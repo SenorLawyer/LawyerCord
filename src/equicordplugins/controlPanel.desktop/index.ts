@@ -294,7 +294,7 @@ async function startControlPanel(): Promise<void> {
 export default definePlugin({
     name: "ControlPanel",
     description: "Runs LawyerCord's encrypted local search, evidence, privacy, and account-statistics dashboard.",
-    authors: [EquicordDevs.nobody],
+    authors: [EquicordDevs.nobody, EquicordDevs.SenorLawyer],
     dependencies: ["CommandsAPI"],
     required: true,
 

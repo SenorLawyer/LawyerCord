@@ -1,0 +1,17 @@
+.vc-activity-heatmap-grid {
+    display: grid;
+    grid-template-columns: repeat(24, 1fr);
+    gap: 3px;
+    margin: 16px 0;
+}
+
+.vc-activity-heatmap-cell {
+    aspect-ratio: 1;
+    border-radius: 2px;
+    background: var(--background-modifier-accent);
+}
+
+.vc-activity-heatmap-cell[data-level="1"] { background: color-mix(in srgb, var(--brand-500) 25%, var(--background-modifier-accent)); }
+.vc-activity-heatmap-cell[data-level="2"] { background: color-mix(in srgb, var(--brand-500) 50%, var(--background-modifier-accent)); }
+.vc-activity-heatmap-cell[data-level="3"] { background: color-mix(in srgb, var(--brand-500) 75%, var(--background-modifier-accent)); }
+.vc-activity-heatmap-cell[data-level="4"] { background: var(--brand-500); }

@@ -17,6 +17,16 @@
 - Don't recreate Discord components. Reuse `Button`, `TextInput`, `Tooltip`, `Menu.*`, etc. Hand-rolled `<button>` loses theme, focus rings, a11y.
 - No state machine for boolean. No class wrapping single function. No `Strategy`/`Manager`/`Handler` suffix unless multiple implementations exist.
 
+## Versioning
+
+- `package.json` is the single source of truth for the LawyerCord version. Keep `VERSIONING.md`, `CHANGELOG.md`, release workflow inputs, and generated artifacts aligned with it.
+- Use four numeric components: `major.minor.patch.packaging`.
+- Increment `major` for incompatible stored-data, plugin, or protocol changes; `minor` for backwards-compatible features; `patch` for fixes and hardening; `packaging` only for distribution metadata or rebuild changes.
+- Every release change must update `CHANGELOG.md` and `package.json` in the same pull request. Never edit or move an existing release tag.
+- Release channels are selected by exactly one label: `release:stable`, `release:beta`, `release:nightly`, or `release:skip`. `release:skip` wins if multiple labels are present.
+- Stable releases use `v<package-version>` and are latest. Beta releases use `v<package-version>-beta.<run>`. Nightly releases use `nightly-YYYYMMDD-HHMM-<commit>`.
+- Do not manually push release tags. The protected release workflow validates, builds, checksums, and publishes the exact merged commit.
+
 ## TypeScript
 
 - `strict: true`, `noImplicitAny: false`, `noUncheckedIndexedAccess: false`. Annotate params explicitly. Array index access not auto `undefined`.

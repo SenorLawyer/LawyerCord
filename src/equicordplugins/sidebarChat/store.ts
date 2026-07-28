@@ -20,6 +20,12 @@ export const settings = definePluginSettings({
         description: "Keep the sidebar chat open across Discord restarts",
         default: true,
     },
+    sidebarWasClosed: {
+        type: OptionType.BOOLEAN,
+        description: "Internal sidebar restore state.",
+        default: false,
+        hidden: true,
+    },
     persistPopoutWindows: {
         type: OptionType.BOOLEAN,
         description: "Restore open popout chats after Discord restarts.",
@@ -63,7 +69,7 @@ export const SidebarStore = proxyLazy(() => {
 
         // @ts-ignore
         initialize(previousState: { guildId?: string; channelId?: string; width?: number; } | undefined) {
-            if (!settings.store.persistSidebar || !previousState) return;
+            if (!settings.store.persistSidebar || settings.store.sidebarWasClosed || !previousState) return;
             const { guildId, channelId, width } = previousState;
             current.guildId = guildId || "";
             current.channelId = channelId || "";
@@ -81,6 +87,7 @@ export const SidebarStore = proxyLazy(() => {
             previous = { ...current };
 
             current.guildId = newGId || "";
+            settings.store.sidebarWasClosed = false;
 
             if (current.guildId) {
                 current.channelId = id;
@@ -104,6 +111,7 @@ export const SidebarStore = proxyLazy(() => {
             previous = { ...current };
             current.guildId = "";
             current.channelId = "";
+            settings.store.sidebarWasClosed = true;
             store.emitChange();
         },
     });

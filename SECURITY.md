@@ -22,12 +22,15 @@ Static review cannot prove the absence of every vulnerability in a large client-
 - Added generated static plugin privacy inventory plus runtime domain observations.
 - Added redacted evidence exports with SHA-256 file and chained-record manifests.
 - Added a release-artifact audit that rejects Discord token-shaped values and private MCP/control-panel runtime files, including bridge configuration, queues, ledgers, semantic indexes, and downloads.
+- Built every release channel's Windows GUI and CLI installers from a pinned, hash-verified Equilotl source revision. The adapted installer embeds the exact reviewed `desktop.asar`, performs no client download, and has self-update networking disabled.
 
 ## Discord account boundary
 
 LawyerCord does not package a Discord token or a connection to the maintainer's account. The optional MCP plugin runs inside each user's existing authenticated Discord renderer and does not expose a token-export or generic authenticated REST tool. When enabled, that installation generates a new random local bridge secret in the user's application-data directory. The secret, local MCP queue, sent-message ledger, control-panel capability, approved-channel list, semantic index, and evidence data are not repository or release assets.
 
 Personal user, guild, and channel IDs are not compiled into the product. The live verification harness accepts authorized IDs only through local environment variables and is excluded from normal CI.
+
+The installer modifies only the Discord installation selected by the user. Its corresponding adapted GPL source is included with each release. The executable is currently unsigned, so Windows may show an unknown-publisher warning; verify it against `SHA256SUMS.txt` before running it.
 
 ## Remaining trust boundaries
 

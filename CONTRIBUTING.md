@@ -18,6 +18,7 @@ LawyerCord accepts focused security fixes, tests, documentation, upstream syncs,
 4. Keep network access explicit, narrowly scoped, and visible in the privacy inventory.
 5. Do not store Discord tokens, message content, encryption keys, MCP secrets, or attachment URLs in fixtures, logs, screenshots, or issue text.
 6. Add focused tests for security boundaries and failure paths.
+7. Installer changes must preserve the pinned source revision, embedded-client model, disabled self-updater, corresponding-source archive, and artifact audit.
 
 Run the relevant local checks:
 

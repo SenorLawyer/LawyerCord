@@ -31,7 +31,7 @@ For a stable release:
 1. Update `CHANGELOG.md` and `package.json` in a release pull request.
 2. Apply `release:stable`.
 3. Confirm required CI checks pass and merge through the protected branch.
-4. The workflow checks out the exact merge commit, reruns audits, focused tests, and builds, rejects packaged credentials/private runtime data, creates a Windows ZIP and SHA-256 checksum, then publishes the immutable release.
+4. The workflow checks out the exact merge commit, reruns audits, focused tests, and builds, rejects packaged credentials/private runtime data, builds offline Windows GUI and CLI installers from the pinned audited installer source, then publishes the immutable release with SHA-256 checksums and corresponding installer source.
 5. Test the artifact on its target platform before enabling it for automatic updates.
 
 Release tags are immutable. Fix a bad release with a new version instead of moving an existing tag.

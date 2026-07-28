@@ -8,6 +8,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Automated nightly, beta, and stable release channels driven by protected pull-request merges.
 - Release ZIP checksums and artifact auditing for Discord credential patterns and private runtime data.
+- Windows graphical and command-line installer executables for nightly, beta, and stable releases.
 
 ### Changed
 
@@ -18,6 +19,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Release artifacts cannot contain local Discord MCP/control-panel configuration, bridge secrets, queues, ledgers, indexes, downloads, or Discord token-shaped values.
 - The optional MCP remains unrestricted within its fixed tool surface but uses only the enabling installation's current Discord session and locally generated bridge secret.
+- Release installers are built from a pinned, hash-verified Equilotl revision, embed the exact LawyerCord client payload, and do not download or self-update executable code.
 
 ### Planned
 

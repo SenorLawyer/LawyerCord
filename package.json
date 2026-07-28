@@ -22,6 +22,7 @@
         "generateVencordPluginJson": "tsx scripts/generatePluginList.ts --vencord",
         "generatePrivacyInventory": "node scripts/generatePrivacyInventory.mjs",
         "auditReleaseArtifacts": "node scripts/auditReleaseArtifacts.mjs",
+        "prepareInstallerSource": "node scripts/prepareInstallerSource.mjs",
         "generateTypes": "tspc --emitDeclarationOnly --declaration --outDir packages/vencord-types --allowJs false",
         "inject": "node scripts/runInstaller.mjs -- --install",
         "uninject": "node scripts/runInstaller.mjs -- --uninstall",

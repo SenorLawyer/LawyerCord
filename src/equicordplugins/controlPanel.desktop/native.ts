@@ -45,8 +45,8 @@ const CONFIG_PATH = join(CONTROL_DIR, "config.json");
 const INDEX_PATH = join(CONTROL_DIR, "semantic-index.bin");
 const EXPORTS_DIR = join(CONTROL_DIR, "evidence");
 const DEFAULT_PORT = 47_831;
-const MAX_MESSAGES = 20_000;
-const MAX_NETWORK_EVENTS = 2_000;
+const MAX_MESSAGES = 5_000;
+const MAX_NETWORK_EVENTS = 500;
 const SNOWFLAKE = /^\d{17,20}$/;
 
 let config: ControlConfig | null = null;
@@ -112,13 +112,16 @@ async function loadIndex(): Promise<void> {
         return;
     }
 
+    let needsTrim = false;
     try {
         const encrypted = await readFile(INDEX_PATH);
         const parsed = JSON.parse(safeStorage.decryptString(encrypted)) as PersistedIndex;
         if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.messages)) throw new Error("unsupported index");
         messages = new Map(parsed.messages.slice(-MAX_MESSAGES).map(message => [message.id, message]));
+        needsTrim = parsed.messages.length > MAX_MESSAGES;
     } catch { }
     storageStatus = "encrypted";
+    if (needsTrim) persistIndexSoon();
 }
 
 function persistIndexSoon(): void {

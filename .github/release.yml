@@ -1,0 +1,18 @@
+changelog:
+    exclude:
+        labels:
+            - release:skip
+    categories:
+        - title: Breaking changes
+          labels:
+              - breaking-change
+        - title: Security and privacy
+          labels:
+              - security
+              - privacy
+        - title: Dependency updates
+          labels:
+              - dependencies
+        - title: Changes
+          labels:
+              - "*"

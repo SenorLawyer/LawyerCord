@@ -4,6 +4,21 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ## Unreleased
 
+### Added
+
+- Automated nightly, beta, and stable release channels driven by protected pull-request merges.
+- Release ZIP checksums and artifact auditing for Discord credential patterns and private runtime data.
+
+### Changed
+
+- New installations begin with no channels approved for local semantic indexing.
+- Live Discord MCP verification accepts authorized target IDs only through local environment variables.
+
+### Security
+
+- Release artifacts cannot contain local Discord MCP/control-panel configuration, bridge secrets, queues, ledgers, indexes, downloads, or Discord token-shaped values.
+- The optional MCP remains unrestricted within its fixed tool surface but uses only the enabling installation's current Discord session and locally generated bridge secret.
+
 ### Planned
 
 - An audited SecureMessaging protocol v2 after the provider, licensing, packaging, and migration gate is approved.

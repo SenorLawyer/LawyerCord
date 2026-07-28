@@ -44,7 +44,6 @@ const CONTROL_DIR = join(DATA_DIR, "control-panel");
 const CONFIG_PATH = join(CONTROL_DIR, "config.json");
 const INDEX_PATH = join(CONTROL_DIR, "semantic-index.bin");
 const EXPORTS_DIR = join(CONTROL_DIR, "evidence");
-const DEFAULT_CHANNEL_ID = "1085873944751521792";
 const DEFAULT_PORT = 47_831;
 const MAX_MESSAGES = 20_000;
 const MAX_NETWORK_EVENTS = 2_000;
@@ -101,7 +100,7 @@ async function loadConfig(): Promise<ControlConfig> {
         schemaVersion: 1,
         secret: randomBytes(32).toString("base64url"),
         preferredPort: DEFAULT_PORT,
-        approvedChannelIds: [DEFAULT_CHANNEL_ID],
+        approvedChannelIds: [],
     };
     await atomicWrite(CONFIG_PATH, `${JSON.stringify(created, null, 2)}\n`);
     return created;

@@ -15,11 +15,23 @@ major.minor.patch.packaging
 
 ## Release process
 
-1. Merge reviewed changes to `main`.
-2. Update `CHANGELOG.md` and `package.json` in a release pull request.
-3. Confirm `pnpm audit --prod --audit-level low` and required CI checks pass.
-4. Create a signed or verified tag matching the package version, such as `v1.14.16.0`.
-5. Push the tag. The release workflow verifies the version, rebuilds, reruns focused checks, packages `dist`, and creates the GitHub release.
-6. Do not publish an installer or enable automatic updates until the artifact has been tested on its target platform and the release owner has approved it.
+Releases are produced only by the GitHub Actions workflow after a protected pull-request merge or an explicit manual dispatch against current `main`. Do not push release tags manually.
+
+Pull-request labels select the channel:
+
+- No release label or `release:nightly`: `nightly-YYYYMMDD-HHMM-<commit>` prerelease.
+- `release:beta`: `v<package-version>-beta.<workflow-run>` prerelease.
+- `release:stable`: `v<package-version>` stable release marked latest.
+- `release:skip`: no release.
+
+Only one channel label may be applied. `release:skip` takes precedence.
+
+For a stable release:
+
+1. Update `CHANGELOG.md` and `package.json` in a release pull request.
+2. Apply `release:stable`.
+3. Confirm required CI checks pass and merge through the protected branch.
+4. The workflow checks out the exact merge commit, reruns audits, focused tests, and builds, rejects packaged credentials/private runtime data, creates a Windows ZIP and SHA-256 checksum, then publishes the immutable release.
+5. Test the artifact on its target platform before enabling it for automatic updates.
 
 Release tags are immutable. Fix a bad release with a new version instead of moving an existing tag.

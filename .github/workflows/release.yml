@@ -1,39 +1,102 @@
-name: Release
+name: Release channels
+run-name: "Release ${{ github.event_name == 'workflow_dispatch' && inputs.channel || format('PR {0}', github.event.pull_request.number) }}"
 
 on:
-    push:
-        tags:
-            - "v*"
+    pull_request:
+        branches: [main]
+        types: [closed]
     workflow_dispatch:
         inputs:
-            tag:
-                description: Existing version tag to release
+            channel:
+                description: Release channel for the current main commit
                 required: true
-                type: string
+                default: nightly
+                type: choice
+                options:
+                    - nightly
+                    - beta
+                    - stable
 
 permissions:
-    contents: write
+    contents: read
+
+concurrency:
+    group: release-${{ github.event.pull_request.merge_commit_sha || github.sha }}
+    cancel-in-progress: false
 
 jobs:
-    release:
-        name: Build release
-        runs-on: windows-latest
-        timeout-minutes: 30
-        env:
-            RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    classify:
+        name: Select release channel
+        if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        outputs:
+            channel: ${{ steps.release.outputs.channel }}
+            ref: ${{ steps.release.outputs.ref }}
 
         steps:
-            - name: Check out repository
+            - name: Resolve merged-PR release label
+              id: release
+              shell: pwsh
+              env:
+                  EVENT_NAME: ${{ github.event_name }}
+                  INPUT_CHANNEL: ${{ inputs.channel }}
+                  LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
+                  MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+              run: |
+                  if ($env:EVENT_NAME -eq "workflow_dispatch") {
+                      $channel = $env:INPUT_CHANNEL
+                      $ref = "main"
+                  } else {
+                      $labels = if ([string]::IsNullOrWhiteSpace($env:LABELS_JSON)) {
+                          @()
+                      } else {
+                          @(ConvertFrom-Json $env:LABELS_JSON)
+                      }
+                      if ($labels -contains "release:skip") {
+                          $channel = "skip"
+                      } else {
+                          $selected = @(
+                              $labels |
+                                  Where-Object { $_ -in @("release:nightly", "release:beta", "release:stable") } |
+                                  ForEach-Object { $_.Substring("release:".Length) }
+                          )
+                          if ($selected.Count -gt 1) {
+                              throw "A pull request may select only one release channel"
+                          }
+                          $channel = if ($selected.Count -eq 1) { $selected[0] } else { "nightly" }
+                      }
+                      $ref = $env:MERGE_SHA
+                  }
+
+                  "channel=$channel" >> $env:GITHUB_OUTPUT
+                  "ref=$ref" >> $env:GITHUB_OUTPUT
+                  Write-Output "Selected release channel: $channel"
+
+    release:
+        name: Build ${{ needs.classify.outputs.channel }} release
+        needs: classify
+        if: needs.classify.outputs.channel != 'skip'
+        runs-on: windows-latest
+        timeout-minutes: 35
+        permissions:
+            contents: write
+        env:
+            RELEASE_CHANNEL: ${{ needs.classify.outputs.channel }}
+            RELEASE_REF: ${{ needs.classify.outputs.ref }}
+
+        steps:
+            - name: Check out merged source
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
               with:
                   persist-credentials: false
-                  ref: ${{ env.RELEASE_TAG }}
+                  ref: ${{ env.RELEASE_REF }}
 
             - name: Set up pnpm
               uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
 
             - name: Set up Node.js
-              uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
               with:
                   node-version: 24
                   cache: pnpm
@@ -41,28 +104,79 @@ jobs:
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
 
-            - name: Validate tag version
-              shell: pwsh
+            - name: Audit and test release source
               run: |
-                  $packageVersion = (Get-Content -LiteralPath package.json | ConvertFrom-Json).version
-                  if ($env:RELEASE_TAG -ne "v$packageVersion") {
-                      throw "Tag $env:RELEASE_TAG does not match package version v$packageVersion"
-                  }
-
-            - name: Build and test
-              run: |
+                  pnpm audit --audit-level moderate
                   pnpm testTsc
                   pnpm testDiscordMcp
                   pnpm testControlPanel
+                  pnpm testReleaseArtifactAudit
+                  pnpm testSecureMessaging
+                  pnpm testSecureMessagingNative
+
+            - name: Build desktop and browser targets
+              run: |
                   pnpm buildStandalone
                   pnpm buildWebStandalone
 
-            - name: Package build output
-              shell: pwsh
-              run: Compress-Archive -Path dist\* -DestinationPath "LawyerCord-$env:RELEASE_TAG.zip"
+            - name: Reject packaged credentials and private runtime data
+              run: pnpm auditReleaseArtifacts dist
 
-            - name: Create GitHub release
+            - name: Prepare release assets
+              id: assets
+              shell: pwsh
+              run: |
+                  $version = (Get-Content -LiteralPath package.json | ConvertFrom-Json).version
+                  $shortSha = (git rev-parse --short=8 HEAD).Trim()
+                  $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmm")
+
+                  $tag = switch ($env:RELEASE_CHANNEL) {
+                      "nightly" { "nightly-$timestamp-$shortSha" }
+                      "beta" { "v$version-beta.$env:GITHUB_RUN_NUMBER" }
+                      "stable" { "v$version" }
+                      default { throw "Unsupported release channel: $env:RELEASE_CHANNEL" }
+                  }
+
+                  $tagProbe = gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/$tag" 2>&1
+                  if ($LASTEXITCODE -eq 0) {
+                      throw "Release tag $tag already exists; version tags are immutable"
+                  }
+
+                  $asset = "LawyerCord-$tag-windows.zip"
+                  Compress-Archive -Path dist\* -DestinationPath $asset
+                  pnpm auditReleaseArtifacts $asset
+                  $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $asset).Hash.ToLowerInvariant()
+                  "$hash  $asset" | Set-Content -LiteralPath SHA256SUMS.txt -Encoding utf8NoBOM
+
+                  "tag=$tag" >> $env:GITHUB_OUTPUT
+                  "asset=$asset" >> $env:GITHUB_OUTPUT
+                  "title=LawyerCord $tag" >> $env:GITHUB_OUTPUT
+
+            - name: Preserve release assets
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: LawyerCord-${{ steps.assets.outputs.tag }}
+                  path: |
+                      ${{ steps.assets.outputs.asset }}
+                      SHA256SUMS.txt
+                  if-no-files-found: error
+                  retention-days: 30
+
+            - name: Publish GitHub release
+              shell: pwsh
               env:
                   GH_TOKEN: ${{ github.token }}
-              shell: pwsh
-              run: gh release create "$env:RELEASE_TAG" "LawyerCord-$env:RELEASE_TAG.zip" --verify-tag --generate-notes --title "LawyerCord $env:RELEASE_TAG"
+                  RELEASE_ASSET: ${{ steps.assets.outputs.asset }}
+                  RELEASE_TAG: ${{ steps.assets.outputs.tag }}
+                  RELEASE_TITLE: ${{ steps.assets.outputs.title }}
+              run: |
+                  $channelArguments = if ($env:RELEASE_CHANNEL -eq "stable") {
+                      @("--latest")
+                  } else {
+                      @("--prerelease", "--latest=false")
+                  }
+                  gh release create $env:RELEASE_TAG $env:RELEASE_ASSET SHA256SUMS.txt `
+                      --target $env:RELEASE_REF `
+                      --generate-notes `
+                      --title $env:RELEASE_TITLE `
+                      @channelArguments

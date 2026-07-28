@@ -159,7 +159,8 @@ jobs:
                   if ($LASTEXITCODE -ne 0) {
                       throw "LawyerCordInstallerCli.exe --version failed"
                   }
-                  if ($versionOutput -notmatch "LawyerCord Installer Cli") {
+                  $versionText = $versionOutput -join "`n"
+                  if ($versionText -notmatch "LawyerCord Installer Cli") {
                       throw "Installer CLI is not LawyerCord branded"
                   }
                   foreach ($installer in @("LawyerCordInstaller.exe", "LawyerCordInstallerCli.exe")) {

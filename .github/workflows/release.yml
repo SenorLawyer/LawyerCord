@@ -193,7 +193,8 @@ jobs:
                   if ($LASTEXITCODE -ne 0) {
                       throw "LawyerCordInstallerCli.exe --version failed"
                   }
-                  if ($versionOutput -notmatch [regex]::Escape("${{ steps.release.outputs.tag }}")) {
+                  $versionText = $versionOutput -join "`n"
+                  if ($versionText -notmatch [regex]::Escape("${{ steps.release.outputs.tag }}")) {
                       throw "Installer CLI does not identify the selected release"
                   }
                   foreach ($installer in @("LawyerCordInstaller.exe", "LawyerCordInstallerCli.exe")) {

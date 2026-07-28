@@ -11,6 +11,34 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
     storage: string[];
     permissions: string[];
 }> = {
+    "src/plugins/_api": {
+        "externalDomains": [
+            "badge.equicord.org",
+            "badges.vencord.dev",
+            "cdn.discordapp.com",
+            "equicord.org",
+            "github.com",
+            "www.gnu.org"
+        ],
+        "storage": [],
+        "permissions": [
+            "Network access",
+            "Open external applications or URLs"
+        ]
+    },
+    "src/plugins/_core": {
+        "externalDomains": [
+            "discord.com",
+            "github.com",
+            "media.tenor.com",
+            "www.gnu.org"
+        ],
+        "storage": [],
+        "permissions": [
+            "Discord write operations",
+            "Network access"
+        ]
+    },
     "src/plugins/accountPanelServerProfile": {
         "externalDomains": [],
         "storage": [],
@@ -446,15 +474,15 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
         ],
         "permissions": []
     },
-    "src/plugins/ignoreActivities": {
-        "externalDomains": [],
-        "storage": [],
-        "permissions": []
-    },
     "src/plugins/iLoveSpam": {
         "externalDomains": [
             "www.gnu.org"
         ],
+        "storage": [],
+        "permissions": []
+    },
+    "src/plugins/ignoreActivities": {
+        "externalDomains": [],
         "storage": [],
         "permissions": []
     },
@@ -676,11 +704,6 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
         "storage": [],
         "permissions": []
     },
-    "src/plugins/notificationVolume": {
-        "externalDomains": [],
-        "storage": [],
-        "permissions": []
-    },
     "src/plugins/noTypingAnimation": {
         "externalDomains": [],
         "storage": [],
@@ -690,6 +713,11 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
         "externalDomains": [
             "www.gnu.org"
         ],
+        "storage": [],
+        "permissions": []
+    },
+    "src/plugins/notificationVolume": {
+        "externalDomains": [],
         "storage": [],
         "permissions": []
     },
@@ -1280,33 +1308,15 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
         "storage": [],
         "permissions": []
     },
-    "src/plugins/_api": {
-        "externalDomains": [
-            "badge.equicord.org",
-            "badges.vencord.dev",
-            "cdn.discordapp.com",
-            "equicord.org",
-            "github.com",
-            "www.gnu.org"
-        ],
+    "src/equicordplugins/_api": {
+        "externalDomains": [],
         "storage": [],
-        "permissions": [
-            "Network access",
-            "Open external applications or URLs"
-        ]
+        "permissions": []
     },
-    "src/plugins/_core": {
-        "externalDomains": [
-            "discord.com",
-            "github.com",
-            "media.tenor.com",
-            "www.gnu.org"
-        ],
+    "src/equicordplugins/_core": {
+        "externalDomains": [],
         "storage": [],
-        "permissions": [
-            "Discord write operations",
-            "Network access"
-        ]
+        "permissions": []
     },
     "src/equicordplugins/advancedPermissions": {
         "externalDomains": [],
@@ -1496,11 +1506,6 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
             "Network access"
         ]
     },
-    "src/equicordplugins/clipsEnhancements.discordDesktop": {
-        "externalDomains": [],
-        "storage": [],
-        "permissions": []
-    },
     "src/equicordplugins/clipUpload.desktop": {
         "externalDomains": [
             "cdn.jsdelivr.net",
@@ -1515,6 +1520,11 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
             "Network access",
             "Voice or media state access"
         ]
+    },
+    "src/equicordplugins/clipsEnhancements.discordDesktop": {
+        "externalDomains": [],
+        "storage": [],
+        "permissions": []
     },
     "src/equicordplugins/collapsibleUi": {
         "externalDomains": [],
@@ -1869,19 +1879,19 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
             "Clipboard access"
         ]
     },
-    "src/equicordplugins/friendshipRanks": {
-        "externalDomains": [
-            "equicord.org"
-        ],
-        "storage": [],
-        "permissions": []
-    },
     "src/equicordplugins/friendTags": {
         "externalDomains": [],
         "storage": [
             "Browser or plugin data store",
             "Persistent local storage"
         ],
+        "permissions": []
+    },
+    "src/equicordplugins/friendshipRanks": {
+        "externalDomains": [
+            "equicord.org"
+        ],
+        "storage": [],
         "permissions": []
     },
     "src/equicordplugins/fullVcPfp": {
@@ -2020,6 +2030,17 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
             "Network access"
         ]
     },
+    "src/equicordplugins/iRememberYou": {
+        "externalDomains": [],
+        "storage": [
+            "Browser or plugin data store",
+            "Persistent local storage"
+        ],
+        "permissions": [
+            "Clipboard access",
+            "Discord message access"
+        ]
+    },
     "src/equicordplugins/iconViewer": {
         "externalDomains": [],
         "storage": [],
@@ -2037,15 +2058,15 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
         "storage": [],
         "permissions": []
     },
+    "src/equicordplugins/inRole": {
+        "externalDomains": [],
+        "storage": [],
+        "permissions": []
+    },
     "src/equicordplugins/ingtoninator": {
         "externalDomains": [
             "www.w3.org"
         ],
-        "storage": [],
-        "permissions": []
-    },
-    "src/equicordplugins/inRole": {
-        "externalDomains": [],
         "storage": [],
         "permissions": []
     },
@@ -2072,17 +2093,6 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
         "externalDomains": [],
         "storage": [],
         "permissions": []
-    },
-    "src/equicordplugins/iRememberYou": {
-        "externalDomains": [],
-        "storage": [
-            "Browser or plugin data store",
-            "Persistent local storage"
-        ],
-        "permissions": [
-            "Clipboard access",
-            "Discord message access"
-        ]
     },
     "src/equicordplugins/jumpTo": {
         "externalDomains": [],
@@ -2343,7 +2353,7 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
         "storage": [],
         "permissions": []
     },
-    "src/equicordplugins/normalizeMessageLinks": {
+    "src/equicordplugins/noRPC.discordDesktop": {
         "externalDomains": [],
         "storage": [],
         "permissions": []
@@ -2353,7 +2363,7 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
         "storage": [],
         "permissions": []
     },
-    "src/equicordplugins/noRPC.discordDesktop": {
+    "src/equicordplugins/normalizeMessageLinks": {
         "externalDomains": [],
         "storage": [],
         "permissions": []
@@ -2388,19 +2398,19 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
         "storage": [],
         "permissions": []
     },
-    "src/equicordplugins/pingNotifications": {
-        "externalDomains": [],
-        "storage": [],
-        "permissions": [
-            "Discord message access"
-        ]
-    },
     "src/equicordplugins/pinIcon": {
         "externalDomains": [
             "www.gnu.org"
         ],
         "storage": [],
         "permissions": []
+    },
+    "src/equicordplugins/pingNotifications": {
+        "externalDomains": [],
+        "storage": [],
+        "permissions": [
+            "Discord message access"
+        ]
     },
     "src/equicordplugins/platformSpoofer": {
         "externalDomains": [],
@@ -3018,15 +3028,5 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
             "Clipboard access",
             "Network access"
         ]
-    },
-    "src/equicordplugins/_api": {
-        "externalDomains": [],
-        "storage": [],
-        "permissions": []
-    },
-    "src/equicordplugins/_core": {
-        "externalDomains": [],
-        "storage": [],
-        "permissions": []
     }
 };

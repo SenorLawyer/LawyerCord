@@ -12,9 +12,14 @@ const ROOTS = ["src/plugins", "src/equicordplugins"];
 const OUTPUT = resolve("src/equicordplugins/controlPanel.desktop/privacyInventory.ts");
 const SOURCE_EXTENSIONS = /\.(?:css|js|jsx|mjs|ts|tsx)$/u;
 
+function compareEntries(left, right) {
+    return left.name < right.name ? -1 : left.name > right.name ? 1 : 0;
+}
+
 async function filesUnder(directory) {
     const result = [];
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const entries = await readdir(directory, { withFileTypes: true });
+    for (const entry of entries.sort(compareEntries)) {
         const path = join(directory, entry.name);
         if (entry.isDirectory()) result.push(...await filesUnder(path));
         else if (SOURCE_EXTENSIONS.test(entry.name)) result.push(path);
@@ -51,7 +56,8 @@ function sourceCapabilities(source) {
 
 const inventory = {};
 for (const root of ROOTS) {
-    for (const entry of await readdir(root, { withFileTypes: true })) {
+    const entries = await readdir(root, { withFileTypes: true });
+    for (const entry of entries.sort(compareEntries)) {
         if (!entry.isDirectory()) continue;
         const directory = join(root, entry.name);
         const sources = await Promise.all((await filesUnder(directory)).map(path => readFile(path, "utf8")));

@@ -101,7 +101,14 @@ Every merged pull request is built from its merge commit and defaults to a uniqu
 - `release:stable` creates the versioned stable release and marks it latest.
 - `release:skip` performs no release, which is appropriate for release-process-only changes.
 
-Each release contains a Windows ZIP and `SHA256SUMS.txt`. Stable releases require a unique version in `package.json`; tags are never moved or overwritten.
+Every channel publishes the same Windows asset set:
+
+- `LawyerCordInstaller.exe`: graphical offline installer with the exact release build embedded.
+- `LawyerCordInstallerCli.exe`: command-line offline installer.
+- `LawyerCord.asar`: standalone desktop injection payload.
+- A portable build ZIP, corresponding installer source ZIP, and `SHA256SUMS.txt`.
+
+The installers do not contain a Discord token, contact an account-specific service, download the client at runtime, or update themselves. Stable releases require a unique version in `package.json`; tags are never moved or overwritten.
 
 ## Credits and license
 

@@ -78,7 +78,7 @@ jobs:
         needs: classify
         if: needs.classify.outputs.channel != 'skip'
         runs-on: windows-latest
-        timeout-minutes: 35
+        timeout-minutes: 50
         permissions:
             contents: write
         env:
@@ -92,6 +92,14 @@ jobs:
                   persist-credentials: false
                   ref: ${{ env.RELEASE_REF }}
 
+            - name: Check out audited installer source
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  repository: Equicord/Equilotl
+                  ref: c6bfed9c941883fb0aa48cc1ab6031ed69334c2a
+                  path: installer-source
+                  persist-credentials: false
+
             - name: Set up pnpm
               uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
 
@@ -100,6 +108,17 @@ jobs:
               with:
                   node-version: 24
                   cache: pnpm
+
+            - name: Set up Go
+              uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+              with:
+                  go-version: 1.26.5
+                  cache-dependency-path: installer-source/go.sum
+
+            - name: Set up MSYS2
+              uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2
+              with:
+                  path-type: inherit
 
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
@@ -122,8 +141,8 @@ jobs:
             - name: Reject packaged credentials and private runtime data
               run: pnpm auditReleaseArtifacts dist
 
-            - name: Prepare release assets
-              id: assets
+            - name: Resolve release identity
+              id: release
               shell: pwsh
               run: |
                   $version = (Get-Content -LiteralPath package.json | ConvertFrom-Json).version
@@ -142,22 +161,87 @@ jobs:
                       throw "Release tag $tag already exists; version tags are immutable"
                   }
 
-                  $asset = "LawyerCord-$tag-windows.zip"
-                  Compress-Archive -Path dist\* -DestinationPath $asset
-                  pnpm auditReleaseArtifacts $asset
-                  $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $asset).Hash.ToLowerInvariant()
-                  "$hash  $asset" | Set-Content -LiteralPath SHA256SUMS.txt -Encoding utf8NoBOM
-
                   "tag=$tag" >> $env:GITHUB_OUTPUT
-                  "asset=$asset" >> $env:GITHUB_OUTPUT
                   "title=LawyerCord $tag" >> $env:GITHUB_OUTPUT
+
+            - name: Prepare offline LawyerCord installer source
+              run: node scripts/prepareInstallerSource.mjs installer-source "${{ steps.release.outputs.tag }}" "$(git rev-parse HEAD)" dist/desktop.asar
+
+            - name: Install Windows installer build dependencies
+              shell: msys2 {0}
+              run: pacman -S --noconfirm git mingw-w64-x86_64-gcc mingw-w64-x86_64-SDL2
+
+            - name: Build Windows installers
+              shell: msys2 {0}
+              working-directory: installer-source
+              env:
+                  RELEASE_TAG: ${{ steps.release.outputs.tag }}
+              run: |
+                  go mod download
+                  version=$(node -p "require('../package.json').version")
+                  go run github.com/tc-hib/go-winres@v0.3.3 make --product-version "$version"
+                  installer_hash=$(git rev-parse --short=12 HEAD)
+                  client_hash=$(git -C .. rev-parse HEAD)
+                  ldflags="-s -w -X equilotl/buildinfo.InstallerGitHash=$installer_hash -X equilotl/buildinfo.InstallerTag=$RELEASE_TAG -X equilotl/buildinfo.ClientGitHash=$client_hash"
+                  CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build -tags "static gui" -ldflags "$ldflags -H=windowsgui -extldflags=-static" -o ../LawyerCordInstaller.exe
+                  CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build -tags cli -ldflags "$ldflags" -o ../LawyerCordInstallerCli.exe
+
+            - name: Validate Windows installer executables
+              shell: pwsh
+              run: |
+                  $versionOutput = & .\LawyerCordInstallerCli.exe --version
+                  if ($LASTEXITCODE -ne 0) {
+                      throw "LawyerCordInstallerCli.exe --version failed"
+                  }
+                  if ($versionOutput -notmatch [regex]::Escape("${{ steps.release.outputs.tag }}")) {
+                      throw "Installer CLI does not identify the selected release"
+                  }
+                  foreach ($installer in @("LawyerCordInstaller.exe", "LawyerCordInstallerCli.exe")) {
+                      $header = Get-Content -LiteralPath $installer -AsByteStream -TotalCount 2
+                      if ($header[0] -ne 0x4d -or $header[1] -ne 0x5a) {
+                          throw "$installer is not a Windows PE executable"
+                      }
+                  }
+
+            - name: Prepare release assets
+              id: assets
+              shell: pwsh
+              env:
+                  RELEASE_TAG: ${{ steps.release.outputs.tag }}
+              run: |
+                  $bundle = "LawyerCord-$env:RELEASE_TAG-windows.zip"
+                  $source = "LawyerCordInstaller-source-$env:RELEASE_TAG.zip"
+                  Compress-Archive -Path dist\* -DestinationPath $bundle
+                  Compress-Archive -Path installer-source\* -DestinationPath $source
+                  Copy-Item -LiteralPath dist\desktop.asar -Destination LawyerCord.asar
+
+                  $assets = @(
+                      $bundle,
+                      "LawyerCordInstaller.exe",
+                      "LawyerCordInstallerCli.exe",
+                      "LawyerCord.asar",
+                      $source
+                  )
+                  pnpm auditReleaseArtifacts @assets
+                  $checksums = foreach ($asset in $assets) {
+                      $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $asset).Hash.ToLowerInvariant()
+                      "$hash  $asset"
+                  }
+                  $checksums | Set-Content -LiteralPath SHA256SUMS.txt -Encoding utf8NoBOM
+
+                  "bundle=$bundle" >> $env:GITHUB_OUTPUT
+                  "source=$source" >> $env:GITHUB_OUTPUT
 
             - name: Preserve release assets
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
-                  name: LawyerCord-${{ steps.assets.outputs.tag }}
+                  name: LawyerCord-${{ steps.release.outputs.tag }}
                   path: |
-                      ${{ steps.assets.outputs.asset }}
+                      ${{ steps.assets.outputs.bundle }}
+                      LawyerCordInstaller.exe
+                      LawyerCordInstallerCli.exe
+                      LawyerCord.asar
+                      ${{ steps.assets.outputs.source }}
                       SHA256SUMS.txt
                   if-no-files-found: error
                   retention-days: 30
@@ -166,16 +250,23 @@ jobs:
               shell: pwsh
               env:
                   GH_TOKEN: ${{ github.token }}
-                  RELEASE_ASSET: ${{ steps.assets.outputs.asset }}
-                  RELEASE_TAG: ${{ steps.assets.outputs.tag }}
-                  RELEASE_TITLE: ${{ steps.assets.outputs.title }}
+                  RELEASE_BUNDLE: ${{ steps.assets.outputs.bundle }}
+                  RELEASE_SOURCE: ${{ steps.assets.outputs.source }}
+                  RELEASE_TAG: ${{ steps.release.outputs.tag }}
+                  RELEASE_TITLE: ${{ steps.release.outputs.title }}
               run: |
                   $channelArguments = if ($env:RELEASE_CHANNEL -eq "stable") {
                       @("--latest")
                   } else {
                       @("--prerelease", "--latest=false")
                   }
-                  gh release create $env:RELEASE_TAG $env:RELEASE_ASSET SHA256SUMS.txt `
+                  gh release create $env:RELEASE_TAG `
+                      $env:RELEASE_BUNDLE `
+                      LawyerCordInstaller.exe `
+                      LawyerCordInstallerCli.exe `
+                      LawyerCord.asar `
+                      $env:RELEASE_SOURCE `
+                      SHA256SUMS.txt `
                       --target $env:RELEASE_REF `
                       --generate-notes `
                       --title $env:RELEASE_TITLE `

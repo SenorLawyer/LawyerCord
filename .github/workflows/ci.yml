@@ -84,12 +84,20 @@ jobs:
     windows-smoke:
         name: Windows smoke
         runs-on: windows-latest
-        timeout-minutes: 30
+        timeout-minutes: 45
 
         steps:
             - name: Check out repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
               with:
+                  persist-credentials: false
+
+            - name: Check out audited installer source
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  repository: Equicord/Equilotl
+                  ref: c6bfed9c941883fb0aa48cc1ab6031ed69334c2a
+                  path: installer-source
                   persist-credentials: false
 
             - name: Set up pnpm
@@ -100,6 +108,17 @@ jobs:
               with:
                   node-version: 24
                   cache: pnpm
+
+            - name: Set up Go
+              uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+              with:
+                  go-version: 1.26.5
+                  cache-dependency-path: installer-source/go.sum
+
+            - name: Set up MSYS2
+              uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2
+              with:
+                  path-type: inherit
 
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
@@ -112,3 +131,41 @@ jobs:
                   pnpm testReleaseArtifactAudit
                   pnpm buildStandalone
                   pnpm auditReleaseArtifacts dist
+
+            - name: Prepare offline LawyerCord installer source
+              run: node scripts/prepareInstallerSource.mjs installer-source "ci-${{ github.sha }}" "${{ github.sha }}" dist/desktop.asar
+
+            - name: Install Windows installer build dependencies
+              shell: msys2 {0}
+              run: pacman -S --noconfirm git mingw-w64-x86_64-gcc mingw-w64-x86_64-SDL2
+
+            - name: Build Windows installers
+              shell: msys2 {0}
+              working-directory: installer-source
+              run: |
+                  go mod download
+                  version=$(node -p "require('../package.json').version")
+                  go run github.com/tc-hib/go-winres@v0.3.3 make --product-version "$version"
+                  installer_hash=$(git rev-parse --short=12 HEAD)
+                  client_hash=$(git -C .. rev-parse HEAD)
+                  ldflags="-s -w -X equilotl/buildinfo.InstallerGitHash=$installer_hash -X equilotl/buildinfo.InstallerTag=ci-$client_hash -X equilotl/buildinfo.ClientGitHash=$client_hash"
+                  CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build -tags "static gui" -ldflags "$ldflags -H=windowsgui -extldflags=-static" -o ../LawyerCordInstaller.exe
+                  CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build -tags cli -ldflags "$ldflags" -o ../LawyerCordInstallerCli.exe
+
+            - name: Validate Windows installer executables
+              shell: pwsh
+              run: |
+                  $versionOutput = & .\LawyerCordInstallerCli.exe --version
+                  if ($LASTEXITCODE -ne 0) {
+                      throw "LawyerCordInstallerCli.exe --version failed"
+                  }
+                  if ($versionOutput -notmatch "LawyerCord Installer Cli") {
+                      throw "Installer CLI is not LawyerCord branded"
+                  }
+                  foreach ($installer in @("LawyerCordInstaller.exe", "LawyerCordInstallerCli.exe")) {
+                      $header = Get-Content -LiteralPath $installer -AsByteStream -TotalCount 2
+                      if ($header[0] -ne 0x4d -or $header[1] -ne 0x5a) {
+                          throw "$installer is not a Windows PE executable"
+                      }
+                  }
+                  pnpm auditReleaseArtifacts LawyerCordInstaller.exe LawyerCordInstallerCli.exe

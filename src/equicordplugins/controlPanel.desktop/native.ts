@@ -253,6 +253,12 @@ async function createEvidenceExport(body: Record<string, unknown>) {
 function overview() {
     const domainCounts = new Map<string, number>();
     for (const event of networkEvents) domainCounts.set(event.domain, (domainCounts.get(event.domain) ?? 0) + 1);
+    const processMetrics = app.getAppMetrics().map(metric => ({
+        type: metric.type,
+        pid: metric.pid,
+        workingSetKb: metric.memory.workingSetSize,
+        cpuPercent: metric.cpu.percentCPUUsage,
+    }));
     return {
         app: {
             name: "LawyerCord",
@@ -272,6 +278,10 @@ function overview() {
             domainCount: domainCounts.size,
             topDomains: [...domainCounts].sort((left, right) => right[1] - left[1]).slice(0, 12).map(([domain, count]) => ({ domain, count })),
             recent: networkEvents.slice(-100).reverse(),
+        },
+        memory: {
+            totalWorkingSetKb: processMetrics.reduce((total, metric) => total + metric.workingSetKb, 0),
+            processes: processMetrics,
         },
     };
 }

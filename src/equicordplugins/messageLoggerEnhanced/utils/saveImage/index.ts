@@ -23,10 +23,12 @@ import { LoggedAttachment, LoggedMessage, LoggedMessageJSON } from "../../types"
 import { deleteImage, downloadAttachment, getImage, } from "./ImageManager";
 
 const MAX_ATTACHMENT_BLOB_URLS = 100;
+const ATTACHMENT_BLOB_URL_TTL = 10 * 60 * 1000;
 
 type AttachmentBlobUrlCacheEntry = {
     promise: Promise<string | null>;
     url?: string;
+    lastAccessedAt: number;
 };
 
 const attachmentBlobUrlCache = new Map<string, AttachmentBlobUrlCacheEntry>();
@@ -50,6 +52,13 @@ function revokeAttachmentBlobUrlEntry(key: string, entry: AttachmentBlobUrlCache
 }
 
 function pruneAttachmentBlobUrlCache() {
+    const expiresBefore = Date.now() - ATTACHMENT_BLOB_URL_TTL;
+    for (const [key, entry] of attachmentBlobUrlCache) {
+        if (entry.lastAccessedAt < expiresBefore) {
+            attachmentBlobUrlCache.delete(key);
+            revokeAttachmentBlobUrlEntry(key, entry);
+        }
+    }
     while (attachmentBlobUrlCache.size > MAX_ATTACHMENT_BLOB_URLS) {
         const oldest = attachmentBlobUrlCache.entries().next().value;
         if (!oldest) return;
@@ -142,9 +151,11 @@ export async function deleteMessageImages(message: LoggedMessage | LoggedMessage
 }
 
 export async function getAttachmentBlobUrl(attachment: LoggedAttachment) {
+    pruneAttachmentBlobUrlCache();
     const key = getAttachmentBlobUrlCacheKey(attachment);
     const cached = attachmentBlobUrlCache.get(key);
     if (cached) {
+        cached.lastAccessedAt = Date.now();
         attachmentBlobUrlCache.delete(key);
         attachmentBlobUrlCache.set(key, cached);
         return cached.promise;
@@ -159,7 +170,7 @@ export async function getAttachmentBlobUrl(attachment: LoggedAttachment) {
 
         return resUrl;
     })();
-    const entry: AttachmentBlobUrlCacheEntry = { promise };
+    const entry: AttachmentBlobUrlCacheEntry = { promise, lastAccessedAt: Date.now() };
 
     void promise.then(url => {
         if (!url) return;

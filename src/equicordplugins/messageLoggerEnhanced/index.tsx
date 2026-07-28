@@ -102,6 +102,7 @@ async function messageDeleteHandler(payload: MessageDeletePayload & { isBulk: bo
 
         const currentChannelId = SelectedChannelStore.getChannelId();
         await addMessage(message, ghostPinged ? idb.DBMessageStatus.GHOST_PINGED : idb.DBMessageStatus.DELETED, currentChannelId);
+        cacheSentMessages.delete(`${payload.channelId},${payload.id}`);
     }
     finally {
         handledMessageIds.delete(payload.id);
@@ -117,6 +118,7 @@ async function messageDeleteBulkHandler({ channelId, guildId, ids }: MessageDele
     }
 
     await idb.addMessagesBulkIDB(messages);
+    for (const message of messages) cacheSentMessages.delete(`${message.channel_id},${message.id}`);
 
     if (messages.length > 0 && settings.store.timeBasedCleanupMinutes > 0) {
         const currentChannelId = SelectedChannelStore.getChannelId();

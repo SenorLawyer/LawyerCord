@@ -77,8 +77,10 @@ export async function downloadAttachment(attachemnt: LoggedAttachment): Promise<
 
 export async function deleteImage(attachmentId: string): Promise<void> {
     const idbPath = idbSavedImages.get(attachmentId)?.path;
-    if (idbPath)
+    if (idbPath) {
+        idbSavedImages.delete(attachmentId);
         return await del(idbPath, ImageStore);
+    }
 
     if (IS_WEB) return;
 

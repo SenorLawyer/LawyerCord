@@ -34,6 +34,10 @@ export class LimitedMap<K, V> {
         return this.map.get(key);
     }
 
+    delete(key: K) {
+        return this.map.delete(key);
+    }
+
     clear() {
         this.map.clear();
     }

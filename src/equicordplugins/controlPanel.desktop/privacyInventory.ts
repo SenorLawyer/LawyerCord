@@ -1318,6 +1318,13 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
         "storage": [],
         "permissions": []
     },
+    "src/equicordplugins/activityHeatmap": {
+        "externalDomains": [],
+        "storage": [],
+        "permissions": [
+            "Discord message access"
+        ]
+    },
     "src/equicordplugins/advancedPermissions": {
         "externalDomains": [],
         "storage": [],
@@ -2225,6 +2232,11 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
         "permissions": [
             "Discord message access"
         ]
+    },
+    "src/equicordplugins/messageTemplates": {
+        "externalDomains": [],
+        "storage": [],
+        "permissions": []
     },
     "src/equicordplugins/messageTranslate": {
         "externalDomains": [

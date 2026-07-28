@@ -62,7 +62,7 @@ export const patchResourcesDir = (resources: string, patcherJsPath: string): boo
             try {
                 undo[i]();
             } catch (cleanupErr) {
-                console.error("[Protonn Cord] Rollback step failed", cleanupErr);
+                console.error("[LawyerCord] Rollback step failed", cleanupErr);
             }
         }
         throw err;
@@ -104,14 +104,14 @@ export const findStaleSibling = (currentExeDir: string): string | null => {
             try {
                 isDir = statSync(join(discordPath, name)).isDirectory();
             } catch (statErr) {
-                console.error("[Protonn Cord] Skipping unreadable sibling", name, statErr);
+                console.error("[LawyerCord] Skipping unreadable sibling", name, statErr);
                 continue;
             }
             if (!isDir) continue;
             if (isNewer(name, latest)) latest = name;
         }
     } catch (err) {
-        console.error("[Protonn Cord] Failed to scan for sibling versions", err);
+        console.error("[LawyerCord] Failed to scan for sibling versions", err);
         return null;
     }
 

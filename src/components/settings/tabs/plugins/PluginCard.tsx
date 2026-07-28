@@ -10,6 +10,7 @@ import { Settings } from "@api/Settings";
 import { CogWheel, InfoIcon } from "@components/Icons";
 import { AddonCard } from "@components/settings/AddonCard";
 import { classNameFactory } from "@utils/css";
+import { LAWYERCORD_ICON_URL } from "@utils/lawyerCordIcon";
 import { Logger } from "@utils/Logger";
 import { Plugin } from "@utils/types";
 import { React, showToast, Toasts } from "@webpack/common";
@@ -92,15 +93,15 @@ export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, on
     const pluginInfo = [
         {
             condition: isModifiedPlugin,
-            src: "https://raw.githubusercontent.com/ProtonnCord/ProtonnCord/refs/heads/main/browser/icon.png",
+            src: LAWYERCORD_ICON_URL,
             alt: "Modified",
             title: "Modified Vencord Plugin"
         },
         {
             condition: isEquicordPlugin,
-            src: "https://raw.githubusercontent.com/ProtonnCord/ProtonnCord/refs/heads/main/browser/icon.png",
-            alt: "Protonn Cord",
-            title: "Protonn Cord Plugin"
+            src: LAWYERCORD_ICON_URL,
+            alt: "LawyerCord",
+            title: "LawyerCord Plugin"
         },
         {
             condition: isVencordPlugin,
@@ -110,7 +111,7 @@ export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, on
         },
         {
             condition: isUserPlugin,
-            src: "https://raw.githubusercontent.com/ProtonnCord/ProtonnCord/refs/heads/main/browser/icon.png",
+            src: LAWYERCORD_ICON_URL,
             alt: "User",
             title: "User Plugin"
         }

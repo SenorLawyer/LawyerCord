@@ -1,1 +1,26 @@
-Protonn Cord is designed with user privacy in mind and doesn’t collect or share any personal data. Since it’s an extension for Discord, it operates entirely within the Discord platform. This means all interactions and data management follow Discord’s privacy policies, which you can check out at [discord.com/privacy](https://discord.com/privacy/). So, while Protonn Cord doesn’t handle your data, it’s a good idea to review Discord’s policy to understand how your information is managed. This setup ensures transparency and follows standard practices for third-party tools working within larger platforms.
+# LawyerCord privacy notes
+
+LawyerCord does not operate a LawyerCord telemetry or account-data service. It is still a Discord client modification, so Discord receives the normal data required to provide Discord and remains governed by [Discord's privacy policy](https://discord.com/privacy/).
+
+Default privacy behavior:
+
+- Discord analytics, metrics, and Sentry are disabled by the required `NoTrack` plugin.
+- Cloud settings sync and source auto-update are disabled.
+- `DiscordMCP`, secure messaging, voice transcription, and other optional plugins are disabled until the user enables them.
+- The local control panel is required and runs only on `127.0.0.1` while LawyerCord is open. Its private URL includes a random capability token.
+- Local plugin settings, MCP queue data, downloaded MCP attachments, control-panel data, evidence exports, and secure-messaging material are stored in LawyerCord's local application-data directory.
+
+Features that can contact third parties:
+
+- Cloud sync uploads the selected settings backup to the configured backend after the user authenticates and enables sync.
+- Plugins for translation, media, lyrics, external uploads, themes, badges, code highlighting, transcription, and similar services may contact the provider named in that plugin's settings or source.
+- The voice transcriber downloads a pinned JavaScript runtime from jsDelivr and speech models from Hugging Face; audio inference itself runs locally.
+- The updater contacts the configured Git remote only after auto-update is enabled or an update is requested manually.
+- The local Discord MCP server uses stdio plus a secret-authenticated file queue. It opens no listening network port, but the connected MCP host can request data from any Discord channel visible to the authenticated account.
+- The control panel records bounded runtime network destination metadata in memory. It removes query strings from displayed URLs and does not transmit observations.
+
+Only explicitly approved channels enter the control panel's local search index. Persistent index contents are protected with Electron `safeStorage`; if secure OS storage is unavailable, the index remains memory-only. Removing a channel from the index scope deletes its indexed messages. Evidence exports are explicit user actions and are written locally.
+
+Secure messaging encrypts message bodies and supported attachments before Discord receives them. Discord still sees metadata including participants, channel, timing, ciphertext size, attachment count, and traffic patterns. Endpoint compromise, another powerful client plugin, or screen/clipboard capture can still expose plaintext.
+
+Review optional plugin source and settings before enabling it. This document describes the checked-in code; downstream builds can change these guarantees.

@@ -38,8 +38,8 @@ import { Alerts, SearchableSelect, Select, useState } from "@webpack/common";
 
 const ICON_STYLE: React.CSSProperties = { width: 20, height: 20, borderRadius: 4, verticalAlign: "middle" };
 
-function ProtonnCordIcon() {
-    return <img src="https://raw.githubusercontent.com/ProtonnCord/ProtonnCord/refs/heads/main/browser/icon.png" alt="Protonn Cord" style={ICON_STYLE} />;
+function EquicordIcon() {
+    return <img src="https://equicord.org/assets/favicon.png" alt="Equicord" style={ICON_STYLE} />;
 }
 
 function VencordIcon() {
@@ -59,7 +59,7 @@ function validateUrl(url: string) {
 }
 
 const cloudBackendOptions = [
-    { label: "Protonn Cord Cloud", value: "https://cloud.equicord.org/" },
+    { label: "Equicord Cloud (upstream)", value: "https://cloud.equicord.org/" },
     { label: "Vencord Cloud", value: "https://api.vencord.dev/" }
 ];
 
@@ -93,11 +93,11 @@ function CloudTab() {
         <SettingsTab>
             <Heading className={Margins.top16}>Cloud Integration</Heading>
             <Paragraph className={Margins.bottom16}>
-                Protonn Cord's cloud integration allows you to sync your settings across multiple devices and Discord installations. Your data is securely stored and can be easily restored at any time.
+                LawyerCord can sync settings across devices using a backend you explicitly choose and authorize. Cloud sync is disabled by default.
             </Paragraph>
 
             <Notice.Info className={Margins.bottom16}>
-                Protonn Cord can use a compatible cloud backend with enhanced features.
+                LawyerCord can use a compatible cloud backend with enhanced features.
                 View the <Link href="https://equicord.org/cloud/policy">cloud privacy policy</Link> to see what it stores and how it uses your data.
                 The backend is BSD 3.0 licensed, so you can self-host if preferred.
             </Notice.Info>
@@ -119,7 +119,7 @@ function CloudTab() {
 
             <Heading className={Margins.top20}>Cloud Backend</Heading>
             <Paragraph className={Margins.bottom16}>
-                Choose which cloud backend to use for storing your settings. You can switch between Protonn Cord's and Vencord's cloud services, or use a self-hosted instance.
+                Choose which third-party or self-hosted backend may store your settings.
             </Paragraph>
 
             <div className={Margins.bottom8}>
@@ -128,7 +128,7 @@ function CloudTab() {
                     value={cloudBackendOptions.find(o => o.value === cloud.url)?.value}
                     onChange={v => changeUrl(v)}
                     closeOnSelect={true}
-                    renderOptionPrefix={o => o?.value?.includes("equicord") ? <ProtonnCordIcon /> : <VencordIcon />}
+                    renderOptionPrefix={o => o?.value?.includes("equicord") ? <EquicordIcon /> : <VencordIcon />}
                 />
             </div>
 
@@ -164,7 +164,7 @@ function CloudTab() {
 
             <Heading className={Margins.top20}>Settings Sync</Heading>
             <Paragraph className={Margins.bottom16}>
-                Synchronize your Protonn Cord settings to the cloud. This makes it easy to keep your configuration consistent across multiple devices without manual import/export.
+                Synchronize your LawyerCord settings to the cloud. This makes it easy to keep your configuration consistent across multiple devices without manual import/export.
             </Paragraph>
 
             <FormSwitch

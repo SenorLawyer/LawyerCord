@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>LawyerCord Control Panel</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #1e1f22;
+            --sidebar: #111214;
+            --panel: #2b2d31;
+            --panel-2: #232428;
+            --panel-3: #313338;
+            --line: rgba(255, 255, 255, .075);
+            --text: #f2f3f5;
+            --muted: #a9acb3;
+            --soft: #80848e;
+            --brand: #d7a95b;
+            --brand-2: #f1d39a;
+            --green: #23a55a;
+            --red: #f23f43;
+            --blue: #5865f2;
+            --radius: 14px;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+        button, input, select { font: inherit; }
+        button { color: inherit; }
+        .shell { min-height: 100vh; display: grid; grid-template-columns: 256px minmax(0, 1fr); }
+        aside {
+            position: sticky; top: 0; height: 100vh; padding: 18px 14px;
+            background: var(--sidebar); border-right: 1px solid var(--line);
+            display: flex; flex-direction: column; gap: 18px;
+        }
+        .brand { display: flex; align-items: center; gap: 12px; padding: 4px 7px 16px; border-bottom: 1px solid var(--line); }
+        .brand-mark {
+            width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center;
+            color: #17130b; font: 800 20px Georgia, serif;
+            background: linear-gradient(145deg, var(--brand-2), var(--brand));
+            box-shadow: 0 8px 28px rgba(215,169,91,.18);
+        }
+        .brand strong { display: block; font-size: 15px; letter-spacing: -.01em; }
+        .brand span { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
+        nav { display: grid; gap: 4px; }
+        .nav-button {
+            width: 100%; border: 0; background: transparent; padding: 10px 11px; border-radius: 8px;
+            display: flex; gap: 11px; align-items: center; color: var(--muted); cursor: pointer; text-align: left;
+        }
+        .nav-button:hover { background: rgba(255,255,255,.055); color: var(--text); }
+        .nav-button.active { background: var(--panel-3); color: var(--text); }
+        .nav-icon { width: 22px; text-align: center; color: var(--soft); }
+        .nav-button.active .nav-icon { color: var(--brand-2); }
+        .sidebar-status {
+            margin-top: auto; padding: 12px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line);
+            font-size: 12px; color: var(--muted);
+        }
+        .status-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 4px rgba(35,165,90,.1); }
+        main { min-width: 0; }
+        header {
+            position: sticky; top: 0; z-index: 4; min-height: 72px; display: flex; align-items: center;
+            padding: 14px clamp(20px, 4vw, 50px); background: rgba(30,31,34,.9); backdrop-filter: blur(18px);
+            border-bottom: 1px solid var(--line);
+        }
+        .header-title { font-size: 16px; font-weight: 700; }
+        .header-subtitle { margin-left: 10px; color: var(--soft); font-size: 13px; }
+        .account { margin-left: auto; display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--panel-3); object-fit: cover; }
+        .account-copy { min-width: 0; }
+        .account-copy strong, .account-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 190px; }
+        .account-copy strong { font-size: 13px; }
+        .account-copy span { color: var(--soft); font-size: 11px; }
+        .content { width: min(1440px, 100%); margin: 0 auto; padding: 32px clamp(20px, 4vw, 50px) 70px; }
+        .view { display: none; animation: enter .18s ease-out; }
+        .view.active { display: block; }
+        @keyframes enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+        .eyebrow { margin: 0 0 8px; color: var(--brand-2); font-size: 11px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+        h1 { margin: 0; font-size: clamp(26px, 3vw, 38px); letter-spacing: -.035em; line-height: 1.08; }
+        .lede { margin: 10px 0 26px; color: var(--muted); max-width: 720px; line-height: 1.55; }
+        .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 24px; }
+        .metric, .card {
+            border: 1px solid var(--line); background: linear-gradient(150deg, var(--panel), #27292d); border-radius: var(--radius);
+            box-shadow: 0 12px 30px rgba(0,0,0,.1);
+        }
+        .metric { padding: 18px; min-height: 124px; display: flex; flex-direction: column; justify-content: space-between; }
+        .metric-label { color: var(--muted); font-size: 12px; }
+        .metric-value { font-size: 30px; font-weight: 760; letter-spacing: -.04em; }
+        .metric-detail { color: var(--soft); font-size: 11px; }
+        .grid-2 { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(320px, .7fr); gap: 14px; }
+        .card { padding: 20px; min-width: 0; }
+        .card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+        .card-head h2 { margin: 0; font-size: 15px; }
+        .card-head span { color: var(--soft); font-size: 12px; margin-left: auto; }
+        .list { display: grid; gap: 2px; }
+        .list-row { display: flex; align-items: center; gap: 11px; padding: 10px; border-radius: 8px; }
+        .list-row:hover { background: rgba(255,255,255,.035); }
+        .guild-icon { width: 36px; height: 36px; border-radius: 11px; background: var(--panel-3); object-fit: cover; display: grid; place-items: center; font-weight: 700; }
+        .row-copy { min-width: 0; flex: 1; }
+        .row-copy strong, .row-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .row-copy strong { font-size: 13px; }
+        .row-copy span { color: var(--soft); font-size: 11px; margin-top: 3px; }
+        .pill { padding: 4px 8px; border-radius: 999px; background: rgba(255,255,255,.055); color: var(--muted); font-size: 10px; white-space: nowrap; }
+        .pill.green { color: #7ee2a8; background: rgba(35,165,90,.13); }
+        .pill.gold { color: var(--brand-2); background: rgba(215,169,91,.12); }
+        .pill.red { color: #ff9a9d; background: rgba(242,63,67,.12); }
+        .search-box {
+            display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 7px;
+            background: var(--panel-2); border: 1px solid var(--line); border-radius: 13px; margin-bottom: 18px;
+        }
+        input, select {
+            width: 100%; border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+            padding: 10px 12px; border-radius: 8px; outline: none;
+        }
+        .search-box input { border: 0; background: transparent; padding: 8px 10px; }
+        input:focus, select:focus { border-color: rgba(215,169,91,.55); box-shadow: 0 0 0 3px rgba(215,169,91,.08); }
+        .button {
+            border: 0; border-radius: 8px; padding: 9px 14px; background: var(--blue); cursor: pointer; font-weight: 650; font-size: 12px;
+        }
+        .button:hover { filter: brightness(1.08); }
+        .button.secondary { background: var(--panel-3); border: 1px solid var(--line); }
+        .button.gold { color: #1a140a; background: var(--brand); }
+        .search-result { padding: 16px; border-bottom: 1px solid var(--line); }
+        .search-result:last-child { border-bottom: 0; }
+        .result-meta { display: flex; gap: 8px; align-items: center; color: var(--soft); font-size: 11px; }
+        .result-meta strong { color: var(--text); font-size: 12px; }
+        .result-content { margin: 8px 0 10px; white-space: pre-wrap; line-height: 1.45; color: #dbdee1; }
+        .result-link { color: var(--brand-2); text-decoration: none; font-size: 11px; }
+        .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+        label.field { display: grid; gap: 7px; color: var(--muted); font-size: 12px; }
+        .check { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+        .check input { width: 15px; height: 15px; }
+        .channel-picker { max-height: 330px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+        .channel-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 11px; align-items: center; padding: 11px 12px; border-bottom: 1px solid var(--line); }
+        .channel-row:last-child { border-bottom: 0; }
+        .channel-row input { width: 16px; height: 16px; }
+        .switch { width: 36px; height: 20px; border: 0; border-radius: 999px; background: #4e5058; padding: 2px; cursor: pointer; }
+        .switch::after { content: ""; display: block; width: 16px; height: 16px; border-radius: 50%; background: white; transition: transform .15s; }
+        .switch.on { background: var(--green); }
+        .switch.on::after { transform: translateX(16px); }
+        .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th { color: var(--soft); text-align: left; font-weight: 600; background: var(--panel-2); position: sticky; top: 0; }
+        th, td { padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+        tr:last-child td { border-bottom: 0; }
+        .tags { display: flex; flex-wrap: wrap; gap: 5px; }
+        .tag { border: 1px solid var(--line); padding: 3px 6px; border-radius: 5px; color: var(--muted); font-size: 10px; }
+        .empty { padding: 34px; text-align: center; color: var(--soft); }
+        .notice { padding: 13px 14px; border-radius: 9px; background: rgba(215,169,91,.08); border: 1px solid rgba(215,169,91,.2); color: #e8d2ad; font-size: 12px; line-height: 1.5; margin-bottom: 16px; }
+        .security-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 13px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+        .security-row:last-child { border: 0; }
+        .security-icon { width: 38px; height: 38px; border-radius: 11px; background: var(--panel-3); display: grid; place-items: center; color: var(--brand-2); }
+        .mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; word-break: break-all; }
+        .toast { position: fixed; right: 22px; bottom: 22px; z-index: 20; background: #111214; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; box-shadow: 0 18px 50px rgba(0,0,0,.35); transform: translateY(20px); opacity: 0; pointer-events: none; transition: .18s; font-size: 12px; }
+        .toast.show { transform: none; opacity: 1; }
+        @media (max-width: 1000px) {
+            .shell { grid-template-columns: 76px minmax(0,1fr); }
+            aside { padding-inline: 10px; }
+            .brand-copy, .nav-label, .sidebar-status { display: none; }
+            .brand { justify-content: center; padding-inline: 0; }
+            .nav-button { justify-content: center; }
+            .metric-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+            .grid-2 { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 620px) {
+            .shell { display: block; }
+            aside { position: fixed; z-index: 10; top: auto; bottom: 0; width: 100%; height: 62px; padding: 8px; border: 0; border-top: 1px solid var(--line); }
+            .brand, .sidebar-status { display: none; }
+            nav { grid-template-columns: repeat(6, 1fr); }
+            .nav-button { padding: 10px 4px; }
+            .nav-label { display: none; }
+            .metric-grid { grid-template-columns: 1fr 1fr; }
+            .metric { min-height: 105px; }
+            .form-grid { grid-template-columns: 1fr; }
+            .content { padding-bottom: 92px; }
+            .header-subtitle, .account-copy { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <aside>
+            <div class="brand">
+                <div class="brand-mark">L</div>
+                <div class="brand-copy"><strong>LawyerCord</strong><span>Local control panel</span></div>
+            </div>
+            <nav>
+                <button class="nav-button active" data-view="overview"><span class="nav-icon">⌂</span><span class="nav-label">Overview</span></button>
+                <button class="nav-button" data-view="search"><span class="nav-icon">⌕</span><span class="nav-label">Semantic search</span></button>
+                <button class="nav-button" data-view="evidence"><span class="nav-icon">▤</span><span class="nav-label">Evidence exports</span></button>
+                <button class="nav-button" data-view="privacy"><span class="nav-icon">◉</span><span class="nav-label">Privacy</span></button>
+                <button class="nav-button" data-view="channels"><span class="nav-icon">#</span><span class="nav-label">Index channels</span></button>
+                <button class="nav-button" data-view="security"><span class="nav-icon">◇</span><span class="nav-label">Security</span></button>
+            </nav>
+            <div class="sidebar-status">
+                <div class="status-line"><span>Loopback service</span><span class="dot"></span></div>
+                <div id="side-storage" style="margin-top:9px;color:var(--soft)">Loading encrypted store…</div>
+            </div>
+        </aside>
+        <main>
+            <header>
+                <div class="header-title" id="header-title">Overview</div>
+                <div class="header-subtitle">Private · 127.0.0.1 only</div>
+                <div class="account">
+                    <img class="avatar" id="account-avatar" alt="">
+                    <div class="account-copy"><strong id="account-name">Connecting…</strong><span id="account-id"></span></div>
+                </div>
+            </header>
+            <div class="content">
+                <section class="view active" id="view-overview">
+                    <p class="eyebrow">Your Discord at a glance</p>
+                    <h1>One control room.<br>Nothing leaves your machine.</h1>
+                    <p class="lede">Live account statistics, approved-channel search, evidence tooling, and privacy observations while LawyerCord is running.</p>
+                    <div class="metric-grid">
+                        <div class="metric"><span class="metric-label">Servers</span><strong class="metric-value" id="metric-guilds">—</strong><span class="metric-detail" id="detail-guilds">Visible to this account</span></div>
+                        <div class="metric"><span class="metric-label">Friends</span><strong class="metric-value" id="metric-friends">—</strong><span class="metric-detail" id="detail-friends">Relationship store</span></div>
+                        <div class="metric"><span class="metric-label">Indexed messages</span><strong class="metric-value" id="metric-messages">—</strong><span class="metric-detail" id="detail-messages">Encrypted locally</span></div>
+                        <div class="metric"><span class="metric-label">Observed domains</span><strong class="metric-value" id="metric-domains">—</strong><span class="metric-detail" id="detail-domains">This app session</span></div>
+                    </div>
+                    <div class="grid-2">
+                        <div class="card"><div class="card-head"><h2>Largest servers</h2><span id="guild-summary"></span></div><div class="list" id="guild-list"></div></div>
+                        <div class="card"><div class="card-head"><h2>Runtime health</h2></div><div id="runtime-health"></div></div>
+                    </div>
+                </section>
+                <section class="view" id="view-search">
+                    <p class="eyebrow">Encrypted local retrieval</p>
+                    <h1>Search meaning, not just exact words.</h1>
+                    <p class="lede">The index uses local subword vectors and hybrid ranking. Only channels you explicitly approve are persisted.</p>
+                    <form class="search-box" id="search-form"><input id="search-query" autocomplete="off" placeholder="Try “deployment problem last week” or a person’s name"><button class="button gold">Search locally</button></form>
+                    <div class="card" style="padding:0"><div id="search-results" class="empty">Enter a question or phrase to search your encrypted index.</div></div>
+                </section>
+                <section class="view" id="view-evidence">
+                    <p class="eyebrow">Forensic export</p>
+                    <h1>Portable evidence with a verifiable chain.</h1>
+                    <p class="lede">Generate JSONL evidence, a SHA-256 file manifest, and a chained record hash. Automatic redaction is on by default.</p>
+                    <div class="notice">Exports are intentionally limited to approved, locally indexed channels. They are written to LawyerCord’s private data directory and never uploaded.</div>
+                    <div class="grid-2">
+                        <form class="card" id="evidence-form">
+                            <div class="card-head"><h2>Export scope</h2></div>
+                            <div class="channel-picker" id="evidence-channels"></div>
+                            <div class="form-grid" style="margin-top:14px">
+                                <label class="field">From<input id="evidence-from" type="datetime-local"></label>
+                                <label class="field">To<input id="evidence-to" type="datetime-local"></label>
+                            </div>
+                            <div style="display:flex;gap:18px;margin:16px 0">
+                                <label class="check"><input id="evidence-redact" type="checkbox" checked> Redact emails, phones, IPs, tokens, and secrets</label>
+                                <label class="check"><input id="evidence-anonymize" type="checkbox"> Hash author identities</label>
+                            </div>
+                            <button class="button gold">Create evidence package</button>
+                        </form>
+                        <div class="card"><div class="card-head"><h2>Latest result</h2><button class="button secondary" id="open-exports" type="button">Open folder</button></div><div id="evidence-result" class="empty">No package created this session.</div></div>
+                    </div>
+                </section>
+                <section class="view" id="view-privacy">
+                    <p class="eyebrow">Privacy observatory</p>
+                    <h1>See what can act—and what actually connected.</h1>
+                    <p class="lede">Declared capabilities are shown per plugin. Runtime domains are observed independently because Electron cannot reliably attribute a request to bundled plugin code.</p>
+                    <div class="grid-2" style="margin-bottom:14px">
+                        <div class="card"><div class="card-head"><h2>Observed domains</h2><span>Current app session</span></div><div class="list" id="domain-list"></div></div>
+                        <div class="card"><div class="card-head"><h2>Recent network activity</h2><span>URLs exclude query strings</span></div><div class="list" id="network-list"></div></div>
+                    </div>
+                    <div class="card"><div class="card-head"><h2>Plugin capability inventory</h2><span id="plugin-count"></span></div><div class="table-wrap"><table><thead><tr><th>Plugin</th><th>External domains in source</th><th>Storage</th><th>Capabilities</th></tr></thead><tbody id="privacy-table"></tbody></table></div></div>
+                </section>
+                <section class="view" id="view-channels">
+                    <p class="eyebrow">Explicit local scope</p>
+                    <h1>Choose what enters the encrypted index.</h1>
+                    <p class="lede">This does not restrict Discord or the MCP. It controls semantic indexing and evidence exports only.</p>
+                    <div class="card"><div class="card-head"><h2>Visible channels</h2><span id="approved-count"></span></div><input id="channel-filter" placeholder="Filter by server or channel name" style="margin-bottom:12px"><div class="channel-picker" id="channel-list" style="max-height:600px"></div></div>
+                </section>
+                <section class="view" id="view-security">
+                    <p class="eyebrow">Trust boundaries</p>
+                    <h1>Security status without marketing fog.</h1>
+                    <p class="lede">What is protected now, what remains legacy, and what must be true before a protocol migration is safe.</p>
+                    <div class="card" id="security-list"></div>
+                </section>
+            </div>
+        </main>
+    </div>
+    <div class="toast" id="toast"></div>
+    <script>
+        const state = { overview: null, channels: [], approved: new Set(), privacy: null };
+        const $ = selector => document.querySelector(selector);
+        const $$ = selector => [...document.querySelectorAll(selector)];
+        const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
+        const number = value => new Intl.NumberFormat().format(Number(value || 0));
+        const relative = value => {
+            const seconds = Math.round((Date.parse(value) - Date.now()) / 1000);
+            const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+            if (Math.abs(seconds) < 60) return formatter.format(seconds, "second");
+            if (Math.abs(seconds) < 3600) return formatter.format(Math.round(seconds / 60), "minute");
+            if (Math.abs(seconds) < 86400) return formatter.format(Math.round(seconds / 3600), "hour");
+            return formatter.format(Math.round(seconds / 86400), "day");
+        };
+        const api = async (path, options) => {
+            const response = await fetch(`api/${path}`, options);
+            const value = await response.json();
+            if (!response.ok || value.error) throw new Error(value.error || `Request failed: ${response.status}`);
+            return value;
+        };
+        function toast(message) {
+            const element = $("#toast");
+            element.textContent = message;
+            element.classList.add("show");
+            clearTimeout(toast.timer);
+            toast.timer = setTimeout(() => element.classList.remove("show"), 2600);
+        }
+        function showView(name) {
+            $$(".nav-button").forEach(button => button.classList.toggle("active", button.dataset.view === name));
+            $$(".view").forEach(view => view.classList.toggle("active", view.id === `view-${name}`));
+            $("#header-title").textContent = $(`.nav-button[data-view="${name}"] .nav-label`)?.textContent || name;
+            if (name === "privacy") loadPrivacy();
+            if (name === "channels" || name === "evidence") loadChannels();
+        }
+        $$(".nav-button").forEach(button => button.addEventListener("click", () => showView(button.dataset.view)));
+        function runtimeRow(icon, title, detail, status, statusClass = "green") {
+            return `<div class="security-row"><div class="security-icon">${icon}</div><div class="row-copy"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span></div><span class="pill ${statusClass}">${escapeHtml(status)}</span></div>`;
+        }
+        async function loadOverview() {
+            try {
+                const value = await api("overview");
+                state.overview = value;
+                const snapshot = value.snapshot;
+                if (!snapshot) return;
+                $("#account-name").textContent = snapshot.user?.displayName || "Discord";
+                $("#account-id").textContent = snapshot.user?.id || "";
+                const avatar = $("#account-avatar");
+                avatar.style.display = snapshot.user?.avatarUrl ? "" : "none";
+                if (snapshot.user?.avatarUrl) avatar.src = snapshot.user.avatarUrl;
+                $("#metric-guilds").textContent = number(snapshot.guilds.length);
+                $("#metric-friends").textContent = number(snapshot.friendCount);
+                $("#metric-messages").textContent = number(value.storage.indexedMessages);
+                $("#metric-domains").textContent = number(value.network.domainCount);
+                $("#detail-guilds").textContent = `${number(snapshot.channels.length)} visible channels`;
+                $("#detail-friends").textContent = `${number(snapshot.blockedCount)} blocked accounts`;
+                $("#detail-messages").textContent = `${number(value.storage.approvedChannels)} approved channels`;
+                $("#detail-domains").textContent = `${number(value.network.requestCount)} observed requests`;
+                $("#side-storage").textContent = value.storage.status === "encrypted" ? `${number(value.storage.indexedMessages)} messages · encrypted` : "Memory-only storage";
+                const guilds = [...snapshot.guilds].sort((a,b) => b.memberCount - a.memberCount).slice(0, 7);
+                $("#guild-summary").textContent = `${number(snapshot.guilds.length)} total`;
+                $("#guild-list").innerHTML = guilds.map(guild => `<div class="list-row">${guild.iconUrl ? `<img class="guild-icon" src="${escapeHtml(guild.iconUrl)}" alt="">` : `<div class="guild-icon">${escapeHtml(guild.name.slice(0,2).toUpperCase())}</div>`}<div class="row-copy"><strong>${escapeHtml(guild.name)}</strong><span>${number(guild.channelCount)} channels</span></div><span class="pill">${guild.memberCount ? `${number(guild.memberCount)} members` : "member count unavailable"}</span></div>`).join("") || '<div class="empty">No guild data loaded.</div>';
+                $("#runtime-health").innerHTML =
+                    runtimeRow("●", "Loopback control plane", `Port ${new URL(value.app.controlPanelUrl).port} · capability-token URL`, "ONLINE") +
+                    runtimeRow("⌁", "Semantic index", "OS-protected encryption at rest", value.storage.status.toUpperCase(), value.storage.status === "encrypted" ? "green" : "red") +
+                    runtimeRow("◈", "Discord MCP", "All visible channels and fixed write surface", "UNRESTRICTED", "gold") +
+                    runtimeRow("◇", "Secure Messaging", snapshot.secureMessaging.forwardSecrecy ? "Forward-secret protocol active" : "Legacy non-ratcheting protocol", snapshot.secureMessaging.forwardSecrecy ? "V2" : "V1", snapshot.secureMessaging.forwardSecrecy ? "green" : "red");
+                renderSecurity(snapshot.secureMessaging, value.storage);
+            } catch (error) { toast(error.message); }
+        }
+        $("#search-form").addEventListener("submit", async event => {
+            event.preventDefault();
+            const query = $("#search-query").value.trim();
+            if (!query) return;
+            const container = $("#search-results");
+            container.className = "empty";
+            container.textContent = "Searching encrypted local index…";
+            try {
+                const value = await api(`search?q=${encodeURIComponent(query)}`);
+                container.className = "";
+                container.innerHTML = value.results.length ? value.results.map(result => `<article class="search-result"><div class="result-meta"><strong>${escapeHtml(result.authorName)}</strong><span>in ${escapeHtml(result.guildName ? `${result.guildName} / ${result.channelName}` : result.channelName)}</span><span>·</span><span>${escapeHtml(relative(result.timestamp))}</span><span class="pill gold">${Math.round(result.score * 100)}%</span></div><div class="result-content">${escapeHtml(result.content || `[${result.attachmentCount} attachment(s)]`)}</div><a class="result-link" href="${escapeHtml(result.jumpUrl)}" target="_blank" rel="noreferrer">Open message in Discord ↗</a></article>`).join("") : '<div class="empty">No relevant indexed messages found. Approve and backfill more channels if needed.</div>';
+            } catch (error) { container.textContent = error.message; toast(error.message); }
+        });
+        async function loadChannels() {
+            try {
+                const value = await api("channels");
+                state.channels = value.channels;
+                state.approved = new Set(value.approvedChannelIds);
+                renderChannels();
+                renderEvidenceChannels();
+            } catch (error) { toast(error.message); }
+        }
+        function renderChannels() {
+            const filter = ($("#channel-filter")?.value || "").toLowerCase();
+            const values = state.channels.filter(channel => `${channel.guildName || "Direct messages"} ${channel.name}`.toLowerCase().includes(filter));
+            $("#approved-count").textContent = `${state.approved.size} approved`;
+            $("#channel-list").innerHTML = values.map(channel => `<div class="channel-row"><span style="color:var(--soft)">#</span><div class="row-copy"><strong>${escapeHtml(channel.name)}</strong><span>${escapeHtml(channel.guildName || "Direct messages")} · ${channel.id}</span></div><button class="switch ${state.approved.has(channel.id) ? "on" : ""}" data-channel="${channel.id}" aria-label="Toggle ${escapeHtml(channel.name)}"></button></div>`).join("") || '<div class="empty">No matching channels.</div>';
+            $$("#channel-list .switch").forEach(button => button.addEventListener("click", () => toggleChannel(button.dataset.channel, !state.approved.has(button.dataset.channel))));
+        }
+        async function toggleChannel(channelId, approved) {
+            try {
+                const value = await api("channels", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ channelId, approved }) });
+                state.approved = new Set(value.approvedChannelIds);
+                renderChannels();
+                renderEvidenceChannels();
+                toast(approved ? "Channel approved for encrypted indexing" : "Channel removed from future indexing");
+            } catch (error) { toast(error.message); }
+        }
+        $("#channel-filter").addEventListener("input", renderChannels);
+        function renderEvidenceChannels() {
+            const approved = state.channels.filter(channel => state.approved.has(channel.id));
+            $("#evidence-channels").innerHTML = approved.map(channel => `<label class="channel-row"><input type="checkbox" name="evidence-channel" value="${channel.id}"><div class="row-copy"><strong>${escapeHtml(channel.name)}</strong><span>${escapeHtml(channel.guildName || "Direct messages")}</span></div><span class="pill green">indexed</span></label>`).join("") || '<div class="empty">Approve at least one channel first.</div>';
+        }
+        $("#evidence-form").addEventListener("submit", async event => {
+            event.preventDefault();
+            const channelIds = $$('input[name="evidence-channel"]:checked').map(input => input.value);
+            try {
+                const value = await api("evidence", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ channelIds, from: $("#evidence-from").value || null, to: $("#evidence-to").value || null, redact: $("#evidence-redact").checked, anonymize: $("#evidence-anonymize").checked })
+                });
+                $("#evidence-result").className = "";
+                $("#evidence-result").innerHTML = `<div class="security-row"><div class="security-icon">✓</div><div class="row-copy"><strong>${number(value.recordCount)} records exported</strong><span>${escapeHtml(value.createdAt)}</span></div><span class="pill green">VERIFIED</span></div><p class="metric-label">Export path</p><p class="mono">${escapeHtml(value.path)}</p><p class="metric-label">Manifest SHA-256</p><p class="mono">${escapeHtml(value.manifestSha256)}</p><p class="metric-label">Final chain hash</p><p class="mono">${escapeHtml(value.chain.finalHash)}</p>`;
+                toast("Evidence package created");
+            } catch (error) { toast(error.message); }
+        });
+        $("#open-exports").addEventListener("click", async () => {
+            try { await api("open-exports", { method: "POST" }); } catch (error) { toast(error.message); }
+        });
+        async function loadPrivacy() {
+            try {
+                const value = await api("privacy");
+                state.privacy = value;
+                $("#domain-list").innerHTML = value.observedDomains.slice(0, 16).map(item => `<div class="list-row"><div class="guild-icon" style="border-radius:50%;width:30px;height:30px">↗</div><div class="row-copy"><strong>${escapeHtml(item.domain)}</strong><span>Observed by Electron this session</span></div><span class="pill">${number(item.count)} requests</span></div>`).join("") || '<div class="empty">No external requests observed yet.</div>';
+                const recent = state.overview?.network?.recent || [];
+                $("#network-list").innerHTML = recent.slice(0, 10).map(item => `<div class="list-row"><div class="row-copy"><strong>${escapeHtml(item.domain)}</strong><span>${escapeHtml(item.method)} · ${escapeHtml(item.resourceType)} · ${escapeHtml(relative(item.timestamp))}</span></div><span class="pill ${item.statusCode >= 400 ? "red" : "green"}">${item.statusCode}</span></div>`).join("") || '<div class="empty">No recent requests.</div>';
+                $("#plugin-count").textContent = `${number(value.inventory.length)} plugins`;
+                $("#privacy-table").innerHTML = value.inventory.map(plugin => `<tr><td><strong>${escapeHtml(plugin.name)}</strong></td><td><div class="tags">${plugin.externalDomains.length ? plugin.externalDomains.map(item => `<span class="tag">${escapeHtml(item)}</span>`).join("") : '<span class="tag">None found</span>'}</div></td><td><div class="tags">${plugin.storage.length ? plugin.storage.map(item => `<span class="tag">${escapeHtml(item)}</span>`).join("") : '<span class="tag">No declared storage</span>'}</div></td><td><div class="tags">${plugin.permissions.length ? plugin.permissions.map(item => `<span class="tag">${escapeHtml(item)}</span>`).join("") : '<span class="tag">No elevated capability declared</span>'}</div></td></tr>`).join("");
+            } catch (error) { toast(error.message); }
+        }
+        function renderSecurity(secure, storage) {
+            $("#security-list").innerHTML =
+                runtimeRow("⌁", "Encrypted semantic index", storage.status === "encrypted" ? "Persisted through Electron safeStorage; decrypted only in the trusted main process." : "OS secure storage is unavailable, so messages remain memory-only.", storage.status === "encrypted" ? "PROTECTED" : "MEMORY ONLY", storage.status === "encrypted" ? "green" : "red") +
+                runtimeRow("⌘", "Device verification", "Secure Messaging fingerprints bind the Discord user and public identity keys; changes require review.", secure.deviceVerification ? "AVAILABLE" : "MISSING", secure.deviceVerification ? "green" : "red") +
+                runtimeRow("⇄", "Forward secrecy", secure.forwardSecrecy ? "A ratcheting audited provider protects historical sessions." : "PCEM1 uses static recipient keys. A future provider must migrate with dual-read and explicit device sessions.", secure.forwardSecrecy ? "ACTIVE" : "NOT ACTIVE", secure.forwardSecrecy ? "green" : "red") +
+                runtimeRow("◈", "Protocol migration gate", secure.migrationStatus, "FAIL CLOSED", "gold") +
+                runtimeRow("◎", "Local dashboard boundary", "Bound to 127.0.0.1 with an unguessable capability URL, same-origin API checks, no CORS, and no remote assets.", "LOCAL", "green");
+        }
+        loadOverview();
+        loadChannels();
+        setInterval(loadOverview, 5000);
+    </script>
+</body>
+</html>

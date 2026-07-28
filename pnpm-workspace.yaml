@@ -1,5 +1,7 @@
 packages:
     - packages/*
+overrides:
+    dompurify: 3.4.12
 peerDependencyRules:
     ignoreMissing:
         - eslint-plugin-import

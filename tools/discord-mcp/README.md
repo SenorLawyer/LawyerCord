@@ -1,6 +1,6 @@
 # Discord MCP
 
-This local stdio MCP server talks to the `DiscordMCP` ProtonnCord plugin through a private file queue. Discord remains the only process that accesses the authenticated account.
+This local stdio MCP server talks to the `DiscordMCP` LawyerCord plugin through a private file queue. Discord remains the only process that accesses the authenticated account.
 
 ## Safety boundary
 
@@ -15,10 +15,10 @@ This local stdio MCP server talks to the `DiscordMCP` ProtonnCord plugin through
 
 ## Run
 
-Enable `DiscordMCP` in ProtonnCord and keep Discord running, then configure an MCP client to run:
+Enable `DiscordMCP` in LawyerCord and keep Discord running, then configure an MCP client to run:
 
 ```text
-node D:\Development\protonn-cord\ProtonnCord\tools\discord-mcp\server.mjs
+node tools/discord-mcp/server.mjs
 ```
 
-For isolated testing, `PROTONN_CORD_DISCORD_MCP_DIR` may point at a temporary bridge directory.
+For isolated testing, `LAWYERCORD_DISCORD_MCP_DIR` may point at a temporary bridge directory.

@@ -71,7 +71,7 @@ export async function installExt(id: string) {
 
         const buf = await fetchBuffer(url, {
             headers: {
-                "User-Agent": `Electron ${process.versions.electron} ~ ProtonnCord (https://github.com/ProtonnCord/ProtonnCord)`
+                "User-Agent": `Electron ${process.versions.electron} ~ LawyerCord (https://github.com/ProtonDev-sys/ProtonnCord)`
             }
         });
 

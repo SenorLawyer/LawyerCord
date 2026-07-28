@@ -1,5 +1,5 @@
 name: Feature Request
-description: Have an idea for a new feature? Request it here! No plugin requests, go to our Discord server for that
+description: Propose a focused feature or improvement for LawyerCord.
 labels: [enhancement]
 title: "[Feature] <title>"
 
@@ -7,9 +7,8 @@ body:
     - type: markdown
       attributes:
           value: |
-              This form is not for any of the following:
-              - Plugin requests - Go to our [Discord server](https://equicord.org/discord) for that
-              - Feature requests for plugins - Go to our [Discord server](https://equicord.org/discord) for that
+              - Keep requests scoped to LawyerCord.
+              - Explain any new network access, stored data, or Discord write capability.
 
     - type: textarea
       id: feature-description
@@ -40,6 +39,4 @@ body:
           label: Request Agreement
           options:
               - label: I've searched existing issues and this hasn't been suggested before
-              - label: This is a **core modification feature**, not a plugin request (those go in Discord)
-              - label: This feature would benefit most users, not just a specific use case
-              - label: I am willing to work on this myself
+              - label: I have described the feature's privacy and security impact

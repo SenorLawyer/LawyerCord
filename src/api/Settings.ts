@@ -104,7 +104,8 @@ export interface Settings {
 }
 
 const DefaultSettings: Settings = {
-    autoUpdate: true,
+    // Keep source updates opt-in until the operator has configured a trusted LawyerCord remote.
+    autoUpdate: false,
     autoUpdateNotification: true,
     useQuickCss: true,
     themeLinks: [],

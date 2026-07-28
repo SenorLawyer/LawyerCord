@@ -22,10 +22,10 @@ import { ComponentType } from "react";
 import { PluginButtons } from "./pluginButtons";
 import { PluginCards } from "./pluginCards";
 
-migratePluginSettings("ProtonnCordHelper", "EquicordHelper");
-migratePluginToSettings(true, "ProtonnCordHelper", "NoBulletPoints", "noBulletPoints");
-migratePluginToSettings(true, "ProtonnCordHelper", "NoModalAnimation", "noModalAnimation");
-migratePluginToSettings(true, "ProtonnCordHelper", "GuildTagSettings", "disableAdoptTagPrompt");
+migratePluginSettings("LawyerCordHelper", "EquicordHelper");
+migratePluginToSettings(true, "LawyerCordHelper", "NoBulletPoints", "noBulletPoints");
+migratePluginToSettings(true, "LawyerCordHelper", "NoModalAnimation", "noModalAnimation");
+migratePluginToSettings(true, "LawyerCordHelper", "GuildTagSettings", "disableAdoptTagPrompt");
 
 let clicked = false;
 
@@ -143,7 +143,7 @@ const settings = definePluginSettings({
 });
 
 export default definePlugin({
-    name: "ProtonnCordHelper",
+    name: "LawyerCordHelper",
     description: "Used to provide support, fix discord caused crashes, and other misc features.",
     tags: ["Appearance", "Commands", "Utility"],
     dependencies: ["CommandsAPI", "HeaderBarAPI", "MessageAccessoriesAPI"],
@@ -380,8 +380,8 @@ export default definePlugin({
             if (VC_SUPPORT_CHANNEL_IDS.includes(channelId) && !clicked) {
                 return Alerts.show({
                     title: "Vencord Support Channel Warning",
-                    body: "Before asking for help. Check updates and if this issue is actually caused by Protonn Cord!",
-                    confirmText: "Protonn Cord Support",
+                    body: "Before asking for help. Check updates and if this issue is actually caused by LawyerCord!",
+                    confirmText: "LawyerCord Support",
                     onConfirm() {
                         NavigationRouter.transitionTo(`/channels/${GUILD_ID}/${SUPPORT_CHANNEL_ID}`);
                     },

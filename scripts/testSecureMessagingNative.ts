@@ -472,6 +472,7 @@ async function testStorageFailures(bundlePath: string, linuxBundlePath: string, 
     );
 
     const parentSyncDir = join(root, "parent-sync-failure");
+    await mkdir(parentSyncDir, { recursive: true });
     native = await loadNative(linuxBundlePath, parentSyncDir);
     const parentSyncCalls = protector.parentDirectorySyncCalls;
     protector.failParentDirectorySync = true;
@@ -1095,7 +1096,7 @@ async function testNativeLifecycle(bundlePath: string, dataDir: string): Promise
 }
 
 async function main(): Promise<void> {
-    const root = await mkdtemp(join(tmpdir(), "protonncord-secure-native-"));
+    const root = await mkdtemp(join(tmpdir(), "lawyercord-secure-native-"));
     const bundlePath = join(root, "secure-messaging-native.mjs");
     const linuxBundlePath = join(root, "secure-messaging-native-linux.mjs");
     const windowsBundlePath = join(root, "secure-messaging-native-windows.mjs");

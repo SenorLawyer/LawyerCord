@@ -552,7 +552,7 @@ function ChangelogContent() {
 
             <Heading className={Margins.top20}>Repository</Heading>
             <Paragraph className={Margins.bottom8}>
-                This is the GitHub repository where Protonn Cord fetches updates from.
+                This is the GitHub repository where LawyerCord fetches updates from.
             </Paragraph>
             <Paragraph color="text-subtle">
                 {repoPending ? (

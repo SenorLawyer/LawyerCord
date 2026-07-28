@@ -52,7 +52,7 @@ export const PluginButtons = ErrorBoundary.wrap(function PluginCards({ message }
                         const success = await toggleEnabled(matchedPlugin);
                         if (success) showToast(`${label}`, Toasts.Type.SUCCESS);
                     } catch (e) {
-                        new Logger("ProtonnCordHelper").error("Error while toggling:", e);
+                        new Logger("LawyerCordHelper").error("Error while toggling:", e);
                         showToast(`Failed to ${label.toLowerCase()}`, Toasts.Type.FAILURE);
                     }
                 }}

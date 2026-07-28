@@ -66,13 +66,13 @@ if (!IS_VANILLA && !IS_EXTENSION) {
 
         handleClientProtocol("vencord");
         handleClientProtocol("equicord");
-        handleClientProtocol("protonncord");
+        handleClientProtocol("lawyercord");
 
         try {
             if (RendererSettings.store.enableReactDevtools)
                 installExt("fmkadmapgofadopljbjfkapdkoienihi")
-                    .then(() => console.info("[Protonn Cord] Installed React Developer Tools"))
-                    .catch(err => console.error("[Protonn Cord] Failed to install React Developer Tools", err));
+                    .then(() => console.info("[LawyerCord] Installed React Developer Tools"))
+                    .catch(err => console.error("[LawyerCord] Failed to install React Developer Tools", err));
         } catch { }
 
         initCsp();

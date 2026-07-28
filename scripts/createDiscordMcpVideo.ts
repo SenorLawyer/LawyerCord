@@ -32,7 +32,7 @@ const chatIcon = `
 
 const slides: Slide[] = [
     {
-        eyebrow: "PROTONN CORD PRESENTS",
+        eyebrow: "LAWYERCORD PRESENTS",
         title: "Discord MCP",
         subtitle: "Your Discord. Agent-ready. Quietly.",
         accent: "#62e8ff",
@@ -54,7 +54,7 @@ const slides: Slide[] = [
             <div class="flow-node"><b>AI agent</b><small>MCP client</small></div><i>→</i>
             <div class="flow-node"><b>stdio server</b><small>15 focused tools</small></div><i>→</i>
             <div class="flow-node secure"><b>private queue</b><small>local + authenticated</small></div><i>→</i>
-            <div class="flow-node"><b>ProtonnCord</b><small>Discord APIs + events</small></div>
+            <div class="flow-node"><b>LawyerCord</b><small>Discord APIs + events</small></div>
           </div>
           <div class="boundary"><span>LOCAL TRUST BOUNDARY</span></div>
           <div class="metric-row"><div><strong>0</strong><span>network ports</span></div><div><strong>0</strong><span>exported tokens</span></div><div><strong>1</strong><span>authenticated client</span></div></div>`,
@@ -119,7 +119,7 @@ const slides: Slide[] = [
         accent: "#62e8ff",
         body: `
           <div class="proof-grid"><div><strong>46 ms</strong><span>status response</span></div><div><strong>457 ms</strong><span>two-channel bulk read</span></div><div><strong>100</strong><span>messages sampled live</span></div><div><strong>✓</strong><span>subscription delivered</span></div></div>
-          <div class="final-lockup"><div class="mini-icon">${chatIcon}</div><div><b>Discord MCP</b><small>Running locally in ProtonnCord</small></div></div>
+          <div class="final-lockup"><div class="mini-icon">${chatIcon}</div><div><b>Discord MCP</b><small>Running locally in LawyerCord</small></div></div>
           <p class="final-note">Your Discord stays yours. Agents simply get a better interface.</p>`,
     },
 ];
@@ -145,7 +145,7 @@ function renderSlide(slide: Slide, index: number): string {
     </style></head><body><div class="glow"></div><div class="frame">
       <header><div class="brand">${chatIcon}<span>DISCORD MCP</span></div><div class="status"><i></i>LOCAL BRIDGE ONLINE</div></header>
       <main><div class="eyebrow">${slide.eyebrow}</div><h1 class="title">${slide.title}</h1><p class="subtitle">${slide.subtitle}</p><div class="content">${slide.body}</div></main>
-      <footer><span>PROTONN CORD · SILENT AGENT INTERFACE</span><div class="dots">${dots}</div><span class="page">0${index + 1} / 0${slides.length}</span></footer>
+      <footer><span>LAWYERCORD · LOCAL AGENT INTERFACE</span><div class="dots">${dots}</div><span class="page">0${index + 1} / 0${slides.length}</span></footer>
     </div></body></html>`;
 }
 

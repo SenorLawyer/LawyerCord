@@ -10,7 +10,7 @@ document.addEventListener(
             meta: {
                 EXTENSION_VERSION: browser.runtime.getManifest().version,
                 EXTENSION_BASE_URL: browser.runtime.getURL(""),
-                RENDERER_CSS_URL: browser.runtime.getURL("dist/ProtonnCord.css"),
+                RENDERER_CSS_URL: browser.runtime.getURL("dist/LawyerCord.css"),
             }
         });
     },

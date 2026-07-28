@@ -105,7 +105,7 @@ const buildConfigs = [
             IS_USERSCRIPT: "true",
             window: "unsafeWindow",
         },
-        outfile: "dist/ProtonnCord.user.js",
+        outfile: "dist/LawyerCord.user.js",
         banner: {
             js: readFileSync("browser/userscript.meta.js", "utf-8").replace("%version%", `${VERSION}.${new Date().getTime()}`)
         },
@@ -155,8 +155,8 @@ async function loadDir(dir, basePath = "") {
  */
 async function buildExtension(target, files) {
     const entries = {
-        "dist/ProtonnCord.js": await readFile("dist/browser/extension.js"),
-        "dist/ProtonnCord.css": await readFile("dist/browser/extension.css"),
+        "dist/LawyerCord.js": await readFile("dist/browser/extension.js"),
+        "dist/LawyerCord.css": await readFile("dist/browser/extension.css"),
         ...await loadDir("dist/browser/vendor/monaco", "dist/browser/"),
         ...Object.fromEntries(await Promise.all(files.map(async f => {
             let content = await readFile(join("browser", f));
@@ -184,17 +184,17 @@ async function buildExtension(target, files) {
     console.info("Unpacked Extension written to dist/browser/" + target);
 }
 
-const appendCssRuntime = readFile("dist/ProtonnCord.user.css", "utf-8").then(content => {
+const appendCssRuntime = readFile("dist/LawyerCord.user.css", "utf-8").then(content => {
     const cssRuntime = `unsafeWindow._vcUserScriptRendererCss=\`${content.replaceAll("`", "\\`")}\``;
 
-    return appendFile("dist/ProtonnCord.user.js", cssRuntime);
+    return appendFile("dist/LawyerCord.user.js", cssRuntime);
 });
 
 if (!process.argv.includes("--skip-extension")) {
     await Promise.all([
         appendCssRuntime,
-        buildExtension("chromium-unpacked", ["modifyResponseHeaders.json", "content.js", "manifest.json", "icon.png"]),
-        buildExtension("firefox-unpacked", ["background.js", "content.js", "manifestv2.json", "icon.png"]),
+        buildExtension("chromium-unpacked", ["modifyResponseHeaders.json", "content.js", "manifest.json", "lawyercord-icon.png"]),
+        buildExtension("firefox-unpacked", ["background.js", "content.js", "manifestv2.json", "lawyercord-icon.png"]),
     ]);
 
     Zip.zip("dist/browser/chromium-unpacked", (_err, zip) => {

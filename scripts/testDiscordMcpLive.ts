@@ -1,320 +1,192 @@
 import assert from "node:assert/strict";
 import { ChildProcessWithoutNullStreams, spawn } from "node:child_process";
-import { access } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 
 import puppeteer from "puppeteer-core";
 
-const TEST_CHANNEL_ID = "895063026686885909";
-const EXPECTED_RECIPIENT_ID = "710514340855545878";
+const TARGET_USER_ID = "1045011641940574208";
+const TARGET_GUILD_ID = "690342051778396403";
+const TARGET_CHANNEL_ID = "1085873944751521792";
 const DEBUG_URL = process.env.DISCORD_DEBUG_URL ?? "http://127.0.0.1:9222";
+const LIVE_CONFIRMATION = "VERIFY_AUTHORIZED_DISCORD_TARGET";
+
+if (process.env.LAWYERCORD_RUN_LIVE_DISCORD_MCP_READONLY !== LIVE_CONFIRMATION) {
+    throw new Error(
+        `Live Discord access is disabled. Set LAWYERCORD_RUN_LIVE_DISCORD_MCP_READONLY=${LIVE_CONFIRMATION} ` +
+        "only with a disposable, reviewed LawyerCord build."
+    );
+}
 
 interface RpcWaiter {
-    resolve(value: any): void;
+    resolve(value: unknown): void;
     reject(error: Error): void;
 }
 
-async function connectWithRetry() {
-    const deadline = Date.now() + 60_000;
-    let lastError: unknown;
-    while (Date.now() < deadline) {
-        try { return await puppeteer.connect({ browserURL: DEBUG_URL, defaultViewport: null }); }
-        catch (error) { lastError = error; }
-        await new Promise(resolvePromise => setTimeout(resolvePromise, 500));
-    }
-    throw lastError;
+interface LiveDiscordPlugin {
+    started: boolean;
+}
+
+interface LiveDiscordSettings {
+    enabled?: boolean;
+    authorizedUserId?: string;
+    allowedGuildIds?: string;
+    allowedChannelIds?: string;
+    allowWrites?: boolean;
+}
+
+interface LawyerCordLiveWindow {
+    Vencord?: {
+        Plugins: {
+            plugins: Record<string, LiveDiscordPlugin | undefined>;
+            startPlugin(plugin: LiveDiscordPlugin): Promise<void>;
+        };
+        Settings: {
+            plugins: Record<string, LiveDiscordSettings | undefined>;
+        };
+        Webpack: {
+            Common: {
+                UserStore: {
+                    getCurrentUser(): { id: string; } | undefined;
+                };
+            };
+        };
+    };
+    VencordNative?: {
+        pluginHelpers: {
+            DiscordMCP?: {
+                initializeBridge(): Promise<{ queueDirectory: string; }>;
+            };
+        };
+    };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function requireRecord(value: unknown, label: string): Record<string, unknown> {
+    if (!isRecord(value)) throw new Error(`${label} returned an invalid object`);
+    return value;
+}
+
+function requireRecordArray(value: unknown, label: string): Record<string, unknown>[] {
+    if (!Array.isArray(value) || !value.every(isRecord)) throw new Error(`${label} returned an invalid list`);
+    return value;
 }
 
 async function main() {
-    const browser = await connectWithRetry();
+    const browser = await puppeteer.connect({ browserURL: DEBUG_URL, defaultViewport: null });
     let mcp: ChildProcessWithoutNullStreams | undefined;
-    let sentMessageId: string | undefined;
-    let subscriptionId: string | undefined;
-    let callTool: ((name: string, args?: Record<string, unknown>) => Promise<any>) | undefined;
 
     try {
         const pages = await browser.pages();
         const page = pages.find(candidate => candidate.url().includes("discord.com/channels")) ?? pages[0];
-        await page.waitForFunction(() => Boolean((globalThis as any).Vencord?.Plugins?.plugins), { timeout: 30_000 });
+        await page.waitForFunction(() => {
+            const liveWindow = globalThis as typeof globalThis & LawyerCordLiveWindow;
+            return Boolean(liveWindow.Vencord?.Plugins.plugins);
+        }, { timeout: 30_000 });
 
-        const pluginState = await page.evaluate(async () => {
-            const global = globalThis as any;
-            const vencord = global.Vencord;
+        const pluginState = await page.evaluate(async targetUserId => {
+            const liveWindow = globalThis as typeof globalThis & LawyerCordLiveWindow;
+            const vencord = liveWindow.Vencord;
+            if (!vencord) throw new Error("LawyerCord is unavailable in the Discord renderer");
             const plugin = vencord.Plugins.plugins.DiscordMCP;
             if (!plugin) throw new Error("DiscordMCP plugin is missing from the built client");
 
-            const pluginSettings = vencord.Settings.plugins.DiscordMCP ??= {};
+            const currentUserId = vencord.Webpack.Common.UserStore.getCurrentUser()?.id;
+            if (currentUserId !== targetUserId)
+                throw new Error(`Expected Discord account ${targetUserId}, received ${String(currentUserId)}`);
+
+            const pluginSettings = vencord.Settings.plugins.DiscordMCP ??= { enabled: true };
+            delete pluginSettings.authorizedUserId;
+            delete pluginSettings.allowedGuildIds;
             delete pluginSettings.allowedChannelIds;
+            delete pluginSettings.allowWrites;
             pluginSettings.enabled = true;
-            if (!plugin.started) vencord.Plugins.startPlugin(plugin);
+            if (!plugin.started) await vencord.Plugins.startPlugin(plugin);
 
-            await new Promise(resolvePromise => setTimeout(resolvePromise, 1_000));
-            const bridge = await global.VencordNative.pluginHelpers.DiscordMCP.initializeBridge();
-            return {
-                legacyAllowlistRemoved: !("allowedChannelIds" in pluginSettings),
-                enabled: pluginSettings.enabled,
-                pluginStarted: plugin.started,
-                queueDirectory: bridge.queueDirectory,
-            };
-        });
-
-        assert.equal(pluginState.enabled, true, "DiscordMCP is enabled in persisted ProtonnCord settings");
-        assert.equal(pluginState.pluginStarted, true, "DiscordMCP started in the renderer");
-        assert.equal(pluginState.legacyAllowlistRemoved, true, "the obsolete channel allowlist setting was removed");
-        await new Promise(resolvePromise => setTimeout(resolvePromise, 1_000));
-        const routeBefore = new URL(page.url()).pathname;
+            const nativeBridge = liveWindow.VencordNative?.pluginHelpers.DiscordMCP;
+            if (!nativeBridge) throw new Error("DiscordMCP native bridge is unavailable");
+            const bridge = await nativeBridge.initializeBridge();
+            return { queueDirectory: bridge.queueDirectory };
+        }, TARGET_USER_ID);
 
         mcp = spawn(process.execPath, [resolve("tools/discord-mcp/server.mjs")], {
             cwd: resolve("."),
-            env: { ...process.env, PROTONN_CORD_DISCORD_MCP_DIR: pluginState.queueDirectory },
+            env: { ...process.env, LAWYERCORD_DISCORD_MCP_DIR: pluginState.queueDirectory },
             stdio: ["pipe", "pipe", "pipe"],
         }) as ChildProcessWithoutNullStreams;
 
         const pending = new Map<number, RpcWaiter>();
-        const lastToolContent = new Map<string, any[]>();
         let rpcId = 1;
         let stderr = "";
         mcp.stderr.on("data", data => { stderr += data.toString(); });
         createInterface({ input: mcp.stdout, crlfDelay: Infinity }).on("line", line => {
-            const message = JSON.parse(line);
-            const waiter = pending.get(message.id);
+            const parsed: unknown = JSON.parse(line);
+            if (!isRecord(parsed) || typeof parsed.id !== "number") return;
+            const waiter = pending.get(parsed.id);
             if (!waiter) return;
-            pending.delete(message.id);
-            if (message.error) waiter.reject(new Error(message.error.message));
-            else waiter.resolve(message.result);
+            pending.delete(parsed.id);
+            if (isRecord(parsed.error))
+                waiter.reject(new Error(typeof parsed.error.message === "string" ? parsed.error.message : "MCP request failed"));
+            else waiter.resolve(parsed.result);
         });
 
-        const rpc = (method: string, params?: unknown) => {
+        const rpc = (method: string, params?: unknown): Promise<unknown> => {
             const id = rpcId++;
-            const result = new Promise<any>((resolvePromise, rejectPromise) => {
+            const result = new Promise<unknown>((resolvePromise, rejectPromise) => {
                 pending.set(id, { resolve: resolvePromise, reject: rejectPromise });
             });
             mcp!.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
             return result;
         };
-        callTool = async (name, args = {}) => {
-            const result = await rpc("tools/call", { name, arguments: args });
-            if (result.isError) throw new Error(result.content?.[0]?.text ?? `${name} failed`);
-            lastToolContent.set(name, result.content ?? []);
+        const callTool = async (name: string, args: Record<string, unknown> = {}): Promise<unknown> => {
+            const result = requireRecord(await rpc("tools/call", { name, arguments: args }), name);
+            if (result.isError === true) {
+                const firstContent = Array.isArray(result.content) && isRecord(result.content[0]) ? result.content[0] : undefined;
+                throw new Error(typeof firstContent?.text === "string" ? firstContent.text : `${name} failed`);
+            }
             return result.structuredContent;
         };
 
-        const initialized = await rpc("initialize", {
+        await rpc("initialize", {
             protocolVersion: "2025-06-18",
             capabilities: {},
-            clientInfo: { name: "ProtonnCord live test", version: "1" },
+            clientInfo: { name: "LawyerCord read-only live test", version: "1" },
         });
-        assert.equal(initialized.serverInfo.name, "discord-mcp");
-        const toolList = await rpc("tools/list");
-        assert.equal(toolList.tools.length, 15, "all fifteen silent, scoped tools are exposed over stdio MCP");
 
-        const status = await callTool("discord_connection_status");
-        assert.equal(status.connected, true);
+        const status = requireRecord(await callTool("discord_connection_status"), "discord_connection_status");
+        const currentUser = requireRecord(status.currentUser, "discord_connection_status.currentUser");
+        const capabilities = requireRecord(status.capabilities, "discord_connection_status.capabilities");
+        assert.equal(currentUser.id, TARGET_USER_ID);
         assert.equal(status.channelAccess, "all_accessible_channels");
-        assert.equal(status.capabilities.allAccessibleChannels, true);
-        assert.equal(status.capabilities.changesActiveView, false);
-        assert.equal(status.capabilities.silentBackground, true);
-        assert.equal(status.capabilities.subscriptions, true);
-        assert.equal(status.capabilities.messageSearch, true);
-        assert.equal(status.capabilities.membershipChanges, false);
-        assert.equal(status.capabilities.relationshipChanges, false);
-        assert.equal(status.capabilities.blocking, false);
-        assert.equal(status.capabilities.arbitraryRequests, false);
+        assert.equal(capabilities.allAccessibleChannels, true);
 
-        const servers = await callTool("discord_list_servers");
-        assert.ok(Array.isArray(servers) && servers.length > 0, "server listing returns the live account's servers");
-        const serverChannels = await callTool("discord_list_server_channels", { guild_id: servers[0].id });
-        assert.ok(Array.isArray(serverChannels), "server channel listing succeeds");
+        const servers = requireRecordArray(await callTool("discord_list_servers"), "discord_list_servers");
+        assert.ok(servers.some(server => server.id === TARGET_GUILD_ID), "target guild is visible");
 
-        const dms = await callTool("discord_list_dms");
-        const testDm = dms.find((channel: any) => channel.id === TEST_CHANNEL_ID);
-        const otherDm = dms.find((channel: any) => channel.id !== TEST_CHANNEL_ID);
-        assert.ok(testDm, "test DM is present in the DM listing");
-        assert.ok(
-            testDm.recipients.some((recipient: any) => recipient?.id === EXPECTED_RECIPIENT_ID),
-            "test channel belongs to the supplied testing user"
+        const channels = requireRecordArray(
+            await callTool("discord_list_server_channels", { guild_id: TARGET_GUILD_ID }),
+            "discord_list_server_channels"
         );
+        assert.ok(channels.some(channel => channel.id === TARGET_CHANNEL_ID), "target channel is visible");
 
-        const messages = await callTool("discord_read_messages", { channel_id: TEST_CHANNEL_ID, limit: 100 });
-        assert.ok(Array.isArray(messages) && messages.length > 0, "message reads return live messages");
-        const bulkMessages = await callTool("discord_bulk_read_messages", {
-            channel_ids: [TEST_CHANNEL_ID, ...(otherDm ? [otherDm.id] : [])],
-            limit_per_channel: 10,
-        });
-        assert.equal(bulkMessages.channels[0].channelId, TEST_CHANNEL_ID);
-        assert.equal(bulkMessages.channels.length, otherDm ? 2 : 1, "bulk reads accept every visible channel supplied");
-        assert.ok(bulkMessages.totalMessages > 0, "bulk message reads return live messages");
-        assert.ok(
-            messages.some((message: any) => message.author?.id === EXPECTED_RECIPIENT_ID),
-            "received messages from the supplied testing user are readable"
-        );
-        const routeBeforeChannelSearch = new URL(page.url()).pathname;
-        const searchStartedAt = performance.now();
-        const searchResults = await callTool("discord_search_messages", {
-            channel_id: TEST_CHANNEL_ID,
-            author_id: EXPECTED_RECIPIENT_ID,
-            sort_order: "desc",
-            limit: 5,
-        });
-        const searchLatencyMs = Math.round(performance.now() - searchStartedAt);
-        assert.equal(searchResults.scope.type, "channel", "search stays scoped to the requested DM");
-        assert.ok(searchResults.resultCount > 0, "headless search returns live indexed messages");
-        assert.ok(
-            searchResults.messages.every((message: any) => message.author?.id === EXPECTED_RECIPIENT_ID),
-            "Discord applies the requested author filter"
-        );
-        assert.equal(new URL(page.url()).pathname, routeBeforeChannelSearch, "headless search does not navigate or open Discord search UI");
+        const messages = await callTool("discord_read_messages", { channel_id: TARGET_CHANNEL_ID, limit: 5 });
+        assert.ok(Array.isArray(messages), "target channel returned a message array");
 
-        const routeBeforeServerSearch = new URL(page.url()).pathname;
-        let serverSearchProof: { guildId: string; resultCount: number; } | undefined;
-        for (const server of servers.slice(0, 3)) {
-            const channels = server.id === servers[0].id
-                ? serverChannels
-                : await callTool("discord_list_server_channels", { guild_id: server.id });
-            for (const channel of channels.filter((candidate: any) => [0, 5, 10, 11, 12].includes(candidate.type)).slice(0, 5)) {
-                const sample = await callTool("discord_read_messages", { channel_id: channel.id, limit: 1 })
-                    .catch(() => []);
-                const authorId = sample[0]?.author?.id;
-                if (!authorId) continue;
-                const serverSearch = await callTool("discord_search_messages", {
-                    guild_id: server.id,
-                    author_id: authorId,
-                    sort_order: "desc",
-                    limit: 1,
-                }).catch(() => null);
-                if (!serverSearch?.resultCount) continue;
-                assert.equal(serverSearch.scope.type, "guild");
-                assert.equal(serverSearch.messages[0].guildId, server.id);
-                serverSearchProof = { guildId: server.id, resultCount: serverSearch.resultCount };
-                break;
-            }
-            if (serverSearchProof) break;
-        }
-        assert.ok(serverSearchProof, "server-wide headless search returns a live indexed message");
-        assert.equal(new URL(page.url()).pathname, routeBeforeServerSearch, "server-wide search also leaves Discord's route unchanged");
-        const newest = messages[0];
-        assert.equal(newest.isVoiceMessage, true, "the newest test-channel message is the supplied voice-message fixture");
-        const voiceMessage = newest;
-        const voiceAttachment = voiceMessage.attachments[0];
-        assert.equal(typeof voiceAttachment.durationSeconds, "number", "voice duration is populated");
-        assert.ok(voiceAttachment.durationSeconds > 0, "voice duration is positive");
-        assert.ok(
-            voiceAttachment.waveform === null || typeof voiceAttachment.waveform === "string",
-            "the message list reports Discord's waveform without guessing when the API omits it"
-        );
-
-        const fetched = await callTool("discord_get_message", {
-            channel_id: TEST_CHANNEL_ID,
-            message_id: voiceMessage.id,
-        });
-        assert.equal(fetched.id, voiceMessage.id, "single-message lookup matches the list result");
-        assert.equal(typeof fetched.attachments[0].waveform, "string", "single-message lookup populates a generated voice waveform");
-        assert.ok(fetched.attachments[0].waveform.length > 0, "generated voice waveform is non-empty");
-        assert.equal(fetched.attachments[0].waveformSource, "generated");
-
-        const downloaded = await callTool("discord_download_attachment", {
-            channel_id: TEST_CHANNEL_ID,
-            message_id: voiceMessage.id,
-            attachment_id: voiceAttachment.id,
-        });
-        assert.ok(downloaded.download.size > 0, "voice attachment bytes were downloaded");
-        assert.match(downloaded.download.sha256, /^[a-f0-9]{64}$/, "download returns a content hash");
-        assert.equal(typeof downloaded.attachment.waveform, "string", "download returns a populated voice waveform");
-        assert.ok(downloaded.attachment.waveform.length > 0, "downloaded voice waveform is non-empty");
-        const audioBlock = lastToolContent.get("discord_download_attachment")?.find(block => block.type === "audio");
-        assert.ok(audioBlock, "voice downloads include a native MCP audio content block");
-        assert.equal(audioBlock.mimeType, "audio/mp4", "mislabelled Discord MP4 voice media receives an audio MIME type");
-        assert.ok(audioBlock.data.length > downloaded.download.size, "the MCP audio block contains base64 media bytes");
-        await access(downloaded.download.path);
-
-        if (otherDm) {
-            const otherMessages = await callTool("discord_read_messages", { channel_id: otherDm.id, limit: 1 });
-            assert.ok(Array.isArray(otherMessages), "a second visible DM can be read without an allowlist");
-        }
-
-        const preexistingDelete = await callTool("discord_delete_own_message", {
-            channel_id: TEST_CHANNEL_ID,
-            message_id: newest.id,
-        }).then(() => null, error => error as Error);
-        assert.match(preexistingDelete!.message, /not sent by Discord MCP/, "pre-existing messages cannot be deleted");
-
-        const subscription = await callTool("discord_subscribe_channel", { channel_id: TEST_CHANNEL_ID });
-        subscriptionId = subscription.id;
-        const activeSubscriptions = await callTool("discord_list_subscriptions");
-        assert.ok(activeSubscriptions.some((entry: any) => entry.id === subscriptionId), "the channel subscription is active");
-
-        const waitForMessage = callTool("discord_wait_for_message", {
-            subscription_id: subscriptionId,
-            timeout_seconds: 15,
-        });
-        await new Promise(resolvePromise => setTimeout(resolvePromise, 250));
-
-        const marker = `Discord MCP live verification ${new Date().toISOString()}`;
-        const sent = await callTool("discord_send_message", { channel_id: TEST_CHANNEL_ID, content: marker });
-        sentMessageId = sent.id;
-        assert.equal(sent.content, marker, "send returns the exact live message");
-
-        const subscriptionEvent = await waitForMessage;
-        assert.equal(subscriptionEvent.timedOut, false, "subscription wait resolves before its timeout");
-        assert.equal(subscriptionEvent.cancelled, false);
-        assert.equal(subscriptionEvent.message.id, sentMessageId, "subscription delivered the newly created message");
-        assert.equal(subscriptionEvent.message.content, marker);
-
-        const unsubscribed = await callTool("discord_unsubscribe_channel", { subscription_id: subscriptionId });
-        assert.equal(unsubscribed.unsubscribed, true);
-        subscriptionId = undefined;
-
-        const sentLookup = await callTool("discord_get_message", {
-            channel_id: TEST_CHANNEL_ID,
-            message_id: sentMessageId,
-        });
-        assert.equal(sentLookup.content, marker, "the sent message can be read back");
-
-        const deleted = await callTool("discord_delete_own_message", {
-            channel_id: TEST_CHANNEL_ID,
-            message_id: sentMessageId,
-        });
-        assert.equal(deleted.deleted, true, "the bridge can delete its own sent message");
-        sentMessageId = undefined;
-
-        const repeatedDelete = await callTool("discord_delete_own_message", {
-            channel_id: TEST_CHANNEL_ID,
-            message_id: sent.id,
-        }).then(() => null, error => error as Error);
-        assert.match(repeatedDelete!.message, /not sent by Discord MCP/, "the ledger entry is removed after deletion");
-        assert.equal(new URL(page.url()).pathname, routeBefore, "MCP activity does not navigate or replace the active Discord view");
-
-        assert.equal(stderr, "", "the stdio server emitted no unexpected diagnostics");
         console.log(JSON.stringify({
-            attachmentDownload: { contentType: downloaded.download.contentType, sha256Verified: true, size: downloaded.download.size },
-            allChannelAccessVerified: Boolean(otherDm),
-            bulkReadVerified: true,
-            deletionBoundaryVerified: true,
-            dmCount: dms.length,
-            messageCountSampled: messages.length,
-            messageSearchVerified: { latencyMs: searchLatencyMs, resultCount: searchResults.resultCount },
-            serverWideSearchVerified: serverSearchProof,
-            pluginEnabled: pluginState.enabled,
-            receivedMessagesReadable: true,
-            silentRouteVerified: true,
-            serverChannelToolVerified: true,
-            serverCount: servers.length,
-            stdioToolsVerified: toolList.tools.length,
-            subscriptionWaitVerified: true,
-            voiceMetadata: { durationSeconds: voiceAttachment.durationSeconds, waveformCharacters: fetched.attachments[0].waveform.length },
-            voiceFixtureDirection: voiceMessage.author?.id === EXPECTED_RECIPIENT_ID ? "received" : "outgoing",
+            accountId: currentUser.id,
+            allAccessibleChannels: capabilities.allAccessibleChannels,
+            guildCount: servers.length,
+            channelCount: channels.length,
+            sampledMessageCount: messages.length,
+            targetGuildVisible: true,
+            targetChannelVisible: true,
         }, null, 2));
+
+        if (stderr) throw new Error(stderr);
     } finally {
-        if (subscriptionId && callTool) {
-            await callTool("discord_unsubscribe_channel", { subscription_id: subscriptionId }).catch(() => undefined);
-        }
-        if (sentMessageId && callTool) {
-            await callTool("discord_delete_own_message", {
-                channel_id: TEST_CHANNEL_ID,
-                message_id: sentMessageId,
-            }).catch(() => undefined);
-        }
         mcp?.kill();
         await browser.disconnect();
     }

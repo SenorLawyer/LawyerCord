@@ -137,7 +137,7 @@ async function saveWorkingGifs() {
 
 const settings = definePluginSettings({
     showToolboxButton: {
-        description: "Show 'Save Favorite GIFs' button in Protonn Cord Toolbox (Requires Reload)",
+        description: "Show 'Save Favorite GIFs' button in LawyerCord Toolbox (Requires Reload)",
         type: OptionType.BOOLEAN,
         default: true,
         restartNeeded: true,

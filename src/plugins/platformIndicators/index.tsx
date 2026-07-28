@@ -216,7 +216,7 @@ const settings = definePluginSettings({
         restartNeeded: true,
         options: [
             {
-                label: "Protonn Cord",
+                label: "LawyerCord",
                 value: "equicord",
                 default: true
             },

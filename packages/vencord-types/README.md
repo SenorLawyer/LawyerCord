@@ -1,11 +1,11 @@
-# Protonn Cord Types
+# LawyerCord Types
 
-Typings for Protonn Cord's API, published to npm-compatible tooling.
+Typings for LawyerCord's API, published to npm-compatible tooling.
 
 ```sh
-npm i @equicord/types
+npm i @lawyercord/types
 
-yarn add @equicord/types
+yarn add @lawyercord/types
 
-pnpm add @equicord/types
+pnpm add @lawyercord/types
 ```

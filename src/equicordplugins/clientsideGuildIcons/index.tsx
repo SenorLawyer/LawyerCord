@@ -14,7 +14,7 @@ import { FluxDispatcher, GuildStore, Menu, Toasts } from "@webpack/common";
 
 import { normalizeStoredGuildIcons } from "./iconStorage";
 
-const KEY_DATASTORE = "protonncord-clientside-guild-icons";
+const KEY_DATASTORE = "lawyercord-clientside-guild-icons";
 const IMAGE_EXTENSION_REGEX = /\.(apng|avif|gif|jpe?g|png|webp)$/i;
 const MAX_ICON_FILE_SIZE_BYTES = 2 * 1024 * 1024;
 

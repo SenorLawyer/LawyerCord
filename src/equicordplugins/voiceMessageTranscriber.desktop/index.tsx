@@ -536,7 +536,7 @@ function VoiceMessageAccessory({ message }: { message: Message; }) {
 export default definePlugin({
     name: "VoiceMessageTranscriber",
     authors: [Devs.TheSun],
-    description: "Transcribes Discord voice messages on-device and optionally translates the transcript into a selected language.",
+    description: "Transcribes voice messages on-device after downloading a pinned runtime from jsDelivr and speech models from Hugging Face.",
     tags: ["Chat", "Media", "Utility", "Voice"],
     dependencies: ["MessageAccessoriesAPI", "VoiceMessages"],
     settings,

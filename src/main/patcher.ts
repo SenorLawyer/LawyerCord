@@ -24,7 +24,7 @@ import { RendererSettings } from "./settings";
 import { patchTrayMenu } from "./trayMenu";
 import { IS_VANILLA } from "./utils/constants";
 
-console.log("[Protonn Cord] Starting up...");
+console.log("[LawyerCord] Starting up...");
 
 // Our injector file at app/index.js
 const injectorPath = require.main!.filename;
@@ -109,7 +109,7 @@ if (!IS_VANILLA) {
     const settings = RendererSettings.store;
 
     app.whenReady().then(installDiscordMediaPermissionBypass).catch(err => {
-        console.error("[Protonn Cord] Failed to install Discord media permission bypass", err);
+        console.error("[LawyerCord] Failed to install Discord media permission bypass", err);
     });
 
     patchTrayMenu();
@@ -122,7 +122,7 @@ if (!IS_VANILLA) {
         try {
             require("./hostUpdateHook").installHostUpdateHook();
         } catch (err) {
-            console.error("[Protonn Cord] Failed to install host update hook", err);
+            console.error("[LawyerCord] Failed to install host update hook", err);
         }
     }
 
@@ -223,7 +223,7 @@ if (!IS_VANILLA) {
         s.set("DANGEROUS_ENABLE_DEVTOOLS_ONLY_ENABLE_IF_YOU_KNOW_WHAT_YOURE_DOING", true);
     });
 
-    process.env.DATA_DIR = join(app.getPath("userData"), "..", "ProtonnCord");
+    process.env.DATA_DIR = join(app.getPath("userData"), "..", "LawyerCord");
 
     // Monkey patch commandLine to:
     // - disable WidgetLayering: Fix DevTools context menus https://github.com/electron/electron/issues/38790
@@ -249,8 +249,8 @@ if (!IS_VANILLA) {
     app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
     app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 } else {
-    console.log("[Protonn Cord] Running in vanilla mode. Not loading Protonn Cord");
+    console.log("[LawyerCord] Running in vanilla mode. Not loading LawyerCord");
 }
 
-console.log("[Protonn Cord] Loading original Discord app.asar");
+console.log("[LawyerCord] Loading original Discord app.asar");
 require(require.main!.filename);

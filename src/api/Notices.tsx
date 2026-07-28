@@ -35,7 +35,7 @@ export function nextNotice() {
     currentNotice = noticesQueue.shift();
 
     if (currentNotice) {
-        NoticesModule.show(...currentNotice, "ProtonnCordNotice");
+        NoticesModule.show(...currentNotice, "LawyerCordNotice");
     }
 }
 

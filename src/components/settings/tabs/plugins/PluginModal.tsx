@@ -260,7 +260,7 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
                             <div className={cl("links")}>
                                 <WebsiteButton
                                     text="Website"
-                                    href={isEquicordPlugin ? `https://github.com/ProtonnCord/ProtonnCord/tree/main/${pluginMeta.folderName}` : `https://vencord.dev/plugins/${plugin.name}`}
+                                    href={isEquicordPlugin ? `https://github.com/ProtonDev-sys/ProtonnCord/tree/main/${pluginMeta.folderName}` : `https://vencord.dev/plugins/${plugin.name}`}
                                 />
                                 <GithubButton
                                     text="Source Code"

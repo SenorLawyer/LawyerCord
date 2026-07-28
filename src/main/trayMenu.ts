@@ -91,21 +91,21 @@ function openAboutWindow() {
     });
 }
 
-function createProtonnCordMenuItems(): MenuItemConstructorOptions[] {
+function createLawyerCordMenuItems(): MenuItemConstructorOptions[] {
     return [
         {
-            label: "Protonn Cord",
+            label: "LawyerCord",
             submenu: [
                 {
-                    label: "About Protonn Cord",
+                    label: "About LawyerCord",
                     click: () => openAboutWindow()
                 },
                 {
-                    label: cachedUpdateAvailable ? "Update Protonn Cord" : "Check for Updates",
+                    label: cachedUpdateAvailable ? "Update LawyerCord" : "Check for Updates",
                     click: () => sendToRenderer(IpcEvents.TRAY_CHECK_UPDATES)
                 },
                 {
-                    label: "Repair Protonn Cord",
+                    label: "Repair LawyerCord",
                     click: () => sendToRenderer(IpcEvents.TRAY_REPAIR)
                 },
                 { type: "separator" },
@@ -127,11 +127,11 @@ export function patchTrayMenu(): void {
     const originalBuildFromTemplate = Menu.buildFromTemplate;
 
     Menu.buildFromTemplate = function (template: MenuItemConstructorOptions[]) {
-        const alreadyPatched = template.some(item => item.label === "Protonn Cord");
+        const alreadyPatched = template.some(item => item.label === "LawyerCord");
         if (isTrayMenu(template) && !alreadyPatched) {
             const insertIndex = findInsertIndex(template);
-            const protonnCordItems = createProtonnCordMenuItems();
-            template.splice(insertIndex, 0, ...protonnCordItems);
+            const lawyerCordItems = createLawyerCordMenuItems();
+            template.splice(insertIndex, 0, ...lawyerCordItems);
         }
 
         return originalBuildFromTemplate.call(this, template);

@@ -1,0 +1,33 @@
+# Changelog
+
+All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
+
+## Unreleased
+
+### Planned
+
+- An audited SecureMessaging protocol v2 after the provider, licensing, packaging, and migration gate is approved.
+- Signed installable artifacts and platform-specific release verification.
+
+## 1.14.16.0 - 2026-07-28
+
+### Added
+
+- LawyerCord product identity, browser metadata, local icon, and application-data namespace.
+- App-lifetime loopback control panel with account, guild, relationship, plugin, storage, and network statistics.
+- Encrypted local approved-channel search and tamper-evident evidence exports.
+- Generated privacy inventory covering plugin domains, storage, and elevated capabilities.
+- Scoped live Discord MCP verification harness.
+- Security, privacy, contribution, CI, dependency review, CodeQL, audit, and controlled release documentation.
+
+### Security
+
+- Audited the ProtonnCord fork delta and documented remaining trust boundaries.
+- Disabled source auto-update and cloud sync by default.
+- Removed mutable remote installer execution and inherited upstream publishing workflows.
+- Updated vulnerable dependencies until the production audit reported no known vulnerabilities.
+- Retained the intentionally unrestricted Discord MCP with its fixed tool surface, authenticated local queue, attachment validation, mention suppression, and sent-message-only deletion ledger.
+
+### Changed
+
+- Renamed product-facing ProtonnCord identifiers to LawyerCord while preserving attribution and cryptographic protocol compatibility identifiers.

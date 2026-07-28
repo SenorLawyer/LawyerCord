@@ -152,7 +152,7 @@ export function Updatable(props: CommonProps) {
                 </>
             ) : (
                 <Paragraph>
-                    You're running the latest version of Protonn Cord.
+                    You're running the latest version of LawyerCord.
                 </Paragraph>
             )}
         </>

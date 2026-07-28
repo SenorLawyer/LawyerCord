@@ -33,7 +33,7 @@
     color: var(--badge-expressive-text-default);
 }
 
-/* Protonn Cord variants */
+/* LawyerCord variants */
 .vc-badge-danger {
     background-color: var(--status-danger);
     color: var(--white);

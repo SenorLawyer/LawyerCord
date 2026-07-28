@@ -48,8 +48,8 @@ function EquibopSection() {
     return (
         <Flex className={Margins.bottom20} flexDirection="column" gap="1em">
             <Card variant="brand">
-                <HeadingSecondary>Equibop & Protonn Cord</HeadingSecondary>
-                <Paragraph>Equibop and Protonn Cord are two separate things. This updater is for Protonn Cord.</Paragraph>
+                <HeadingSecondary>Equibop & LawyerCord</HeadingSecondary>
+                <Paragraph>Equibop and LawyerCord are two separate things. This updater is for LawyerCord.</Paragraph>
                 <Paragraph className={Margins.top8}>
                     You receive separate popups for Equibop updates. You can also manually update by installing the <Link href="https://equibop.org/install">latest version</Link>.
                 </Paragraph>
@@ -88,12 +88,12 @@ function Updater() {
             <EquibopSection />
             <Heading className={Margins.top16}>Update Preferences</Heading>
             <Paragraph className={Margins.bottom20}>
-                Control how Protonn Cord keeps itself up to date. You can choose to update automatically in the background or be notified when new updates are available.
+                Control how LawyerCord keeps itself up to date. You can choose to update automatically in the background or be notified when new updates are available.
             </Paragraph>
 
             <FormSwitch
                 title="Automatically update"
-                description="When enabled, Protonn Cord will automatically download and install updates in the background without asking for confirmation. You'll need to restart Discord to apply the changes."
+                description="When enabled, LawyerCord will automatically download and install updates in the background without asking for confirmation. You'll need to restart Discord to apply the changes."
                 value={settings.autoUpdate}
                 onChange={(v: boolean) => settings.autoUpdate = v}
                 hideBorder
@@ -102,7 +102,7 @@ function Updater() {
                 value={settings.autoUpdateNotification}
                 onChange={(v: boolean) => settings.autoUpdateNotification = v}
                 title="Get notified when an automatic update completes"
-                description="Receive a notification when Protonn Cord finishes downloading an update in the background, so you know when to restart Discord."
+                description="Receive a notification when LawyerCord finishes downloading an update in the background, so you know when to restart Discord."
                 disabled={!settings.autoUpdate}
                 hideBorder
             />
@@ -111,7 +111,7 @@ function Updater() {
 
             <Heading className={Margins.top20}>Repository</Heading>
             <Paragraph className={Margins.bottom8}>
-                This is the GitHub repository where Protonn Cord fetches updates from.
+                This is the GitHub repository where LawyerCord fetches updates from.
             </Paragraph>
             <Paragraph color="text-subtle">
                 {repoPending

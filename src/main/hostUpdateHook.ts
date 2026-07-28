@@ -5,7 +5,7 @@
  */
 
 /**
- * re-applies the Protonn Cord patch to a freshly installed Discord host
+ * re-applies the LawyerCord patch to a freshly installed Discord host
  * version at the moment the native updater finishes writing it.
  *
  * hooks `discord_desktop_core.startup({ updater })` to capture the live
@@ -52,7 +52,7 @@ interface DiscordHostUpdater {
 interface DiscordUpdaterModule {
     getUpdater?(): DiscordHostUpdater | null | undefined;
     tryInitUpdater?(buildInfo: DiscordBuildInfo, repositoryUrl: string, useRustBspatch: boolean): boolean;
-    __protonnCordTryInitWrapped?: boolean;
+    __lawyerCordTryInitWrapped?: boolean;
 }
 
 interface DiscordDesktopCoreStartupOpts {
@@ -62,10 +62,10 @@ interface DiscordDesktopCoreStartupOpts {
 
 interface DiscordDesktopCore {
     startup?(opts: DiscordDesktopCoreStartupOpts): void;
-    __protonnCordStartupWrapped?: boolean;
+    __lawyerCordStartupWrapped?: boolean;
 }
 
-const error = (...args: unknown[]) => console.error("[Protonn Cord:HostUpdate]", ...args);
+const error = (...args: unknown[]) => console.error("[LawyerCord:HostUpdate]", ...args);
 
 const hookedUpdaters = new WeakSet<DiscordHostUpdater>();
 let hooked = false;
@@ -123,7 +123,7 @@ const resolveCommittedVersion = (updater: DiscordHostUpdater): number[] | undefi
     return undefined;
 };
 
-const retainProtonnCord = (updater: DiscordHostUpdater, reason: string) => {
+const retainLawyerCord = (updater: DiscordHostUpdater, reason: string) => {
     try {
         const committed = resolveCommittedVersion(updater);
         const { rootPath } = updater;
@@ -158,7 +158,7 @@ const attachToUpdater = (updater: DiscordHostUpdater | null | undefined) => {
         return;
     }
 
-    updater.on?.("host-updated", () => retainProtonnCord(updater, "host-updated"));
+    updater.on?.("host-updated", () => retainLawyerCord(updater, "host-updated"));
 
     /*
      * wrap the post-update relaunch entrypoints. retain runs after the
@@ -172,7 +172,7 @@ const attachToUpdater = (updater: DiscordHostUpdater | null | undefined) => {
         const bound = sync.bind(updater);
         updater.startCurrentVersionSync = (options?: StartCurrentVersionOptions) => {
             bound(options);
-            try { retainProtonnCord(updater, "startCurrentVersionSync"); } catch (e) { error(e); }
+            try { retainLawyerCord(updater, "startCurrentVersionSync"); } catch (e) { error(e); }
         };
     }
     const async_ = updater.startCurrentVersion;
@@ -180,14 +180,14 @@ const attachToUpdater = (updater: DiscordHostUpdater | null | undefined) => {
         const bound = async_.bind(updater);
         updater.startCurrentVersion = async (queryOptions?: object, options?: StartCurrentVersionOptions) => {
             await bound(queryOptions, options);
-            try { retainProtonnCord(updater, "startCurrentVersion"); } catch (e) { error(e); }
+            try { retainLawyerCord(updater, "startCurrentVersion"); } catch (e) { error(e); }
         };
     }
 };
 
 const wrapStartup = (coreExports: DiscordDesktopCore | null | undefined) => {
-    if (!coreExports?.startup || coreExports.__protonnCordStartupWrapped) return;
-    coreExports.__protonnCordStartupWrapped = true;
+    if (!coreExports?.startup || coreExports.__lawyerCordStartupWrapped) return;
+    coreExports.__lawyerCordStartupWrapped = true;
 
     const origStartup = coreExports.startup;
     coreExports.startup = function (opts, ...rest) {
@@ -196,12 +196,12 @@ const wrapStartup = (coreExports: DiscordDesktopCore | null | undefined) => {
             const inst = updaterModule?.getUpdater?.();
             if (inst) {
                 attachToUpdater(inst);
-            } else if (typeof updaterModule?.tryInitUpdater === "function" && !updaterModule.__protonnCordTryInitWrapped) {
+            } else if (typeof updaterModule?.tryInitUpdater === "function" && !updaterModule.__lawyerCordTryInitWrapped) {
                 /*
                  * updater not yet constructed at startup time. wrap the
                  * factory so we attach once vanilla creates it.
                  */
-                updaterModule.__protonnCordTryInitWrapped = true;
+                updaterModule.__lawyerCordTryInitWrapped = true;
                 const origTry = updaterModule.tryInitUpdater.bind(updaterModule);
                 updaterModule.tryInitUpdater = (buildInfo, repositoryUrl, useRustBspatch) => {
                     const ok = origTry(buildInfo, repositoryUrl, useRustBspatch);

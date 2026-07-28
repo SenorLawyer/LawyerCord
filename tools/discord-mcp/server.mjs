@@ -231,14 +231,14 @@ function sleep(ms) {
 
 function candidateBridgeDirectories() {
     const candidates = [];
-    if (process.env.PROTONN_CORD_DISCORD_MCP_DIR) candidates.push(process.env.PROTONN_CORD_DISCORD_MCP_DIR);
+    if (process.env.LAWYERCORD_DISCORD_MCP_DIR) candidates.push(process.env.LAWYERCORD_DISCORD_MCP_DIR);
     const appData = process.env.APPDATA;
     if (appData) {
-        candidates.push(join(appData, "ProtonnCord", "discord-mcp"));
-        candidates.push(join(appData, "ProtonnCord", "dev", "discord-mcp"));
-        candidates.push(join(appData, "ProtonnCordData", "discord-mcp"));
+        candidates.push(join(appData, "LawyerCord", "discord-mcp"));
+        candidates.push(join(appData, "LawyerCord", "dev", "discord-mcp"));
+        candidates.push(join(appData, "LawyerCordData", "discord-mcp"));
     }
-    candidates.push(join(homedir(), ".protonn-cord", "discord-mcp"));
+    candidates.push(join(homedir(), ".lawyercord", "discord-mcp"));
     return [...new Set(candidates.map(candidate => dirname(join(candidate, "config.json"))))];
 }
 
@@ -253,7 +253,7 @@ async function loadBridgeConfig() {
                 return { directory, secret: config.secret };
         } catch { }
     }
-    throw new Error(`Discord MCP bridge is not ready. Enable DiscordMCP in ProtonnCord and keep Discord running. Checked: ${attempted.join(", ")}`);
+    throw new Error(`Discord MCP bridge is not ready. Enable DiscordMCP in LawyerCord and keep Discord running. Checked: ${attempted.join(", ")}`);
 }
 
 async function writeAtomic(path, body) {

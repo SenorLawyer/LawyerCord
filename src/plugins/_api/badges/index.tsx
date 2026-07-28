@@ -47,7 +47,7 @@ const ContributorBadge: ProfileBadge = {
 
 const EquicordContributorBadge: ProfileBadge = {
     id: "equicord_contributor_badge",
-    description: "Protonn Cord Contributor",
+    description: "LawyerCord Contributor",
     iconSrc: EQUICORD_CONTRIBUTOR_BADGE,
     position: BadgePosition.START,
     shouldShow: ({ userId }) => shouldShowEquicordContributorBadge(userId),
@@ -250,7 +250,7 @@ export default definePlugin({
         return DonorBadges[userId]?.map((badge, idx) => ({
             id: `vencord_donor_badge_${idx}`,
             iconSrc: badge.badge,
-            description: badge.tooltip.replace(/^Equicord/, "Protonn Cord"),
+            description: badge.tooltip.replace(/^Equicord/, "LawyerCord"),
             position: BadgePosition.START,
             props: {
                 style: {

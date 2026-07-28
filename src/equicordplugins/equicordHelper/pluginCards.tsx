@@ -41,7 +41,7 @@ export function ChatPluginCard({ url, description }: { url: string, description:
     if (excludedPlugin || !p) {
         const toolTipText = excludedPlugin
             ? `${pluginName} is only available on the ${ExcludedReasons[ExcludedPlugins[pluginName]]}`
-            : "This plugin is not on this version of Protonn Cord. Try updating!";
+            : "This plugin is not on this version of LawyerCord. Try updating!";
 
         const card = (
             <AddonCard
@@ -80,7 +80,7 @@ export function ChatPluginCard({ url, description }: { url: string, description:
 
     if (required) {
         const tooltipText = p.required || !dependents.length
-            ? "This plugin is required for Protonn Cord to function."
+            ? "This plugin is required for LawyerCord to function."
             : <PluginDependencyList deps={dependents} />;
 
         return (

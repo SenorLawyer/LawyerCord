@@ -60,7 +60,7 @@ await writeFile(fakeImagePath, fakeImage);
 
 const child = spawn(process.execPath, [resolve("tools/discord-mcp/server.mjs")], {
     cwd: resolve("."),
-    env: { ...process.env, PROTONN_CORD_DISCORD_MCP_DIR: bridgeDirectory },
+    env: { ...process.env, LAWYERCORD_DISCORD_MCP_DIR: bridgeDirectory },
     stdio: ["pipe", "pipe", "pipe"],
 }) as ChildProcessWithoutNullStreams;
 

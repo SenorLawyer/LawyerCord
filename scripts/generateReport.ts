@@ -102,7 +102,7 @@ function toCodeBlock(s: string, indentation = 0, isDiscord = false) {
 async function printReport() {
     console.log();
 
-    console.log("# Protonn Cord Report" + (CANARY ? " (Canary)" : ""));
+    console.log("# LawyerCord Report" + (CANARY ? " (Canary)" : ""));
 
     console.log();
 
@@ -203,7 +203,7 @@ async function printReport() {
         }
 
         const body = JSON.stringify({
-            username: "Protonn Cord Reporter" + (CANARY ? " (Canary)" : ""),
+            username: "LawyerCord Reporter" + (CANARY ? " (Canary)" : ""),
             embeds
         });
 
@@ -273,7 +273,7 @@ page.on("console", async e => {
 
     const firstArg = await rawArgs[0]?.jsonValue();
 
-    const isEquicord = firstArg === "[Equicord]" || firstArg === "[ProtonnCord]";
+    const isEquicord = firstArg === "[Equicord]" || firstArg === "[LawyerCord]";
     const isDebug = firstArg === "[PUP_DEBUG]";
     const isReporterMeta = firstArg === "[REPORTER_META]";
 

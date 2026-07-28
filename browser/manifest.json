@@ -1,12 +1,11 @@
 {
     "manifest_version": 3,
     "minimum_chrome_version": "111",
-    "name": "Protonn Cord Web",
-    "description": "Protonn Cord in your browser",
-    "author": "Protonn Cord",
-    "homepage_url": "https://github.com/ProtonnCord/ProtonnCord",
+    "name": "LawyerCord Web",
+    "description": "LawyerCord in your browser",
+    "author": "LawyerCord",
     "icons": {
-        "128": "icon.png"
+        "128": "lawyercord-icon.png"
     },
     "host_permissions": [
         "*://*.discord.com/*",
@@ -33,7 +32,7 @@
                 "*://*.discord.com/*"
             ],
             "js": [
-                "dist/ProtonnCord.js"
+                "dist/LawyerCord.js"
             ],
             "all_frames": true,
             "world": "MAIN"

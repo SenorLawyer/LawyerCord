@@ -1,0 +1,105 @@
+name: Build and test
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: ci-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    build-and-test:
+        name: Build and test
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+
+        steps:
+            - name: Check out repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  persist-credentials: false
+
+            - name: Set up pnpm
+              uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+
+            - name: Set up Node.js
+              uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+              with:
+                  node-version: 24
+                  cache: pnpm
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Type-check
+              run: pnpm testTsc
+
+            - name: Run focused tests
+              run: |
+                  pnpm testMessageEventsPriority
+                  pnpm testDiscordMcp
+                  pnpm testControlPanel
+                  pnpm testSecureMessaging
+                  pnpm testSecureMessagingNative
+
+            - name: Lint
+              run: |
+                  pnpm lint
+                  pnpm lint-styles
+                  pnpm lint:intl
+                  pnpm lint:patches
+
+            - name: Verify generated privacy inventory
+              run: |
+                  pnpm generatePrivacyInventory
+                  git diff --exit-code -- src/equicordplugins/controlPanel.desktop/privacyInventory.ts
+
+            - name: Build desktop and browser targets
+              run: |
+                  pnpm buildStandalone
+                  pnpm buildWebStandalone
+
+            - name: Upload build output
+              uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+              with:
+                  name: lawyercord-build-${{ github.sha }}
+                  path: dist/
+                  if-no-files-found: error
+                  retention-days: 7
+
+    windows-smoke:
+        name: Windows smoke
+        runs-on: windows-latest
+        timeout-minutes: 30
+
+        steps:
+            - name: Check out repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  persist-credentials: false
+
+            - name: Set up pnpm
+              uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+
+            - name: Set up Node.js
+              uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+              with:
+                  node-version: 24
+                  cache: pnpm
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Validate Windows build
+              run: |
+                  pnpm testTsc
+                  pnpm testDiscordMcp
+                  pnpm testControlPanel
+                  pnpm buildStandalone

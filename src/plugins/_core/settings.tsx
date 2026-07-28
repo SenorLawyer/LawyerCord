@@ -98,7 +98,7 @@ interface SettingsLayoutBuilder {
 const settings = definePluginSettings({
     settingsLocation: {
         type: OptionType.SELECT,
-        description: "Where to put the Protonn Cord settings section",
+        description: "Where to put the LawyerCord settings section",
         options: [
             { label: "At the very top", value: "top" },
             { label: "Above the Nitro section", value: "aboveNitro", default: true },
@@ -190,11 +190,11 @@ export default definePlugin({
 
         const { buildEntry } = this;
 
-        const protonnCordEntries: SettingsLayoutNode[] = [
+        const lawyerCordEntries: SettingsLayoutNode[] = [
             buildEntry({
                 key: "equicord_main",
-                title: "Protonn Cord",
-                panelTitle: "Protonn Cord Settings",
+                title: "LawyerCord",
+                panelTitle: "LawyerCord Settings",
                 Component: VencordTab,
                 Icon: MainSettingsIcon
             }),
@@ -213,7 +213,7 @@ export default definePlugin({
             !IS_UPDATER_DISABLED && UpdaterTab && buildEntry({
                 key: "equicord_updater",
                 title: "Updater",
-                panelTitle: "Protonn Cord Updater",
+                panelTitle: "LawyerCord Updater",
                 Component: UpdaterTab,
                 Icon: UpdaterIcon
             }),
@@ -226,7 +226,7 @@ export default definePlugin({
             buildEntry({
                 key: "equicord_cloud",
                 title: "Cloud",
-                panelTitle: "Protonn Cord Cloud",
+                panelTitle: "LawyerCord Cloud",
                 Component: CloudTab,
                 Icon: CloudIcon
             }),
@@ -245,11 +245,11 @@ export default definePlugin({
             ...this.customEntries.map(buildEntry)
         ].filter(isTruthy);
 
-        const protonnCordSection: SettingsLayoutNode = {
+        const lawyerCordSection: SettingsLayoutNode = {
             key: "equicord_section",
             type: LayoutTypes.SECTION,
-            useTitle: () => "Protonn Cord Settings",
-            buildLayout: () => protonnCordEntries
+            useTitle: () => "LawyerCord Settings",
+            buildLayout: () => lawyerCordEntries
         };
 
         const { settingsLocation } = settings.store;
@@ -272,7 +272,7 @@ export default definePlugin({
             idx += 1;
         }
 
-        layout.splice(idx, 0, protonnCordSection);
+        layout.splice(idx, 0, lawyerCordSection);
 
         return layout;
     },
@@ -314,7 +314,7 @@ export default definePlugin({
     getInfoRows() {
         const { electronVersion, chromiumVersion, getVersionInfo } = this;
 
-        const rows = [`Protonn Cord ${gitHashShort}${getVersionInfo()}`];
+        const rows = [`LawyerCord ${gitHashShort}${getVersionInfo()}`];
 
         if (electronVersion) rows.push(`Electron ${electronVersion}`);
         if (chromiumVersion) rows.push(`Chromium ${chromiumVersion}`);

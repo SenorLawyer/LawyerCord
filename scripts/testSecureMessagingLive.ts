@@ -31,11 +31,11 @@ const SYNTHETIC_ANNOUNCEMENT_MESSAGE_ID = "1456074443980800000";
 const DEBUG_URL = process.env.DISCORD_DEBUG_URL ?? "http://127.0.0.1:9222";
 const ENCRYPTED_PREFIX = "PCEM1:";
 const DISPOSABLE_ACKNOWLEDGEMENT = "I_UNDERSTAND_THIS_IS_DISPOSABLE";
-const DISPOSABLE_FLAG_ENV = "PROTONN_CORD_SECURE_MESSAGING_LIVE_TEST";
-const DISPOSABLE_DATA_DIR_ENV = "PROTONN_CORD_SECURE_MESSAGING_LIVE_DATA_DIR";
-const CLIENT_DATA_DIR_ENV = "PROTONN_CORD_USER_DATA_DIR";
-const PRESTARTED_PLUGIN_ENV = "PROTONN_CORD_SECURE_MESSAGING_PRESTARTED";
-const PAGE_MESSAGE_REGISTRY = "__protonnCordSecureMessagingLiveMessageIds";
+const DISPOSABLE_FLAG_ENV = "LAWYERCORD_SECURE_MESSAGING_LIVE_TEST";
+const DISPOSABLE_DATA_DIR_ENV = "LAWYERCORD_SECURE_MESSAGING_LIVE_DATA_DIR";
+const CLIENT_DATA_DIR_ENV = "LAWYERCORD_USER_DATA_DIR";
+const PRESTARTED_PLUGIN_ENV = "LAWYERCORD_SECURE_MESSAGING_PRESTARTED";
+const PAGE_MESSAGE_REGISTRY = "__lawyerCordSecureMessagingLiveMessageIds";
 const PROOF_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAYAAAC56t6BAAAAFUlEQVR4nGP8z8Dwn4GBgYEJRKAwADE7AgRVI0g0AAAAAElFTkSuQmCC";
 const PROOF_PNG_FILENAME = "encrypted-proof-pixel.png";
 
@@ -153,7 +153,7 @@ async function getDiscordPage(pages: Page[]): Promise<Page> {
         await new Promise(resolve => setTimeout(resolve, 250));
         candidates = page ? await page.browser().pages() : candidates;
     }
-    throw new Error("Discord did not expose a stable Protonn Cord renderer page");
+    throw new Error("Discord did not expose a stable LawyerCord renderer page");
 }
 
 async function assertConnectedClientUsesDisposableDataDir(page: Page, expectedDataDir: string): Promise<void> {
@@ -165,7 +165,7 @@ async function assertConnectedClientUsesDisposableDataDir(page: Page, expectedDa
     assert.equal(
         comparablePath(dirname(settingsDir)),
         comparablePath(expectedDataDir),
-        "the connected Discord client is not using the declared disposable Protonn Cord data directory",
+        "the connected Discord client is not using the declared disposable LawyerCord data directory",
     );
 }
 

@@ -184,7 +184,7 @@ let socketGeneration = 0;
 async function connectSocket() {
     const generation = ++socketGeneration;
     const previousSocket = socket;
-    const nextSocket = new WebSocket(`ws://127.0.0.1:${settings.store.webSocketPort ?? 42070}/?client=ProtonnCord`);
+    const nextSocket = new WebSocket(`ws://127.0.0.1:${settings.store.webSocketPort ?? 42070}/?client=LawyerCord`);
     socket = nextSocket;
     previousSocket?.close();
 
@@ -429,7 +429,7 @@ function sendOtherNotif(content: string, titleString: string) {
         content: content,
         useBase64Icon: false,
         icon: "default",
-        sourceApp: "Protonn Cord"
+        sourceApp: "LawyerCord"
     };
     void sendToOverlay(msgData).catch(error => logger.error("Failed to send XSOverlay notification", error));
 }

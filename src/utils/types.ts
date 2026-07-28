@@ -228,7 +228,7 @@ export interface PluginDef {
     renderMemberListDecorator?: MemberListDecoratorFactory;
 
     /*
-    * Custom APIs added by Protonn Cord and kept here for quicker identification rather than mixing them in
+    * Custom APIs added by LawyerCord and kept here for quicker identification rather than mixing them in
     */
     renderNicknameIcon?: NicknameIconFactory;
     headerBarButton?: HeaderBarButtonData;
@@ -240,7 +240,7 @@ export interface PluginDef {
     gifPickerContextMenu?: GifPickerContextMenuItemFactory;
 
     /**
-     * A Vencord plugin that is modified for extra features in Protonn Cord
+     * A Vencord plugin that is modified for extra features in LawyerCord
      */
     isModified?: boolean;
 }

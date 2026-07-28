@@ -30,11 +30,11 @@ export interface UpdateSession {
 
 export type ChangelogHistory = UpdateSession[];
 
-const CHANGELOG_HISTORY_KEY = "EquicordChangelog_History";
-const LAST_SEEN_HASH_KEY = "EquicordChangelog_LastSeenHash";
-const KNOWN_PLUGINS_KEY = "EquicordChangelog_KnownPlugins";
-const KNOWN_SETTINGS_KEY = "EquicordChangelog_KnownSettings";
-const LAST_REPO_CHECK_KEY = "EquicordChangelog_LastRepoCheck";
+const CHANGELOG_HISTORY_KEY = "LawyerCordChangelog_History";
+const LAST_SEEN_HASH_KEY = "LawyerCordChangelog_LastSeenHash";
+const KNOWN_PLUGINS_KEY = "LawyerCordChangelog_KnownPlugins";
+const KNOWN_SETTINGS_KEY = "LawyerCordChangelog_KnownSettings";
+const LAST_REPO_CHECK_KEY = "LawyerCordChangelog_LastRepoCheck";
 const GITHUB_COMPARE_ENDPOINT = "https://api.github.com/repos";
 
 type KnownPluginSettingsMap = Map<string, Set<string>>;

@@ -149,7 +149,7 @@ async function runUpdateCheck() {
                 notifiedForUpdatesThisSession = true;
 
                 showNotice(
-                    "Protonn Cord has been updated!",
+                    "LawyerCord has been updated!",
                     "Restart",
                     relaunch
                 );
@@ -161,7 +161,7 @@ async function runUpdateCheck() {
         notifiedForUpdatesThisSession = true;
 
         showNotice(
-            "A new version of Protonn Cord is available!",
+            "A new version of LawyerCord is available!",
             "View Update",
             () => openSettingsTabModal(UpdaterTab!)
         );
@@ -179,7 +179,7 @@ function initTrayIpc() {
             VencordNative.tray.setUpdateState(isOutdated);
 
             if (isOutdated) {
-                showNotice("A Protonn Cord update is available!", "View Update", () => openSettingsTabModal(UpdaterTab!));
+                showNotice("A LawyerCord update is available!", "View Update", () => openSettingsTabModal(UpdaterTab!));
             } else {
                 showNotice("No updates available, you're on the latest version!", "OK", popNotice);
             }
@@ -194,7 +194,7 @@ function initTrayIpc() {
             await update();
             relaunch();
         } catch (err) {
-            UpdateLogger.error("Failed to repair Protonn Cord", err);
+            UpdateLogger.error("Failed to repair LawyerCord", err);
         }
     });
 
@@ -224,7 +224,7 @@ async function init() {
                 "Webpack has finished initialising, but some patches haven't been applied yet.",
                 "This might be expected since some Modules are lazy loaded, but please verify",
                 "that all plugins are working as intended.",
-                "You are seeing this warning because this is a development build of Protonn Cord.",
+                "You are seeing this warning because this is a development build of LawyerCord.",
                 "\nThe following patches have not been applied:",
                 "\n\n" + pendingPatches.map(p => `${p.plugin}: ${p.find}`).join("\n")
             );

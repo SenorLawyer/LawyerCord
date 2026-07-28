@@ -28,7 +28,7 @@ async function runReporter() {
                 match: /"Could not find app-mount"/,
                 replace: "(Vencord.Webpack._initReporter(),$&)"
             }
-        }, "Protonn Cord Reporter");
+        }, "LawyerCord Reporter");
 
         // @ts-expect-error
         Vencord.Webpack._initReporter = function () {
@@ -131,7 +131,7 @@ async function runReporter() {
 }
 
 // Imported in webpack for reporterData, wrap to avoid running reporter
-// Run after the Protonn Cord object has been created.
-// We need to add extra properties to it, and it is only created after all Protonn Cord code has run
+// Run after the LawyerCord object has been created.
+// We need to add extra properties to it, and it is only created after all LawyerCord code has run
 if (IS_REPORTER)
     setTimeout(runReporter, 0);

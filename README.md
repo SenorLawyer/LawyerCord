@@ -1,119 +1,93 @@
-# [<img src="./browser/icon.png" width="40" align="left" alt="Equicord">](https://github.com/Equicord/Equicord) Equicord
+# LawyerCord
 
-[![Equibop](https://img.shields.io/badge/Equibop-grey?style=flat)](https://github.com/Equicord/Equibop)
-[![Tests](https://github.com/Equicord/Equicord/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/Equicord/Equicord/actions/workflows/test.yml)
-[![Discord](https://img.shields.io/discord/1173279886065029291.svg?color=768AD4&label=Discord&logo=discord&logoColor=white)](https://equicord.org/discord)
+LawyerCord is a security-hardened fork of [ProtonnCord](https://github.com/ProtonDev-sys/ProtonnCord), which is based on [Equicord](https://github.com/Equicord/Equicord) and [Vencord](https://github.com/Vendicated/Vencord).
 
-Equicord is a fork of [Vencord](https://github.com/Vendicated/Vencord), with over 300+ plugins.
+This repository keeps upstream attribution and protocol compatibility where changing an internal identifier would break existing data. Product names, build artifacts, settings, app data, browser metadata, and user-facing text use LawyerCord.
 
-You can join our [Discord server](https://equicord.org/discord) for commits, changes, chatting, or even support.
+## Security posture
 
-### Included Plugins
+LawyerCord is safe-by-default, not network-free:
 
-Our included plugins can be found [here](https://equicord.org/plugins).
+- Discord analytics, metrics, and Sentry are disabled by the required `NoTrack` plugin.
+- Cloud settings sync is disabled by default.
+- Source auto-updates are disabled by default. Only enable them after configuring a Git remote you control and trust.
+- Optional plugins may contact services required for their feature. Review a plugin before enabling it.
+- The voice-message transcriber performs inference locally but currently loads its pinned runtime and speech models from jsDelivr and Hugging Face. Keep it disabled if runtime CDN code is outside your trust model.
+- The optional `DiscordMCP` plugin intentionally retains ProtonnCord's unrestricted access to every channel visible to the authenticated account, including its fixed send/delete surface.
+- The required `ControlPanel` plugin serves a capability-token-protected dashboard on `127.0.0.1`, preferring port `47831` and falling back to an available loopback port.
+- No generic Discord REST, token-export, webhook, moderation, membership, relationship, or arbitrary filesystem MCP tool is exposed.
 
-## Installing / Uninstalling
+See [SECURITY.md](./SECURITY.md) and [PRIVACY_POLICY.md](./PRIVACY_POLICY.md) for the audit summary and network boundaries.
 
-Windows
+## Local control panel
 
-- [GUI](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl.exe)
-- [CLI](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli.exe)
+Open the panel with the local `/lawyercord control panel` command. It is available only while LawyerCord is running and includes:
 
-MacOS
+- Discord account, server, relationship, channel, plugin, storage, and runtime-network statistics.
+- Encrypted-at-rest local hybrid semantic search over explicitly approved channels.
+- Evidence exports with automatic redaction, timestamps, SHA-256 file hashes, and a chained record manifest.
+- A generated per-plugin source inventory of external domains, local storage, and elevated capabilities.
+- Honest SecureMessaging protocol and migration status.
 
-- [X64 GUI](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-darwin-x64.zip)
-- [ARM64 GUI](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-darwin-arm64.zip)
+The semantic index initially approves channel `1085873944751521792`; change indexing scope from the dashboard. This does not restrict Discord or the MCP. The panel binds only to loopback, embeds no remote assets, disables CORS, and uses an unguessable URL stored with mode `0600` where supported.
 
-Linux
+## Discord MCP verification
 
-- [GUI](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-x11)
-- [CLI](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli-Linux)
-- [AUR](https://aur.archlinux.org/packages?O=0&K=equicord)
+The live test targets account `1045011641940574208`, guild `690342051778396403`, and channel `1085873944751521792` without turning those IDs into product restrictions. It verifies the account and read surface without sending a message. Live tests require a reviewed installed build and an explicitly enabled Discord debugging endpoint.
 
-```shell
-bash -c "$(curl -sS https://raw.githubusercontent.com/Equicord/Equicord/refs/heads/main/misc/install.sh)"
-```
+## Development
 
-## Installing Equicord Devbuild
+Requirements:
 
-### Dependencies
+- Git
+- Node.js 22 or newer
+- pnpm 11.13.0
 
-[Git](https://git-scm.com/download) and [Node.JS LTS](https://nodejs.dev/en/) are required.
-
-Install `pnpm`:
-
-> :exclamation: This next command may need to be run as admin/root depending on your system, and you may need to close and reopen your terminal for pnpm to be in your PATH.
-
-```shell
-npm i -g pnpm
-```
-
-> :exclamation: **IMPORTANT** Make sure you aren't using an admin/root terminal from here onwards. It **will** mess up your Discord/Equicord instance and you **will** most likely have to reinstall.
-
-Clone Equicord:
-
-```shell
-git clone https://github.com/Equicord/Equicord
-cd Equicord
-```
-
-Install dependencies:
+Install dependencies without running as administrator:
 
 ```shell
 pnpm install --frozen-lockfile
 ```
 
-Build Equicord:
+Build the desktop injection:
 
 ```shell
 pnpm build
 ```
 
-Inject Equicord into your desktop client:
-
-```shell
-pnpm inject
-```
-
-Build Equicord for web:
+Build the browser extension and userscript:
 
 ```shell
 pnpm buildWeb
 ```
 
-After building Equicord's web extension, locate the appropriate ZIP file in the `dist` directory and follow your browser’s guide for installing custom extensions, if supported.
+Run the static test suite:
 
-Note: Firefox extension zip requires Firefox for developers
+```shell
+pnpm test
+```
 
-## Credits
+Regenerate the privacy inventory after adding or changing plugins:
 
-Thank you to [Vendicated](https://github.com/Vendicated) for creating [Vencord](https://github.com/Vendicated/Vencord) & [Suncord](https://github.com/verticalsync/Suncord) by [verticalsync](https://github.com/verticalsync) for helping when needed.
+```shell
+pnpm generatePrivacyInventory
+```
 
-## Star History
+Injecting into Discord modifies the local Discord installation. LawyerCord will not download and execute a mutable installer release; provide an installer binary you built or verified locally:
 
-<a href="https://star-history.com/#Equicord/Equicord&Timeline">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Equicord/Equicord&type=Timeline&theme=dark&sealed_token=64drv2U7WiV6dQ5VRbOZdxHT3mRzxUzhVvfm5qt1VRpGjVPje0PbObjibX2FYe4zd-h36lCAGZ873gAgb_5_tAzUBixUVbtaLHqy1fNH6PkQP_PqPdKztatlI2s17T9IUFzRyhYynmJ1-H4idFFzEAMN1gRZlVvvmJ71P0LovJPOIqTT7uHIubWcHzxC" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Equicord/Equicord&type=Timeline&sealed_token=64drv2U7WiV6dQ5VRbOZdxHT3mRzxUzhVvfm5qt1VRpGjVPje0PbObjibX2FYe4zd-h36lCAGZ873gAgb_5_tAzUBixUVbtaLHqy1fNH6PkQP_PqPdKztatlI2s17T9IUFzRyhYynmJ1-H4idFFzEAMN1gRZlVvvmJ71P0LovJPOIqTT7uHIubWcHzxC" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Equicord/Equicord&type=Timeline&sealed_token=64drv2U7WiV6dQ5VRbOZdxHT3mRzxUzhVvfm5qt1VRpGjVPje0PbObjibX2FYe4zd-h36lCAGZ873gAgb_5_tAzUBixUVbtaLHqy1fNH6PkQP_PqPdKztatlI2s17T9IUFzRyhYynmJ1-H4idFFzEAMN1gRZlVvvmJ71P0LovJPOIqTT7uHIubWcHzxC" />
-  </picture>
-</a>
+```powershell
+$env:LAWYERCORD_INSTALLER_PATH = "C:\path\to\verified\EquilotlCli.exe"
+pnpm inject
+```
 
-## Disclaimer
+Do not inject or run live Discord tests from an unreviewed branch. The live MCP and secure-messaging scripts connect to a running Discord client through its debugging interface and are intentionally excluded from the normal test command.
 
-Discord is trademark of Discord Inc., and solely mentioned for the sake of descriptivity.
-Mentioning it does not imply any affiliation with or endorsement by Discord Inc.
-Vencord is not connected to Equicord and as such, all donation links go to Vendicated's donation link.
+## Project status
 
-<details>
-<summary>Using Equicord violates Discord's terms of service</summary>
+There is no official LawyerCord release feed configured yet. Build from reviewed source, and do not enable source auto-update until this fork has a repository and release process under your control.
 
-Client modifications are against Discord’s Terms of Service.
+## Credits and license
 
-However, Discord is pretty indifferent about them and there are no known cases of users getting banned for using client mods! So you should generally be fine if you don’t use plugins that implement abusive behaviour. But no worries, all inbuilt plugins are safe to use!
+LawyerCord is licensed under GPL-3.0-or-later. Copyright notices from ProtonnCord, Equicord, Vencord, and individual contributors are preserved in their files.
 
-Regardless, if your account is essential to you and getting disabled would be a disaster for you, you should probably not use any client mods (not exclusive to Equicord), just to be safe.
-
-Additionally, make sure not to post screenshots with Equicord in a server where you might get banned for it.
-
-</details>
+Discord is a trademark of Discord Inc. LawyerCord is not affiliated with or endorsed by Discord. Client modifications can violate Discord's Terms of Service; use a client mod only if you accept the account risk.

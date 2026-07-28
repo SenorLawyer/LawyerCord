@@ -144,6 +144,8 @@ jobs:
             - name: Resolve release identity
               id: release
               shell: pwsh
+              env:
+                  GH_TOKEN: ${{ github.token }}
               run: |
                   $version = (Get-Content -LiteralPath package.json | ConvertFrom-Json).version
                   $shortSha = (git rev-parse --short=8 HEAD).Trim()

@@ -156,8 +156,11 @@ jobs:
                       default { throw "Unsupported release channel: $env:RELEASE_CHANNEL" }
                   }
 
-                  $tagProbe = gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/$tag" 2>&1
-                  if ($LASTEXITCODE -eq 0) {
+                  $matchingTags = @(
+                      gh api "repos/$env:GITHUB_REPOSITORY/git/matching-refs/tags/$tag" |
+                          ConvertFrom-Json
+                  )
+                  if ($matchingTags.Count -ne 0) {
                       throw "Release tag $tag already exists; version tags are immutable"
                   }
 

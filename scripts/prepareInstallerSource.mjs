@@ -6,7 +6,6 @@
  */
 
 import { copyFile, readFile, rm, writeFile } from "node:fs/promises";
-import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -30,23 +29,12 @@ const revision = spawnSync("git", ["-C", sourceDirectory, "rev-parse", "HEAD"], 
 });
 if (revision.status !== 0 || revision.stdout.trim() !== INSTALLER_COMMIT)
     throw new Error(`Installer source must be the audited commit ${INSTALLER_COMMIT}`);
-
-const expectedFiles = new Map([
-    ["constants.go", "1b1110c8686ee56641f486dda940ce33584149707f704528c1c3b6208bfc600b"],
-    ["self_updater.go", "008a5c9c4af7b8bc7d48800b9ba4f68a45d8a29ba6c33a1a3dbcffe7f20d22fd"],
-    ["github_downloader.go", "943f9eb1a27154ea5964693a20d2b6fd30117360d9d92dc6ab73a46a8ab54f71"],
-    ["patcher.go", "5f3661524ef368c33ddca818f3e3ea8c95bf6901791d2435ff6492752691f3a0"],
-    ["gui.go", "b4e1a7ceb2236703e5a6cfe917b2ede40328e23a77f30403312ee8ef7d19e5d7"],
-    ["cli.go", "5d9d487227984de9389c4809215ab6b4f68bec651bb981565cab179c12fb7680"],
-    ["find_discord_linux.go", "16db43eecfe705c1aa5b15fc0f63c86a6f03cedb5e2e16235f8dc0f3c3e851c1"],
-    ["winres/winres.json", "5e471b3c8d674e930a504077f4ede58040d543fbb564d354a81a4ed0e8998fb2"],
-]);
-
-for (const [file, expectedHash] of expectedFiles) {
-    const contents = await readFile(resolve(sourceDirectory, file));
-    const actualHash = createHash("sha256").update(contents).digest("hex");
-    if (actualHash !== expectedHash) throw new Error(`${file} does not match the audited installer source`);
-}
+const sourceStatus = spawnSync("git", ["-C", sourceDirectory, "status", "--porcelain", "--untracked-files=no"], {
+    encoding: "utf8",
+    windowsHide: true,
+});
+if (sourceStatus.status !== 0 || sourceStatus.stdout.trim())
+    throw new Error("Installer source checkout contains changes outside the audited commit");
 
 const constantsSource = `/*
  * SPDX-License-Identifier: GPL-3.0

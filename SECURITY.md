@@ -21,6 +21,13 @@ Static review cannot prove the absence of every vulnerability in a large client-
 - Added a loopback-only control panel with a random capability path, same-origin API checks, no remote UI assets, encrypted semantic-index persistence, and bounded request bodies.
 - Added generated static plugin privacy inventory plus runtime domain observations.
 - Added redacted evidence exports with SHA-256 file and chained-record manifests.
+- Added a release-artifact audit that rejects Discord token-shaped values and private MCP/control-panel runtime files, including bridge configuration, queues, ledgers, semantic indexes, and downloads.
+
+## Discord account boundary
+
+LawyerCord does not package a Discord token or a connection to the maintainer's account. The optional MCP plugin runs inside each user's existing authenticated Discord renderer and does not expose a token-export or generic authenticated REST tool. When enabled, that installation generates a new random local bridge secret in the user's application-data directory. The secret, local MCP queue, sent-message ledger, control-panel capability, approved-channel list, semantic index, and evidence data are not repository or release assets.
+
+Personal user, guild, and channel IDs are not compiled into the product. The live verification harness accepts authorized IDs only through local environment variables and is excluded from normal CI.
 
 ## Remaining trust boundaries
 
@@ -31,6 +38,7 @@ Static review cannot prove the absence of every vulnerability in a large client-
 - Electron can observe runtime network destinations but cannot reliably attribute every bundled request to the exact plugin that initiated it. The dashboard keeps source declarations and observations separate.
 - Source updates execute newly fetched code after a rebuild. Only update from a reviewed remote under your control.
 - The MCP file secret protects against accidental queue injection, not against malware already running as the same operating-system user.
+- Enabling the unrestricted MCP grants its documented tool surface the same channel visibility as that installation's currently authenticated Discord account. Keep it disabled when it is not actively needed.
 - Secure messaging has no forward secrecy or post-compromise healing and has not received an independent cryptographic audit. The dashboard reports this as legacy protocol v1. No unaudited replacement is silently enabled.
 
 ## Reporting

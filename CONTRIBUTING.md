@@ -6,8 +6,8 @@ LawyerCord accepts focused security fixes, tests, documentation, upstream syncs,
 
 - `main` is the protected, releasable branch.
 - Create short-lived branches from current `main`.
-- Use `feature/<name>`, `fix/<name>`, `security/<name>`, or `maintenance/<name>`.
-- Submit changes through a pull request. Direct pushes to `main` are reserved for repository initialization and emergency owner recovery.
+- Use `feature/<name>`, `fix/<name>`, `security/<name>`, `maintenance/<name>`, or the automation-specific branch convention configured for your contributor tool.
+- Submit every change through a pull request. Direct pushes to `main`, including release tags, are not part of the normal repository workflow.
 - Keep one logical change per pull request and use squash merge.
 
 ## Before opening a pull request
@@ -26,6 +26,7 @@ pnpm install --frozen-lockfile
 pnpm testTsc
 pnpm testDiscordMcp
 pnpm testControlPanel
+pnpm testReleaseArtifactAudit
 pnpm testSecureMessaging
 pnpm lint
 pnpm lint-styles
@@ -63,4 +64,4 @@ Well-known third-party services are acceptable only when the feature, provider, 
 
 ## Review and release
 
-Pull requests require passing CI and resolved review conversations. Releases are created from version tags matching `package.json`; see [VERSIONING.md](./VERSIONING.md) and [CHANGELOG.md](./CHANGELOG.md).
+Pull requests require passing CI and resolved review conversations. Merged pull requests default to nightly releases; use exactly one `release:*` label to select beta, stable, or no release. See [VERSIONING.md](./VERSIONING.md) and [CHANGELOG.md](./CHANGELOG.md).

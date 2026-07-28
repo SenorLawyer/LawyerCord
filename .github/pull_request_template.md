@@ -13,8 +13,13 @@
 - [ ] Lint passes
 - [ ] Relevant builds pass
 - [ ] Privacy inventory regenerated when applicable
+- [ ] Release artifact audit passes
 - [ ] No credentials, private Discord data, or generated build output are included
 
 ## Compatibility
 
 <!-- Note migration, upstream compatibility, or release implications. -->
+
+## Release channel
+
+<!-- No label defaults to nightly. Apply exactly one of release:nightly, release:beta, release:stable, or release:skip. -->

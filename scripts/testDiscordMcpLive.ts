@@ -5,11 +5,9 @@ import { createInterface } from "node:readline";
 
 import puppeteer from "puppeteer-core";
 
-const TARGET_USER_ID = "1045011641940574208";
-const TARGET_GUILD_ID = "690342051778396403";
-const TARGET_CHANNEL_ID = "1085873944751521792";
 const DEBUG_URL = process.env.DISCORD_DEBUG_URL ?? "http://127.0.0.1:9222";
 const LIVE_CONFIRMATION = "VERIFY_AUTHORIZED_DISCORD_TARGET";
+const SNOWFLAKE = /^\d{17,20}$/u;
 
 if (process.env.LAWYERCORD_RUN_LIVE_DISCORD_MCP_READONLY !== LIVE_CONFIRMATION) {
     throw new Error(
@@ -17,6 +15,16 @@ if (process.env.LAWYERCORD_RUN_LIVE_DISCORD_MCP_READONLY !== LIVE_CONFIRMATION) 
         "only with a disposable, reviewed LawyerCord build."
     );
 }
+
+function requireTarget(name: string): string {
+    const value = process.env[name];
+    if (!value || !SNOWFLAKE.test(value)) throw new Error(`${name} must be an authorized Discord snowflake ID`);
+    return value;
+}
+
+const TARGET_USER_ID = requireTarget("LAWYERCORD_MCP_TEST_USER_ID");
+const TARGET_GUILD_ID = requireTarget("LAWYERCORD_MCP_TEST_GUILD_ID");
+const TARGET_CHANNEL_ID = requireTarget("LAWYERCORD_MCP_TEST_CHANNEL_ID");
 
 interface RpcWaiter {
     resolve(value: unknown): void;

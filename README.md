@@ -14,7 +14,9 @@ LawyerCord is safe-by-default, not network-free:
 - Optional plugins may contact services required for their feature. Review a plugin before enabling it.
 - The voice-message transcriber performs inference locally but currently loads its pinned runtime and speech models from jsDelivr and Hugging Face. Keep it disabled if runtime CDN code is outside your trust model.
 - The optional `DiscordMCP` plugin intentionally retains ProtonnCord's unrestricted access to every channel visible to the authenticated account, including its fixed send/delete surface.
+- Discord credentials are never read, exported, embedded, or packaged. Each installation uses its own current Discord session and creates its own random local MCP bridge secret only after the user enables the plugin.
 - The required `ControlPanel` plugin serves a capability-token-protected dashboard on `127.0.0.1`, preferring port `47831` and falling back to an available loopback port.
+- CI rejects release artifacts containing Discord token-shaped values or LawyerCord runtime configuration, indexes, queues, ledgers, and downloads.
 - No generic Discord REST, token-export, webhook, moderation, membership, relationship, or arbitrary filesystem MCP tool is exposed.
 
 See [SECURITY.md](./SECURITY.md) and [PRIVACY_POLICY.md](./PRIVACY_POLICY.md) for the audit summary and network boundaries.
@@ -29,11 +31,19 @@ Open the panel with the local `/lawyercord control panel` command. It is availab
 - A generated per-plugin source inventory of external domains, local storage, and elevated capabilities.
 - Honest SecureMessaging protocol and migration status.
 
-The semantic index initially approves channel `1085873944751521792`; change indexing scope from the dashboard. This does not restrict Discord or the MCP. The panel binds only to loopback, embeds no remote assets, disables CORS, and uses an unguessable URL stored with mode `0600` where supported.
+The semantic index starts with no approved channels. Add channels explicitly from the dashboard; this indexing scope does not restrict Discord or the MCP. The panel binds only to loopback, embeds no remote assets, disables CORS, and uses an unguessable URL stored with mode `0600` where supported.
 
 ## Discord MCP verification
 
-The live test targets account `1045011641940574208`, guild `690342051778396403`, and channel `1085873944751521792` without turning those IDs into product restrictions. It verifies the account and read surface without sending a message. Live tests require a reviewed installed build and an explicitly enabled Discord debugging endpoint.
+The opt-in live test reads authorized target IDs from local environment variables; no personal account, guild, or channel IDs are stored in the repository or release. It verifies the account and read surface without sending a message. Live tests require a reviewed installed build and an explicitly enabled Discord debugging endpoint:
+
+```powershell
+$env:LAWYERCORD_RUN_LIVE_DISCORD_MCP_READONLY = "VERIFY_AUTHORIZED_DISCORD_TARGET"
+$env:LAWYERCORD_MCP_TEST_USER_ID = "<authorized-user-id>"
+$env:LAWYERCORD_MCP_TEST_GUILD_ID = "<authorized-guild-id>"
+$env:LAWYERCORD_MCP_TEST_CHANNEL_ID = "<authorized-channel-id>"
+pnpm tsx scripts/testDiscordMcpLive.ts
+```
 
 ## Development
 
@@ -82,9 +92,16 @@ pnpm inject
 
 Do not inject or run live Discord tests from an unreviewed branch. The live MCP and secure-messaging scripts connect to a running Discord client through its debugging interface and are intentionally excluded from the normal test command.
 
-## Project status
+## Releases
 
-There is no official LawyerCord release feed configured yet. Build from reviewed source, and do not enable source auto-update until this fork has a repository and release process under your control.
+Every merged pull request is built from its merge commit and defaults to a unique nightly prerelease. Apply one release label before merging to select a different result:
+
+- `release:nightly` creates an immutable nightly prerelease.
+- `release:beta` creates a versioned beta prerelease.
+- `release:stable` creates the versioned stable release and marks it latest.
+- `release:skip` performs no release, which is appropriate for release-process-only changes.
+
+Each release contains a Windows ZIP and `SHA256SUMS.txt`. Stable releases require a unique version in `package.json`; tags are never moved or overwritten.
 
 ## Credits and license
 

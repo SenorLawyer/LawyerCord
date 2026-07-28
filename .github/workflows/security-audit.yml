@@ -32,5 +32,5 @@ jobs:
             - name: Install dependencies
               run: pnpm install --frozen-lockfile --ignore-scripts
 
-            - name: Audit production dependencies
-              run: pnpm audit --prod --audit-level moderate
+            - name: Audit full dependency graph
+              run: pnpm audit --audit-level low

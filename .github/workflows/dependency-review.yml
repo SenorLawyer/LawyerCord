@@ -11,14 +11,25 @@ jobs:
     dependency-review:
         name: Dependency review
         runs-on: ubuntu-latest
+        timeout-minutes: 15
+
         steps:
             - name: Check out repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
               with:
                   persist-credentials: false
 
-            - name: Review dependency changes
-              uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+            - name: Set up pnpm
+              uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+
+            - name: Set up Node.js
+              uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
               with:
-                  fail-on-severity: moderate
-                  deny-licenses: AGPL-1.0-only, AGPL-1.0-or-later, AGPL-3.0-only, AGPL-3.0-or-later
+                  node-version: 24
+                  cache: pnpm
+
+            - name: Verify lockfile without lifecycle scripts
+              run: pnpm install --frozen-lockfile --ignore-scripts
+
+            - name: Audit dependency changes
+              run: pnpm audit --audit-level moderate

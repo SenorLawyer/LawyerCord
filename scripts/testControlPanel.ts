@@ -76,9 +76,10 @@ async function main() {
 
     const html = await readFile("src/equicordplugins/controlPanel.desktop/dashboard.html", "utf8");
     assert.doesNotMatch(html, /<(?:script|link)[^>]+(?:src|href)=["']https?:/iu, "dashboard has no remote script or stylesheet");
-    assert.match(html, /Semantic search/u);
-    assert.match(html, /Evidence exports/u);
+    assert.match(html, /Message search/u);
+    assert.match(html, /Message export/u);
     assert.match(html, /Plugin capability inventory/u);
+    assert.doesNotMatch(html, /Index channels|<span class="nav-label">Security/u);
 
 console.log("control-panel search, redaction, evidence-chain, and local-asset checks passed");
 }

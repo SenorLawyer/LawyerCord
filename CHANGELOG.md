@@ -25,7 +25,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Audited the ProtonnCord fork delta and documented remaining trust boundaries.
 - Disabled source auto-update and cloud sync by default.
 - Removed mutable remote installer execution and inherited upstream publishing workflows.
-- Updated vulnerable dependencies until the production audit reported no known vulnerabilities.
+- Updated production and development dependencies until the full audit reported no known vulnerabilities.
+- Replaced the obsolete `zip-local` build wrapper with the current JSZip API so extension packaging no longer depends on vulnerable JSZip 2 behavior.
 - Retained the intentionally unrestricted Discord MCP with its fixed tool surface, authenticated local queue, attachment validation, mention suppression, and sent-message-only deletion ledger.
 
 ### Changed

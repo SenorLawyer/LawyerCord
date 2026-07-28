@@ -21,8 +21,8 @@
 
 import { readFileSync } from "fs";
 import { appendFile, mkdir, readdir, readFile, rm, writeFile } from "fs/promises";
-import path, { join } from "path";
-import Zip from "zip-local";
+import { join, relative } from "path";
+import JSZip from "jszip";
 
 import { BUILD_TIMESTAMP, commonOpts, globPlugins, IS_DEV, IS_REPORTER, IS_COMPANION_TEST, IS_STANDALONE, VERSION, commonRendererPlugins, buildOrWatchAll, stringifyValues, IS_ANTI_CRASH_TEST } from "./common.mjs";
 
@@ -184,6 +184,25 @@ async function buildExtension(target, files) {
     console.info("Unpacked Extension written to dist/browser/" + target);
 }
 
+/**
+ * @type {(source: string, target: string, label: string) => Promise<void>}
+ */
+async function packExtension(source, target, label) {
+    const zip = new JSZip();
+    for (const file of await globDir(source)) {
+        const archivePath = relative(source, file).replaceAll("\\", "/");
+        zip.file(archivePath, await readFile(file));
+    }
+    const archive = await zip.generateAsync({
+        compression: "DEFLATE",
+        compressionOptions: { level: 9 },
+        platform: "UNIX",
+        type: "nodebuffer",
+    });
+    await writeFile(target, archive);
+    console.info(`Packed ${label} Extension written to ${target}`);
+}
+
 const appendCssRuntime = readFile("dist/LawyerCord.user.css", "utf-8").then(content => {
     const cssRuntime = `unsafeWindow._vcUserScriptRendererCss=\`${content.replaceAll("`", "\\`")}\``;
 
@@ -197,14 +216,10 @@ if (!process.argv.includes("--skip-extension")) {
         buildExtension("firefox-unpacked", ["background.js", "content.js", "manifestv2.json", "lawyercord-icon.png"]),
     ]);
 
-    Zip.zip("dist/browser/chromium-unpacked", (_err, zip) => {
-        zip.compress().save("dist/extension-chrome.zip");
-        console.info("Packed Chromium Extension written to dist/extension-chrome.zip");
-    });
-    Zip.zip("dist/browser/firefox-unpacked", (_err, zip) => {
-        zip.compress().save("dist/extension-firefox.zip");
-        console.info("Packed Firefox Extension written to dist/extension-firefox.zip");
-    });
+    await Promise.all([
+        packExtension("dist/browser/chromium-unpacked", "dist/extension-chrome.zip", "Chromium"),
+        packExtension("dist/browser/firefox-unpacked", "dist/extension-firefox.zip", "Firefox"),
+    ]);
 } else {
     await appendCssRuntime;
 }

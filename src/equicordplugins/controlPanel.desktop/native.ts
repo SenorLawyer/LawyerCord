@@ -295,6 +295,25 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     }
     if (request.method === "POST" && pathname === "/api/channels") {
         const body = await readBody(request);
+        if (Array.isArray(body.channelIds)) {
+            const visible = new Set(snapshot?.channels.map(channel => channel.id));
+            const channelIds = body.channelIds.map(String).filter(id => SNOWFLAKE.test(id) && visible.has(id));
+            const approved = body.approved === true;
+            const values = new Set(config!.approvedChannelIds);
+            for (const channelId of channelIds) {
+                if (approved) values.add(channelId);
+                else values.delete(channelId);
+            }
+            config!.approvedChannelIds = [...values];
+            if (!approved) {
+                for (const [messageId, message] of messages) {
+                    if (channelIds.includes(message.channelId)) messages.delete(messageId);
+                }
+                persistIndexSoon();
+            }
+            await atomicWrite(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`);
+            return send(response, 200, json({ approvedChannelIds: config!.approvedChannelIds }));
+        }
         const channelId = String(body.channelId ?? "");
         if (!SNOWFLAKE.test(channelId) || !snapshot?.channels.some(channel => channel.id === channelId))
             throw new Error("Channel is not visible to the authenticated Discord account");

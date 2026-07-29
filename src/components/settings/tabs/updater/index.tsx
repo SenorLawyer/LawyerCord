@@ -29,7 +29,7 @@ import { SettingsTab, wrapTab } from "@components/settings/tabs/BaseTab";
 import { Margins } from "@utils/margins";
 import { useAwaiter } from "@utils/react";
 import { getRepo, isNewer, UpdateLogger } from "@utils/updater";
-import { React } from "@webpack/common";
+import { React, Select } from "@webpack/common";
 
 import gitHash from "~git-hash";
 
@@ -69,7 +69,7 @@ function EquibopSection() {
 }
 
 function Updater() {
-    const settings = useSettings(["autoUpdate", "autoUpdateNotification"]);
+    const settings = useSettings(["autoUpdate", "autoUpdateNotification", "updateChannel"]);
 
     const [repo, err, repoPending] = useAwaiter(getRepo, { fallbackValue: "Loading..." });
 
@@ -105,6 +105,21 @@ function Updater() {
                 description="Receive a notification when LawyerCord finishes downloading an update in the background, so you know when to restart Discord."
                 disabled={!settings.autoUpdate}
                 hideBorder
+            />
+
+            <Heading className={Margins.top20}>Release Channel</Heading>
+            <Paragraph className={Margins.bottom8}>
+                Stable receives tested releases. Beta and Nightly may include unfinished changes.
+            </Paragraph>
+            <Select
+                options={[
+                    { label: "Stable", value: "stable", default: true },
+                    { label: "Beta", value: "beta" },
+                    { label: "Nightly", value: "nightly" },
+                ] satisfies Array<{ value: typeof settings.updateChannel; } & Record<string, unknown>>}
+                select={v => settings.updateChannel = v}
+                isSelected={v => v === settings.updateChannel}
+                serialize={v => v}
             />
 
             <Divider className={Margins.top20} />

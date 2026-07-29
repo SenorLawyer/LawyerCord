@@ -248,6 +248,7 @@ function serializeMessage(message: any) {
         tts: Boolean(message.tts),
         attachments: Array.isArray(message.attachments) ? message.attachments.map(serializeAttachment) : [],
         embeds: Array.isArray(message.embeds) ? message.embeds.map(serializeEmbed) : [],
+        components: Array.isArray(message.components) ? message.components : [],
         replyToMessageId: message.message_reference?.message_id ?? message.messageReference?.message_id ?? null,
     };
 }

@@ -4,6 +4,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ## Unreleased
 
+## 1.16.0.0 - 2026-07-29
+
 ### Added
 
 - Automated nightly, beta, and stable release channels driven by protected pull-request merges.
@@ -11,6 +13,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Windows graphical and command-line installer executables for nightly, beta, and stable releases.
 - Discord-style local control panel with scrollable server lists, real runtime status, scoped message search, date-range message exports, and expandable privacy activity.
 - Bulk channel selection controls for local indexing and message exports.
+- Stable, beta, and nightly channel selection for standalone LawyerCord updates.
 
 ### Changed
 
@@ -18,6 +21,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Live Discord MCP verification accepts authorized target IDs only through local environment variables.
 - Message search now means local hybrid search across only channels explicitly selected in the panel; it does not search every Discord channel or DM.
 - Removed the separate index-channel and security tabs. Protocol migration remains a visible runtime warning rather than a standalone settings page.
+- Discord MCP message responses now retain Components v2 payloads.
 
 ### Security
 

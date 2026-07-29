@@ -22,8 +22,7 @@ function isChannelExempted(channel: Channel): boolean {
 }
 
 const countedChannels = new Set<string>();
-// track channels that were manually cleared and the message ID at time of clear
-const clearedChannels = new Map<string, string>();
+const clearedChannels = new Map(Object.entries(settings.store.clearedChannels ?? {}));
 // listeners for when a channel is cleared or un-cleared (thororen is this allowed lolz)
 const clearedChannelListeners = new Set<(channelId: string) => void>();
 
@@ -57,6 +56,25 @@ export function getGhostedChannels(): string[] {
     return Array.from(countedChannels);
 }
 
+function setClearedChannel(channelId: string, messageId: string) {
+    clearedChannels.set(channelId, messageId);
+    settings.store.clearedChannels = {
+        ...settings.store.clearedChannels,
+        [channelId]: messageId,
+    };
+}
+
+function removeClearedChannel(channelId: string) {
+    if (!clearedChannels.delete(channelId)) return;
+
+    const { [channelId]: _, ...remaining } = settings.store.clearedChannels ?? {};
+    settings.store.clearedChannels = remaining;
+
+    for (const listener of clearedChannelListeners) {
+        listener(channelId);
+    }
+}
+
 export function clearChannelFromGhost(channelId: string): void {
     if (!countedChannels.has(channelId)) {
         return;
@@ -67,7 +85,7 @@ export function clearChannelFromGhost(channelId: string): void {
     // so we can detect new messages from the other person
     const lastMessage = MessageStore.getMessages(channelId)?.last();
     if (lastMessage) {
-        clearedChannels.set(channelId, lastMessage.id);
+        setClearedChannel(channelId, lastMessage.id);
     }
 
     // notify all listeners that this channel was cleared
@@ -148,12 +166,8 @@ export function Boo({ channel }: { channel: Channel; }) {
             // if there's a NEW message from the OTHER person, remove from cleared state
             // so it can be re-ghosted
             if (currentLastMessageId !== clearedAtMessageId) {
-                clearedChannels.delete(id);
+                removeClearedChannel(id);
                 wasManuallyCleared = false; // update the flag since we deleted it
-                // notify listeners that this channel is no longer cleared (new message)
-                for (const listener of clearedChannelListeners) {
-                    listener(id);
-                }
             }
         }
 
@@ -164,7 +178,7 @@ export function Boo({ channel }: { channel: Channel; }) {
                 setBooCount(getBooCount() - 1);
             }
             if (clearedChannels.has(id)) {
-                clearedChannels.delete(id);
+                removeClearedChannel(id);
             }
             return;
         }

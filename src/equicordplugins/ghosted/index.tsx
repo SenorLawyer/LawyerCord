@@ -64,7 +64,7 @@ export const settings = definePluginSettings({
         ],
         restartNeeded: false
     }
-});
+}).withPrivateSettings<{ clearedChannels?: Record<string, string>; }>();
 
 function BooIndicator() {
     const [count, setCount] = useState(getBooCount());

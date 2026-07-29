@@ -6,7 +6,7 @@ LawyerCord accepts focused security fixes, tests, documentation, upstream syncs,
 
 - `main` is the protected, releasable branch.
 - Create short-lived branches from current `main`.
-- Use `feature/<name>`, `fix/<name>`, `security/<name>`, `maintenance/<name>`, or the automation-specific branch convention configured for your contributor tool.
+- Use `feature/<name>`, `fix/<name>`, `security/<name>`, or `maintenance/<name>` with lowercase hyphenated names. Never use a person, agent, or tool name as a branch prefix.
 - Submit every change through a pull request. Direct pushes to `main`, including release tags, are not part of the normal repository workflow.
 - Keep one logical change per pull request and use squash merge.
 

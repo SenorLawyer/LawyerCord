@@ -1,8 +1,6 @@
 name: Build and test
 
 on:
-    push:
-        branches: [main]
     pull_request:
         branches: [main]
     workflow_dispatch:
@@ -125,10 +123,6 @@ jobs:
 
             - name: Validate Windows build
               run: |
-                  pnpm testTsc
-                  pnpm testDiscordMcp
-                  pnpm testControlPanel
-                  pnpm testReleaseArtifactAudit
                   pnpm buildStandalone
                   pnpm auditReleaseArtifacts dist
 

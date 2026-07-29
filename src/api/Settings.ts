@@ -17,6 +17,7 @@
 */
 
 import { SettingsStore as SettingsStoreClass } from "@shared/SettingsStore";
+import type { UpdateChannel } from "@shared/updateChannel";
 import { Logger } from "@utils/Logger";
 import { mergeDefaults } from "@utils/mergeDefaults";
 import { DefinedSettings, OptionType, SettingsChecks, SettingsDefinition } from "@utils/types";
@@ -42,6 +43,7 @@ export type SettingsPluginUiElements = {
 export interface Settings {
     autoUpdate: boolean;
     autoUpdateNotification: boolean;
+    updateChannel: UpdateChannel;
     useQuickCss: boolean;
     eagerPatches: boolean;
     enabledThemes: string[];
@@ -107,6 +109,7 @@ const DefaultSettings: Settings = {
     // Keep source updates opt-in until the operator has configured a trusted LawyerCord remote.
     autoUpdate: false,
     autoUpdateNotification: true,
+    updateChannel: "stable",
     useQuickCss: true,
     themeLinks: [],
     eagerPatches: false, // Eagerly patching no longer works due to module factories with the same id being able to have different sources now.

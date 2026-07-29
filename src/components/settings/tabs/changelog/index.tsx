@@ -6,6 +6,7 @@
 
 import "./styles.css";
 
+import { Settings } from "@api/Settings";
 import { Button } from "@components/Button";
 import { Card } from "@components/Card";
 import { Divider } from "@components/Divider";
@@ -310,7 +311,7 @@ function ChangelogContent() {
         const checkRecentStatus = async () => {
             try {
                 const lastRepoCheck = await getLastRepositoryCheckHash();
-                const updates = await VencordNative.updater.getUpdates();
+                const updates = await VencordNative.updater.getUpdates(Settings.updateChannel);
 
                 if (updates.ok) {
                     const currentRepoHash =
@@ -338,7 +339,7 @@ function ChangelogContent() {
 
         try {
             // check if the repository was recently refreshed and that nothing has changed
-            const updates = await VencordNative.updater.getUpdates();
+            const updates = await VencordNative.updater.getUpdates(Settings.updateChannel);
             const lastRepoCheck = await getLastRepositoryCheckHash();
             const currentRepoHash =
                 updates.ok && updates.value.length > 0

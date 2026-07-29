@@ -18,6 +18,7 @@
 
 import { fetchBuffer, fetchJson } from "@main/utils/http";
 import { IpcEvents } from "@shared/IpcEvents";
+import { normalizeUpdateChannel, type UpdateChannel } from "@shared/updateChannel";
 import { VENCORD_USER_AGENT } from "@shared/vencordUserAgent";
 import { ipcMain } from "electron";
 import { writeFileSync } from "original-fs";
@@ -30,6 +31,13 @@ import { ASAR_FILE, serializeErrors } from "./common";
 const API_BASE = `https://api.github.com/repos/${gitRemote}`;
 let PendingUpdate: string | null = null;
 
+interface GithubRelease {
+    assets: Array<{ name: string; browser_download_url: string; }>;
+    prerelease: boolean;
+    tag_name: string;
+    target_commitish: string;
+}
+
 async function githubGet<T = any>(endpoint: string) {
     return fetchJson<T>(API_BASE + endpoint, {
         headers: {
@@ -41,30 +49,40 @@ async function githubGet<T = any>(endpoint: string) {
     });
 }
 
-async function calculateGitChanges() {
-    const isOutdated = await fetchUpdates();
-    if (!isOutdated) return [];
+async function getRelease(channel: UpdateChannel): Promise<GithubRelease> {
+    if (channel === "stable") return githubGet("/releases/latest");
 
-    const data = await githubGet(`/compare/${gitHash}...HEAD`);
+    const releases = await githubGet<GithubRelease[]>("/releases?per_page=100");
+    const release = releases.find(release => release.prerelease && (
+        channel === "beta"
+            ? /^v.+-beta\.\d+$/.test(release.tag_name)
+            : /^nightly-\d{8}-\d{4}-[a-f\d]+$/.test(release.tag_name)
+    ));
+    if (!release) throw new Error(`No ${channel} release is available`);
+    return release;
+}
+
+async function fetchUpdates(channel: UpdateChannel) {
+    const release = await getRelease(channel);
+    if (release.target_commitish === gitHash) return null;
+
+    const asset = release.assets.find(asset => asset.name === ASAR_FILE);
+    if (!asset) throw new Error(`The ${channel} release does not include ${ASAR_FILE}`);
+    PendingUpdate = asset.browser_download_url;
+    return release;
+}
+
+async function calculateGitChanges(_: unknown, updateChannel: unknown) {
+    const release = await fetchUpdates(normalizeUpdateChannel(updateChannel));
+    if (!release) return [];
+
+    const data = await githubGet(`/compare/${gitHash}...${release.target_commitish}`);
 
     return data.commits.map((c: any) => ({
         hash: c.sha,
         author: c.author?.login ?? c.commit?.author?.name ?? "Unknown Author",
         message: c.commit.message.split("\n")[0]
     }));
-}
-
-async function fetchUpdates() {
-    const data = await githubGet("/releases/latest");
-
-    const hash = data.name.slice(data.name.lastIndexOf(" ") + 1);
-    if (hash === gitHash)
-        return false;
-
-    const asset = data.assets.find(a => a.name === ASAR_FILE);
-    PendingUpdate = asset.browser_download_url;
-
-    return true;
 }
 
 async function applyUpdates() {
@@ -80,5 +98,5 @@ async function applyUpdates() {
 
 ipcMain.handle(IpcEvents.GET_REPO, serializeErrors(() => `https://github.com/${gitRemote}`));
 ipcMain.handle(IpcEvents.GET_UPDATES, serializeErrors(calculateGitChanges));
-ipcMain.handle(IpcEvents.UPDATE, serializeErrors(fetchUpdates));
+ipcMain.handle(IpcEvents.UPDATE, serializeErrors(async (_: unknown, updateChannel: unknown) => Boolean(await fetchUpdates(normalizeUpdateChannel(updateChannel)))));
 ipcMain.handle(IpcEvents.BUILD, serializeErrors(applyUpdates));

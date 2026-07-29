@@ -22,7 +22,7 @@ function isChannelExempted(channel: Channel): boolean {
 }
 
 const countedChannels = new Set<string>();
-const clearedChannels = new Map(Object.entries(settings.store.clearedChannels ?? {}));
+const clearedChannels = new Map<string, string>();
 // listeners for when a channel is cleared or un-cleared (thororen is this allowed lolz)
 const clearedChannelListeners = new Set<(channelId: string) => void>();
 
@@ -54,6 +54,12 @@ export function onClearedChannelChange(cb: (channelId: string) => void) {
 
 export function getGhostedChannels(): string[] {
     return Array.from(countedChannels);
+}
+
+export function loadClearedChannels() {
+    for (const [channelId, messageId] of Object.entries(settings.store.clearedChannels ?? {})) {
+        clearedChannels.set(channelId, messageId);
+    }
 }
 
 function setClearedChannel(channelId: string, messageId: string) {

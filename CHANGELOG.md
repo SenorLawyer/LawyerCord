@@ -9,6 +9,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ### Fixed
 
 - Publish the standalone updater asset as `desktop.asar` alongside the LawyerCord-named copy.
+- Defer Ghosted's private-settings restore until startup so LawyerCord loads correctly.
 
 ## 1.16.0.0 - 2026-07-29
 

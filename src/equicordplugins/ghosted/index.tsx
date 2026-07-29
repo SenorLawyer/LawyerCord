@@ -16,7 +16,7 @@ import definePlugin, { OptionType } from "@utils/types";
 import { Channel } from "@vencord/discord-types";
 import { Menu, openModal, Tooltip, useEffect, useState } from "@webpack/common";
 
-import { Boo, clearChannelFromGhost, getBooCount, getGhostedChannels, onBooCountChange } from "./Boo";
+import { Boo, clearChannelFromGhost, getBooCount, getGhostedChannels, loadClearedChannels, onBooCountChange } from "./Boo";
 import { getChannelDisplayName, GhostedUsersModal } from "./GhostedUsersModal";
 import { IconGhost } from "./IconGhost";
 
@@ -186,6 +186,7 @@ export default definePlugin({
     },
 
     start() {
+        loadClearedChannels();
         addServerListElement(ServerListRenderPosition.Above, this.renderIndicator);
     },
 

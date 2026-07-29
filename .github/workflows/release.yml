@@ -219,12 +219,14 @@ jobs:
                   $source = "LawyerCordInstaller-source-$env:RELEASE_TAG.zip"
                   Compress-Archive -Path dist\* -DestinationPath $bundle
                   Compress-Archive -Path installer-source\* -DestinationPath $source
+                  Copy-Item -LiteralPath dist\desktop.asar -Destination desktop.asar
                   Copy-Item -LiteralPath dist\desktop.asar -Destination LawyerCord.asar
 
                   $assets = @(
                       $bundle,
                       "LawyerCordInstaller.exe",
                       "LawyerCordInstallerCli.exe",
+                      "desktop.asar",
                       "LawyerCord.asar",
                       $source
                   )
@@ -246,6 +248,7 @@ jobs:
                       ${{ steps.assets.outputs.bundle }}
                       LawyerCordInstaller.exe
                       LawyerCordInstallerCli.exe
+                      desktop.asar
                       LawyerCord.asar
                       ${{ steps.assets.outputs.source }}
                       SHA256SUMS.txt
@@ -266,6 +269,7 @@ jobs:
                       $env:RELEASE_BUNDLE,
                       "LawyerCordInstaller.exe",
                       "LawyerCordInstallerCli.exe",
+                      "desktop.asar",
                       "LawyerCord.asar",
                       $env:RELEASE_SOURCE,
                       "SHA256SUMS.txt",

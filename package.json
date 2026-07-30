@@ -1,7 +1,7 @@
 {
     "name": "lawyercord",
     "private": true,
-    "version": "1.16.1.0",
+    "version": "1.16.2.0",
     "description": "LawyerCord, a Discord client mod",
     "license": "GPL-3.0-or-later",
     "author": "LawyerCord contributors",

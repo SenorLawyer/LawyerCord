@@ -181,14 +181,39 @@ await copyFile(clientAsar, resolve(sourceDirectory, "lawyercord-desktop.asar"));
 for (const file of ["patcher.go", "gui.go", "cli.go", "find_discord_linux.go"]) {
     const path = resolve(sourceDirectory, file);
     const source = await readFile(path, "utf8");
-    await writeFile(
-        path,
-        source
-            .replaceAll("EQUICORD", "LAWYERCORD")
-            .replaceAll("Equilotl", "LawyerCord Installer")
-            .replaceAll("Equicord", "LawyerCord")
-            .replaceAll("equicord.asar", "lawyercord.asar"),
-    );
+    let adapted = source
+        .replaceAll("EQUICORD", "LAWYERCORD")
+        .replaceAll("Equilotl", "LawyerCord Installer")
+        .replaceAll("Equicord", "LawyerCord")
+        .replaceAll("equicord.asar", "lawyercord.asar");
+
+    if (file === "patcher.go") {
+        const lineEnding = adapted.includes("\r\n") ? "\r\n" : "\n";
+        const cleanupStart = `func cleanupDesyncedPatchedInstall(dir string, isSystemElectron bool) (bool, error) {
+\tappAsar := path.Join(dir, "app.asar")
+\t_appAsar := path.Join(dir, "_app.asar")
+
+\tisLoader, err := isLawyerCordLoaderAppAsar(appAsar)`.replaceAll("\n", lineEnding);
+        const cleanupReplacement = `func cleanupDesyncedPatchedInstall(dir string, isSystemElectron bool) (bool, error) {
+\tappAsar := path.Join(dir, "app.asar")
+\t_appAsar := path.Join(dir, "_app.asar")
+
+\tif stat, err := os.Stat(appAsar); err != nil {
+\t\treturn false, err
+\t} else if stat.IsDir() {
+\t\tLog.Warn("Detected a patched install with an app.asar folder. Removing stale folder patch")
+\t\tif err = os.RemoveAll(appAsar); err != nil {
+\t\t\treturn false, CheckIfErrIsCauseItsBusyRn(err)
+\t\t}
+\t\treturn false, nil
+\t}
+
+\tisLoader, err := isLawyerCordLoaderAppAsar(appAsar)`.replaceAll("\n", lineEnding);
+        adapted = adapted.replace(cleanupStart, cleanupReplacement);
+        if (!adapted.includes(cleanupReplacement)) throw new Error("Audited installer patcher source changed unexpectedly");
+    }
+
+    await writeFile(path, adapted);
 }
 
 const winresPath = resolve(sourceDirectory, "winres/winres.json");

@@ -4,6 +4,12 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ## Unreleased
 
+## 1.16.2.0 - 2026-07-30
+
+### Fixed
+
+- Repair folder-style patched Discord installations before installing LawyerCord.
+
 ## 1.16.1.0 - 2026-07-29
 
 ### Fixed

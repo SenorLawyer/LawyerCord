@@ -188,11 +188,12 @@ for (const file of ["patcher.go", "gui.go", "cli.go", "find_discord_linux.go"]) 
         .replaceAll("equicord.asar", "lawyercord.asar");
 
     if (file === "patcher.go") {
+        const lineEnding = adapted.includes("\r\n") ? "\r\n" : "\n";
         const cleanupStart = `func cleanupDesyncedPatchedInstall(dir string, isSystemElectron bool) (bool, error) {
 \tappAsar := path.Join(dir, "app.asar")
 \t_appAsar := path.Join(dir, "_app.asar")
 
-\tisLoader, err := isLawyerCordLoaderAppAsar(appAsar)`;
+\tisLoader, err := isLawyerCordLoaderAppAsar(appAsar)`.replaceAll("\n", lineEnding);
         const cleanupReplacement = `func cleanupDesyncedPatchedInstall(dir string, isSystemElectron bool) (bool, error) {
 \tappAsar := path.Join(dir, "app.asar")
 \t_appAsar := path.Join(dir, "_app.asar")
@@ -207,7 +208,7 @@ for (const file of ["patcher.go", "gui.go", "cli.go", "find_discord_linux.go"]) 
 \t\treturn false, nil
 \t}
 
-\tisLoader, err := isLawyerCordLoaderAppAsar(appAsar)`;
+\tisLoader, err := isLawyerCordLoaderAppAsar(appAsar)`.replaceAll("\n", lineEnding);
         adapted = adapted.replace(cleanupStart, cleanupReplacement);
         if (!adapted.includes(cleanupReplacement)) throw new Error("Audited installer patcher source changed unexpectedly");
     }

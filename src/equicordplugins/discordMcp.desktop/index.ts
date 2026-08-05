@@ -118,6 +118,7 @@ const MCP_CLIENTS = [
     ["gemini", "Gemini CLI"],
     ["cursor", "Cursor"],
 ] as const;
+const MCP_CLIENT_SETTINGS_KEYS = ["mcpClients"] as const;
 
 type McpClient = typeof MCP_CLIENTS[number][0];
 type McpClientSettings = Record<McpClient, boolean>;
@@ -135,7 +136,7 @@ const inFlightRequests = new Set<Promise<void>>();
 let bridgeGeneration = 0;
 
 function McpClientSetup() {
-    const { mcpClients } = settings.use(["mcpClients"]);
+    const { mcpClients } = settings.use(MCP_CLIENT_SETTINGS_KEYS);
     const [isInstalling, setIsInstalling] = useState(false);
     const selected = MCP_CLIENTS.filter(([client]) => mcpClients[client]).map(([client]) => client);
 

@@ -9,7 +9,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import type { IpcMainInvokeEvent } from "electron";
 import { watch } from "fs";
 import { chmod, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "fs/promises";
-import { homedir } from "os";
+import { homedir, platform } from "os";
 import { basename, dirname, extname, join } from "path";
 
 import { DISCORD_MCP_TOOL_NAMES, isDiscordSnowflake, sentMessageKey } from "./policy";
@@ -108,7 +108,7 @@ async function writeJsonConfig(path: string): Promise<void> {
     let config: Record<string, unknown> = {};
     try {
         const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
-        if (!isRecord(parsed)) throw new Error("Configuration root must be an object");
+        if (!isRecord(parsed)) throw new Error("Configuration root must be an object.");
         config = parsed;
     } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -116,7 +116,7 @@ async function writeJsonConfig(path: string): Promise<void> {
 
     const existingServers = config.mcpServers;
     if (existingServers !== undefined && !isRecord(existingServers))
-        throw new Error("mcpServers must be an object");
+        throw new Error("mcpServers must be an object.");
 
     const servers = existingServers ?? {};
     servers["lawyercord-discord"] = serverConfig();
@@ -156,6 +156,14 @@ async function writeCodexConfig(): Promise<string> {
 async function ensureBridgeServer(): Promise<void> {
     const source = await readFile(SERVER_SOURCE_PATH, "utf8");
     await atomicWrite(SERVER_PATH, source);
+}
+
+function claudeDesktopConfigPath(): string {
+    switch (platform()) {
+        case "darwin": return join(homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json");
+        case "win32": return join(process.env.APPDATA ?? join(homedir(), "AppData", "Roaming"), "Claude", "claude_desktop_config.json");
+        default: return join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "Claude", "claude_desktop_config.json");
+    }
 }
 
 async function readOrCreateConfig(): Promise<BridgeConfig> {
@@ -237,7 +245,7 @@ export async function initializeBridge(_: IpcMainInvokeEvent): Promise<{
 export async function configureMcpClients(_: IpcMainInvokeEvent, clients: unknown): Promise<McpSetupResult[]> {
     await ensureInitialized();
     if (!Array.isArray(clients) || clients.length === 0 || clients.some(client => !MCP_CLIENTS.includes(client as McpClient)))
-        throw new Error("Choose at least one supported MCP client");
+        throw new Error("Choose at least one supported MCP client.");
 
     const selected = [...new Set(clients as McpClient[])];
     const results: McpSetupResult[] = [];
@@ -246,7 +254,7 @@ export async function configureMcpClients(_: IpcMainInvokeEvent, clients: unknow
         switch (client) {
             case "codex": path = await writeCodexConfig(); break;
             case "claudeDesktop":
-                path = join(process.env.APPDATA ?? join(homedir(), "AppData", "Roaming"), "Claude", "claude_desktop_config.json");
+                path = claudeDesktopConfigPath();
                 await writeJsonConfig(path);
                 break;
             case "claudeCode":

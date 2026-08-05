@@ -4,20 +4,30 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { definePluginSettings } from "@api/Settings";
+import { BaseText } from "@components/BaseText";
+import ErrorBoundary from "@components/ErrorBoundary";
+import { SettingsSection } from "@components/settings/tabs/plugins/components/Common";
 import { generateWaveform } from "@plugins/voiceMessages/waveform";
 import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
-import definePlugin, { PluginNative } from "@utils/types";
+import definePlugin, { defineDefault, OptionType, PluginNative } from "@utils/types";
 import { Channel } from "@vencord/discord-types";
 import { ChannelType, MessageFlags } from "@vencord/discord-types/enums";
 import {
+    Button,
     ChannelStore,
+    Checkbox,
     Constants,
     GuildChannelStore,
     GuildStore,
+    React,
     RestAPI,
+    showToast,
     SnowflakeUtils,
+    Toasts,
     UserStore,
+    useState,
 } from "@webpack/common";
 
 import { decodeAudio } from "../voiceMessageTranscriber.desktop/utils";
@@ -101,6 +111,18 @@ interface SubscriptionWaitResult {
     message: any | null;
 }
 
+const MCP_CLIENTS = [
+    ["codex", "Codex"],
+    ["claudeDesktop", "Claude Desktop"],
+    ["claudeCode", "Claude Code"],
+    ["gemini", "Gemini CLI"],
+    ["cursor", "Cursor"],
+] as const;
+const MCP_CLIENT_SETTINGS_KEYS = ["mcpClients"] as const;
+
+type McpClient = typeof MCP_CLIENTS[number][0];
+type McpClientSettings = Record<McpClient, boolean>;
+
 const Native = VencordNative.pluginHelpers.DiscordMCP as PluginNative<typeof import("./native")>;
 const logger = new Logger("DiscordMCP");
 const LONG_POLL_MS = 10_000;
@@ -112,6 +134,62 @@ const subscriptions = new Map<string, MessageSubscription>();
 const inFlightRequests = new Set<Promise<void>>();
 
 let bridgeGeneration = 0;
+
+function McpClientSetup() {
+    const { mcpClients } = settings.use(MCP_CLIENT_SETTINGS_KEYS);
+    const [isInstalling, setIsInstalling] = useState(false);
+    const selected = MCP_CLIENTS.filter(([client]) => mcpClients[client]).map(([client]) => client);
+
+    return React.createElement(
+        SettingsSection,
+        {
+            name: "Connect an AI app",
+            id: "mcpClients",
+            description: "Installs LawyerCord's bundled local MCP bridge for the selected apps. Restart each app after setup.",
+        },
+        ...MCP_CLIENTS.map(([client, label]) => React.createElement(
+            Checkbox,
+            {
+                key: client,
+                value: mcpClients[client],
+                onChange: (_, value) => settings.store.mcpClients = { ...mcpClients, [client]: value },
+            },
+            React.createElement(BaseText, { size: "sm" }, label)
+        )),
+        React.createElement(
+            Button,
+            {
+                disabled: isInstalling || selected.length === 0,
+                onClick: async () => {
+                    setIsInstalling(true);
+                    try {
+                        const results = await Native.configureMcpClients(selected);
+                        showToast(`Connected LawyerCord to ${results.map(result => MCP_CLIENTS.find(([client]) => client === result.client)?.[1]).join(", ")}. Restart the selected apps.`, Toasts.Type.SUCCESS);
+                    } catch (error) {
+                        showToast(error instanceof Error ? error.message : "Could not configure the selected apps.", Toasts.Type.FAILURE);
+                    } finally {
+                        setIsInstalling(false);
+                    }
+                },
+            },
+            isInstalling ? "Connecting..." : "Connect selected apps"
+        )
+    );
+}
+
+const settings = definePluginSettings({
+    mcpClients: {
+        type: OptionType.COMPONENT,
+        component: ErrorBoundary.wrap(McpClientSetup, { noop: true }),
+        default: defineDefault<McpClientSettings>({
+            codex: true,
+            claudeDesktop: false,
+            claudeCode: false,
+            gemini: false,
+            cursor: false,
+        }),
+    },
+});
 
 function requireAccessibleChannel(channelId: unknown): string {
     const normalized = requireSnowflake(channelId, "channel_id");
@@ -755,6 +833,7 @@ export default definePlugin({
     name: "DiscordMCP",
     description: "A local, fixed-surface MCP bridge for agent access to every channel visible to this authenticated Discord client.",
     authors: [EquicordDevs.nobody],
+    settings,
 
     flux: {
         MESSAGE_CREATE: handleMessageCreate,

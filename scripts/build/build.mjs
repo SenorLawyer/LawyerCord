@@ -20,7 +20,7 @@
 // @ts-check
 
 import { createPackage } from "@electron/asar";
-import { readdir, writeFile } from "fs/promises";
+import { copyFile, readdir, writeFile } from "fs/promises";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
@@ -236,7 +236,9 @@ await Promise.all([
     writeFile("dist/equibop/package.json", JSON.stringify({
         name: "lawyercord",
         main: "main.js"
-    }))
+    })),
+    copyFile("tools/discord-mcp/server.mjs", "dist/desktop/discord-mcp-server.mjs"),
+    copyFile("tools/discord-mcp/server.mjs", "dist/equibop/discord-mcp-server.mjs")
 ]);
 
 await Promise.all([

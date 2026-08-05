@@ -15,7 +15,9 @@ This local stdio MCP server talks to the `DiscordMCP` LawyerCord plugin through 
 
 ## Run
 
-Enable `DiscordMCP` in LawyerCord and keep Discord running, then configure an MCP client to run:
+Enable `DiscordMCP` in LawyerCord, open its settings, select the AI apps you use under **Connect an AI app**, then restart those apps. LawyerCord installs its bundled local bridge and uses Discord's Electron runtime, so no Node.js installation or LawyerCord checkout is required.
+
+For a manual setup, configure an MCP client to run:
 
 ```text
 node tools/discord-mcp/server.mjs

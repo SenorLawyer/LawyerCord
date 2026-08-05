@@ -9,7 +9,8 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import type { IpcMainInvokeEvent } from "electron";
 import { watch } from "fs";
 import { chmod, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "fs/promises";
-import { basename, extname, join } from "path";
+import { homedir } from "os";
+import { basename, dirname, extname, join } from "path";
 
 import { DISCORD_MCP_TOOL_NAMES, isDiscordSnowflake, sentMessageKey } from "./policy";
 
@@ -49,12 +50,23 @@ interface AttachmentData {
     data: Buffer;
 }
 
+const MCP_CLIENTS = ["codex", "claudeDesktop", "claudeCode", "gemini", "cursor"] as const;
+
+type McpClient = typeof MCP_CLIENTS[number];
+
+interface McpSetupResult {
+    client: McpClient;
+    path: string;
+}
+
 const BRIDGE_DIR = join(DATA_DIR, "discord-mcp");
 const REQUESTS_DIR = join(BRIDGE_DIR, "requests");
 const RESPONSES_DIR = join(BRIDGE_DIR, "responses");
 const DOWNLOADS_DIR = join(BRIDGE_DIR, "downloads");
 const CONFIG_PATH = join(BRIDGE_DIR, "config.json");
 const SENT_LEDGER_PATH = join(BRIDGE_DIR, "sent-messages.json");
+const SERVER_PATH = join(BRIDGE_DIR, "server.mjs");
+const SERVER_SOURCE_PATH = join(__dirname, "discord-mcp-server.mjs");
 const MAX_REQUEST_SIZE = 64 * 1024;
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 const MAX_REQUEST_AGE_MS = 5 * 60 * 1000;
@@ -78,6 +90,72 @@ async function atomicWrite(path: string, value: string): Promise<void> {
     await writeFile(temporaryPath, value, { encoding: "utf8", mode: 0o600 });
     await rename(temporaryPath, path);
     try { await chmod(path, 0o600); } catch { }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function serverConfig(): Record<string, unknown> {
+    return {
+        command: process.execPath,
+        args: [SERVER_PATH],
+        env: { ELECTRON_RUN_AS_NODE: "1" },
+    };
+}
+
+async function writeJsonConfig(path: string): Promise<void> {
+    let config: Record<string, unknown> = {};
+    try {
+        const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
+        if (!isRecord(parsed)) throw new Error("Configuration root must be an object");
+        config = parsed;
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+
+    const existingServers = config.mcpServers;
+    if (existingServers !== undefined && !isRecord(existingServers))
+        throw new Error("mcpServers must be an object");
+
+    const servers = existingServers ?? {};
+    servers["lawyercord-discord"] = serverConfig();
+    config.mcpServers = servers;
+    await mkdir(dirname(path), { recursive: true });
+    await atomicWrite(path, `${JSON.stringify(config, null, 2)}\n`);
+}
+
+function tomlString(value: string): string {
+    return `"${value.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"")}"`;
+}
+
+async function writeCodexConfig(): Promise<string> {
+    const path = join(homedir(), ".codex", "config.toml");
+    let config = "";
+    try {
+        config = await readFile(path, "utf8");
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+
+    const section = [
+        "[mcp_servers.lawyercord-discord]",
+        `command = ${tomlString(process.execPath)}`,
+        `args = [${tomlString(SERVER_PATH)}]`,
+        "",
+        "[mcp_servers.lawyercord-discord.env]",
+        "ELECTRON_RUN_AS_NODE = \"1\"",
+        "",
+    ].join("\n");
+    const withoutExisting = config.replace(/^\[mcp_servers\.lawyercord-discord(?:\.env)?\][\s\S]*?(?=^\[[^\]]+\]|(?![\s\S]))/gim, "").trimEnd();
+    await mkdir(dirname(path), { recursive: true });
+    await atomicWrite(path, `${withoutExisting}${withoutExisting ? "\n\n" : ""}${section}`);
+    return path;
+}
+
+async function ensureBridgeServer(): Promise<void> {
+    const source = await readFile(SERVER_SOURCE_PATH, "utf8");
+    await atomicWrite(SERVER_PATH, source);
 }
 
 async function readOrCreateConfig(): Promise<BridgeConfig> {
@@ -135,6 +213,7 @@ async function ensureInitialized(): Promise<void> {
                 mkdir(RESPONSES_DIR, { recursive: true }),
                 mkdir(DOWNLOADS_DIR, { recursive: true }),
             ]);
+            await ensureBridgeServer();
             bridgeSecret = (await readOrCreateConfig()).secret;
             await Promise.all([loadSentLedger(), cleanupStaleQueueFiles()]);
         })();
@@ -153,6 +232,39 @@ export async function initializeBridge(_: IpcMainInvokeEvent): Promise<{
         allowedTools: DISCORD_MCP_TOOL_NAMES,
         sentMessageCount: sentMessages.size,
     };
+}
+
+export async function configureMcpClients(_: IpcMainInvokeEvent, clients: unknown): Promise<McpSetupResult[]> {
+    await ensureInitialized();
+    if (!Array.isArray(clients) || clients.length === 0 || clients.some(client => !MCP_CLIENTS.includes(client as McpClient)))
+        throw new Error("Choose at least one supported MCP client");
+
+    const selected = [...new Set(clients as McpClient[])];
+    const results: McpSetupResult[] = [];
+    for (const client of selected) {
+        let path: string;
+        switch (client) {
+            case "codex": path = await writeCodexConfig(); break;
+            case "claudeDesktop":
+                path = join(process.env.APPDATA ?? join(homedir(), "AppData", "Roaming"), "Claude", "claude_desktop_config.json");
+                await writeJsonConfig(path);
+                break;
+            case "claudeCode":
+                path = join(homedir(), ".claude.json");
+                await writeJsonConfig(path);
+                break;
+            case "gemini":
+                path = join(homedir(), ".gemini", "settings.json");
+                await writeJsonConfig(path);
+                break;
+            case "cursor":
+                path = join(homedir(), ".cursor", "mcp.json");
+                await writeJsonConfig(path);
+                break;
+        }
+        results.push({ client, path });
+    }
+    return results;
 }
 
 async function claimRequests(): Promise<BridgeRequest[]> {

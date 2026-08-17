@@ -13,8 +13,8 @@
     "license": "GPL-3.0-or-later",
     "devDependencies": {
         "@types/fs-extra": "^11.0.4",
-        "fs-extra": "^11.3.6",
-        "tsx": "^4.22.4"
+        "fs-extra": "^11.4.0",
+        "tsx": "^4.23.12"
     },
     "dependencies": {
         "@types/lodash": "4.17.19",

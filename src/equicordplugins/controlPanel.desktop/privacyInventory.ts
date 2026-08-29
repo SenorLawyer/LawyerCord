@@ -2143,6 +2143,11 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
             "Network access"
         ]
     },
+    "src/equicordplugins/lawyersFakeNitro": {
+        "externalDomains": [],
+        "storage": [],
+        "permissions": []
+    },
     "src/equicordplugins/limitlessScreenshare": {
         "externalDomains": [],
         "storage": [],

@@ -4,6 +4,12 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ## Unreleased
 
+## 1.17.0.0 - 2026-08-29
+
+### Added
+
+- Add Lawyers Fake Nitro, a targeted override for high-quality streaming and Favorites editing that does not change emoji, sticker, or theme access.
+
 ## 1.16.2.0 - 2026-07-30
 
 ### Fixed

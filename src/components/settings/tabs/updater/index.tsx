@@ -28,7 +28,7 @@ import { Paragraph } from "@components/Paragraph";
 import { SettingsTab, wrapTab } from "@components/settings/tabs/BaseTab";
 import { Margins } from "@utils/margins";
 import { useAwaiter } from "@utils/react";
-import { getRepo, isNewer, UpdateLogger } from "@utils/updater";
+import { getRepo, isNewer, resetUpdateState, UpdateLogger } from "@utils/updater";
 import { React, Select } from "@webpack/common";
 
 import gitHash from "~git-hash";
@@ -117,7 +117,11 @@ function Updater() {
                     { label: "Beta", value: "beta" },
                     { label: "Nightly", value: "nightly" },
                 ] satisfies Array<{ value: typeof settings.updateChannel; } & Record<string, unknown>>}
-                select={v => settings.updateChannel = v}
+                select={v => {
+                    if (settings.updateChannel === v) return;
+                    settings.updateChannel = v;
+                    resetUpdateState();
+                }}
                 isSelected={v => v === settings.updateChannel}
                 serialize={v => v}
             />
@@ -141,11 +145,14 @@ function Updater() {
                 }
                 {" "}(<HashLink hash={gitHash} repo={repo} disabled={repoPending} />)
             </Paragraph>
+            <Paragraph color="text-subtle">Current version: v{VERSION}</Paragraph>
 
             <Divider className={Margins.top20} />
 
             <Heading className={Margins.top20}>Updates</Heading>
-            {isNewer ? <Newer {...commonProps} /> : <Updatable {...commonProps} />}
+            {isNewer
+                ? <Newer key={settings.updateChannel} {...commonProps} />
+                : <Updatable key={settings.updateChannel} {...commonProps} />}
         </SettingsTab>
     );
 }

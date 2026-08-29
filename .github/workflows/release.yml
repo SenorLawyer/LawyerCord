@@ -101,7 +101,7 @@ jobs:
                   persist-credentials: false
 
             - name: Set up pnpm
-              uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+              uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
 
             - name: Set up Node.js
               uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -110,7 +110,7 @@ jobs:
                   cache: pnpm
 
             - name: Set up Go
-              uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+              uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
               with:
                   go-version: 1.26.5
                   cache-dependency-path: installer-source/go.sum
@@ -132,6 +132,7 @@ jobs:
                   pnpm testReleaseArtifactAudit
                   pnpm testSecureMessaging
                   pnpm testSecureMessagingNative
+                  pnpm testUpdateChannelSelection
 
             - name: Build desktop and browser targets
               run: |
@@ -283,4 +284,25 @@ jobs:
                       gh release create @releaseArguments --latest
                   } else {
                       gh release create @releaseArguments --prerelease --latest=false
+                  }
+
+            - name: Advance source update channels
+              shell: pwsh
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  $branches = switch ($env:RELEASE_CHANNEL) {
+                      "stable" { @("beta", "nightly") }
+                      "beta" { @("beta", "nightly") }
+                      "nightly" { @("nightly") }
+                      default { throw "Unsupported release channel: $env:RELEASE_CHANNEL" }
+                  }
+                  $sha = git rev-parse $env:RELEASE_REF
+                  foreach ($branch in $branches) {
+                      gh api "repos/$env:GITHUB_REPOSITORY/git/ref/heads/$branch" --silent 2>$null
+                      if ($LASTEXITCODE -eq 0) {
+                          gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/git/refs/heads/$branch" -f sha=$sha -F force=false --silent
+                      } else {
+                          gh api --method POST "repos/$env:GITHUB_REPOSITORY/git/refs" -f ref="refs/heads/$branch" -f sha=$sha --silent
+                      }
                   }

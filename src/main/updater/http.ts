@@ -27,16 +27,10 @@ import gitHash from "~git-hash";
 import gitRemote from "~git-remote";
 
 import { ASAR_FILE, serializeErrors } from "./common";
+import { type GithubRelease, selectUpdateRelease } from "./releaseSelection";
 
 const API_BASE = `https://api.github.com/repos/${gitRemote}`;
 let PendingUpdate: string | null = null;
-
-interface GithubRelease {
-    assets: Array<{ name: string; browser_download_url: string; }>;
-    prerelease: boolean;
-    tag_name: string;
-    target_commitish: string;
-}
 
 async function githubGet<T = any>(endpoint: string) {
     return fetchJson<T>(API_BASE + endpoint, {
@@ -50,16 +44,8 @@ async function githubGet<T = any>(endpoint: string) {
 }
 
 async function getRelease(channel: UpdateChannel): Promise<GithubRelease> {
-    if (channel === "stable") return githubGet("/releases/latest");
-
     const releases = await githubGet<GithubRelease[]>("/releases?per_page=100");
-    const release = releases.find(release => release.prerelease && (
-        channel === "beta"
-            ? /^v.+-beta\.\d+$/.test(release.tag_name)
-            : /^nightly-\d{8}-\d{4}-[a-f\d]+$/.test(release.tag_name)
-    ));
-    if (!release) throw new Error(`No ${channel} release is available`);
-    return release;
+    return selectUpdateRelease(releases, channel);
 }
 
 async function fetchUpdates(channel: UpdateChannel) {

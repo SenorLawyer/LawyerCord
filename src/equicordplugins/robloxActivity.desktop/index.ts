@@ -15,7 +15,7 @@ import { ChannelStore, PresenceStore, UserStore } from "@webpack/common";
 
 const Native = VencordNative.pluginHelpers.RobloxActivity as PluginNative<typeof import("./native")>;
 const logger = new Logger("RobloxActivity");
-const allowedUsers = new Set(["larsmutsaers", "froggodoggo"]);
+const allowedUserIds = new Set(["1045011641940574208", "519508374581149707"]);
 const sessionStartedAt = { value: 0 };
 
 let isPlaying = false;
@@ -68,8 +68,8 @@ function formatDuration(startedAt: number) {
 }
 
 function isAllowedUser() {
-    const username = UserStore.getCurrentUser()?.username.toLowerCase();
-    return username !== undefined && allowedUsers.has(username);
+    const userId = UserStore.getCurrentUser()?.id;
+    return userId !== undefined && allowedUserIds.has(userId);
 }
 
 async function checkProcess() {

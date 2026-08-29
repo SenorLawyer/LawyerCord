@@ -64,7 +64,7 @@ jobs:
                           if ($selected.Count -gt 1) {
                               throw "A pull request may select only one release channel"
                           }
-                          $channel = if ($selected.Count -eq 1) { $selected[0] } else { "nightly" }
+                          $channel = if ($selected.Count -eq 1) { $selected[0] } else { "skip" }
                       }
                       $ref = $env:MERGE_SHA
                   }

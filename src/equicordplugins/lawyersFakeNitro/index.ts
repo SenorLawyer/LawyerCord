@@ -26,6 +26,13 @@ function favoriteChannels(proto: unknown): RecordValue | undefined {
     return record(record(proto)?.favorites) && record(record(record(proto)?.favorites)?.favoriteChannels);
 }
 
+function stateFavoriteChannels(state: unknown): RecordValue | undefined {
+    const stateRecord = record(state);
+    if (!stateRecord) return favoriteChannels(state);
+
+    return favoriteChannels(state) ?? Object.values(stateRecord).map(value => favoriteChannels(value) ?? favoriteChannels(record(value)?.proto)).find(value => value !== undefined);
+}
+
 function isFavoritesProtoRequest(url: unknown): boolean {
     return typeof url === "string" && url === FAVORITES_PROTO_URL;
 }
@@ -36,8 +43,8 @@ function localResponse() {
 
 function saveFavoriteChannels(body: unknown) {
     const bodyRecord = record(body);
-    const candidates = [body, bodyRecord?.settings, bodyRecord?.proto, record(bodyRecord?.settings)?.proto];
-    const channels = candidates.map(favoriteChannels).find(value => value !== undefined);
+    const candidates = [body, bodyRecord?.settings, bodyRecord?.proto, record(bodyRecord?.settings)?.proto, stateFavoriteChannels(body)];
+    const channels = candidates.map(stateFavoriteChannels).find(value => value !== undefined);
     if (!channels) return;
 
     localFavoriteChannels = { ...channels };
@@ -82,11 +89,11 @@ export default definePlugin({
     start() {
         originalPatch = RestAPI.patch;
         originalPut = RestAPI.put;
-        RestAPI.patch = request => isFavoritesProtoRequest(request.url) ? (saveFavoriteChannels(request.body), localResponse()) : originalPatch(request);
-        RestAPI.put = request => isFavoritesProtoRequest(request.url) ? (saveFavoriteChannels(request.body), localResponse()) : originalPut(request);
+        RestAPI.patch = request => isFavoritesProtoRequest(request.url) ? (saveFavoriteChannels(request.body), queueMicrotask(() => saveFavoriteChannels(UserSettingsProtoStore.getFullState())), localResponse()) : originalPatch(request);
+        RestAPI.put = request => isFavoritesProtoRequest(request.url) ? (saveFavoriteChannels(request.body), queueMicrotask(() => saveFavoriteChannels(UserSettingsProtoStore.getFullState())), localResponse()) : originalPut(request);
         void DataStore.get<RecordValue>(FAVORITES_KEY).then(value => {
             localFavoriteChannels = value;
-            this.applyLocalFavorites(UserSettingsProtoStore.settings);
+            this.applyLocalFavorites(UserSettingsProtoStore.getFullState());
         });
     },
 
@@ -97,8 +104,19 @@ export default definePlugin({
     },
 
     applyLocalFavorites(proto: unknown) {
-        const favorites = record(record(proto)?.favorites);
-        if (favorites && localFavoriteChannels) favorites.favoriteChannels = { ...localFavoriteChannels };
+        if (!localFavoriteChannels) return;
+
+        const apply = (value: unknown) => {
+            const favorites = record(record(value)?.favorites);
+            if (favorites) favorites.favoriteChannels = { ...localFavoriteChannels };
+        };
+
+        apply(proto);
+        const state = record(proto);
+        if (state) Object.values(state).forEach(value => {
+            apply(value);
+            apply(record(value)?.proto);
+        });
     },
 
     flux: {

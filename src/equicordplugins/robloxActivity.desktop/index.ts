@@ -10,7 +10,8 @@ import { EquicordDevs } from "@utils/constants";
 import { sendMessage } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
-import { ChannelStore, UserStore } from "@webpack/common";
+import type { Activity } from "@vencord/discord-types";
+import { ChannelStore, PresenceStore, UserStore } from "@webpack/common";
 
 const Native = VencordNative.pluginHelpers.RobloxActivity as PluginNative<typeof import("./native")>;
 const logger = new Logger("RobloxActivity");
@@ -18,6 +19,7 @@ const allowedUsers = new Set(["notlmutsaers", "froggodoggo"]);
 const sessionStartedAt = { value: 0 };
 
 let isPlaying = false;
+let robloxActivity: Activity | undefined;
 let pollInterval: ReturnType<typeof setInterval> | undefined;
 let polling = false;
 
@@ -35,8 +37,8 @@ const settings = definePluginSettings({
     pollInterval: {
         type: OptionType.SLIDER,
         description: "Seconds between Roblox process checks.",
-        markers: [10, 15, 20, 30],
-        default: 15,
+        markers: [30, 60, 90, 120],
+        default: 60,
         restartNeeded: true,
     },
 });
@@ -76,8 +78,13 @@ async function checkProcess() {
     polling = true;
 
     try {
-        const running = await Native.isRobloxRunning();
-        if (running === null) return;
+        const processRunning = await Native.isRobloxRunning();
+        const currentUserId = UserStore.getCurrentUser()?.id;
+        robloxActivity = currentUserId
+            ? PresenceStore.getActivities(currentUserId).find(activity => activity.type === 0 && /roblox/i.test(activity.name))
+            : undefined;
+        const running = processRunning === true || robloxActivity !== undefined;
+        if (processRunning === null && robloxActivity === undefined) return;
         if (running === isPlaying) return;
 
         isPlaying = running;
@@ -89,9 +96,9 @@ async function checkProcess() {
                 color: 0x00a2ff,
                 timestamp: new Date().toISOString(),
                 fields: [
-                    { name: "Game", value: "Unknown", inline: true },
+                    { name: "Game", value: robloxActivity?.details ?? robloxActivity?.name ?? "Unknown", inline: true },
                     { name: "Players", value: "Unknown", inline: true },
-                    { name: "Game link", value: "Unavailable", inline: true },
+                    { name: "Game link", value: robloxActivity?.url ?? "Unavailable", inline: true },
                 ],
             });
         } else {
@@ -127,6 +134,12 @@ export default definePlugin({
             pollInterval = undefined;
         }
         isPlaying = false;
+        robloxActivity = undefined;
         sessionStartedAt.value = 0;
+    },
+    flux: {
+        PRESENCE_UPDATE() {
+            void checkProcess();
+        }
     },
 });

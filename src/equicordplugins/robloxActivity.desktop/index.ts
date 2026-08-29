@@ -65,7 +65,13 @@ function formatDuration(startedAt: number) {
     return [hours && `${hours}h`, minutes && `${minutes}m`, `${remainingSeconds}s`].filter(Boolean).join(" ");
 }
 
+function isAllowedUser() {
+    const username = UserStore.getCurrentUser()?.username.toLowerCase();
+    return username !== undefined && allowedUsers.has(username);
+}
+
 async function checkProcess() {
+    if (!isAllowedUser()) return;
     if (polling) return;
     polling = true;
 
@@ -112,9 +118,6 @@ export default definePlugin({
     enabledByDefault: true,
     settings,
     start() {
-        const username = UserStore.getCurrentUser()?.username.toLowerCase();
-        if (!username || !allowedUsers.has(username)) return;
-
         void checkProcess();
         pollInterval = setInterval(checkProcess, settings.store.pollInterval * 1000);
     },

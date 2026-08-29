@@ -51,6 +51,7 @@ jobs:
                   pnpm testSecureMessaging
                   pnpm testSecureMessagingNative
                   pnpm testUpdateChannelSelection
+                  pnpm testInstallerStaleMarkerRepair
 
             - name: Lint
               run: |

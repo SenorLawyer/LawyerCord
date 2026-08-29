@@ -198,7 +198,13 @@ for (const file of ["patcher.go", "gui.go", "cli.go", "find_discord_linux.go"]) 
 \tappAsar := path.Join(dir, "app.asar")
 \t_appAsar := path.Join(dir, "_app.asar")
 
-\tif stat, err := os.Stat(appAsar); err != nil {
+\tif stat, err := os.Stat(appAsar); errors.Is(err, os.ErrNotExist) {
+\t\tLog.Warn("Detected a patched install without app.asar. Restoring _app.asar")
+\t\tif err = os.Rename(_appAsar, appAsar); err != nil {
+\t\t\treturn false, CheckIfErrIsCauseItsBusyRn(err)
+\t\t}
+\t\treturn true, nil
+\t} else if err != nil {
 \t\treturn false, err
 \t} else if stat.IsDir() {
 \t\tLog.Warn("Detected a patched install with an app.asar folder. Removing stale folder patch")

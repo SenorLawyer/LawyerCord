@@ -4,6 +4,12 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ## Unreleased
 
+## 2.0.1.0 - 2026-08-29
+
+### Fixed
+
+- Restore Discord's original app archive when an interrupted update leaves only the LawyerCord patch marker, so Install, Reinstall / Repair, and Uninstall work again.
+
 ## 2.0.0.0 - 2026-08-29
 
 ### Fixed

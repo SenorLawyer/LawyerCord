@@ -48,21 +48,27 @@ async function getRelease(channel: UpdateChannel): Promise<GithubRelease> {
     return selectUpdateRelease(releases, channel);
 }
 
+async function getReleaseCommit(release: GithubRelease): Promise<string> {
+    const commit = await githubGet<{ sha: string }>(`/commits/${encodeURIComponent(release.tag_name)}`);
+    return commit.sha;
+}
+
 async function fetchUpdates(channel: UpdateChannel) {
     const release = await getRelease(channel);
-    if (release.target_commitish === gitHash) return null;
+    const releaseCommit = await getReleaseCommit(release);
+    if (releaseCommit === gitHash) return null;
 
     const asset = release.assets.find(asset => asset.name === ASAR_FILE);
     if (!asset) throw new Error(`The ${channel} release does not include ${ASAR_FILE}`);
     PendingUpdate = asset.browser_download_url;
-    return release;
+    return { release, releaseCommit };
 }
 
 async function calculateGitChanges(_: unknown, updateChannel: unknown) {
-    const release = await fetchUpdates(normalizeUpdateChannel(updateChannel));
-    if (!release) return [];
+    const update = await fetchUpdates(normalizeUpdateChannel(updateChannel));
+    if (!update) return [];
 
-    const data = await githubGet(`/compare/${gitHash}...${release.target_commitish}`);
+    const data = await githubGet(`/compare/${gitHash}...${update.releaseCommit}`);
 
     return data.commits.map((c: any) => ({
         hash: c.sha,

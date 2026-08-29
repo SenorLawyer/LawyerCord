@@ -15,7 +15,7 @@ import { ChannelStore, PresenceStore, UserStore } from "@webpack/common";
 
 const Native = VencordNative.pluginHelpers.RobloxActivity as PluginNative<typeof import("./native")>;
 const logger = new Logger("RobloxActivity");
-const allowedUsers = new Set(["notlmutsaers", "froggodoggo"]);
+const allowedUsers = new Set(["larsmutsaers", "froggodoggo"]);
 const sessionStartedAt = { value: 0 };
 
 let isPlaying = false;

@@ -9,7 +9,7 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "LawyersFakeNitro",
-    description: "Unlocks high-quality streaming and Favorites editing without changing other Nitro features.",
+    description: "Unlocks high-quality streaming without changing other Nitro features.",
     authors: [EquicordDevs.SenorLawyer],
 
     patches: [
@@ -18,13 +18,6 @@ export default definePlugin({
             replacement: {
                 match: /(?<=canStreamQuality:function\(\i,\i\)\{)/,
                 replace: "return true;"
-            }
-        },
-        {
-            find: '"getFavoritesAccess"',
-            replacement: {
-                match: /hasAccess:\i,isExperimentEnabled:\i,isFreemium:\i,favoriteLimit:\i,canUpsellFavoriteLimit:\i/,
-                replace: "hasAccess:true,isExperimentEnabled:true,isFreemium:false,favoriteLimit:0,canUpsellFavoriteLimit:false"
             }
         }
     ]

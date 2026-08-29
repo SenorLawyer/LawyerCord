@@ -4,6 +4,19 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ## Unreleased
 
+## 2.0.0.0 - 2026-08-29
+
+### Fixed
+
+- Make Stable, Beta, and Nightly updates fall back to the newest eligible release instead of reporting an older channel build as current.
+- Show the installed LawyerCord version in Updater settings.
+- Stop advertising Favorites editing because Discord enforces that permission server-side.
+
+### Changed
+
+- Advance Beta and Nightly source-update branches only from successful eligible releases.
+- Replace stale Dependabot pull requests with pinned GitHub Actions updates and remove the Dependabot schedule.
+
 ## 1.17.0.0 - 2026-08-29
 
 ### Added

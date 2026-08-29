@@ -17,6 +17,7 @@
 */
 
 import { IpcEvents } from "@shared/IpcEvents";
+import { normalizeUpdateChannel } from "@shared/updateChannel";
 import { execFile as cpExecFile } from "child_process";
 import { ipcMain } from "electron";
 import { join } from "path";
@@ -47,15 +48,23 @@ async function getRepo() {
         .replace(/\.git$/, "");
 }
 
-async function calculateGitChanges() {
-    await git("fetch");
+function updateBranch(channel: unknown): string {
+    const selected = normalizeUpdateChannel(channel);
+    return selected === "stable" ? "main" : selected;
+}
 
-    const branch = (await git("branch", "--show-current")).stdout.trim();
+async function fetchBranch(channel: unknown): Promise<string> {
+    let branch = updateBranch(channel);
+    if (branch !== "main" && !(await git("ls-remote", "--heads", "origin", `refs/heads/${branch}`)).stdout.trim())
+        branch = "main";
+    await git("fetch", "origin", `refs/heads/${branch}:refs/remotes/origin/${branch}`);
+    return branch;
+}
 
-    const existsOnOrigin = (await git("ls-remote", "origin", branch)).stdout.length > 0;
-    if (!existsOnOrigin) return [];
+async function calculateGitChanges(_: unknown, channel: unknown) {
+    const branch = await fetchBranch(channel);
 
-    const res = await git("log", `HEAD...origin/${branch}`, "--pretty=format:%an/%H/%s");
+    const res = await git("log", `HEAD..origin/${branch}`, "--pretty=format:%an/%H/%s");
 
     const commits = res.stdout.trim();
     return commits ? commits.split("\n").map(line => {
@@ -67,12 +76,27 @@ async function calculateGitChanges() {
     }) : [];
 }
 
-async function pull() {
+async function pull(_: unknown, channel: unknown) {
+    const branch = await fetchBranch(channel);
     const before = (await git("rev-parse", "HEAD")).stdout.trim();
-    await git("pull", "--ff-only");
-    const after = (await git("rev-parse", "HEAD")).stdout.trim();
+    const beforeBranch = (await git("branch", "--show-current")).stdout.trim();
+    const dirty = (await git("status", "--porcelain=v1", "--untracked-files=all")).stdout.trim();
+    if (dirty) throw new Error("Commit or stash local changes before updating");
 
-    return before !== after;
+    if (beforeBranch === branch) {
+        await git("merge", "--ff-only", `origin/${branch}`);
+    } else {
+        const exists = (await git("for-each-ref", "--format=%(refname)", `refs/heads/${branch}`)).stdout.trim();
+        if (!exists) {
+            await git("switch", "--create", branch, "--track", `origin/${branch}`);
+        } else {
+            await git("switch", branch);
+            await git("merge", "--ff-only", `origin/${branch}`);
+        }
+    }
+
+    const after = (await git("rev-parse", "HEAD")).stdout.trim();
+    return before !== after || beforeBranch !== branch;
 }
 
 async function build() {

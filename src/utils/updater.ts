@@ -27,7 +27,7 @@ export const UpdateLogger = /* #__PURE__*/ new Logger("Updater", "white");
 export let isOutdated = false;
 export let isNewer = false;
 export let updateError: any;
-export let changes: Record<"hash" | "author" | "message", string>[];
+export let changes: Record<"hash" | "author" | "message", string>[] = [];
 
 async function Unwrap<T>(p: Promise<IpcRes<T>>) {
     const res = await p;
@@ -39,6 +39,7 @@ async function Unwrap<T>(p: Promise<IpcRes<T>>) {
 }
 
 export async function checkForUpdates() {
+    updateError = undefined;
     changes = await Unwrap(VencordNative.updater.getUpdates(Vencord.Settings.updateChannel));
 
     // we only want to check this for the git updater, not the http updater
@@ -50,6 +51,13 @@ export async function checkForUpdates() {
 
     isNewer = false;
     return (isOutdated = changes.length > 0);
+}
+
+export function resetUpdateState() {
+    isOutdated = false;
+    isNewer = false;
+    updateError = undefined;
+    changes = [];
 }
 
 export async function update() {

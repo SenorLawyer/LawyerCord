@@ -2145,8 +2145,14 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
     },
     "src/equicordplugins/lawyersFakeNitro": {
         "externalDomains": [],
-        "storage": [],
-        "permissions": []
+        "storage": [
+            "Browser or plugin data store",
+            "Persistent local storage"
+        ],
+        "permissions": [
+            "Discord write operations",
+            "Network access"
+        ]
     },
     "src/equicordplugins/limitlessScreenshare": {
         "externalDomains": [],
@@ -2540,6 +2546,11 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
         "permissions": [
             "Network access"
         ]
+    },
+    "src/equicordplugins/robloxActivity.desktop": {
+        "externalDomains": [],
+        "storage": [],
+        "permissions": []
     },
     "src/equicordplugins/rpcEditor": {
         "externalDomains": [],

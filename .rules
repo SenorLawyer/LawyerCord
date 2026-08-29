@@ -27,6 +27,13 @@
 - Stable releases use `v<package-version>` and are latest. Beta releases use `v<package-version>-beta.<run>`. Nightly releases use `nightly-YYYYMMDD-HHMM-<commit>`.
 - Do not manually push release tags. The protected release workflow validates, builds, checksums, and publishes the exact merged commit.
 
+## Git workflow
+
+- Start feature work from an up-to-date `main` branch.
+- Use a dedicated branch for every feature or fix; do not develop directly on `main`.
+- Open a pull request and enable auto-merge when the change is ready and CI is expected to pass.
+- After the pull request merges, switch back to `main` and run `git pull --ff-only origin main` before starting the next task.
+
 ## TypeScript
 
 - `strict: true`, `noImplicitAny: false`, `noUncheckedIndexedAccess: false`. Annotate params explicitly. Array index access not auto `undefined`.

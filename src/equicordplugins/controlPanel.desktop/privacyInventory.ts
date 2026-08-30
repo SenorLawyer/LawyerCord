@@ -2149,10 +2149,7 @@ export const SOURCE_PRIVACY_INVENTORY: Record<string, {
             "Browser or plugin data store",
             "Persistent local storage"
         ],
-        "permissions": [
-            "Discord write operations",
-            "Network access"
-        ]
+        "permissions": []
     },
     "src/equicordplugins/limitlessScreenshare": {
         "externalDomains": [],

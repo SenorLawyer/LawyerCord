@@ -7,16 +7,13 @@
 import { DataStore } from "@api/index";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
-import { RestAPI, UserSettingsProtoStore } from "@webpack/common";
+import { UserSettingsProtoStore } from "@webpack/common";
 
 const FAVORITES_KEY = "LawyersFakeNitro_favoriteChannels";
-const FAVORITES_PROTO_URL = "/users/@me/settings-proto/1";
 
 type RecordValue = Record<string, unknown>;
 
 let localFavoriteChannels: RecordValue | undefined;
-let originalPatch: typeof RestAPI.patch;
-let originalPut: typeof RestAPI.put;
 
 function record(value: unknown): RecordValue | undefined {
     return typeof value === "object" && value !== null ? value as RecordValue : undefined;
@@ -33,18 +30,8 @@ function stateFavoriteChannels(state: unknown): RecordValue | undefined {
     return favoriteChannels(state) ?? Object.values(stateRecord).map(value => favoriteChannels(value) ?? favoriteChannels(record(value)?.proto)).find(value => value !== undefined);
 }
 
-function isFavoritesProtoRequest(url: unknown): boolean {
-    return typeof url === "string" && url === FAVORITES_PROTO_URL;
-}
-
-function localResponse() {
-    return Promise.resolve({ body: {}, ok: true, status: 200 });
-}
-
-function saveFavoriteChannels(body: unknown) {
-    const bodyRecord = record(body);
-    const candidates = [body, bodyRecord?.settings, bodyRecord?.proto, record(bodyRecord?.settings)?.proto, stateFavoriteChannels(body)];
-    const channels = candidates.map(stateFavoriteChannels).find(value => value !== undefined);
+function saveFavoriteChannels(state: unknown) {
+    const channels = stateFavoriteChannels(state);
     if (!channels) return;
 
     localFavoriteChannels = { ...channels };
@@ -87,10 +74,6 @@ export default definePlugin({
     ],
 
     start() {
-        originalPatch = RestAPI.patch;
-        originalPut = RestAPI.put;
-        RestAPI.patch = request => isFavoritesProtoRequest(request.url) ? (saveFavoriteChannels(request.body), queueMicrotask(() => saveFavoriteChannels(UserSettingsProtoStore.getFullState())), localResponse()) : originalPatch(request);
-        RestAPI.put = request => isFavoritesProtoRequest(request.url) ? (saveFavoriteChannels(request.body), queueMicrotask(() => saveFavoriteChannels(UserSettingsProtoStore.getFullState())), localResponse()) : originalPut(request);
         void DataStore.get<RecordValue>(FAVORITES_KEY).then(value => {
             localFavoriteChannels = value;
             this.applyLocalFavorites(UserSettingsProtoStore.getFullState());
@@ -98,8 +81,6 @@ export default definePlugin({
     },
 
     stop() {
-        RestAPI.patch = originalPatch;
-        RestAPI.put = originalPut;
         localFavoriteChannels = undefined;
     },
 
@@ -123,11 +104,7 @@ export default definePlugin({
         USER_SETTINGS_PROTO_UPDATE(event: { local?: boolean; settings?: { proto?: unknown; }; }) {
             if (!event.local) return;
 
-            const channels = favoriteChannels(event.settings?.proto);
-            if (!channels) return;
-
-            localFavoriteChannels = { ...channels };
-            void DataStore.set(FAVORITES_KEY, localFavoriteChannels);
+            saveFavoriteChannels(event.settings?.proto);
         }
     }
 });

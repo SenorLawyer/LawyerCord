@@ -51,7 +51,7 @@
 
 Does NOT get merged:
 
-- Selfbots, automation of user actions, client state spoofing, API abuse.
+- Selfbots
 - Plugins requiring user-supplied API keys or untrusted third-party endpoints.
 - Plugins targeting specific third-party bots. Official Discord apps are fine.
 - CSS-only plugins that just hide/restyle UI.

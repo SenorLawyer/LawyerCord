@@ -36,7 +36,9 @@ function visibleVideoArea(video: HTMLVideoElement) {
     return rect.width * rect.height;
 }
 
-function getDomStreamAudioState() {
+type DomStreamAudioState = { primaryAudio: StreamAudioData | null; streamAudio: Set<StreamAudioData>; };
+
+function getDomStreamAudioState(): DomStreamAudioState {
     let primary: { area: number; data: StreamAudioData; } | null = null;
     const streamAudio = new Set<StreamAudioData>();
 
@@ -78,8 +80,8 @@ function pruneTrackedAudio() {
     }
 }
 
-function applyAudioState(data: StreamAudioData) {
-    const volume = getEffectiveVolume(data, trackedAudio, stores, getDomStreamAudioState());
+function applyAudioState(data: StreamAudioData, domState: DomStreamAudioState) {
+    const volume = getEffectiveVolume(data, trackedAudio, stores, domState);
 
     if (data.gainNode) {
         if (data.audioElement) data.audioElement.volume = 0;
@@ -92,7 +94,11 @@ function applyAudioState(data: StreamAudioData) {
 
 function updateTrackedAudio() {
     pruneTrackedAudio();
-    for (const data of trackedAudio) applyAudioState(data);
+    if (!trackedAudio.size) return;
+    // Reading the DOM state measures every video element, which forces a layout. Once per tick
+    // is enough: setting a gain or volume cannot move anything on the page.
+    const domState = getDomStreamAudioState();
+    for (const data of trackedAudio) applyAudioState(data, domState);
 }
 
 function scheduleUpdateTrackedAudio() {

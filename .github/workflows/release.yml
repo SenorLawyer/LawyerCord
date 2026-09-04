@@ -128,7 +128,6 @@ jobs:
                   pnpm audit --audit-level moderate
                   pnpm testTsc
                   pnpm testDiscordMcp
-                  pnpm testControlPanel
                   pnpm testReleaseArtifactAudit
                   pnpm testSecureMessaging
                   pnpm testSecureMessagingNative

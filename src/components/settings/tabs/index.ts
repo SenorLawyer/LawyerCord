@@ -6,6 +6,7 @@
 
 import "./styles.css";
 
+export { default as AutomationsTab } from "./automations";
 export * from "./BaseTab";
 export { default as ChangelogTab } from "./changelog";
 export { default as PatchHelperTab } from "./patchHelper";

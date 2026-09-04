@@ -6,6 +6,8 @@
 
 import { Constants, RestAPI, SpotifyStore } from "@webpack/common";
 
+import { checkCancelled } from "./runtime";
+
 const SPOTIFY_API = "https://api.spotify.com/v1/me/player";
 
 export interface ConnectedAccount {
@@ -41,33 +43,46 @@ function requireSpotify(): { token: string; deviceId: string; premium: boolean; 
     return { token: active.socket.accessToken, deviceId: active.device.id, premium: active.socket.isPremium };
 }
 
-async function callSpotify(method: string, path: string, query: Record<string, string> = {}): Promise<void> {
+async function callSpotify(method: string, path: string, query: Record<string, string> = {}, signal?: AbortSignal, selectedDevice?: string) {
+    if (signal) checkCancelled(signal);
     const { token, deviceId, premium } = requireSpotify();
     if (!premium) throw new Error("Spotify only allows playback control on Premium accounts.");
 
     const url = new URL(`${SPOTIFY_API}${path}`);
-    url.searchParams.set("device_id", deviceId);
+    url.searchParams.set("device_id", selectedDevice || deviceId);
     for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
 
-    const response = await fetch(url.toString(), { method, headers: { Authorization: `Bearer ${token}` } });
+    const response = await fetch(url.toString(), { method, signal, headers: { Authorization: `Bearer ${token}` } });
     // Spotify answers 204 with no body when it accepts a command.
     if (!response.ok && response.status !== 204) {
         throw new Error(response.status === 403
             ? "Spotify refused that. Playback control needs Premium and an active device."
             : `Spotify returned ${response.status}.`);
     }
+    if (signal) checkCancelled(signal);
+    return { accepted: true, action: path.slice(1), deviceId: selectedDevice || deviceId, track: currentTrack() };
 }
 
-export const spotifyPlay = () => callSpotify("PUT", "/play");
-export const spotifyPause = () => callSpotify("PUT", "/pause");
-export const spotifyNext = () => callSpotify("POST", "/next");
-export const spotifyPrevious = () => callSpotify("POST", "/previous");
-export const spotifySeek = (seconds: number) => callSpotify("PUT", "/seek", { position_ms: String(Math.max(0, Math.trunc(seconds)) * 1000) });
-export const spotifyVolume = (percent: number) => callSpotify("PUT", "/volume", { volume_percent: String(Math.min(100, Math.max(0, Math.trunc(percent)))) });
+export const spotifyPlay = (signal?: AbortSignal, deviceId?: string) => callSpotify("PUT", "/play", {}, signal, deviceId);
+export const spotifyPause = (signal?: AbortSignal, deviceId?: string) => callSpotify("PUT", "/pause", {}, signal, deviceId);
+export const spotifyNext = (signal?: AbortSignal, deviceId?: string) => callSpotify("POST", "/next", {}, signal, deviceId);
+export const spotifyPrevious = (signal?: AbortSignal, deviceId?: string) => callSpotify("POST", "/previous", {}, signal, deviceId);
+export const spotifySeek = (seconds: number, signal?: AbortSignal, deviceId?: string) => callSpotify("PUT", "/seek", { position_ms: String(Math.max(0, Math.trunc(seconds)) * 1000) }, signal, deviceId);
+export const spotifyVolume = (percent: number, signal?: AbortSignal, deviceId?: string) => callSpotify("PUT", "/volume", { volume_percent: String(Math.min(100, Math.max(0, Math.trunc(percent)))) }, signal, deviceId);
+export function spotifySetting(setting: "shuffle" | "repeat", value: string, signal: AbortSignal, deviceId?: string) {
+    if (!(setting === "shuffle" ? ["true", "false"] : ["off", "track", "context"]).includes(value)) throw new Error("Choose a valid Spotify setting.");
+    return callSpotify("PUT", "/" + setting, { state: value }, signal, deviceId);
+}
 
 export function spotifyNowPlaying() {
-    const track = SpotifyStore.getTrack();
+    const track = currentTrack();
     if (!track) throw new Error("Spotify is not playing anything right now.");
+    return track;
+}
+
+function currentTrack() {
+    const track = SpotifyStore.getTrack();
+    if (!track) return null;
     return {
         id: track.id,
         name: track.name,

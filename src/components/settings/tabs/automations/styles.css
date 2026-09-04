@@ -287,7 +287,7 @@
 }
 
 .vc-automations-field-error {
-    color: var(--text-danger);
+    color: var(--text-feedback-critical, var(--text-danger));
     font-size: 12px;
     margin: -6px 0 12px;
 }
@@ -418,7 +418,7 @@
 }
 
 .vc-automations-discord-message {
-    background: var(--background-primary);
+    background: var(--background-base-low, var(--background-primary));
     border-radius: 6px;
     display: flex;
     gap: 10px;
@@ -676,7 +676,7 @@
 }
 
 .vc-automations-guild-copy em {
-    color: var(--text-danger);
+    color: var(--text-feedback-critical, var(--text-danger));
     font-style: normal;
 }
 

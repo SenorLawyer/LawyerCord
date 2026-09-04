@@ -3,8 +3,9 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const VALID_MODIFIERS = new Set(["raw", "hash"]);
 const MARKER_RE = /#\{intl::([\w$+/]*)(?:::(\w+))?\}/g;
 const HASH_RE = /["'`]\s*\.([A-Za-z][A-Za-z0-9+/]{5})\b/g;

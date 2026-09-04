@@ -22,35 +22,33 @@ import {
     MessageStore,
     ReadStateStore,
     RestAPI,
+    SelectedChannelStore,
     SnowflakeUtils,
     UserStore,
 } from "@webpack/common";
 
+import { parseConversation, validateResult } from "./ai";
+import { compileTriggers, matchTriggers } from "./events";
 import {
     addScheduleInterval,
     type Automation,
     type AutomationBlock,
     type AutomationComponent,
-    type AutomationEdge,
     type AutomationFile,
     type AutomationLog,
     type AutomationMatchMode,
     type AutomationOptionMode,
     BLOCK_DEFINITIONS,
-    cloneAutomation,
     collectGuildReferences,
-    conditionLeftTemplate,
-    edgeTargets,
-    getNextRunAt,
-    graphEntry,
     type GuildReference,
     isAutomation,
     isRecord,
-    migrateToGraph,
-    parseAutomationFile,
     parseComponents,
 } from "./model";
 import { completeOpenRouter, getAutomationAISettings, loadOpenRouterModels } from "./openRouter";
+import { createRunQueue, type QueuedRun } from "./runQueue";
+import { checkCancelled, delay, executeWorkflow, type RunContext, type RunEvent, updateSavedValue } from "./runtime";
+import { nextOccurrence } from "./scheduling";
 import {
     getConnections,
     spotifyNext,
@@ -59,15 +57,20 @@ import {
     spotifyPlay,
     spotifyPrevious,
     spotifySeek,
+    spotifySetting,
     spotifyVolume,
 } from "./spotify";
+import { readPath, resolveInput } from "./values";
+import { compileWorkflow, migrateWorkflow, parseWorkflowFile, validateWorkflow } from "./workflow";
 
 const logger = new Logger("Automations");
 const AUTOMATIONS_KEY = "LawyerCord_automations";
+const WORKFLOWS_KEY = "LawyerCord_automations_v2";
+const BACKUP_KEY = "LawyerCord_automations_v1_backup";
 const LOGS_KEY = "LawyerCord_automationLogs";
 const GUILDS_KEY = "LawyerCord_automationGuilds";
 const COMMANDS_KEY = "LawyerCord_automationCommands";
-const MAX_LOGS = 100;
+const MAX_LOGS = 2000;
 
 interface RuntimeMessage {
     id: string;
@@ -84,6 +87,8 @@ interface RuntimeMessage {
 }
 
 interface ExecutionContext {
+    signal: AbortSignal;
+    workflow: Automation;
     variables: Record<string, unknown>;
     lastChannelId?: string;
     lastMessage?: RuntimeMessage;
@@ -105,6 +110,9 @@ interface ComponentMatch {
 }
 
 export interface AutomationSnapshot {
+    drafts: Automation[];
+    runs: QueuedRun[];
+    globalLimit: number;
     automations: Automation[];
     logs: AutomationLog[];
     guilds: GuildReference[];
@@ -142,61 +150,123 @@ export interface CachedCommand {
  */
 let commandCache: Record<string, CachedCommand> = {};
 let automations: Automation[] = [];
+let drafts: Automation[] = [];
 let logs: AutomationLog[] = [];
+let logBuffer: AutomationLog[] = [];
+let logCursor = 0;
+function recordLog(log: AutomationLog): void {
+    logBuffer[logCursor++ % MAX_LOGS] = log;
+}
+function flushLogs(): void {
+    if (!logCursor) return;
+    const split = logCursor >= MAX_LOGS ? logCursor % MAX_LOGS : 0;
+    const ordered = split ? [...logBuffer.slice(split), ...logBuffer.slice(0, split)] : logBuffer;
+    logs = [...ordered.toReversed(), ...logs].slice(0, MAX_LOGS);
+    logBuffer = [];
+    logCursor = 0;
+    snapshot = undefined;
+}
 let guilds: GuildReference[] = [];
 let loaded = false;
 let loadPromise: Promise<void> | undefined;
 let writeQueue: Promise<void> = Promise.resolve();
 let engineRunning = false;
 let timerId: number | undefined;
-let processing = false;
-const runningAutomations = new Set<string>();
+const processing = false;
+let globalLimit = 4;
+const queue = createRunQueue(() => notify());
+const nextDue = new Map<string, number>();
+let triggerIndex = compileTriggers([]);
+const waitListeners = new Map<string, Set<(event: unknown) => void>>();
+const eventHandlers = new Map<string, (event: unknown) => void>();
+let notifyTimer: ReturnType<typeof setTimeout> | undefined;
 const listeners = new Set<() => void>();
 const pendingWaits = new Set<() => void>();
 /** Ids of messages this engine posted, so an automation never reacts to its own output. */
 const sentByEngine = new Set<string>();
+const engineEffects = new Map<string, number>();
+const runtimeSnapshots = new WeakMap<Automation, Automation>();
+let previousOwnVoice = "";
 
-/** Triggers that need every incoming message inspected. */
-const LIVE_TRIGGERS = ["mention", "message", "dm"];
-/** Recomputed on every state change so the message handler can bail in one comparison. */
-let hasMessageTriggers = false;
+function runtimeSnapshot(workflow: Automation): Automation {
+    const cached = runtimeSnapshots.get(workflow);
+    if (cached) return cached;
+    const snapshot = Object.freeze(structuredClone(workflow));
+    compileWorkflow(snapshot);
+    runtimeSnapshots.set(workflow, snapshot);
+    return snapshot;
+}
 
-/** Whether the global MESSAGE_CREATE handler is currently attached. */
-let subscribedToMessages = false;
+function rememberEffect(key: string): void {
+    engineEffects.set(key, Date.now() + 15_000);
+    for (const [id, expires] of engineEffects) if (expires < Date.now() || engineEffects.size > 200) engineEffects.delete(id);
+}
 
-/**
- * Attaches the message handler only while an enabled automation actually reacts to messages.
- * With nothing listening there is no reason to sit on every MESSAGE_CREATE the client receives.
- */
 function syncTriggerSubscription(): void {
-    const wanted = engineRunning && hasMessageTriggers;
-    if (wanted === subscribedToMessages) return;
+    const wanted = new Set([...triggerIndex.keys(), ...waitListeners.keys()]);
+    for (const [event, handler] of eventHandlers) if (!engineRunning || !wanted.has(event)) {
+        FluxDispatcher.unsubscribe(event as import("@vencord/discord-types").FluxEvents, handler);
+        eventHandlers.delete(event);
+    }
+    if (!engineRunning) return;
+    for (const event of wanted) if (!eventHandlers.has(event)) {
+        if (event === "VOICE_STATE_UPDATES") previousOwnVoice = SelectedChannelStore.getVoiceChannelId() ?? "";
+        const handler = (payload: unknown) => {
+            for (const listener of waitListeners.get(event) ?? []) listener(payload);
+            handleTriggerEvent(event, payload);
+        };
+        eventHandlers.set(event, handler);
+        FluxDispatcher.subscribe(event as import("@vencord/discord-types").FluxEvents, handler);
+    }
+}
 
-    if (wanted) FluxDispatcher.subscribe("MESSAGE_CREATE", handleTriggerMessage);
-    else FluxDispatcher.unsubscribe("MESSAGE_CREATE", handleTriggerMessage);
-    subscribedToMessages = wanted;
+function listen(event: string, listener: (payload: unknown) => void): () => void {
+    const subscribers = waitListeners.get(event) ?? new Set();
+    subscribers.add(listener);
+    waitListeners.set(event, subscribers);
+    syncTriggerSubscription();
+    return () => {
+        subscribers.delete(listener);
+        if (!subscribers.size) waitListeners.delete(event);
+        syncTriggerSubscription();
+    };
 }
 
 function refreshTriggerCache(): void {
-    hasMessageTriggers = automations.some(automation => automation.enabled && LIVE_TRIGGERS.includes(automation.trigger.type));
+    for (const workflow of automations) runtimeSnapshot(workflow);
+    triggerIndex = compileTriggers(automations);
+    const now = Date.now();
+    for (const id of nextDue.keys()) if (!automations.some(a => a.id === id && a.enabled && a.trigger.type === "schedule")) nextDue.delete(id);
+    for (const automation of automations) if (automation.enabled && automation.trigger.type === "schedule" && !nextDue.has(automation.id)) {
+        try {
+            const legacy = automation.schedule.missed === "legacy";
+            const after = automation.lastScheduledAt ?? (legacy ? automation.lastRunAt ?? automation.schedule.startAt - 1 : automation.schedule.missed === "once" ? automation.schedule.startAt - 1 : now);
+            nextDue.set(automation.id, nextOccurrence(automation, after));
+        } catch (error) { logger.warn("Invalid automation schedule", error); }
+    }
     syncTriggerSubscription();
 }
 
+let snapshot: AutomationSnapshot | undefined;
 function notify(): void {
-    refreshTriggerCache();
-    for (const listener of listeners) listener();
+    snapshot = undefined;
+    if (notifyTimer !== undefined) return;
+    notifyTimer = setTimeout(() => { notifyTimer = undefined; for (const listener of listeners) listener(); }, 50);
 }
 
+let writePending = false;
 function queueWrite(): Promise<void> {
-    const entries: [IDBValidKey, unknown][] = [
-        [AUTOMATIONS_KEY, automations],
-        [LOGS_KEY, logs],
-        [GUILDS_KEY, guilds],
-    ];
-    writeQueue = writeQueue.then(
-        () => DataStore.setMany(entries),
-        () => DataStore.setMany(entries),
-    );
+    if (writePending) return writeQueue;
+    writePending = true;
+    writeQueue = writeQueue.catch((error: unknown) => logger.error("Could not save automation state", error)).then(async () => {
+        writePending = false;
+        flushLogs();
+        await DataStore.setMany([
+            [WORKFLOWS_KEY, { version: 2, automations, globalLimit }],
+            [LOGS_KEY, logs.map(({ preview: _preview, inputPreview: _inputPreview, ...log }) => log)],
+            [GUILDS_KEY, guilds],
+        ]);
+    });
     return writeQueue;
 }
 
@@ -234,23 +304,38 @@ function getErrorMessage(error: unknown): string {
 
 async function readState(): Promise<void> {
     try {
-        const [storedAutomations, storedLogs, storedGuilds, storedCommands] = await DataStore.getMany<unknown>([
+        const [storedAutomations, storedLogs, storedGuilds, storedCommands, storedV2] = await DataStore.getMany<unknown>([
             AUTOMATIONS_KEY,
             LOGS_KEY,
             GUILDS_KEY,
             COMMANDS_KEY,
+            WORKFLOWS_KEY,
         ]);
 
-        automations = Array.isArray(storedAutomations)
-            ? storedAutomations.filter(isAutomation).map(cloneAutomation).map(automation => ({ ...automation, blocks: migrateToGraph(automation.blocks) }))
-            : [];
+        if (storedV2 !== undefined && (!isRecord(storedV2) || storedV2.version !== 2 || !Array.isArray(storedV2.automations))) throw new Error("Unsupported workflow storage format.");
+        const source = isRecord(storedV2) && storedV2.version === 2 && Array.isArray(storedV2.automations) ? storedV2.automations : storedAutomations;
+        automations = Array.isArray(source) ? source.map(migrateWorkflow) : [];
+        const draftKeys = (await DataStore.keys()).filter((key): key is string => typeof key === "string" && key.startsWith("LawyerCord_automationDraft_"));
+        drafts = (await DataStore.getMany<unknown>(draftKeys)).filter(isAutomation);
+        if (storedV2 === undefined && Array.isArray(storedAutomations)) {
+            const backup = await DataStore.get<unknown>(BACKUP_KEY);
+            if (backup === undefined) await DataStore.set(BACKUP_KEY, storedAutomations);
+            await DataStore.set(WORKFLOWS_KEY, { version: 2, automations, globalLimit });
+        }
+        if (isRecord(storedV2) && typeof storedV2.globalLimit === "number") globalLimit = Math.max(1, Math.min(32, storedV2.globalLimit));
+        queue.setLimit(globalLimit);
+        loaded = true;
+        refreshTriggerCache();
+
         logs = Array.isArray(storedLogs) ? storedLogs.filter(isAutomationLog).slice(0, MAX_LOGS) : [];
         guilds = Array.isArray(storedGuilds) ? storedGuilds.filter(isGuildReference).map(reference => ({ ...reference })) : [];
         commandCache = isRecord(storedCommands) ? Object.fromEntries(Object.entries(storedCommands).filter(([, value]) => isCachedCommand(value)) as [string, CachedCommand][]) : {};
     } catch (error) {
         logger.error("Failed to load automation state", error);
+        loaded = false;
+        loadPromise = undefined;
+        throw new Error("Automation data could not be loaded. Existing data has not been replaced.");
     } finally {
-        loaded = true;
         notify();
     }
 }
@@ -261,12 +346,26 @@ export function loadAutomationState(): Promise<void> {
 }
 
 export function getAutomationSnapshot(): AutomationSnapshot {
-    return {
-        automations: automations.map(cloneAutomation),
-        logs: logs.map(log => ({ ...log })),
-        guilds: guilds.map(reference => ({ ...reference })),
-        loaded,
-    };
+    flushLogs();
+    return snapshot ??= { automations, drafts, logs, guilds, loaded, runs: queue.snapshot(), globalLimit };
+}
+
+export async function saveAutomationDraft(workflow: Automation): Promise<void> {
+    await DataStore.set(`LawyerCord_automationDraft_${workflow.id}`, workflow);
+    drafts = [...drafts.filter(draft => draft.id !== workflow.id), workflow];
+    notify();
+}
+
+export async function discardAutomationDraft(id: string): Promise<void> {
+    await DataStore.del(`LawyerCord_automationDraft_${id}`);
+    drafts = drafts.filter(draft => draft.id !== id);
+    notify();
+}
+
+export async function setAutomationRunLimit(value: number): Promise<void> {
+    queue.setLimit(value);
+    globalLimit = value;
+    await queueWrite();
 }
 
 export function subscribeAutomationState(listener: () => void): () => void {
@@ -276,7 +375,9 @@ export function subscribeAutomationState(listener: () => void): () => void {
 
 export async function replaceAutomations(next: Automation[]): Promise<void> {
     await loadAutomationState();
-    automations = next.map(cloneAutomation);
+    automations = next.map(migrateWorkflow);
+    nextDue.clear();
+    refreshTriggerCache();
     guilds = collectGuildReferences(automations, guilds);
     notify();
     await queueWrite();
@@ -285,11 +386,15 @@ export async function replaceAutomations(next: Automation[]): Promise<void> {
 
 export async function upsertAutomation(value: Automation): Promise<void> {
     await loadAutomationState();
-    const next = cloneAutomation(value);
+    const next = migrateWorkflow(value);
+    const errors = validateWorkflow(next, [...automations.filter(a => a.id !== next.id), next]).filter(issue => issue.severity === "error");
+    if (next.enabled && errors.length) throw new Error(errors[0].message);
     next.updatedAt = Date.now();
     const index = automations.findIndex(automation => automation.id === next.id);
     if (index === -1) automations.push(next);
     else automations[index] = next;
+    nextDue.delete(next.id);
+    refreshTriggerCache();
     guilds = collectGuildReferences(automations, guilds);
     notify();
     await queueWrite();
@@ -298,8 +403,12 @@ export async function upsertAutomation(value: Automation): Promise<void> {
 
 export async function deleteAutomation(id: string): Promise<void> {
     await loadAutomationState();
+    queue.cancel(id);
+    flushLogs();
     automations = automations.filter(automation => automation.id !== id);
+    refreshTriggerCache();
     logs = logs.filter(log => log.automationId !== id);
+    await discardAutomationDraft(id);
     notify();
     await queueWrite();
     scheduleEngine();
@@ -483,16 +592,19 @@ function messageFlags(config: AutomationBlock["config"]): Record<string, unknown
     };
 }
 
-async function postMessage(channelId: string, body: Record<string, unknown>): Promise<RuntimeMessage> {
+async function postMessage(channelId: string, body: Record<string, unknown>, signal: AbortSignal): Promise<RuntimeMessage> {
+    checkCancelled(signal);
     const endpoint = Constants.Endpoints.MESSAGES;
     if (typeof endpoint !== "function") throw new Error("Discord's message endpoint is unavailable.");
 
+    const nonce = SnowflakeUtils.fromTimestamp(Date.now());
+    rememberEffect(`MESSAGE_CREATE:${nonce}`);
     const response = await RestAPI.post({
         url: endpoint(channelId),
         body: {
             channel_id: channelId,
             content: "",
-            nonce: SnowflakeUtils.fromTimestamp(Date.now()),
+            nonce,
             sticker_ids: [],
             type: 0,
             attachments: [],
@@ -668,6 +780,7 @@ async function runCommand(config: AutomationBlock["config"], context: ExecutionC
     // Prefer the live index, then what this client already learned, then a fresh REST lookup.
     const cached = commandCache[commandId];
     const remote = command || cached ? undefined : await fetchCommandDefinition(channelId, name, commandId);
+    checkCancelled(context.signal);
     const version = command?.version || root?.version || cached?.version || remote?.version;
     if (!version) {
         refreshCommandIndexes(guildId, channelId);
@@ -743,7 +856,8 @@ function waitForReply(config: AutomationBlock["config"], context: ExecutionConte
             if (settled) return;
             settled = true;
             window.clearTimeout(timeoutId);
-            FluxDispatcher.unsubscribe("MESSAGE_CREATE", onMessage);
+            unsubscribe();
+            context.signal.removeEventListener("abort", cancel);
             pendingWaits.delete(cancel);
             if (value instanceof Error) reject(value);
             else resolve(value);
@@ -763,7 +877,9 @@ function waitForReply(config: AutomationBlock["config"], context: ExecutionConte
         const timeoutId = window.setTimeout(() => finish(null), timeoutSeconds * 1000);
 
         pendingWaits.add(cancel);
-        FluxDispatcher.subscribe("MESSAGE_CREATE", onMessage);
+        const unsubscribe = listen("MESSAGE_CREATE", payload => { if (isRecord(payload)) onMessage(payload); });
+        context.signal.addEventListener("abort", cancel, { once: true });
+        if (context.signal.aborted) cancel();
     });
 }
 
@@ -830,6 +946,30 @@ async function fetchRecentMentions(config: AutomationBlock["config"]): Promise<R
     return messages.slice(0, limit);
 }
 
+function waitForReaction(config: AutomationBlock["config"], context: ExecutionContext): Promise<unknown> {
+    const message = sourceMessage(config, context);
+    checkCancelled(context.signal);
+    return new Promise((resolve, reject) => {
+        const finish = (value: unknown) => {
+            clearTimeout(timer);
+            unsubscribe();
+            context.signal.removeEventListener("abort", cancel);
+            if (value instanceof Error) reject(value); else resolve(value);
+        };
+        const cancel = () => finish(new Error("Run cancelled."));
+        const unsubscribe = listen("MESSAGE_REACTION_ADD", event => {
+            if (!isRecord(event) || event.channelId !== message.channel_id || event.messageId !== message.id) return;
+            if (config.authorId && event.userId !== resolveTemplate(config.authorId, context.variables)) return;
+            if (event.userId === UserStore.getCurrentUser()?.id) return;
+            const emoji = isRecord(event.emoji) ? String(event.emoji.id ?? event.emoji.name ?? "") : "";
+            if (config.emoji && emoji !== resolveTemplate(config.emoji, context.variables)) return;
+            finish(event);
+        });
+        const timer = setTimeout(() => finish(null), Math.min(86_400, Math.max(1, config.timeoutSeconds ?? 60)) * 1000);
+        context.signal.addEventListener("abort", cancel, { once: true });
+    });
+}
+
 async function waitForDm(config: AutomationBlock["config"], context: ExecutionContext): Promise<RuntimeMessage | null> {
     const userId = resolveUserId(config, context, "DM user ID");
     const channelId = await resolveDmChannel(userId);
@@ -850,7 +990,7 @@ function resolveUserId(config: AutomationBlock["config"], context: ExecutionCont
 }
 
 function sourceMessage(config: AutomationBlock["config"], context: ExecutionContext): RuntimeMessage {
-    const source = config.sourceVariable?.trim() ? context.variables[config.sourceVariable.trim()] : context.lastMessage;
+    const source = config.sourceVariable?.trim() ? readPath(context.variables, config.sourceVariable.trim()) : context.lastMessage;
     const values = Array.isArray(source) ? source : [source];
     for (let index = values.length - 1; index >= 0; index--) {
         const message = toRuntimeMessage(values[index]);
@@ -1028,94 +1168,11 @@ async function interactWithModal(block: AutomationBlock, context: ExecutionConte
 }
 
 /** Returns both sides as well, so the run log can show what was actually compared. */
-function compareCondition(block: AutomationBlock, context: ExecutionContext): { passed: boolean; left: string; right: string; } {
-    const template = conditionLeftTemplate(block.config.sourceVariable, block.config.value);
-    // Nothing named means check the message the flow just handled. Comparing an empty string
-    // against anything is never what someone meant.
-    const left = template === null
-        ? context.lastMessage?.content ?? ""
-        : resolveTemplate(template, context.variables);
-    const right = resolveTemplate(block.config.compareValue, context.variables);
-    const compare = (): boolean => {
-        switch (block.config.operator) {
-            case "not-equals": return left !== right;
-            case "contains": return left.includes(right);
-            case "greater": return Number(left) > Number(right);
-            case "less": return Number(left) < Number(right);
-            case "regex": {
-                try {
-                    return new RegExp(right, "i").test(left);
-                } catch {
-                    throw new Error("Condition regex is not valid.");
-                }
-            }
-            default: return left === right;
-        }
-    };
-    return { passed: compare(), left, right };
-}
 
 function variableValue(name: string | undefined, context: ExecutionContext): unknown {
     return name?.trim() ? getPathValue(context.variables, name.trim()) : undefined;
 }
 
-function mathVariable(block: AutomationBlock, context: ExecutionContext): number {
-    const current = Number(variableValue(block.config.sourceVariable, context) ?? 0);
-    const amount = Number(block.config.amount ?? 0);
-    if (!Number.isFinite(current) || !Number.isFinite(amount)) throw new Error("Variable math requires finite numbers.");
-    switch (block.config.operation) {
-        case "subtract": return current - amount;
-        case "multiply": return current * amount;
-        case "divide": {
-            if (amount === 0) throw new Error("Variable math cannot divide by zero.");
-            return current / amount;
-        }
-        case "round": return Math.round(current * 10 ** amount) / 10 ** amount;
-        default: return current + amount;
-    }
-}
-
-function textVariable(block: AutomationBlock, context: ExecutionContext): string {
-    const current = stringify(variableValue(block.config.sourceVariable, context));
-    const value = resolveTemplate(block.config.value, context.variables);
-    switch (block.config.operation) {
-        case "uppercase": return current.toUpperCase();
-        case "lowercase": return current.toLowerCase();
-        case "replace": return current.replaceAll(resolveTemplate(block.config.needle, context.variables), resolveTemplate(block.config.replacement, context.variables));
-        case "append": return current + value;
-        case "prepend": return value + current;
-        default: return current.trim();
-    }
-}
-
-function arrayVariable(block: AutomationBlock, context: ExecutionContext): unknown[] {
-    const value = variableValue(block.config.sourceVariable, context);
-    if (!Array.isArray(value)) throw new Error("This block requires an array variable.");
-    return value;
-}
-
-function filterArray(block: AutomationBlock, context: ExecutionContext): unknown[] {
-    const query = resolveTemplate(block.config.compareValue, context.variables);
-    return arrayVariable(block, context).filter(item => {
-        const value = stringify(block.config.fieldPath?.trim() ? getPathValue(item, block.config.fieldPath.trim()) : item);
-        switch (block.config.operator) {
-            case "not-equals": return value !== query;
-            case "contains": return value.toLowerCase().includes(query.toLowerCase());
-            case "greater": return Number(value) > Number(query);
-            case "less": return Number(value) < Number(query);
-            case "regex": {
-                try {
-                    return new RegExp(query, "i").test(value);
-                } catch {
-                    throw new Error("Filter regex is not valid.");
-                }
-            }
-            default: return value === query;
-        }
-    });
-}
-
-/** Renders a value for a prompt. Messages become "author: text" rather than a JSON dump. */
 function describeForAI(value: unknown): string {
     const message = toRuntimeMessage(value);
     if (message) return `${message.author.id}: ${message.content}`;
@@ -1131,7 +1188,8 @@ function describeForAI(value: unknown): string {
 }
 
 async function runAI(block: AutomationBlock, context: ExecutionContext): Promise<unknown> {
-    const settings = await getAutomationAISettings();
+    const saved = await getAutomationAISettings();
+    const settings = { ...saved, ...context.workflow.ai, defaultModel: context.workflow.ai?.model || saved.defaultModel };
     const source = variableValue(block.config.sourceVariable, context);
     const instructions = resolveTemplate(block.config.content, context.variables).trim();
     // Instructions lead, context follows inside a fence. A raw JSON blob followed by loose
@@ -1159,18 +1217,25 @@ async function runAI(block: AutomationBlock, context: ExecutionContext): Promise
     }
     const result = await completeOpenRouter({
         model,
-        systemPrompt: resolveTemplate(block.config.systemPrompt, context.variables).trim() || defaults,
+        systemPrompt: resolveTemplate(block.config.systemPrompt || settings.systemPrompt, context.variables).trim() || defaults,
         prompt,
         maxTokens: Math.min(4_096, Math.max(16, Math.trunc(block.config.maxTokens ?? settings.maxTokens))),
         temperature: Math.min(2, Math.max(0, block.config.temperature ?? settings.temperature)),
         json: block.type === "ai-extract-json",
-    });
+        timeoutSeconds: block.config.timeoutSeconds ?? settings.timeoutSeconds ?? 60,
+        messages: parseConversation(resolveTemplate(block.config.conversation, context.variables)),
+    }, context.signal);
     if (!result.success || !result.content) throw new Error(result.error || "OpenRouter returned no text.");
+    checkCancelled(context.signal);
+    context.variables.aiUsage = { model: result.model, promptTokens: result.promptTokens, completionTokens: result.completionTokens };
+    if (block.type === "ai-classify" && !(labels || "important, normal, ignore").split(",").map(label => label.trim()).includes(result.content.trim())) throw new Error("AI returned a label outside the configured list.");
     if (block.type !== "ai-extract-json") return result.content.trim();
     try {
-        return JSON.parse(result.content);
+        const value: unknown = JSON.parse(result.content);
+        if (block.config.schema?.trim()) validateResult(value, JSON.parse(block.config.schema));
+        return value;
     } catch {
-        throw new Error("OpenRouter did not return valid JSON.");
+        throw new Error("AI output did not match the configured JSON result schema.");
     }
 }
 
@@ -1188,6 +1253,7 @@ async function messageContent(block: AutomationBlock, context: ExecutionContext)
 async function messageAction(block: AutomationBlock, context: ExecutionContext): Promise<unknown> {
     const message = sourceMessage(block.config, context);
     const content = await messageContent(block, context);
+    checkCancelled(context.signal);
     const endpoint = Constants.Endpoints.MESSAGE;
     if (typeof endpoint !== "function") throw new Error("Discord's message endpoint is unavailable.");
 
@@ -1201,13 +1267,15 @@ async function messageAction(block: AutomationBlock, context: ExecutionContext):
                 guild_id: message.guild_id,
                 fail_if_not_exists: false,
             },
-        });
+        }, context.signal);
     }
     if (block.type === "edit-message") {
+        rememberEffect(`MESSAGE_UPDATE:${message.id}`);
         const response = await RestAPI.patch({ url: endpoint(message.channel_id, message.id), body: { content } });
         return toRuntimeMessage(response.body) ?? { ...message, content };
     }
     if (block.type === "delete-message") {
+        rememberEffect(`MESSAGE_DELETE:${message.id}`);
         await RestAPI.del({ url: endpoint(message.channel_id, message.id) });
         return undefined;
     }
@@ -1234,7 +1302,7 @@ async function messageAction(block: AutomationBlock, context: ExecutionContext):
         const channelId = requireSnowflake(resolveTemplate(block.config.channelId, context.variables), "Target channel ID");
         const forwarded = await postMessage(channelId, {
             message_reference: { type: 1, message_id: message.id, channel_id: message.channel_id, guild_id: message.guild_id },
-        });
+        }, context.signal);
         context.lastChannelId = channelId;
         return forwarded;
     }
@@ -1243,6 +1311,7 @@ async function messageAction(block: AutomationBlock, context: ExecutionContext):
     const emoji = normalizeReaction(resolveTemplate(block.config.emoji, context.variables));
     if (!emoji) throw new Error("Add an emoji before running the reaction block.");
     const reactionUrl = reactionEndpoint(message.channel_id, message.id, emoji, "@me");
+    rememberEffect(`${block.type === "remove-reaction" ? "MESSAGE_REACTION_REMOVE" : "MESSAGE_REACTION_ADD"}:${message.id}`);
     if (block.type === "remove-reaction") await RestAPI.del({ url: reactionUrl });
     else await RestAPI.put({ url: reactionUrl });
     return message;
@@ -1258,13 +1327,40 @@ async function executeBlock(block: AutomationBlock, context: ExecutionContext): 
     const { config } = block;
     let value: unknown;
 
+    checkCancelled(context.signal);
     switch (block.type) {
+        case "fetch-message":
+        case "list-reactions": {
+            const channelId = requireSnowflake(resolveTemplate(config.channelId, context.variables) || context.lastChannelId, "Channel ID");
+            const messageId = requireSnowflake(resolveTemplate(config.targetId, context.variables) || context.lastMessage?.id, "Message ID");
+            const response = await RestAPI.get({ url: Constants.Endpoints.MESSAGE(channelId, messageId) });
+            value = block.type === "list-reactions" ? isRecord(response.body) && Array.isArray(response.body.reactions) ? response.body.reactions : [] : toRuntimeMessage(response.body);
+            break;
+        }
+        case "get-channel": {
+            const id = requireSnowflake(resolveTemplate(config.channelId, context.variables) || context.lastChannelId, "Channel ID");
+            const channel = ChannelStore.getChannel(id);
+            if (!channel) throw new Error("This channel is not available.");
+            value = { id: channel.id, name: channel.name, type: channel.type, guild_id: channel.guild_id };
+            break;
+        }
+        case "wait-reaction": {
+            value = await waitForReaction(config, context);
+            if (value === null) return false;
+            break;
+        }
+        case "spotify-shuffle":
+            value = await spotifySetting("shuffle", config.value ?? "true", context.signal, config.deviceId);
+            break;
+        case "spotify-repeat":
+            value = await spotifySetting("repeat", config.value ?? "off", context.signal, config.deviceId);
+            break;
         case "send-message": {
             const channelId = requireSnowflake(resolveTemplate(config.channelId, context.variables) || context.lastChannelId, "Channel ID");
             const content = await messageContent(block, context);
             // Discord rejects an empty message with a 400, so say what is actually wrong.
             if (!content.trim()) throw new Error("This block has no message to send. Write something, or check the variables in it resolved.");
-            value = await postMessage(channelId, { content, ...messageFlags(config) });
+            value = await postMessage(channelId, { content, ...messageFlags(config) }, context.signal);
             context.lastChannelId = channelId;
             break;
         }
@@ -1274,7 +1370,7 @@ async function executeBlock(block: AutomationBlock, context: ExecutionContext): 
         case "send-dm": {
             const userId = resolveUserId(config, context, "DM user ID");
             const channelId = await resolveDmChannel(userId);
-            value = await postMessage(channelId, { content: await messageContent(block, context), ...messageFlags(config) });
+            value = await postMessage(channelId, { content: await messageContent(block, context), ...messageFlags(config) }, context.signal);
             context.lastChannelId = channelId;
             break;
         }
@@ -1294,8 +1390,9 @@ async function executeBlock(block: AutomationBlock, context: ExecutionContext): 
             const channelId = requireSnowflake(resolveTemplate(config.channelId, context.variables) || context.lastChannelId, "Channel ID");
             const seconds = Math.min(60, Math.max(0, Math.trunc(config.durationSeconds ?? 3)));
             for (let elapsed = 0; elapsed <= seconds; elapsed += 8) {
+                checkCancelled(context.signal);
                 await RestAPI.post({ url: `${channelEndpoint(channelId)}/typing` });
-                if (elapsed + 8 <= seconds) await sleep(8_000);
+                if (elapsed + 8 <= seconds) await delay(8_000, context.signal);
             }
             context.lastChannelId = channelId;
             break;
@@ -1336,50 +1433,27 @@ async function executeBlock(block: AutomationBlock, context: ExecutionContext): 
             });
             break;
         case "spotify-play":
-            await spotifyPlay();
+            value = await spotifyPlay(context.signal, config.deviceId);
             break;
         case "spotify-pause":
-            await spotifyPause();
+            value = await spotifyPause(context.signal, config.deviceId);
             break;
         case "spotify-next":
-            await spotifyNext();
+            value = await spotifyNext(context.signal, config.deviceId);
             break;
         case "spotify-previous":
-            await spotifyPrevious();
+            value = await spotifyPrevious(context.signal, config.deviceId);
             break;
         case "spotify-seek":
-            await spotifySeek(config.durationSeconds ?? 0);
+            value = await spotifySeek(config.durationSeconds ?? 0, context.signal, config.deviceId);
             break;
         case "spotify-volume":
-            await spotifyVolume(config.amount ?? 50);
+            value = await spotifyVolume(config.amount ?? 50, context.signal, config.deviceId);
             break;
         case "spotify-now-playing":
             value = spotifyNowPlaying();
             break;
-        case "split-text": {
-            const separator = resolveTemplate(config.separator, context.variables) || "\n";
-            value = stringify(variableValue(config.sourceVariable, context)).split(separator);
-            break;
-        }
-        case "regex-extract": {
-            const pattern = resolveTemplate(config.matchText, context.variables);
-            if (!pattern) throw new Error("Add a regular expression to extract with.");
-            let regex: RegExp;
-            try {
-                regex = new RegExp(pattern, "i");
-            } catch {
-                throw new Error("That regular expression is not valid.");
-            }
-            const match = regex.exec(stringify(variableValue(config.sourceVariable, context)));
-            value = match ? match[1] ?? match[0] : "";
-            break;
-        }
-        case "random-item": {
-            const items = arrayVariable(block, context);
-            if (!items.length) throw new Error("That list is empty.");
-            value = items[Math.floor(Math.random() * items.length)];
-            break;
-        }
+
         case "open-channel": {
             const channelId = requireSnowflake(resolveTemplate(config.channelId, context.variables), "Channel ID");
             ChannelRouter.transitionToChannel(channelId);
@@ -1403,14 +1477,7 @@ async function executeBlock(block: AutomationBlock, context: ExecutionContext): 
                 context.variables.replyUserId = reply.author.id;
             }
             break;
-        case "wait-until": {
-            const input = resolveTemplate(config.value, context.variables).trim();
-            const timestamp = /^\d+$/.test(input) ? Number(input) : Date.parse(input);
-            if (!Number.isFinite(timestamp)) throw new Error("Wait until requires an ISO date or millisecond timestamp.");
-            const delay = timestamp - Date.now();
-            if (delay > 0) await sleep(Math.min(delay, 2_147_000_000));
-            break;
-        }
+
         case "fetch-dm":
             {
                 const messages = await fetchLatestDm(config, context);
@@ -1453,62 +1520,9 @@ async function executeBlock(block: AutomationBlock, context: ExecutionContext): 
             value = embed;
             break;
         }
-        case "delay":
-            await sleep(Math.min(86_400, Math.max(0, config.durationSeconds || 0)) * 1000);
-            break;
-        case "set-variable":
-            value = resolveTemplate(config.value, context.variables);
-            break;
-        case "math-variable":
-            value = mathVariable(block, context);
-            break;
-        case "delete-variable":
-            if (config.sourceVariable?.trim()) delete context.variables[config.sourceVariable.trim()];
-            break;
-        case "text-variable":
-            value = textVariable(block, context);
-            break;
-        case "random-number": {
-            const min = Math.ceil(Math.min(config.min ?? 0, config.max ?? 100));
-            const max = Math.floor(Math.max(config.min ?? 0, config.max ?? 100));
-            value = Math.floor(Math.random() * (max - min + 1)) + min;
-            break;
-        }
-        case "current-time":
-            value = config.value === "timestamp" ? Date.now() : new Date().toISOString();
-            break;
-        case "array-length": {
-            const source = variableValue(config.sourceVariable, context);
-            value = Array.isArray(source) || typeof source === "string" ? source.length : 0;
-            break;
-        }
-        case "join-array":
-            value = arrayVariable(block, context)
-                .map(item => stringify(config.fieldPath?.trim() ? getPathValue(item, config.fieldPath.trim()) : item))
-                .join(resolveTemplate(config.separator, context.variables));
-            break;
-        case "json-value":
-            value = getPathValue(variableValue(config.sourceVariable, context), resolveTemplate(config.fieldPath, context.variables).trim());
-            break;
-        case "filter-array":
-            value = filterArray(block, context);
-            break;
-        case "condition":
-            return true;
-        case "chance":
-        case "else":
-        case "end-if":
-        case "repeat":
-        case "end-repeat":
-        case "break-loop":
-        case "stop":
-        case "log":
-        case "note":
-            break;
-        case "fail":
-            throw new Error(resolveTemplate(config.errorMessage, context.variables) || "Automation stopped at a failure block.");
     }
 
+    checkCancelled(context.signal);
     const message = toRuntimeMessage(value);
     if (message) {
         context.lastMessage = message;
@@ -1521,7 +1535,7 @@ async function executeBlock(block: AutomationBlock, context: ExecutionContext): 
 }
 
 function appendLog(automation: Automation, status: AutomationLog["status"], message: string, block?: AutomationBlock, durationMs?: number): void {
-    logs = [{
+    recordLog({
         id: crypto.randomUUID(),
         automationId: automation.id,
         automationName: automation.name,
@@ -1531,207 +1545,150 @@ function appendLog(automation: Automation, status: AutomationLog["status"], mess
         blockId: block?.id,
         blockLabel: block ? BLOCK_DEFINITIONS.find(definition => definition.type === block.type)?.label : undefined,
         durationMs,
-    }, ...logs].slice(0, MAX_LOGS);
+    });
 }
 
 export function getAutomationNextRunAt(automation: Automation, now = Date.now()): number | null {
     if (!automation.enabled || automation.trigger.type !== "schedule") return null;
-    if (automation.lastRunAt === undefined) return automation.schedule.startAt;
-    return getNextRunAt({ ...automation.schedule, startAt: automation.lastRunAt }, now);
+    try { return nextDue.get(automation.id) ?? nextOccurrence(automation, now); } catch { return null; }
+}
+
+function traceRun(event: RunEvent): void {
+    const automation = automations.find(item => item.id === event.workflowId);
+    recordLog({ id: crypto.randomUUID(), automationId: event.workflowId, automationName: automation?.name ?? "Test workflow", timestamp: Date.now(), blockLabel: automation?.blocks.find(block => block.id === event.blockId)?.type, ...event });
+    notify();
+}
+
+async function persistentValue(workflowId: string, operation: string, key: string, value: unknown, signal: AbortSignal): Promise<unknown> {
+    checkCancelled(signal);
+    const storageKey = `LawyerCord_automationValues_${workflowId}`;
+    if (operation === "read-value") {
+        const values = await DataStore.get<Record<string, unknown>>(storageKey);
+        return values && Object.hasOwn(values, key) ? values[key] : undefined;
+    }
+    let result: unknown;
+    await DataStore.update<Record<string, unknown>>(storageKey, current => {
+        checkCancelled(signal);
+        const values = { ...current };
+        result = updateSavedValue(Object.hasOwn(values, key) ? values[key] : undefined, operation, value);
+        if (operation === "delete-value") delete values[key];
+        else Object.defineProperty(values, key, { value: result, enumerable: true, configurable: true, writable: true });
+        return values;
+    });
+    return result;
+}
+
+async function externalBlock(block: AutomationBlock, run: RunContext) {
+    checkCancelled(run.signal);
+    const supplied = resolveInput(block.config.input, run.variables, block.config.sourceVariable);
+    const message = toRuntimeMessage(supplied) ?? toRuntimeMessage(run.variables.lastMessage);
+    const { variables } = run;
+    const context: ExecutionContext = { variables, signal: run.signal, workflow: run.workflow, lastMessage: message ?? undefined, lastChannelId: message?.channel_id ?? (typeof variables.__channelId === "string" ? variables.__channelId : undefined), lastUserId: typeof variables.__userId === "string" ? variables.__userId : typeof variables.triggerUserId === "string" ? variables.triggerUserId : undefined };
+    const copy = { ...block, config: { ...block.config, variable: "__blockResult" } };
+    if (block.config.input) { variables.__blockInput = supplied; copy.config.sourceVariable = "__blockInput"; }
+    delete variables.__blockResult;
+    const passed = await executeBlock(copy, context);
+    checkCancelled(run.signal);
+    variables.__channelId = context.lastChannelId;
+    variables.__userId = context.lastUserId;
+    return { value: variables.__blockResult, usage: block.type.startsWith("ai-") || block.config.aiEnabled ? variables.aiUsage : undefined, port: passed ? "next" as const : "alternate" as const };
+}
+
+async function executeRun(workflow: Automation, variables: Record<string, unknown>, signal: AbortSignal, runId: string, dryRun = false): Promise<unknown> {
+    workflow = runtimeSnapshot(workflow);
+    const append = (status: "running" | "success" | "failure", message: string) => {
+        recordLog({ id: crypto.randomUUID(), runId, automationId: workflow.id, automationName: workflow.name, timestamp: Date.now(), status, message });
+        notify();
+    };
+    append("running", dryRun ? "Test started." : "Run started.");
+    try {
+        const result = await executeWorkflow(workflow, variables, { now: Date.now, random: Math.random, delay, external: externalBlock, persistent: persistentValue, workflows: () => [...automations.filter(a => a.id !== workflow.id), workflow], trace: traceRun }, { signal, runId, dryRun, immutableSnapshot: true });
+        append("success", dryRun ? "Test completed." : "Run completed.");
+        if (!dryRun) automations = automations.map(a => a.id === workflow.id ? { ...a, lastRunAt: Date.now(), lastStatus: "success" } : a);
+        return result;
+    } catch (error) {
+        append("failure", getErrorMessage(error));
+        if (!dryRun) automations = automations.map(a => a.id === workflow.id ? { ...a, lastRunAt: Date.now(), lastStatus: "failure" } : a);
+        throw error;
+    } finally { notify(); if (!dryRun) await queueWrite(); }
 }
 
 async function runAutomationWithVariables(id: string, variables: Record<string, unknown>): Promise<AutomationRunResult> {
     await loadAutomationState();
-    const source = automations.find(automation => automation.id === id);
-    if (!source) return { success: false, error: "Automation was not found." };
-    if (runningAutomations.has(id)) return { success: false, error: "Automation is already running." };
-
-    const automation = cloneAutomation(source);
-    automation.blocks = migrateToGraph(automation.blocks);
-    const byId = new Map(automation.blocks.map(block => [block.id, block]));
-    const context: ExecutionContext = { variables: { ...variables } };
-    // A port can fan out, so the runner keeps a stack rather than a single cursor. Targets are
-    // pushed in front, which finishes the branch just taken before starting the next one.
-    const entry = graphEntry(automation.blocks);
-    const pending: string[] = entry ? [entry.id] : [];
-    let activeBlock: AutomationBlock | undefined;
-    const loops = new Map<string, number>();
-    let steps = 0;
-    runningAutomations.add(id);
+    const workflow = automations.find(a => a.id === id);
+    if (!workflow) return { success: false, error: "Workflow was not found." };
     try {
-        appendLog(automation, "running", "Automation started.");
-        while (pending.length) {
-            const nextId = pending.shift();
-            activeBlock = nextId === undefined ? undefined : byId.get(nextId);
-            if (!activeBlock) continue;
-            if (++steps > 10_000) throw new Error("Automation stopped after 10,000 block steps. Check for a loop that never ends.");
-            const block: AutomationBlock = activeBlock;
-            const startedAt = Date.now();
-            appendLog(automation, "running", "Block started.", block);
-            let message = "Block completed.";
-            let follow: AutomationEdge | undefined;
-
-            if (block.type === "condition" || block.type === "chance") {
-                const result = block.type === "condition"
-                    ? compareCondition(block, context)
-                    : { passed: Math.random() * 100 < Math.min(100, Math.max(0, block.config.chancePercent ?? 50)), left: "", right: "" };
-                follow = result.passed ? block.next : block.alternate;
-                const verdict = result.passed ? "Condition passed" : "Condition did not pass";
-                message = block.type === "condition"
-                    ? `${verdict}: "${result.left}" ${block.config.operator ?? "equals"} "${result.right}".`
-                    : `${verdict}.`;
-            } else if (block.type === "repeat") {
-                const total = Math.min(1_000, Math.max(0, Math.trunc(block.config.repeatCount ?? 1)));
-                const remaining = loops.get(block.id) ?? total;
-                if (remaining <= 0) {
-                    loops.delete(block.id);
-                    follow = block.alternate;
-                    message = "Loop completed.";
-                } else {
-                    loops.set(block.id, remaining - 1);
-                    const variable = block.config.variable?.trim();
-                    if (variable) context.variables[variable] = total - remaining + 1;
-                    follow = block.next;
-                    message = `Loop pass ${total - remaining + 1} of ${total}.`;
-                }
-            } else if (block.type === "stop") {
-                // Stop ends this branch. Anything else already queued still runs.
-                appendLog(automation, "success", pending.length ? "Branch stopped." : "Automation stopped.", block, Date.now() - startedAt);
-                continue;
-            } else {
-                await executeBlock(block, context);
-                follow = block.next;
-                if (block.type === "log") message = resolveTemplate(block.config.content, context.variables) || "Checkpoint reached.";
-                if (block.type === "note") message = "Note skipped.";
-            }
-
-            const targets = edgeTargets(follow);
-            if (targets.length > 1) message += ` Continuing into ${targets.length} branches.`;
-            appendLog(automation, "success", message, block, Date.now() - startedAt);
-            pending.unshift(...targets);
-        }
-        const index = automations.findIndex(value => value.id === id);
-        if (index !== -1) automations[index] = { ...automations[index], lastRunAt: Date.now(), lastStatus: "success", updatedAt: Date.now() };
-        appendLog(automation, "success", "Automation completed successfully.");
-        notify();
-        await queueWrite();
+        await queue.enqueue(workflow, (signal, runId) => executeRun(workflow, variables, signal, runId));
         return { success: true };
     } catch (error) {
         const message = getErrorMessage(error);
-        const index = automations.findIndex(value => value.id === id);
-        if (index !== -1) automations[index] = { ...automations[index], lastRunAt: Date.now(), lastStatus: "failure", updatedAt: Date.now() };
-        appendLog(automation, "failure", message, activeBlock);
-        logger.warn(`Automation failed: ${automation.name}`, error);
-        notify();
-        await queueWrite();
+        if (message.includes("queue") || message.includes("skipped")) { appendLog(workflow, "failure", message); notify(); }
         return { success: false, error: message };
-    } finally {
-        runningAutomations.delete(id);
-        scheduleEngine();
     }
 }
 
-export function runAutomation(id: string): Promise<AutomationRunResult> {
-    return runAutomationWithVariables(id, {});
+export const runAutomation = (id: string) => runAutomationWithVariables(id, {});
+export const cancelAutomation = (id: string) => queue.cancel(id);
+export async function testAutomation(workflow: Automation): Promise<AutomationRunResult> {
+    try { await queue.enqueue(workflow, (signal, runId) => executeRun(workflow, {}, signal, runId, true)); return { success: true }; }
+    catch (error) { return { success: false, error: getErrorMessage(error) }; }
 }
 
-function handleTriggerMessage(event: MessageCreateEvent): void {
-    if (!engineRunning || event.optimistic || (event.type && event.type !== "MESSAGE_CREATE")) return;
-    // This runs for every message in every channel the client can see. Converting one costs a
-    // recursive walk of its components, so check whether anything actually wants messages first.
-    if (!hasMessageTriggers) return;
+function handleTriggerEvent(type: string, payload: unknown): void {
+    if (!engineRunning || !triggerIndex.has(type) || !isRecord(payload) || payload.optimistic) return;
+    const user = UserStore.getCurrentUser();
+    if (!user) return;
+    const events = type === "VOICE_STATE_UPDATES" && Array.isArray(payload.voiceStates) ? payload.voiceStates : [payload];
+    for (const event of events) {
+        if (!isRecord(event)) continue;
+        const raw = isRecord(event.message) ? event.message : event;
+        const channelId = String(raw.channel_id ?? event.channelId ?? "");
+        const channel = ChannelStore.getChannel(channelId);
+        const guildId = String(raw.guild_id ?? event.guildId ?? channel?.guild_id ?? "");
+        const author = isRecord(raw.author) ? raw.author : undefined;
+        const authorId = String(author?.id ?? event.userId ?? "");
+        const id = String(raw.id ?? event.messageId ?? "");
+        let previousChannel = typeof event.oldChannelId === "string" ? event.oldChannelId : typeof event.previousChannelId === "string" ? event.previousChannelId : "";
+        if (type === "VOICE_STATE_UPDATES" && authorId === user.id) { previousChannel = previousOwnVoice; previousOwnVoice = channelId; }
+        if (type === "VOICE_STATE_UPDATES" && channelId === previousChannel) continue;
+        const voice = type === "VOICE_STATE_UPDATES" ? !channelId ? "voice-leave" : previousChannel && previousChannel !== channelId ? "voice-move" : "voice-join" : undefined;
+        const emoji = isRecord(event.emoji) ? String(event.emoji.id ?? event.emoji.name ?? "") : "";
+        const effectKey = `${type}:${type === "MESSAGE_CREATE" ? raw.nonce : id}`;
+        const ownEffect = (engineEffects.get(effectKey) ?? 0) >= Date.now() && (!type.startsWith("MESSAGE_REACTION") || authorId === user.id);
+        if (ownEffect) engineEffects.delete(effectKey);
+        const matches = matchTriggers(triggerIndex, { type, channelId: channelId || previousChannel, guildId, authorId, content: String(raw.content ?? ""), self: authorId === user.id, bot: author?.bot === true, mention: mentionsCurrentUser(raw, user.id), fromEngine: ownEffect || type === "MESSAGE_CREATE" && sentByEngine.has(id), emoji, voice });
+        if (!matches.length) continue;
+        const message = toRuntimeMessage(raw);
+        for (const automation of matches) void runAutomationWithVariables(automation.id, { triggerEvent: event, triggerMessage: message, triggerUserId: authorId, lastMessage: message });
+    }
+}
 
-    // Everything below reads the raw payload. Converting a message walks its component tree and
-    // copies its embeds, which is far too much work to do for every message in every channel,
-    // so it only happens once an automation has actually matched.
-    const raw = event.message;
-    if (!isRecord(raw) || typeof raw.content !== "string" || !isRecord(raw.author) || typeof raw.author.id !== "string") return;
-    const currentUser = UserStore.getCurrentUser();
-    if (!currentUser) return;
-    // Never react to a message this engine just posted. That is the real loop hazard, and it is
-    // narrower than ignoring everything you type, which blocks command-word automations.
-    if (typeof raw.id === "string" && sentByEngine.has(raw.id)) return;
-    const fromSelf = raw.author.id === currentUser.id;
-
-    const channelId = typeof raw.channel_id === "string" ? raw.channel_id : "";
-    const guildId = typeof raw.guild_id === "string" ? raw.guild_id : "";
-    let message: RuntimeMessage | null | undefined;
-
+function processDueAutomations(): void {
+    const now = Date.now();
     for (const automation of automations) {
-        const { trigger } = automation;
-        if (!automation.enabled || !LIVE_TRIGGERS.includes(trigger.type)) continue;
-        if (fromSelf && trigger.includeSelf !== true) continue;
-        const scope = trigger.guildId?.trim();
-        // A server with no channel picked means the whole server. "@me" means direct messages.
-        if (scope === "@me" ? guildId !== "" : scope !== undefined && scope !== "" && scope !== guildId) continue;
-        if (trigger.channelId?.trim() && trigger.channelId.trim() !== channelId) continue;
-        if (trigger.authorId?.trim() && trigger.authorId.trim() !== raw.author.id) continue;
-        if (trigger.type === "dm" && guildId) continue;
-        if (trigger.type === "mention" && !mentionsCurrentUser(raw, currentUser.id)) continue;
-
-        const query = trigger.matchText || "";
-        if (query) {
-            const mode = trigger.matchMode || "contains";
-            if (mode === "exact" && raw.content !== query) continue;
-            if (mode === "contains" && !raw.content.toLowerCase().includes(query.toLowerCase())) continue;
-            if (mode === "regex") {
-                try {
-                    if (!new RegExp(query, "i").test(raw.content)) continue;
-                } catch {
-                    continue;
-                }
-            }
-        }
-
-        // Something wants this message, so pay for the conversion now, once.
-        if (message === undefined) message = toRuntimeMessage(raw);
-        if (!message) return;
-
-        void runAutomationWithVariables(automation.id, {
-            triggerMessage: message,
-            triggerUserId: message.author.id,
-            lastMessage: message,
-        });
+        const due = nextDue.get(automation.id);
+        if (due === undefined || due > now) continue;
+        nextDue.set(automation.id, nextOccurrence(automation, now));
+        automations = automations.map(a => a.id === automation.id ? { ...a, lastScheduledAt: due } : a);
+        if (now - due < 5000 || automation.schedule.missed !== "skip") void runAutomation(automation.id);
     }
-}
-
-async function processDueAutomations(): Promise<void> {
-    if (processing) return;
-    processing = true;
-    try {
-        const now = Date.now();
-        const due = automations.filter(automation => {
-            const next = getAutomationNextRunAt(automation, now);
-            return next !== null && next <= now;
-        });
-        for (const automation of due) await runAutomation(automation.id);
-    } finally {
-        processing = false;
-    }
+    notify();
+    void queueWrite();
 }
 
 function scheduleEngine(): void {
     if (!engineRunning) return;
     if (timerId !== undefined) window.clearTimeout(timerId);
-
-    const now = Date.now();
-    const next = automations
-        .map(automation => getAutomationNextRunAt(automation, now))
-        .filter((value): value is number => value !== null)
-        .sort((a, b) => a - b)[0];
-    if (next === undefined) return;
-
-    const delay = Math.min(2_147_000_000, Math.max(1_000, next - now));
-    timerId = window.setTimeout(() => {
-        timerId = undefined;
-        void processDueAutomations().finally(scheduleEngine);
-    }, delay);
+    const next = Math.min(...nextDue.values());
+    if (!Number.isFinite(next)) return;
+    timerId = window.setTimeout(() => { timerId = undefined; processDueAutomations(); scheduleEngine(); }, Math.min(2_147_000_000, Math.max(0, next - Date.now())));
 }
 
 export async function startAutomationEngine(): Promise<void> {
     if (engineRunning) return;
     engineRunning = true;
     await loadAutomationState();
+    if (!engineRunning) return;
     // Attaches the message handler only if an enabled automation actually reacts to messages.
     refreshTriggerCache();
     scheduleEngine();
@@ -1742,6 +1699,7 @@ export async function startAutomationEngine(): Promise<void> {
 
 export function stopAutomationEngine(): void {
     engineRunning = false;
+    queue.cancel();
     syncTriggerSubscription();
     if (timerId !== undefined) {
         window.clearTimeout(timerId);
@@ -1815,7 +1773,7 @@ export async function refreshGuildReferences(references?: GuildReference[]): Pro
 }
 
 export function parseImportedAutomation(value: unknown): AutomationFile {
-    return parseAutomationFile(value);
+    return parseWorkflowFile(value);
 }
 
 export { addScheduleInterval };

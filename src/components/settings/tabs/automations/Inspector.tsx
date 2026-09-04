@@ -13,6 +13,7 @@ import { openModal } from "@utils/modal";
 import type { ApplicationCommandOption } from "@vencord/discord-types";
 import { ChannelStore, IconUtils, Parser, React, UserStore } from "@webpack/common";
 
+import { AdvancedBlockInspector, RuntimeInspector } from "./AdvancedInspector";
 import { BLOCK_ICONS, blockDefinition } from "./blocks";
 import { getAvailableCommands, requestCommandIndex } from "./engine";
 import {
@@ -28,6 +29,7 @@ import {
 } from "./fields";
 import {
     type Automation,
+    AUTOMATION_TRIGGER_TYPES,
     AUTOMATION_UNITS,
     type AutomationBlock,
     type AutomationBlockConfig,
@@ -51,7 +53,7 @@ function isUnit(value: unknown): value is AutomationUnit {
 }
 
 function isTriggerType(value: unknown): value is AutomationTriggerType {
-    return value === "schedule" || value === "mention" || value === "message" || value === "dm" || value === "startup";
+    return AUTOMATION_TRIGGER_TYPES.some(type => type === value);
 }
 
 function updateBlock(automation: Automation, id: string, patch: Partial<AutomationBlockConfig>): Automation {
@@ -167,10 +169,12 @@ function AiEditor({ block, onChange }: { block: AutomationBlock; onChange(patch:
         {block.type === "ai-classify" && <TextField label="Allowed labels" value={config.labels ?? ""} description="Comma-separated. The result must be one label." onChange={labels => onChange({ labels })} />}
         <ModelField allowDefault value={config.model ?? ""} onChange={model => onChange({ model })} />
         <AreaField label="System instructions" value={config.systemPrompt ?? ""} description="Optional. Leave empty for the block's built-in instructions." rows={3} onChange={systemPrompt => onChange({ systemPrompt })} />
-        <div className="vc-ab-grid">
+        <CheckField label="Override workflow generation settings" value={config.maxTokens !== undefined || config.temperature !== undefined || config.timeoutSeconds !== undefined} onChange={override => onChange({ maxTokens: override ? 800 : undefined, temperature: override ? 0.2 : undefined, timeoutSeconds: override ? 60 : undefined })} />
+        {(config.maxTokens !== undefined || config.temperature !== undefined || config.timeoutSeconds !== undefined) && <div className="vc-ab-grid">
             <NumberField label="Max output tokens" value={config.maxTokens ?? 800} min={16} max={4_096} onChange={maxTokens => onChange({ maxTokens })} />
             <NumberField label="Temperature" value={config.temperature ?? 0.2} min={0} max={2} onChange={temperature => onChange({ temperature })} />
-        </div>
+            <NumberField label="Timeout in seconds" value={config.timeoutSeconds ?? 60} min={1} max={300} onChange={timeoutSeconds => onChange({ timeoutSeconds })} />
+        </div>}
         <TextField label="Save result as" value={config.variable ?? ""} onChange={variable => onChange({ variable })} />
     </>;
 }
@@ -305,7 +309,7 @@ export function BlockInspector({ block, automation, setAutomation }: { block: Au
     const item = blockDefinition(block.type);
     const Icon = BLOCK_ICONS[item.category];
     const guildId = config.guildId ?? "";
-    const result = <TextField label="Save result as" value={config.variable ?? ""} placeholder="lastMessage" onChange={variable => patch({ variable })} />;
+    const result = null;
     const inherited = inheritedContext(automation.blocks, block.id);
     const inheritedChannel = inherited.channelId ? ChannelStore.getChannel(inherited.channelId) : undefined;
 
@@ -314,7 +318,7 @@ export function BlockInspector({ block, automation, setAutomation }: { block: Au
         && !override.message
         && (!config.sourceVariable || config.sourceVariable === "lastMessage" || config.sourceVariable === inherited.messageVariable);
 
-    const source = usesInheritedMessage && inherited.messageFrom
+    const source = config.input ? null : usesInheritedMessage && inherited.messageFrom
         ? <Inherited
             title={`Acting on the message from ${blockDefinition(inherited.messageFrom.type).label}`}
             detail={`Saved as ${inherited.messageVariable}.`}
@@ -475,6 +479,7 @@ export function BlockInspector({ block, automation, setAutomation }: { block: Au
         {block.type === "fail" && <AreaField label="Failure message" value={config.errorMessage ?? ""} rows={3} onChange={errorMessage => patch({ errorMessage })} />}
         {(block.type === "log" || block.type === "note") && <AreaField label={block.type === "log" ? "Log message" : "Note"} value={config.content ?? ""} rows={3} onChange={content => patch({ content })} />}
 
+        {block.type !== "note" && <AdvancedBlockInspector automation={automation} block={block} onChange={patch} />}
         <OutputSummary block={block} automation={automation} />
         <VariablesPanel automation={automation} beforeBlockId={block.id} />
     </div>;
@@ -483,7 +488,7 @@ export function BlockInspector({ block, automation, setAutomation }: { block: Au
 export function AutomationInspector({ automation, setAutomation }: { automation: Automation; setAutomation(automation: Automation): void; }) {
     const { schedule, trigger } = automation;
     const updateTrigger = (patch: Partial<Automation["trigger"]>) => setAutomation({ ...automation, trigger: { ...trigger, ...patch } });
-    const live = trigger.type === "mention" || trigger.type === "message" || trigger.type === "dm";
+    const live = trigger.type !== "schedule" && trigger.type !== "startup";
 
     return <div className="vc-ab-inspector-body">
         <div className="vc-ab-inspector-title flow">
@@ -491,8 +496,8 @@ export function AutomationInspector({ automation, setAutomation }: { automation:
             <div><Heading tag="h2">Automation</Heading><Paragraph>Name the workflow and choose what starts it.</Paragraph></div>
         </div>
         <TextField label="Name" value={automation.name} onChange={name => setAutomation({ ...automation, name })} />
-        <SelectField label="Start workflow" value={trigger.type} options={[{ label: "On a schedule", value: "schedule" }, { label: "When I am mentioned", value: "mention" }, { label: "When a message matches", value: "message" }, { label: "When a DM matches", value: "dm" }, { label: "When LawyerCord starts", value: "startup" }]} onChange={type => isTriggerType(type) && updateTrigger({ type })} />
-        {trigger.type === "schedule" && <>
+        <SelectField label="Start workflow" value={trigger.type} options={[{ label: "On a schedule", value: "schedule" }, { label: "When I am mentioned", value: "mention" }, { label: "When a message matches", value: "message" }, { label: "When a DM matches", value: "dm" }, { label: "When LawyerCord starts", value: "startup" }, ...AUTOMATION_TRIGGER_TYPES.filter(type => !["schedule", "mention", "message", "dm", "startup"].includes(type)).map(value => ({ label: value.replaceAll("-", " "), value }))]} onChange={type => isTriggerType(type) && updateTrigger({ type })} />
+        {trigger.type === "schedule" && (schedule.mode ?? "interval") === "interval" && <>
             <div className="vc-ab-grid">
                 <NumberField label="Run every" value={schedule.interval} min={1} onChange={interval => setAutomation({ ...automation, schedule: { ...schedule, interval } })} />
                 <SelectField label="Time unit" value={schedule.unit} options={AUTOMATION_UNITS.map(unit => ({ label: unit[0].toUpperCase() + unit.slice(1), value: unit }))} onChange={unit => isUnit(unit) && setAutomation({ ...automation, schedule: { ...schedule, unit } })} />
@@ -507,6 +512,8 @@ export function AutomationInspector({ automation, setAutomation }: { automation:
                 channelId={trigger.channelId ?? ""}
                 onChange={updateTrigger}
             />
+            <TextField label="Reaction emoji filter" value={trigger.emoji ?? ""} onChange={emoji => updateTrigger({ emoji })} />
+            <CheckField label="Include bots" value={trigger.includeBots !== false} onChange={includeBots => updateTrigger({ includeBots })} />
             <UserField label="Author" description="Optional. Leave empty to accept any author." value={trigger.authorId ?? ""} onChange={authorId => updateTrigger({ authorId })} />
             <SelectField label="Text match" value={trigger.matchMode ?? "contains"} options={[{ label: "Contains", value: "contains" }, { label: "Full match", value: "exact" }, { label: "Regular expression", value: "regex" }]} onChange={matchMode => updateTrigger({ matchMode: matchMode as Automation["trigger"]["matchMode"] })} />
             <TextField label="Message text" value={trigger.matchText ?? ""} description="Leave empty to accept every matching event." onChange={matchText => updateTrigger({ matchText })} />
@@ -526,6 +533,7 @@ export function AutomationInspector({ automation, setAutomation }: { automation:
             onChange={maxRunMinutes => setAutomation({ ...automation, maxRunMinutes })}
         />
         <CheckField label="Enabled" description="Run this workflow while LawyerCord is open." value={automation.enabled} onChange={enabled => setAutomation({ ...automation, enabled })} />
+        <RuntimeInspector automation={automation} onChange={setAutomation} />
         <VariablesPanel automation={automation} />
     </div>;
 }

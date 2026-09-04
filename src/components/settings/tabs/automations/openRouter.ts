@@ -98,7 +98,12 @@ export async function clearOpenRouterKey() {
     return Native.clearOpenRouterKey();
 }
 
-export async function completeOpenRouter(value: { model: string; systemPrompt: string; prompt: string; maxTokens: number; temperature: number; json: boolean; }) {
+export async function completeOpenRouter(value: { model: string; systemPrompt: string; prompt: string; maxTokens: number; temperature: number; json: boolean; timeoutSeconds: number; messages: import("./ai").AIMessage[]; }, signal: AbortSignal) {
     if (!IS_DISCORD_DESKTOP) return { success: false, error: "OpenRouter blocks require Discord Desktop." };
-    return Native.completeOpenRouter(value);
+    if (signal.aborted) throw new Error("Run cancelled.");
+    const requestId = crypto.randomUUID();
+    const cancel = () => { void Native.cancelOpenRouter(requestId); };
+    signal.addEventListener("abort", cancel, { once: true });
+    try { return await Native.completeOpenRouter({ ...value, requestId }); }
+    finally { signal.removeEventListener("abort", cancel); }
 }

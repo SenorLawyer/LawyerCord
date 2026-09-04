@@ -1,0 +1,135 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+.vc-ab-steps {
+    min-width: 0;
+    padding: 20px;
+    overflow: auto;
+    background: var(--background-base-low, var(--background-primary));
+}
+
+.vc-ab-step {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--border-subtle, var(--background-modifier-accent));
+    border-radius: 8px;
+    margin-bottom: 12px;
+    background: var(--background-base-lower, var(--background-secondary));
+}
+
+.vc-ab-step.selected {
+    border-color: var(--brand-500);
+}
+
+.vc-ab-step small,
+.vc-ab-draft-status {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.vc-ab-step-actions,
+.vc-ab-connection-target,
+.vc-ab-template-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.vc-ab-validation,
+.vc-ab-connections,
+.vc-ab-cases,
+.vc-ab-case,
+.vc-ab-input-binding,
+.vc-ab-advanced,
+.vc-ab-weekdays {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.vc-ab-validation,
+.vc-ab-connections {
+    padding: 12px;
+    border-bottom: 1px solid var(--border-subtle, var(--background-modifier-accent));
+}
+
+.vc-ab-connections summary,
+.vc-ab-advanced summary {
+    padding: 8px 0;
+    color: var(--text-default, var(--text-normal));
+    cursor: pointer;
+}
+
+.vc-ab-validation button {
+    height: auto;
+    justify-content: flex-start;
+    white-space: normal;
+    text-align: left;
+}
+
+.vc-ab-schedule-preview {
+    padding-inline-start: 20px;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.8;
+}
+
+.vc-ab-subhead {
+    flex-wrap: wrap;
+}
+
+.vc-ab-workspace {
+    grid-template-columns: 230px minmax(240px, 1fr) 340px;
+}
+
+.vc-ab-node:focus-visible,
+.vc-ab-step:focus-within {
+    outline: 2px solid var(--brand-500);
+    outline-offset: 2px;
+}
+
+.vc-ab-edge.error .vc-ab-edge-line {
+    stroke: var(--text-feedback-critical, var(--text-danger));
+}
+
+@media (width <= 1050px) {
+    .vc-ab-workspace {
+        grid-template-columns: 160px minmax(0, 1fr);
+        grid-template-rows: minmax(320px, 50vh) auto;
+        overflow: auto;
+    }
+
+    .vc-ab-inspector {
+        grid-column: 1 / -1;
+        max-height: 360px;
+    }
+}
+
+@media (width <= 760px) {
+    .vc-ab-workspace {
+        height: auto;
+        max-height: 70vh;
+        grid-template-columns: minmax(0, 1fr);
+        overflow: auto;
+    }
+
+    .vc-ab-palette {
+        max-height: 180px;
+    }
+
+    .vc-ab-canvas,
+    .vc-ab-steps {
+        min-height: 320px;
+    }
+
+    .vc-ab-inspector {
+        max-height: none;
+    }
+}

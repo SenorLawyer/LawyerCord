@@ -5,17 +5,20 @@
  */
 
 // Bump this on every change that gets injected locally, so the settings tab shows whether the rebuild landed.
-export const AUTOMATIONS_UI_VERSION = 27;
+import { EXTENDED_BLOCKS, EXTENDED_DEFAULTS, EXTENDED_TYPES } from "./catalog";
+
+export const AUTOMATIONS_UI_VERSION = 28;
 
 export const AUTOMATION_FILE_FORMAT = "lawyercord-automation";
-export const AUTOMATION_FILE_VERSION = 1;
+export const AUTOMATION_FILE_VERSION = 2;
 
 export const AUTOMATION_UNITS = ["minutes", "hours", "days", "weeks", "months", "years"] as const;
 export type AutomationUnit = typeof AUTOMATION_UNITS[number];
-export const AUTOMATION_TRIGGER_TYPES = ["schedule", "mention", "message", "dm", "startup"] as const;
+export const AUTOMATION_TRIGGER_TYPES = ["schedule", "mention", "message", "dm", "startup", "message-edit", "message-delete", "reaction-add", "reaction-remove", "voice-join", "voice-leave", "voice-move"] as const;
 export type AutomationTriggerType = typeof AUTOMATION_TRIGGER_TYPES[number];
 
 export const AUTOMATION_BLOCK_TYPES = [
+    ...EXTENDED_TYPES,
     "send-message",
     "send-embed",
     "send-components",
@@ -101,6 +104,7 @@ export interface BlockDefinition {
 }
 
 export const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
+    ...EXTENDED_BLOCKS,
     { type: "send-message", label: "Send message", description: "Post text in a channel.", category: "messages" },
     { type: "send-embed", label: "Send embed", description: "Legacy app-only block.", category: "messages", available: false },
     { type: "send-components", label: "Send Components V2", description: "Legacy app-only block.", category: "messages", available: false },
@@ -174,12 +178,22 @@ export const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
 ];
 
 export interface Schedule {
+    mode?: "interval" | "calendar" | "cron";
+    timezone?: string;
+    weekdays?: number[];
+    time?: string;
+    cron?: string;
+    activeStart?: string;
+    activeEnd?: string;
+    missed?: "skip" | "once" | "legacy";
     interval: number;
     unit: AutomationUnit;
     startAt: number;
 }
 
 export interface AutomationTrigger {
+    emoji?: string;
+    includeBots?: boolean;
     type: AutomationTriggerType;
     /** Let your own messages fire this trigger, for command-word style automations. */
     includeSelf?: boolean;
@@ -238,7 +252,24 @@ export interface AutomationCommandOptionValue {
 export type AutomationMatchMode = "contains" | "exact" | "regex";
 export type AutomationOptionMode = "exact" | "contains" | "regex" | "index";
 
+export type AutomationPort = "next" | "alternate" | "error";
+export type ValueInput = { kind: "literal"; value: unknown; } | { kind: "reference" | "template"; value: string; };
 export interface AutomationBlockConfig {
+    jsonDrafts?: Record<string, string>;
+    input?: ValueInput;
+    secondInput?: ValueInput;
+    workflowId?: string;
+    cases?: { value: string; target: string; }[];
+    persistentKey?: string;
+    descending?: boolean;
+    deviceId?: string;
+    retryCount?: number;
+    retryDelaySeconds?: number;
+    sample?: unknown;
+    conversation?: string;
+    schema?: string;
+    unsupported?: Record<string, unknown>;
+
     channelId?: string;
     guildId?: string;
     content?: string;
@@ -311,7 +342,7 @@ export interface AutomationBlockConfig {
 }
 
 /** Points every target of an edge at its new id, used when copying an automation. */
-function remapEdge(edge: AutomationEdge | undefined, ids: Map<string, string>): AutomationEdge | undefined {
+export function remapEdge(edge: AutomationEdge | undefined, ids: Map<string, string>): AutomationEdge | undefined {
     const next = edgeTargets(edge).map(id => ids.get(id)).filter((id): id is string => id !== undefined);
     if (!next.length) return undefined;
     return next.length === 1 ? next[0] : next;
@@ -360,9 +391,20 @@ export interface AutomationBlock {
     next?: AutomationEdge;
     /** Where the flow goes on the false branch, or when a repeat finishes. */
     alternate?: AutomationEdge;
+    error?: AutomationEdge;
 }
 
 export interface Automation {
+    schemaVersion?: 2;
+    entryId?: string;
+    runMode?: "queue" | "skip" | "parallel";
+    concurrency?: number;
+    queueLimit?: number;
+    cooldownSeconds?: number;
+    maxSteps?: number;
+    lastScheduledAt?: number;
+    ai?: { model?: string; systemPrompt?: string; temperature?: number; maxTokens?: number; timeoutSeconds?: number; };
+
     id: string;
     name: string;
     enabled: boolean;
@@ -437,6 +479,11 @@ export function getAutomationVariableNames(automation: Automation, beforeBlockId
 }
 
 export interface AutomationLog {
+    usage?: string;
+    inputPreview?: string;
+    runId?: string;
+    port?: AutomationPort;
+    preview?: string;
     id: string;
     automationId: string;
     automationName: string;
@@ -502,7 +549,7 @@ function defaultModalFields(): AutomationComponent[] {
 
 export function createAutomationBlock(type: AutomationBlockType): AutomationBlock {
     const common = { variable: "lastMessage" };
-    let config: AutomationBlockConfig;
+    let config: AutomationBlockConfig = {};
 
     switch (type) {
         case "send-message":
@@ -696,7 +743,8 @@ export function createAutomationBlock(type: AutomationBlockType): AutomationBloc
 
     }
 
-    return { id: newId(), type, config };
+    if (type.startsWith("ai-")) { delete config.maxTokens; delete config.temperature; }
+    return { id: newId(), type, config: structuredClone(EXTENDED_DEFAULTS[type] ?? config) };
 }
 
 export function createAutomation(): Automation {
@@ -705,9 +753,14 @@ export function createAutomation(): Automation {
         id: newId(),
         name: "New automation",
         enabled: false,
+        schemaVersion: 2,
+        runMode: "queue",
+        concurrency: 1,
+        queueLimit: 50,
+        maxSteps: 10_000,
         trigger: { type: "schedule" },
         maxRunMinutes: 15,
-        schedule: { interval: 1, unit: "hours", startAt: now + 60_000 },
+        schedule: { mode: "interval", interval: 1, unit: "hours", startAt: now + 60_000, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, missed: "skip" },
         blocks: [],
         createdAt: now,
         updatedAt: now,
@@ -716,32 +769,24 @@ export function createAutomation(): Automation {
 
 /** A deep copy of one block, keeping its id and wiring. */
 export function cloneBlock(block: AutomationBlock): AutomationBlock {
-    return {
-        ...block,
-        position: block.position ? { ...block.position } : undefined,
-        config: {
-            ...block.config,
-            embed: block.config.embed ? { ...block.config.embed } : undefined,
-            commandOptions: block.config.commandOptions?.map(option => ({ ...option })),
-            components: cloneComponents(block.config.components),
-            modalFields: cloneComponents(block.config.modalFields),
-        },
-    };
+    return structuredClone(block);
 }
 
 export function cloneAutomation(automation: Automation): Automation {
-    return {
-        ...automation,
-        trigger: { ...(automation.trigger ?? { type: "schedule" }) },
-        schedule: { ...automation.schedule },
-        blocks: automation.blocks.map(cloneBlock),
-    };
+    return structuredClone(automation);
 }
 
 /**
  * A standalone copy of an automation, with fresh ids throughout so it can live alongside the
  * original. Edges are remapped to the new block ids rather than pointing back at the source.
  */
+export function remapBlockConfig(config: AutomationBlockConfig, ids: Map<string, string>): AutomationBlockConfig {
+    const json = JSON.stringify(config).replace(/blocks\.([\w-]+)\./g, (match: string, id: string) => ids.has(id) ? `blocks.${ids.get(id)}.` : match);
+    const copy: AutomationBlockConfig = JSON.parse(json);
+    if (copy.cases) copy.cases = copy.cases.map(item => ({ ...item, target: ids.get(item.target) ?? item.target }));
+    return copy;
+}
+
 export function duplicateAutomation(automation: Automation, name?: string): Automation {
     const copy = cloneAutomation(automation);
     const ids = new Map(copy.blocks.map(block => [block.id, crypto.randomUUID()]));
@@ -749,18 +794,22 @@ export function duplicateAutomation(automation: Automation, name?: string): Auto
 
     return {
         ...copy,
+        entryId: copy.entryId ? ids.get(copy.entryId) : undefined,
         id: crypto.randomUUID(),
         name: name ?? `${copy.name} copy`,
         enabled: false,
         createdAt: now,
         updatedAt: now,
         lastRunAt: undefined,
+        lastScheduledAt: undefined,
         lastStatus: undefined,
         blocks: copy.blocks.map(block => ({
             ...block,
             id: ids.get(block.id) ?? block.id,
             next: remapEdge(block.next, ids),
             alternate: remapEdge(block.alternate, ids),
+            error: remapEdge(block.error, ids),
+            config: remapBlockConfig(block.config, ids),
         })),
     };
 }
@@ -822,23 +871,25 @@ export function findStartRepeat(blocks: AutomationBlock[], end: number): number 
 }
 
 /** Blocks with two outputs. Everything else has one, and stop/fail have none. */
-export const BRANCH_TYPES: AutomationBlockType[] = ["condition", "chance", "repeat", "wait-reply", "wait-dm"];
+export const BRANCH_TYPES: AutomationBlockType[] = ["condition", "chance", "repeat", "for-each", "switch", "wait-reply", "wait-dm", "wait-reaction"];
 /** Structural markers from the old linear format. Converted away by migrateToGraph. */
-export const MARKER_TYPES: AutomationBlockType[] = ["else", "end-if", "end-repeat", "break-loop"];
-export const TERMINAL_TYPES: AutomationBlockType[] = ["stop", "fail"];
+export const MARKER_TYPES: AutomationBlockType[] = ["else", "end-if", "end-repeat"];
+export const TERMINAL_TYPES: AutomationBlockType[] = ["stop", "stop-run", "return", "break-loop"];
 
 export function isGraph(blocks: AutomationBlock[]): boolean {
     return blocks.some(block => block.next !== undefined || block.alternate !== undefined);
 }
 
-export function outputPorts(type: AutomationBlockType): ("next" | "alternate")[] {
+export function outputPorts(type: AutomationBlockType): AutomationPort[] {
     if (TERMINAL_TYPES.includes(type)) return [];
-    return BRANCH_TYPES.includes(type) ? ["next", "alternate"] : ["next"];
+    if (type === "note") return ["next"];
+    return BRANCH_TYPES.includes(type) ? ["next", "alternate", "error"] : ["next", "error"];
 }
 
-export function portLabel(type: AutomationBlockType, port: "next" | "alternate"): string {
-    if (type === "repeat") return port === "next" ? "Each pass" : "When done";
-    if (type === "wait-reply" || type === "wait-dm") return port === "next" ? "Got one" : "Timed out";
+export function portLabel(type: AutomationBlockType, port: AutomationPort): string {
+    if (port === "error") return "On error";
+    if (type === "repeat" || type === "for-each") return port === "next" ? "Each pass" : "When done";
+    if (type === "wait-reply" || type === "wait-dm" || type === "wait-reaction") return port === "next" ? "Got one" : "Timed out";
     if (BRANCH_TYPES.includes(type)) return port === "next" ? "Yes" : "No";
     return "Next";
 }
@@ -928,7 +979,8 @@ export function upstreamChain(blocks: AutomationBlock[], id: string): Automation
     let current = id;
 
     for (let steps = 0; steps < blocks.length; steps++) {
-        const parent = blocks.find(block => edgeTargets(block.next).includes(current) || edgeTargets(block.alternate).includes(current));
+        const parents = blocks.filter(block => edgeTargets(block.next).includes(current) || edgeTargets(block.alternate).includes(current) || edgeTargets(block.error).includes(current) || block.config.cases?.some(item => item.target === current));
+        const parent = parents.length === 1 ? parents[0] : undefined;
         if (!parent || seen.has(parent.id)) break;
         seen.add(parent.id);
         chain.push(parent);
@@ -1002,6 +1054,9 @@ export interface InheritedContext {
 export function inheritedContext(blocks: AutomationBlock[], id: string): InheritedContext {
     const context: InheritedContext = {};
 
+    const incoming = blocks.filter(block => [block.next, block.alternate, block.error].some(edge => edgeTargets(edge).includes(id)) || block.config.cases?.some(item => item.target === id));
+    if (incoming.length > 1) return context;
+
     for (const block of upstreamChain(blocks, id)) {
         const channelId = block.config.channelId?.trim();
         if (!context.channelFrom && (channelId || block.config.userId?.trim())) {
@@ -1027,7 +1082,7 @@ export function inheritedContext(blocks: AutomationBlock[], id: string): Inherit
 
 /** The block a run starts from: the first without an incoming edge, else the first block. */
 export function graphEntry(blocks: AutomationBlock[]): AutomationBlock | undefined {
-    const targets = new Set(blocks.flatMap(block => [...edgeTargets(block.next), ...edgeTargets(block.alternate)]));
+    const targets = new Set(blocks.flatMap(block => [...edgeTargets(block.next), ...edgeTargets(block.alternate), ...edgeTargets(block.error), ...(block.config.cases ?? []).map(route => route.target)]));
     return blocks.find(block => !targets.has(block.id)) ?? blocks[0];
 }
 
@@ -1038,7 +1093,7 @@ const NODE_STEP_Y = 130;
 export function layoutGraph(blocks: AutomationBlock[]): AutomationBlock[] {
     const byId = new Map(blocks.map(block => [block.id, block]));
     const placed = new Set<string>();
-    const targets = new Set(blocks.flatMap(block => [...edgeTargets(block.next), ...edgeTargets(block.alternate)]));
+    const targets = new Set(blocks.flatMap(block => [...edgeTargets(block.next), ...edgeTargets(block.alternate), ...edgeTargets(block.error), ...(block.config.cases ?? []).map(route => route.target)]));
     const roots = blocks.filter(block => !targets.has(block.id));
     let column = 0;
 
@@ -1050,6 +1105,8 @@ export function layoutGraph(blocks: AutomationBlock[]): AutomationBlock[] {
         block.position ??= { x: 80 + lane * NODE_STEP_X, y: 60 + depth * NODE_STEP_Y };
         edgeTargets(block.next).forEach((target, index) => walk(target, depth + 1, lane + index));
         edgeTargets(block.alternate).forEach((target, index) => walk(target, depth + 1, lane + 1 + index));
+        edgeTargets(block.error).forEach((target, index) => walk(target, depth + 1, lane + 2 + index));
+        block.config.cases?.forEach((route, index) => walk(route.target, depth + 1, lane + index));
     };
 
     for (const root of roots.length ? roots : blocks.slice(0, 1)) walk(root.id, 0, column++);
@@ -1148,7 +1205,7 @@ export function parseComponents(value: string): { components: AutomationComponen
 export function parseAutomationFile(value: unknown): AutomationFile {
     if (!isRecord(value)
         || value.format !== AUTOMATION_FILE_FORMAT
-        || value.version !== AUTOMATION_FILE_VERSION
+        || (value.version !== 1 && value.version !== AUTOMATION_FILE_VERSION)
         || !Array.isArray(value.automations)
         || value.automations.length > 100
         || !value.automations.every(isAutomation)) {
@@ -1238,6 +1295,8 @@ export function getNextRunAt(schedule: Schedule, now = Date.now()): number {
 }
 
 export function formatSchedule(schedule: Schedule): string {
+    if (schedule.mode === "cron") return `${schedule.cron || "Choose a cron expression"} (${schedule.timezone || "local time"})`;
+    if (schedule.mode === "calendar") return `${(schedule.weekdays ?? [1, 2, 3, 4, 5]).map(day => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day]).join(", ")} at ${schedule.time || "09:00"} (${schedule.timezone || "local time"})`;
     return `Every ${schedule.interval} ${schedule.unit.slice(0, -1)}${schedule.interval === 1 ? "" : "s"}`;
 }
 

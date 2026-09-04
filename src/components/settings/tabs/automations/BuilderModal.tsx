@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import * as DataStore from "@api/DataStore";
+import { Button } from "@components/Button";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { Heading } from "@components/Heading";
 import { PlusIcon, RobotIcon } from "@components/Icons";
 import type { RenderModalProps } from "@vencord/discord-types";
@@ -12,7 +15,9 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 
 import { BLOCK_ICONS, blockDefinition, CATEGORY_LABELS, paletteBlocks } from "./blocks";
 import { Canvas, type CanvasDrag, type CanvasView, clampZoom, graphBounds, GRID, NODE_WIDTH, nodeHeight } from "./Canvas";
-import { runAutomation, upsertAutomation } from "./engine";
+import { Connections } from "./Connections";
+import { duplicateBlocks, editorReducer, removeBlocks } from "./editorState";
+import { cancelAutomation, discardAutomationDraft, getAutomationSnapshot, runAutomation, saveAutomationDraft, testAutomation, upsertAutomation } from "./engine";
 import { AutomationInspector, BlockInspector } from "./Inspector";
 import {
     addEdgeTarget,
@@ -20,13 +25,17 @@ import {
     AUTOMATION_BLOCK_CATEGORIES,
     type AutomationBlock,
     type AutomationBlockType,
+    type AutomationPort,
     cloneAutomation,
     cloneBlock,
     createAutomationBlock,
+    isAutomation,
     layoutGraph,
     migrateToGraph,
-    removeEdgeTarget,
 } from "./model";
+import { WorkflowRunHistory } from "./RunHistory";
+import { StepView } from "./StepView";
+import { validateWorkflow } from "./workflow";
 
 function snap(value: number): number {
     return Math.round(value / GRID) * GRID;
@@ -76,11 +85,41 @@ function BlockPalette({ onAdd, onDragStart }: { onAdd(type: AutomationBlockType)
 }
 
 function Builder({ initial, transitionState, onClose, onSaved }: RenderModalProps & { initial: Automation; onSaved?(automation: Automation): void; }) {
-    const [automation, setAutomation] = React.useState(() => {
-        const copy = cloneAutomation(initial);
-        return { ...copy, blocks: layoutGraph(migrateToGraph(copy.blocks)) };
-    });
-    const [selectedId, setSelectedId] = React.useState<string | null>(null);
+    const [state, dispatch] = React.useReducer(editorReducer, initial, workflow => ({
+        workflow: { ...cloneAutomation(workflow), blocks: layoutGraph(workflow.schemaVersion === 2 ? structuredClone(workflow.blocks) : migrateToGraph(workflow.blocks)) }, past: [], future: [],
+    }));
+    const automation = state.workflow;
+    const dragGroup = React.useRef<string | undefined>(undefined);
+    const setAutomation = (workflow: Automation) => dispatch({ type: "edit", workflow, group: dragGroup.current });
+    const [selectedId, selectOne] = React.useState<string | null>(null);
+    const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
+    const setSelectedId = (id: string | null) => { selectOne(id); setSelectedIds(new Set(id ? [id] : [])); };
+    const [mode, setMode] = React.useState<"graph" | "steps">("graph");
+    const [insertion, setInsertion] = React.useState<{ id: string; port: AutomationPort; } | null>(null);
+    const [runBusy, setRunBusy] = React.useState(false);
+    const [draftStatus, setDraftStatus] = React.useState("Draft");
+    const saved = React.useRef(initial);
+    const draft = React.useRef(automation);
+    draft.current = automation;
+    React.useEffect(() => () => {
+        if (draft.current !== saved.current) void saveAutomationDraft(draft.current).catch(() => showToast("Draft could not be saved.", Toasts.Type.FAILURE));
+    }, []);
+    const issues = React.useMemo(() => validateWorkflow(automation, [...getAutomationSnapshot().automations.filter(a => a.id !== automation.id), automation]), [automation]);
+    const startRun = async (test: boolean) => {
+        setRunBusy(true);
+        try {
+            const result = test ? await testAutomation(automation) : await runAutomation(automation.id);
+            showToast(result.success ? test ? "Test completed." : "Run completed." : result.error || "Run failed.", result.success ? Toasts.Type.SUCCESS : Toasts.Type.FAILURE);
+        } finally { setRunBusy(false); }
+    };
+    React.useEffect(() => {
+        const timer = setTimeout(() => {
+            if (automation === saved.current) return;
+            void saveAutomationDraft(automation).then(() => setDraftStatus("Draft saved"), () => setDraftStatus("Draft could not be saved"));
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [automation]);
+
     const [saving, setSaving] = React.useState(false);
     const [drag, setDrag] = React.useState<CanvasDrag | null>(null);
     const [pointer, setPointer] = React.useState<{ x: number; y: number; } | null>(null);
@@ -147,6 +186,11 @@ function Builder({ initial, transitionState, onClose, onSaved }: RenderModalProp
         });
     };
 
+    React.useLayoutEffect(() => {
+        const frame = requestAnimationFrame(fitView);
+        return () => cancelAnimationFrame(frame);
+    }, []);
+
     /** True when a node box starting here would overlap one that already exists. */
     const overlaps = (x: number, y: number, type: AutomationBlockType) => automation.blocks.some(block => {
         const spot = block.position ?? { x: 0, y: 0 };
@@ -178,7 +222,12 @@ function Builder({ initial, transitionState, onClose, onSaved }: RenderModalProp
         const blocks = automation.blocks.map(current => current.id === selectedId && current.next === undefined && current.type !== "stop" && current.type !== "fail"
             ? { ...current, next: block.id }
             : current);
-        setAutomation({ ...automation, blocks: [...blocks, block] });
+        if (insertion) {
+            const origin = blocks.find(item => item.id === insertion.id);
+            block.next = origin?.[insertion.port];
+            setAutomation({ ...automation, blocks: [...blocks.map(item => item.id === insertion.id ? { ...item, [insertion.port]: block.id } : item), block] });
+            setInsertion(null);
+        } else setAutomation({ ...automation, entryId: automation.entryId ?? block.id, blocks: [...blocks, block] });
         setSelectedId(block.id);
     };
 
@@ -197,22 +246,15 @@ function Builder({ initial, transitionState, onClose, onSaved }: RenderModalProp
     };
 
     const removeBlock = (id: string) => {
-        setAutomation({
-            ...automation,
-            blocks: automation.blocks
-                .filter(block => block.id !== id)
-                .map(block => ({
-                    ...block,
-                    next: removeEdgeTarget(block.next, id),
-                    alternate: removeEdgeTarget(block.alternate, id),
-                })),
-        });
+        setAutomation(removeBlocks(automation, selectedIds.has(id) ? selectedIds : new Set([id])));
         setSelectedId(null);
     };
 
     const duplicateBlock = (id: string) => {
-        const source = automation.blocks.find(block => block.id === id);
-        if (source) addCopy(source);
+        const result = duplicateBlocks(automation, selectedIds.has(id) ? selectedIds : new Set([id]));
+        setAutomation(result.workflow);
+        setSelectedIds(result.ids);
+        selectOne([...result.ids][0] ?? null);
     };
 
     const copyBlock = (id: string) => {
@@ -226,7 +268,7 @@ function Builder({ initial, transitionState, onClose, onSaved }: RenderModalProp
         if (clipboard) addCopy(clipboard, at);
     };
 
-    const connect = (fromId: string, port: "next" | "alternate", targetId: string) => {
+    const connect = (fromId: string, port: "next" | "alternate" | "error", targetId: string) => {
         if (fromId === targetId) return;
         const current = latest.current.automation;
         setAutomation({
@@ -245,13 +287,19 @@ function Builder({ initial, transitionState, onClose, onSaved }: RenderModalProp
     };
 
     const nodeAt = (clientX: number, clientY: number): string | null => {
-        const element = document.elementFromPoint(clientX, clientY);
-        const node = element instanceof HTMLElement ? element.closest("[data-node-id]") : null;
-        return node instanceof HTMLElement ? node.dataset.nodeId ?? null : null;
+        const point = toCanvas(clientX, clientY);
+        return latest.current.automation.blocks.find(block => {
+            const { x, y } = block.position ?? { x: 0, y: 0 };
+            return point.x >= x && point.x <= x + NODE_WIDTH && point.y >= y && point.y <= y + nodeHeight(block.type);
+        })?.id ?? null;
     };
+    const dragCleanup = React.useRef<(() => void) | undefined>(undefined);
+    React.useEffect(() => () => dragCleanup.current?.(), []);
 
     const startDrag = (source: CanvasDrag, event: ReactPointerEvent<HTMLElement>) => {
         if (event.button !== 0) return;
+        dragCleanup.current?.();
+        dragGroup.current = crypto.randomUUID();
         const element = event.currentTarget;
         const origin = { x: event.clientX, y: event.clientY };
         let active = false;
@@ -307,12 +355,16 @@ function Builder({ initial, transitionState, onClose, onSaved }: RenderModalProp
                 }
             }
 
+            dragGroup.current = undefined;
+            dispatch({ type: "finish" });
+            dragCleanup.current = undefined;
             setDrag(null);
             setPointer(null);
             setGhost(null);
             setDropTarget(null);
         };
 
+        dragCleanup.current = () => { element.removeEventListener("pointermove", move); element.removeEventListener("pointerup", finish); element.removeEventListener("pointercancel", finish); };
         element.setPointerCapture(event.pointerId);
         element.addEventListener("pointermove", move);
         element.addEventListener("pointerup", finish);
@@ -342,6 +394,9 @@ function Builder({ initial, transitionState, onClose, onSaved }: RenderModalProp
             if (!event.ctrlKey && !event.metaKey) return;
 
             const key = event.key.toLowerCase();
+            if (key === "z") { event.preventDefault(); dispatch({ type: event.shiftKey ? "redo" : "undo" }); return; }
+            if (key === "y") { event.preventDefault(); dispatch({ type: "redo" }); return; }
+            if (key === "a") { event.preventDefault(); setSelectedIds(new Set(automation.blocks.map(block => block.id))); return; }
             if (key === "c" && selectedId) { event.preventDefault(); copyBlock(selectedId); }
             else if (key === "d" && selectedId) { event.preventDefault(); duplicateBlock(selectedId); }
             else if (key === "v" && clipboard) { event.preventDefault(); pasteBlock(); }
@@ -349,9 +404,10 @@ function Builder({ initial, transitionState, onClose, onSaved }: RenderModalProp
 
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [selectedId, clipboard, automation]);
+    }, [selectedId, selectedIds, clipboard, automation]);
 
     const save = async (run: boolean) => {
+        if (automation.blocks.some(block => block.config.jsonDrafts && Object.keys(block.config.jsonDrafts).length)) return;
         setSaving(true);
         const next = { ...automation, name: automation.name.trim() || "Untitled automation", updatedAt: Date.now() };
         try {
@@ -360,7 +416,9 @@ function Builder({ initial, transitionState, onClose, onSaved }: RenderModalProp
                 const result = await runAutomation(next.id);
                 showToast(result.success ? "Automation completed." : result.error || "Automation failed.", result.success ? Toasts.Type.SUCCESS : Toasts.Type.FAILURE);
             } else showToast("Automation saved.", Toasts.Type.SUCCESS);
-            setAutomation(next);
+            saved.current = automation;
+            await discardAutomationDraft(next.id);
+            setDraftStatus("Saved");
             onSaved?.(next);
         } catch (error) {
             showToast(error instanceof Error ? error.message : "Automation could not be saved.", Toasts.Type.FAILURE);
@@ -375,6 +433,11 @@ function Builder({ initial, transitionState, onClose, onSaved }: RenderModalProp
         size="xxl"
         title={<div className="vc-ab-title"><RobotIcon width={20} height={20} /><span>{automation.name || "Untitled automation"}</span><small>{automation.blocks.length} block{automation.blocks.length === 1 ? "" : "s"}</small></div>}
         subtitle={<div className="vc-ab-subhead">
+            <Button size="small" variant={mode === "graph" ? "primary" : "secondary"} onClick={() => setMode("graph")}>Graph</Button>
+            <Button size="small" variant={mode === "steps" ? "primary" : "secondary"} onClick={() => setMode("steps")}>Steps</Button>
+            <Button size="small" variant="secondary" disabled={!state.past.length} onClick={() => dispatch({ type: "undo" })}>Undo</Button>
+            <Button size="small" variant="secondary" disabled={!state.future.length} onClick={() => dispatch({ type: "redo" })}>Redo</Button>
+            <span className="vc-ab-draft-status">{insertion ? "Choose a block to insert" : draftStatus}</span>
             <button type="button" className="vc-ab-tidy" onClick={tidy}>Auto-arrange</button>
             <button type="button" className="vc-ab-tidy" onClick={fitView}>Fit to view</button>
             <button type="button" className="vc-ab-tidy" disabled={!selected} onClick={() => selected && duplicateBlock(selected.id)}>Duplicate</button>
@@ -387,15 +450,19 @@ function Builder({ initial, transitionState, onClose, onSaved }: RenderModalProp
             </div>
         </div>}
         actions={[
-            { text: "Save", variant: "primary", onClick: () => void save(false), disabled: saving },
-            { text: "Save and run", variant: "secondary", onClick: () => void save(true), disabled: saving },
+            { text: "Save", variant: "primary", onClick: () => void save(false), disabled: saving || automation.blocks.some(block => block.config.jsonDrafts && Object.keys(block.config.jsonDrafts).length > 0) },
+            { text: "Test", variant: "secondary", onClick: () => void startRun(true), disabled: runBusy || issues.some(issue => issue.severity === "error") },
+            { text: "Run saved workflow", variant: "secondary", onClick: () => void startRun(false), disabled: runBusy || !getAutomationSnapshot().automations.some(item => item.id === automation.id) },
+            { text: "Cancel run", variant: "secondary", onClick: () => cancelAutomation(automation.id) },
         ]}
     >
         <div className="vc-ab-workspace">
             <BlockPalette onAdd={addFromPalette} onDragStart={startDrag} />
-            <Canvas
+            {mode === "steps" ? <StepView automation={automation} selectedId={selectedId} onSelect={setSelectedId} onInsert={(id, port) => { setSelectedId(id); setInsertion({ id, port }); }} /> : <Canvas
                 automation={automation}
                 selectedId={selectedId}
+                selectedIds={selectedIds}
+                onToggleSelection={id => { selectOne(id); setSelectedIds(previous => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next; }); }}
                 setSelectedId={setSelectedId}
                 setAutomation={setAutomation}
                 onNodeDragStart={startDrag}
@@ -405,8 +472,11 @@ function Builder({ initial, transitionState, onClose, onSaved }: RenderModalProp
                 dropTarget={dropTarget}
                 view={view}
                 onZoomAt={zoomAt}
-            />
+            />}
             <aside className="vc-ab-inspector">
+                <WorkflowRunHistory workflowId={automation.id} />
+                {issues.length > 0 && <section className="vc-ab-validation" aria-label="Workflow checks">{issues.map((issue, index) => <Button key={issue.message + index} size="small" variant="secondary" onClick={() => setSelectedId(issue.blockId ?? null)}>{issue.severity === "error" ? "Fix: " : "Check: "}{issue.message}</Button>)}</section>}
+                {selected && <Connections automation={automation} block={selected} onChange={setAutomation} onInsert={port => setInsertion({ id: selected.id, port })} />}
                 {selected
                     ? <BlockInspector key={selected.id} block={selected} automation={automation} setAutomation={setAutomation} />
                     : <AutomationInspector automation={automation} setAutomation={setAutomation} />}
@@ -417,5 +487,9 @@ function Builder({ initial, transitionState, onClose, onSaved }: RenderModalProp
 }
 
 export function openAutomationBuilder(automation: Automation, onSaved?: (automation: Automation) => void): void {
-    openModal(props => <Builder {...props} initial={automation} onSaved={onSaved} />);
+    void DataStore.get<Automation>(`LawyerCord_automationDraft_${automation.id}`).then(draft => {
+        const initial = draft && isAutomation(draft) ? draft : automation;
+        const Wrapped = ErrorBoundary.wrap(Builder, { noop: true });
+        openModal(props => <Wrapped {...props} key={initial.id} initial={initial} onSaved={onSaved} />);
+    });
 }

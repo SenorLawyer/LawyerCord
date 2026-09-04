@@ -9,6 +9,7 @@ import { React } from "@webpack/common";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
 import { BLOCK_ICONS, blockDefinition } from "./blocks";
+import { removeBlocks } from "./editorState";
 import {
     type Automation,
     type AutomationBlock,
@@ -40,7 +41,7 @@ function portOffset(type: AutomationBlockType, index: number): number {
 
 export type CanvasDrag =
     | { kind: "node"; id: string; nodeX: number; nodeY: number; }
-    | { kind: "edge"; id: string; port: "next" | "alternate"; }
+    | { kind: "edge"; id: string; port: "next" | "alternate" | "error"; }
     | { kind: "new"; type: AutomationBlockType; }
     | { kind: "pan"; startX: number; startY: number; viewX: number; viewY: number; };
 
@@ -63,7 +64,7 @@ function inputAnchor(block: AutomationBlock) {
     return { x, y: y + HEADER_HEIGHT / 2 };
 }
 
-function outputAnchor(block: AutomationBlock, port: "next" | "alternate") {
+function outputAnchor(block: AutomationBlock, port: "next" | "alternate" | "error") {
     const { x, y } = nodePosition(block);
     return { x: x + NODE_WIDTH, y: y + portOffset(block.type, outputPorts(block.type).indexOf(port)) };
 }
@@ -104,6 +105,8 @@ export function graphBounds(blocks: AutomationBlock[]) {
 interface CanvasProps {
     automation: Automation;
     selectedId: string | null;
+    selectedIds: Set<string>;
+    onToggleSelection(id: string): void;
     setSelectedId(id: string | null): void;
     setAutomation(automation: Automation): void;
     onNodeDragStart(source: CanvasDrag, event: ReactPointerEvent<HTMLElement>): void;
@@ -115,7 +118,7 @@ interface CanvasProps {
     onZoomAt(delta: number, clientX: number, clientY: number): void;
 }
 
-export function Canvas({ automation, selectedId, setSelectedId, setAutomation, onNodeDragStart, surfaceRef, drag, pointer, dropTarget, view, onZoomAt }: CanvasProps) {
+export function Canvas({ automation, selectedId, selectedIds, onToggleSelection, setSelectedId, setAutomation, onNodeDragStart, surfaceRef, drag, pointer, dropTarget, view, onZoomAt }: CanvasProps) {
     const { blocks } = automation;
     const byId = new Map(blocks.map(block => [block.id, block]));
 
@@ -125,22 +128,13 @@ export function Canvas({ automation, selectedId, setSelectedId, setAutomation, o
     }, { width: 900, height: 520 });
 
     // Removes just the line you clicked, leaving the port's other targets alone.
-    const disconnect = (id: string, port: "next" | "alternate", targetId: string) => setAutomation({
+    const disconnect = (id: string, port: "next" | "alternate" | "error", targetId: string) => setAutomation({
         ...automation,
         blocks: blocks.map(block => block.id === id ? { ...block, [port]: removeEdgeTarget(block[port], targetId) } : block),
     });
 
     const remove = (id: string) => {
-        setAutomation({
-            ...automation,
-            blocks: blocks
-                .filter(block => block.id !== id)
-                .map(block => ({
-                    ...block,
-                    next: removeEdgeTarget(block.next, id),
-                    alternate: removeEdgeTarget(block.alternate, id),
-                })),
-        });
+        setAutomation(removeBlocks(automation, new Set([id])));
         if (selectedId === id) setSelectedId(null);
     };
 
@@ -149,8 +143,11 @@ export function Canvas({ automation, selectedId, setSelectedId, setAutomation, o
         edgeTargets(block[port]).flatMap(targetId => {
             const target = byId.get(targetId);
             if (!target) return [];
-            return [{ block, port, targetId, from: outputAnchor(block, port), to: inputAnchor(target) }];
-        })));
+            return [{ block, port, targetId, from: outputAnchor(block, port), to: inputAnchor(target), caseIndex: -1 }];
+        }))).concat(blocks.flatMap(block => (block.config.cases ?? []).flatMap((route, caseIndex) => {
+        const target = byId.get(route.target);
+        return target ? [{ block, port: "next" as const, targetId: route.target, from: outputAnchor(block, "next"), to: inputAnchor(target), caseIndex }] : [];
+    })));
 
     const liveEdge = drag?.kind === "edge" && pointer
         ? { from: outputAnchor(byId.get(drag.id) ?? blocks[0], drag.port), to: pointer }
@@ -184,9 +181,9 @@ export function Canvas({ automation, selectedId, setSelectedId, setAutomation, o
                 <span>Drag a node's right-hand dot onto another node to connect them. Click a line to remove it.</span>
             </div>}
             <svg className="vc-ab-edges" width={extent.width + CANVAS_PAD} height={extent.height + CANVAS_PAD}>
-                {edges.map(edge => <g key={`${edge.block.id}-${edge.port}-${edge.targetId}`} className={`vc-ab-edge ${edge.port}`}>
-                    <path className="vc-ab-edge-hit" d={curve(edge.from, edge.to)} onClick={() => disconnect(edge.block.id, edge.port, edge.targetId)}>
-                        <title>Click to disconnect</title>
+                {edges.map(edge => <g key={`${edge.block.id}-${edge.port}-${edge.targetId}-${edge.caseIndex}`} className={`vc-ab-edge ${edge.port}`}>
+                    <path className="vc-ab-edge-hit" d={curve(edge.from, edge.to)} onClick={() => edge.caseIndex < 0 ? disconnect(edge.block.id, edge.port, edge.targetId) : setAutomation({ ...automation, blocks: blocks.map(block => block.id === edge.block.id ? { ...block, config: { ...block.config, cases: block.config.cases?.filter((_route, index) => index !== edge.caseIndex) } } : block) })}>
+                        <title>{edge.caseIndex < 0 ? "Click to disconnect" : `Match ${edge.block.config.cases?.[edge.caseIndex].value}. Click to remove route.`}</title>
                     </path>
                     <path className="vc-ab-edge-line" d={curve(edge.from, edge.to)} />
                 </g>)}
@@ -201,11 +198,15 @@ export function Canvas({ automation, selectedId, setSelectedId, setAutomation, o
                 const dragging = drag?.kind === "node" && drag.id === block.id;
                 return <article
                     key={block.id}
-                    className={`vc-ab-node ${item.category}${selectedId === block.id ? " selected" : ""}${dragging ? " dragging" : ""}${dropTarget === block.id ? " droppable" : ""}`}
+                    className={`vc-ab-node ${item.category}${selectedIds.has(block.id) ? " selected" : ""}${dragging ? " dragging" : ""}${dropTarget === block.id ? " droppable" : ""}`}
                     style={{ left: x, top: y, width: NODE_WIDTH, height: nodeHeight(block.type) }}
                     data-node-id={block.id}
+                    tabIndex={0}
+                    aria-label={item.label}
+                    onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(block.id); } }}
                     onPointerDown={event => {
                         if ((event.target as HTMLElement).closest(".vc-ab-port, .vc-ab-node-delete")) return;
+                        if (event.ctrlKey || event.metaKey || event.shiftKey) { onToggleSelection(block.id); return; }
                         setSelectedId(block.id);
                         onNodeDragStart({ kind: "node", id: block.id, nodeX: x, nodeY: y }, event);
                     }}

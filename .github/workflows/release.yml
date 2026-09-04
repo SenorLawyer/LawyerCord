@@ -127,6 +127,7 @@ jobs:
               run: |
                   pnpm audit --audit-level moderate
                   pnpm testTsc
+                  pnpm testAutomations
                   pnpm testDiscordMcp
                   pnpm testReleaseArtifactAudit
                   pnpm testSecureMessaging

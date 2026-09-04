@@ -31,7 +31,12 @@ let modelCache: { models: OpenRouterModel[]; fetchedAt: number; } | null = null;
 /** Ids OpenRouter has confirmed exist, so a completion cannot smuggle in an arbitrary URL path. */
 let knownModelIds = new Set<string>();
 
+const completions = new Map<string, AbortController>();
+
 interface CompletionInput {
+    requestId: string;
+    timeoutSeconds: number;
+    messages: { role: "user" | "assistant"; content: string; }[];
     model: string;
     systemPrompt: string;
     prompt: string;
@@ -79,7 +84,12 @@ function completionInput(value: unknown): CompletionInput | null {
     if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
     const input = value as Partial<CompletionInput>;
     if (
-        typeof input.model !== "string"
+        typeof input.requestId !== "string"
+        || !/^[\w-]{1,80}$/.test(input.requestId)
+        || typeof input.timeoutSeconds !== "number" || !Number.isFinite(input.timeoutSeconds) || input.timeoutSeconds < 1 || input.timeoutSeconds > 300
+        || !Array.isArray(input.messages) || input.messages.length > 40 || JSON.stringify(input.messages).length > 100000
+        || !input.messages.every(message => typeof message === "object" && message !== null && (message.role === "user" || message.role === "assistant") && typeof message.content === "string" && message.content.length <= 20000)
+        || typeof input.model !== "string"
         || !MODEL_ID.test(input.model)
         || input.model.length > 120
         || (knownModelIds.size > 0 && !knownModelIds.has(input.model))
@@ -200,19 +210,30 @@ export async function clearOpenRouterKey(_event: IpcMainInvokeEvent): Promise<{ 
     }
 }
 
+export function cancelOpenRouter(event: IpcMainInvokeEvent, requestId: unknown): { success: boolean; } {
+    if (typeof requestId !== "string" || !/^[\w-]{1,80}$/.test(requestId)) return { success: false };
+    completions.get(`${event.sender.id}:${requestId}`)?.abort();
+    return { success: true };
+}
+
 export async function completeOpenRouter(_event: IpcMainInvokeEvent, value: unknown): Promise<CompletionResult> {
     const input = completionInput(value);
     if (!input) return { success: false, error: "The AI block configuration is invalid." };
+    if (completions.size >= 32) return { success: false, error: "Too many AI requests are active." };
+    const requestKey = `${_event.sender.id}:${input.requestId}`;
+    if (completions.has(requestKey)) return { success: false, error: "This AI request is already running." };
+    const controller = new AbortController();
+    completions.set(requestKey, controller);
     let key: string | null;
     try {
         key = await readKey();
     } catch {
+        completions.delete(requestKey);
         return { success: false, error: "The OpenRouter key could not be read." };
     }
-    if (!key) return { success: false, error: "Add an OpenRouter API key in Automation settings." };
+    if (!key) { completions.delete(requestKey); return { success: false, error: "Add an OpenRouter API key in Automation settings." }; }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60_000);
+    const timeout = setTimeout(() => controller.abort(), input.timeoutSeconds * 1000);
     try {
         const response = await fetch(OPENROUTER_URL, {
             method: "POST",
@@ -228,6 +249,7 @@ export async function completeOpenRouter(_event: IpcMainInvokeEvent, value: unkn
                 model: input.model,
                 messages: [
                     ...(input.systemPrompt ? [{ role: "system", content: input.systemPrompt }] : []),
+                    ...input.messages,
                     { role: "user", content: input.prompt },
                 ],
                 max_tokens: input.maxTokens,
@@ -271,5 +293,6 @@ export async function completeOpenRouter(_event: IpcMainInvokeEvent, value: unkn
         return { success: false, error: error instanceof DOMException && error.name === "AbortError" ? "OpenRouter timed out." : "The OpenRouter request failed." };
     } finally {
         clearTimeout(timeout);
+        completions.delete(requestKey);
     }
 }

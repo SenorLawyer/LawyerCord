@@ -6,11 +6,11 @@
 
 import "./builder.css";
 import "./styles.css";
+import "./revamp.css";
 
 import { Button } from "@components/Button";
 import { Heading } from "@components/Heading";
-import { ClockIcon, CloudDownloadIcon, CloudUploadIcon, DeleteIcon, PlusIcon, RobotIcon } from "@components/Icons";
-import { Notice } from "@components/Notice";
+import { ClockIcon, CloudDownloadIcon, CloudUploadIcon, DeleteIcon, PlusIcon } from "@components/Icons";
 import { Paragraph } from "@components/Paragraph";
 import { SettingsTab, wrapTab } from "@components/settings/tabs/BaseTab";
 import { openInviteModal } from "@utils/discord";
@@ -20,6 +20,7 @@ import { Alerts, Checkbox, GuildStore, IconUtils, React, showToast, TextInput, T
 import { openAutomationBuilder } from "./BuilderModal";
 import {
     deleteAutomation,
+    discardAutomationDraft,
     getAutomationNextRunAt,
     getAutomationSnapshot,
     loadAutomationState,
@@ -28,11 +29,12 @@ import {
     replaceAutomations,
     runAutomation,
     setAutomationEnabled,
+    setAutomationRunLimit,
     subscribeAutomationState,
     upsertAutomation,
 } from "./engine";
-import { ModelField } from "./fields";
-import { type Automation, AUTOMATIONS_UI_VERSION, createAutomation, createAutomationFile, duplicateAutomation, formatSchedule } from "./model";
+import { ModelField, NumberField } from "./fields";
+import { type Automation, createAutomation, createAutomationFile, duplicateAutomation, formatSchedule } from "./model";
 import {
     clearOpenRouterKey,
     DEFAULT_AI_SETTINGS,
@@ -41,6 +43,9 @@ import {
     setAutomationAISettings,
     setOpenRouterKey,
 } from "./openRouter";
+import { RunHistory } from "./RunHistory";
+import { createTemplate, TEMPLATE_NAMES } from "./templates";
+import { duplicateWorkflows } from "./workflow";
 
 function useAutomationState() {
     const [, forceUpdate] = React.useState(0);
@@ -91,12 +96,6 @@ function AutomationCard({ automation }: { automation: Automation; }) {
     return <article className="vc-automations-card"><div className="vc-automations-card-main"><div className="vc-automations-card-icon"><ClockIcon width={22} height={22} /></div><div className="vc-automations-card-copy"><div className="vc-automations-card-title"><strong>{automation.name || "Untitled automation"}</strong><span className={automation.enabled ? "vc-automations-status-enabled" : "vc-automations-status-disabled"}>{automation.enabled ? "Enabled" : "Disabled"}</span></div><div className="vc-automations-card-meta">{formatTrigger(automation)} · {automation.blocks.length} block{automation.blocks.length === 1 ? "" : "s"}{nextRun === null ? "" : ` · Next run: ${formatDate(nextRun)}`}</div>{automation.lastStatus && <div className="vc-automations-card-meta">Last run: {formatDate(automation.lastRunAt ?? null)} · {automation.lastStatus}</div>}</div></div><div className="vc-automations-card-actions"><Checkbox value={automation.enabled} onChange={(_event, enabled) => void setAutomationEnabled(automation.id, enabled)} /><Button size="small" variant="secondary" onClick={() => openAutomationBuilder(automation)}>Open builder</Button><Button size="small" variant="secondary" onClick={() => void run()}>Run now</Button><Button size="small" variant="secondary" onClick={() => void duplicate()}>Duplicate</Button><Button size="iconOnly" variant="dangerSecondary" aria-label={`Delete ${automation.name}`} onClick={remove}><DeleteIcon width={16} height={16} /></Button></div></article>;
 }
 
-function LogsPanel({ logs }: { logs: ReturnType<typeof getAutomationSnapshot>["logs"]; }) {
-    const runs = logs.filter(log => !log.blockId);
-    const blockLogs = logs.filter(log => log.blockId);
-    return <section className="vc-automations-panel-section"><div className="vc-automations-section-heading"><div><Heading tag="h2">Run logs</Heading><Paragraph>Recent runs and block-level failures stay on this device.</Paragraph></div></div>{logs.length === 0 ? <div className="vc-automations-muted">No automation runs yet.</div> : <div className="vc-automations-log-layout"><div className="vc-automations-log-list">{runs.map(log => <div className="vc-automations-log-row" key={log.id}><span className={`vc-automations-log-dot ${log.status}`} /><div><strong>{log.automationName}</strong><div>{log.message}</div></div><time dateTime={new Date(log.timestamp).toISOString()}>{new Date(log.timestamp).toLocaleString()}</time></div>)}</div>{blockLogs.length > 0 && <details className="vc-automations-block-log-details"><summary className="vc-automations-block-log-summary">Show {blockLogs.length} block events</summary><div className="vc-automations-log-list">{blockLogs.map(log => <div className="vc-automations-log-row" key={log.id}><span className={`vc-automations-log-dot ${log.status}`} /><div><strong>{log.blockLabel || "Block"}</strong><div>{log.message}{log.durationMs !== undefined ? ` · ${log.durationMs} ms` : ""}</div></div><time dateTime={new Date(log.timestamp).toISOString()}>{new Date(log.timestamp).toLocaleTimeString()}</time></div>)}</div></details>}</div>}</section>;
-}
-
 function GuildPanel({ guilds }: { guilds: ReturnType<typeof getAutomationSnapshot>["guilds"]; }) {
     if (guilds.length === 0) return null;
     return <section className="vc-automations-panel-section"><div className="vc-automations-section-heading"><div><Heading tag="h2">Referenced servers</Heading><Paragraph>Imported workflows show everything Discord can resolve before you run them.</Paragraph></div></div><div className="vc-automations-guild-list">{guilds.map(reference => {
@@ -116,8 +115,9 @@ async function importAutomationFile(current: ReturnType<typeof getAutomationSnap
         const now = Date.now();
         // duplicateAutomation remaps every edge onto the new block ids. Handing out fresh ids
         // without that leaves the whole graph pointing at blocks that no longer exist.
-        const copies = imported.automations.map(value => ({
-            ...duplicateAutomation(value, `${value.name} (imported)`),
+        const copies = duplicateWorkflows(imported.automations).map(value => ({
+            ...value,
+            name: `${value.name} (imported)`,
             createdAt: now,
             updatedAt: now,
         }));
@@ -179,8 +179,36 @@ function AISettingsPanel() {
 
 function AutomationsTab() {
     const current = useAutomationState();
-
-    return <SettingsTab><div className="vc-automations-page-heading"><div><Heading tag="h1">Automations v{AUTOMATIONS_UI_VERSION}</Heading><Paragraph>Build, schedule, and inspect Discord workflows without leaving the client.</Paragraph></div><ClockIcon width={42} height={42} /></div><Notice.Info className="vc-automations-info">Automations run locally as the currently signed-in account. Review imported workflows before enabling them.</Notice.Info><div className="vc-automations-toolbar"><Button onClick={() => openAutomationBuilder(createAutomation())}><PlusIcon width={16} height={16} />New automation</Button><Button variant="secondary" onClick={() => void importAutomationFile(current)}><CloudUploadIcon width={16} height={16} />Import</Button><Button variant="secondary" onClick={() => exportAutomationFile(current)}><CloudDownloadIcon width={16} height={16} />Export all</Button></div><AISettingsPanel /><section className="vc-automations-panel-section"><div className="vc-automations-section-heading"><div><Heading tag="h2">Your automations</Heading><Paragraph>Run on a schedule, at startup, or when matching Discord messages arrive.</Paragraph></div><span className="vc-automations-count">{current.automations.length}</span></div>{!current.loaded ? <div className="vc-automations-muted">Loading automations…</div> : current.automations.length === 0 ? <div className="vc-automations-empty-state"><RobotIcon width={28} height={28} /><strong>No automations yet</strong><span>Drag blocks onto the grid and connect them to build a workflow.</span></div> : <div className="vc-automations-card-list">{current.automations.map(automation => <AutomationCard key={automation.id} automation={automation} />)}</div>}</section><GuildPanel guilds={current.guilds} /><LogsPanel logs={current.logs} /></SettingsTab>;
+    const [query, setQuery] = React.useState("");
+    const matches = current.automations.filter(a => a.name.toLowerCase().includes(query.toLowerCase()));
+    return <SettingsTab>
+        <div className="vc-automations-page-heading"><div><Heading tag="h1">Automations</Heading><Paragraph>Build workflows, connect their data, and inspect each run.</Paragraph></div><ClockIcon width={42} height={42} /></div>
+        <div className="vc-automations-toolbar">
+            <Button onClick={() => openAutomationBuilder(createAutomation())}><PlusIcon width={16} height={16} />New automation</Button>
+            <Button variant="secondary" onClick={() => void importAutomationFile(current)}><CloudUploadIcon width={16} height={16} />Import</Button>
+            <Button variant="secondary" onClick={() => exportAutomationFile(current)}><CloudDownloadIcon width={16} height={16} />Export all</Button>
+        </div>
+        <section className="vc-automations-panel-section"><Heading tag="h2">Start with a template</Heading><div className="vc-ab-template-actions">{TEMPLATE_NAMES.map(name => <Button key={name} variant="secondary" onClick={() => openAutomationBuilder(createTemplate(name))}>{name}</Button>)}</div></section>
+        <section className="vc-automations-panel-section">
+            <Heading tag="h2">Your workflows</Heading>
+            <TextInput aria-label="Search workflows" placeholder="Search workflows" value={query} onChange={setQuery} />
+            {!current.loaded ? <p>Loading workflows...</p> : !matches.length ? <p>{query ? "No workflows match your search." : "Create a workflow or choose a template."}</p> : <div className="vc-automations-card-list">{matches.map(automation => <AutomationCard key={automation.id} automation={automation} />)}</div>}
+        </section>
+        {current.drafts.some(draft => !current.automations.some(a => a.id === draft.id)) && <section className="vc-automations-panel-section">
+            <Heading tag="h2">Unsaved workflows</Heading>
+            {current.drafts.filter(draft => !current.automations.some(a => a.id === draft.id) && draft.name.toLowerCase().includes(query.toLowerCase())).map(draft => <article className="vc-automations-card" key={draft.id}>
+                <strong>{draft.name || "Untitled workflow"}</strong>
+                <Button variant="secondary" onClick={() => openAutomationBuilder(draft)}>Open draft</Button>
+                <Button variant="dangerSecondary" onClick={() => void discardAutomationDraft(draft.id)}>Discard draft</Button>
+            </article>)}
+        </section>}
+        <RunHistory current={current} />
+        <details className="vc-ab-advanced"><summary>Connections and engine settings</summary>
+            <NumberField label="Maximum active runs across all workflows" value={current.globalLimit} min={1} max={32} onChange={value => void setAutomationRunLimit(value)} />
+            <AISettingsPanel />
+            <GuildPanel guilds={current.guilds} />
+        </details>
+    </SettingsTab>;
 }
 
 export default wrapTab(AutomationsTab, "Automations");

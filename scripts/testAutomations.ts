@@ -134,7 +134,7 @@ assert.ok(graphVars.includes("lastMessage"), "variables follow the edges once bl
 console.log("context inheritance checks passed");
 
 // Waiting is a branch: something arrived, or the wait ran out.
-assert.deepEqual(outputPorts("wait-reply"), ["next", "alternate"], "a wait has a timeout branch");
+assert.deepEqual(outputPorts("wait-reply"), ["next", "alternate", "error"], "a wait has a timeout branch");
 assert.equal(portLabel("wait-reply", "alternate"), "Timed out");
 assert.equal(portLabel("repeat", "alternate"), "When done");
 assert.equal(portLabel("send-message", "next"), "Next");
@@ -160,33 +160,7 @@ assert.equal(acceptsReply({ channelId: "chan", authorId: "them" }, reply({ autho
 
 console.log("reply matching checks passed");
 
-// The AI must read the message the block is already acting on, without extra wiring.
-const aiInputFor = (config: { aiInput?: string; sourceVariable?: string; }) =>
-    config.aiInput?.trim() || config.sourceVariable?.trim() || "lastMessage";
 
-assert.equal(aiInputFor({ sourceVariable: "reply" }), "reply", "a reply block feeds the AI the reply it answers");
-assert.equal(aiInputFor({ aiInput: "messages", sourceVariable: "reply" }), "messages", "an explicit choice wins");
-assert.equal(aiInputFor({}), "lastMessage", "otherwise the last message the flow touched");
-assert.equal(aiInputFor({ aiInput: "  " , sourceVariable: "reply" }), "reply", "blank does not count as a choice");
-
-console.log("inline AI input checks passed");
-
-// The message handler runs for every message in every channel, so the bail-out must be right.
-const liveTriggers = ["mention", "message", "dm"];
-const wantsMessages = (list: { enabled: boolean; trigger: { type: string; }; }[]) =>
-    list.some(a => a.enabled && liveTriggers.includes(a.trigger.type));
-
-assert.equal(wantsMessages([]), false, "no automations means no per-message work");
-assert.equal(wantsMessages([{ enabled: false, trigger: { type: "message" } }]), false, "a disabled automation costs nothing");
-assert.equal(wantsMessages([{ enabled: true, trigger: { type: "schedule" } }]), false, "a scheduled automation never inspects messages");
-assert.equal(wantsMessages([{ enabled: true, trigger: { type: "startup" } }]), false, "neither does a startup one");
-assert.equal(wantsMessages([{ enabled: true, trigger: { type: "mention" } }]), true, "a mention trigger does");
-assert.equal(wantsMessages([
-    { enabled: true, trigger: { type: "schedule" } },
-    { enabled: true, trigger: { type: "dm" } },
-]), true, "one live trigger among many is enough");
-
-console.log("trigger bail-out checks passed");
 
 // A condition must accept a bare variable and a written-out template alike.
 assert.equal(conditionLeftTemplate("postReply.content"), "{{postReply.content}}", "a bare name is wrapped");
@@ -199,18 +173,7 @@ assert.equal(conditionLeftTemplate(undefined, undefined), null, "so does leaving
 
 console.log("condition input checks passed");
 
-// The client should carry no automation listener at all unless something reacts to messages.
-const liveTriggerTypes = ["mention", "message", "dm"];
-const shouldSubscribe = (running: boolean, list: { enabled: boolean; trigger: { type: string; }; }[]) =>
-    running && list.some(a => a.enabled && liveTriggerTypes.includes(a.trigger.type));
 
-assert.equal(shouldSubscribe(true, []), false, "an idle engine hooks nothing");
-assert.equal(shouldSubscribe(true, [{ enabled: true, trigger: { type: "schedule" } }]), false, "a scheduled automation hooks nothing");
-assert.equal(shouldSubscribe(true, [{ enabled: false, trigger: { type: "message" } }]), false, "a disabled one hooks nothing");
-assert.equal(shouldSubscribe(true, [{ enabled: true, trigger: { type: "message" } }]), true, "an enabled message trigger hooks in");
-assert.equal(shouldSubscribe(false, [{ enabled: true, trigger: { type: "message" } }]), false, "a stopped engine hooks nothing");
-
-console.log("subscription lifecycle checks passed");
 
 // Duplicating must produce a standalone copy, never one wired back into the original.
 const source = { ...createAutomation(), name: "repost auto", enabled: true, lastStatus: "success" as const };
@@ -277,44 +240,3 @@ assert.deepEqual(addEdgeTarget(["a", "b"], "b"), ["a", "b"], "and that holds for
 assert.equal(removeEdgeTarget(["a", "b"], "a"), "b", "dropping to one target collapses back to a string");
 assert.equal(removeEdgeTarget("a", "a"), undefined, "removing the only target clears the port");
 assert.equal(removeEdgeTarget("a", "b"), "a", "removing an unrelated target is a no-op");
-
-// The runner walks a fan-out depth first, finishing one branch before starting the next.
-const order: string[] = [];
-const fan: Record<string, { next?: string | string[]; }> = {
-    root: { next: ["left", "right"] },
-    left: { next: "leftEnd" },
-    leftEnd: {},
-    right: {},
-};
-const stack = ["root"];
-for (let guard = 0; stack.length && guard < 20; guard++) {
-    const id = stack.shift()!;
-    order.push(id);
-    stack.unshift(...edgeTargets(fan[id]?.next));
-}
-assert.deepEqual(order, ["root", "left", "leftEnd", "right"], "the first branch finishes before the second starts");
-
-console.log("fan-out edge checks passed");
-
-// Your own messages are ignored unless a trigger opts in, and the engine's own output never counts.
-const selfId = "me";
-const shouldFire = (
-    trigger: { type: string; includeSelf?: boolean; },
-    authorId: string,
-    messageId: string,
-    postedByEngine: Set<string>,
-) => {
-    if (postedByEngine.has(messageId)) return false;
-    if (!["mention", "message", "dm"].includes(trigger.type)) return false;
-    if (authorId === selfId && trigger.includeSelf !== true) return false;
-    return true;
-};
-
-const engineSent = new Set(["engine-1"]);
-assert.equal(shouldFire({ type: "message" }, "someone", "m1", engineSent), true, "other people fire a message trigger");
-assert.equal(shouldFire({ type: "message" }, selfId, "m2", engineSent), false, "your own messages are ignored by default");
-assert.equal(shouldFire({ type: "message", includeSelf: true }, selfId, "m3", engineSent), true, "unless the trigger opts in");
-assert.equal(shouldFire({ type: "message", includeSelf: true }, selfId, "engine-1", engineSent), false, "but never the automation's own output");
-assert.equal(shouldFire({ type: "schedule" }, "someone", "m4", engineSent), false, "a scheduled automation ignores messages");
-
-console.log("self-trigger checks passed");

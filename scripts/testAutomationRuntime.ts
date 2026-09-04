@@ -177,6 +177,15 @@ async function main() {
     const isolatedEnv = environment([isolated]);
     const parallel = await Promise.all([1, 2, 3].map(input => executeWorkflow(isolated, { input }, isolatedEnv.env)));
     assert.deepEqual(parallel, [1, 2, 3]);
+    const stoppedChild = workflow(createAutomationBlock("stop-run"));
+    const callStopped = createAutomationBlock("call-workflow");
+    callStopped.config.workflowId = stoppedChild.id;
+    const forbiddenAfterStop = createAutomationBlock("fail");
+    callStopped.next = forbiddenAfterStop.id;
+    const stoppedParent = workflow(callStopped, forbiddenAfterStop);
+    const stoppedEnvironment = environment([stoppedParent, stoppedChild]);
+    await executeWorkflow(stoppedParent, {}, stoppedEnvironment.env);
+    assert.ok(!stoppedEnvironment.events.some(event => event.blockId === forbiddenAfterStop.id));
     let queueClock = 0;
     const cooling = createRunQueue(() => {}, () => queueClock);
     const cooled = { ...createAutomation(), cooldownSeconds: 100 };

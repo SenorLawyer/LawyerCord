@@ -73,6 +73,7 @@ export function delay(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 interface Budget {
+    stopped?: boolean;
     remaining: number;
     deadline: number;
 }
@@ -106,7 +107,7 @@ async function run(workflow: Automation, variables: Record<string, unknown>, env
     const loops: { id: string; index: number; items: unknown[]; pendingLength: number; }[] = [];
     variables.blocks = {};
     let yieldedAt = env.now();
-    while (pending.length) {
+    while (pending.length && !budget.stopped) {
         checkCancelled(context.signal);
         if (env.now() >= budget.deadline) throw new Error("Run time limit reached.");
         if (budget.remaining-- <= 0) throw new Error("Block step limit reached. Check the workflow for an endless loop.");
@@ -152,7 +153,7 @@ async function run(workflow: Automation, variables: Record<string, unknown>, env
                 pending.length = loop.pendingLength;
                 targets = edgeTargets(byId.get(loop.id)?.alternate);
             } else if (block.type === "stop") targets = [];
-            else if (block.type === "stop-run") { pending.length = 0; targets = []; }
+            else if (block.type === "stop-run") { budget.stopped = true; pending.length = 0; targets = []; }
             else if (block.type === "return") {
                 value = input();
                 emit({ status: "success", message: "Value returned.", durationMs: env.now() - started });

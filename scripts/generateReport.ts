@@ -20,20 +20,17 @@
 /// <reference types="../src/modules" />
 
 import { createHmac } from "crypto";
-import { readFileSync, writeFileSync } from "fs";
-import { join } from "path";
+import { readFileSync } from "fs";
 import pup, { JSHandle } from "puppeteer-core";
 
-const logStderr = (...data: any[]) => console.error(`${CANARY ? "CANARY" : "STABLE"} ---`, ...data);
+const CANARY = process.env.USE_CANARY === "true";
+const logStderr = (...data: unknown[]) => console.error(`${CANARY ? "CANARY" : "STABLE"} ---`, ...data);
 
-for (const variable of ["CHROMIUM_BIN"]) {
-    if (!process.env[variable]) {
-        logStderr(`Missing environment variable ${variable}`);
-        process.exit(1);
-    }
+if (!process.env.CHROMIUM_BIN) {
+    logStderr("Missing environment variable CHROMIUM_BIN");
+    process.exit(1);
 }
 
-const CANARY = process.env.USE_CANARY === "true";
 let metaData = {
     buildNumber: "Unknown Build Number",
     buildHash: "Unknown Build Hash"

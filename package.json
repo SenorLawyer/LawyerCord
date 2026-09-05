@@ -1,7 +1,7 @@
 {
     "name": "lawyercord",
     "private": true,
-    "version": "2.0.1.0",
+    "version": "2.1.0.0",
     "description": "LawyerCord, a Discord client mod",
     "license": "GPL-3.0-or-later",
     "author": "LawyerCord contributors",
@@ -41,7 +41,7 @@
         "testInstallerStaleMarkerRepair": "node scripts/testInstallerStaleMarkerRepair.mjs",
         "testVoiceMessageTranscriber": "tsx scripts/testVoiceMessageTranscriber.ts",
         "testDiscordMcp": "tsx scripts/testDiscordMcp.ts",
-        "testAutomations": "tsx scripts/testAutomations.ts && tsx scripts/testAutomationRuntime.ts && node scripts/benchmarkAutomations.mjs --storage-test",
+        "testAutomations": "tsx scripts/testAutomations.ts && tsx scripts/testAutomationRuntime.ts && tsx scripts/testAutomationLayout.ts && tsx scripts/testAutomationSystem.ts && node scripts/testAutomationNative.mjs && node scripts/benchmarkAutomations.mjs --storage-test",
         "testReleaseArtifactAudit": "tsx scripts/testReleaseArtifactAudit.ts",
         "testMessageEventsPriority": "tsx scripts/testMessageEventsPriority.ts",
         "testSecureMessaging": "tsx scripts/testSecureMessaging.ts",

@@ -6,15 +6,15 @@
 
 // Bump this on every change that gets injected locally, so the settings tab shows whether the rebuild landed.
 import { EXTENDED_BLOCKS, EXTENDED_DEFAULTS, EXTENDED_TYPES } from "./catalog";
+import { SYSTEM_TRIGGER_TYPES } from "./system";
 
-export const AUTOMATIONS_UI_VERSION = 28;
-
+export const LAYOUT_VERSION = 2;
 export const AUTOMATION_FILE_FORMAT = "lawyercord-automation";
 export const AUTOMATION_FILE_VERSION = 2;
 
 export const AUTOMATION_UNITS = ["minutes", "hours", "days", "weeks", "months", "years"] as const;
 export type AutomationUnit = typeof AUTOMATION_UNITS[number];
-export const AUTOMATION_TRIGGER_TYPES = ["schedule", "mention", "message", "dm", "startup", "message-edit", "message-delete", "reaction-add", "reaction-remove", "voice-join", "voice-leave", "voice-move"] as const;
+export const AUTOMATION_TRIGGER_TYPES = ["schedule", "mention", "message", "dm", "startup", "message-edit", "message-delete", "reaction-add", "reaction-remove", "voice-join", "voice-leave", "voice-move", ...SYSTEM_TRIGGER_TYPES] as const;
 export type AutomationTriggerType = typeof AUTOMATION_TRIGGER_TYPES[number];
 
 export const AUTOMATION_BLOCK_TYPES = [
@@ -89,10 +89,20 @@ export const AUTOMATION_BLOCK_TYPES = [
     "fail",
     "log",
     "note",
+    "list-processes",
+    "check-process",
+    "wait-process",
+    "run-program",
+    "read-file",
+    "open-link",
+    "roblox-current-game",
+    "roblox-game-info",
+    "codex-last-turn",
+    "codex-sessions",
 ] as const;
 export type AutomationBlockType = typeof AUTOMATION_BLOCK_TYPES[number];
 
-export const AUTOMATION_BLOCK_CATEGORIES = ["messages", "commands", "client", "spotify", "data", "ai", "waits", "interactions", "flow", "variables"] as const;
+export const AUTOMATION_BLOCK_CATEGORIES = ["messages", "commands", "client", "spotify", "data", "ai", "waits", "interactions", "flow", "variables", "computer", "roblox", "codex"] as const;
 export type AutomationBlockCategory = typeof AUTOMATION_BLOCK_CATEGORIES[number];
 
 export interface BlockDefinition {
@@ -154,6 +164,16 @@ export const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
     { type: "read-components", label: "List buttons and menus", description: "Save every button and menu on a message, with its row and label.", category: "interactions" },
     { type: "read-embed", label: "Read embed", description: "Save an embed's title, text, fields and images.", category: "data" },
     { type: "delay", label: "Wait", description: "Pause for a precise amount of time.", category: "waits" },
+    { type: "list-processes", label: "List running programs", description: "Save every program running on this computer.", category: "computer" },
+    { type: "check-process", label: "Is a program running?", description: "Branch on whether a program is open right now.", category: "computer" },
+    { type: "wait-process", label: "Wait for a program", description: "Pause until a program starts or closes.", category: "computer" },
+    { type: "run-program", label: "Run a program", description: "Start a program or script and save what it prints.", category: "computer" },
+    { type: "read-file", label: "Read a file", description: "Save the text of a file in your user folder.", category: "computer" },
+    { type: "open-link", label: "Open a link", description: "Open an https link in your browser.", category: "computer" },
+    { type: "roblox-current-game", label: "Current Roblox game", description: "Save the game you are playing, with players, visits and icon.", category: "roblox" },
+    { type: "roblox-game-info", label: "Look up a Roblox game", description: "Save a game's details from its place or universe ID.", category: "roblox" },
+    { type: "codex-last-turn", label: "Last Codex result", description: "Save what Codex last finished, with its closing message.", category: "codex" },
+    { type: "codex-sessions", label: "Recent Codex sessions", description: "Save the latest Codex sessions and their projects.", category: "codex" },
     { type: "condition", label: "If", description: "Start a conditional branch.", category: "flow" },
     { type: "else", label: "Else", description: "Run when the matching If is false.", category: "flow" },
     { type: "end-if", label: "End If", description: "Close an If and Else branch.", category: "flow" },
@@ -197,6 +217,8 @@ export interface AutomationTrigger {
     type: AutomationTriggerType;
     /** Let your own messages fire this trigger, for command-word style automations. */
     includeSelf?: boolean;
+    /** Codex triggers: also fire for helper agents Codex spawns, not just the main conversation. */
+    includeSubagents?: boolean;
     /** The server the chosen channel belongs to, so the picker can show it again. */
     guildId?: string;
     channelId?: string;
@@ -396,6 +418,8 @@ export interface AutomationBlock {
 
 export interface Automation {
     schemaVersion?: 2;
+    /** Positions laid out for the current node geometry. Older layouts are re-arranged when opened. */
+    layoutVersion?: number;
     entryId?: string;
     runMode?: "queue" | "skip" | "parallel";
     concurrency?: number;
@@ -427,11 +451,21 @@ const BLOCK_VARIABLE_FIELDS: Partial<Record<AutomationBlockType, string[]>> = {
     "list-connections": ["0.type", "0.name", "0.id", "0.verified"],
     "read-components": ["0.type", "0.label", "0.custom_id"],
     "search-messages": ["0.id", "0.content", "0.author.id"],
+    "roblox-current-game": ["game.name", "game.playing", "game.visits", "game.url", "game.icon", "game.placeId", "game.creator", "duration"],
+    "roblox-game-info": ["name", "playing", "visits", "url", "icon", "placeId", "universeId", "creator"],
+    "codex-last-turn": ["project", "cwd", "message", "question", "duration", "status"],
+    "codex-sessions": ["0.project", "0.cwd", "0.originator"],
+    "list-processes": ["0.name", "0.pid", "0.memoryKb"],
+    "run-program": ["stdout", "stderr", "code"],
 };
 
 export function getAutomationVariableNames(automation: Automation, beforeBlockId?: string): string[] {
     const names = new Set<string>();
-    if (automation.trigger.type !== "schedule" && automation.trigger.type !== "startup") {
+    const { type } = automation.trigger;
+    if (type.startsWith("roblox-")) for (const name of ["game", "game.name", "game.playing", "game.visits", "game.url", "game.icon", "game.placeId", "game.creator", "joinedAt", ...(type === "roblox-leave" ? ["duration", "durationMs"] : [])]) names.add(name);
+    if (type.startsWith("process-")) { names.add("process.name"); names.add("process.pid"); }
+    if (type.startsWith("codex-")) for (const name of ["codex", "codex.project", "codex.cwd", "codex.message", "codex.question", "codex.duration", "codex.durationMs"]) names.add(name);
+    if (type !== "schedule" && type !== "startup" && !SYSTEM_TRIGGER_TYPES.some(candidate => candidate === type)) {
         names.add("triggerMessage");
         names.add("triggerMessage.id");
         names.add("triggerMessage.channel_id");
@@ -687,6 +721,36 @@ export function createAutomationBlock(type: AutomationBlockType): AutomationBloc
         case "delay":
             config = { durationSeconds: 1 };
             break;
+        case "list-processes":
+            config = { variable: "processes" };
+            break;
+        case "check-process":
+            config = { name: "" };
+            break;
+        case "wait-process":
+            config = { name: "", value: "start", timeoutSeconds: 300 };
+            break;
+        case "run-program":
+            config = { value: "", content: "", timeoutSeconds: 60, variable: "output" };
+            break;
+        case "read-file":
+            config = { value: "", limit: 200_000, variable: "fileText" };
+            break;
+        case "open-link":
+            config = { value: "https://" };
+            break;
+        case "roblox-current-game":
+            config = { variable: "game" };
+            break;
+        case "roblox-game-info":
+            config = { value: "", variable: "game" };
+            break;
+        case "codex-last-turn":
+            config = { variable: "codex" };
+            break;
+        case "codex-sessions":
+            config = { limit: 10, variable: "sessions" };
+            break;
         case "set-variable":
             config = { variable: "value", value: "" };
             break;
@@ -754,6 +818,7 @@ export function createAutomation(): Automation {
         name: "New automation",
         enabled: false,
         schemaVersion: 2,
+        layoutVersion: LAYOUT_VERSION,
         runMode: "queue",
         concurrency: 1,
         queueLimit: 50,
@@ -871,7 +936,7 @@ export function findStartRepeat(blocks: AutomationBlock[], end: number): number 
 }
 
 /** Blocks with two outputs. Everything else has one, and stop/fail have none. */
-export const BRANCH_TYPES: AutomationBlockType[] = ["condition", "chance", "repeat", "for-each", "switch", "wait-reply", "wait-dm", "wait-reaction"];
+export const BRANCH_TYPES: AutomationBlockType[] = ["condition", "chance", "repeat", "for-each", "switch", "wait-reply", "wait-dm", "wait-reaction", "check-process", "wait-process"];
 /** Structural markers from the old linear format. Converted away by migrateToGraph. */
 export const MARKER_TYPES: AutomationBlockType[] = ["else", "end-if", "end-repeat"];
 export const TERMINAL_TYPES: AutomationBlockType[] = ["stop", "stop-run", "return", "break-loop"];
@@ -889,7 +954,8 @@ export function outputPorts(type: AutomationBlockType): AutomationPort[] {
 export function portLabel(type: AutomationBlockType, port: AutomationPort): string {
     if (port === "error") return "On error";
     if (type === "repeat" || type === "for-each") return port === "next" ? "Each pass" : "When done";
-    if (type === "wait-reply" || type === "wait-dm" || type === "wait-reaction") return port === "next" ? "Got one" : "Timed out";
+    if (type === "wait-reply" || type === "wait-dm" || type === "wait-reaction" || type === "wait-process") return port === "next" ? "Got one" : "Timed out";
+    if (type === "check-process") return port === "next" ? "Running" : "Not running";
     if (BRANCH_TYPES.includes(type)) return port === "next" ? "Yes" : "No";
     return "Next";
 }

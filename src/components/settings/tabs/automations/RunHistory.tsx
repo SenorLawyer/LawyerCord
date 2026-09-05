@@ -5,8 +5,7 @@
  */
 
 import { Button } from "@components/Button";
-import { Heading } from "@components/Heading";
-import { React } from "@webpack/common";
+import { moment, React } from "@webpack/common";
 
 import { type AutomationSnapshot, cancelAutomation, getAutomationSnapshot, subscribeAutomationState } from "./engine";
 
@@ -14,36 +13,44 @@ export function WorkflowRunHistory({ workflowId }: { workflowId: string; }) {
     const current = React.useSyncExternalStore(subscribeAutomationState, getAutomationSnapshot);
     const logs = current.logs.filter(log => log.automationId === workflowId);
     const runs = current.runs.filter(run => run.workflowId === workflowId);
-    return <details className="vc-ab-advanced">
-        <summary>{runs.length ? `${runs.length} active or queued runs` : logs[0]?.message ?? "No runs yet"}</summary>
-        <RunHistory current={{ ...current, logs, runs }} />
-    </details>;
+    return <RunHistory current={{ ...current, logs, runs }} compact />;
 }
 
-export function RunHistory({ current }: { current: AutomationSnapshot; }) {
+export function RunHistory({ current, compact }: { current: AutomationSnapshot; compact?: boolean; }) {
     const runs = new Map<string, AutomationSnapshot["logs"]>();
     for (const log of current.logs) {
         const id = log.runId ?? "legacy";
-        const entries = runs.get(id) ?? [];
-        entries.push(log);
-        runs.set(id, entries);
+        runs.set(id, [...runs.get(id) ?? [], log]);
     }
-    return <section className="vc-automations-panel-section">
-        <Heading tag="h2">Run history</Heading>
-        {current.runs.map(run => <div className="vc-ab-connection-target" key={run.id}>
-            <span>{current.automations.find(a => a.id === run.workflowId)?.name} · {run.status}</span>
-            <Button size="small" variant="secondary" onClick={() => cancelAutomation(run.workflowId)}>Cancel workflow runs</Button>
+    return <div className={`vc-automations-runs${compact ? " compact" : ""}`}>
+        {current.runs.map(run => <div className="vc-automations-run-live" key={run.id}>
+            <span className="vc-automations-dot running" />
+            <span>{current.automations.find(a => a.id === run.workflowId)?.name ?? "Automation"} is {run.status === "queued" ? "waiting to run" : "running"}</span>
+            <Button size="small" variant="secondary" onClick={() => cancelAutomation(run.workflowId)}>Stop</Button>
         </div>)}
-        {!runs.size && <p>No runs yet. Use Test in the editor to try a workflow with sample data.</p>}
-        {[...runs].slice(0, 100).map(([id, entries]) => <details className="vc-ab-advanced" key={id}>
-            <summary>{entries[0].automationName} · {entries[0].message} · {new Date(entries[0].timestamp).toLocaleString()}</summary>
-            {entries.toReversed().map(event => <article className="vc-ab-step" key={event.id}>
-                <strong>{event.blockLabel ?? "Run"} · {event.status}{event.port ? ` · ${event.port}` : ""}</strong>
-                <span>{event.message}{event.durationMs !== undefined ? ` · ${event.durationMs} ms` : ""}</span>
-                {event.usage && <span>AI usage: {event.usage}</span>}
-                {event.inputPreview && <details><summary>Input preview, this session only</summary><pre className="vc-ab-output-preview">{event.inputPreview}</pre></details>}
-                {event.preview && <details><summary>Output preview, this session only</summary><pre className="vc-ab-output-preview">{event.preview}</pre></details>}
-            </article>)}
-        </details>)}
-    </section>;
+        {!runs.size && !current.runs.length && <p className="vc-automations-empty">Nothing has run yet. Open an automation and press Test to try it with sample data.</p>}
+        {[...runs].slice(0, 100).map(([id, entries]) => {
+            const first = entries[0];
+            const status = entries.some(entry => entry.status === "failure") ? "failure" : first.status;
+            return <details className="vc-automations-run" key={id}>
+                <summary>
+                    <span className={`vc-automations-dot ${status}`} />
+                    <span className="vc-automations-run-title"><strong>{first.automationName}</strong><span>{first.message}</span></span>
+                    <time title={new Date(first.timestamp).toLocaleString()}>{moment(first.timestamp).fromNow()}</time>
+                </summary>
+                <ol className="vc-automations-run-steps">
+                    {entries.toReversed().map(event => <li className={`vc-automations-run-step ${event.status}`} key={event.id}>
+                        <span className={`vc-automations-dot ${event.status}`} />
+                        <div>
+                            <strong>{event.blockLabel ?? "Run"}{event.port ? ` → ${event.port}` : ""}</strong>
+                            <span>{event.message}{event.durationMs !== undefined ? ` · ${event.durationMs} ms` : ""}</span>
+                            {event.usage && <span>AI usage: {event.usage}</span>}
+                            {event.inputPreview && <details><summary>What went in</summary><pre>{event.inputPreview}</pre></details>}
+                            {event.preview && <details><summary>What came out</summary><pre>{event.preview}</pre></details>}
+                        </div>
+                    </li>)}
+                </ol>
+            </details>;
+        })}
+    </div>;
 }

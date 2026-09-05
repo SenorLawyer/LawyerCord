@@ -5,16 +5,15 @@
  */
 
 import { Button } from "@components/Button";
-import { Heading } from "@components/Heading";
+import { FormSwitch } from "@components/FormSwitch";
 import { DeleteIcon } from "@components/Icons";
-import { Paragraph } from "@components/Paragraph";
 import { copyWithToast } from "@utils/discord";
 import { openModal } from "@utils/modal";
 import type { ApplicationCommandOption } from "@vencord/discord-types";
 import { ChannelStore, IconUtils, Parser, React, UserStore } from "@webpack/common";
 
-import { AdvancedBlockInspector, RuntimeInspector } from "./AdvancedInspector";
-import { BLOCK_ICONS, blockDefinition } from "./blocks";
+import { BlockAdvanced, ExtendedFields, WorkflowAdvanced } from "./AdvancedInspector";
+import { BLOCK_ICONS, blockDefinition, TRIGGER_LABELS } from "./blocks";
 import { getAvailableCommands, requestCommandIndex } from "./engine";
 import {
     AreaField,
@@ -28,6 +27,7 @@ import {
     UserField,
 } from "./fields";
 import {
+    addEdgeTarget,
     type Automation,
     AUTOMATION_TRIGGER_TYPES,
     AUTOMATION_UNITS,
@@ -35,6 +35,7 @@ import {
     type AutomationBlockConfig,
     type AutomationCommandOptionValue,
     type AutomationComponent,
+    type AutomationPort,
     type AutomationTriggerType,
     type AutomationUnit,
     edgeTargets,
@@ -45,8 +46,12 @@ import {
     outputPorts,
     parseComponents,
     portLabel,
+    removeEdgeTarget,
     toDateTimeLocal,
 } from "./model";
+import { WorkflowRunHistory } from "./RunHistory";
+import { schedulePreview, validateSchedule } from "./scheduling";
+import { SYSTEM_TRIGGER_TYPES } from "./system";
 
 function isUnit(value: unknown): value is AutomationUnit {
     return typeof value === "string" && AUTOMATION_UNITS.some(unit => unit === value);
@@ -81,6 +86,9 @@ function legacyCommandOptions(value: string | undefined): AutomationCommandOptio
         return [];
     }
 }
+
+const MATCH_OPTIONS = [{ label: "Contains", value: "contains" }, { label: "Is exactly", value: "exact" }, { label: "Matches a regular expression", value: "regex" }];
+const COMPARE_OPTIONS = [{ label: "Is", value: "equals" }, { label: "Is not", value: "not-equals" }, { label: "Contains", value: "contains" }, { label: "Is greater than", value: "greater" }, { label: "Is less than", value: "less" }, { label: "Matches a regular expression", value: "regex" }];
 
 function ModalFieldsEditor({ fields, onChange }: { fields: AutomationComponent[]; onChange(fields: AutomationComponent[]): void; }) {
     const add = () => onChange([...fields, { type: 1, components: [{ type: 4, style: 1, label: "Field", custom_id: crypto.randomUUID(), required: true }] }]);
@@ -163,19 +171,23 @@ function CommandEditor({ block, onChange }: { block: AutomationBlock; onChange(p
 
 function AiEditor({ block, onChange }: { block: AutomationBlock; onChange(patch: Partial<AutomationBlockConfig>): void; }) {
     const { config } = block;
+    const overriding = config.maxTokens !== undefined || config.temperature !== undefined || config.timeoutSeconds !== undefined;
     return <>
-        <TextField label="Input variable" value={config.sourceVariable ?? ""} description="Optional. Arrays and objects are converted to JSON." onChange={sourceVariable => onChange({ sourceVariable })} />
+        <TextField label="What the AI reads" value={config.sourceVariable ?? ""} description="A variable name. Optional. Lists and objects are turned into JSON." placeholder="messages" onChange={sourceVariable => onChange({ sourceVariable })} />
         <AreaField label={block.type === "ai-prompt" ? "Prompt" : "Extra instructions"} value={config.content ?? ""} onChange={content => onChange({ content })} />
-        {block.type === "ai-classify" && <TextField label="Allowed labels" value={config.labels ?? ""} description="Comma-separated. The result must be one label." onChange={labels => onChange({ labels })} />}
-        <ModelField allowDefault value={config.model ?? ""} onChange={model => onChange({ model })} />
-        <AreaField label="System instructions" value={config.systemPrompt ?? ""} description="Optional. Leave empty for the block's built-in instructions." rows={3} onChange={systemPrompt => onChange({ systemPrompt })} />
-        <CheckField label="Override workflow generation settings" value={config.maxTokens !== undefined || config.temperature !== undefined || config.timeoutSeconds !== undefined} onChange={override => onChange({ maxTokens: override ? 800 : undefined, temperature: override ? 0.2 : undefined, timeoutSeconds: override ? 60 : undefined })} />
-        {(config.maxTokens !== undefined || config.temperature !== undefined || config.timeoutSeconds !== undefined) && <div className="vc-ab-grid">
-            <NumberField label="Max output tokens" value={config.maxTokens ?? 800} min={16} max={4_096} onChange={maxTokens => onChange({ maxTokens })} />
-            <NumberField label="Temperature" value={config.temperature ?? 0.2} min={0} max={2} onChange={temperature => onChange({ temperature })} />
-            <NumberField label="Timeout in seconds" value={config.timeoutSeconds ?? 60} min={1} max={300} onChange={timeoutSeconds => onChange({ timeoutSeconds })} />
-        </div>}
-        <TextField label="Save result as" value={config.variable ?? ""} onChange={variable => onChange({ variable })} />
+        {block.type === "ai-classify" && <TextField label="Allowed labels" value={config.labels ?? ""} description="Separate them with commas. The answer is always one of these." onChange={labels => onChange({ labels })} />}
+        <TextField label="Save the answer as" value={config.variable ?? ""} onChange={variable => onChange({ variable })} />
+        <details className="vc-ab-more">
+            <summary>Model and tuning</summary>
+            <ModelField allowDefault value={config.model ?? ""} onChange={model => onChange({ model })} />
+            <AreaField label="System instructions" value={config.systemPrompt ?? ""} description="Optional. Leave empty for the block's built-in instructions." rows={3} onChange={systemPrompt => onChange({ systemPrompt })} />
+            <CheckField label="Override the automation's AI settings" value={overriding} onChange={override => onChange({ maxTokens: override ? 800 : undefined, temperature: override ? 0.2 : undefined, timeoutSeconds: override ? 60 : undefined })} />
+            {overriding && <div className="vc-ab-grid">
+                <NumberField label="Max output tokens" value={config.maxTokens ?? 800} min={16} max={4_096} onChange={maxTokens => onChange({ maxTokens })} />
+                <NumberField label="Temperature" value={config.temperature ?? 0.2} min={0} max={2} onChange={temperature => onChange({ temperature })} />
+                <NumberField label="Timeout in seconds" value={config.timeoutSeconds ?? 60} min={1} max={300} onChange={timeoutSeconds => onChange({ timeoutSeconds })} />
+            </div>}
+        </details>
     </>;
 }
 
@@ -208,7 +220,7 @@ function PreviewBody({ block }: { block: AutomationBlock; }) {
                 </div>
             </div>
         </div>
-        <span className="vc-ab-preview-note">Posts to {where} as {name}. Markdown, mentions and emoji render exactly as Discord shows them. Highlighted names are variables filled in when the block runs.</span>
+        <span className="vc-ab-preview-note">Posts to {where} as {name}. Highlighted names are filled in when it runs.</span>
     </div>;
 }
 
@@ -219,14 +231,14 @@ function MessageBody({ block, onChange, label = "Message" }: { block: Automation
         <AreaField
             label={config.aiEnabled ? "Tell the AI what to write" : label}
             description={config.aiEnabled
-                ? "Instructions only, such as \"thank them if they agreed, otherwise apologise\". Do not paste the earlier message here. The AI reads that from the variable below, and text in this box tends to come back in the reply."
+                ? "Instructions only, such as \"thank them if they agreed, otherwise apologise\". The AI reads the earlier message on its own."
                 : undefined}
             value={config.content ?? ""}
             onChange={content => onChange({ content })}
         />
         <CheckField
-            label="Write it with AI"
-            description="Uses your OpenRouter connection instead of sending this text as-is."
+            label="Let AI write it"
+            description="Uses your OpenRouter connection instead of sending this text as it is."
             value={config.aiEnabled === true}
             onChange={aiEnabled => onChange({ aiEnabled })}
         />
@@ -234,14 +246,14 @@ function MessageBody({ block, onChange, label = "Message" }: { block: Automation
             <ModelField allowDefault value={config.model ?? ""} onChange={model => onChange({ model })} />
             <TextField
                 label="What the AI reads"
-                description={`Leave empty to use ${config.sourceVariable?.trim() || "lastMessage"}, the message this block already works on. Set it to read something else instead.`}
+                description={`Leave empty to use ${config.sourceVariable?.trim() || "lastMessage"}, the message this block already works on.`}
                 placeholder={config.sourceVariable?.trim() || "lastMessage"}
                 value={config.aiInput ?? ""}
                 onChange={aiInput => onChange({ aiInput })}
             />
         </>}
         <div className="vc-ab-grid">
-            <CheckField label="Allow mentions" description="Off means pings render but nobody is notified." value={config.allowMentions === true} onChange={allowMentions => onChange({ allowMentions })} />
+            <CheckField label="Allow pings" description="Off means mentions show but nobody gets notified." value={config.allowMentions === true} onChange={allowMentions => onChange({ allowMentions })} />
             <CheckField label="Silent message" description="Sends without a notification sound." value={config.silent === true} onChange={silent => onChange({ silent })} />
         </div>
     </div>;
@@ -267,13 +279,13 @@ function MessagePreview({ block }: { block: AutomationBlock; }) {
 
 function VariablesPanel({ automation, beforeBlockId }: { automation: Automation; beforeBlockId?: string; }) {
     const variables = getAutomationVariableNames(automation, beforeBlockId);
-    return <section className="vc-ab-variables">
-        <strong>Available variables</strong>
-        <span>Use these in any text field. Click one to copy it.</span>
+    return <details className="vc-ab-more">
+        <summary>Values you can use{variables.length ? ` (${variables.length})` : ""}</summary>
+        <span className="vc-ab-field-description">Type these inside any text box, curly braces included. Click one to copy it.</span>
         {variables.length
-            ? <div className="vc-ab-variable-list">{variables.map(variable => <button type="button" className="vc-ab-variable" key={variable} onClick={() => copyWithToast(`{{${variable}}}`, "Variable copied.")}><code>{`{{${variable}}}`}</code></button>)}</div>
-            : <span>No earlier blocks create variables yet.</span>}
-    </section>;
+            ? <div className="vc-ab-variable-list">{variables.map(variable => <button type="button" className="vc-ab-variable" key={variable} onClick={() => copyWithToast(`{{${variable}}}`, "Copied.")}><code>{`{{${variable}}}`}</code></button>)}</div>
+            : <span className="vc-ab-field-description">No earlier block saves a value yet.</span>}
+    </details>;
 }
 
 function Inherited({ title, detail, onOverride }: { title: string; detail: string; onOverride(): void; }) {
@@ -283,33 +295,62 @@ function Inherited({ title, detail, onOverride }: { title: string; detail: strin
     </div>;
 }
 
-function OutputSummary({ block, automation }: { block: AutomationBlock; automation: Automation; }) {
+interface ConnectionsProps {
+    automation: Automation;
+    block: AutomationBlock;
+    onChange(automation: Automation): void;
+    onSelect(id: string): void;
+    onInsert(port: AutomationPort): void;
+}
+
+function ConnectionsPanel({ automation, block, onChange, onSelect, onInsert }: ConnectionsProps) {
     const ports = outputPorts(block.type);
-    if (!ports.length) return null;
-    return <section className="vc-ab-outputs">
-        <strong>Connections</strong>
+    const change = (port: AutomationPort, target: string, remove = false) => onChange({
+        ...automation,
+        blocks: automation.blocks.map(item => item.id === block.id ? { ...item, [port]: remove ? removeEdgeTarget(item[port], target) : addEdgeTarget(item[port], target) } : item),
+    });
+    const name = (item: AutomationBlock) => blockDefinition(item.type).label;
+
+    return <section className="vc-ab-section vc-ab-connections" aria-label="Connections">
+        <span className="vc-ab-panel-label">What happens next</span>
+        {!ports.length && <span className="vc-ab-field-description">This block ends the run, so nothing comes after it.</span>}
         {ports.map(port => {
-            const names = edgeTargets(block[port])
-                .map(id => automation.blocks.find(current => current.id === id))
-                .filter((target): target is AutomationBlock => target !== undefined)
-                .map(target => blockDefinition(target.type).label);
-            return <div className="vc-ab-output-row" key={port}>
-                <em className={port}>{portLabel(block.type, port)}</em>
-                <span>{names.length ? names.join(", ") : "Not connected"}</span>
+            const targets = edgeTargets(block[port]).flatMap(id => { const item = automation.blocks.find(candidate => candidate.id === id); return item ? [item] : []; });
+            const others = automation.blocks.filter(item => item.id !== block.id && !targets.includes(item));
+            return <div className={`vc-ab-conn ${port}`} key={port}>
+                <em>{port === "error" ? "If it fails" : portLabel(block.type, port)}</em>
+                <div className="vc-ab-conn-targets">
+                    {targets.map(item => <span className="vc-ab-chip" key={item.id}>
+                        <button type="button" onClick={() => onSelect(item.id)}>{name(item)}</button>
+                        <button type="button" className="vc-ab-chip-remove" aria-label={`Disconnect ${name(item)}`} onClick={() => change(port, item.id, true)}>×</button>
+                    </span>)}
+                    {!targets.length && <span className="vc-ab-conn-empty">{port === "error" ? "The run stops with an error." : "Nothing yet."}</span>}
+                    <button type="button" className="vc-ab-chip-add" onClick={() => onInsert(port)}>+ Add a step</button>
+                </div>
+                {others.length > 0 && <SelectField value="" options={[{ label: "Or connect to an existing step…", value: "" }, ...others.map(item => ({ label: `${name(item)}${item.config.variable ? ` (${item.config.variable})` : ""}`, value: item.id }))]} onChange={target => { if (target) change(port, String(target)); }} />}
             </div>;
         })}
-        <span className="vc-ab-field-description">Drag from a node's right-hand dot to connect. A port can feed several blocks, and they run one after another. Click a line to remove just that one.</span>
+        {ports.length > 0 && <span className="vc-ab-field-description">You can also drag from a dot on the block to another block, or hover a line and click × to remove it.</span>}
     </section>;
 }
 
-export function BlockInspector({ block, automation, setAutomation }: { block: AutomationBlock; automation: Automation; setAutomation(automation: Automation): void; }) {
+interface BlockInspectorProps {
+    block: AutomationBlock;
+    automation: Automation;
+    setAutomation(automation: Automation): void;
+    onSelect(id: string): void;
+    onInsert(port: AutomationPort): void;
+    onDuplicate(): void;
+    onDelete(): void;
+}
+
+export function BlockInspector({ block, automation, setAutomation, onSelect, onInsert, onDuplicate, onDelete }: BlockInspectorProps) {
     const [override, setOverride] = React.useState({ channel: false, message: false, user: false });
     const patch = (config: Partial<AutomationBlockConfig>) => setAutomation(updateBlock(automation, block.id, config));
     const { config } = block;
     const item = blockDefinition(block.type);
     const Icon = BLOCK_ICONS[item.category];
     const guildId = config.guildId ?? "";
-    const result = null;
     const inherited = inheritedContext(automation.blocks, block.id);
     const inheritedChannel = inherited.channelId ? ChannelStore.getChannel(inherited.channelId) : undefined;
 
@@ -320,12 +361,12 @@ export function BlockInspector({ block, automation, setAutomation }: { block: Au
 
     const source = config.input ? null : usesInheritedMessage && inherited.messageFrom
         ? <Inherited
-            title={`Acting on the message from ${blockDefinition(inherited.messageFrom.type).label}`}
+            title={`Works on the message from ${blockDefinition(inherited.messageFrom.type).label}`}
             detail={`Saved as ${inherited.messageVariable}.`}
             onOverride={() => setOverride({ ...override, message: true })}
         />
         : <>
-            <TextField label="Source variable" value={config.sourceVariable ?? "lastMessage"} description="The message this block acts on." onChange={sourceVariable => patch({ sourceVariable })} />
+            <TextField label="Which message" value={config.sourceVariable ?? "lastMessage"} description="The saved name of the message this block works on." onChange={sourceVariable => patch({ sourceVariable })} />
             <div className="vc-ab-grid">
                 <TextField label="Message ID fallback" value={config.messageId ?? ""} onChange={messageId => patch({ messageId })} />
                 <TextField label="Channel ID fallback" value={config.channelId ?? ""} onChange={channelId => patch({ channelId })} />
@@ -334,7 +375,7 @@ export function BlockInspector({ block, automation, setAutomation }: { block: Au
 
     const channel = !config.channelId && inherited.channelFrom && !override.channel
         ? <Inherited
-            title={inheritedChannel?.name ? `Using #${inheritedChannel.name}` : "Using the channel from the previous block"}
+            title={inheritedChannel?.name ? `Using #${inheritedChannel.name}` : "Using the channel from the earlier block"}
             detail={`Carried over from ${blockDefinition(inherited.channelFrom.type).label}.`}
             onOverride={() => setOverride({ ...override, channel: true })}
         />
@@ -344,196 +385,257 @@ export function BlockInspector({ block, automation, setAutomation }: { block: Au
         !value && inherited.userFrom && !override.user
             ? <Inherited
                 title={`Using the person from ${blockDefinition(inherited.userFrom.type).label}`}
-                detail="The same user this workflow is already dealing with."
+                detail="The same user this automation is already dealing with."
                 onOverride={() => setOverride({ ...override, user: true })}
             />
             : <UserField label={label} description={description} guildId={guildId} value={value} onChange={onChange} />;
 
+    const sourceVariable = (label = "Which value", description?: string) => <TextField label={label} value={config.sourceVariable ?? ""} description={description ?? "The saved name of the value to use."} onChange={sourceVariable => patch({ sourceVariable })} />;
+    const saveAs = <TextField label="Save the result as" value={config.variable ?? ""} description="Later blocks can use it by this name." onChange={variable => patch({ variable })} />;
+    const showsSaveAs = config.variable !== undefined && !block.type.startsWith("ai-") && !["send-message", "send-dm", "reply-message", "edit-message", "forward-message", "interact-button", "interact-select", "interact-modal", "repeat", "for-each"].includes(block.type);
+
     return <div className="vc-ab-inspector-body">
-        <div className={`vc-ab-inspector-title ${item.category}`}>
+        <header className={`vc-ab-panel-head ${item.category}`}>
             <span className="vc-ab-node-icon"><Icon width={16} height={16} /></span>
-            <div><Heading tag="h2">{item.label}</Heading><Paragraph>{item.description}</Paragraph></div>
-        </div>
-
-        {block.type === "send-message" && <>{channel}<MessageBody block={block} onChange={patch} />{result}<MessagePreview block={block} /></>}
-        {block.type === "send-embed" && <div className="vc-ab-warning">Discord only lets apps send embeds. Replace this block with Send message.</div>}
-        {block.type === "send-components" && <div className="vc-ab-warning">Discord only lets apps send Components V2. Replace this block with Send message.</div>}
-        {block.type === "send-dm" && <>{userField("User", config.userId ?? "", userId => patch({ userId }))}<MessageBody block={block} onChange={patch} />{result}<MessagePreview block={block} /></>}
-        {(block.type === "reply-message" || block.type === "edit-message") && <>{source}<MessageBody block={block} onChange={patch} label={block.type === "reply-message" ? "Reply" : "New message content"} />{result}<MessagePreview block={block} /></>}
-        {(block.type === "delete-message" || block.type === "pin-message" || block.type === "unpin-message" || block.type === "mark-read") && source}
-        {(block.type === "react-message" || block.type === "remove-reaction") && <>{source}<TextField label="Emoji" value={config.emoji ?? ""} description="A Unicode emoji, or a custom one such as <:name:id>." onChange={emoji => patch({ emoji })} /></>}
-        {block.type === "forward-message" && <>{source}<ChannelField label="Forward to" guildId={guildId} channelId={config.channelId ?? ""} onChange={patch} />{result}</>}
-        {block.type === "create-thread" && <>{source}<TextField label="Thread name" value={config.name ?? ""} onChange={name => patch({ name })} />{result}</>}
-        {block.type === "typing-indicator" && <>{channel}<NumberField label="Seconds" value={config.durationSeconds ?? 3} min={0} max={60} onChange={durationSeconds => patch({ durationSeconds })} /></>}
-        {block.type === "open-channel" && channel}
-        {block.type === "crosspost-message" && source}
-        {block.type === "search-messages" && <>{channel}<TextField label="Search for" value={config.matchText ?? ""} onChange={matchText => patch({ matchText })} /><NumberField label="Maximum results" value={config.limit ?? 25} min={1} max={100} onChange={limit => patch({ limit })} />{result}</>}
-        {block.type === "get-user" && <>{userField("User", config.userId ?? "", userId => patch({ userId }))}{result}</>}
-        {block.type === "list-connections" && <>{result}<span className="vc-ab-field-description">Saves what is linked in Discord's Connections settings. Discord only shares a usable token for Spotify, so other services are read-only here.</span></>}
-        {block.type === "notify" && <><TextField label="Title" value={config.name ?? ""} onChange={name => patch({ name })} /><AreaField label="Body" value={config.content ?? ""} rows={3} onChange={content => patch({ content })} /></>}
-        {block.type === "spotify-seek" && <NumberField label="Seconds into the track" value={config.durationSeconds ?? 30} min={0} onChange={durationSeconds => patch({ durationSeconds })} />}
-        {block.type === "spotify-volume" && <NumberField label="Volume" value={config.amount ?? 50} min={0} max={100} onChange={amount => patch({ amount })} />}
-        {block.type === "spotify-now-playing" && <>{result}<span className="vc-ab-field-description">Saves name, artist, album, duration and a share link.</span></>}
-        {(block.type === "spotify-play" || block.type === "spotify-pause" || block.type === "spotify-next" || block.type === "spotify-previous") && <span className="vc-ab-field-description">Controls whichever device Spotify is playing on. Spotify only allows this on Premium accounts.</span>}
-        {block.type === "split-text" && <><TextField label="Source variable" value={config.sourceVariable ?? ""} onChange={sourceVariable => patch({ sourceVariable })} /><TextField label="Split on" value={config.separator ?? ""} onChange={separator => patch({ separator })} />{result}</>}
-        {block.type === "regex-extract" && <><TextField label="Source variable" value={config.sourceVariable ?? ""} onChange={sourceVariable => patch({ sourceVariable })} /><TextField label="Regular expression" description="The first capture group is saved, or the whole match if there is none." value={config.matchText ?? ""} onChange={matchText => patch({ matchText })} />{result}</>}
-        {block.type === "random-item" && <><TextField label="List variable" value={config.sourceVariable ?? ""} onChange={sourceVariable => patch({ sourceVariable })} />{result}</>}
-        {block.type === "run-command" && <CommandEditor block={block} onChange={patch} />}
-
-        {block.type === "wait-reply" && <>{channel}{userField("Author", config.authorId ?? "", authorId => patch({ authorId }), "Optional. Leave empty to accept any author.")}
-            <div className="vc-ab-grid">
-                <SelectField label="Match" value={config.matchMode ?? "contains"} options={[{ label: "Contains", value: "contains" }, { label: "Full match", value: "exact" }, { label: "Regular expression", value: "regex" }]} onChange={matchMode => patch({ matchMode: matchMode as AutomationBlockConfig["matchMode"] })} />
-                <NumberField label="Timeout in seconds" value={config.timeoutSeconds ?? 60} min={1} onChange={timeoutSeconds => patch({ timeoutSeconds })} />
+            <div className="vc-ab-panel-copy"><strong>{item.label}</strong><span>{item.description}</span></div>
+            <div className="vc-ab-panel-actions">
+                <Button size="small" variant="secondary" title="Duplicate (Ctrl+D)" onClick={onDuplicate}>Duplicate</Button>
+                <Button size="iconOnly" variant="dangerSecondary" aria-label="Delete block" title="Delete (Del)" onClick={onDelete}><DeleteIcon width={16} height={16} /></Button>
             </div>
-            <CheckField
-                label="Only a reply to my message"
-                description="On, this waits for someone to actually reply to the message this flow just sent. Off, any message in the channel counts."
-                value={config.requireReply !== false}
-                onChange={requireReply => patch({ requireReply })}
-            />
-            <TextField label="Message text" value={config.matchText ?? ""} description="Leave empty to accept the first reply." onChange={matchText => patch({ matchText })} />{result}
-            <span className="vc-ab-field-description">Connect the Timed out port to decide what happens when nobody answers. Leave it empty to end the run there.</span></>}
-        {block.type === "wait-dm" && <>{userField("User", config.userId ?? "", userId => patch({ userId }))}
-            <div className="vc-ab-grid">
-                <SelectField label="Match" value={config.matchMode ?? "contains"} options={[{ label: "Contains", value: "contains" }, { label: "Full match", value: "exact" }, { label: "Regular expression", value: "regex" }]} onChange={matchMode => patch({ matchMode: matchMode as AutomationBlockConfig["matchMode"] })} />
-                <NumberField label="Timeout in seconds" value={config.timeoutSeconds ?? 60} min={1} onChange={timeoutSeconds => patch({ timeoutSeconds })} />
-            </div>
-            <TextField label="Message text" value={config.matchText ?? ""} description="Leave empty to accept the first DM." onChange={matchText => patch({ matchText })} />{result}</>}
-        {block.type === "wait-until" && <TextField label="Date or timestamp" value={config.value ?? ""} description="An ISO date, a millisecond timestamp, or a template." onChange={value => patch({ value })} />}
-        {block.type === "delay" && <NumberField label="Seconds" value={config.durationSeconds ?? 1} min={0} onChange={durationSeconds => patch({ durationSeconds })} />}
+        </header>
 
-        {block.type === "fetch-dm" && <>{userField("User", config.userId ?? "", userId => patch({ userId }))}<NumberField label="Messages to read" value={config.limit ?? 10} min={1} max={100} onChange={limit => patch({ limit })} />{result}</>}
-        {(block.type === "fetch-messages" || block.type === "fetch-unread") && <>{channel}
-            <div className="vc-ab-grid">
-                <NumberField label="Messages to read" value={config.limit ?? 25} min={1} max={100} onChange={limit => patch({ limit })} />
-                <TextField label="Before message ID" value={config.beforeMessageId ?? ""} onChange={beforeMessageId => patch({ beforeMessageId })} />
-            </div>
-            <CheckField label="Include bot messages" value={config.includeBots !== false} onChange={includeBots => patch({ includeBots })} />{result}</>}
-        {block.type === "fetch-mentions" && <><NumberField label="Maximum mentions" value={config.limit ?? 50} min={1} max={100} onChange={limit => patch({ limit })} /><CheckField label="Include bot messages" value={config.includeBots !== false} onChange={includeBots => patch({ includeBots })} />{result}</>}
+        <section className="vc-ab-section">
+            {block.type === "send-message" && <>{channel}<MessageBody block={block} onChange={patch} /><MessagePreview block={block} /></>}
+            {block.type === "send-embed" && <div className="vc-ab-warning">Discord only lets apps send embeds. Replace this block with Send message.</div>}
+            {block.type === "send-components" && <div className="vc-ab-warning">Discord only lets apps send Components V2. Replace this block with Send message.</div>}
+            {block.type === "send-dm" && <>{userField("Who", config.userId ?? "", userId => patch({ userId }))}<MessageBody block={block} onChange={patch} /><MessagePreview block={block} /></>}
+            {(block.type === "reply-message" || block.type === "edit-message") && <>{source}<MessageBody block={block} onChange={patch} label={block.type === "reply-message" ? "Reply" : "New message text"} /><MessagePreview block={block} /></>}
+            {(block.type === "delete-message" || block.type === "pin-message" || block.type === "unpin-message" || block.type === "mark-read") && source}
+            {(block.type === "react-message" || block.type === "remove-reaction") && <>{source}<TextField label="Emoji" value={config.emoji ?? ""} description="A normal emoji, or a custom one such as <:name:id>." onChange={emoji => patch({ emoji })} /></>}
+            {block.type === "forward-message" && <>{source}<ChannelField label="Forward to" guildId={guildId} channelId={config.channelId ?? ""} onChange={patch} /></>}
+            {block.type === "create-thread" && <>{source}<TextField label="Thread name" value={config.name ?? ""} onChange={name => patch({ name })} /></>}
+            {block.type === "typing-indicator" && <>{channel}<NumberField label="Seconds" value={config.durationSeconds ?? 3} min={0} max={60} onChange={durationSeconds => patch({ durationSeconds })} /></>}
+            {block.type === "open-channel" && channel}
+            {block.type === "crosspost-message" && source}
+            {block.type === "search-messages" && <>{channel}<TextField label="Search for" value={config.matchText ?? ""} onChange={matchText => patch({ matchText })} /><NumberField label="Maximum results" value={config.limit ?? 25} min={1} max={100} onChange={limit => patch({ limit })} /></>}
+            {block.type === "get-user" && userField("Who", config.userId ?? "", userId => patch({ userId }))}
+            {block.type === "list-connections" && <span className="vc-ab-field-description">Saves what is linked in Discord's Connections settings. Only Spotify comes with a usable token, so other services are read-only here.</span>}
+            {block.type === "notify" && <><TextField label="Title" value={config.name ?? ""} onChange={name => patch({ name })} /><AreaField label="Message" value={config.content ?? ""} rows={3} onChange={content => patch({ content })} /></>}
+            {block.type === "spotify-seek" && <NumberField label="Seconds into the track" value={config.durationSeconds ?? 30} min={0} onChange={durationSeconds => patch({ durationSeconds })} />}
+            {block.type === "spotify-volume" && <NumberField label="Volume" value={config.amount ?? 50} min={0} max={100} onChange={amount => patch({ amount })} />}
+            {block.type === "spotify-now-playing" && <span className="vc-ab-field-description">Saves the name, artist, album, duration and a share link.</span>}
+            {(block.type === "spotify-play" || block.type === "spotify-pause" || block.type === "spotify-next" || block.type === "spotify-previous") && <span className="vc-ab-field-description">Controls whichever device Spotify is playing on. Spotify only allows this on Premium accounts.</span>}
+            {block.type === "split-text" && <>{sourceVariable("Text to split")}<TextField label="Split on" value={config.separator ?? ""} onChange={separator => patch({ separator })} /></>}
+            {block.type === "regex-extract" && <>{sourceVariable("Text to search")}<TextField label="Regular expression" description="The first capture group is saved, or the whole match if there is none." value={config.matchText ?? ""} onChange={matchText => patch({ matchText })} /></>}
+            {block.type === "random-item" && sourceVariable("List to pick from")}
+            {block.type === "run-command" && <CommandEditor block={block} onChange={patch} />}
 
-        {(block.type === "ai-prompt" || block.type === "ai-summarize" || block.type === "ai-classify" || block.type === "ai-extract-json") && <AiEditor block={block} onChange={patch} />}
-
-        {block.type === "read-components" && <>{source}{result}<span className="vc-ab-field-description">Saves every button and menu with its label, custom ID, row and position. Run this once to see what a message offers, then use those values in an interact block.</span></>}
-        {block.type === "read-embed" && <>{source}<NumberField label="Which embed" value={config.embedIndex ?? 1} min={1} max={10} onChange={embedIndex => patch({ embedIndex })} />{result}<span className="vc-ab-field-description">Read fields off it with a data path, such as {"{{embed.title}}"} or {"{{embed.fields.0.value}}"}.</span></>}
-        {block.type === "interact-button" && <>{source}
-            <SelectField label="Find the button by" value={config.componentMatch ?? "label"} options={[{ label: "Its label", value: "label" }, { label: "Its custom ID", value: "customId" }, { label: "Row and position", value: "position" }]} onChange={componentMatch => patch({ componentMatch: componentMatch as AutomationBlockConfig["componentMatch"] })} />
-            {(config.componentMatch ?? "label") === "label" && <TextField label="Button label" description="Matches part of the label, so Accept finds Accept invite." value={config.componentLabel ?? ""} onChange={componentLabel => patch({ componentLabel })} />}
-            {config.componentMatch === "customId" && <TextField label="Custom ID" value={config.customId ?? ""} onChange={customId => patch({ customId })} />}
-            <div className="vc-ab-grid">
-                <NumberField label="Component row" value={config.componentRow ?? 1} min={1} onChange={componentRow => patch({ componentRow })} />
-                <NumberField label="Button position" value={config.componentIndex ?? 1} min={1} onChange={componentIndex => patch({ componentIndex })} />
-            </div>{result}</>}
-        {block.type === "interact-select" && <>{source}
-            <div className="vc-ab-step"><strong>1. Which menu</strong><span>A message can carry several menus. Pick the one to open.</span></div>
-            <SelectField label="Find the menu by" value={config.componentMatch ?? "label"} options={[{ label: "Its placeholder text", value: "label" }, { label: "Its custom ID", value: "customId" }, { label: "Row and position", value: "position" }]} onChange={componentMatch => patch({ componentMatch: componentMatch as AutomationBlockConfig["componentMatch"] })} />
-            {(config.componentMatch ?? "label") === "label" && <TextField label="Placeholder text" description="Matches part of it, so Choose finds Choose a role." value={config.componentLabel ?? ""} onChange={componentLabel => patch({ componentLabel })} />}
-            {config.componentMatch === "customId" && <TextField label="Custom ID" description="The exact custom_id Discord gives the menu. Read it with List buttons and menus." value={config.customId ?? ""} onChange={customId => patch({ customId })} />}
-            {config.componentMatch === "position" && <div className="vc-ab-grid">
-                <NumberField label="Row" description="Action row, counting from 1." value={config.componentRow ?? 1} min={1} max={5} onChange={componentRow => patch({ componentRow })} />
-                <NumberField label="Position in that row" value={config.componentIndex ?? 1} min={1} max={5} onChange={componentIndex => patch({ componentIndex })} />
-            </div>}
-            <div className="vc-ab-step"><strong>2. Which option</strong><span>Now choose an entry inside that menu.</span></div>
-            <SelectField label="Find the option by" value={config.optionMode ?? "exact"} options={[{ label: "Its exact label", value: "exact" }, { label: "Part of its label", value: "contains" }, { label: "A regular expression", value: "regex" }, { label: "Its position in the list", value: "index" }]} onChange={optionMode => patch({ optionMode: optionMode as AutomationBlockConfig["optionMode"] })} />
-            <TextField
-                label={config.optionMode === "index" ? "Position in the list" : "Option to choose"}
-                description={config.optionMode === "index" ? "Counting from 1." : "Matched against the option's label and its value."}
-                value={config.optionQuery ?? ""}
-                onChange={optionQuery => patch({ optionQuery })}
-            />
-            {result}
-            <span className="vc-ab-field-description">Not sure what the message offers? Put a List buttons and menus block in front of this one and run it once.</span></>}
-        {block.type === "interact-modal" && <>{source}<TextField label="Modal custom ID" value={config.customId ?? ""} onChange={customId => patch({ customId })} /><ModalFieldsEditor fields={config.modalFields ?? parseComponents(config.modalFieldsJson ?? "[]").components} onChange={modalFields => patch({ modalFields, modalFieldsJson: undefined })} />{result}</>}
-
-        {block.type === "set-variable" && <><TextField label="Variable name" value={config.variable ?? ""} onChange={variable => patch({ variable })} /><AreaField label="Value" value={config.value ?? ""} description="Templates such as {{reply.author.id}} resolve when this block runs." rows={3} onChange={value => patch({ value })} /></>}
-        {block.type === "math-variable" && <><TextField label="Source variable" value={config.sourceVariable ?? ""} onChange={sourceVariable => patch({ sourceVariable })} /><SelectField label="Operation" value={config.operation ?? "add"} options={[{ label: "Add", value: "add" }, { label: "Subtract", value: "subtract" }, { label: "Multiply", value: "multiply" }, { label: "Divide", value: "divide" }, { label: "Round to decimal places", value: "round" }]} onChange={operation => patch({ operation: operation as AutomationBlockConfig["operation"] })} /><NumberField label={config.operation === "round" ? "Decimal places" : "Amount"} value={config.amount ?? 1} onChange={amount => patch({ amount })} />{result}</>}
-        {block.type === "delete-variable" && <TextField label="Variable name" value={config.sourceVariable ?? ""} onChange={sourceVariable => patch({ sourceVariable })} />}
-        {block.type === "text-variable" && <><TextField label="Source variable" value={config.sourceVariable ?? ""} onChange={sourceVariable => patch({ sourceVariable })} /><SelectField label="Operation" value={config.operation ?? "trim"} options={[{ label: "Trim whitespace", value: "trim" }, { label: "Uppercase", value: "uppercase" }, { label: "Lowercase", value: "lowercase" }, { label: "Replace text", value: "replace" }, { label: "Append text", value: "append" }, { label: "Prepend text", value: "prepend" }]} onChange={operation => patch({ operation: operation as AutomationBlockConfig["operation"] })} />
-            {config.operation === "replace" && <div className="vc-ab-grid"><TextField label="Find" value={config.needle ?? ""} onChange={needle => patch({ needle })} /><TextField label="Replace with" value={config.replacement ?? ""} onChange={replacement => patch({ replacement })} /></div>}
-            {(config.operation === "append" || config.operation === "prepend") && <TextField label="Text" value={config.value ?? ""} onChange={value => patch({ value })} />}{result}</>}
-        {block.type === "random-number" && <><div className="vc-ab-grid"><NumberField label="Minimum" value={config.min ?? 1} onChange={min => patch({ min })} /><NumberField label="Maximum" value={config.max ?? 100} onChange={max => patch({ max })} /></div>{result}</>}
-        {block.type === "current-time" && <><SelectField label="Format" value={config.value ?? "iso"} options={[{ label: "ISO date", value: "iso" }, { label: "Millisecond timestamp", value: "timestamp" }]} onChange={value => patch({ value: String(value) })} />{result}</>}
-        {block.type === "array-length" && <><TextField label="Source variable" value={config.sourceVariable ?? ""} onChange={sourceVariable => patch({ sourceVariable })} />{result}</>}
-        {block.type === "join-array" && <><TextField label="Source variable" value={config.sourceVariable ?? ""} onChange={sourceVariable => patch({ sourceVariable })} /><TextField label="Item field path" value={config.fieldPath ?? ""} description="For messages, use content. Leave empty to join whole items." onChange={fieldPath => patch({ fieldPath })} /><TextField label="Separator" value={config.separator ?? "\n"} onChange={separator => patch({ separator })} />{result}</>}
-        {block.type === "json-value" && <><TextField label="Source variable" value={config.sourceVariable ?? ""} onChange={sourceVariable => patch({ sourceVariable })} /><TextField label="Data path" value={config.fieldPath ?? ""} description="Use dots and array indexes, such as messages.0.author.id." onChange={fieldPath => patch({ fieldPath })} />{result}</>}
-        {block.type === "filter-array" && <><TextField label="Source variable" value={config.sourceVariable ?? ""} onChange={sourceVariable => patch({ sourceVariable })} /><TextField label="Item field path" value={config.fieldPath ?? ""} description="For messages, use content or author.id." onChange={fieldPath => patch({ fieldPath })} /><SelectField label="Comparison" value={config.operator ?? "contains"} options={[{ label: "Equals", value: "equals" }, { label: "Does not equal", value: "not-equals" }, { label: "Contains", value: "contains" }, { label: "Greater than", value: "greater" }, { label: "Less than", value: "less" }, { label: "Matches regex", value: "regex" }]} onChange={operator => patch({ operator: operator as AutomationBlockConfig["operator"] })} /><TextField label="Value" value={config.compareValue ?? ""} onChange={compareValue => patch({ compareValue })} />{result}</>}
-
-        {block.type === "condition" && <>
-            {!config.sourceVariable && inherited.messageFrom && !override.message
-                ? <Inherited
-                    title={`Checking the message from ${blockDefinition(inherited.messageFrom.type).label}`}
-                    detail={`Its text, from ${inherited.messageVariable}.`}
-                    onOverride={() => setOverride({ ...override, message: true })}
+            {block.type === "wait-reply" && <>{channel}{userField("From who", config.authorId ?? "", authorId => patch({ authorId }), "Optional. Leave empty to accept anyone.")}
+                <div className="vc-ab-grid">
+                    <SelectField label="The message" value={config.matchMode ?? "contains"} options={MATCH_OPTIONS} onChange={matchMode => patch({ matchMode: matchMode as AutomationBlockConfig["matchMode"] })} />
+                    <TextField label="This text" value={config.matchText ?? ""} placeholder="Leave empty for any reply" onChange={matchText => patch({ matchText })} />
+                </div>
+                <NumberField label="Give up after (seconds)" value={config.timeoutSeconds ?? 60} min={1} onChange={timeoutSeconds => patch({ timeoutSeconds })} />
+                <CheckField
+                    label="Only count real replies to my message"
+                    description="Off means any message in the channel counts."
+                    value={config.requireReply !== false}
+                    onChange={requireReply => patch({ requireReply })}
                 />
-                : <TextField
-                    label="What to check"
-                    description="A variable such as reply.content, or a template. Leave empty to use the message the flow just handled."
-                    placeholder={inherited.messageVariable ? `${inherited.messageVariable}.content` : "reply.content"}
-                    value={config.sourceVariable ?? ""}
-                    onChange={sourceVariable => patch({ sourceVariable })}
-                />}
-            <SelectField label="Comparison" value={config.operator ?? "equals"} options={[{ label: "Equals", value: "equals" }, { label: "Does not equal", value: "not-equals" }, { label: "Contains", value: "contains" }, { label: "Greater than", value: "greater" }, { label: "Less than", value: "less" }, { label: "Matches regex", value: "regex" }]} onChange={operator => patch({ operator: operator as AutomationBlockConfig["operator"] })} />
-            <TextField label="Compare it against" value={config.compareValue ?? ""} onChange={compareValue => patch({ compareValue })} />
-        </>}
-        {block.type === "chance" && <NumberField label="Chance percentage" value={config.chancePercent ?? 50} min={0} max={100} onChange={chancePercent => patch({ chancePercent })} />}
-        {block.type === "repeat" && <><NumberField label="Iterations" value={config.repeatCount ?? 2} min={0} max={1_000} onChange={repeatCount => patch({ repeatCount })} /><TextField label="Iteration variable" value={config.variable ?? "loopIndex"} description="Starts at 1 and updates on every pass." onChange={variable => patch({ variable })} /></>}
-        {block.type === "fail" && <AreaField label="Failure message" value={config.errorMessage ?? ""} rows={3} onChange={errorMessage => patch({ errorMessage })} />}
-        {(block.type === "log" || block.type === "note") && <AreaField label={block.type === "log" ? "Log message" : "Note"} value={config.content ?? ""} rows={3} onChange={content => patch({ content })} />}
+                <span className="vc-ab-field-description">Connect the Timed out dot to decide what happens when nobody answers.</span></>}
+            {block.type === "wait-dm" && <>{userField("From who", config.userId ?? "", userId => patch({ userId }))}
+                <div className="vc-ab-grid">
+                    <SelectField label="The message" value={config.matchMode ?? "contains"} options={MATCH_OPTIONS} onChange={matchMode => patch({ matchMode: matchMode as AutomationBlockConfig["matchMode"] })} />
+                    <TextField label="This text" value={config.matchText ?? ""} placeholder="Leave empty for any DM" onChange={matchText => patch({ matchText })} />
+                </div>
+                <NumberField label="Give up after (seconds)" value={config.timeoutSeconds ?? 60} min={1} onChange={timeoutSeconds => patch({ timeoutSeconds })} /></>}
+            {block.type === "wait-until" && <TextField label="Date or timestamp" value={config.value ?? ""} description="A date like 2026-12-24T18:00, a millisecond timestamp, or a saved value." onChange={value => patch({ value })} />}
+            {block.type === "delay" && <NumberField label="Seconds to wait" value={config.durationSeconds ?? 1} min={0} onChange={durationSeconds => patch({ durationSeconds })} />}
 
-        {block.type !== "note" && <AdvancedBlockInspector automation={automation} block={block} onChange={patch} />}
-        <OutputSummary block={block} automation={automation} />
+            {block.type === "fetch-dm" && <>{userField("Who", config.userId ?? "", userId => patch({ userId }))}<NumberField label="Messages to read" value={config.limit ?? 10} min={1} max={100} onChange={limit => patch({ limit })} /></>}
+            {(block.type === "fetch-messages" || block.type === "fetch-unread") && <>{channel}
+                <div className="vc-ab-grid">
+                    <NumberField label="Messages to read" value={config.limit ?? 25} min={1} max={100} onChange={limit => patch({ limit })} />
+                    <TextField label="Before message ID" value={config.beforeMessageId ?? ""} onChange={beforeMessageId => patch({ beforeMessageId })} />
+                </div>
+                <CheckField label="Include bot messages" value={config.includeBots !== false} onChange={includeBots => patch({ includeBots })} /></>}
+            {block.type === "fetch-mentions" && <><NumberField label="Maximum mentions" value={config.limit ?? 50} min={1} max={100} onChange={limit => patch({ limit })} /><CheckField label="Include bot messages" value={config.includeBots !== false} onChange={includeBots => patch({ includeBots })} /></>}
+
+            {block.type.startsWith("ai-") && <AiEditor block={block} onChange={patch} />}
+
+            {block.type === "read-components" && <>{source}<span className="vc-ab-field-description">Saves every button and menu with its label, custom ID, row and position. Run it once to see what a message offers.</span></>}
+            {block.type === "read-embed" && <>{source}<NumberField label="Which embed" value={config.embedIndex ?? 1} min={1} max={10} onChange={embedIndex => patch({ embedIndex })} /><span className="vc-ab-field-description">Read parts of it with a path, such as {"{{embed.title}}"} or {"{{embed.fields.0.value}}"}.</span></>}
+            {block.type === "interact-button" && <>{source}
+                <SelectField label="Find the button by" value={config.componentMatch ?? "label"} options={[{ label: "Its label", value: "label" }, { label: "Its custom ID", value: "customId" }, { label: "Row and position", value: "position" }]} onChange={componentMatch => patch({ componentMatch: componentMatch as AutomationBlockConfig["componentMatch"] })} />
+                {(config.componentMatch ?? "label") === "label" && <TextField label="Button label" description="Part of it is enough, so Accept finds Accept invite." value={config.componentLabel ?? ""} onChange={componentLabel => patch({ componentLabel })} />}
+                {config.componentMatch === "customId" && <TextField label="Custom ID" value={config.customId ?? ""} onChange={customId => patch({ customId })} />}
+                {config.componentMatch === "position" && <div className="vc-ab-grid">
+                    <NumberField label="Row" value={config.componentRow ?? 1} min={1} onChange={componentRow => patch({ componentRow })} />
+                    <NumberField label="Position in that row" value={config.componentIndex ?? 1} min={1} onChange={componentIndex => patch({ componentIndex })} />
+                </div>}</>}
+            {block.type === "interact-select" && <>{source}
+                <div className="vc-ab-step-label"><strong>1. Which menu</strong><span>A message can carry several menus. Pick the one to open.</span></div>
+                <SelectField label="Find the menu by" value={config.componentMatch ?? "label"} options={[{ label: "Its placeholder text", value: "label" }, { label: "Its custom ID", value: "customId" }, { label: "Row and position", value: "position" }]} onChange={componentMatch => patch({ componentMatch: componentMatch as AutomationBlockConfig["componentMatch"] })} />
+                {(config.componentMatch ?? "label") === "label" && <TextField label="Placeholder text" description="Part of it is enough, so Choose finds Choose a role." value={config.componentLabel ?? ""} onChange={componentLabel => patch({ componentLabel })} />}
+                {config.componentMatch === "customId" && <TextField label="Custom ID" description="The exact custom_id Discord gives the menu. Read it with List buttons and menus." value={config.customId ?? ""} onChange={customId => patch({ customId })} />}
+                {config.componentMatch === "position" && <div className="vc-ab-grid">
+                    <NumberField label="Row" description="Counting from 1." value={config.componentRow ?? 1} min={1} max={5} onChange={componentRow => patch({ componentRow })} />
+                    <NumberField label="Position in that row" value={config.componentIndex ?? 1} min={1} max={5} onChange={componentIndex => patch({ componentIndex })} />
+                </div>}
+                <div className="vc-ab-step-label"><strong>2. Which option</strong><span>Now choose an entry inside that menu.</span></div>
+                <SelectField label="Find the option by" value={config.optionMode ?? "exact"} options={[{ label: "Its exact label", value: "exact" }, { label: "Part of its label", value: "contains" }, { label: "A regular expression", value: "regex" }, { label: "Its position in the list", value: "index" }]} onChange={optionMode => patch({ optionMode: optionMode as AutomationBlockConfig["optionMode"] })} />
+                <TextField
+                    label={config.optionMode === "index" ? "Position in the list" : "Option to choose"}
+                    description={config.optionMode === "index" ? "Counting from 1." : "Matched against the option's label and its value."}
+                    value={config.optionQuery ?? ""}
+                    onChange={optionQuery => patch({ optionQuery })}
+                />
+                <span className="vc-ab-field-description">Not sure what the message offers? Put a List buttons and menus block in front of this one and run it once.</span></>}
+            {block.type === "interact-modal" && <>{source}<TextField label="Modal custom ID" value={config.customId ?? ""} onChange={customId => patch({ customId })} /><ModalFieldsEditor fields={config.modalFields ?? parseComponents(config.modalFieldsJson ?? "[]").components} onChange={modalFields => patch({ modalFields, modalFieldsJson: undefined })} /></>}
+
+            {block.type === "set-variable" && <><TextField label="Name" value={config.variable ?? ""} onChange={variable => patch({ variable })} /><AreaField label="Value" value={config.value ?? ""} description="Saved names such as {{reply.author.id}} are filled in when this block runs." rows={3} onChange={value => patch({ value })} /></>}
+            {block.type === "math-variable" && <>{sourceVariable("Number to change")}<SelectField label="Operation" value={config.operation ?? "add"} options={[{ label: "Add", value: "add" }, { label: "Subtract", value: "subtract" }, { label: "Multiply", value: "multiply" }, { label: "Divide", value: "divide" }, { label: "Round to decimal places", value: "round" }]} onChange={operation => patch({ operation: operation as AutomationBlockConfig["operation"] })} /><NumberField label={config.operation === "round" ? "Decimal places" : "Amount"} value={config.amount ?? 1} onChange={amount => patch({ amount })} /></>}
+            {block.type === "delete-variable" && sourceVariable("Name to forget")}
+            {block.type === "text-variable" && <>{sourceVariable("Text to change")}<SelectField label="Operation" value={config.operation ?? "trim"} options={[{ label: "Trim spaces", value: "trim" }, { label: "UPPERCASE", value: "uppercase" }, { label: "lowercase", value: "lowercase" }, { label: "Replace text", value: "replace" }, { label: "Add text at the end", value: "append" }, { label: "Add text at the start", value: "prepend" }]} onChange={operation => patch({ operation: operation as AutomationBlockConfig["operation"] })} />
+                {config.operation === "replace" && <div className="vc-ab-grid"><TextField label="Find" value={config.needle ?? ""} onChange={needle => patch({ needle })} /><TextField label="Replace with" value={config.replacement ?? ""} onChange={replacement => patch({ replacement })} /></div>}
+                {(config.operation === "append" || config.operation === "prepend") && <TextField label="Text" value={config.value ?? ""} onChange={value => patch({ value })} />}</>}
+            {block.type === "random-number" && <div className="vc-ab-grid"><NumberField label="Lowest" value={config.min ?? 1} onChange={min => patch({ min })} /><NumberField label="Highest" value={config.max ?? 100} onChange={max => patch({ max })} /></div>}
+            {block.type === "current-time" && <SelectField label="Format" value={config.value ?? "iso"} options={[{ label: "Date and time (ISO)", value: "iso" }, { label: "Millisecond timestamp", value: "timestamp" }]} onChange={value => patch({ value: String(value) })} />}
+            {block.type === "array-length" && sourceVariable("List or text to count")}
+            {block.type === "join-array" && <>{sourceVariable("List to join")}<TextField label="Field from each item" value={config.fieldPath ?? ""} description="For messages, use content. Leave empty to join whole items." onChange={fieldPath => patch({ fieldPath })} /><TextField label="Put between items" value={config.separator ?? "\n"} onChange={separator => patch({ separator })} /></>}
+            {block.type === "json-value" && <>{sourceVariable("Value to read from")}<TextField label="Path" value={config.fieldPath ?? ""} description="Use dots and numbers, such as messages.0.author.id." onChange={fieldPath => patch({ fieldPath })} /></>}
+            {block.type === "filter-array" && <>{sourceVariable("List to filter")}<TextField label="Field from each item" value={config.fieldPath ?? ""} description="For messages, use content or author.id." onChange={fieldPath => patch({ fieldPath })} /><div className="vc-ab-grid"><SelectField label="Keep items that" value={config.operator ?? "contains"} options={COMPARE_OPTIONS} onChange={operator => patch({ operator: operator as AutomationBlockConfig["operator"] })} /><TextField label="This value" value={config.compareValue ?? ""} onChange={compareValue => patch({ compareValue })} /></div></>}
+
+            {block.type === "condition" && <>
+                {!config.sourceVariable && inherited.messageFrom && !override.message
+                    ? <Inherited
+                        title={`Checks the message from ${blockDefinition(inherited.messageFrom.type).label}`}
+                        detail={`Its text, from ${inherited.messageVariable}.`}
+                        onOverride={() => setOverride({ ...override, message: true })}
+                    />
+                    : <TextField
+                        label="Check this"
+                        description="A saved name such as reply.content. Leave empty to check the message the flow just handled."
+                        placeholder={inherited.messageVariable ? `${inherited.messageVariable}.content` : "reply.content"}
+                        value={config.sourceVariable ?? ""}
+                        onChange={sourceVariable => patch({ sourceVariable })}
+                    />}
+                <div className="vc-ab-grid">
+                    <SelectField label="Condition" value={config.operator ?? "equals"} options={COMPARE_OPTIONS} onChange={operator => patch({ operator: operator as AutomationBlockConfig["operator"] })} />
+                    <TextField label="This value" value={config.compareValue ?? ""} onChange={compareValue => patch({ compareValue })} />
+                </div>
+                <span className="vc-ab-field-description">Connect the Yes dot for when it is true and the No dot for when it is not.</span>
+            </>}
+            {block.type === "chance" && <NumberField label="Chance in percent" description="Takes the Yes path this often, and No the rest of the time." value={config.chancePercent ?? 50} min={0} max={100} onChange={chancePercent => patch({ chancePercent })} />}
+            {block.type === "repeat" && <><NumberField label="How many times" value={config.repeatCount ?? 2} min={0} max={1_000} onChange={repeatCount => patch({ repeatCount })} /><TextField label="Count is saved as" value={config.variable ?? "loopIndex"} description="Starts at 1 and goes up on every pass." onChange={variable => patch({ variable })} /><span className="vc-ab-field-description">Connect Each pass to the blocks that should repeat, and connect the last of them back to this block. Connect When done to what comes after.</span></>}
+            {block.type === "fail" && <AreaField label="Error message" value={config.errorMessage ?? ""} rows={3} onChange={errorMessage => patch({ errorMessage })} />}
+            {(block.type === "log" || block.type === "note") && <AreaField label={block.type === "log" ? "Log message" : "Note"} value={config.content ?? ""} rows={3} onChange={content => patch({ content })} />}
+
+            {block.type === "list-processes" && <span className="vc-ab-field-description">Saves every running program with its name, process ID and memory use.</span>}
+            {block.type === "check-process" && <><TextField label="Program" description="Its file name, such as RobloxPlayerBeta.exe." value={config.name ?? ""} onChange={name => patch({ name })} /><span className="vc-ab-field-description">Connect Running and Not running to what should happen in each case.</span></>}
+            {block.type === "wait-process" && <><TextField label="Program" description="Its file name, such as RobloxPlayerBeta.exe." value={config.name ?? ""} onChange={name => patch({ name })} /><div className="vc-ab-grid"><SelectField label="Wait until it" value={config.value ?? "start"} options={[{ label: "Starts", value: "start" }, { label: "Closes", value: "exit" }]} onChange={value => patch({ value: String(value) })} /><NumberField label="Give up after (seconds)" value={config.timeoutSeconds ?? 300} min={1} max={86400} onChange={timeoutSeconds => patch({ timeoutSeconds })} /></div></>}
+            {block.type === "run-program" && <><TextField label="Program" description="A program on this computer, such as node or C:\\Tools\\backup.exe. It runs directly, without a shell." value={config.value ?? ""} onChange={value => patch({ value })} /><AreaField label="Arguments, one per line" description="Saved names such as {{game.name}} are filled in." value={config.content ?? ""} rows={3} onChange={content => patch({ content })} /><NumberField label="Give up after (seconds)" value={config.timeoutSeconds ?? 60} min={1} max={600} onChange={timeoutSeconds => patch({ timeoutSeconds })} /><span className="vc-ab-field-description">The result holds stdout, stderr and code, so {"{{output.stdout}}"} is what the program printed.</span></>}
+            {block.type === "read-file" && <><TextField label="File" description="A text file inside your user folder." placeholder="C:\\Users\\you\\Documents\\notes.txt" value={config.value ?? ""} onChange={value => patch({ value })} /><NumberField label="Read at most (characters)" value={config.limit ?? 200000} min={1} max={2000000} onChange={limit => patch({ limit })} /></>}
+            {block.type === "open-link" && <TextField label="Link" description="Opens in your browser. Only https links." placeholder="https://" value={config.value ?? ""} onChange={value => patch({ value })} />}
+            {block.type === "roblox-current-game" && <span className="vc-ab-field-description">Saves the game you are in right now, with name, players, visits, icon and link, or nothing when Roblox is closed.</span>}
+            {block.type === "roblox-game-info" && <TextField label="Place or universe ID" description="The number in a Roblox game link." value={config.value ?? ""} onChange={value => patch({ value })} />}
+            {block.type === "codex-last-turn" && <span className="vc-ab-field-description">Saves the last Codex turn that finished: project, closing message, duration and any question it asked.</span>}
+            {block.type === "codex-sessions" && <NumberField label="How many" value={config.limit ?? 10} min={1} max={50} onChange={limit => patch({ limit })} />}
+            <ExtendedFields automation={automation} block={block} onChange={patch} />
+            {showsSaveAs && saveAs}
+        </section>
+
+        <ConnectionsPanel automation={automation} block={block} onChange={setAutomation} onSelect={onSelect} onInsert={onInsert} />
+        {block.type !== "note" && <BlockAdvanced automation={automation} block={block} onChange={patch} showVariable={!showsSaveAs && !block.type.startsWith("ai-")} />}
         <VariablesPanel automation={automation} beforeBlockId={block.id} />
+    </div>;
+}
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function SchedulePreview({ automation }: { automation: Automation; }) {
+    const { schedule } = automation;
+    let previews: number[] = [];
+    let error = validateSchedule(schedule);
+    if (!error) {
+        try { previews = schedulePreview(automation).slice(0, 3); } catch (caught) { error = caught instanceof Error ? caught.message : "No upcoming runs."; }
+    }
+    if (error) return <p className="vc-ab-warning" role="alert">{error}</p>;
+    return <div className="vc-ab-next-runs">
+        <span className="vc-ab-field-label">Next runs</span>
+        {previews.map(time => <span key={time}>{new Date(time).toLocaleString(undefined, { timeZone: schedule.timezone, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>)}
     </div>;
 }
 
 export function AutomationInspector({ automation, setAutomation }: { automation: Automation; setAutomation(automation: Automation): void; }) {
     const { schedule, trigger } = automation;
     const updateTrigger = (patch: Partial<Automation["trigger"]>) => setAutomation({ ...automation, trigger: { ...trigger, ...patch } });
-    const live = trigger.type !== "schedule" && trigger.type !== "startup";
+    const changeSchedule = (values: Partial<Automation["schedule"]>) => setAutomation({ ...automation, schedule: { ...schedule, ...values } });
+    const system = SYSTEM_TRIGGER_TYPES.some(type => type === trigger.type);
+    const live = trigger.type !== "schedule" && trigger.type !== "startup" && !system;
+    const mode = schedule.mode ?? "interval";
+    const weekdays = schedule.weekdays ?? [1, 2, 3, 4, 5];
 
     return <div className="vc-ab-inspector-body">
-        <div className="vc-ab-inspector-title flow">
+        <header className="vc-ab-panel-head flow">
             <span className="vc-ab-node-icon"><BLOCK_ICONS.flow width={16} height={16} /></span>
-            <div><Heading tag="h2">Automation</Heading><Paragraph>Name the workflow and choose what starts it.</Paragraph></div>
-        </div>
-        <TextField label="Name" value={automation.name} onChange={name => setAutomation({ ...automation, name })} />
-        <SelectField label="Start workflow" value={trigger.type} options={[{ label: "On a schedule", value: "schedule" }, { label: "When I am mentioned", value: "mention" }, { label: "When a message matches", value: "message" }, { label: "When a DM matches", value: "dm" }, { label: "When LawyerCord starts", value: "startup" }, ...AUTOMATION_TRIGGER_TYPES.filter(type => !["schedule", "mention", "message", "dm", "startup"].includes(type)).map(value => ({ label: value.replaceAll("-", " "), value }))]} onChange={type => isTriggerType(type) && updateTrigger({ type })} />
-        {trigger.type === "schedule" && (schedule.mode ?? "interval") === "interval" && <>
-            <div className="vc-ab-grid">
-                <NumberField label="Run every" value={schedule.interval} min={1} onChange={interval => setAutomation({ ...automation, schedule: { ...schedule, interval } })} />
-                <SelectField label="Time unit" value={schedule.unit} options={AUTOMATION_UNITS.map(unit => ({ label: unit[0].toUpperCase() + unit.slice(1), value: unit }))} onChange={unit => isUnit(unit) && setAutomation({ ...automation, schedule: { ...schedule, unit } })} />
-            </div>
-            <DateField label="First run" value={toDateTimeLocal(schedule.startAt)} onChange={value => { const startAt = fromDateTimeLocal(value); if (startAt !== null) setAutomation({ ...automation, schedule: { ...schedule, startAt } }); }} />
-        </>}
-        {live && <>
-            <ChannelField
-                label="Listen in"
-                description="Leave empty to listen everywhere."
-                guildId={trigger.guildId ?? ""}
-                channelId={trigger.channelId ?? ""}
-                onChange={updateTrigger}
-            />
-            <TextField label="Reaction emoji filter" value={trigger.emoji ?? ""} onChange={emoji => updateTrigger({ emoji })} />
-            <CheckField label="Include bots" value={trigger.includeBots !== false} onChange={includeBots => updateTrigger({ includeBots })} />
-            <UserField label="Author" description="Optional. Leave empty to accept any author." value={trigger.authorId ?? ""} onChange={authorId => updateTrigger({ authorId })} />
-            <SelectField label="Text match" value={trigger.matchMode ?? "contains"} options={[{ label: "Contains", value: "contains" }, { label: "Full match", value: "exact" }, { label: "Regular expression", value: "regex" }]} onChange={matchMode => updateTrigger({ matchMode: matchMode as Automation["trigger"]["matchMode"] })} />
-            <TextField label="Message text" value={trigger.matchText ?? ""} description="Leave empty to accept every matching event." onChange={matchText => updateTrigger({ matchText })} />
-            <CheckField
-                label="React to my own messages"
-                description="Needed for command words you type yourself. Messages this automation posts are always ignored, so it cannot answer itself."
-                value={trigger.includeSelf === true}
-                onChange={includeSelf => updateTrigger({ includeSelf })}
-            />
-        </>}
-        <NumberField
-            label="Give up after"
-            description="Minutes. A run that is still going past this stops and is logged as a failure. 0 removes the limit."
-            value={automation.maxRunMinutes ?? 15}
-            min={0}
-            max={1_440}
-            onChange={maxRunMinutes => setAutomation({ ...automation, maxRunMinutes })}
-        />
-        <CheckField label="Enabled" description="Run this workflow while LawyerCord is open." value={automation.enabled} onChange={enabled => setAutomation({ ...automation, enabled })} />
-        <RuntimeInspector automation={automation} onChange={setAutomation} />
+            <div className="vc-ab-panel-copy"><strong>This automation</strong><span>Give it a name and choose when it starts. Click a block to edit that block instead.</span></div>
+        </header>
+
+        <section className="vc-ab-section">
+            <TextField label="Name" value={automation.name} onChange={name => setAutomation({ ...automation, name })} />
+            <FormSwitch title="Turned on" description="Runs while LawyerCord is open. You can still test it while it is off." value={automation.enabled} onChange={enabled => setAutomation({ ...automation, enabled })} hideBorder />
+        </section>
+
+        <section className="vc-ab-section">
+            <span className="vc-ab-panel-label">When does it start?</span>
+            <SelectField value={trigger.type} options={AUTOMATION_TRIGGER_TYPES.map(value => ({ label: TRIGGER_LABELS[value], value }))} onChange={type => isTriggerType(type) && updateTrigger({ type })} />
+            {trigger.type === "schedule" && <>
+                <SelectField label="How often" value={mode} options={[{ label: "Every so often", value: "interval" }, { label: "On certain days at a set time", value: "calendar" }, { label: "Cron expression (advanced)", value: "cron" }]} onChange={next => { if (next === "interval" || next === "calendar" || next === "cron") changeSchedule({ mode: next }); }} />
+                {mode === "interval" && <>
+                    <div className="vc-ab-grid">
+                        <NumberField label="Every" value={schedule.interval} min={1} onChange={interval => changeSchedule({ interval })} />
+                        <SelectField label="Unit" value={schedule.unit} options={AUTOMATION_UNITS.map(unit => ({ label: unit[0].toUpperCase() + unit.slice(1), value: unit }))} onChange={unit => isUnit(unit) && changeSchedule({ unit })} />
+                    </div>
+                    <DateField label="Starting from" value={toDateTimeLocal(schedule.startAt)} onChange={value => { const startAt = fromDateTimeLocal(value); if (startAt !== null) changeSchedule({ startAt }); }} />
+                </>}
+                {mode === "calendar" && <>
+                    <TextField label="At what time" type="time" value={schedule.time ?? "09:00"} onChange={time => changeSchedule({ time })} />
+                    <div className="vc-ab-field">
+                        <span className="vc-ab-field-label">On these days</span>
+                        <div className="vc-ab-weekdays">{WEEKDAYS.map((label, day) => <button type="button" key={label} className={weekdays.includes(day) ? "active" : ""} aria-pressed={weekdays.includes(day)} onClick={() => changeSchedule({ weekdays: weekdays.includes(day) ? weekdays.filter(value => value !== day) : [...weekdays, day].sort() })}>{label}</button>)}</div>
+                    </div>
+                </>}
+                {mode === "cron" && <TextField label="Cron expression" value={schedule.cron ?? ""} description="Minute, hour, day of month, month, day of week." placeholder="0 9 * * 1-5" onChange={cron => changeSchedule({ cron })} />}
+                <SchedulePreview automation={automation} />
+            </>}
+            {trigger.type === "startup" && <span className="vc-ab-field-description">Runs once every time LawyerCord finishes loading.</span>}
+            {trigger.type.startsWith("roblox-") && <TextField label="Only this game" description="Part of the game's name, or its place ID. Leave empty for every game." value={trigger.matchText ?? ""} onChange={matchText => updateTrigger({ matchText })} />}
+            {trigger.type.startsWith("process-") && <TextField label="Program" description="Its file name, such as RobloxPlayerBeta.exe or Code.exe. A List running programs block shows what is open." placeholder="notepad.exe" value={trigger.matchText ?? ""} onChange={matchText => updateTrigger({ matchText })} />}
+            {trigger.type.startsWith("codex-") && <>
+                <TextField label="Only this project" description="Part of the project folder's name or path. Leave empty for every project." value={trigger.matchText ?? ""} onChange={matchText => updateTrigger({ matchText })} />
+                <CheckField label="Include helper agents" description="Codex spawns helper agents for side tasks. Off means only the main conversation counts." value={trigger.includeSubagents === true} onChange={includeSubagents => updateTrigger({ includeSubagents })} />
+            </>}
+            {live && <>
+                <ChannelField label="Only in this channel" description="Leave empty to listen everywhere." guildId={trigger.guildId ?? ""} channelId={trigger.channelId ?? ""} onChange={updateTrigger} />
+                <UserField label="Only from this person" description="Optional. Leave empty to accept anyone." value={trigger.authorId ?? ""} onChange={authorId => updateTrigger({ authorId })} />
+                {(trigger.type === "reaction-add" || trigger.type === "reaction-remove") && <TextField label="Only this emoji" value={trigger.emoji ?? ""} description="Optional." onChange={emoji => updateTrigger({ emoji })} />}
+                {!trigger.type.startsWith("voice-") && <div className="vc-ab-grid">
+                    <SelectField label="Only when the message" value={trigger.matchMode ?? "contains"} options={MATCH_OPTIONS} onChange={matchMode => updateTrigger({ matchMode: matchMode as Automation["trigger"]["matchMode"] })} />
+                    <TextField label="This text" value={trigger.matchText ?? ""} placeholder="Leave empty for any message" onChange={matchText => updateTrigger({ matchText })} />
+                </div>}
+                <CheckField label="Include bots" value={trigger.includeBots !== false} onChange={includeBots => updateTrigger({ includeBots })} />
+                <CheckField
+                    label="Include my own messages"
+                    description="Needed for command words you type yourself. Messages this automation posts are always ignored, so it cannot answer itself."
+                    value={trigger.includeSelf === true}
+                    onChange={includeSelf => updateTrigger({ includeSelf })}
+                />
+            </>}
+        </section>
+
+        <WorkflowAdvanced automation={automation} onChange={setAutomation} />
+        <details className="vc-ab-more"><summary>Recent runs</summary><WorkflowRunHistory workflowId={automation.id} /></details>
         <VariablesPanel automation={automation} />
     </div>;
 }

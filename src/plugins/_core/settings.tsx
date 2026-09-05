@@ -18,7 +18,6 @@ import {
     VencordTab,
 } from "@components/settings";
 import { startAutomationEngine, stopAutomationEngine } from "@components/settings/tabs/automations/engine";
-import { AUTOMATIONS_UI_VERSION } from "@components/settings/tabs/automations/model";
 import { gitHashShort } from "@shared/vencordUserAgent";
 import { Devs } from "@utils/constants";
 import { isTruthy } from "@utils/guards";
@@ -204,7 +203,7 @@ export default definePlugin({
             }),
             buildEntry({
                 key: "equicord_automations",
-                title: `Automations v${AUTOMATIONS_UI_VERSION}`,
+                title: "Automations",
                 Component: AutomationsTab,
                 Icon: ClockIcon
             }),

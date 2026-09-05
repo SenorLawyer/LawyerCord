@@ -50,8 +50,8 @@ export const SAFE_RETRY_TYPES = new Set<AutomationBlockType>(["fetch-message", "
 export function outputKind(type: AutomationBlockType): string {
     if (["for-each", "return", "call-workflow", "read-value", "json-value", "set-variable"].includes(type)) return "value";
     if (["array-length", "math-variable", "random-number", "increment-value"].includes(type)) return "number";
-    if (["create-object", "parse-json", "ai-extract-json", "get-user", "get-channel", "spotify-now-playing"].includes(type)) return "object";
-    if (["fetch-messages", "fetch-mentions", "fetch-unread", "fetch-dm", "search-messages", "filter-array", "split-text", "map-fields", "sort-array", "unique-array", "slice-array", "combine-arrays", "list-reactions", "read-components"].includes(type)) return "list";
+    if (["create-object", "parse-json", "ai-extract-json", "get-user", "get-channel", "spotify-now-playing", "roblox-current-game", "roblox-game-info", "codex-last-turn", "run-program"].includes(type)) return "object";
+    if (["fetch-messages", "fetch-mentions", "fetch-unread", "fetch-dm", "search-messages", "filter-array", "split-text", "map-fields", "sort-array", "unique-array", "slice-array", "combine-arrays", "list-reactions", "read-components", "list-processes", "codex-sessions"].includes(type)) return "list";
     if (["send-message", "send-dm", "reply-message", "edit-message", "wait-reply", "wait-dm", "fetch-message"].includes(type)) return "message";
     return "text";
 }

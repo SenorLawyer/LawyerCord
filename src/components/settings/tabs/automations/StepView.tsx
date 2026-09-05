@@ -4,11 +4,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Button } from "@components/Button";
-import { Heading } from "@components/Heading";
 import { React } from "@webpack/common";
 
-import { blockDefinition } from "./blocks";
+import { BLOCK_ICONS, blockDefinition } from "./blocks";
+import { summarize } from "./Canvas";
 import { type Automation, type AutomationPort, edgeTargets, outputPorts, portLabel } from "./model";
 import { compileWorkflow } from "./workflow";
 
@@ -26,13 +25,13 @@ export function workflowOutline(workflow: Automation) {
             seen.add(row.id);
             const block = byId.get(row.id);
             if (!block) continue;
-            const routes = outputPorts(block.type).flatMap(port => edgeTargets(block[port]).map(id => ({ id, route: portLabel(block.type, port), depth: row.depth + (port === "next" && edgeTargets(block.next).length <= 1 ? 0 : 1) })));
-            routes.push(...(block.config.cases ?? []).map(item => ({ id: item.target, route: item.value, depth: row.depth + 1 })));
+            const routes = outputPorts(block.type).flatMap(port => edgeTargets(block[port]).map(id => ({ id, route: port === "error" ? "If it fails" : portLabel(block.type, port), depth: row.depth + (port === "next" && edgeTargets(block.next).length <= 1 ? 0 : 1) })));
+            routes.push(...(block.config.cases ?? []).map(item => ({ id: item.target, route: `Matches ${item.value || "…"}`, depth: row.depth + 1 })));
             pending.push(...routes.toReversed());
         }
     };
     if (entryId) visit(entryId, "Start");
-    for (const block of workflow.blocks) if (!seen.has(block.id)) visit(block.id, "Disconnected");
+    for (const block of workflow.blocks) if (!seen.has(block.id)) visit(block.id, "Not connected");
     return rows;
 }
 
@@ -45,16 +44,27 @@ interface StepViewProps {
 
 export function StepView({ automation, selectedId, onSelect, onInsert }: StepViewProps) {
     const { byId } = compileWorkflow(automation);
-    return <section className="vc-ab-steps" aria-label="Workflow steps">
-        <Heading tag="h2">Steps</Heading>
-        {!automation.blocks.length && <p>Add a block from the library to begin.</p>}
-        {workflowOutline(automation).map(row => {
+    return <section className="vc-ab-steps" aria-label="Steps">
+        <div className="vc-ab-steps-head">
+            <span className="vc-ab-panel-label">Steps in order</span>
+            <span className="vc-ab-field-description">The same automation, written out. Click a step to edit it.</span>
+        </div>
+        {!automation.blocks.length && <p className="vc-ab-field-description">Add a block from the list on the left to begin.</p>}
+        {workflowOutline(automation).map((row, index) => {
             const block = byId.get(row.id);
             if (!block) return null;
-            return <article className={selectedId === row.id ? "vc-ab-step selected" : "vc-ab-step"} key={row.key} style={{ marginInlineStart: Math.min(row.depth, 8) * 20 }}>
-                <small>{row.route}{row.link ? " · Link to existing step" : ""}</small>
-                <Button variant="secondary" onClick={() => onSelect(row.id)}>{blockDefinition(block.type).label}{block.config.variable ? ` → ${block.config.variable}` : ""}</Button>
-                {!row.link && <div className="vc-ab-step-actions">{outputPorts(block.type).map(port => <Button key={port} size="small" variant="secondary" onClick={() => onInsert(row.id, port)}>Insert on {portLabel(block.type, port).toLowerCase()}</Button>)}</div>}
+            const item = blockDefinition(block.type);
+            const Icon = BLOCK_ICONS[item.category];
+            return <article className={`vc-ab-step ${item.category}${selectedId === row.id ? " selected" : ""}${row.link ? " link" : ""}`} key={row.key} style={{ marginInlineStart: Math.min(row.depth, 8) * 28 }}>
+                <small className={`vc-ab-step-route ${row.route === "Not connected" ? "loose" : ""}`}>{row.route}{row.link ? " · Link to existing step" : ""}</small>
+                <button type="button" className="vc-ab-step-main" onClick={() => onSelect(row.id)}>
+                    <span className="vc-ab-step-number">{index + 1}</span>
+                    <span className="vc-ab-node-icon"><Icon width={14} height={14} /></span>
+                    <span className="vc-ab-step-copy"><strong>{item.label}</strong><span>{summarize(block)}</span></span>
+                </button>
+                {!row.link && outputPorts(block.type).length > 0 && <div className="vc-ab-step-actions">
+                    {outputPorts(block.type).map(port => <button type="button" key={port} className={`vc-ab-chip-add ${port}`} onClick={() => onInsert(row.id, port)}>+ {port === "error" ? "If it fails" : portLabel(block.type, port)}</button>)}
+                </div>}
             </article>;
         })}
     </section>;

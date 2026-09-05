@@ -1,715 +1,392 @@
-.vc-automations-page-heading,
-.vc-automations-editor-heading,
-.vc-automations-section-heading,
-.vc-automations-builder-heading,
-.vc-automations-editor-topbar,
-.vc-automations-card,
-.vc-automations-card-title,
-.vc-automations-card-main,
-.vc-automations-card-actions,
-.vc-automations-toolbar,
-.vc-automations-editor-actions,
-.vc-automations-enabled-row,
-.vc-automations-guild-content,
-.vc-automations-log-row {
-    display: flex;
-}
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 LawyerCord contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
-.vc-automations-page-heading,
-.vc-automations-editor-heading,
-.vc-automations-section-heading,
-.vc-automations-builder-heading,
-.vc-automations-editor-topbar,
-.vc-automations-card,
-.vc-automations-card-main,
-.vc-automations-guild-content,
-.vc-automations-log-row {
-    align-items: center;
-    justify-content: space-between;
-}
+/* stylelint-disable no-descending-specificity */
 
-.vc-automations-page-heading,
-.vc-automations-editor-heading {
-    gap: 16px;
-    margin-bottom: 20px;
-}
-
-.vc-automations-page-heading > svg,
-.vc-automations-editor-heading > svg {
-    color: var(--brand-experiment);
-    flex: 0 0 auto;
-}
-
-.vc-automations-info {
-    margin-bottom: 20px;
-}
-
-.vc-automations-toolbar,
-.vc-automations-editor-actions {
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 24px;
-}
-
-.vc-automations-toolbar button,
-.vc-automations-editor-actions button {
-    align-items: center;
+.vc-automations-hero-button {
     display: inline-flex;
+    align-items: center;
+    margin-top: 1em;
+    background-color: color-mix(in srgb, #a3b4e8 55%, white);
+    color: black;
+    gap: 0.5em;
+}
+
+.vc-automations-hero-button:hover {
+    background-color: color-mix(in srgb, #a3b4e8 35%, white);
+}
+
+.vc-automations-section-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.vc-automations-section-head > div:last-child:not(:first-child) {
+    width: 220px;
+    flex: 0 0 auto;
+    margin-top: 16px;
+}
+
+.vc-automations-grid-cards {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+}
+
+.vc-automations-card-buttons {
+    display: flex;
+    flex: 0 0 auto;
     gap: 6px;
 }
 
-.vc-automations-panel-section,
-.vc-automations-editor-section {
-    background: var(--background-secondary);
-    border-radius: 8px;
-    margin-bottom: 20px;
-    padding: 20px;
-}
-
-.vc-automations-section-heading,
-.vc-automations-builder-heading {
-    gap: 12px;
-    margin-bottom: 16px;
-}
-
-.vc-automations-count,
-.vc-automations-block-count {
-    background: var(--background-tertiary);
-    border-radius: 999px;
+.vc-automations-card-status {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 8px;
     color: var(--text-muted);
-    font-size: 12px;
-    font-weight: 700;
-    padding: 4px 9px;
+    gap: 6px;
 }
 
-.vc-automations-card-list,
-.vc-automations-log-list,
-.vc-automations-guild-list,
-.vc-automations-block-list {
+.vc-automations-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.vc-automations-dot.success {
+    background: var(--status-positive, #3ba55d);
+}
+
+.vc-automations-dot.failure {
+    background: var(--status-danger, #ed4245);
+}
+
+.vc-automations-dot.running {
+    background: var(--brand-500);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-500) 30%, transparent);
+}
+
+/* Template cards share the plugin-card look, with the category colour on the icon. */
+.vc-automations-template {
+    display: flex;
+    box-sizing: border-box;
+    align-items: flex-start;
+    padding: 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background-color: var(--card-background-default);
+    color: var(--text-default);
+    cursor: pointer;
+    font: inherit;
+    gap: 12px;
+    text-align: left;
+    transition: 0.1s ease-out;
+    transition-property: box-shadow, transform;
+}
+
+.vc-automations-template:hover {
+    box-shadow: var(--elevation-high);
+    transform: translateY(-1px);
+}
+
+.vc-automations-template-icon {
     display: grid;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
+    border-radius: 8px;
+    background: var(--ab-hue);
+    color: var(--ab-ink);
+    place-items: center;
+}
+
+.vc-automations-template-copy {
+    display: grid;
+    gap: 4px;
+}
+
+.vc-automations-template-copy strong {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.vc-automations-template-copy span {
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+/* Run history */
+
+.vc-automations-runs {
+    display: grid;
+    gap: 6px;
+}
+
+.vc-automations-runs.compact {
+    max-height: 320px;
+    overflow: auto;
+}
+
+.vc-automations-empty {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.vc-automations-run-live {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    border: 1px solid var(--brand-500);
+    border-radius: 8px;
+    color: var(--text-default);
+    font-size: 13px;
     gap: 10px;
 }
 
-.vc-automations-card {
-    background: var(--background-tertiary);
-    border: 1px solid var(--background-modifier-accent);
+.vc-automations-run-live span:nth-child(2) {
+    flex: 1;
+}
+
+.vc-automations-run {
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
-    gap: 16px;
-    padding: 14px;
+    background-color: var(--card-background-default);
 }
 
-.vc-automations-card-main {
-    gap: 12px;
-    min-width: 0;
-}
-
-.vc-automations-card-icon {
-    align-items: center;
-    background: var(--background-secondary);
-    border-radius: 50%;
-    color: var(--brand-experiment);
+.vc-automations-run > summary {
     display: flex;
-    flex: 0 0 40px;
-    height: 40px;
-    justify-content: center;
-}
-
-.vc-automations-card-copy {
-    min-width: 0;
-}
-
-.vc-automations-card-title {
     align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
+    padding: 10px 14px;
+    cursor: pointer;
+    gap: 10px;
+    list-style: none;
 }
 
-.vc-automations-card-title strong {
-    color: var(--header-primary);
+.vc-automations-run > summary::-webkit-details-marker {
+    display: none;
+}
+
+.vc-automations-run-title {
+    display: grid;
+    min-width: 0;
+    flex: 1;
+}
+
+.vc-automations-run-title strong {
+    color: var(--text-default);
+    font-size: 13px;
+}
+
+.vc-automations-run-title span,
+.vc-automations-run > summary time {
     overflow: hidden;
+    color: var(--text-muted);
+    font-size: 12px;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.vc-automations-card-meta,
-.vc-automations-field-description,
-.vc-automations-guild-copy span,
-.vc-automations-guild-copy em,
-.vc-automations-enabled-row span,
-.vc-automations-muted,
-.vc-automations-empty-state span {
+.vc-automations-run-steps {
+    display: grid;
+    padding: 4px 14px 12px 20px;
+    border-top: 1px solid var(--border-subtle);
+    margin: 0;
+    gap: 8px;
+    list-style: none;
+}
+
+.vc-automations-run-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.vc-automations-run-step .vc-automations-dot {
+    margin-top: 5px;
+}
+
+.vc-automations-run-step > div {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+}
+
+.vc-automations-run-step strong {
+    color: var(--text-default);
+    font-size: 12px;
+}
+
+.vc-automations-run-step span {
     color: var(--text-muted);
     font-size: 12px;
 }
 
-.vc-automations-card-meta {
-    margin-top: 4px;
+.vc-automations-run-step summary {
+    color: var(--text-link);
+    cursor: pointer;
+    font-size: 11px;
 }
 
-.vc-automations-status-enabled,
-.vc-automations-status-disabled {
-    border-radius: 4px;
-    font-size: 10px;
-    font-weight: 700;
-    padding: 2px 5px;
-    text-transform: uppercase;
+.vc-automations-run-step pre {
+    max-height: 200px;
+    overflow: auto;
+    padding: 8px;
+    border-radius: 6px;
+    margin: 4px 0 0;
+    background: var(--background-base-lowest, var(--background-primary));
+    color: var(--text-default);
+    font-size: 11px;
+    white-space: pre-wrap;
 }
 
-.vc-automations-status-enabled {
-    background: color-mix(in srgb, var(--status-positive) 18%, transparent);
-    color: var(--status-positive);
-}
+/* Settings panels */
 
-.vc-automations-status-disabled {
-    background: var(--background-secondary);
-    color: var(--text-muted);
-}
-
-.vc-automations-card-actions {
-    align-items: center;
-    flex: 0 0 auto;
-    gap: 6px;
-}
-
-.vc-automations-empty-state {
-    align-items: center;
-    border: 1px dashed var(--background-modifier-accent);
+.vc-automations-panel {
+    display: grid;
+    padding: 16px;
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
+    margin-bottom: 8px;
+    background-color: var(--card-background-default);
+    gap: 14px;
+}
+
+.vc-automations-badge {
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 8px;
+    background: var(--background-base-low, var(--background-tertiary));
     color: var(--text-muted);
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    justify-content: center;
-    min-height: 150px;
-    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    vertical-align: middle;
 }
 
-.vc-automations-empty-state svg {
-    color: var(--brand-experiment);
-}
-
-.vc-automations-editor-topbar {
-    border-bottom: 1px solid var(--background-modifier-accent);
-    color: var(--text-muted);
-    gap: 12px;
-    margin-bottom: 20px;
-    padding-bottom: 12px;
-}
-
-.vc-automations-editor-layout {
-    display: grid;
-    gap: 16px;
-    grid-template-columns: minmax(0, 1fr) 320px;
-}
-
-.vc-automations-editor-section {
-    padding: 18px;
-}
-
-.vc-automations-form-grid {
-    display: grid;
-    gap: 12px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.vc-automations-schedule-grid {
-    grid-template-columns: 0.7fr 1fr 1.4fr;
+.vc-automations-badge.on {
+    background: color-mix(in srgb, var(--status-positive, #3ba55d) 25%, transparent);
+    color: var(--status-positive, #3ba55d);
 }
 
 .vc-automations-field {
     display: grid;
-    margin-bottom: 14px;
-    min-width: 0;
-}
-
-.vc-automations-ai-grid {
-    display: grid;
-    gap: 12px;
-    max-width: 760px;
-}
-
-.vc-automations-ai-grid > .vc-automations-field {
-    margin-bottom: 0;
-}
-
-.vc-automations-legacy-warning {
-    padding: 10px 12px;
-    border: 1px solid var(--status-warning);
-    border-radius: 6px;
-    background: color-mix(in srgb, var(--status-warning) 12%, transparent);
-    color: var(--header-primary);
-    font-size: 12px;
-    line-height: 1.4;
-}
-
-.vc-automations-form-grid > .vc-automations-field,
-.vc-automations-subsection > .vc-automations-field {
-    margin-bottom: 0;
-}
-
-.vc-automations-field-label {
-    color: var(--header-secondary);
-    font-size: 12px;
-    font-weight: 700;
-    margin-bottom: 6px;
-    text-transform: uppercase;
-}
-
-.vc-automations-field-description {
-    color: var(--header-secondary);
-    line-height: 1.35;
-    margin-bottom: 6px;
-}
-
-.vc-automations-field input,
-.vc-automations-field textarea {
-    background: var(--input-background);
-    border: 1px solid var(--background-modifier-accent);
-    border-radius: 4px;
-    box-sizing: border-box;
-    color: var(--text-normal);
-    font: inherit;
-    max-width: 100%;
-    padding: 10px;
-    width: 100%;
-}
-
-.vc-automations-field textarea {
-    min-height: 90px;
-    resize: vertical;
-}
-
-.vc-automations-field input:focus,
-.vc-automations-field textarea:focus {
-    border-color: var(--brand-experiment);
-    outline: 2px solid var(--brand-experiment);
-    outline-offset: 1px;
-}
-
-.vc-automations-field-error {
-    color: var(--text-feedback-critical, var(--text-danger));
-    font-size: 12px;
-    margin: -6px 0 12px;
-}
-
-.vc-automations-enabled-row {
-    align-items: center;
-    gap: 10px;
-    margin-top: 4px;
-}
-
-.vc-automations-enabled-row > div {
-    display: grid;
-    gap: 3px;
-}
-
-.vc-automations-subsection {
-    border-top: 1px solid var(--background-modifier-accent);
-    margin-top: 6px;
-    padding-top: 14px;
-}
-
-.vc-automations-block-palette {
-    display: grid;
-    gap: 8px;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    margin-bottom: 16px;
-}
-
-.vc-automations-palette-item {
-    align-items: center;
-    background: var(--background-tertiary);
-    border: 1px solid var(--background-modifier-accent);
-    border-radius: 6px;
-    color: var(--text-normal);
-    cursor: pointer;
-    display: flex;
-    gap: 7px;
-    min-height: 38px;
-    padding: 8px;
-    text-align: left;
-}
-
-.vc-automations-palette-item:hover {
-    background: var(--background-modifier-hover);
-}
-
-.vc-automations-palette-item svg {
-    color: var(--brand-experiment);
-    flex: 0 0 auto;
-}
-
-.vc-automations-builder-empty {
-    border: 1px dashed var(--background-modifier-accent);
-    border-radius: 8px;
-    color: var(--text-muted);
-    padding: 28px;
-    text-align: center;
-}
-
-.vc-automations-block-card {
-    background: var(--background-tertiary);
-    border: 1px solid var(--background-modifier-accent);
-    border-radius: 8px;
-    padding: 14px;
-}
-
-.vc-automations-block-card[draggable="true"] {
-    cursor: grab;
-}
-
-.vc-automations-block-card[draggable="true"]:active {
-    cursor: grabbing;
-}
-
-.vc-automations-block-header {
-    align-items: center;
-    display: flex;
-    gap: 10px;
-    margin-bottom: 14px;
-}
-
-.vc-automations-block-number {
-    align-items: center;
-    background: var(--brand-experiment);
-    border-radius: 50%;
-    color: var(--white-500);
-    display: flex;
-    flex: 0 0 28px;
-    font-size: 12px;
-    font-weight: 700;
-    height: 28px;
-    justify-content: center;
-}
-
-.vc-automations-block-title {
-    display: grid;
-    gap: 2px;
-    min-width: 0;
-}
-
-.vc-automations-block-title strong {
-    color: var(--header-primary);
-}
-
-.vc-automations-block-title span {
-    color: var(--text-muted);
-    font-size: 12px;
-}
-
-.vc-automations-block-controls {
-    display: flex;
-    gap: 4px;
-    margin-left: auto;
-}
-
-.vc-automations-block-config > .vc-automations-field:first-child {
-    max-width: 360px;
-}
-
-.vc-automations-preview {
-    align-self: start;
-    background: var(--background-secondary);
-    border-radius: 8px;
-    min-width: 0;
-    padding: 16px;
-    position: sticky;
-    top: 16px;
-}
-
-.vc-automations-discord-message {
-    background: var(--background-base-low, var(--background-primary));
-    border-radius: 6px;
-    display: flex;
-    gap: 10px;
-    padding: 12px 10px;
-}
-
-.vc-automations-preview-avatar {
-    align-items: center;
-    background: var(--brand-experiment);
-    border-radius: 50%;
-    color: var(--white-500);
-    display: flex;
-    flex: 0 0 30px;
-    height: 30px;
-    justify-content: center;
-}
-
-.vc-automations-preview-message-content {
-    min-width: 0;
-    width: 100%;
-}
-
-.vc-automations-preview-author {
-    color: var(--header-primary);
-    font-size: 13px;
-    font-weight: 700;
-    margin-bottom: 4px;
-}
-
-.vc-automations-preview-author span {
-    background: var(--brand-experiment);
-    border-radius: 3px;
-    color: var(--white-500);
-    font-size: 9px;
-    margin-left: 4px;
-    padding: 1px 3px;
-}
-
-.vc-automations-preview-content,
-.vc-automations-embed-description,
-.vc-automations-embed-footer {
-    color: var(--text-normal);
-    font-size: 13px;
-    overflow-wrap: anywhere;
-    white-space: pre-wrap;
-}
-
-.vc-automations-embed-preview {
-    background: var(--background-secondary);
-    border-radius: 4px;
-    display: flex;
-    gap: 10px;
-    margin-top: 8px;
-    padding: 10px;
-}
-
-.vc-automations-embed-accent {
-    background: var(--brand-experiment);
-    border-radius: 2px;
-    flex: 0 0 4px;
-}
-
-.vc-automations-embed-title {
-    color: var(--text-link);
-    font-size: 14px;
-    font-weight: 700;
-    margin-bottom: 4px;
-}
-
-.vc-automations-embed-image {
-    align-items: center;
-    background: var(--background-tertiary);
-    color: var(--text-muted);
-    display: flex;
-    height: 70px;
-    justify-content: center;
-    margin-top: 8px;
-}
-
-.vc-automations-embed-footer {
-    color: var(--text-muted);
-    font-size: 11px;
-    margin-top: 8px;
-}
-
-.vc-automations-components-preview {
-    display: grid;
-    gap: 8px;
-    margin-top: 10px;
-}
-
-.vc-automations-preview-row {
-    display: flex;
-    flex-wrap: wrap;
     gap: 6px;
 }
 
-.vc-automations-preview-button {
-    background: var(--button-secondary-background);
-    border: 0;
-    border-radius: 3px;
-    color: var(--button-secondary-text);
-    cursor: not-allowed;
+.vc-automations-field-label {
+    color: var(--text-default);
     font-size: 12px;
-    padding: 8px 12px;
+    font-weight: 600;
 }
 
-.vc-automations-palette-item:focus-visible,
-.vc-automations-preview-button:focus-visible {
-    border-color: var(--brand-experiment);
-    outline: 2px solid var(--brand-experiment);
-    outline-offset: 1px;
-}
-
-.vc-automations-preview-select {
-    background: var(--background-tertiary);
-    border: 1px solid var(--background-modifier-accent);
-    border-radius: 4px;
+.vc-automations-field-description {
     color: var(--text-muted);
+    font-size: 12px;
+}
+
+.vc-automations-inline {
     display: flex;
-    justify-content: space-between;
-    padding: 9px;
-    position: relative;
+    align-items: center;
+    gap: 8px;
 }
 
-.vc-automations-preview-options {
-    background: var(--background-floating);
-    border-radius: 4px;
-    box-shadow: var(--elevation-high);
-    display: grid;
-    gap: 4px;
-    left: 0;
-    padding: 6px;
-    position: absolute;
-    right: 0;
-    top: calc(100% + 4px);
-    z-index: 1;
-}
-
-.vc-automations-preview-options span {
-    color: var(--text-normal);
-    font-size: 12px;
-    padding: 4px;
-}
-
-.vc-automations-preview-input {
-    background: var(--background-tertiary);
-    border: 1px solid var(--background-modifier-accent);
-    border-radius: 4px;
-    color: var(--text-muted);
-    font-size: 12px;
-    padding: 9px;
-}
-
-.vc-automations-preview-unknown,
-.vc-automations-empty-preview {
-    color: var(--text-muted);
-    font-size: 12px;
-    padding: 8px 0;
-}
-
-.vc-automations-log-row {
-    align-items: flex-start;
-    gap: 10px;
-    padding: 10px 0;
-}
-
-.vc-automations-log-row + .vc-automations-log-row {
-    border-top: 1px solid var(--background-modifier-accent);
-}
-
-.vc-automations-log-row > div {
-    color: var(--text-normal);
+.vc-automations-inline > div:first-child {
     flex: 1;
-    font-size: 12px;
-    min-width: 0;
 }
 
-.vc-automations-log-row > div > div {
-    color: var(--text-muted);
-    margin-top: 3px;
-    overflow-wrap: anywhere;
+.vc-automations-grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
-.vc-automations-log-row time {
-    color: var(--text-muted);
-    flex: 0 0 auto;
-    font-size: 11px;
-}
-
-.vc-automations-log-dot {
-    border-radius: 50%;
-    flex: 0 0 8px;
-    height: 8px;
-    margin-top: 5px;
-    width: 8px;
-}
-
-.vc-automations-log-dot.success {
-    background: var(--status-positive);
-}
-
-.vc-automations-log-dot.failure {
-    background: var(--status-danger);
+.vc-automations-guild-list {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
 }
 
 .vc-automations-guild-card {
-    background: var(--background-tertiary);
-    border: 1px solid var(--background-modifier-accent);
-    border-radius: 8px;
     overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background-color: var(--card-background-default);
 }
 
-/* Discord serves guild banners at 960x540, so show the whole thing rather than a cropped strip. */
+/* Discord banners are 16:9. Show them whole, at the width of the card. */
 .vc-automations-guild-banner {
     display: block;
     width: 100%;
+    height: auto;
     aspect-ratio: 16 / 9;
     object-fit: cover;
 }
 
 .vc-automations-guild-content {
-    gap: 10px;
+    display: flex;
+    align-items: center;
     padding: 12px;
+    gap: 10px;
 }
 
 .vc-automations-guild-icon {
-    border-radius: 50%;
-    flex: 0 0 42px;
-    height: 42px;
+    display: grid;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 auto;
+    border-radius: 12px;
     object-fit: cover;
-    width: 42px;
+    place-items: center;
 }
 
 .vc-automations-guild-icon-fallback {
-    align-items: center;
-    background: var(--background-secondary);
+    background: var(--background-base-lower, var(--background-secondary));
     color: var(--text-muted);
-    display: flex;
     font-weight: 700;
-    justify-content: center;
 }
 
 .vc-automations-guild-copy {
     display: grid;
-    flex: 1;
-    gap: 2px;
     min-width: 0;
+    flex: 1;
 }
 
-.vc-automations-guild-copy strong,
-.vc-automations-guild-copy span,
-.vc-automations-guild-copy em {
+.vc-automations-guild-copy strong {
+    overflow: hidden;
+    color: var(--text-default);
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.vc-automations-guild-copy span {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+/* Automation names wrap instead of scrolling behind the buttons. */
+.vc-automations-grid-cards .vc-addon-title-container {
+    height: auto;
+}
+
+.vc-automations-grid-cards .vc-addon-title {
+    position: static;
+    overflow: visible;
+    animation: none;
+    line-height: 1.25;
     overflow-wrap: anywhere;
+    white-space: normal;
 }
 
-.vc-automations-guild-copy em {
-    color: var(--text-feedback-critical, var(--text-danger));
-    font-style: normal;
-}
-
-@media (width <= 900px) {
-    .vc-automations-editor-layout {
-        grid-template-columns: 1fr;
-    }
-
-    .vc-automations-preview {
-        position: static;
-    }
-}
-
-@media (width <= 650px) {
-    .vc-automations-card,
-    .vc-automations-card-actions,
-    .vc-automations-guild-content {
-        align-items: stretch;
-        flex-direction: column;
-    }
-
-    .vc-automations-card-actions {
-        align-items: flex-start;
-        flex-flow: row wrap;
-    }
-
-    .vc-automations-form-grid,
-    .vc-automations-schedule-grid,
-    .vc-automations-block-palette {
-        grid-template-columns: 1fr;
-    }
-
-    .vc-automations-guild-content {
-        align-items: flex-start;
-    }
+.vc-automations-grid-cards .vc-addon-header {
+    align-items: flex-start;
 }

@@ -85,11 +85,11 @@ const result = await build({
     } }],
 });
 await writeFile(join(output, "preview.js"), result.outputFiles[0].contents);
-const styles = (await Promise.all(["styles.css", "builder.css", "revamp.css"].map(name => readFile(join(directory, name), "utf8")))).join("\n");
+const styles = (await Promise.all(["styles.css", "builder.css"].map(name => readFile(join(directory, name), "utf8")))).join("\n");
 await writeFile(join(output, "preview.css"), styles);
 const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="preview.css"><style>
 :root{color-scheme:dark;--background-primary:#242429;--background-secondary:#1d1d22;--background-tertiary:#151519;--background-modifier-accent:#3a3a43;--text-normal:#eeeef2;--text-default:#eeeef2;--text-muted:#a5a5b3;--header-primary:#fff;--header-secondary:#ccc;--brand-500:#7289ff;--text-danger:#ff7272}
-body{margin:0;background:#17171b;color:var(--text-normal);font:14px system-ui}*{box-sizing:border-box}button,input,textarea,select{font:inherit;color:inherit}button,select{background:#35353f;border:1px solid #505060;border-radius:6px;padding:7px 10px;cursor:pointer}input,textarea{width:100%;background:#16161c;border:1px solid #484852;padding:8px;border-radius:6px}input[type=checkbox]{width:auto}button:disabled{opacity:.45}header,footer{display:flex;justify-content:space-between;gap:10px;padding:14px}footer{justify-content:flex-end}.preview-modal{padding:12px;max-width:1600px;margin:auto}.vc-ab-workspace{height:73vh}.vc-ab-subhead{padding:10px}#toast{position:fixed;bottom:0;left:12px;background:#242429;padding:6px}.preview-label{padding:8px 20px;background:#363020;color:#ffdf98}h2,h3,p{margin:8px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere}
+body{margin:0;background:#17171b;color:var(--text-normal);font:14px system-ui}*{box-sizing:border-box}button,input,textarea,select{font:inherit;color:inherit}button,select{background:#35353f;border:1px solid #505060;border-radius:6px;padding:7px 10px;cursor:pointer}input,textarea{width:100%;background:#16161c;border:1px solid #484852;padding:8px;border-radius:6px}input[type=checkbox]{width:auto}button:disabled{opacity:.45}header,footer{display:flex;justify-content:space-between;gap:10px;padding:14px}footer{justify-content:flex-end}.preview-modal{padding:12px;max-width:1600px;margin:auto}.vc-ab-workspace{height:73vh}.vc-ab-toolbar{padding:10px}#toast{position:fixed;bottom:0;left:12px;background:#242429;padding:6px}.preview-label{padding:8px 20px;background:#363020;color:#ffdf98}h2,h3,p{margin:8px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere}
 </style></head><body><div class="preview-label">Isolated editor preview. Discord controls are substituted. Live actions and persistent writes are disabled.</div><div id="app"></div><div id="toast" role="status"></div><script src="preview.js"></script></body></html>`;
 await writeFile(join(output, "index.html"), html);
 const server = createServer(async (request, response) => {
@@ -135,13 +135,13 @@ else {
         const click = async text => page.evaluate(text => { const button = [...document.querySelectorAll("button")].find(b => b.textContent === text); if (!button) throw Error("Missing button: "+text); button.click(); }, text);
         assert.equal(await page.$eval(".vc-ab-title", el => el.textContent.includes("Process a list")), true);
         await page.screenshot({ path: join(output, "graph.png"), fullPage: true });
-        await click("Steps");
+        await click("List");
         await page.waitForSelector(".vc-ab-step");
         assert.ok(await page.$$eval(".vc-ab-step", nodes => nodes.some(n => n.textContent.includes("Link to existing step"))));
         await page.screenshot({ path: join(output, "steps.png"), fullPage: true });
-        await click("Test");
-        await page.waitForFunction(() => document.querySelector("#toast").textContent.includes("Test completed"));
-        await click("Graph");
+        await click("Test with sample data");
+        await page.waitForFunction(() => document.querySelector("#toast").textContent.includes("Test finished"));
+        await click("Canvas");
         await page.waitForSelector(".vc-ab-node");
         await page.click(".vc-ab-node");
         await click("Duplicate");
@@ -151,7 +151,7 @@ else {
         await click("Redo");
         await page.waitForFunction(() => document.querySelectorAll(".vc-ab-node").length === 3);
         await page.setViewport({ width: 720, height: 900 });
-        await click("Steps");
+        await click("List");
         await page.screenshot({ path: join(output, "small-window.png"), fullPage: true });
         await page.setViewport({ width: 1440, height: 1000 });
         await page.evaluate(() => window.previewOpen(true));

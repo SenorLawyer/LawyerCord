@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { Button } from "@components/Button";
 import { DeleteIcon } from "@components/Icons";
 import { React } from "@webpack/common";
 import type { PointerEvent as ReactPointerEvent } from "react";
@@ -11,68 +12,38 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { BLOCK_ICONS, blockDefinition } from "./blocks";
 import { removeBlocks } from "./editorState";
 import {
+    edgeMidpoint,
+    edgePath,
+    GRID,
+    HEADER_HEIGHT,
+    inputAnchor,
+    labelledPorts,
+    NODE_WIDTH,
+    nodeHeight,
+    nodePosition,
+    outputAnchor,
+    type Point,
+    portOffset,
+    ROW_HEIGHT,
+} from "./layout";
+import {
     type Automation,
     type AutomationBlock,
     type AutomationBlockType,
+    type AutomationPort,
     edgeTargets,
     outputPorts,
     portLabel,
     removeEdgeTarget,
 } from "./model";
 
-export const GRID = 20;
-export const NODE_WIDTH = 240;
-/** Node geometry is fixed so edge anchors land exactly on the rendered port dots. */
-const HEADER_HEIGHT = 52;
-const BRANCH_ROW = 26;
-const CANVAS_PAD = 400;
-
-export function nodeHeight(type: AutomationBlockType): number {
-    const ports = outputPorts(type);
-    return HEADER_HEIGHT + (ports.length > 1 ? ports.length * BRANCH_ROW : 0);
-}
-
-/** Vertical centre of a port, relative to the node's top edge. */
-function portOffset(type: AutomationBlockType, index: number): number {
-    return outputPorts(type).length > 1
-        ? HEADER_HEIGHT + index * BRANCH_ROW + BRANCH_ROW / 2
-        : HEADER_HEIGHT / 2;
-}
+const CANVAS_PAD = 600;
 
 export type CanvasDrag =
     | { kind: "node"; id: string; nodeX: number; nodeY: number; }
-    | { kind: "edge"; id: string; port: "next" | "alternate" | "error"; }
+    | { kind: "edge"; id: string; port: AutomationPort; }
     | { kind: "new"; type: AutomationBlockType; }
     | { kind: "pan"; startX: number; startY: number; viewX: number; viewY: number; };
-
-export interface PendingDrop {
-    type: AutomationBlockType;
-    x: number;
-    y: number;
-}
-
-function snap(value: number): number {
-    return Math.round(value / GRID) * GRID;
-}
-
-export function nodePosition(block: AutomationBlock): { x: number; y: number; } {
-    return block.position ?? { x: 80, y: 60 };
-}
-
-function inputAnchor(block: AutomationBlock) {
-    const { x, y } = nodePosition(block);
-    return { x, y: y + HEADER_HEIGHT / 2 };
-}
-
-function outputAnchor(block: AutomationBlock, port: "next" | "alternate" | "error") {
-    const { x, y } = nodePosition(block);
-    return { x: x + NODE_WIDTH, y: y + portOffset(block.type, outputPorts(block.type).indexOf(port)) };
-}
-
-function curve(from: { x: number; y: number; }, to: { x: number; y: number; }): string {
-    const distance = Math.max(60, Math.abs(to.x - from.x) * 0.6);
-    return `M ${from.x} ${from.y} C ${from.x + distance} ${from.y}, ${to.x - distance} ${to.y}, ${to.x} ${to.y}`;
-}
 
 /** Where the canvas is looking. Pan is a translation, so it works at any zoom. */
 export interface CanvasView {
@@ -88,37 +59,35 @@ export function clampZoom(value: number): number {
     return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
 }
 
-/** The box every node occupies, used for fitting the view to the workflow. */
-export function graphBounds(blocks: AutomationBlock[]) {
-    if (!blocks.length) return { x: 0, y: 0, width: 900, height: 520 };
-    let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
-    for (const block of blocks) {
-        const { x, y } = nodePosition(block);
-        left = Math.min(left, x);
-        top = Math.min(top, y);
-        right = Math.max(right, x + NODE_WIDTH);
-        bottom = Math.max(bottom, y + nodeHeight(block.type));
-    }
-    return { x: left, y: top, width: right - left, height: bottom - top };
+export interface Insertion {
+    id: string;
+    port: AutomationPort;
+    at?: Point;
 }
 
 interface CanvasProps {
     automation: Automation;
     selectedId: string | null;
     selectedIds: Set<string>;
+    insertion: Insertion | null;
     onToggleSelection(id: string): void;
     setSelectedId(id: string | null): void;
     setAutomation(automation: Automation): void;
-    onNodeDragStart(source: CanvasDrag, event: ReactPointerEvent<HTMLElement>): void;
+    onDragStart(source: CanvasDrag, event: ReactPointerEvent<HTMLElement>): void;
     surfaceRef: { current: HTMLDivElement | null; };
     drag: CanvasDrag | null;
-    pointer: { x: number; y: number; } | null;
+    pointer: Point | null;
     dropTarget: string | null;
     view: CanvasView;
     onZoomAt(delta: number, clientX: number, clientY: number): void;
+    onPan(dx: number, dy: number): void;
+    onZoomStep(zoomIn: boolean): void;
+    onFit(): void;
+    onTidy(): void;
+    onResetZoom(): void;
 }
 
-export function Canvas({ automation, selectedId, selectedIds, onToggleSelection, setSelectedId, setAutomation, onNodeDragStart, surfaceRef, drag, pointer, dropTarget, view, onZoomAt }: CanvasProps) {
+export function Canvas({ automation, selectedId, selectedIds, insertion, onToggleSelection, setSelectedId, setAutomation, onDragStart, surfaceRef, drag, pointer, dropTarget, view, onZoomAt, onPan, onZoomStep, onFit, onTidy, onResetZoom }: CanvasProps) {
     const { blocks } = automation;
     const byId = new Map(blocks.map(block => [block.id, block]));
 
@@ -127,42 +96,59 @@ export function Canvas({ automation, selectedId, selectedIds, onToggleSelection,
         return { width: Math.max(size.width, x + NODE_WIDTH), height: Math.max(size.height, y + nodeHeight(block.type)) };
     }, { width: 900, height: 520 });
 
-    // Removes just the line you clicked, leaving the port's other targets alone.
-    const disconnect = (id: string, port: "next" | "alternate" | "error", targetId: string) => setAutomation({
+    const disconnect = (id: string, port: AutomationPort, targetId: string) => setAutomation({
         ...automation,
         blocks: blocks.map(block => block.id === id ? { ...block, [port]: removeEdgeTarget(block[port], targetId) } : block),
     });
-
+    const removeCase = (id: string, caseIndex: number) => setAutomation({
+        ...automation,
+        blocks: blocks.map(block => block.id === id ? { ...block, config: { ...block.config, cases: block.config.cases?.filter((_route, index) => index !== caseIndex) } } : block),
+    });
     const remove = (id: string) => {
         setAutomation(removeBlocks(automation, new Set([id])));
         if (selectedId === id) setSelectedId(null);
     };
 
-    // A port can point at several blocks, so every target gets its own line.
-    const edges = blocks.flatMap(block => outputPorts(block.type).flatMap(port =>
-        edgeTargets(block[port]).flatMap(targetId => {
+    const bottomOf = (block: AutomationBlock) => nodePosition(block).y + nodeHeight(block.type);
+    const edges = blocks.flatMap(block => [
+        ...outputPorts(block.type).flatMap(port => edgeTargets(block[port]).flatMap(targetId => {
             const target = byId.get(targetId);
-            if (!target) return [];
-            return [{ block, port, targetId, from: outputAnchor(block, port), to: inputAnchor(target), caseIndex: -1 }];
-        }))).concat(blocks.flatMap(block => (block.config.cases ?? []).flatMap((route, caseIndex) => {
-        const target = byId.get(route.target);
-        return target ? [{ block, port: "next" as const, targetId: route.target, from: outputAnchor(block, "next"), to: inputAnchor(target), caseIndex }] : [];
-    })));
+            return target ? [{ block, port, target, caseIndex: -1 }] : [];
+        })),
+        ...(block.config.cases ?? []).flatMap((route, caseIndex) => {
+            const target = byId.get(route.target);
+            return target ? [{ block, port: "next" as const, target, caseIndex }] : [];
+        }),
+    ]).map(edge => {
+        const from = outputAnchor(edge.block, edge.port);
+        const to = inputAnchor(edge.target);
+        const below = Math.max(bottomOf(edge.block), bottomOf(edge.target)) + 30;
+        return { ...edge, from, to, path: edgePath(from, to, below), mid: edgeMidpoint(from, to, below) };
+    });
 
     const liveEdge = drag?.kind === "edge" && pointer
-        ? { from: outputAnchor(byId.get(drag.id) ?? blocks[0], drag.port), to: pointer }
+        ? (() => {
+            const source = byId.get(drag.id);
+            if (!source) return null;
+            const from = outputAnchor(source, drag.port);
+            return edgePath(from, pointer, Math.max(bottomOf(source), pointer.y) + 30);
+        })()
         : null;
 
+    const linked = (block: AutomationBlock, port: AutomationPort) => edgeTargets(block[port]).length > 0 || (port === "next" && (block.config.cases?.length ?? 0) > 0);
+
     return <div
-        className="vc-ab-canvas"
+        className={`vc-ab-canvas${drag?.kind === "pan" ? " panning" : ""}`}
         ref={surfaceRef}
-        // The dot grid is painted on the viewport, so it has to pan and scale with the world.
-        style={{ backgroundSize: `${GRID * view.zoom}px ${GRID * view.zoom}px`, backgroundPosition: `${view.x}px ${view.y}px` }}
-        onWheel={event => onZoomAt(event.deltaY, event.clientX, event.clientY)}
+        style={{ "--ab-grid": `${GRID * view.zoom}px`, "--ab-major": `${GRID * 5 * view.zoom}px`, "--ab-grid-x": `${view.x}px`, "--ab-grid-y": `${view.y}px` } as React.CSSProperties}
+        onWheel={event => {
+            if (event.ctrlKey || event.metaKey) onZoomAt(event.deltaY, event.clientX, event.clientY);
+            else onPan(-event.deltaX, -event.deltaY);
+        }}
         onPointerDown={event => {
             if (event.target === event.currentTarget || (event.target as HTMLElement).classList.contains("vc-ab-canvas-world")) {
                 setSelectedId(null);
-                onNodeDragStart({ kind: "pan", startX: event.clientX, startY: event.clientY, viewX: view.x, viewY: view.y }, event);
+                onDragStart({ kind: "pan", startX: event.clientX, startY: event.clientY, viewX: view.x, viewY: view.y }, event);
             }
         }}
     >
@@ -176,26 +162,39 @@ export function Canvas({ automation, selectedId, selectedIds, onToggleSelection,
             }}
         >
             {!blocks.length && <div className="vc-ab-canvas-empty">
-                <strong>Start your workflow</strong>
-                <span>Click a block on the left to drop one in, or drag it onto the grid.</span>
-                <span>Drag a node's right-hand dot onto another node to connect them. Click a line to remove it.</span>
+                <strong>Add your first step</strong>
+                <span>Click a block in the list on the left, or drag one onto this grid.</span>
+                <span>Then drag from the dot on its right side to the next block to connect them.</span>
             </div>}
             <svg className="vc-ab-edges" width={extent.width + CANVAS_PAD} height={extent.height + CANVAS_PAD}>
-                {edges.map(edge => <g key={`${edge.block.id}-${edge.port}-${edge.targetId}-${edge.caseIndex}`} className={`vc-ab-edge ${edge.port}`}>
-                    <path className="vc-ab-edge-hit" d={curve(edge.from, edge.to)} onClick={() => edge.caseIndex < 0 ? disconnect(edge.block.id, edge.port, edge.targetId) : setAutomation({ ...automation, blocks: blocks.map(block => block.id === edge.block.id ? { ...block, config: { ...block.config, cases: block.config.cases?.filter((_route, index) => index !== edge.caseIndex) } } : block) })}>
-                        <title>{edge.caseIndex < 0 ? "Click to disconnect" : `Match ${edge.block.config.cases?.[edge.caseIndex].value}. Click to remove route.`}</title>
-                    </path>
-                    <path className="vc-ab-edge-line" d={curve(edge.from, edge.to)} />
-                </g>)}
-                {liveEdge && <path className="vc-ab-edge-live" d={curve(liveEdge.from, liveEdge.to)} />}
+                {edges.map(edge => {
+                    const active = selectedId === edge.block.id || selectedId === edge.target.id;
+                    const label = edge.caseIndex < 0 ? portLabel(edge.block.type, edge.port) : `Match ${edge.block.config.cases?.[edge.caseIndex]?.value || "…"}`;
+                    return <g key={`${edge.block.id}-${edge.port}-${edge.target.id}-${edge.caseIndex}`} className={`vc-ab-edge ${edge.port}${active ? " active" : ""}`}>
+                        <path className="vc-ab-edge-hit" d={edge.path}><title>{label}</title></path>
+                        <path className="vc-ab-edge-line" d={edge.path} />
+                        <g
+                            className="vc-ab-edge-remove"
+                            transform={`translate(${edge.mid.x} ${edge.mid.y})`}
+                            onClick={() => edge.caseIndex < 0 ? disconnect(edge.block.id, edge.port, edge.target.id) : removeCase(edge.block.id, edge.caseIndex)}
+                        >
+                            <title>Remove this connection</title>
+                            <circle r={10} />
+                            <path d="M-3.5 -3.5 L3.5 3.5 M3.5 -3.5 L-3.5 3.5" />
+                        </g>
+                    </g>;
+                })}
+                {liveEdge && <path className="vc-ab-edge-live" d={liveEdge} />}
             </svg>
 
             {blocks.map(block => {
                 const item = blockDefinition(block.type);
                 const { x, y } = nodePosition(block);
                 const ports = outputPorts(block.type);
+                const rows = labelledPorts(block.type);
                 const Icon = BLOCK_ICONS[item.category];
                 const dragging = drag?.kind === "node" && drag.id === block.id;
+                const isEntry = automation.entryId === block.id;
                 return <article
                     key={block.id}
                     className={`vc-ab-node ${item.category}${selectedIds.has(block.id) ? " selected" : ""}${dragging ? " dragging" : ""}${dropTarget === block.id ? " droppable" : ""}`}
@@ -208,52 +207,80 @@ export function Canvas({ automation, selectedId, selectedIds, onToggleSelection,
                         if ((event.target as HTMLElement).closest(".vc-ab-port, .vc-ab-node-delete")) return;
                         if (event.ctrlKey || event.metaKey || event.shiftKey) { onToggleSelection(block.id); return; }
                         setSelectedId(block.id);
-                        onNodeDragStart({ kind: "node", id: block.id, nodeX: x, nodeY: y }, event);
+                        onDragStart({ kind: "node", id: block.id, nodeX: x, nodeY: y }, event);
                     }}
                 >
-                    <header className="vc-ab-node-head">
-                        <span className="vc-ab-node-icon"><Icon width={15} height={15} /></span>
+                    {isEntry && <span className="vc-ab-node-start">Start</span>}
+                    <span className="vc-ab-port in" style={{ top: HEADER_HEIGHT / 2 }} />
+                    <header className="vc-ab-node-head" style={{ height: HEADER_HEIGHT }}>
+                        <span className="vc-ab-node-icon"><Icon width={16} height={16} /></span>
                         <span className="vc-ab-node-copy">
                             <strong>{item.label}</strong>
                             <small>{summarize(block)}</small>
                         </span>
-                        <button type="button" className="vc-ab-node-delete" aria-label={`Delete ${item.label}`} onClick={() => remove(block.id)}><DeleteIcon width={13} height={13} /></button>
+                        <button type="button" className="vc-ab-node-delete" aria-label={`Delete ${item.label}`} onClick={() => remove(block.id)}><DeleteIcon width={14} height={14} /></button>
                     </header>
-                    <div className="vc-ab-node-ports">
-                        <span className="vc-ab-port in" style={{ top: portOffset("note", 0) }} />
-                        {ports.map((port, index) => <span
+                    {rows.map(port => <div key={port} className={`vc-ab-node-row ${port}`} style={{ height: ROW_HEIGHT }}><em>{portLabel(block.type, port)}</em></div>)}
+                    {ports.map(port => {
+                        const offset = portOffset(block.type, port);
+                        const pending = insertion?.id === block.id && insertion.port === port;
+                        return <span
                             key={port}
-                            className={`vc-ab-out ${port}`}
-                            style={{ top: portOffset(block.type, index) }}
+                            className={`vc-ab-out ${port}${linked(block, port) ? " linked" : ""}${pending ? " pending" : ""}`}
+                            style={{ top: offset.y }}
                         >
-                            {ports.length > 1 && <em>{portLabel(block.type, port)}</em>}
                             <span
                                 className={`vc-ab-port out ${port}`}
-                                title={`Drag to connect: ${portLabel(block.type, port)}`}
+                                title={port === "error" ? "If this step fails. Drag to connect." : `${portLabel(block.type, port)}. Drag to connect.`}
                                 onPointerDown={event => {
                                     event.stopPropagation();
-                                    onNodeDragStart({ kind: "edge", id: block.id, port }, event);
+                                    onDragStart({ kind: "edge", id: block.id, port }, event);
                                 }}
                             />
-                        </span>)}
-                    </div>
+                        </span>;
+                    })}
                 </article>;
             })}
+        </div>
+
+        <div className="vc-ab-canvas-tools">
+            <div className="vc-ab-zoom">
+                <button type="button" aria-label="Zoom out" onClick={() => onZoomStep(false)}>&minus;</button>
+                <button type="button" className="vc-ab-zoom-level" title="Back to 100%" onClick={onResetZoom}>{Math.round(view.zoom * 100)}%</button>
+                <button type="button" aria-label="Zoom in" onClick={() => onZoomStep(true)}>+</button>
+            </div>
+            <Button size="small" variant="secondary" title="Show the whole automation" onClick={onFit}>Fit</Button>
+            <Button size="small" variant="secondary" title="Line the blocks up neatly from left to right" onClick={onTidy}>Tidy up</Button>
         </div>
     </div>;
 }
 
-/** One line of the block's most important setting, so a node reads at a glance. */
-function summarize(block: AutomationBlock): string {
+/** The block's most important settings in plain words, so a node reads at a glance. */
+export function summarize(block: AutomationBlock): string {
     const { config } = block;
+    const quote = (value: string | undefined, fallback: string) => value?.trim() ? `\u201c${value.trim()}\u201d` : fallback;
+    const verbs: Record<string, string> = { equals: "is", "not-equals": "is not", contains: "contains", greater: "is more than", less: "is less than", regex: "matches" };
+    const seconds = (value: number | undefined, fallback: number) => `${value ?? fallback} second${(value ?? fallback) === 1 ? "" : "s"}`;
+    switch (block.type) {
+        case "condition": return `${config.sourceVariable?.trim() || "the message"} ${verbs[config.operator ?? "equals"]} ${quote(config.compareValue, "\u2026")}`;
+        case "chance": return `${config.chancePercent ?? 50}% of the time`;
+        case "repeat": return `${config.repeatCount ?? 2} times`;
+        case "for-each": return `Every item, saved as ${config.variable || "item"}`;
+        case "delay": return `Wait ${seconds(config.durationSeconds, 1)}`;
+        case "wait-reply": case "wait-dm": return `${config.matchText?.trim() ? `For ${quote(config.matchText, "")}, ` : ""}up to ${seconds(config.timeoutSeconds, 60)}`;
+        case "run-command": return config.commandName ? `/${config.commandName}` : "No command chosen yet";
+        case "switch": return `${config.cases?.length ?? 0} route${config.cases?.length === 1 ? "" : "s"}`;
+        case "notify": return [config.name, config.content].filter(value => value?.trim()).join(": ") || "No text yet";
+        case "set-variable": return `${config.variable || "value"} = ${quote(config.value, "empty")}`;
+        case "fetch-messages": case "fetch-unread": case "fetch-dm": case "fetch-mentions": return `Reads ${config.limit ?? 25}, saved as ${config.variable || "messages"}`;
+        case "react-message": case "remove-reaction": return config.emoji || "No emoji yet";
+        case "call-workflow": return config.workflowId ? "Runs another automation" : "No automation chosen yet";
+        case "spotify-volume": return `${config.amount ?? 50}%`;
+        case "spotify-seek": return `${config.durationSeconds ?? 30} seconds in`;
+    }
     const text = config.content?.trim() || config.value?.trim() || config.matchText?.trim();
-    if (block.type === "condition") return `${config.sourceVariable || "value"} ${config.operator ?? "equals"} ${config.compareValue || "…"}`;
-    if (block.type === "chance") return `${config.chancePercent ?? 50}% of the time`;
-    if (block.type === "repeat") return `${config.repeatCount ?? 2} times`;
-    if (block.type === "delay") return `${config.durationSeconds ?? 1}s`;
-    if (block.type === "run-command") return config.commandName ? `/${config.commandName}` : "No command chosen";
-    if (config.variable?.trim() && !text) return `Saves ${config.variable.trim()}`;
-    return text ? (text.length > 34 ? `${text.slice(0, 34)}…` : text) : blockDefinition(block.type).description;
+    if (text) return text.length > 70 ? `${text.slice(0, 70)}\u2026` : text;
+    if (config.aiEnabled) return "Written by AI";
+    if (config.variable?.trim() && config.variable !== "lastMessage") return `Saved as ${config.variable.trim()}`;
+    return blockDefinition(block.type).description;
 }
-
-export { snap };

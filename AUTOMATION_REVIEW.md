@@ -67,3 +67,13 @@ OpenRouter completions, Spotify playback changes, Discord message mutations, com
 Calendar boundaries are checked with controlled dates; an actual computer sleep/wake cycle was not performed. Heap deltas from the runtime benchmark include garbage-collection noise and are not total allocation counts. The live theme check changes CSS theme classes temporarily and restores them, without changing the saved Discord theme.
 
 The installer used for injection matched the published SHA-256 of `LawyerCordInstallerCli.exe` from `nightly-20260830-1239-6210ccf6`. The original loader backup is at `%TEMP%\lawyercord-installer-verification\original-loader.asar`.
+
+## Nightly 2.1.0.0 follow-up
+
+The original checkout now includes the later editor redesign. The settings title is simply Automations. The master switch defaults off for both new and existing installations, persists an explicit opt-in, cancels active and queued runs, detaches Flux listeners and clears schedule and system polling timers. Dry-run tests and editing remain available while off. When on with no enabled workflows, no trigger listeners or polling are attached. Waiting event-triggered workflows retain only their required subscriptions.
+
+Native computer monitoring no longer creates a permanent two-second interval. Each renderer request scans only the requested sources. Roblox monitoring also checks processes to detect a game closed without a disconnect log. Once requests stop, no new native scans start; an already pending scan may finish. Opening the page no longer fetches server references automatically.
+
+Production regression checks cover default-off migration, persisted opt-in and reload, listener removal, cancellation during a wait, and an enabled empty system. An isolated native-module test rejects any background interval, unexpected network request or unrelated source scan. The browser editor preview passes after the UI redesign.
+
+The same runtime fixtures measured 76.52 ms before versus 22.22 ms after for 10,000 unmatched events across 100 workflows, 53.07 ms versus 0.19 ms for 1,000 snapshot reads, 21 versus 1 subscriptions for 20 waits, and 24 versus 7 storage writes. The 10,000-step fixture remains slower, 44.56 ms versus 95.44 ms, with tracing and cooperative yielding. These are isolated fixture results, not whole-client CPU measurements. Native disabled-state overhead is checked structurally by running the real module with instrumented dependencies, not inferred from these dispatch timings.

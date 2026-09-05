@@ -116,6 +116,7 @@ export function validateWorkflow(automation: Automation, workflows: Automation[]
         const error = validateSchedule(automation.schedule);
         if (error) add(error);
     }
+    if ((automation.trigger.type === "process-start" || automation.trigger.type === "process-exit") && !automation.trigger.matchText?.trim()) add("Choose which program this automation watches.");
     const { byId, entryId } = compileWorkflow(automation);
     if (!automation.blocks.length) add("Add at least one block.");
     if (byId.size !== automation.blocks.length) add("Block IDs must be unique.");

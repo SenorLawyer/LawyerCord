@@ -27,15 +27,15 @@ const count = () => page.$$eval("[data-automation-review] .vc-ab-node", nodes =>
 try {
     await page.waitForFunction(() => window.Vencord?.Webpack?.Common?.SettingsRouter);
     await page.evaluate(() => Vencord.Webpack.Common.SettingsRouter.openUserSettings("equicord_automations"));
-    await page.waitForSelector(".vc-ab-template-actions");
+    await page.waitForSelector(".vc-automations-template");
     await click("Process a list");
     await page.waitForSelector(".vc-ab-workspace");
     await page.evaluate(() => [...document.querySelectorAll(".vc-ab-workspace")].at(-1).closest("[data-mana-component=modal]").setAttribute("data-automation-review", "true"));
-    await click("Fit to view");
-    await click("Steps");
+    await click("Fit");
+    await click("List");
     await page.waitForSelector(".vc-ab-step");
     assert.ok(await page.$$eval(".vc-ab-step", nodes => nodes.some(node => node.textContent.includes("Link to existing step"))));
-    await click("Graph");
+    await click("Canvas");
     await page.waitForSelector(".vc-ab-node");
     const before = await count();
     const node = await page.$("[data-automation-review] .vc-ab-node");
@@ -48,13 +48,13 @@ try {
     await click("Redo");
     await page.waitForFunction(before => document.querySelectorAll("[data-automation-review] .vc-ab-node").length === before + 1, {}, before);
     await click("Undo");
-    await click("Test");
-    await page.waitForFunction(() => document.body.textContent.includes("Test completed."));
-    await click("Steps");
+    await click("Test with sample data");
+    await page.waitForFunction(() => document.body.textContent.includes("Test finished."));
+    await click("List");
     const workspace = await page.$("[data-automation-review] .vc-ab-workspace");
     await workspace.screenshot({ path: `${output}/discord-steps.png` });
-    await click("Graph");
-    await click("Fit to view");
+    await click("Canvas");
+    await click("Fit");
     await workspace.screenshot({ path: `${output}/discord-graph.png` });
     const themeChanged = await page.evaluate(() => {
         const workspace = document.querySelector("[data-automation-review] .vc-ab-workspace");
@@ -87,7 +87,7 @@ try {
         return !a.enabled && a.blocks.every(b => ["for-each", "log"].includes(b.type));
     }, testName);
     assert.equal(safe, true, "Live run is restricted to a disabled data-only workflow.");
-    await click("Run saved workflow");
+    await click("Run for real");
     await page.waitForFunction(async name => (await Vencord.Api.DataStore.get("LawyerCord_automations_v2")).automations.find(a => a.name === name)?.lastStatus === "success", {}, testName);
     await nameInput.focus();
     await page.keyboard.down("Control"); await page.keyboard.press("A"); await page.keyboard.up("Control");
@@ -96,7 +96,7 @@ try {
     await page.waitForFunction(() => !document.querySelector("[data-automation-review]"));
     await page.evaluate(name => {
         const card = [...document.querySelectorAll(".vc-automations-card")].find(card => card.querySelector("strong")?.textContent === name);
-        [...card.querySelectorAll("button")].find(button => button.textContent === "Open builder").click();
+        [...card.querySelectorAll("button")].find(button => button.textContent === "Edit").click();
     }, testName);
     await page.waitForFunction(name => [...document.querySelectorAll(".vc-ab-title")].some(el => el.textContent.includes(name + " draft")), {}, testName);
     assert.equal(await page.evaluate(async name => (await Vencord.Api.DataStore.get("LawyerCord_automations_v2")).automations.some(a => a.name === name), testName), true);

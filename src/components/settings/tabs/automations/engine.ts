@@ -9,6 +9,7 @@ import { showNotification } from "@api/Notifications";
 import { openPrivateChannel } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import { sleep } from "@utils/misc";
+import type { PluginNative } from "@utils/types";
 import type { ApplicationCommand, ApplicationCommandIndexResult, ApplicationCommandOption, Guild } from "@vencord/discord-types";
 import {
     ApplicationCommandIndexStore,
@@ -38,6 +39,7 @@ import {
     type AutomationLog,
     type AutomationMatchMode,
     type AutomationOptionMode,
+    type AutomationTrigger,
     BLOCK_DEFINITIONS,
     collectGuildReferences,
     type GuildReference,
@@ -60,6 +62,7 @@ import {
     spotifySetting,
     spotifyVolume,
 } from "./spotify";
+import { SYSTEM_TRIGGER_TYPES, type SystemEvent } from "./system";
 import { readPath, resolveInput } from "./values";
 import { compileWorkflow, migrateWorkflow, parseWorkflowFile, validateWorkflow } from "./workflow";
 
@@ -113,6 +116,7 @@ export interface AutomationSnapshot {
     drafts: Automation[];
     runs: QueuedRun[];
     globalLimit: number;
+    systemEnabled: boolean;
     automations: Automation[];
     logs: AutomationLog[];
     guilds: GuildReference[];
@@ -171,6 +175,9 @@ let loaded = false;
 let loadPromise: Promise<void> | undefined;
 let writeQueue: Promise<void> = Promise.resolve();
 let engineRunning = false;
+let systemEnabled = false;
+let engineAvailable = false;
+let engineGeneration = 0;
 let timerId: number | undefined;
 const processing = false;
 let globalLimit = 4;
@@ -187,6 +194,13 @@ const sentByEngine = new Set<string>();
 const engineEffects = new Map<string, number>();
 const runtimeSnapshots = new WeakMap<Automation, Automation>();
 let previousOwnVoice = "";
+let systemTimer: ReturnType<typeof setInterval> | undefined;
+let systemCursor = 0;
+let systemBusy = false;
+// Looked up on use, so the engine can be bundled where VencordNative does not exist, such as the benchmark sandbox.
+function native() {
+    return VencordNative.pluginHelpers.AutomationCore as PluginNative<typeof import("@equicordplugins/automationCore.desktop/native")>;
+}
 
 function runtimeSnapshot(workflow: Automation): Automation {
     const cached = runtimeSnapshots.get(workflow);
@@ -233,11 +247,11 @@ function listen(event: string, listener: (payload: unknown) => void): () => void
 }
 
 function refreshTriggerCache(): void {
-    for (const workflow of automations) runtimeSnapshot(workflow);
-    triggerIndex = compileTriggers(automations);
+    for (const workflow of automations) if (engineRunning && workflow.enabled) runtimeSnapshot(workflow);
+    triggerIndex = compileTriggers(engineRunning ? automations : []);
     const now = Date.now();
     for (const id of nextDue.keys()) if (!automations.some(a => a.id === id && a.enabled && a.trigger.type === "schedule")) nextDue.delete(id);
-    for (const automation of automations) if (automation.enabled && automation.trigger.type === "schedule" && !nextDue.has(automation.id)) {
+    for (const automation of automations) if (engineRunning && automation.enabled && automation.trigger.type === "schedule" && !nextDue.has(automation.id)) {
         try {
             const legacy = automation.schedule.missed === "legacy";
             const after = automation.lastScheduledAt ?? (legacy ? automation.lastRunAt ?? automation.schedule.startAt - 1 : automation.schedule.missed === "once" ? automation.schedule.startAt - 1 : now);
@@ -245,6 +259,56 @@ function refreshTriggerCache(): void {
         } catch (error) { logger.warn("Invalid automation schedule", error); }
     }
     syncTriggerSubscription();
+    syncSystemPolling();
+}
+
+function usesSystemTrigger(automation: Automation): boolean {
+    return automation.enabled && SYSTEM_TRIGGER_TYPES.some(type => type === automation.trigger.type);
+}
+
+/** Polls the main process for computer events only while an enabled automation wants them. */
+function syncSystemPolling(): void {
+    const wanted = engineRunning && automations.some(usesSystemTrigger);
+    if (!wanted && systemTimer !== undefined) { clearInterval(systemTimer); systemTimer = undefined; }
+    if (wanted && systemTimer === undefined) systemTimer = setInterval(() => void pollSystem(), 2_000);
+}
+
+function systemTriggerMatches(trigger: AutomationTrigger, event: SystemEvent): boolean {
+    if (trigger.type !== event.type) return false;
+    const filter = (trigger.matchText ?? "").trim().toLowerCase();
+    if (event.type === "roblox-join" || event.type === "roblox-leave") return !filter || event.game.name.toLowerCase().includes(filter) || event.game.placeId === filter || event.game.universeId === filter;
+    if ("process" in event) {
+        const name = event.process.name.toLowerCase();
+        return Boolean(filter) && (name === filter || name === `${filter}.exe` || name.includes(filter));
+    }
+    if (event.codex.subagent && !trigger.includeSubagents) return false;
+    return !filter || event.codex.cwd.toLowerCase().includes(filter) || event.codex.project.toLowerCase().includes(filter);
+}
+
+function systemVariables(event: SystemEvent): Record<string, unknown> {
+    if (event.type === "roblox-join") return { triggerEvent: event, game: event.game, joinedAt: event.joinedAt };
+    if (event.type === "roblox-leave") return { triggerEvent: event, game: event.game, joinedAt: event.joinedAt, duration: event.duration, durationMs: event.durationMs };
+    if ("process" in event) return { triggerEvent: event, process: event.process };
+    return { triggerEvent: event, codex: event.codex };
+}
+
+async function pollSystem(): Promise<void> {
+    if (systemBusy || !engineRunning) return;
+    systemBusy = true;
+    const generation = engineGeneration;
+    try {
+        const types = [...new Set(automations.filter(usesSystemTrigger).map(a => a.trigger.type))];
+        const { events, cursor } = await native().pollSystemEvents(systemCursor, types);
+        if (!engineRunning || generation !== engineGeneration) return;
+        systemCursor = cursor;
+        for (const event of events) for (const automation of automations) {
+            if (usesSystemTrigger(automation) && systemTriggerMatches(automation.trigger, event)) void runAutomationWithVariables(automation.id, systemVariables(event));
+        }
+    } catch (error) {
+        logger.warn("Computer events could not be read", error);
+    } finally {
+        systemBusy = false;
+    }
 }
 
 let snapshot: AutomationSnapshot | undefined;
@@ -262,7 +326,7 @@ function queueWrite(): Promise<void> {
         writePending = false;
         flushLogs();
         await DataStore.setMany([
-            [WORKFLOWS_KEY, { version: 2, automations, globalLimit }],
+            [WORKFLOWS_KEY, { version: 2, automations, globalLimit, systemEnabled }],
             [LOGS_KEY, logs.map(({ preview: _preview, inputPreview: _inputPreview, ...log }) => log)],
             [GUILDS_KEY, guilds],
         ]);
@@ -320,9 +384,10 @@ async function readState(): Promise<void> {
         if (storedV2 === undefined && Array.isArray(storedAutomations)) {
             const backup = await DataStore.get<unknown>(BACKUP_KEY);
             if (backup === undefined) await DataStore.set(BACKUP_KEY, storedAutomations);
-            await DataStore.set(WORKFLOWS_KEY, { version: 2, automations, globalLimit });
+            await DataStore.set(WORKFLOWS_KEY, { version: 2, automations, globalLimit, systemEnabled });
         }
         if (isRecord(storedV2) && typeof storedV2.globalLimit === "number") globalLimit = Math.max(1, Math.min(32, storedV2.globalLimit));
+        systemEnabled = isRecord(storedV2) && storedV2.systemEnabled === true;
         queue.setLimit(globalLimit);
         loaded = true;
         refreshTriggerCache();
@@ -347,7 +412,7 @@ export function loadAutomationState(): Promise<void> {
 
 export function getAutomationSnapshot(): AutomationSnapshot {
     flushLogs();
-    return snapshot ??= { automations, drafts, logs, guilds, loaded, runs: queue.snapshot(), globalLimit };
+    return snapshot ??= { automations, drafts, logs, guilds, loaded, runs: queue.snapshot(), globalLimit, systemEnabled };
 }
 
 export async function saveAutomationDraft(workflow: Automation): Promise<void> {
@@ -1512,6 +1577,62 @@ async function executeBlock(block: AutomationBlock, context: ExecutionContext): 
         case "read-components":
             value = describeComponents(sourceMessage(config, context));
             break;
+        case "list-processes":
+            value = await native().listProcesses();
+            break;
+        case "check-process": {
+            const running = await native().isProcessRunning(resolveTemplate(config.name, context.variables));
+            const variable = config.variable?.trim();
+            if (variable) context.variables[variable] = running;
+            if (!running) return false;
+            break;
+        }
+        case "wait-process": {
+            const name = resolveTemplate(config.name, context.variables);
+            const wantRunning = config.value !== "exit";
+            const deadline = Date.now() + Math.min(86_400, Math.max(1, Math.trunc(config.timeoutSeconds || 300))) * 1000;
+            let matched = false;
+            while (Date.now() < deadline) {
+                if ((await native().isProcessRunning(name)) === wantRunning) { matched = true; break; }
+                await delay(2_000, context.signal);
+            }
+            if (!matched) return false;
+            break;
+        }
+        case "run-program": {
+            const result = await native().runProgram({
+                command: resolveTemplate(config.value, context.variables).trim(),
+                args: resolveTemplate(config.content, context.variables).split("\n").map(line => line.trim()).filter(Boolean),
+                timeoutSeconds: config.timeoutSeconds ?? 60,
+            });
+            if (!result.success) throw new Error(result.error || "The program could not be run.");
+            value = { code: result.code, stdout: result.stdout, stderr: result.stderr };
+            break;
+        }
+        case "read-file": {
+            const result = await native().readTextFile({ path: resolveTemplate(config.value, context.variables).trim(), maxBytes: config.limit ?? 200_000 });
+            if (!result.success) throw new Error(result.error || "The file could not be read.");
+            value = result.text;
+            break;
+        }
+        case "open-link": {
+            const result = await native().openLink(resolveTemplate(config.value, context.variables).trim());
+            if (!result.success) throw new Error(result.error || "The link could not be opened.");
+            break;
+        }
+        case "roblox-current-game":
+            value = await native().robloxSession();
+            break;
+        case "roblox-game-info":
+            value = await native().robloxGameInfo(resolveTemplate(config.value, context.variables).trim());
+            if (value === null) throw new Error("Roblox has no game with that ID.");
+            break;
+        case "codex-last-turn":
+            value = await native().codexLastTurn();
+            break;
+        case "codex-sessions":
+            value = await native().codexRecentSessions(config.limit ?? 10);
+            break;
         case "read-embed": {
             const message = sourceMessage(config, context);
             const wanted = Math.max(1, Math.trunc(config.embedIndex ?? 1));
@@ -1615,6 +1736,7 @@ async function executeRun(workflow: Automation, variables: Record<string, unknow
 
 async function runAutomationWithVariables(id: string, variables: Record<string, unknown>): Promise<AutomationRunResult> {
     await loadAutomationState();
+    if (!engineRunning) return { success: false, error: "Enable the automation system before running a workflow." };
     const workflow = automations.find(a => a.id === id);
     if (!workflow) return { success: false, error: "Workflow was not found." };
     try {
@@ -1685,28 +1807,47 @@ function scheduleEngine(): void {
 }
 
 export async function startAutomationEngine(): Promise<void> {
-    if (engineRunning) return;
-    engineRunning = true;
+    engineAvailable = true;
     await loadAutomationState();
-    if (!engineRunning) return;
-    // Attaches the message handler only if an enabled automation actually reacts to messages.
+    if (!engineAvailable || !systemEnabled || engineRunning) return;
+    engineRunning = true;
+    engineGeneration++;
     refreshTriggerCache();
     scheduleEngine();
     for (const automation of automations) {
         if (automation.enabled && automation.trigger.type === "startup") void runAutomation(automation.id);
     }
+    notify();
 }
 
 export function stopAutomationEngine(): void {
+    engineAvailable = false;
     engineRunning = false;
+    engineGeneration++;
     queue.cancel();
     syncTriggerSubscription();
+    syncSystemPolling();
+    nextDue.clear();
+    triggerIndex = compileTriggers([]);
     if (timerId !== undefined) {
         window.clearTimeout(timerId);
         timerId = undefined;
     }
-    // Release every waiting block, which clears its timeout and its own message handler.
     for (const cancel of [...pendingWaits]) cancel();
+    notify();
+}
+
+export async function setAutomationSystemEnabled(value: boolean): Promise<void> {
+    await loadAutomationState();
+    if (systemEnabled === value) return;
+    systemEnabled = value;
+    const available = engineAvailable;
+    if (!value) {
+        stopAutomationEngine();
+        engineAvailable = available;
+    } else if (available) await startAutomationEngine();
+    notify();
+    await queueWrite();
 }
 
 function guildReferenceFromGuild(guild: Guild): GuildReference {

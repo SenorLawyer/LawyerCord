@@ -22,6 +22,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Delete the unused predecessor to the UserSettings API.
 
+- Delete notification log entries by their unique ID without overwriting concurrent updates.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

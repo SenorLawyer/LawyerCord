@@ -16,6 +16,30 @@ import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
 const filename = "src/api/Notifications/NotificationComponent.tsx";
 const root = fileURLToPath(new URL("../", import.meta.url));
 
+test("notification deletion uses its ID and preserves concurrent log updates", async () => {
+    let log = [{ id: "first", timestamp: 1 }, { id: "second", timestamp: 1 }];
+    const mocks: Record<string, unknown> = {
+        "@api/DataStore": {
+            get: async () => structuredClone(log),
+            set: async (_key: string, value: typeof log) => { log = value; },
+            update: async (_key: string, change: (value: typeof log) => typeof log) => { log = change(log); }
+        },
+        "@api/Settings": { Settings: { notifications: { logLimit: 100 } } },
+        "@utils/css": { classNameFactory: () => () => "" },
+        "nanoid": { nanoid: () => "new" }
+    };
+    const { outputText } = transpileModule(readFileSync("src/api/Notifications/notificationLog.tsx", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022, jsx: 2 }, fileName: "notificationLog.tsx"
+    });
+    const { deleteNotification, persistNotification } = runInNewContext(`${outputText}\nexports;`, {
+        exports: {}, require: (name: string) => mocks[name] ?? {}
+    });
+    await Promise.all([deleteNotification("second"), persistNotification({ title: "New", body: "New" })]);
+    assert.deepEqual(Array.from(log, entry => entry.id), ["new", "first"]);
+    await Promise.all([deleteNotification("first"), deleteNotification("new")]);
+    assert.equal(log.length, 0);
+});
+
 test("notification dismissal releases the queue even if the caller's callback throws", async () => {
     const source = readFileSync(new URL("../src/api/Notifications/Notifications.tsx", import.meta.url), "utf8");
     const code = source.slice(source.indexOf("function _showNotification"), source.indexOf("function shouldBeNative"));

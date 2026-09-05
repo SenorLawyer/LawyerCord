@@ -129,6 +129,7 @@ jobs:
                   pnpm testTsc
                   pnpm testPerformance
                   pnpm testStartupFlags
+                  pnpm testCrxToZip
                   pnpm testAutomations
                   pnpm testDiscordMcp
                   pnpm testReleaseArtifactAudit

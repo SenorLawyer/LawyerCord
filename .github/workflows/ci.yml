@@ -46,6 +46,7 @@ jobs:
               run: |
                   pnpm testPerformance
                   pnpm testStartupFlags
+                  pnpm testCrxToZip
                   pnpm testMessageEventsPriority
                   pnpm testAutomations
                   pnpm testDiscordMcp

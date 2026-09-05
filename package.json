@@ -38,6 +38,7 @@
         "testPromiseTimeout": "tsx scripts/testPromiseTimeout.ts",
         "testUpdaterClassification": "tsx scripts/testUpdaterClassification.ts",
         "testStartupFlags": "tsx scripts/testStartupFlags.ts",
+        "testCrxToZip": "tsx scripts/testCrxToZip.ts",
         "testUpdateChannelSelection": "tsx scripts/testUpdateChannelSelection.ts",
         "testInstallerStaleMarkerRepair": "node scripts/testInstallerStaleMarkerRepair.mjs",
         "testVoiceMessageTranscriber": "tsx scripts/testVoiceMessageTranscriber.ts",

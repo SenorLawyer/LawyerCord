@@ -46,6 +46,38 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("moving a bookmark into a later folder preserves the bookmark", () => {
+    const bookmark = { channelId: "channel", guildId: "guild", name: "Bookmark" };
+    const folder = { name: "Folder", bookmarks: [] as typeof bookmark[] };
+    const bookmarks: (typeof bookmark | typeof folder)[] = [bookmark, folder];
+    let drop: (item: object, monitor: object) => void = () => assert.fail("Folder drop handler was not registered");
+    const React = { createElement() {} };
+    const Bookmark = loadSource("src/equicordplugins/channelTabs/components/BookmarkContainer.tsx", {
+        "@components/BaseText": {},
+        "@equicordplugins/channelTabs/util": { isBookmarkFolder: (value: object) => "bookmarks" in value, settings: { store: {}, use: () => ({}) } },
+        "@equicordplugins/channelTabs/util/icons": {},
+        "@utils/css": { classNameFactory: () => () => "" }, "@utils/discord": {},
+        "@utils/misc": { classes: () => "" }, "@webpack": { findComponentByCodeLazy: () => null },
+        "./ChannelTab": {}, "./ContextMenus": {},
+        "@webpack/common": {
+            React, useRef: () => ({ current: null }), useState: (value: unknown) => [value, () => {}], useEffect() {},
+            useDrag: () => [{}, (ref: unknown) => ref],
+            useDrop: (create: () => { drop?: typeof drop; }) => { const spec = create(); if (spec.drop) drop = spec.drop; return [{}, (ref: unknown) => ref]; }
+        }
+    }, { React }, "Bookmark");
+    Bookmark({ bookmarks, index: 1, methods: {
+        deleteBookmark: (index: number) => bookmarks.splice(index, 1),
+        addBookmark(value: typeof bookmark, index: number) {
+            const target = bookmarks[index];
+            assert.ok(target && "bookmarks" in target);
+            target.bookmarks.push(value);
+        }
+    } });
+    drop({ bookmark, index: 0, isFromFolder: false }, { getItemType: () => "vc_Bookmark" });
+    assert.deepEqual(bookmarks, [folder]);
+    assert.deepEqual(folder.bookmarks, [bookmark]);
+});
+
 test("channel tab limits preserve foreground and background opening behavior", () => {
     const navigations: string[] = [];
     const tabs = loadSource("src/equicordplugins/channelTabs/util/tabs.tsx", {

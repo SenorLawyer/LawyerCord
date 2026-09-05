@@ -472,6 +472,9 @@ function Bookmark(props: BookmarkProps & { isExpanded?: boolean; onToggleFolder?
                 // skip if already in this folder
                 if (item.isFromFolder && item.folderIndex === index) return;
 
+                // add to this folder
+                methods.addBookmark(sourceBookmark, index);
+
                 // remove from original location
                 if (item.isFromFolder) {
                     // coming from a folder
@@ -481,8 +484,6 @@ function Bookmark(props: BookmarkProps & { isExpanded?: boolean; onToggleFolder?
                     methods.deleteBookmark(item.index);
                 }
 
-                // add to this folder
-                methods.addBookmark(sourceBookmark, index);
             }
         },
         collect: monitor => ({

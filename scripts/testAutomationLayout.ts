@@ -75,6 +75,11 @@ const at = (blocks: ReturnType<typeof arrangeBlocks>, id: string) => {
     assert.deepEqual(settle([a], "other", 333, 341), { x: 340, y: 340 });
     const spot = freeSpot([a], 200, 100, "notify");
     assert.ok(spot.y >= 100 + nodeHeight("send-message"), "a free spot never lands on an existing node");
+    const crowded = Array.from({ length: 100 }, (_, i) => ({ ...createAutomationBlock("note"), position: { x: 0, y: i * 100 } })).reverse();
+    for (const [x, y] of [[0, 0], [-400, 0], [0, -200]]) {
+        const free = freeSpot(crowded, x, y, "notify");
+        assert.ok(!overlaps(crowded, free.x, free.y, "notify"), "the final snapped position is free even in a crowded column");
+    }
 }
 
 console.log("automation layout checks passed");

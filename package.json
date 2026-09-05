@@ -49,9 +49,10 @@
         "testSecureMessagingLive": "tsx scripts/testSecureMessagingLive.ts",
         "createDiscordMcpVideo": "tsx scripts/createDiscordMcpVideo.ts",
         "benchmarkDiscord": "tsx scripts/benchmarkDiscord.ts",
-        "test": "pnpm buildStandalone && pnpm testTsc && pnpm testMessageEventsPriority && pnpm testDiscordMcp && pnpm testSecureMessaging && pnpm testSecureMessagingNative && pnpm lint:fix && pnpm lint-styles && pnpm lint:intl && pnpm lint:patches && pnpm generatePluginJson",
+        "test": "pnpm buildStandalone && pnpm testTsc && pnpm testMessageEventsPriority && pnpm testDiscordMcp && pnpm testSecureMessaging && pnpm testSecureMessagingNative && pnpm testPerformance && pnpm lint:fix && pnpm lint-styles && pnpm lint:intl && pnpm lint:patches && pnpm generatePluginJson",
         "testWeb": "pnpm lint:fix && pnpm buildWeb && pnpm testTsc",
-        "testTsc": "tsc --noEmit"
+        "testTsc": "tsc --noEmit",
+        "testPerformance": "tsx --test scripts/testBadges.ts scripts/testBrowserBuild.ts scripts/testDataStoreUpdates.ts scripts/testListenBrainzCache.ts scripts/testNativeWatchers.ts scripts/testNotificationPerformance.ts scripts/testPluginManagerPerformance.ts scripts/testPluginPerformance.ts scripts/testPresenceLifecycle.ts scripts/testSettingsPerformance.ts scripts/testTTLMap.ts scripts/testThemePerformance.ts scripts/testUseIntersection.ts scripts/testZipPreviewSecurity.ts scripts/testZipPreviewLifecycle.ts && tsx scripts/benchmarkTimezones.ts --check"
     },
     "dependencies": {
         "@ffmpeg/ffmpeg": "^0.12.10",

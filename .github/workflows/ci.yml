@@ -49,6 +49,7 @@ jobs:
                   pnpm testCrxToZip
                   pnpm testFilePicker
                   pnpm testExtensionInstall
+                  pnpm testSettingsSync
                   pnpm testMessageEventsPriority
                   pnpm testAutomations
                   pnpm testDiscordMcp

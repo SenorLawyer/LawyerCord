@@ -63,7 +63,6 @@ export async function importSettings(data: string, type: BackupType = "all", clo
     try {
         var parsed = JSON.parse(data);
     } catch (err) {
-        console.log(data);
         throw new Error("Failed to parse JSON: " + String(err));
     }
 
@@ -79,7 +78,7 @@ export async function importSettings(data: string, type: BackupType = "all", clo
                 deepMerge(PlainSettings, parsed.settings);
                 await VencordNative.settings.set(PlainSettings);
             }
-            if (parsed.quickCss) await VencordNative.quickCss.set(parsed.quickCss);
+            if (typeof parsed.quickCss === "string") await VencordNative.quickCss.set(parsed.quickCss);
             if (parsed.dataStore) await DataStore.setMany(parsed.dataStore);
             break;
         }
@@ -91,7 +90,7 @@ export async function importSettings(data: string, type: BackupType = "all", clo
             break;
         }
         case "css": {
-            if (!parsed.quickCss) throw new Error("CSS missing");
+            if (typeof parsed.quickCss !== "string") throw new Error("CSS missing");
 
             await VencordNative.quickCss.set(parsed.quickCss);
             break;
@@ -162,37 +161,26 @@ export async function downloadSettingsBackup(type: BackupType = "all", { minify 
 }
 
 export async function uploadSettingsBackup(type: BackupType = "all", showToast = true): Promise<void> {
-    if (IS_DISCORD_DESKTOP) {
-        const [file] = await DiscordNative.fileManager.openFiles({
-            filters: [
-                { name: "LawyerCord Settings Backup", extensions: ["json"] },
-                { name: "all", extensions: ["*"] }
-            ]
-        });
-
-        if (file) {
-            try {
-                await importSettings(new TextDecoder().decode(file.data), type);
-                if (showToast) toastSuccess();
-            } catch (err) {
-                logger.error(err);
-                if (showToast) toastFailure(err);
-            }
+    try {
+        let data: string;
+        if (IS_DISCORD_DESKTOP) {
+            const [file] = await DiscordNative.fileManager.openFiles({
+                filters: [
+                    { name: "LawyerCord Settings Backup", extensions: ["json"] },
+                    { name: "all", extensions: ["*"] }
+                ]
+            });
+            if (!file) return;
+            data = new TextDecoder().decode(file.data);
+        } else {
+            const file = await chooseFile("application/json");
+            if (!file) return;
+            data = await file.text();
         }
-    } else {
-        const file = await chooseFile("application/json");
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = async () => {
-            try {
-                await importSettings(reader.result as string, type);
-                if (showToast) toastSuccess();
-            } catch (err) {
-                logger.error(err);
-                if (showToast) toastFailure(err);
-            }
-        };
-        reader.readAsText(file);
+        await importSettings(data, type);
+        if (showToast) toastSuccess();
+    } catch (err) {
+        logger.error(err);
+        if (showToast) toastFailure(err);
     }
 }

@@ -44,13 +44,13 @@ export function chooseFile(mimeTypes: string) {
         input.type = "file";
         input.style.display = "none";
         input.accept = mimeTypes;
-        input.onchange = async () => {
+        input.onchange = input.oncancel = () => {
             resolve(input.files?.[0] ?? null);
+            input.remove();
         };
 
         document.body.appendChild(input);
         input.click();
-        setImmediate(() => document.body.removeChild(input));
     });
 }
 

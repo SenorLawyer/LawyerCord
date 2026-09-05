@@ -130,6 +130,7 @@ jobs:
                   pnpm testPerformance
                   pnpm testStartupFlags
                   pnpm testCrxToZip
+                  pnpm testFilePicker
                   pnpm testAutomations
                   pnpm testDiscordMcp
                   pnpm testReleaseArtifactAudit

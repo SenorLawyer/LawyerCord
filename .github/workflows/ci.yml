@@ -47,6 +47,7 @@ jobs:
                   pnpm testPerformance
                   pnpm testStartupFlags
                   pnpm testCrxToZip
+                  pnpm testFilePicker
                   pnpm testMessageEventsPriority
                   pnpm testAutomations
                   pnpm testDiscordMcp

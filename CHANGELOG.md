@@ -44,6 +44,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Propagate folder-read and size-limit failures when automatically zipping dropped folders.
 
+- Preserve incomplete automation log records until their remaining bytes arrive.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

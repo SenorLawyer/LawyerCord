@@ -12,6 +12,8 @@ import { build } from "esbuild";
 const require = createRequire(import.meta.url);
 let reads = 0;
 let processes = 0;
+let logBytes = Buffer.alloc(0);
+let readLimit = Infinity;
 const result = await build({
     entryPoints: ["src/equicordplugins/automationCore.desktop/native.ts"], bundle: true, write: false, platform: "node", format: "cjs",
     external: ["electron"],
@@ -27,12 +29,20 @@ const globals = {
     fetch: () => { throw new Error("Unexpected network call."); },
     require: name => {
         if (name === "electron") return { safeStorage: {}, shell: {} };
-        if (name === "fs/promises") return { readdir: async () => { reads++; return []; }, stat: async () => { reads++; throw Object.assign(new Error("Missing test file"), { code: "ENOENT" }); } };
+        if (name === "fs/promises") return {
+            readdir: async () => { reads++; return []; },
+            stat: async () => { reads++; throw Object.assign(new Error("Missing test file"), { code: "ENOENT" }); },
+            open: async () => ({
+                stat: async () => ({ size: logBytes.length }),
+                read: async (buffer, offset, length, position) => ({ bytesRead: logBytes.copy(buffer, offset, position, position + Math.min(length, readLimit)) }),
+                close: async () => {}
+            })
+        };
         if (name === "child_process") return { spawn: () => { processes++; throw new Error("Unexpected process scan."); } };
         return require(name);
     },
 };
-runInNewContext(result.outputFiles[0].text, globals);
+const readAppended = runInNewContext(result.outputFiles[0].text + "\nreadAppended;", globals);
 const api = globals.module.exports;
 await api.pollSystemEvents({}, 0, []);
 assert.equal(reads, 0);
@@ -49,3 +59,22 @@ await api.pollSystemEvents({}, 0, ["process-start"]);
 assert.equal(processes, 1);
 assert.equal(reads, previousReads);
 console.log("Native scans are demand-driven, source-specific, and create no background timers.");
+
+logBytes = Buffer.from('first\n{"message":"');
+let chunk = await readAppended("fixture", 0);
+assert.equal(chunk.offset, 6);
+assert.equal(chunk.lines.filter(Boolean).join("\n"), "first");
+logBytes = Buffer.from('first\n{"message":"😀"}\n');
+readLimit = 14;
+chunk = await readAppended("fixture", chunk.offset);
+assert.equal(chunk.offset, 6);
+assert.equal(chunk.lines.filter(Boolean).length, 0);
+readLimit = Infinity;
+chunk = await readAppended("fixture", chunk.offset);
+assert.equal(chunk.lines.filter(Boolean).join("\n"), '{"message":"😀"}');
+assert.equal(chunk.offset, logBytes.length);
+logBytes = Buffer.from("reset\n");
+chunk = await readAppended("fixture", chunk.offset);
+assert.equal(chunk.lines.filter(Boolean).join("\n"), "reset");
+assert.equal(chunk.offset, logBytes.length);
+console.log("Incremental log reads retain partial lines and UTF-8 bytes across short reads and truncation.");

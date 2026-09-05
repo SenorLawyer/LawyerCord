@@ -426,11 +426,9 @@ async function readAppended(path: string, offset: number): Promise<{ lines: stri
         if (size === start) return { lines: [], offset: size };
         const length = Math.min(size - start, READ_CAP);
         const buffer = Buffer.alloc(length);
-        await handle.read(buffer, 0, length, start);
-        const text = buffer.toString("utf8");
-        const lines = text.split("\n");
-        const partial = text.endsWith("\n") || start + length === size ? "" : lines.pop() ?? "";
-        return { lines, offset: start + length - Buffer.byteLength(partial) };
+        const { bytesRead } = await handle.read(buffer, 0, length, start);
+        const end = buffer.subarray(0, bytesRead).lastIndexOf(0x0A) + 1;
+        return { lines: buffer.subarray(0, end).toString("utf8").split("\n"), offset: start + end };
     } finally {
         await handle.close();
     }

@@ -36,6 +36,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Validate desktop favourite attachment downloads, reject redirects, cap downloads at 500 MiB and return safe errors.
 
+- Apply the existing clip size limit to native file reads and reuse the byte-upload writer for selected clips.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

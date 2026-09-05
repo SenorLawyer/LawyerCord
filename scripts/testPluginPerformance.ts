@@ -7,6 +7,9 @@
 import assert from "node:assert/strict";
 
 import { readFileSync } from "node:fs";
+import * as path from "node:path";
+import { Readable } from "node:stream";
+import { buffer } from "node:stream/consumers";
 
 import { test } from "node:test";
 import { setImmediate } from "node:timers/promises";
@@ -87,6 +90,43 @@ function decorFixture() {
     }
     return { store, requests, scheduled, flush, advance, errors, clock };
 }
+
+test("clip file reads share the size cap and selected files reuse the byte writer", async () => {
+    const footer = Buffer.from([0x75, 0x75, 0x69, 0x64, 0xA1, 0xC8, 0x52, 0x99, 0x33, 0x46, 0x4D, 0xB8, 0x88, 0xF0, 0x83, 0xF5, 0x7A, 0x75, 0xA5, 0xEF]);
+    const payload = Buffer.concat([Buffer.from([1, 2, 3]), footer, Buffer.from('{"applicationName":"Fixture"}')]);
+    let oversized = false;
+    let id = 0;
+    let reads = 0;
+    const writes: Buffer[] = [];
+    const native = loadComponent("src/equicordplugins/clipUpload.desktop/native.ts", {}, {
+        "@main/ipcMain": { ensureSafePath: () => true },
+        "@main/utils/constants": { DATA_DIR: "fixture" },
+        crypto: { randomUUID: () => String(++id) },
+        electron: { dialog: { showOpenDialog: async () => ({ filePaths: ["clip.mp4"], canceled: false }) } },
+        fs: { createReadStream: (_path: string, options: { end: number; }) => {
+            assert.equal(options.end, 500 * 1024 * 1024);
+            reads++;
+            return Readable.from([payload]);
+        } },
+        "fs/promises": { mkdir: async () => {}, writeFile: async (_path: string, data: Buffer) => { writes.push(data); } },
+        path,
+        "stream/consumers": { buffer: async (stream: Readable) => oversized ? { length: 500 * 1024 * 1024 + 1 } : buffer(stream) }
+    }, { Buffer, Uint8Array });
+    const picked = await native.chooseVideoFile({});
+    const metadata = await native.parseClipFileMetadata({}, picked.token);
+    assert.equal(metadata[0].applicationName, "Fixture");
+    const temp = await native.createTempVideoFile({}, picked.token);
+    assert.equal(typeof temp, "string");
+    assert.deepEqual(Array.from(writes[0]), [1, 2, 3]);
+    assert.deepEqual(Array.from(await native.readVideoFile({}, temp)), Array.from(payload));
+    oversized = true;
+    const large = await native.chooseVideoFile({});
+    assert.equal(await native.parseClipFileMetadata({}, large.token), null);
+    assert.equal(await native.createTempVideoFile({}, large.token), null);
+    assert.equal(await native.readVideoFile({}, temp), null);
+    assert.equal(writes.length, 1);
+    assert.equal(reads, 6);
+});
 
 test("favourite attachment downloads validate IPC input and bound network responses", async () => {
     let requests = 0;

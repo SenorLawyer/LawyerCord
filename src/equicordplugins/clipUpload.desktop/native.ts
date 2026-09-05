@@ -8,8 +8,10 @@ import { ensureSafePath } from "@main/ipcMain";
 import { DATA_DIR } from "@main/utils/constants";
 import { randomUUID } from "crypto";
 import { dialog, type IpcMainInvokeEvent } from "electron";
-import { mkdir, readFile, rm, writeFile } from "fs/promises";
+import { createReadStream } from "fs";
+import { mkdir, rm, writeFile } from "fs/promises";
 import { basename, extname, join, resolve } from "path";
+import { buffer } from "stream/consumers";
 
 interface TempEntry {
     tmpDir: string;
@@ -49,9 +51,15 @@ function stripClipFooter(data: Buffer): Buffer {
     return idx === -1 ? data : data.subarray(0, idx);
 }
 
+async function readClipFile(filePath: string): Promise<Buffer> {
+    const data = await buffer(createReadStream(filePath, { end: MAX_CLIP_SIZE }));
+    if (data.length > MAX_CLIP_SIZE) throw new Error("Clip file is too large.");
+    return data;
+}
+
 async function parseClipMetadata(filePath: string): Promise<RawClipAttachment[] | null> {
     try {
-        const buf = await readFile(filePath);
+        const buf = await readClipFile(filePath);
         if (buf.length <= CLIP_FOOTER_SIZE) return null;
 
         const footerIdx = buf.indexOf(CLIP_FOOTER);
@@ -94,17 +102,7 @@ export async function createTempVideoFile(_: IpcMainInvokeEvent, token: string):
     pendingTokens.delete(token);
 
     try {
-        const tmpDir = join(CLIP_UPLOAD_DIR, randomUUID());
-        const tmpPath = join(tmpDir, basename(originalPath));
-
-        if (!ensureSafePath(tmpDir, basename(originalPath))) return null;
-
-        await mkdir(tmpDir, { recursive: true });
-        await writeFile(tmpPath, stripClipFooter(await readFile(originalPath)));
-
-        const tmpToken = randomUUID();
-        tempEntries.set(tmpToken, { tmpDir, tmpPath });
-        return tmpToken;
+        return await createTempVideoFileFromBytes(_, basename(originalPath), stripClipFooter(await readClipFile(originalPath)));
     } catch {
         return null;
     }
@@ -145,7 +143,7 @@ export async function readVideoFile(_: IpcMainInvokeEvent, token: string): Promi
     if (!entry) return null;
 
     try {
-        const buf = await readFile(entry.tmpPath);
+        const buf = await readClipFile(entry.tmpPath);
         return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
     } catch {
         return null;

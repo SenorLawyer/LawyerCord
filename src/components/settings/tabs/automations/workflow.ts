@@ -86,6 +86,7 @@ export function migrateWorkflow(input: unknown): Automation {
     });
     if (!isAutomation(value)) throw new Error("The workflow settings are malformed.");
     const migrated = cloneAutomation(value);
+    migrated.trigger ??= { type: "schedule" };
     if (input.schemaVersion !== 2) migrated.blocks = migrateToGraph(migrated.blocks);
     if (input.schemaVersion !== 2) {
         migrated.runMode = "skip";

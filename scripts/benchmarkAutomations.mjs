@@ -72,6 +72,15 @@ if (storageTest) {
         assert.throws(() => helpers.variableValue(path, { variables }), /not allowed/);
     }
     const legacy = fixture(1);
+    const scheduled = fixture(3);
+    delete scheduled.trigger;
+    const scheduledReload = await engine("after");
+    scheduledReload.globals.data.set("LawyerCord_automations", [scheduled]);
+    await scheduledReload.api.loadAutomationState();
+    assert.equal(scheduledReload.api.getAutomationSnapshot().automations[0].trigger.type, "schedule");
+    assert.deepEqual(scheduledReload.globals.data.get("LawyerCord_automations_v1_backup"), [scheduled]);
+    await scheduledReload.api.setAutomationSystemEnabled(true);
+    scheduledReload.api.stopAutomationEngine();
     globals.data.set("LawyerCord_automations", [legacy]);
     await api.loadAutomationState();
     assert.equal(api.getAutomationSnapshot().automations[0].runMode, "skip");

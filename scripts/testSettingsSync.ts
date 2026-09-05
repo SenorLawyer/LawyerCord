@@ -14,6 +14,25 @@ const { outputText } = transpileModule(readFileSync("src/api/SettingsSync/offlin
     compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
 });
 
+test("automatic cloud sync uses the displayed default and respects each direction", () => {
+    const { outputText } = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    });
+    const storage: Record<string, string> = {};
+    const { shouldCloudSync } = runInNewContext(`${outputText}\nexports;`, {
+        exports: {},
+        require: (name: string) => name === "@utils/localStorage"
+            ? { localStorage: new Proxy(storage, { get: (target, key: string) => key === "getItem" ? (key: string) => target[key] ?? null : target[key] }) }
+            : name === "@utils/Logger" ? { Logger: class { } } : {}
+    });
+    for (const [direction, push, pull] of [[undefined, true, true], ["both", true, true], ["push", true, false], ["pull", false, true], ["manual", false, false]] as const) {
+        if (direction === undefined) delete storage.Vencord_cloudSyncDirection;
+        else storage.Vencord_cloudSyncDirection = direction;
+        assert.equal(shouldCloudSync("push"), push, `${direction}: push`);
+        assert.equal(shouldCloudSync("pull"), pull, `${direction}: pull`);
+    }
+});
+
 test("backup imports await file reading, preserve empty CSS, and never log backup content", async () => {
     const css: string[] = [];
     const logs: unknown[] = [];

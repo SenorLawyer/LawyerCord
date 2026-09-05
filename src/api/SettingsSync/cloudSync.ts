@@ -453,7 +453,7 @@ async function deleteV1() {
 }
 
 export function shouldCloudSync(direction: "push" | "pull") {
-    const localDirection = localStorage.Vencord_cloudSyncDirection;
+    const localDirection = getCloudSyncDirection();
     return localDirection === direction || localDirection === "both";
 }
 

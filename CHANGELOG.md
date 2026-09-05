@@ -14,6 +14,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Simplify extension extraction, reject paths outside the extension directory, and finish cleanup before reporting installation failures.
 - Await backup file imports, preserve empty QuickCSS backups, and remove backup-content logging and duplicate import handling.
 
+- Honor the default two-way cloud sync direction and remove unreachable startup warnings and unused notification code.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

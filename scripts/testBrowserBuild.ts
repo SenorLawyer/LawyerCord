@@ -26,7 +26,7 @@ test("browser packaging replaces stale output without unused editor bundles", as
         assert.ok(result.startsWith(root + sep), "build writes must stay inside the fixture");
         return result;
     };
-    const css = ".fixture { color: red; }";
+    const css = '.fixture::after { content: "`${missing}\\\\path"; }\n.next { color: red; }';
     const files = {
         "dist/browser/extension.js": "renderer",
         "dist/browser/extension.css": "styles",

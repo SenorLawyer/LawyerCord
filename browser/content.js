@@ -8,8 +8,6 @@ document.addEventListener(
         window.postMessage({
             type: "vencord:meta",
             meta: {
-                EXTENSION_VERSION: browser.runtime.getManifest().version,
-                EXTENSION_BASE_URL: browser.runtime.getURL(""),
                 RENDERER_CSS_URL: browser.runtime.getURL("dist/LawyerCord.css"),
             }
         });

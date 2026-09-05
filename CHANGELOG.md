@@ -8,6 +8,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Preserve existing Chromium feature flags when applying startup workarounds.
 - Remove an unused native download helper and correct the pull request release instructions.
+- Preserve literal CSS in userscript builds and remove obsolete browser editor metadata and About page scripting.
 
 ## 2.1.1.0 - 2026-09-05
 

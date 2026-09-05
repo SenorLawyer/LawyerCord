@@ -38,6 +38,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Apply the existing clip size limit to native file reads and reuse the byte-upload writer for selected clips.
 
+- Remove unused icon viewer modal styles.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

@@ -45,6 +45,7 @@ jobs:
             - name: Run focused tests
               run: |
                   pnpm testPerformance
+                  pnpm testStartupFlags
                   pnpm testMessageEventsPriority
                   pnpm testAutomations
                   pnpm testDiscordMcp

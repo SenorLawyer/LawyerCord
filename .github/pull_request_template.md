@@ -22,4 +22,4 @@
 
 ## Release channel
 
-<!-- No label defaults to nightly. Apply exactly one of release:nightly, release:beta, release:stable, or release:skip. -->
+<!-- Apply exactly one of release:nightly, release:beta, release:stable, or release:skip. No label prevents a release. -->

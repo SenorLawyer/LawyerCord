@@ -2,6 +2,13 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 2.1.2.0 - 2026-09-05
+
+### Fixed
+
+- Preserve existing Chromium feature flags when applying startup workarounds.
+- Remove an unused native download helper and correct the pull request release instructions.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

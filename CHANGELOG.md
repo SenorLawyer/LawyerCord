@@ -42,6 +42,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Use the managed message hook for random mentions and choose members from the destination channel.
 
+- Propagate folder-read and size-limit failures when automatically zipping dropped folders.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

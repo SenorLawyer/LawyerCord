@@ -91,6 +91,32 @@ function decorFixture() {
     return { store, requests, scheduled, flush, advance, errors, clock };
 }
 
+test("folder zipping drains directory batches and rejects read and size failures", { timeout: 1000 }, async () => {
+    const readDirectory = loadSource("src/equicordplugins/autoZipper/index.ts", {
+        "@api/Settings": { definePluginSettings: () => ({ store: { extensions: "" } }) },
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/Logger": { Logger: class {} },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+        "@webpack/common": {}, fflate: {}
+    }, {}, "readDirectoryEntry");
+    const directory = (name: string, batches: object[][]) => ({
+        name, isDirectory: true,
+        createReader: () => ({ readEntries: (resolve: (entries: object[]) => void) => resolve(batches.shift() ?? []) })
+    });
+    const file = (name: string, size = 1, fail = false) => ({
+        name, isFile: true,
+        file: (resolve: (value: object) => void, reject: (error: Error) => void) => fail
+            ? reject(new Error("Read failed"))
+            : resolve({ size, arrayBuffer: async () => new Uint8Array([7]).buffer })
+    });
+    const files = await readDirectory(directory("root", [[file("a")], [directory("nested", [[file("b")]])]]));
+    assert.deepEqual(Object.keys(files), ["a", "nested/b"]);
+    assert.deepEqual(Array.from(files["nested/b"]), [7]);
+    await assert.rejects(readDirectory(directory("root", [[file("bad", 1, true)]])), /Read failed/);
+    await assert.rejects(readDirectory(directory("root", [[file("large", 100 * 1024 * 1024 + 1)]])), /too large/);
+    await assert.rejects(readDirectory(directory("root", [Array.from({ length: 501 }, (_, i) => file(String(i)))])), /more than 500/);
+});
+
 test("random mentions use the destination channel and preserve text when no members are loaded", () => {
     const plugin = loadComponent("src/equicordplugins/atSomeone/index.ts", {
         ChannelStore: { getChannel: (id: string) => ({

@@ -16,6 +16,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Honor the default two-way cloud sync direction and remove unreachable startup warnings and unused notification code.
 
+- Keep cloud sync failures retryable and report failed downloads or deletions instead of recording success.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

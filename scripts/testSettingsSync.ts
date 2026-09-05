@@ -33,6 +33,48 @@ test("automatic cloud sync uses the displayed default and respects each directio
     }
 });
 
+test("failed cloud downloads and deletions do not advance the manifest or report success", async () => {
+    const { outputText } = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    });
+    let writes = 0;
+    let notifications: { color: string; }[] = [];
+    let response: unknown;
+    const modules: Record<string, unknown> = {
+        "@api/DataStore": { get: async () => undefined, set: async () => { writes++; } },
+        "@api/Notifications": { showNotification: (data: { color: string; }) => notifications.push(data) },
+        "@api/Settings": { PlainSettings: { cloud: {} } },
+        "@utils/localStorage": { localStorage: {} },
+        "@utils/Logger": { Logger: class { info() { } error() { } } },
+        "./cloudSetup": { getCloudUrl: () => new URL("https://cloud.example"), getCloudAuth: async () => "test" },
+        "./offline": { importSettings: async () => { throw new Error("Import failed"); } }
+    };
+    const { getCloudSettings, deleteCloudSettings } = runInNewContext(`${outputText}\nexports;`, {
+        exports: {}, require: (name: string) => modules[name] ?? {}, URL, TextDecoder, atob,
+        fetch: async (_url: URL, init: RequestInit) => init.method === "DELETE"
+            ? { ok: false, status: 500 }
+            : { ok: true, json: async () => response },
+        VencordNative: { settings: { set: async () => { writes++; } } }
+    });
+    for (const [downloads, errors] of [
+        [[{ key: "settings", value: btoa("{}") }], []],
+        [[], [{ key: "settings", error: "Server failed" }]]
+    ]) {
+        response = { downloads, errors, server_manifest: [], uploaded: [] };
+        notifications = [];
+        assert.equal(await getCloudSettings(), false);
+        assert.equal(writes, 0);
+        assert.equal(notifications.length, 1);
+        assert.equal(notifications[0].color, "var(--red-360)");
+    }
+    response = { entries: [{ key: "settings" }] };
+    notifications = [];
+    await deleteCloudSettings();
+    assert.equal(writes, 0);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0].color, "var(--red-360)");
+});
+
 test("backup imports await file reading, preserve empty CSS, and never log backup content", async () => {
     const css: string[] = [];
     const logs: unknown[] = [];

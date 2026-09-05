@@ -40,6 +40,7 @@
         "testStartupFlags": "tsx scripts/testStartupFlags.ts",
         "testCrxToZip": "tsx scripts/testCrxToZip.ts",
         "testFilePicker": "tsx --test scripts/testFilePicker.ts",
+        "testExtensionInstall": "tsx --test scripts/testExtensionInstall.ts",
         "testUpdateChannelSelection": "tsx scripts/testUpdateChannelSelection.ts",
         "testInstallerStaleMarkerRepair": "node scripts/testInstallerStaleMarkerRepair.mjs",
         "testVoiceMessageTranscriber": "tsx scripts/testVoiceMessageTranscriber.ts",

@@ -11,6 +11,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Preserve literal CSS in userscript builds and remove obsolete browser editor metadata and About page scripting.
 - Use native integer decoding for extension headers and reject truncated archives.
 - Resolve cancelled file pickers and release their temporary inputs.
+- Simplify extension extraction, reject paths outside the extension directory, and finish cleanup before reporting installation failures.
 
 ## 2.1.1.0 - 2026-09-05
 

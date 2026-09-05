@@ -46,6 +46,28 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("channel tab limits preserve foreground and background opening behavior", () => {
+    const navigations: string[] = [];
+    const tabs = loadSource("src/equicordplugins/channelTabs/util/tabs.tsx", {
+        "@api/index": {}, "@api/PluginManager": {},
+        "@utils/css": { classNameFactory: () => () => "" },
+        "./constants": { logger: { warn() {}, error() {} }, settings: { store: { maxOpenTabs: 1 } } },
+        "@webpack/common": {
+            NavigationRouter: { transitionToGuild: (_guildId: string, channelId: string) => navigations.push(channelId) },
+            SelectedChannelStore: { getChannelId: () => "initial" }, SelectedGuildStore: { getGuildId: () => "guild" }
+        }
+    }, { setTimeout: () => 0, clearTimeout() {} });
+    tabs.setUpdaterFunction(() => {});
+    tabs.createTab({ guildId: "guild", channelId: "initial" }, false);
+    tabs.setOpenTab(tabs.openedTabs[0].id);
+    tabs.createTab({ guildId: "guild", channelId: "foreground" }, true);
+    assert.deepEqual(navigations, ["foreground"]);
+    tabs.createTab({ guildId: "guild", channelId: "background" }, false);
+    assert.deepEqual(navigations, ["foreground"]);
+    assert.equal(tabs.openedTabs.length, 1);
+    assert.equal(tabs.openedTabs[0].channelId, "background");
+});
+
 test("channel tab animation selection can clear all and replace multiple choices", () => {
     let onChange: (values: (string | { value: string; })[]) => void = () => assert.fail("Selector was not rendered");
     const { AnimationSettings, settings } = loadSource("src/equicordplugins/channelTabs/util/constants.tsx", {

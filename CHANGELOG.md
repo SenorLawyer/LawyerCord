@@ -24,6 +24,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Delete notification log entries by their unique ID without overwriting concurrent updates.
 
+- Enable the badges API for plugins declaring profile badges.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

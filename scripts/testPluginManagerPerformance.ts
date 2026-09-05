@@ -73,6 +73,16 @@ function loadManager() {
     return { manager, add, plugins, settings, dispatcher, handlers, errors };
 }
 
+test("declarative profile badges enable their API dependency", () => {
+    const { manager, add, settings } = loadManager();
+    const api = add({ name: "BadgeAPI" });
+    add({ name: "Fixture", userProfileBadges: [{ id: "fixture" }] });
+    settings.Fixture.enabled = true;
+    manager.initPluginManager();
+    assert.equal(settings.BadgeAPI.enabled, true);
+    assert.equal(api.isDependency, true);
+});
+
 test("flux subscriptions preserve original handlers and clean up the functions actually registered", async () => {
     const { manager, add, dispatcher, handlers, errors } = loadManager();
     let calls = 0;

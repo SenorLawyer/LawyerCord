@@ -40,6 +40,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Remove unused icon viewer modal styles.
 
+- Use the managed message hook for random mentions and choose members from the destination channel.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

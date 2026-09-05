@@ -91,6 +91,24 @@ function decorFixture() {
     return { store, requests, scheduled, flush, advance, errors, clock };
 }
 
+test("random mentions use the destination channel and preserve text when no members are loaded", () => {
+    const plugin = loadComponent("src/equicordplugins/atSomeone/index.ts", {
+        ChannelStore: { getChannel: (id: string) => ({
+            guild: { guild_id: "destination" }, dm: { recipients: ["recipient"] }, empty: { guild_id: "empty" }
+        })[id] },
+        GuildMemberStore: { getMembers: (id: string) => id === "destination" ? [{ userId: "member" }] : [] }
+    }, {
+        "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin }
+    }).default;
+    assert.equal(plugin.start, undefined);
+    for (const [channel, expected] of [["guild", "<@member> <@member>"], ["dm", "<@recipient> <@recipient>"], ["empty", "@someone @someone"], ["missing", "@someone @someone"]]) {
+        const message = { content: "@someone @someone" };
+        plugin.onBeforeMessageSend(channel, message);
+        assert.equal(message.content, expected);
+    }
+});
+
 test("clip file reads share the size cap and selected files reuse the byte writer", async () => {
     const footer = Buffer.from([0x75, 0x75, 0x69, 0x64, 0xA1, 0xC8, 0x52, 0x99, 0x33, 0x46, 0x4D, 0xB8, 0x88, 0xF0, 0x83, 0xF5, 0x7A, 0x75, 0xA5, 0xEF]);
     const payload = Buffer.concat([Buffer.from([1, 2, 3]), footer, Buffer.from('{"applicationName":"Fixture"}')]);

@@ -20,6 +20,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Preserve zero volume when creating audio players.
 
+- Delete the unused predecessor to the UserSettings API.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

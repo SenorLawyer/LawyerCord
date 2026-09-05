@@ -20,6 +20,10 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Rebuild the automation builder: one toolbar, a single "What happens next" connections panel, beginner-first block settings with everything else folded under Advanced, a "+" on every output dot to add a connected block, hover-to-remove connection lines, wheel panning with Ctrl+wheel zoom, and grid snapping on release instead of during the drag.
 - Auto-arrange now lays automations out left to right, with the Yes branch above, the No branch below, and the error branch beneath that.
 
+### Fixed
+
+- Update the pinned fast-uri dependency to 3.1.6 to resolve the dependency audit failures.
+
 ## 2.0.1.0 - 2026-08-29
 
 ### Fixed

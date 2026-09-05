@@ -333,6 +333,7 @@ const system = {
     nextId: 1,
     processes: new Map<string, number>(),
     processesReady: false,
+    lastProcessScan: 0,
     roblox: {
         file: "",
         offset: 0,
@@ -396,6 +397,8 @@ async function readProcesses(): Promise<ProcessInfo[]> {
 }
 
 async function scanProcesses(): Promise<void> {
+    if (Date.now() - system.lastProcessScan < 4_000) return;
+    system.lastProcessScan = Date.now();
     const after = new Map<string, number>();
     for (const item of await readProcesses()) {
         const key = processKey(item.name);

@@ -45,5 +45,7 @@ await api.pollSystemEvents({}, 0, []);
 assert.equal(reads, previousReads);
 await api.pollSystemEvents({}, 0, ["process-start"]);
 assert.equal(processes, 1);
+await api.pollSystemEvents({}, 0, ["process-start"]);
+assert.equal(processes, 1);
 assert.equal(reads, previousReads);
 console.log("Native scans are demand-driven, source-specific, and create no background timers.");

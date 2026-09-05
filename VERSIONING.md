@@ -19,10 +19,10 @@ Releases are produced only by the GitHub Actions workflow after a protected pull
 
 Pull-request labels select the channel:
 
-- No release label or `release:nightly`: `nightly-YYYYMMDD-HHMM-<commit>` prerelease.
+- `release:nightly`: `nightly-YYYYMMDD-HHMM-<commit>` prerelease.
 - `release:beta`: `v<package-version>-beta.<workflow-run>` prerelease.
 - `release:stable`: `v<package-version>` stable release marked latest.
-- `release:skip`: no release.
+- No release label or `release:skip`: no release.
 
 Only one channel label may be applied. `release:skip` takes precedence.
 

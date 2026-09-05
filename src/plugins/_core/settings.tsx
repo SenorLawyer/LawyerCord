@@ -5,8 +5,9 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
-import { BackupRestoreIcon, CloudIcon, LogIcon, MainSettingsIcon, PaintbrushIcon, PatchHelperIcon, PluginsIcon, UpdaterIcon } from "@components/Icons";
+import { BackupRestoreIcon, ClockIcon, CloudIcon, LogIcon, MainSettingsIcon, PaintbrushIcon, PatchHelperIcon, PluginsIcon, UpdaterIcon } from "@components/Icons";
 import {
+    AutomationsTab,
     BackupAndRestoreTab,
     ChangelogTab,
     CloudTab,
@@ -16,6 +17,7 @@ import {
     UpdaterTab,
     VencordTab,
 } from "@components/settings";
+import { startAutomationEngine, stopAutomationEngine } from "@components/settings/tabs/automations/engine";
 import { gitHashShort } from "@shared/vencordUserAgent";
 import { Devs } from "@utils/constants";
 import { isTruthy } from "@utils/guards";
@@ -121,6 +123,7 @@ export default definePlugin({
     authors: [Devs.Ven, Devs.Megu],
     tags: ["Utility"],
     required: true,
+    dependencies: ["NoticesAPI"],
 
     settings,
 
@@ -197,6 +200,12 @@ export default definePlugin({
                 panelTitle: "LawyerCord Settings",
                 Component: VencordTab,
                 Icon: MainSettingsIcon
+            }),
+            buildEntry({
+                key: "equicord_automations",
+                title: "Automations",
+                Component: AutomationsTab,
+                Icon: ClockIcon
             }),
             buildEntry({
                 key: "equicord_plugins",
@@ -279,6 +288,14 @@ export default definePlugin({
 
     customSections: [] as ((SectionTypes: Record<string, string>) => { section: string; element: ComponentType; label: string; id?: string; })[],
     customEntries: [] as EntryOptions[],
+
+    async start() {
+        await startAutomationEngine();
+    },
+
+    stop() {
+        stopAutomationEngine();
+    },
 
     get electronVersion() {
         return VencordNative.native.getVersions().electron ?? window.legcord?.electron ?? null;

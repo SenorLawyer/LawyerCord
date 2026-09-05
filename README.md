@@ -15,7 +15,6 @@ LawyerCord is safe-by-default, not network-free:
 - The voice-message transcriber performs inference locally but currently loads its pinned runtime and speech models from jsDelivr and Hugging Face. Keep it disabled if runtime CDN code is outside your trust model.
 - The optional `DiscordMCP` plugin intentionally retains ProtonnCord's unrestricted access to every channel visible to the authenticated account, including its fixed send/delete surface.
 - Discord credentials are never read, exported, embedded, or packaged. Each installation uses its own current Discord session and creates its own random local MCP bridge secret only after the user enables the plugin.
-- The required `ControlPanel` plugin serves a capability-token-protected dashboard on `127.0.0.1`, preferring port `47831` and falling back to an available loopback port.
 - CI rejects release artifacts containing Discord token-shaped values or LawyerCord runtime configuration, indexes, queues, ledgers, and downloads.
 - No generic Discord REST, token-export, webhook, moderation, membership, relationship, or arbitrary filesystem MCP tool is exposed.
 
@@ -80,7 +79,6 @@ pnpm test
 Regenerate the privacy inventory after adding or changing plugins:
 
 ```shell
-pnpm generatePrivacyInventory
 ```
 
 Injecting into Discord modifies the local Discord installation. LawyerCord will not download and execute a mutable installer release; provide an installer binary you built or verified locally:
@@ -89,6 +87,8 @@ Injecting into Discord modifies the local Discord installation. LawyerCord will 
 $env:LAWYERCORD_INSTALLER_PATH = "C:\path\to\verified\EquilotlCli.exe"
 pnpm inject
 ```
+
+See [LOCAL_INJECTION.md](./LOCAL_INJECTION.md) for injection, rebuilds, Discord debugging, logs, local tests, repair, and removal.
 
 Do not inject or run live Discord tests from an unreviewed branch. The live MCP and secure-messaging scripts connect to a running Discord client through its debugging interface and are intentionally excluded from the normal test command.
 

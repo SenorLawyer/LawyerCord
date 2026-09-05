@@ -27,6 +27,7 @@ export interface ButtonAction {
 
 export const actions: ButtonAction[] = [
     { id: "openLawyerCordSettings", label: "Open LawyerCord tab", callback: async () => await SettingsRouter.openUserSettings("equicord_main_panel"), registrar: "LawyerCord" },
+    { id: "openAutomationsSettings", label: "Open Automations tab", callback: () => SettingsRouter.openUserSettings("equicord_automations_panel"), registrar: "LawyerCord" },
     { id: "openPluginSettings", label: "Open Plugin tab", callback: () => SettingsRouter.openUserSettings("equicord_plugins_panel"), registrar: "LawyerCord" },
     { id: "openThemesSettings", label: "Open Themes tab", callback: () => SettingsRouter.openUserSettings("equicord_themes_panel"), registrar: "LawyerCord" },
     { id: "openUpdaterSettings", label: "Open Updater tab", callback: () => SettingsRouter.openUserSettings("equicord_updater_panel"), registrar: "LawyerCord" },

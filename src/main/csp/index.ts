@@ -1,6 +1,6 @@
 /*
  * Vencord, a Discord client mod
- * Copyright (c) 2025 Vendicated and contributors
+ * Copyright (c) 2026 Vendicated and contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -36,6 +36,8 @@ export const CspPolicies: PolicyMap = {
 
     "*.githack.com": ImageAndCssSrc, // githack (namely raw.githack.com), used by some themes
     "jsdelivr.net": ImageAndCssSrc, // jsDelivr, used by very few themes
+
+    "api.spotify.com": ConnectSrc, // Spotify playback control for automation blocks, using Discord's own connection token
 
     "fonts.googleapis.com": CssSrc, // Google Fonts, used by many themes
 

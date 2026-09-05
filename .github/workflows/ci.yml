@@ -45,8 +45,8 @@ jobs:
             - name: Run focused tests
               run: |
                   pnpm testMessageEventsPriority
+                  pnpm testAutomations
                   pnpm testDiscordMcp
-                  pnpm testControlPanel
                   pnpm testReleaseArtifactAudit
                   pnpm testSecureMessaging
                   pnpm testSecureMessagingNative
@@ -59,11 +59,6 @@ jobs:
                   pnpm lint-styles
                   pnpm lint:intl
                   pnpm lint:patches
-
-            - name: Verify generated privacy inventory
-              run: |
-                  pnpm generatePrivacyInventory
-                  git diff --exit-code -- src/equicordplugins/controlPanel.desktop/privacyInventory.ts
 
             - name: Build desktop and browser targets
               run: |

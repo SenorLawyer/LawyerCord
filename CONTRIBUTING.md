@@ -26,7 +26,6 @@ Run the relevant local checks:
 pnpm install --frozen-lockfile
 pnpm testTsc
 pnpm testDiscordMcp
-pnpm testControlPanel
 pnpm testReleaseArtifactAudit
 pnpm testSecureMessaging
 pnpm lint
@@ -37,7 +36,6 @@ pnpm buildStandalone
 If plugin source or network behavior changed, regenerate the checked-in privacy inventory:
 
 ```shell
-pnpm generatePrivacyInventory
 ```
 
 ## Code standards

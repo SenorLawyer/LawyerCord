@@ -2,7 +2,27 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
-## Unreleased
+## 2.1.0.0 - 2026-09-05
+
+### Added
+
+- Automations can now react to this computer: triggers for joining or leaving a Roblox game (with the game's name, players, visits, icon and link, and how long you played), for a program starting or closing, and for Codex starting, finishing or asking a question.
+- New block families: This computer (list running programs, is a program running, wait for a program, run a program, read a file, open a link), Roblox (current game, look up a game) and Codex (last result, recent sessions).
+- Roblox game log and Codex finished templates.
+
+### Changed
+
+- Automations now default off. The master switch stops runs, queues, trigger listeners and computer polling while keeping the editor available.
+- Computer events scan only the requested sources, with no permanent background timer.
+- Add workflow migration, explicit data connections, reusable workflows, cancellable execution, calendar schedules and dry-run tests.
+
+- Rebuild the Automations settings page as a spacious list with an on/off switch, plain-English "when it starts" text, template cards, and grouped run history and settings.
+- Rebuild the automation builder: one toolbar, a single "What happens next" connections panel, beginner-first block settings with everything else folded under Advanced, a "+" on every output dot to add a connected block, hover-to-remove connection lines, wheel panning with Ctrl+wheel zoom, and grid snapping on release instead of during the drag.
+- Auto-arrange now lays automations out left to right, with the Yes branch above, the No branch below, and the error branch beneath that.
+
+### Fixed
+
+- Update the pinned fast-uri dependency to 3.1.6 to resolve the dependency audit failures.
 
 ## 2.0.1.0 - 2026-08-29
 

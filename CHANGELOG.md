@@ -30,6 +30,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Handle queued task failures without unhandled promise rejections while continuing queued work.
 
+- Require linked-message previews to match the requested message ID.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

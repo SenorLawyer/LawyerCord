@@ -88,6 +88,27 @@ function decorFixture() {
     return { store, requests, scheduled, flush, advance, errors, clock };
 }
 
+test("linked message previews reject neighboring messages returned by an around lookup", async () => {
+    const source = readFileSync("src/plugins/messageLinkEmbeds/index.tsx", "utf8");
+    const code = transpileModule(source.slice(source.indexOf("async function fetchMessage("), source.indexOf("function getImages(")), {
+        compilerOptions: { target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const id of ["neighbor", "requested"]) {
+        const message = { id, channel_id: "channel" };
+        let stored = 0;
+        const cache = new Map();
+        const fetchMessage = runInNewContext(`${code}\nfetchMessage;`, {
+            messageCache: cache,
+            setMessageCache: (key: string, value: unknown) => cache.set(key, value),
+            RestAPI: { get: async () => ({ body: [message] }) },
+            Constants: { Endpoints: { MESSAGES: (id: string) => id } },
+            MessageStore: { getMessages: () => ({ receiveMessage: () => { stored++; return { get: () => message }; } }) }
+        });
+        assert.equal(await fetchMessage("channel", "requested"), id === "requested" ? message : undefined);
+        assert.equal(stored, id === "requested" ? 1 : 0);
+    }
+});
+
 test("queued task failures are reported without interrupting ordered work", async () => {
     const errors: unknown[][] = [];
     const { Queue } = loadComponent("src/utils/Queue.ts", {}, {

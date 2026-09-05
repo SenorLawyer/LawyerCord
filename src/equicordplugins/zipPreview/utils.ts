@@ -6,14 +6,22 @@
 
 import { PluginNative } from "@utils/types";
 import { saveFile } from "@utils/web";
-import { unzipSync } from "fflate";
+
+import {
+    extractZipArchiveEntry,
+    type InspectedZipArchive,
+    type InspectedZipEntry,
+    inspectZipArchive,
+    MAX_ZIP_BYTES
+} from "./archive";
 
 const Native = VencordNative?.pluginHelpers?.ZipPreview as PluginNative<typeof import("./native")> | undefined;
 
-export const MAX_ZIP_BYTES = 50 * 1024 * 1024;
-export const MAX_ENTRIES = 1000;
 export const MAX_PREVIEW_BYTES = 10 * 1024 * 1024;
-const MAX_CACHE_ENTRIES = 20;
+const MAX_CACHE_ENTRIES = 2;
+const MAX_CONCURRENT_ENTRY_LOADS = 2;
+const MAX_QUEUED_ENTRY_LOADS = 4;
+export { MAX_ZIP_ENTRIES as MAX_ENTRIES, MAX_ZIP_BYTES } from "./archive";
 
 const CANCELLED_PREVIEW_MESSAGE = "ZIP preview was cancelled.";
 const NATIVE_UNAVAILABLE_MESSAGE = "Native helper is unavailable.";
@@ -56,9 +64,12 @@ export interface ZipEntry {
     path: string;
     name: string;
     size: number;
-    data: Uint8Array;
     kind: ZipPreviewKind;
     extension: string;
+}
+
+export interface LoadedZipEntry extends ZipEntry {
+    data: Uint8Array;
 }
 
 export interface ZipPreviewResult {
@@ -77,7 +88,17 @@ interface NativeFetchResult {
     error?: string;
 }
 
+interface QueuedEntryLoad {
+    operation: () => Promise<Uint8Array>;
+    reject: (error: Error) => void;
+    resolve: (data: Uint8Array) => void;
+}
+
 const zipCache = new Map<string, ZipPreviewCacheState>();
+let entrySources = new WeakMap<ZipEntry, { archive: InspectedZipArchive; entry: InspectedZipEntry; }>();
+let pendingEntryLoads = new WeakMap<ZipEntry, Promise<Uint8Array>>();
+let activeEntryLoads = 0;
+const entryLoadQueue: QueuedEntryLoad[] = [];
 
 export function isZipFile(fileName?: string): boolean {
     return typeof fileName === "string" && /\.zip$/i.test(fileName);
@@ -123,6 +144,9 @@ export function getCachedZip(url: string): ZipPreviewCacheState {
 
 export function clearZipPreviewCache() {
     zipCache.clear();
+    entrySources = new WeakMap();
+    pendingEntryLoads = new WeakMap();
+    for (const queued of entryLoadQueue.splice(0)) queued.reject(new Error("ZIP preview was closed."));
 }
 
 function trimZipCache() {
@@ -135,16 +159,16 @@ function trimZipCache() {
     }
 }
 
-export function makeDownload(entry: ZipEntry) {
+export function makeDownload(entry: LoadedZipEntry) {
     const type = entry.kind === "image" ? getImageMimeType(entry.extension) : "text/plain;charset=utf-8";
     saveFile(new File([entry.data as BlobPart], entry.name, { type }));
 }
 
-export function createImageObjectUrl(entry: ZipEntry): string {
+export function createImageObjectUrl(entry: LoadedZipEntry): string {
     return URL.createObjectURL(new Blob([entry.data as BlobPart], { type: getImageMimeType(entry.extension) }));
 }
 
-export function readTextEntry(entry: ZipEntry): string {
+export function readTextEntry(entry: LoadedZipEntry): string {
     return new TextDecoder("utf-8").decode(entry.data);
 }
 
@@ -177,18 +201,58 @@ async function loadZip(url: string): Promise<ZipPreviewResult> {
         throw new Error(nativeResult.error || "Could not fetch ZIP through native Discord attachment fetch.");
     }
 
-    const response = await fetch(url);
-    if (!response.ok) throw new Error("Could not fetch ZIP.");
+    const response = await fetch(url, {
+        cache: "no-store",
+        credentials: "omit",
+        redirect: "error",
+        signal: AbortSignal.timeout(30_000)
+    });
+    if (!response.ok) {
+        void response.body?.cancel();
+        throw new Error("Could not fetch ZIP.");
+    }
 
     const contentLength = Number(response.headers.get("content-length"));
     if (Number.isFinite(contentLength) && contentLength > MAX_ZIP_BYTES) {
+        void response.body?.cancel();
         throw new Error("ZIP is too large to preview.");
     }
 
-    const buffer = await response.arrayBuffer();
-    if (buffer.byteLength > MAX_ZIP_BYTES) throw new Error("ZIP is too large to preview.");
+    const buffer = await readLimitedResponse(response);
 
     return parseZipBuffer(buffer);
+}
+
+async function readLimitedResponse(response: Response): Promise<ArrayBuffer> {
+    if (!response.body) {
+        const buffer = await response.arrayBuffer();
+        if (buffer.byteLength > MAX_ZIP_BYTES) throw new Error("ZIP is too large to preview.");
+        return buffer;
+    }
+
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    try {
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            totalBytes += value.byteLength;
+            if (totalBytes > MAX_ZIP_BYTES) throw new Error("ZIP is too large to preview.");
+            chunks.push(value);
+        }
+    } catch (error) {
+        await reader.cancel().catch(() => { });
+        throw error;
+    }
+
+    const result = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+        result.set(chunk, offset);
+        offset += chunk.byteLength;
+    }
+    return result.buffer;
 }
 
 async function fetchNativeDiscordAttachment(attachmentPath: string): Promise<NativeFetchResult> {
@@ -223,31 +287,67 @@ function isValidDiscordAttachmentPath(path: string): boolean {
         && parts.slice(2).every(part => part.length > 0);
 }
 
-function parseZipBuffer(buffer: ArrayBuffer): ZipPreviewResult {
-    const unzipped = unzipSync(new Uint8Array(buffer));
-    const files = Object.entries(unzipped)
-        .filter(([path]) => !path.endsWith("/"))
-        .sort(([a], [b]) => a.localeCompare(b));
-
-    const truncated = files.length > MAX_ENTRIES;
-    const entries = files.slice(0, MAX_ENTRIES).map(([path, data]) => {
-        const normalizedPath = normalizePath(path);
-        const extension = getExtension(normalizedPath);
-
-        return {
-            path: normalizedPath,
-            name: getFileName(normalizedPath),
-            size: data.byteLength,
-            data,
-            extension,
-            kind: getPreviewKind(extension, data.byteLength)
-        };
-    });
+export function parseZipBuffer(buffer: ArrayBuffer): ZipPreviewResult {
+    const archive = inspectZipArchive(buffer);
+    const entries = archive.entries
+        .map(source => {
+            const extension = getExtension(source.path);
+            const entry: ZipEntry = {
+                path: source.path,
+                name: getFileName(source.path),
+                size: source.uncompressedSize,
+                extension,
+                kind: getPreviewKind(extension, source.uncompressedSize)
+            };
+            entrySources.set(entry, { archive, entry: source });
+            return entry;
+        })
+        .sort((left, right) => left.path.localeCompare(right.path));
 
     return {
         entries,
-        truncated
+        truncated: false
     };
+}
+
+export async function loadZipEntry(entry: ZipEntry): Promise<LoadedZipEntry> {
+    const source = entrySources.get(entry);
+    if (!source) throw new Error("ZIP entry is no longer available.");
+    if (entry.kind === "unsupported") throw new Error("ZIP entry cannot be previewed.");
+
+    let pending = pendingEntryLoads.get(entry);
+    if (!pending) {
+        pending = runBoundedEntryLoad(() => extractZipArchiveEntry(source.archive, source.entry, MAX_PREVIEW_BYTES));
+        pendingEntryLoads.set(entry, pending);
+        void pending.then(
+            () => pendingEntryLoads.delete(entry),
+            () => pendingEntryLoads.delete(entry)
+        );
+    }
+
+    const data = await pending;
+    if (entrySources.get(entry) !== source) throw new Error("ZIP preview was closed.");
+    return { ...entry, data };
+}
+
+function runBoundedEntryLoad(operation: () => Promise<Uint8Array>): Promise<Uint8Array> {
+    if (activeEntryLoads < MAX_CONCURRENT_ENTRY_LOADS) return startEntryLoad(operation);
+    if (entryLoadQueue.length >= MAX_QUEUED_ENTRY_LOADS) {
+        return Promise.reject(new Error("Too many ZIP entries are being opened."));
+    }
+
+    return new Promise((resolve, reject) => entryLoadQueue.push({ operation, reject, resolve }));
+}
+
+async function startEntryLoad(operation: () => Promise<Uint8Array>): Promise<Uint8Array> {
+    activeEntryLoads++;
+    try {
+        return await operation();
+    } finally {
+        activeEntryLoads--;
+        const next = entryLoadQueue.shift();
+        if (next) void startEntryLoad(next.operation).then(next.resolve, next.reject);
+    }
 }
 
 function getPreviewKind(extension: string, size: number): ZipPreviewKind {
@@ -260,10 +360,6 @@ function getPreviewKind(extension: string, size: number): ZipPreviewKind {
 function getImageMimeType(extension: string): string {
     if (extension === "jpg") return "image/jpeg";
     return `image/${extension}`;
-}
-
-function normalizePath(path: string): string {
-    return path.replace(/^\/+/, "").replaceAll("\\", "/");
 }
 
 function getFileName(path: string): string {

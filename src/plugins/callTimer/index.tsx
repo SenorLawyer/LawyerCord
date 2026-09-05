@@ -30,7 +30,7 @@ export const settings = definePluginSettings({
                 label: "30d 23h 00m 42s",
                 value: "human"
             }
-        ]
+        ] as const
     },
     allCallTimers: {
         type: OptionType.BOOLEAN,
@@ -106,6 +106,12 @@ let myLastChannelId: string | undefined;
 // Allow user updates on discord first load
 let runOneTime = true;
 
+function resetJoinTimes() {
+    userJoinTimes.clear();
+    myLastChannelId = undefined;
+    runOneTime = true;
+}
+
 export default definePlugin({
     name: "CallTimer",
     description: "Add call timers for all users in voice channels and in the connection status.",
@@ -115,8 +121,6 @@ export default definePlugin({
     settings,
 
     isModified: true,
-    startTime: 0,
-    interval: void 0 as NodeJS.Timeout | undefined,
 
     patches: [
         {
@@ -139,12 +143,13 @@ export default definePlugin({
             find: '"RTCConnectionMenu"',
             replacement: {
                 match: /("RTCConnectionMenu".{0,200}?lineClamp:1,children:)(\i)(?=,|}\))/,
-                replace: "$1[$2,$self.renderConnectionTimer({ channelId: this?.props?.channel?.id })]"
+                replace: "$1[$2,$self.renderConnectionTimer()]"
             }
         },
     ],
 
     flux: {
+        LOGOUT: resetJoinTimes,
         VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceState[]; }) {
             const currentUser = UserStore.getCurrentUser();
             if (!currentUser) return;
@@ -246,11 +251,7 @@ export default definePlugin({
         }
     },
 
-    stop() {
-        userJoinTimes.clear();
-        myLastChannelId = undefined;
-        runOneTime = true;
-    },
+    stop: resetJoinTimes,
 
     renderTimer(userId: string) {
         // get the user join time from the users object
@@ -271,14 +272,13 @@ export default definePlugin({
         );
     },
 
-    renderConnectionTimer({ channelId }: { channelId: string | undefined; }) {
-        return <ErrorBoundary noop>
-            <this.ConnectionTimer channelId={channelId} />
-        </ErrorBoundary>;
+    renderConnectionTimer() {
+        return <this.ConnectionTimer />;
     },
 
-    ConnectionTimer: ErrorBoundary.wrap((_: { channelId: string | undefined; }) => {
-        const joinTime = userJoinTimes.get(UserStore.getCurrentUser().id)?.time;
+    ConnectionTimer: ErrorBoundary.wrap(() => {
+        const user = UserStore.getCurrentUser();
+        const joinTime = user && userJoinTimes.get(user.id)?.time;
         const time = useFixedTimer({ initialTime: joinTime });
 
         if (joinTime == null) return null;

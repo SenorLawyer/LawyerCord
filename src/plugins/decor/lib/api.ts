@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { isObject } from "@utils/misc";
+
 import { API_URL } from "./constants";
 import { useAuthorizationStore } from "./stores/AuthorizationStore";
 
@@ -42,13 +44,23 @@ export async function fetchApi(url: RequestInfo, options?: RequestInit) {
     else throw new Error(await res.text());
 }
 
-export const getUsersDecorations = async (ids?: string[]): Promise<Record<string, string | null>> => {
-    if (ids?.length === 0) return {};
+export const getUsersDecorations = async (ids: string[], signal?: AbortSignal): Promise<Record<string, string | null>> => {
+    if (ids.length === 0) return {};
 
     const url = new URL(API_URL + "/users");
-    if (ids && ids.length !== 0) url.searchParams.set("ids", JSON.stringify(ids));
+    url.searchParams.set("ids", JSON.stringify(ids));
 
-    return await fetch(url).then(c => c.json());
+    const response = await fetch(url, { signal });
+    if (!response.ok) throw new Error("Could not load decorations.");
+    const data: unknown = await response.json();
+    if (!isObject(data)) throw new Error("Invalid decoration response.");
+    const decorations: Record<string, string | null> = {};
+    for (const id of ids) {
+        const asset = Object.hasOwn(data, id) ? data[id] : null;
+        if (asset !== null && typeof asset !== "string") throw new Error("Invalid decoration response.");
+        Object.defineProperty(decorations, id, { value: asset, enumerable: true });
+    }
+    return decorations;
 };
 
 export const getUserDecorations = async (id: string = "@me"): Promise<Decoration[]> =>

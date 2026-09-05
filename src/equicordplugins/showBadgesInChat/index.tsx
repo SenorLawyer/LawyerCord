@@ -12,7 +12,7 @@ import { isEquicordPluginDev, isPluginDev } from "@utils/misc";
 import definePlugin from "@utils/types";
 import { findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
 
-const { roleIcon } = findCssClassesLazy("roleIcon", "separator");
+const roleClasses = findCssClassesLazy("roleIcon", "separator");
 const RoleIconComponent = findComponentByCodeLazy("#{intl::ROLE_ICON_ALT_TEXT}");
 
 import { User } from "@vencord/discord-types";
@@ -42,8 +42,8 @@ function CheckBadge({ badge, author }: { badge: string; author: User; }): JSX.El
                 <span style={{ order: settings.store.EquicordDonorPosition }}>
                     {badges.getEquicordDonorBadges(author.id)?.map(badge => (
                         <RoleIconComponent
-                            key={author.id}
-                            className={roleIcon}
+                            key={badge.id}
+                            className={roleClasses.roleIcon}
                             name={badge.description}
                             size={20}
                             src={badge.iconSrc}
@@ -55,7 +55,7 @@ function CheckBadge({ badge, author }: { badge: string; author: User; }): JSX.El
             return isEquicordPluginDev(author.id) ? (
                 <span style={{ order: settings.store.EquicordContributorPosition }}>
                     <RoleIconComponent
-                        className={roleIcon}
+                        className={roleClasses.roleIcon}
                         name="LawyerCord Contributor"
                         size={20}
                         src={"https://equicord.org/assets/favicon.png"}
@@ -67,8 +67,8 @@ function CheckBadge({ badge, author }: { badge: string; author: User; }): JSX.El
                 <span style={{ order: settings.store.VencordDonorPosition }}>
                     {badges.getDonorBadges(author.id)?.map(badge => (
                         <RoleIconComponent
-                            key={author.id}
-                            className={roleIcon}
+                            key={badge.id}
+                            className={roleClasses.roleIcon}
                             name={badge.description}
                             size={20}
                             src={badge.iconSrc}
@@ -80,7 +80,7 @@ function CheckBadge({ badge, author }: { badge: string; author: User; }): JSX.El
             return isPluginDev(author.id) ? (
                 <span style={{ order: settings.store.VencordContributorPosition }}>
                     <RoleIconComponent
-                        className={roleIcon}
+                        className={roleClasses.roleIcon}
                         name="Vencord Contributor"
                         size={20}
                         src={"https://cdn.discordapp.com/emojis/1092089799109775453.png"}
@@ -93,8 +93,8 @@ function CheckBadge({ badge, author }: { badge: string; author: User; }): JSX.El
                 .map(badge => (
 
                     <RoleIconComponent
-                        key={author.id}
-                        className={roleIcon}
+                        key={badge[0]}
+                        className={roleClasses.roleIcon}
                         name={badge[1]}
                         size={20}
                         src={`https://cdn.discordapp.com/badge-icons/${badge[2]}.png`}
@@ -109,7 +109,7 @@ function CheckBadge({ badge, author }: { badge: string; author: User; }): JSX.El
             return (author?.premiumType ?? 0) > 0 ? (
                 <span style={{ order: settings.store.DiscordNitroPosition }}>
                     <RoleIconComponent
-                        className={roleIcon}
+                        className={roleClasses.roleIcon}
                         name={
                             "Discord Nitro" +
                             (author.premiumType === 3 ? " Basic" : author.premiumType === 1 ? " Classic" : "")

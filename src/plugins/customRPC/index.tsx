@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { definePluginSettings } from "@api/Settings";
+import { definePluginSettings, SettingsStore } from "@api/Settings";
 import { getUserSettingLazy } from "@api/UserSettings";
 import { Divider } from "@components/Divider";
 import { ErrorCard } from "@components/ErrorCard";
@@ -49,7 +49,7 @@ const assetCache = new Map<string, Promise<string>>();
 
 async function getApplicationAsset(key: string): Promise<string> {
     const appId = settings.store.appID || "0";
-    const cacheKey = `${appId}:${key}`;
+    const cacheKey = JSON.stringify([appId, key]);
     const cached = assetCache.get(cacheKey);
     if (cached) return await cached;
 
@@ -61,7 +61,7 @@ async function getApplicationAsset(key: string): Promise<string> {
     const promise = ApplicationAssetUtils.fetchAssetIds(appId, [key])
         .then(ids => ids[0]!)
         .catch(error => {
-            assetCache.delete(cacheKey);
+            if (assetCache.get(cacheKey) === promise) assetCache.delete(cacheKey);
             throw error;
         });
     assetCache.set(cacheKey, promise);
@@ -162,7 +162,7 @@ async function createActivity(): Promise<Activity | undefined> {
             if (startTime || endTime) {
                 activity.timestamps = {};
                 if (startTime && endTime && endTime > startTime) {
-                    const anchor = getLoopAnchor();
+                    const anchor = loopAnchor ?? Date.now();
                     activity.timestamps.start = anchor;
                     activity.timestamps.end = anchor + (endTime - startTime);
                 } else {
@@ -236,52 +236,71 @@ async function createActivity(): Promise<Activity | undefined> {
     return activity;
 }
 
-export async function setRpc(disable?: boolean) {
-    const generation = disable ? ++rpcGeneration : rpcGeneration;
-    const activity: Activity | undefined = disable ? undefined : await createActivity();
-    if (!disable && (!pluginActive || generation !== rpcGeneration)) return;
-
-    FluxDispatcher.dispatch({
-        type: "LOCAL_ACTIVITY_UPDATE",
-        activity: !disable ? activity : null,
-        socketId: "CustomRPC",
-    });
+export async function setRpc(disable = false) {
+    const generation = ++rpcGeneration;
+    if (disable) {
+        stopTimestampLoop();
+        FluxDispatcher.dispatch({ type: "LOCAL_ACTIVITY_UPDATE", activity: null, socketId: "CustomRPC" });
+        return;
+    }
+    if (!pluginActive) return;
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) { stopTimestampLoop(); return; }
+    updateTimestampLoop();
+    const activity = await createActivity();
+    if (!pluginActive || generation !== rpcGeneration || userId !== UserStore.getCurrentUser()?.id) return;
+    FluxDispatcher.dispatch({ type: "LOCAL_ACTIVITY_UPDATE", activity: activity ?? null, socketId: "CustomRPC" });
 }
 
-export function queueSetRpc(disable?: boolean) {
+function queueSetRpc(disable = false) {
     void setRpc(disable).catch(error => logger.error("Failed to update custom RPC", error));
 }
 
 const MAX_TIMEOUT_MS = 2_147_483_647;
-
+const MAX_TIMESTAMP = 8_640_000_000_000_000;
 let loopTimeout: ReturnType<typeof setTimeout> | undefined;
-let loopAnchor = 0;
+let updateTimeout: ReturnType<typeof setTimeout> | undefined;
+let loopAnchor: number | undefined;
+let loopDuration: number | undefined;
 let rpcGeneration = 0;
 let pluginActive = false;
 
-function getLoopAnchor() {
-    return loopAnchor;
+function validTimestamp(value: unknown) {
+    return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= MAX_TIMESTAMP ? value : undefined;
 }
 
-function startTimestampLoop() {
-    const { timestampMode, startTime, endTime } = settings.store;
-    if (timestampMode !== TimestampMode.CUSTOM || !startTime || !endTime) return;
-    const duration = endTime - startTime;
-    if (duration <= 0) return;
+function handleSettingsChange(_data?: unknown, path = "") {
+    if (!pluginActive || (path && path !== "plugins" && path !== "plugins.CustomRPC" && !path.startsWith("plugins.CustomRPC."))) return;
+    rpcGeneration++;
+    clearTimeout(updateTimeout);
+    updateTimestampLoop();
+    updateTimeout = setTimeout(() => {
+        updateTimeout = undefined;
+        queueSetRpc();
+    }, 300);
+}
 
+function updateTimestampLoop() {
+    const { timestampMode, startTime, endTime, appName } = settings.store;
+    const start = validTimestamp(startTime);
+    const end = validTimestamp(endTime);
+    const duration = pluginActive && UserStore.getCurrentUser() && appName && timestampMode === TimestampMode.CUSTOM && start !== undefined && end !== undefined && end > start && end - start <= MAX_TIMESTAMP - Date.now()
+        ? end - start : undefined;
+    if (duration === loopDuration) return;
     stopTimestampLoop();
-    loopAnchor = Date.now();
-    scheduleTimestampLoop(duration);
+    loopDuration = duration;
+    if (duration !== undefined) {
+        loopAnchor = Date.now();
+        scheduleTimestampLoop(duration);
+    }
 }
 
 function scheduleTimestampLoop(duration: number) {
-    if (!pluginActive) return;
-    const delay = Math.min(Math.max(loopAnchor + duration - Date.now(), 0), MAX_TIMEOUT_MS);
-
+    if (!pluginActive || loopAnchor === undefined || loopDuration !== duration) return;
+    const delay = Math.min(Math.max(loopAnchor + duration - Date.now(), 1000), MAX_TIMEOUT_MS);
     loopTimeout = setTimeout(() => {
         loopTimeout = undefined;
-        if (!pluginActive) return;
-
+        if (!pluginActive || loopAnchor === undefined || loopDuration !== duration) return;
         if (Date.now() >= loopAnchor + duration) {
             loopAnchor = Date.now();
             queueSetRpc();
@@ -291,11 +310,10 @@ function scheduleTimestampLoop(duration: number) {
 }
 
 function stopTimestampLoop() {
-    if (loopTimeout !== undefined) {
-        clearTimeout(loopTimeout);
-        loopTimeout = undefined;
-    }
-    loopAnchor = 0;
+    clearTimeout(loopTimeout);
+    loopTimeout = undefined;
+    loopAnchor = undefined;
+    loopDuration = undefined;
 }
 
 export default definePlugin({
@@ -309,16 +327,29 @@ export default definePlugin({
     settings,
 
     start() {
+        if (pluginActive) return;
         pluginActive = true;
-        rpcGeneration++;
-        startTimestampLoop();
+        SettingsStore.addGlobalChangeListener(handleSettingsChange);
         queueSetRpc();
     },
     stop() {
+        if (!pluginActive) return;
         pluginActive = false;
+        SettingsStore.removeGlobalChangeListener(handleSettingsChange);
+        clearTimeout(updateTimeout);
+        updateTimeout = undefined;
         queueSetRpc(true);
-        stopTimestampLoop();
         assetCache.clear();
+    },
+
+    flux: {
+        CONNECTION_OPEN() { queueSetRpc(); },
+        LOGOUT() {
+            clearTimeout(updateTimeout);
+            updateTimeout = undefined;
+            queueSetRpc(true);
+            assetCache.clear();
+        }
     },
 
     // Discord hides buttons on your own Rich Presence for some reason. This patch disables that behaviour

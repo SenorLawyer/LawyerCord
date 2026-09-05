@@ -20,9 +20,12 @@ import {
     MessageObject
 } from "@api/MessageEvents";
 import { Devs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 
 const CLEAR_URLS_JSON_URL = "https://raw.githubusercontent.com/ClearURLs/Rules/master/data.min.json";
+const logger = new Logger("ClearURLs");
+let activeRequest: AbortController | undefined;
 const HAS_URL_REGEX = /https?:\/\//;
 const MESSAGE_URL_REGEX = /(https?:\/\/[^\s<]+[^<.,:;"'>)|\]\s])/g;
 
@@ -63,6 +66,8 @@ export default definePlugin({
     },
 
     stop() {
+        activeRequest?.abort();
+        activeRequest = undefined;
         this.rules = [];
     },
 
@@ -75,25 +80,34 @@ export default definePlugin({
     },
 
     async createRules() {
-        const res = await fetch(CLEAR_URLS_JSON_URL)
-            .then(res => res.json()) as ClearUrlsData;
+        activeRequest?.abort();
+        const request = activeRequest = new AbortController();
+        try {
+            const response = await fetch(CLEAR_URLS_JSON_URL, { signal: request.signal });
+            if (!response.ok) throw new Error(`Rule request failed with status ${response.status}`);
+            const res = await response.json() as ClearUrlsData;
+            if (request.signal.aborted) return;
 
-        this.rules = [];
+            const compiledRules: RuleSet[] = [];
 
-        for (const [name, provider] of Object.entries(res.providers)) {
-            const urlPattern = new RegExp(provider.urlPattern, "i");
+            for (const [name, provider] of Object.entries(res.providers)) {
+                const urlPattern = new RegExp(provider.urlPattern, "i");
 
-            const rules = provider.rules?.map(rule => new RegExp(rule, "i"));
-            const rawRules = provider.rawRules?.map(rule => new RegExp(rule, "i"));
-            const exceptions = provider.exceptions?.map(ex => new RegExp(ex, "i"));
+                const rules = provider.rules?.map(rule => new RegExp(rule, "i"));
+                const rawRules = provider.rawRules?.map(rule => new RegExp(rule, "i"));
+                const exceptions = provider.exceptions?.map(ex => new RegExp(ex, "i"));
 
-            this.rules.push({
-                name,
-                urlPattern,
-                rules,
-                rawRules,
-                exceptions,
-            });
+                compiledRules.push({
+                    name,
+                    urlPattern,
+                    rules,
+                    rawRules,
+                    exceptions,
+                });
+            }
+            this.rules = compiledRules;
+        } catch (error) {
+            if (!request.signal.aborted) logger.error("Failed to load URL cleaning rules", error);
         }
     },
 

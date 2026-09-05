@@ -24,6 +24,10 @@ export interface AvatarDecoration {
     skuId: string;
 }
 
+let generation = 0;
+let active = false;
+let configuration: Promise<void> | undefined;
+
 export default definePlugin({
     name: "Decor",
     description: "Create and use your own custom avatar decorations, or pick your favorite from the presets.",
@@ -131,14 +135,27 @@ export default definePlugin({
     settings,
 
     flux: {
-        CONNECTION_OPEN: () => {
+        CONNECTION_OPEN: async () => {
+            if (!active) return;
+            const currentGeneration = generation;
             useAuthorizationStore.getState().init();
             useCurrentUserDecorationsStore.getState().clear();
+            useUsersDecorationsStore.getState().stop();
+            await configuration;
+            if (!active || currentGeneration !== generation) return;
             const currentUserId = UserStore.getCurrentUser()?.id;
-            if (currentUserId) useUsersDecorationsStore.getState().fetch(currentUserId, true);
+            if (currentUserId) {
+                useUsersDecorationsStore.getState().start();
+                useUsersDecorationsStore.getState().fetch(currentUserId, true);
+            }
         },
         USER_PROFILE_MODAL_OPEN: data => {
             useUsersDecorationsStore.getState().fetch(data.userId, true);
+        },
+        LOGOUT: () => {
+            generation++;
+            useUsersDecorationsStore.getState().stop();
+            useCurrentUserDecorationsStore.getState().clear();
         },
     },
 
@@ -160,9 +177,23 @@ export default definePlugin({
     useUserDecorAvatarDecoration,
 
     async start() {
-        await setBaseUrl(settings.store.baseUrl);
+        const currentGeneration = ++generation;
+        active = true;
+        configuration = setBaseUrl(settings.store.baseUrl);
+        await configuration;
+        if (currentGeneration !== generation) return;
         const currentUserId = UserStore.getCurrentUser()?.id;
-        if (currentUserId) useUsersDecorationsStore.getState().fetch(currentUserId, true);
+        if (currentUserId) {
+            useUsersDecorationsStore.getState().start();
+            useUsersDecorationsStore.getState().fetch(currentUserId, true);
+        }
+    },
+
+    stop() {
+        generation++;
+        active = false;
+        useUsersDecorationsStore.getState().stop();
+        useCurrentUserDecorationsStore.getState().clear();
     },
 
     getDecorAvatarDecorationURL({ avatarDecoration, canAnimate }: { avatarDecoration: AvatarDecoration | null; canAnimate?: boolean; }) {

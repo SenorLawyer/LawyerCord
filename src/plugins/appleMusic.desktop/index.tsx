@@ -7,6 +7,7 @@
 import { definePluginSettings } from "@api/Settings";
 import { Paragraph } from "@components/Paragraph";
 import { Devs, IS_MAC } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType, PluginNative, ReporterTestable } from "@utils/types";
 import { Activity, ActivityAssets, ActivityButton } from "@vencord/discord-types";
 import { ActivityFlags, ActivityStatusDisplayType, ActivityType } from "@vencord/discord-types/enums";
@@ -45,6 +46,9 @@ const enum LinkType {
 const applicationId = "1239490006054207550";
 
 let updateInterval: NodeJS.Timeout | undefined;
+let updateGeneration = 0;
+let pendingUpdate: Promise<void> | undefined;
+const logger = new Logger("AppleMusicRichPresence");
 
 function setActivity(activity: Activity | null) {
     FluxDispatcher.dispatch({
@@ -196,6 +200,7 @@ function getLink(type: LinkType, data: TrackData) {
 }
 
 function getImageAsset(type: AssetImageType, data: TrackData) {
+    if (type === AssetImageType.Disabled) return undefined;
     const source = type === AssetImageType.Album
         ? data.albumArtwork
         : data.artistArtwork;
@@ -225,18 +230,34 @@ export default definePlugin({
     settings,
 
     start() {
+        updateGeneration++;
+        pendingUpdate = undefined;
+        clearInterval(updateInterval);
+        const interval = settings.store.refreshInterval;
+        updateInterval = setInterval(() => { this.updatePresence(); }, (typeof interval === "number" && interval >= 1 && interval <= 15 ? interval : 5) * 1000);
         this.updatePresence();
-        updateInterval = setInterval(() => { this.updatePresence(); }, settings.store.refreshInterval * 1000);
     },
 
     stop() {
+        updateGeneration++;
+        pendingUpdate = undefined;
         clearInterval(updateInterval);
         updateInterval = undefined;
-        FluxDispatcher.dispatch({ type: "LOCAL_ACTIVITY_UPDATE", activity: null });
+        setActivity(null);
     },
 
     updatePresence() {
-        this.getActivity().then(activity => { setActivity(activity); });
+        if (pendingUpdate) return pendingUpdate;
+        const generation = updateGeneration;
+        pendingUpdate = this.getActivity().then(activity => {
+            if (generation === updateGeneration) setActivity(activity);
+        }).catch(error => {
+            logger.error("Failed to update activity", error);
+            if (generation === updateGeneration) setActivity(null);
+        }).finally(() => {
+            if (generation === updateGeneration) pendingUpdate = undefined;
+        });
+        return pendingUpdate;
     },
 
     async getActivity(): Promise<Activity | null> {

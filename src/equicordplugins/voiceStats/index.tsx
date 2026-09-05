@@ -111,8 +111,7 @@ function formatDuration(seconds: number): string {
 }
 
 const VoiceStatsSection = ErrorBoundary.wrap(({ userId, isSideBar }: { userId: string; isSideBar: boolean; }) => {
-    const isLive = sessionStarts.has(userId);
-    useTimer({ interval: isLive ? 1000 : 0 });
+    useTimer({});
 
     const seconds = getLiveSeconds(userId);
     if (seconds <= 0) return null;

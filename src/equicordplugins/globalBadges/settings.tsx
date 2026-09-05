@@ -8,7 +8,7 @@ import { definePluginSettings } from "@api/Settings";
 import { OptionType } from "@utils/types";
 import { findComponentByCodeLazy } from "@webpack";
 
-import { loadBadges } from "./utils";
+import { refreshBadges } from "./utils";
 
 const ManaSelect = findComponentByCodeLazy('"data-mana-component":"select"');
 const badgeOptions = [
@@ -36,13 +36,11 @@ function ShowXSettings() {
     const currentSettings = settings.use(badgeOptions.map(o => o.value));
     const selectedValues = badgeOptions.filter(o => currentSettings[o.value]).map(o => o.value);
 
-    async function updateSelection(value) {
+    function updateSelection(value) {
         const selectedKeys = new Set(Array.isArray(value) ? value : value ? [value] : []);
         for (const o of badgeOptions) {
             settings.store[o.value] = selectedKeys.has(o.value);
         }
-
-        await loadBadges();
     }
 
     return (
@@ -74,11 +72,9 @@ export const settings = definePluginSettings({
         type: OptionType.STRING,
         description: "API to use",
         default: "https://badges.equicord.org/",
+        onChange: refreshBadges,
         restartNeeded: false,
-        isValid: (value => {
-            if (!value) return false;
-            return true;
-        })
+        isValid: value => !!value
     },
     showClientMods: {
         type: OptionType.COMPONENT,

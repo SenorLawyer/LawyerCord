@@ -11,14 +11,14 @@ import { Button } from "@components/Button";
 import { BadgeContextMenu } from "@plugins/_api/badges";
 import { Devs, EquicordDevs } from "@utils/constants";
 import { openInviteModal } from "@utils/discord";
+import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { ContextMenuApi, React, Toasts } from "@webpack/common";
 
 import { settings } from "./settings";
-import { cl, GlobalBadges, INVITE_LINK, loadBadges } from "./utils";
+import { cancelBadgeLoad, cl, getBadges, INVITE_LINK, loadBadges, refreshBadges } from "./utils";
 
 let intervalId: ReturnType<typeof setInterval> | undefined;
-let startGeneration = 0;
 
 export default definePlugin({
     name: "GlobalBadges",
@@ -27,46 +27,37 @@ export default definePlugin({
     authors: [Devs.HypedDomi, EquicordDevs.Wolfie, Devs.thororen],
     settings,
     settingsAboutComponent: () => (
-        <>
-            <Button
-                variant="link"
-                className={cl("settings-button")}
-                onClick={() => openInviteModal(INVITE_LINK)}
-            >
-                Join GlobalBadges Server
-            </Button>
-        </>
+        <Button
+            variant="link"
+            className={cl("settings-button")}
+            onClick={() => openInviteModal(INVITE_LINK)}
+        >
+            Join GlobalBadges Server
+        </Button>
     ),
-    async start() {
-        const generation = ++startGeneration;
+    start() {
         clearInterval(intervalId);
-        intervalId = undefined;
-
-        await loadBadges();
-        if (generation !== startGeneration) return;
-
-        intervalId = setInterval(() => void loadBadges(), 1000 * 60 * 30);
+        intervalId = setInterval(refreshBadges, 1000 * 60 * 30);
+        void refreshBadges();
     },
-    async stop() {
-        startGeneration++;
+    stop() {
+        cancelBadgeLoad();
         clearInterval(intervalId);
         intervalId = undefined;
     },
     toolboxActions: {
         async "Refetch Global Badges"() {
-            await loadBadges();
-            Toasts.show({
-                id: Toasts.genId(),
-                message: "Successfully refetched global badges!",
-                type: Toasts.Type.SUCCESS
-            });
+            try {
+                await loadBadges();
+                Toasts.show({ id: Toasts.genId(), message: "Successfully refetched global badges!", type: Toasts.Type.SUCCESS });
+            } catch (error) {
+                new Logger("GlobalBadges").error("Failed to refresh badges", error);
+                Toasts.show({ id: Toasts.genId(), message: "Could not refresh global badges. Try again later.", type: Toasts.Type.FAILURE });
+            }
         }
     },
-    get GlobalBadges() {
-        return GlobalBadges;
-    },
     getGlobalBadges(userId: string) {
-        return GlobalBadges[userId]?.map((badge, idx) => ({
+        return getBadges(userId)?.map((badge, idx) => ({
             id: `global_badges_badge_${idx}`,
             iconSrc: badge.badge,
             description: badge.tooltip,

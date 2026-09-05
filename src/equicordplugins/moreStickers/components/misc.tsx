@@ -16,11 +16,9 @@ import { convert as convertLineSP, getIdFromUrl as getLineStickerPackIdFromUrl, 
 import { isV1, migrate } from "@equicordplugins/moreStickers/migrate-v1";
 import { deleteStickerPack, getStickerPack, getStickerPackMetas, saveStickerPack } from "@equicordplugins/moreStickers/stickers";
 import { SettingsTabsKey, Sticker, StickerPack, StickerPackMeta } from "@equicordplugins/moreStickers/types";
-import { cl, clPicker, Mutex } from "@equicordplugins/moreStickers/utils";
+import { cl, clPicker } from "@equicordplugins/moreStickers/utils";
 import { Button, React, TabBar, TextArea, Toasts } from "@webpack/common";
 import { JSX } from "react";
-
-const mutex = new Mutex();
 
 // The ID of recent sticker and recent sticker pack
 export const RECENT_STICKERS_ID = "recent";
@@ -473,28 +471,14 @@ export async function getRecentStickers(key: string = KEY): Promise<Sticker[]> {
 }
 
 export async function setRecentStickers(stickers: Sticker[], key: string = KEY): Promise<void> {
-    const unlock = await mutex.lock();
-    try {
-        await DataStore.set(key, stickers);
-    } finally {
-        unlock();
-    }
+    await DataStore.set(key, stickers);
 }
 
 export async function addRecentSticker(sticker: Sticker): Promise<void> {
-    const stickers = await getRecentStickers();
-    const index = stickers.findIndex(s => s.id === sticker.id);
-    if (index !== -1) {
-        stickers.splice(index, 1);
-    }
-    stickers.unshift(sticker);
-    while (stickers.length > 16) {
-        stickers.pop();
-    }
-    await setRecentStickers(stickers);
+    await DataStore.update<Sticker[]>(KEY, stickers =>
+        [sticker, ...(stickers ?? []).filter(s => s.id !== sticker.id)].slice(0, 16));
 }
 
 export async function removeRecentStickerByPackId(packId: string): Promise<void> {
-    const stickers = await getRecentStickers();
-    await setRecentStickers(stickers.filter(s => s.stickerPackId !== packId));
+    await DataStore.update<Sticker[]>(KEY, stickers => stickers?.filter(s => s.stickerPackId !== packId) ?? []);
 }

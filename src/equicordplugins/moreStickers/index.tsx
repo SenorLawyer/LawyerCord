@@ -9,6 +9,7 @@ import "./style.css";
 import { definePluginSettings } from "@api/Settings";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { Devs, EquicordDevs } from "@utils/constants";
+import { loadFFmpeg } from "@utils/ffmpeg";
 import definePlugin, { OptionType } from "@utils/types";
 import { Channel } from "@vencord/discord-types";
 import { React } from "@webpack/common";
@@ -16,7 +17,7 @@ import { React } from "@webpack/common";
 import { Packs, PickerContent, PickerHeader, PickerSidebar, Wrapper } from "./components";
 import { getStickerPack, getStickerPackMetas } from "./stickers";
 import { StickerPack, StickerPackMeta } from "./types";
-import { cl, FFmpegStateContext, loadFFmpeg } from "./utils";
+import { cl, FFmpegStateContext } from "./utils";
 
 export const settings = definePluginSettings({
     promptToUpload: {
@@ -163,7 +164,7 @@ export default definePlugin({
         React.useEffect(() => {
             if (ffmpegLoaded[0]) return;
 
-            loadFFmpeg(ffmpeg[0], () => {
+            loadFFmpeg(ffmpeg[0]).then(() => {
                 ffmpegLoaded[1](true);
             });
         }, []);

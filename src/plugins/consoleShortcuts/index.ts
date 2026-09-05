@@ -20,11 +20,10 @@ import { loadLazyChunks } from "@debug/loadLazyChunks";
 import { Devs } from "@utils/constants";
 import { getCurrentChannel, getCurrentGuild } from "@utils/discord";
 import { runtimeHashMessageKey } from "@utils/intlHash";
-import { SYM_LAZY_CACHED, SYM_LAZY_GET } from "@utils/lazy";
-import { sleep } from "@utils/misc";
+import { SYM_LAZY_GET } from "@utils/lazy";
 import { relaunch } from "@utils/native";
 import { canonicalizeMatch, canonicalizeReplace, canonicalizeReplacement } from "@utils/patches";
-import definePlugin, { PluginNative, StartAt } from "@utils/types";
+import definePlugin, { StartAt } from "@utils/types";
 import * as Webpack from "@webpack";
 import { extract, filters, findAll, findModuleId, search } from "@webpack";
 import * as Common from "@webpack/common";
@@ -43,63 +42,45 @@ const switchBranch = (branch: string) => () => {
     VesktopNative.app.relaunch();
 };
 
-const define: typeof Object.defineProperty =
-    (obj, prop, desc) => {
-        if (Object.hasOwn(desc, "value"))
-            desc.writable = true;
+const installedShortcuts = new Map<string, { previous?: PropertyDescriptor; installed: PropertyDescriptor; }>();
+let renderWindow: Window | null = null;
+let renderRoot: ReturnType<typeof Common.createRoot> | undefined;
 
-        return Object.defineProperty(obj, prop, {
-            configurable: true,
-            enumerable: true,
-            ...desc
-        });
-    };
+function closeFakeRender() {
+    const win = renderWindow;
+    const root = renderRoot;
+    renderWindow = null;
+    renderRoot = undefined;
+    try { root?.unmount(); } finally { win?.close(); }
+}
+
+function installShortcut(key: string, descriptor: PropertyDescriptor) {
+    const previous = Object.getOwnPropertyDescriptor(window, key);
+    if (previous?.configurable === false) return;
+    const installed = { configurable: true, enumerable: true, ...descriptor };
+    Object.defineProperty(window, key, installed);
+    installedShortcuts.set(key, { previous, installed });
+}
+
+function resolveShortcut(value: unknown) {
+    if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+    const resolve = Reflect.get(value, SYM_LAZY_GET) ?? Reflect.get(value, "$$vencordGetWrappedComponent");
+    return typeof resolve === "function" ? Reflect.apply(resolve, value, []) : value;
+}
 
 function makeShortcuts() {
-    function newFindWrapper(filterFactory: (...props: any[]) => Webpack.FilterFn, topLevelOnly = false) {
-        const cache = new Map<string, unknown>();
-
-        return function (...filterProps: unknown[]) {
-            const cacheKey = String(filterProps);
-            if (cache.has(cacheKey)) return cache.get(cacheKey);
-
+    function newFindWrapper<Args extends unknown[]>(filterFactory: (...props: Args) => Webpack.FilterFn, topLevelOnly = false) {
+        return (...filterProps: Args) => {
             const matches = findAll(filterFactory(...filterProps), { topLevelOnly });
-
-            const result = (() => {
-                switch (matches.length) {
-                    case 0: return null;
-                    case 1: return matches[0];
-                    default:
-                        const uniqueMatches = [...new Set(matches)];
-                        if (uniqueMatches.length > 1)
-                            console.warn(`Warning: This filter matches ${uniqueMatches.length} exports. Make it more specific!\n`, uniqueMatches);
-
-                        return matches[0];
-                }
-            })();
-            if (result && cacheKey) cache.set(cacheKey, result);
-            return result;
+            if (!matches.length) return null;
+            const uniqueMatches = [...new Set(matches)];
+            if (uniqueMatches.length > 1)
+                console.warn(`Warning: This filter matches ${uniqueMatches.length} exports. Make it more specific!\n`, uniqueMatches);
+            return matches[0];
         };
     }
 
-    function findStoreWrapper(findStore: typeof Webpack.findStore) {
-        const cache = new Map<string, unknown>();
-
-        return function (storeName: string) {
-            const cacheKey = String(storeName);
-            if (cache.has(cacheKey)) return cache.get(cacheKey);
-
-            let store: unknown;
-            try {
-                store = findStore(storeName);
-            } catch { }
-            if (store) cache.set(cacheKey, store);
-            return store;
-        };
-    }
-
-    let fakeRenderWin: WeakRef<Window> | undefined;
-    const find = newFindWrapper(f => f);
+    const find = newFindWrapper((filter: Webpack.FilterFn) => filter);
     const findByProps = newFindWrapper(filters.byProps);
 
     return {
@@ -111,7 +92,10 @@ function makeShortcuts() {
         wpInstances: { getter: () => Vencord.WebpackPatcher.allWebpackInstances },
         wpsearch: search,
         wpex: extract,
-        wpexs: (code: string) => extract(findModuleId(code)!),
+        wpexs: (code: string) => {
+            const id = findModuleId(code);
+            return id == null ? null : extract(id);
+        },
         loadLazyChunks: loadLazyChunks,
         find,
         findAll: findAll,
@@ -122,8 +106,10 @@ function makeShortcuts() {
         findAllByCode: (code: string) => findAll(filters.byCode(code)),
         findComponentByCode: newFindWrapper(filters.componentByCode),
         findAllComponentsByCode: (...code: string[]) => findAll(filters.componentByCode(...code)),
-        findExportedComponent: (...props: string[]) => findByProps(...props)[props[0]],
-        findStore: findStoreWrapper(Webpack.findStore),
+        findExportedComponent: (...props: string[]) => findByProps(...props)?.[props[0]],
+        findStore: (name: string) => {
+            try { return Webpack.findStore(name); } catch { return null; }
+        },
         PluginsApi: { getter: () => Vencord.Plugins },
         plugins: { getter: () => Vencord.Plugins.plugins },
         Settings: { getter: () => Vencord.Settings },
@@ -135,47 +121,41 @@ function makeShortcuts() {
         canonicalizeReplace,
         canonicalizeReplacement,
         runtimeHashMessageKey,
-        fakeRender: (component: ComponentType, props: any) => {
-            const prevWin = fakeRenderWin?.deref();
-            const win = prevWin?.closed === false
-                ? prevWin
-                : window.open("about:blank", "Fake Render", "popup,width=500,height=500")!;
-            fakeRenderWin = new WeakRef(win);
-            win.focus();
+        fakeRender: <Props extends object>(component: ComponentType<Props>, props?: Props) => {
+            if (!renderWindow || renderWindow.closed) {
+                closeFakeRender();
+                const win = window.open("about:blank", "Fake Render", "popup,width=500,height=500");
+                if (!win) throw new Error("Could not open the component preview window");
+                renderWindow = win;
+                try {
+                    const doc = win.document;
+                    doc.body.style.margin = "1em";
 
-            const doc = win.document;
-            doc.body.style.margin = "1em";
+                    for (const style of document.querySelectorAll("style, link[rel=stylesheet]"))
+                        doc.head.append(style.cloneNode(true));
 
-            if (!win.prepared) {
-                win.prepared = true;
-
-                [...document.querySelectorAll("style"), ...document.querySelectorAll("link[rel=stylesheet]")].forEach(s => {
-                    const n = s.cloneNode(true) as HTMLStyleElement | HTMLLinkElement;
-
-                    if (s.parentElement?.tagName === "HEAD")
-                        doc.head.append(n);
-                    else if (n.id?.startsWith("vencord-") || n.id?.startsWith("vcd-"))
-                        doc.documentElement.append(n);
-                    else
-                        doc.body.append(n);
-                });
+                    renderRoot = Common.createRoot(doc.body.appendChild(doc.createElement("div")));
+                } catch (error) {
+                    closeFakeRender();
+                    throw error;
+                }
+                win.addEventListener("pagehide", () => {
+                    if (renderWindow === win) closeFakeRender();
+                }, { once: true });
             }
-
-            const root = Common.createRoot(doc.body.appendChild(document.createElement("div")));
-            root.render(Common.React.createElement(component, props));
-
-            doc.addEventListener("close", () => root.unmount(), { once: true });
+            renderWindow.focus();
+            renderRoot?.render(Common.React.createElement(component, props));
         },
 
         preEnable: (plugin: string) => (Vencord.Settings.plugins[plugin] ??= { enabled: true }).enabled = true,
 
-        channel: { getter: () => getCurrentChannel(), preload: false },
-        channelId: { getter: () => Common.SelectedChannelStore.getChannelId(), preload: false },
-        guild: { getter: () => getCurrentGuild(), preload: false },
-        guildId: { getter: () => Common.SelectedGuildStore.getGuildId(), preload: false },
-        me: { getter: () => Common.UserStore.getCurrentUser(), preload: false },
-        meId: { getter: () => Common.UserStore.getCurrentUser()?.id, preload: false },
-        messages: { getter: () => Common.MessageStore.getMessages(Common.SelectedChannelStore.getChannelId()), preload: false },
+        channel: { getter: () => getCurrentChannel() },
+        channelId: { getter: () => Common.SelectedChannelStore.getChannelId() },
+        guild: { getter: () => getCurrentGuild() },
+        guildId: { getter: () => Common.SelectedGuildStore.getGuildId() },
+        me: { getter: () => Common.UserStore.getCurrentUser() },
+        meId: { getter: () => Common.UserStore.getCurrentUser()?.id },
+        messages: { getter: () => Common.MessageStore.getMessages(Common.SelectedChannelStore.getChannelId()) },
         openModal: { getter: () => Common.openModal },
         openModalLazy: { getter: () => Common.openModalLazy },
 
@@ -198,48 +178,6 @@ function makeShortcuts() {
     };
 }
 
-function loadAndCacheShortcut(key: string, val: any, forceLoad: boolean) {
-    const currentVal = val.getter();
-    if (!currentVal || val.preload === false) return currentVal;
-
-    function unwrapProxy(value: any) {
-        if (value[SYM_LAZY_GET]) {
-            forceLoad ? currentVal[SYM_LAZY_GET]() : currentVal[SYM_LAZY_CACHED];
-        } else if (value.$$vencordGetWrappedComponent) {
-            return forceLoad ? value.$$vencordGetWrappedComponent() : value;
-        }
-
-        return value;
-    }
-
-    const value = unwrapProxy(currentVal);
-    if (typeof value === "object" && value !== null) {
-        const descriptors = Object.getOwnPropertyDescriptors(value);
-
-        for (const propKey in descriptors) {
-            if (value[propKey] == null) continue;
-
-            const descriptor = descriptors[propKey];
-            if (descriptor.writable === true || descriptor.set != null) {
-                const currentValue = value[propKey];
-                const newValue = unwrapProxy(currentValue);
-                if (newValue != null && currentValue !== newValue) {
-                    value[propKey] = newValue;
-                }
-            }
-        }
-    }
-
-    if (value != null) {
-        define(window.shortcutList, key, { value });
-        define(window, key, { value });
-    }
-
-    return value;
-}
-
-const webpackModulesProbablyLoaded = Webpack.onceReady.then(() => sleep(1000));
-
 export default definePlugin({
     name: "ConsoleShortcuts",
     description: "Adds shorter Aliases for many things on the window. Run `shortcutList` for a list.",
@@ -260,51 +198,26 @@ export default definePlugin({
     ],
 
     start() {
-        const shortcuts = makeShortcuts();
-        window.shortcutList = {};
-
-        for (const [key, val] of Object.entries(shortcuts)) {
-            if ("getter" in val) {
-                define(window.shortcutList, key, {
-                    get: () => loadAndCacheShortcut(key, val, true)
-                });
-
-                define(window, key, {
-                    get: () => window.shortcutList[key]
-                });
-            } else {
-                window.shortcutList[key] = val;
-                window[key] = val;
-            }
+        if (installedShortcuts.size) return;
+        const shortcutList: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(makeShortcuts())) {
+            const descriptor = "getter" in value
+                ? { get: () => resolveShortcut(value.getter()) }
+                : { value, writable: true };
+            Object.defineProperty(shortcutList, key, { configurable: true, enumerable: true, ...descriptor });
+            installShortcut(key, descriptor);
         }
-
-        // unproxy loaded modules
-        this.eagerLoad(false);
-
-        if (!IS_WEB) {
-            const Native = VencordNative.pluginHelpers.ConsoleShortcuts as PluginNative<typeof import("./native")>;
-            Native.initDevtoolsOpenEagerLoad();
-        }
-    },
-
-    async eagerLoad(forceLoad: boolean) {
-        await webpackModulesProbablyLoaded;
-
-        const shortcuts = makeShortcuts();
-
-        for (const [key, val] of Object.entries(shortcuts)) {
-            if (!Object.hasOwn(val, "getter") || (val as any).preload === false) continue;
-
-            try {
-                loadAndCacheShortcut(key, val, forceLoad);
-            } catch { } // swallow not found errors in DEV
-        }
+        installShortcut("shortcutList", { value: shortcutList, writable: true });
     },
 
     stop() {
-        delete window.shortcutList;
-        for (const key in makeShortcuts()) {
-            delete window[key];
+        for (const [key, { previous, installed }] of installedShortcuts) {
+            const current = Object.getOwnPropertyDescriptor(window, key);
+            if (!current?.configurable || current.get !== installed.get || current.set !== installed.set || current.value !== installed.value) continue;
+            if (previous) Object.defineProperty(window, key, previous);
+            else delete window[key];
         }
+        installedShortcuts.clear();
+        closeFakeRender();
     }
 });

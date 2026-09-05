@@ -4,15 +4,13 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { popNotice, showNotice } from "@api/Notices";
 import { Settings } from "@api/Settings";
-import ErrorBoundary from "@components/ErrorBoundary";
 import { loadLazyChunks } from "@debug/loadLazyChunks";
 import { reporterData } from "@debug/reporterData";
 import { getIntlMessageFromHash } from "@utils/discord";
 import { canonicalizeMatch, canonicalizeReplace } from "@utils/patches";
 import { filters, findAll, search, wreq } from "@webpack";
-import { React, Toasts, useState } from "@webpack/common";
+import { Toasts } from "@webpack/common";
 
 import { CLIENT_VERSION, logger, PORT, settings } from ".";
 import { Recieve } from "./types";
@@ -27,15 +25,17 @@ export function stopWs() {
 export let socket: WebSocket | undefined;
 
 export function initWs(isManual = false) {
+    stopWs();
     let wasConnected = isManual;
     let hasErrored = false;
     const ws = socket = new WebSocket(`ws://127.0.0.1:${PORT}`);
 
     function replyData(data: OutgoingMessage) {
-        ws.send(JSON.stringify(data));
+        if (socket === ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
     }
 
     ws.addEventListener("open", () => {
+        if (socket !== ws) return;
         wasConnected = true;
 
         logger.info("Connected to WebSocket");
@@ -56,7 +56,7 @@ export function initWs(isManual = false) {
                 return v;
             });
 
-            socket?.send(JSON.stringify({
+            ws.send(JSON.stringify({
                 type: "report",
                 data: JSON.parse(toSend),
                 ok: true
@@ -81,7 +81,7 @@ export function initWs(isManual = false) {
     });
 
     ws.addEventListener("error", e => {
-        if (!wasConnected) return;
+        if (socket !== ws || !wasConnected) return;
 
         hasErrored = true;
 
@@ -98,7 +98,8 @@ export function initWs(isManual = false) {
     });
 
     ws.addEventListener("close", e => {
-        if (!wasConnected || hasErrored) return;
+        if (socket !== ws || !wasConnected || hasErrored) return;
+        socket = undefined;
 
         logger.info("Dev Companion Disconnected:", e.code, e.reason);
 
@@ -113,6 +114,7 @@ export function initWs(isManual = false) {
     });
 
     ws.addEventListener("message", e => {
+        if (socket !== ws || ws.readyState !== WebSocket.OPEN) return;
         try {
             var d = JSON.parse(e.data) as Recieve.FullIncomingMessage;
         } catch (err) {
@@ -126,7 +128,7 @@ export function initWs(isManual = false) {
             const toSend = { nonce: d.nonce, ok: !error } as Record<string, unknown>;
             if (error) toSend.error = error;
             logger.debug("Replying with:", toSend);
-            ws.send(JSON.stringify(toSend));
+            if (socket === ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(toSend));
         }
         function replyData(data: OutgoingMessage) {
             const toSend: FullOutgoingMessage = {
@@ -134,7 +136,7 @@ export function initWs(isManual = false) {
                 nonce: d.nonce
             };
             logger.debug(`Replying with data: ${toSend}`);
-            ws.send(JSON.stringify(toSend));
+            if (socket === ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(toSend));
         }
 
         logger.debug(`Received Message: ${d.type}`, "\n", d.data);
@@ -406,25 +408,8 @@ export function initWs(isManual = false) {
                 break;
             }
             case "allModules": {
-                const { promise, resolve, reject } = Promise.withResolvers<void>();
-                // wrap in try/catch to prevent crashing if notice api is not loaded
-                try {
-                    let closed = false;
-                    const close = () => {
-                        if (closed) return;
-                        closed = true;
-                        popNotice();
-                    };
-                    showNotice(<AllModulesNoti done={promise} close={close} />, "OK", () => {
-                        closed = true;
-                        popNotice();
-                    });
-                } catch (e) {
-                    console.error(e);
-                }
                 loadLazyChunks()
                     .then(() => {
-                        resolve();
                         replyData({
                             type: "moduleList",
                             data: {
@@ -441,7 +426,6 @@ export function initWs(isManual = false) {
                             error: String(e),
                             data: null
                         });
-                        reject(e);
                     });
                 break;
             }
@@ -473,19 +457,3 @@ export function initWs(isManual = false) {
         }
     });
 }
-
-interface AllModulesNotiProps {
-    done: Promise<unknown>;
-    close: () => void;
-}
-
-const AllModulesNoti = ErrorBoundary.wrap(function ({ done, close }: AllModulesNotiProps) {
-    const [state, setState] = useState<0 | 1 | -1>(0);
-    done.then(setState.bind(null, 1)).catch(setState.bind(null, -1));
-    if (state === 1) setTimeout(close, 5000);
-    return (<>
-        {state === 0 && "Loading lazy modules, restarting could lead to errors"}
-        {state === 1 && "Loaded all lazy modules"}
-        {state === -1 && "Failed to load lazy modules, check console for errors"}
-    </>);
-}, { noop: true });

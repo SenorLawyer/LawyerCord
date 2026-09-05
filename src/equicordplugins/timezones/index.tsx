@@ -144,9 +144,24 @@ export const settings = definePluginSettings({
     }
 });
 
+const formatterCache = new Map<string, Intl.DateTimeFormat>();
+
+function getFormatter(options: Intl.DateTimeFormatOptions) {
+    const currentLocale = locale.getLocale() ?? "en-US";
+    if (options.timeZone === undefined) return new Intl.DateTimeFormat(currentLocale, options);
+    const key = JSON.stringify([currentLocale, options]);
+    let formatter = formatterCache.get(key);
+    if (!formatter) {
+        formatter = new Intl.DateTimeFormat(currentLocale, options);
+        if (formatterCache.size >= 128) formatterCache.clear();
+        formatterCache.set(key, formatter);
+    }
+    return formatter;
+}
+
 function getTime(timezone: string, timestamp: string | number, props: Intl.DateTimeFormatOptions = {}) {
     const date = new Date(timestamp);
-    const formatter = new Intl.DateTimeFormat(locale.getLocale() ?? "en-US", {
+    const formatter = getFormatter({
         hour12: !settings.store.twentyFourHourFormat,
         timeZone: timezone,
         ...props
@@ -156,7 +171,7 @@ function getTime(timezone: string, timestamp: string | number, props: Intl.DateT
 
 function getTimezoneAbbreviation(timezone: string, timestamp: string | number) {
     const date = new Date(timestamp);
-    const formatter = new Intl.DateTimeFormat(locale.getLocale() ?? "en-US", {
+    const formatter = getFormatter({
         timeZone: timezone,
         timeZoneName: "short"
     });

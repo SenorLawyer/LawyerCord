@@ -5,6 +5,7 @@
  */
 
 import assert from "node:assert/strict";
+import { build } from "esbuild";
 import { readFileSync } from "node:fs";
 import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -13,11 +14,34 @@ import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { createSourceFile, isFunctionDeclaration, isVariableStatement, ScriptTarget } from "typescript";
 
+import { stylePlugin } from "./build/common.mjs";
+
 const source = createSourceFile("buildWeb.mjs", readFileSync("scripts/build/buildWeb.mjs", "utf8"), ScriptTarget.Latest, true);
 const code = source.statements.filter(node =>
     isFunctionDeclaration(node) && node.name?.text === "buildExtension" ||
     isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(source) === "appendCssRuntime")
 ).map(node => node.getText(source)).join("\n");
+
+test("managed style modules preserve replacement syntax and placeholder names in CSS", async () => {
+    const root = await mkdtemp(join(tmpdir(), "lawyercord-managed-style-"));
+    const css = ".fixture::after { content: '$& $$ STYLE_NAME STYLE_SOURCE'; }";
+    try {
+        await writeFile(join(root, "fixture.css"), css);
+        await writeFile(join(root, "index.js"), 'import "./fixture.css?managed";');
+        const result = await build({
+            entryPoints: [join(root, "index.js")],
+            bundle: true, write: false, format: "iife", plugins: [stylePlugin]
+        });
+        const styles = new Map<string, { source: string; name: string; }>();
+        runInNewContext(result.outputFiles[0].text, { window: { VencordStyles: styles } });
+        assert.equal(styles.size, 1);
+        const [name, style] = [...styles][0];
+        assert.equal(style.name, name);
+        assert.equal(style.source, css);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
 
 test("browser packaging replaces stale output without unused editor bundles", async () => {
     const root = await mkdtemp(join(tmpdir(), "lawyercord-browser-build-"));

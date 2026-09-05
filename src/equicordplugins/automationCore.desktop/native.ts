@@ -90,7 +90,7 @@ function completionInput(value: unknown): CompletionInput | null {
         typeof input.requestId !== "string"
         || !/^[\w-]{1,80}$/.test(input.requestId)
         || typeof input.timeoutSeconds !== "number" || !Number.isFinite(input.timeoutSeconds) || input.timeoutSeconds < 1 || input.timeoutSeconds > 300
-        || !Array.isArray(input.messages) || input.messages.length > 40 || JSON.stringify(input.messages).length > 100000
+        || !Array.isArray(input.messages) || input.messages.length > 40
         || !input.messages.every(message => typeof message === "object" && message !== null && (message.role === "user" || message.role === "assistant") && typeof message.content === "string" && message.content.length <= 20000)
         || typeof input.model !== "string"
         || !MODEL_ID.test(input.model)
@@ -111,7 +111,9 @@ function completionInput(value: unknown): CompletionInput | null {
         || input.temperature > 2
         || typeof input.json !== "boolean"
     ) return null;
-    return input as CompletionInput;
+    const messages = input.messages.map(({ role, content }) => ({ role, content }));
+    if (JSON.stringify(messages).length > 100000) return null;
+    return { ...input, messages } as CompletionInput;
 }
 
 async function responseText(response: Response): Promise<string> {

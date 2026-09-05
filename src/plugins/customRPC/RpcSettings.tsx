@@ -6,18 +6,18 @@
 
 import "./settings.css";
 
-import { isPluginEnabled } from "@api/PluginManager";
 import { Divider } from "@components/Divider";
 import { Heading } from "@components/Heading";
 import { resolveError } from "@components/settings/tabs/plugins/components/Common";
-import { debounce } from "@shared/debounce";
 import { classNameFactory } from "@utils/css";
 import { ActivityType } from "@vencord/discord-types/enums";
 import { Select, Text, TextInput, useState } from "@webpack/common";
 
-import CustomRPCPlugin, { queueSetRpc, settings, TimestampMode } from ".";
+import { settings, TimestampMode } from ".";
 
 const cl = classNameFactory("vc-customRPC-settings-");
+
+const FORM_SETTINGS: ["type", "timestampMode"] = ["type", "timestampMode"];
 
 type SettingsKey = keyof typeof settings.store;
 
@@ -48,11 +48,6 @@ function isAppIdValid(value: string) {
     if (!/^\d{16,21}$/.test(value)) return "Must be a valid Discord ID.";
     return true;
 }
-
-const updateRPC = debounce(() => {
-    queueSetRpc(true);
-    if (isPluginEnabled(CustomRPCPlugin.name)) queueSetRpc();
-});
 
 function isStreamLinkDisabled() {
     return settings.store.type !== ActivityType.STREAMING;
@@ -111,7 +106,6 @@ function SingleSetting<T>({ settingsKey, label, disabled, isValid, transform }: 
 
         if (valid === true) {
             settings.store[settingsKey] = newValue;
-            updateRPC();
         }
     }
 
@@ -149,7 +143,7 @@ function SelectSetting<T>({ settingsKey, label, options, disabled }: SelectOptio
 }
 
 export function RPCSettings() {
-    const s = settings.use();
+    const s = settings.use(FORM_SETTINGS);
 
     return (
         <div className={cl("root")}>

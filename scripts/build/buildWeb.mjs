@@ -58,31 +58,8 @@ const commonOptions = {
     })
 };
 
-const MonacoWorkerEntryPoints = [
-    "vs/language/css/css.worker.js",
-    "vs/editor/editor.worker.js"
-];
-
 /** @type {import("esbuild").BuildOptions[]} */
 const buildConfigs = [
-    {
-        entryPoints: MonacoWorkerEntryPoints.map(entry => `node_modules/monaco-editor/esm/${entry}`),
-        bundle: true,
-        minify: true,
-        format: "iife",
-        outbase: "node_modules/monaco-editor/esm/",
-        outdir: "dist/browser/vendor/monaco"
-    },
-    {
-        entryPoints: ["browser/monaco.ts"],
-        bundle: true,
-        minify: true,
-        format: "iife",
-        outfile: "dist/browser/vendor/monaco/index.js",
-        loader: {
-            ".ttf": "file"
-        }
-    },
     {
         ...commonOptions,
         outfile: "dist/browser/browser.js",
@@ -136,28 +113,12 @@ async function globDir(dir) {
 }
 
 /**
- * @type {(dir: string, basePath?: string) => Promise<Record<string, string>>}
- */
-async function loadDir(dir, basePath = "") {
-    const files = await globDir(dir);
-    return Object.fromEntries(
-        await Promise.all(
-            files.map(
-                async f =>
-                    [f.slice(basePath.length), await readFile(f)]
-            )
-        )
-    );
-}
-
-/**
   * @type {(target: string, files: string[]) => Promise<void>}
  */
 async function buildExtension(target, files) {
     const entries = {
         "dist/LawyerCord.js": await readFile("dist/browser/extension.js"),
         "dist/LawyerCord.css": await readFile("dist/browser/extension.css"),
-        ...await loadDir("dist/browser/vendor/monaco", "dist/browser/"),
         ...Object.fromEntries(await Promise.all(files.map(async f => {
             let content = await readFile(join("browser", f));
             if (f.startsWith("manifest")) {
@@ -173,7 +134,7 @@ async function buildExtension(target, files) {
         })))
     };
 
-    await rm(target, { recursive: true, force: true });
+    await rm(join("dist/browser", target), { recursive: true, force: true });
     await Promise.all(Object.entries(entries).map(async ([file, content]) => {
         const dest = join("dist/browser", target, file);
         const parentDirectory = join(dest, "..");

@@ -22,12 +22,49 @@ import { HeadingSecondary } from "@components/Heading";
 import { Link } from "@components/Link";
 import { Paragraph } from "@components/Paragraph";
 import { Devs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
+import { isObject } from "@utils/misc";
 import definePlugin, { ReporterTestable } from "@utils/types";
 import { ApplicationAssetUtils, fetchApplicationsRPC, FluxDispatcher, Toasts } from "@webpack/common";
 
 const MAX_CACHE_SIZE = 100;
 const assetCache = new Map<string, Promise<string>>();
 const applicationCache = new Map<string, Promise<{ name?: string; } | undefined>>();
+const logger = new Logger("WebRichPresence");
+
+interface RpcMessage {
+    socketId: string;
+    pid?: number | null;
+    activity: (Record<string, unknown> & {
+        name?: string | null;
+        application_id?: string | null;
+        assets?: (Record<string, unknown> & { large_image?: string | null; small_image?: string | null; }) | null;
+    }) | null;
+}
+
+const latestActivities = new Map<string, RpcMessage>();
+
+function isRpcMessage(value: unknown): value is RpcMessage {
+    if (!isObject(value)) return false;
+    const data = value as Record<string, unknown>;
+    if (typeof data.socketId !== "string" || !data.socketId) return false;
+    if (data.pid != null && (typeof data.pid !== "number" || !Number.isSafeInteger(data.pid) || data.pid < 0)) return false;
+    if (data.activity === null) return true;
+    if (!isObject(data.activity)) return false;
+    const activity = data.activity as Record<string, unknown>;
+    if (["application_id", "name"].some(key => activity[key] != null && typeof activity[key] !== "string")) return false;
+    if (activity.assets == null) return true;
+    if (!isObject(activity.assets)) return false;
+    const assets = activity.assets as Record<string, unknown>;
+    return ["large_image", "small_image"].every(key => assets[key] == null || typeof assets[key] === "string");
+}
+
+function clearActivities() {
+    const activities = [...latestActivities];
+    latestActivities.clear();
+    for (const [socketId, { pid }] of activities)
+        FluxDispatcher.dispatch({ type: "LOCAL_ACTIVITY_UPDATE", activity: null, socketId, pid });
+}
 
 function pruneOldestCacheEntry(cache: Pick<Map<string, unknown>, "delete" | "keys">) {
     const oldestKey = cache.keys().next().value;
@@ -35,16 +72,16 @@ function pruneOldestCacheEntry(cache: Pick<Map<string, unknown>, "delete" | "key
 }
 
 async function lookupAsset(applicationId: string, key: string): Promise<string> {
-    const cacheKey = `${applicationId}:${key}`;
+    const cacheKey = JSON.stringify([applicationId, key]);
     const cachedAsset = assetCache.get(cacheKey);
     if (cachedAsset) return cachedAsset;
 
     if (assetCache.size >= MAX_CACHE_SIZE) pruneOldestCacheEntry(assetCache);
 
     const assetPromise = ApplicationAssetUtils.fetchAssetIds(applicationId, [key])
-        .then(assetIds => assetIds[0]!)
+        .then(assetIds => assetIds[0])
         .catch(error => {
-            assetCache.delete(cacheKey);
+            if (assetCache.get(cacheKey) === assetPromise) assetCache.delete(cacheKey);
             throw error;
         });
 
@@ -58,11 +95,11 @@ async function lookupApp(applicationId: string): Promise<{ name?: string; } | un
 
     if (applicationCache.size >= MAX_CACHE_SIZE) pruneOldestCacheEntry(applicationCache);
 
-    const socket: any = {};
+    const socket: { application?: { name?: string; }; } = {};
     const applicationPromise = fetchApplicationsRPC(socket, applicationId)
-        .then(() => socket.application as { name?: string; } | undefined)
+        .then(() => socket.application)
         .catch(error => {
-            applicationCache.delete(applicationId);
+            if (applicationCache.get(applicationId) === applicationPromise) applicationCache.delete(applicationId);
             throw error;
         });
 
@@ -95,74 +132,88 @@ export default definePlugin({
         </>
     ),
 
-    async handleEvent(e: MessageEvent<any>, generation = connectionGeneration) {
-        if (generation !== connectionGeneration) return;
+    async handleEvent(e: MessageEvent<unknown>, generation = connectionGeneration) {
+        if (generation !== connectionGeneration || typeof e.data !== "string") return;
 
-        let data;
+        let data: unknown;
         try {
             data = JSON.parse(e.data);
         } catch {
             return;
         }
+        if (!isRpcMessage(data)) return;
 
         const { activity } = data;
-        const assets = activity?.assets;
-        const appId = activity?.application_id;
-
-        const [largeImage, smallImage] = await Promise.all([
-            resolveOptional(appId && assets?.large_image ? lookupAsset(appId, assets.large_image) : undefined),
-            resolveOptional(appId && assets?.small_image ? lookupAsset(appId, assets.small_image) : undefined),
-        ]);
-        if (generation !== connectionGeneration) return;
-
-        if (largeImage) assets.large_image = largeImage;
-        if (smallImage) assets.small_image = smallImage;
+        const socketId = `arRPC:${data.socketId}`;
+        latestActivities.set(socketId, data);
+        const isCurrent = () => generation === connectionGeneration && latestActivities.get(socketId) === data;
 
         if (activity) {
+            const { assets, application_id: appId } = activity;
+            const [largeImage, smallImage] = await Promise.all([
+                resolveOptional(appId && assets?.large_image ? lookupAsset(appId, assets.large_image) : undefined),
+                resolveOptional(appId && assets?.small_image ? lookupAsset(appId, assets.small_image) : undefined),
+            ]);
+            if (!isCurrent()) return;
+
+            if (assets && largeImage) assets.large_image = largeImage;
+            if (assets && smallImage) assets.small_image = smallImage;
+
             const app = await resolveOptional(appId ? lookupApp(appId) : undefined);
-            if (generation !== connectionGeneration) return;
+            if (!isCurrent()) return;
 
             activity.name ||= app?.name;
         }
 
-        FluxDispatcher.dispatch({ type: "LOCAL_ACTIVITY_UPDATE", ...data });
+        FluxDispatcher.dispatch({ type: "LOCAL_ACTIVITY_UPDATE", activity, socketId, pid: data.pid });
+        if (!activity && isCurrent()) latestActivities.delete(socketId);
     },
 
-    async start() {
+    start() {
         const generation = ++connectionGeneration;
-        if (ws) ws.close();
-        const socket = new WebSocket("ws://127.0.0.1:1337"); // try to open WebSocket
-        ws = socket;
+        ws?.close();
+        ws = undefined;
+        clearActivities();
 
-        socket.onmessage = event => void this.handleEvent(event, generation);
-
-        const connectionSuccessful = await new Promise(res => setTimeout(() => res(socket.readyState === WebSocket.OPEN), 5000)); // check if open after 5s
-        if (generation !== connectionGeneration || socket !== ws) return;
-
-        if (!connectionSuccessful) {
-            showNotice("Failed to connect to arRPC, is it running?", "Retry", () => {
-                // show notice about failure to connect, with retry/ignore
+        const onClose = () => {
+            if (generation !== connectionGeneration) return;
+            ws = undefined;
+            clearActivities();
+            showNotice("Disconnected from arRPC, is it running?", "Retry", () => {
+                if (generation !== connectionGeneration) return;
                 popNotice();
                 this.start();
             });
+        };
+
+        let socket: WebSocket;
+        try {
+            socket = new WebSocket("ws://127.0.0.1:1337");
+        } catch (error) {
+            logger.error("Failed to connect to arRPC", error);
+            onClose();
             return;
         }
-
-        Toasts.show({
-            // show toast on success
-            message: "Connected to arRPC",
-            type: Toasts.Type.SUCCESS,
-            id: Toasts.genId(),
-            options: {
-                duration: 1000,
-                position: Toasts.Position.BOTTOM
-            }
-        });
+        ws = socket;
+        socket.onmessage = event => void this.handleEvent(event, generation).catch(error => logger.error("Failed to update activity", error));
+        socket.onclose = onClose;
+        socket.onopen = () => {
+            if (generation !== connectionGeneration) return;
+            Toasts.show({
+                message: "Connected to arRPC",
+                type: Toasts.Type.SUCCESS,
+                id: Toasts.genId(),
+                options: {
+                    duration: 1000,
+                    position: Toasts.Position.BOTTOM
+                }
+            });
+        };
     },
 
     stop() {
         connectionGeneration++;
-        FluxDispatcher.dispatch({ type: "LOCAL_ACTIVITY_UPDATE", activity: null }); // clear status
+        clearActivities(); // clear status
         ws?.close(); // close WebSocket
         ws = undefined;
         assetCache.clear();

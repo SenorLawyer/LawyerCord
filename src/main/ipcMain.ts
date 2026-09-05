@@ -22,7 +22,8 @@ import "./settings";
 
 import { debounce } from "@shared/debounce";
 import { IpcEvents } from "@shared/IpcEvents";
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell, systemPreferences } from "electron";
+import { Logger } from "@utils/Logger";
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell, systemPreferences, type WebContents } from "electron";
 import monacoHtml from "file://monacoWin.html?minify&base64";
 import { FSWatcher, mkdirSync, readFileSync, watch, writeFileSync } from "fs";
 import { open, readdir, readFile, unlink } from "fs/promises";
@@ -35,6 +36,7 @@ import { ALLOWED_PROTOCOLS, QUICK_CSS_PATH, SETTINGS_DIR, THEMES_DIR } from "./u
 import { makeLinksOpenExternally } from "./utils/externalLinks";
 
 const RENDERER_CSS_PATH = join(__dirname, "renderer.css");
+const logger = new Logger("IpcMain");
 
 mkdirSync(THEMES_DIR, { recursive: true });
 
@@ -116,32 +118,49 @@ ipcMain.handle(IpcEvents.GET_THEME_SYSTEM_VALUES, () => {
 ipcMain.handle(IpcEvents.OPEN_THEMES_FOLDER, () => shell.openPath(THEMES_DIR));
 ipcMain.handle(IpcEvents.OPEN_SETTINGS_FOLDER, () => shell.openPath(SETTINGS_DIR));
 
-ipcMain.handle(IpcEvents.INIT_FILE_WATCHERS, ({ sender }) => {
-    let quickCssWatcher: FSWatcher | undefined;
-    let rendererCssWatcher: FSWatcher | undefined;
+const stopWatching = new WeakMap<WebContents, () => void>();
 
-    open(QUICK_CSS_PATH, "a+").then(fd => {
-        fd.close();
-        quickCssWatcher = watch(QUICK_CSS_PATH, { persistent: false }, debounce(async () => {
-            sender.postMessage(IpcEvents.QUICK_CSS_UPDATE, await readCss());
-        }, 50));
-    }).catch(() => { });
+ipcMain.handle(IpcEvents.INIT_FILE_WATCHERS, async ({ sender }) => {
+    stopWatching.get(sender)?.();
 
-    const themesWatcher = watch(THEMES_DIR, { persistent: false }, debounce(() => {
-        sender.postMessage(IpcEvents.THEME_UPDATE, void 0);
-    }));
+    const watchers: FSWatcher[] = [];
+    let stopped = false;
+    const stop = () => {
+        stopped = true;
+        watchers.forEach(watcher => watcher.close());
+        sender.removeListener("destroyed", stop);
+        if (stopWatching.get(sender) === stop) stopWatching.delete(sender);
+    };
+    stopWatching.set(sender, stop);
+    sender.once("destroyed", stop);
 
-    if (IS_DEV) {
-        rendererCssWatcher = watch(RENDERER_CSS_PATH, { persistent: false }, async () => {
-            sender.postMessage(IpcEvents.RENDERER_CSS_UPDATE, await readFile(RENDERER_CSS_PATH, "utf-8"));
-        });
+    await open(QUICK_CSS_PATH, "a+").then(fd => fd.close()).catch(error => logger.error("Failed to open QuickCSS file", error));
+    if (stopped) return;
+
+    try {
+        watchers.push(watch(QUICK_CSS_PATH, { persistent: false }, debounce(async () => {
+            const css = await readCss();
+            if (!stopped) sender.postMessage(IpcEvents.QUICK_CSS_UPDATE, css);
+        }, 50)));
+    } catch (error) {
+        logger.error("Failed to watch QuickCSS file", error);
     }
 
-    sender.once("destroyed", () => {
-        quickCssWatcher?.close();
-        themesWatcher.close();
-        rendererCssWatcher?.close();
-    });
+    try {
+        watchers.push(watch(THEMES_DIR, { persistent: false }, debounce(() => {
+            if (!stopped) sender.postMessage(IpcEvents.THEME_UPDATE, void 0);
+        })));
+
+        if (IS_DEV) {
+            watchers.push(watch(RENDERER_CSS_PATH, { persistent: false }, async () => {
+                const css = await readFile(RENDERER_CSS_PATH, "utf-8").catch(() => null);
+                if (!stopped && css !== null) sender.postMessage(IpcEvents.RENDERER_CSS_UPDATE, css);
+            }));
+        }
+    } catch (error) {
+        stop();
+        throw error;
+    }
 });
 
 ipcMain.on(IpcEvents.GET_MONACO_THEME, e => {

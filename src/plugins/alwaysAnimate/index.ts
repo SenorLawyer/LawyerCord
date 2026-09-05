@@ -25,26 +25,31 @@ const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         description: "Always animate server icons, avatars, decor and more",
         default: true,
+        restartNeeded: true,
     },
     statusEmojis: {
         type: OptionType.BOOLEAN,
         description: "Always animate status emojis",
         default: true,
+        restartNeeded: true,
     },
     serverBanners: {
         type: OptionType.BOOLEAN,
         description: "Always animate server banners",
         default: true,
+        restartNeeded: true,
     },
     nameplates: {
         type: OptionType.BOOLEAN,
         description: "Always animate nameplates",
         default: true,
+        restartNeeded: true,
     },
     roleGradients: {
         type: OptionType.BOOLEAN,
         description: "Always animate role gradients",
         default: true,
+        restartNeeded: true,
     }
 });
 
@@ -91,6 +96,7 @@ export default definePlugin({
         {
             // Gradient roles in chat
             find: "=!1,contentOnly:",
+            predicate: () => settings.store.roleGradients,
             replacement: {
                 match: /animate:\i/,
                 replace: "animate:!0"
@@ -99,6 +105,7 @@ export default definePlugin({
         {
             // Gradient roles in member list
             find: '="left",className:',
+            predicate: () => settings.store.roleGradients,
             replacement: {
                 match: /,animateGradient:/,
                 replace: ",animateGradient:!0,_oldAnimateGradient:"

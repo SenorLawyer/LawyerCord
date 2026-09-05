@@ -28,7 +28,6 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { HeadingTertiary } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
 import { SettingsTab } from "@components/settings";
-import { debounce } from "@shared/debounce";
 import { ChangeList } from "@utils/ChangeList";
 import { classNameFactory } from "@utils/css";
 import { isTruthy } from "@utils/guards";
@@ -364,20 +363,15 @@ export default function PluginSettings() {
         const enabledUserPlugins = enabledPlugins.filter(p => PluginMeta[p].userPlugin).length;
         return { totalStockPlugins, totalUserPlugins, enabledStockPlugins, enabledUserPlugins, enabledPlugins };
     }, [settings.plugins]);
-    const pluginsToLoad = Math.min(36, plugins.length);
-    const [visibleCount, setVisibleCount] = React.useState(pluginsToLoad);
-    const loadMore = React.useCallback(() => {
-        setVisibleCount(v => Math.min(v + pluginsToLoad, plugins.length));
-    }, [plugins.length]);
-
-    const dLoadMore = useMemo(() => debounce(loadMore, 100), [loadMore]);
+    const [visibleCount, setVisibleCount] = useState(36);
 
     const [sentinelRef, isSentinelVisible] = useIntersection();
     React.useEffect(() => {
         if (isSentinelVisible && visibleCount < plugins.length) {
-            dLoadMore();
+            const timeout = setTimeout(() => setVisibleCount(v => Math.min(v + 36, plugins.length)), 100);
+            return () => clearTimeout(timeout);
         }
-    }, [isSentinelVisible, visibleCount, plugins.length, dLoadMore]);
+    }, [isSentinelVisible, visibleCount, plugins.length]);
 
     const visiblePlugins = plugins.slice(0, visibleCount);
 

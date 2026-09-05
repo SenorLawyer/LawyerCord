@@ -7,7 +7,6 @@
 import "./styles.css";
 
 import { BadgePosition, BadgeUserArgs } from "@api/Badges";
-import { Badges } from "@api/index";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
 import { Paragraph } from "@components/Paragraph";
@@ -145,11 +144,5 @@ export default definePlugin({
     description: "Adds badges showcasing how long you have been friends with a user for",
     tags: ["Friends"],
     authors: [Devs.Samwich],
-    start() {
-        getBadgesToApply().forEach(b => Badges.addProfileBadge(b));
-
-    },
-    stop() {
-        getBadgesToApply().forEach(b => Badges.removeProfileBadge(b));
-    },
+    userProfileBadges: getBadgesToApply(),
 });

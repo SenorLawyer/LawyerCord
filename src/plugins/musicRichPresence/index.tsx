@@ -29,7 +29,7 @@ import { ActivityFlags, ActivityStatusDisplayType, ActivityType } from "@vencord
 import { ApplicationAssetUtils, AuthenticationStore, FluxDispatcher, PresenceStore } from "@webpack/common";
 
 import { LastFMScrobbler } from "./lastfm";
-import { ListenBrainzScrobbler } from "./listenbrainz";
+import { clearListenBrainzCache, ListenBrainzScrobbler } from "./listenbrainz";
 
 export interface TrackData {
     name: string;
@@ -243,6 +243,7 @@ export default definePlugin({
 
     stop() {
         clearInterval(this.updateInterval);
+        clearListenBrainzCache();
     },
 
     async updatePresence() {

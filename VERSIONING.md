@@ -10,7 +10,7 @@ major.minor.patch.packaging
 
 - Increment `major` for incompatible stored-data, plugin, or protocol changes.
 - Increment `minor` for backwards-compatible features.
-- Increment `patch` for backwards-compatible fixes and security hardening.
+- Increment `patch` for backwards-compatible fixes, performance improvements and security hardening.
 - Increment `packaging` for rebuilds that change distribution metadata without changing source behavior.
 
 ## Release process

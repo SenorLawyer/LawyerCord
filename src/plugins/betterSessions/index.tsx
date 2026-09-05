@@ -23,9 +23,10 @@ import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Paragraph } from "@components/Paragraph";
 import { Devs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 import { findComponentByCodeLazy, findCssClassesLazy, findStoreLazy } from "@webpack";
-import { Constants, React, RestAPI, SettingsRouter, Tooltip } from "@webpack/common";
+import { Constants, React, RestAPI, SettingsRouter, Tooltip, UserStore } from "@webpack/common";
 
 import { NewButton, RenameButton } from "./components/RenameButton";
 import { Session, SessionInfo } from "./types";
@@ -38,6 +39,7 @@ const BlobMask = findComponentByCodeLazy("!1,lowerBadgeSize:");
 const MIN_BACKGROUND_CHECK_INTERVAL_MINUTES = 1;
 let checkNewSessionsPromise: Promise<void> | undefined;
 let lifecycleGeneration = 0;
+const logger = new Logger("BetterSessions");
 
 const settings = definePluginSettings({
     backgroundCheck: {
@@ -158,12 +160,14 @@ export default definePlugin({
         if (generation !== lifecycleGeneration) return;
         if (checkNewSessionsPromise) return checkNewSessionsPromise;
 
+        const userId = UserStore.getCurrentUser()?.id;
+        if (!userId) return;
         const promise = (async () => {
             const data = await RestAPI.get({
                 url: Constants.Endpoints.AUTH_SESSIONS
             });
 
-            if (generation !== lifecycleGeneration) return;
+            if (generation !== lifecycleGeneration || userId !== UserStore.getCurrentUser()?.id) return;
 
             let hasNewSession = false;
             for (const session of data.body.user_sessions) {
@@ -179,19 +183,23 @@ export default definePlugin({
                 });
             }
 
-            if (hasNewSession) void saveSessionsToDataStore();
+            if (hasNewSession) await saveSessionsToDataStore();
         })();
 
         checkNewSessionsPromise = promise;
 
         try {
             await promise;
+        } catch (error) {
+            logger.error("Failed to check sessions", error);
         } finally {
             if (checkNewSessionsPromise === promise) checkNewSessionsPromise = undefined;
         }
     },
 
     flux: {
+        LOGOUT(this: { stop(): void; }) { this.stop(); },
+        CONNECTION_OPEN(this: { start(): Promise<void>; }) { return this.start(); },
         USER_SETTINGS_ACCOUNT_RESET_AND_CLOSE_FORM() {
             const lastFetchedHashes = new Set<string>(
                 AuthSessionsStore.getSessions().map((session: SessionInfo["session"]) => session.id_hash)
@@ -231,19 +239,24 @@ export default definePlugin({
     },
 
     async start() {
+        clearInterval(this.checkInterval);
+        this.checkInterval = undefined;
+        checkNewSessionsPromise = undefined;
         const generation = ++lifecycleGeneration;
         await fetchNamesFromDataStore(() => generation === lifecycleGeneration);
         if (generation !== lifecycleGeneration) return;
 
         void this.checkNewSessions(generation);
         if (settings.store.backgroundCheck) {
-            const checkIntervalMinutes = Math.max(settings.store.checkInterval, MIN_BACKGROUND_CHECK_INTERVAL_MINUTES);
+            const minutes = settings.store.checkInterval;
+            const checkIntervalMinutes = Number.isFinite(minutes) && minutes >= MIN_BACKGROUND_CHECK_INTERVAL_MINUTES && minutes <= 0x7FFFFFFF / 60000 ? minutes : 20;
             this.checkInterval = setInterval(() => void this.checkNewSessions(generation), checkIntervalMinutes * 60 * 1000);
         }
     },
 
     stop() {
         lifecycleGeneration++;
+        savedSessionsCache.clear();
         checkNewSessionsPromise = undefined;
         clearInterval(this.checkInterval);
         this.checkInterval = undefined;

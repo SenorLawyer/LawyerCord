@@ -11,7 +11,7 @@ import definePlugin, { OptionType } from "@utils/types";
 import { findByPropsLazy } from "@webpack";
 import { Menu } from "@webpack/common";
 
-const { convertNameToSurrogate } = findByPropsLazy("convertNameToSurrogate");
+const EmojiUtils = findByPropsLazy("convertNameToSurrogate");
 
 interface Emoji {
     type: string;
@@ -40,7 +40,7 @@ function getEmojiMarkdown(target: Target, copyUnicode: boolean): string {
 
     if (!emojiId) {
         return copyUnicode
-            ? convertNameToSurrogate(emojiName)
+            ? EmojiUtils.convertNameToSurrogate(emojiName)
             : `:${emojiName}:`;
     }
 

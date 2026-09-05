@@ -6,15 +6,19 @@
 
 import { managedStyleRootNode } from "@api/Styles";
 import { createAndAppendStyle } from "@utils/css";
+import { Logger } from "@utils/Logger";
 
 import { hexToHSL } from "./colorUtils";
 const VARS_STYLE_ID = "vc-clientTheme-vars";
 const OVERRIDES_STYLE_ID = "vc-clientTheme-overrides";
 type StyleId = typeof VARS_STYLE_ID | typeof OVERRIDES_STYLE_ID;
 
-const styleCache = {} as Record<StyleId, HTMLStyleElement | null>;
+const styleCache: Partial<Record<StyleId, HTMLStyleElement>> = {};
+const logger = new Logger("ClientTheme");
+let activeRequest: AbortController | undefined;
 
 export function createOrUpdateThemeColorVars(color: string) {
+    if (!activeRequest) return;
     const { hue, saturation, lightness } = hexToHSL(color);
 
     createOrUpdateStyle(VARS_STYLE_ID, `:root {
@@ -25,50 +29,48 @@ export function createOrUpdateThemeColorVars(color: string) {
 }
 
 export async function startClientTheme(color: string) {
+    activeRequest?.abort();
+    const request = activeRequest = new AbortController();
     createOrUpdateThemeColorVars(color);
-    createColorsOverrides(await getDiscordStyles());
+    const styles = await getDiscordStyles(request.signal);
+    if (!request.signal.aborted) createColorsOverrides(styles);
 }
 
 export function disableClientTheme() {
+    activeRequest?.abort();
+    activeRequest = undefined;
     styleCache[VARS_STYLE_ID]?.remove();
     styleCache[OVERRIDES_STYLE_ID]?.remove();
-    styleCache[VARS_STYLE_ID] = null;
-    styleCache[OVERRIDES_STYLE_ID] = null;
-}
-
-function getOrCreateStyle(styleId: StyleId) {
-    if (!styleCache[styleId]) {
-        styleCache[styleId] = createAndAppendStyle(styleId, managedStyleRootNode);
-    }
-    return styleCache[styleId];
+    delete styleCache[VARS_STYLE_ID];
+    delete styleCache[OVERRIDES_STYLE_ID];
 }
 
 function createOrUpdateStyle(styleId: StyleId, css: string) {
-    const style = getOrCreateStyle(styleId);
+    const style = styleCache[styleId] ??= createAndAppendStyle(styleId, managedStyleRootNode);
     style.textContent = css;
 }
 
 /**
  * @returns A string containing all the CSS styles from the Discord client.
  */
-async function getDiscordStyles(): Promise<string> {
+async function getDiscordStyles(signal: AbortSignal): Promise<string> {
     const styleLinkNodes = document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]');
 
     const cssTexts = await Promise.all(Array.from(styleLinkNodes, async node => {
         if (!node.href)
-            return null;
+            return "";
 
-        return fetch(node.href).then(res => res.text());
+        try {
+            const response = await fetch(node.href, { signal });
+            if (!response.ok) throw new Error(`Stylesheet request failed with status ${response.status}`);
+            return await response.text();
+        } catch (error) {
+            if (!signal.aborted) logger.warn("Failed to load stylesheet", error);
+            return "";
+        }
     }));
 
-    let styles = "";
-    for (const cssText of cssTexts) {
-        if (!cssText) continue;
-        if (styles) styles += "\n";
-        styles += cssText;
-    }
-
-    return styles;
+    return cssTexts.filter(Boolean).join("\n");
 }
 
 const VISUAL_REFRESH_COLORS_VARIABLES_REGEX = /(--neutral-\d{1,3}?-hsl):.+?([\d.]+?)%;/g;
@@ -82,6 +84,10 @@ function createColorsOverrides(styles: string) {
 
     const lightThemeBaseLightness = visualRefreshColorsLightness["--neutral-2-hsl"];
     const darkThemeBaseLightness = visualRefreshColorsLightness["--neutral-69-hsl"];
+    if (!Number.isFinite(lightThemeBaseLightness) || !Number.isFinite(darkThemeBaseLightness)) {
+        logger.warn("Could not find the client theme base colors");
+        return;
+    }
 
     createOrUpdateStyle(OVERRIDES_STYLE_ID, [
         `.theme-light {\n ${generateNewColorVars(visualRefreshColorsLightness, lightThemeBaseLightness)} \n}`,
@@ -90,15 +96,10 @@ function createColorsOverrides(styles: string) {
 }
 
 function generateNewColorVars(colorsLightess: Record<string, number>, baseLightness: number) {
-    let css = "";
-
-    for (const [colorVariableName, lightness] of Object.entries(colorsLightess)) {
+    return Object.entries(colorsLightess).map(([colorVariableName, lightness]) => {
         const lightnessOffset = lightness - baseLightness;
         const plusOrMinus = lightnessOffset >= 0 ? "+" : "-";
 
-        if (css) css += "\n";
-        css += `${colorVariableName}: var(--theme-h) var(--theme-s) calc(var(--theme-l) ${plusOrMinus} ${Math.abs(lightnessOffset).toFixed(2)}%);`;
-    }
-
-    return css;
+        return `${colorVariableName}: var(--theme-h) var(--theme-s) calc(var(--theme-l) ${plusOrMinus} ${Math.abs(lightnessOffset).toFixed(2)}%);`;
+    }).join("\n");
 }

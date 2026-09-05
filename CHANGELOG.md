@@ -2,6 +2,16 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 2.1.1.0 - 2026-09-05
+
+### Fixed
+
+- Reduce notification updates, timezone formatting work, visibility observer churn and repeated badge rendering work.
+- Cancel obsolete plugin requests, presence updates, theme loads and native CSS watchers while preserving independent Discord windows.
+- Share media loading, update sticker metadata atomically, cache ListenBrainz metadata and extract ZIP preview files only when opened.
+- Remove unused browser editor bundles and cancel settings pagination after leaving the page.
+- Port the applicable ProtonnCord nightly and PR #81 performance changes without the secure messaging extensions. Add regression checks for resource cleanup and output compatibility.
+
 ## 2.1.0.0 - 2026-09-05
 
 ### Added

@@ -64,6 +64,8 @@
 }
 
 .vc-notification-progressbar {
+    width: 100%;
+    transform-origin: left;
     height: 0.25rem;
     border-radius: 5px;
     margin-top: auto;

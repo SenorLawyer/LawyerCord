@@ -26,8 +26,16 @@ export async function fetchDiscordAttachment(
         });
         if (previewDialog.response !== 1) return { success: false, error: "ZIP preview was cancelled." };
 
-        const response = await fetch(attachmentUrl);
-        if (!response.ok) return { success: false, error: `Fetch failed: ${response.status} ${response.statusText}` };
+        const response = await fetch(attachmentUrl, {
+            cache: "no-store",
+            credentials: "omit",
+            redirect: "error",
+            signal: AbortSignal.timeout(30_000)
+        });
+        if (!response.ok) {
+            void response.body?.cancel();
+            return { success: false, error: `ZIP download failed with status ${response.status}.` };
+        }
 
         return {
             success: true,
@@ -41,6 +49,7 @@ export async function fetchDiscordAttachment(
 async function readLimitedResponse(response: Response): Promise<ArrayBuffer> {
     const contentLength = Number(response.headers.get("content-length"));
     if (Number.isFinite(contentLength) && contentLength > MAX_ZIP_BYTES) {
+        void response.body?.cancel();
         throw new Error("ZIP is too large to preview.");
     }
 

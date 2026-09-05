@@ -4,7 +4,7 @@ Source snapshots inspected on 5 September 2026:
 
 - [Nightly](https://github.com/ProtonDev-sys/ProtonnCord/tree/57444b9324e9bede6fd311f9689bfd715eb2e9d4), `57444b9324e9bede6fd311f9689bfd715eb2e9d4`.
 - [PR #81](https://github.com/ProtonDev-sys/ProtonnCord/pull/81), `8f520c42e1130dbd919f136a7bdc9990c632a815`.
-- Initial LawyerCord baseline, `6210ccf67`. The automation work in PR #45 is developed separately and retained when rebasing.
+- Initial LawyerCord baseline, `6210ccf67`. Rebased onto automation PR #45 at `b25ed68a80a759e73f2defbbdfd0e5c721a6480f`, preserving its code, dependency fixes and release workflow.
 
 The audit covered the current nightly and PR file inventories and relevant history, then traced the performance candidates and their callers. It is not a line-by-line correctness audit of every unchanged ProtonnCord plugin. Secure Messaging, hardware vaults, encrypted attachments, and their integration hooks are excluded.
 
@@ -80,4 +80,4 @@ Run timing benchmarks sequentially. The regular regression command does not requ
 - Reject ZIP extraction results whose source cache was cleared while the worker ran. Tests cover coalescing, two active/four waiting limits, retries, queued cancellation and active completion after stop.
 - Scope native watcher replacement to one sender so a popout cannot disable the main window's CSS updates.
 - Preserve LawyerCord's existing stronger caches, queue bounds, storage writes, branding and release behavior.
-- Fix URL-to-path conversion in the two existing lint scripts so the checks run from Windows directories containing spaces.
+- The two existing lint scripts needed URL-to-path conversion for Windows directories containing spaces. PR #45 independently included the same fix, retained on rebase.

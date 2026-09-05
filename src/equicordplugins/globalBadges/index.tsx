@@ -11,12 +11,11 @@ import { Button } from "@components/Button";
 import { BadgeContextMenu } from "@plugins/_api/badges";
 import { Devs, EquicordDevs } from "@utils/constants";
 import { openInviteModal } from "@utils/discord";
-import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { ContextMenuApi, React, Toasts } from "@webpack/common";
 
 import { settings } from "./settings";
-import { cancelBadgeLoad, cl, getBadges, INVITE_LINK, loadBadges, refreshBadges } from "./utils";
+import { cancelBadgeLoad, cl, getBadges, INVITE_LINK, loadBadges, logger, refreshBadges } from "./utils";
 
 let intervalId: ReturnType<typeof setInterval> | undefined;
 
@@ -51,7 +50,7 @@ export default definePlugin({
                 await loadBadges();
                 Toasts.show({ id: Toasts.genId(), message: "Successfully refetched global badges!", type: Toasts.Type.SUCCESS });
             } catch (error) {
-                new Logger("GlobalBadges").error("Failed to refresh badges", error);
+                logger.error("Failed to refresh badges", error);
                 Toasts.show({ id: Toasts.genId(), message: "Could not refresh global badges. Try again later.", type: Toasts.Type.FAILURE });
             }
         }

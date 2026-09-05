@@ -11,6 +11,7 @@ import { isObject } from "@utils/misc";
 import { settings } from "./settings";
 
 type GlobalBadge = Record<"mod" | "tooltip" | "badge", string>;
+export const logger = new Logger("GlobalBadges");
 
 let GlobalBadges: Record<string, GlobalBadge[]> = {};
 let loadGeneration = 0;
@@ -61,7 +62,7 @@ export async function loadBadges() {
 }
 
 export function refreshBadges() {
-    return loadBadges().catch(error => new Logger("GlobalBadges").error("Failed to refresh badges", error));
+    return loadBadges().catch(error => logger.error("Failed to refresh badges", error));
 }
 
 export function getBadges(userId: string) {

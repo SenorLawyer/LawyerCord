@@ -18,6 +18,7 @@
 
 import { Settings, SettingsStore, type ThemeActivationMode } from "@api/Settings";
 import { createAndAppendStyle } from "@utils/css";
+import { Logger } from "@utils/Logger";
 import { ThemeStore } from "@vencord/discord-types";
 import { PopoutWindowStore } from "@webpack/common";
 
@@ -52,7 +53,12 @@ async function toggle(isEnabled: boolean) {
         style.disabled = !isEnabled;
 }
 
+const logger = new Logger("Themes");
+let previousThemeBlobObjectURLs: string[] = [];
+let themeLoadId = 0;
+
 async function initThemes() {
+    const loadId = ++themeLoadId;
     themesStyle ??= createAndAppendStyle("vencord-themes", userStyleRootNode);
 
     const { enabledThemeLinks, enabledThemes } = Settings;
@@ -78,15 +84,22 @@ async function initThemes() {
     }
 
     if (IS_WEB) {
-        for (const theme of enabledThemes) {
-            const mode = getThemeActivationMode(theme);
-            if (!shouldApplyTheme(mode, activeTheme)) continue;
+        const themesToApply = enabledThemes.filter(theme =>
+            shouldApplyTheme(getThemeActivationMode(theme), activeTheme)
+        );
 
-            const themeData = await VencordNative.themes.getThemeData(theme);
-            if (!themeData) continue;
-            const blob = new Blob([themeData], { type: "text/css" });
-            links.add(URL.createObjectURL(blob));
-        }
+        const themeData = await Promise.all(themesToApply.map(theme => VencordNative.themes.getThemeData(theme)))
+            .catch(err => {
+                logger.error("Failed to read themes", err);
+                return null;
+            });
+        if (!themeData || loadId !== themeLoadId) return;
+
+        const objectUrls = themeData.filter((data): data is string => !!data)
+            .map(data => URL.createObjectURL(new Blob([data], { type: "text/css" })));
+        previousThemeBlobObjectURLs.forEach(url => URL.revokeObjectURL(url));
+        previousThemeBlobObjectURLs = objectUrls;
+        previousThemeBlobObjectURLs.forEach(url => links.add(url));
     } else {
         const version = Date.now();
         for (const theme of enabledThemes) {

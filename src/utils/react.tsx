@@ -45,7 +45,7 @@ export const useIntersection = (intersectOnly = false): [
     const observerRef = React.useRef<IntersectionObserver | null>(null);
     const [isIntersecting, setIntersecting] = useState(false);
 
-    const refCallback = (element: Element | null) => {
+    const refCallback = React.useCallback((element: Element | null) => {
         observerRef.current?.disconnect();
         observerRef.current = null;
 
@@ -69,7 +69,7 @@ export const useIntersection = (intersectOnly = false): [
             }
         });
         observerRef.current.observe(element);
-    };
+    }, [intersectOnly]);
 
     return [refCallback, isIntersecting];
 };

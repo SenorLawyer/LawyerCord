@@ -41,38 +41,38 @@ export default ErrorBoundary.wrap(function NotificationComponent({
     const { timeout, position } = useSettings(["notifications.timeout", "notifications.position"]).notifications;
 
     const [isHover, setIsHover] = useState(false);
-    const [elapsed, setElapsed] = useState(0);
 
     const start = useRef(Date.now());
     const pause = useRef<number | null>(null);
+    const progress = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (timeout === 0 || permanent) return;
 
         if (isHover) {
             if (pause.current === null) pause.current = Date.now();
-            return;
-        }
-
-        if (pause.current !== null) {
+        } else if (pause.current !== null) {
             const pausedFor = Date.now() - pause.current;
             start.current += pausedFor;
             pause.current = null;
         }
 
-        const intervalId = setInterval(() => {
-            const elapsedNow = Date.now() - start.current;
-            if (elapsedNow >= timeout) {
-                onClose!();
-            } else {
-                setElapsed(elapsedNow);
-            }
-        }, 10);
+        const elapsed = (pause.current ?? Date.now()) - start.current;
+        const animation = progress.current?.animate(
+            [{ transform: "scaleX(1)" }, { transform: "scaleX(0)" }],
+            { duration: timeout, fill: "forwards" }
+        );
+        if (animation) {
+            animation.currentTime = elapsed;
+            if (isHover) animation.pause();
+        }
+        const timeoutId = isHover ? undefined : setTimeout(() => onClose?.(), Math.max(0, timeout - elapsed));
 
-        return () => clearInterval(intervalId);
-    }, [timeout, isHover, permanent]);
-
-    const timeoutProgress = elapsed / timeout;
+        return () => {
+            clearTimeout(timeoutId);
+            animation?.cancel();
+        };
+    }, [timeout, isHover, permanent, onClose]);
 
     return (
         <button
@@ -123,7 +123,8 @@ export default ErrorBoundary.wrap(function NotificationComponent({
             {timeout !== 0 && !permanent && (
                 <div
                     className="vc-notification-progressbar"
-                    style={{ width: `${(1 - timeoutProgress) * 100}%`, backgroundColor: color || "var(--brand-500)" }}
+                    ref={progress}
+                    style={{ backgroundColor: color || "var(--brand-500)" }}
                 />
             )}
         </button>

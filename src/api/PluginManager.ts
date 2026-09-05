@@ -33,7 +33,6 @@ import { Logger } from "@utils/Logger";
 import { onlyOnce } from "@utils/onlyOnce";
 import { canonicalizeFind, canonicalizeReplacement } from "@utils/patches";
 import { DefinedSettings, Patch, Plugin, PluginDef, PluginSettingDef, ReporterTestable, StartAt } from "@utils/types";
-import { FluxEvents } from "@vencord/discord-types";
 import { FluxDispatcher } from "@webpack/common";
 import { patches } from "@webpack/patcher";
 
@@ -53,7 +52,8 @@ export const PMLogger = logger;
 
 /** Whether we have subscribed to flux events of all the enabled plugins when FluxDispatcher was ready */
 let enabledPluginsSubscribedFlux = false;
-const subscribedFluxEventsPlugins = new Set<string>();
+type FluxHandler = (event: unknown) => void | Promise<void>;
+const subscribedFluxEventsPlugins = new Map<string, Map<string, FluxHandler>>();
 
 const pluginKeysToBind = [
     "onBeforeMessageEdit", "onBeforeMessageSend", "onMessageClick",
@@ -182,14 +182,16 @@ export function startDependenciesRecursive(p: Plugin) {
 
 export function subscribePluginFluxEvents(p: Plugin, fluxDispatcher: typeof FluxDispatcher) {
     if (p.flux && !subscribedFluxEventsPlugins.has(p.name) && (!IS_REPORTER || isReporterTestable(p, ReporterTestable.FluxEvents))) {
-        subscribedFluxEventsPlugins.add(p.name);
+        const handlers = new Map<string, FluxHandler>();
+        subscribedFluxEventsPlugins.set(p.name, handlers);
 
         logger.debug("Subscribing to flux events of plugin", p.name);
         for (const [event, handler] of Object.entries(p.flux)) {
-            const wrappedHandler = p.flux[event] = function () {
+            if (!handler) continue;
+            const wrappedHandler: FluxHandler = eventData => {
                 if (p.name === "Encryptcord" && event === "MESSAGE_CREATE") return;
                 try {
-                    const res = handler!.apply(p, arguments as any);
+                    const res = handler.call(p, eventData);
                     return res instanceof Promise
                         ? res.catch(e => logger.error(`${p.name}: Error while handling ${event}\n`, e))
                         : res;
@@ -198,19 +200,20 @@ export function subscribePluginFluxEvents(p: Plugin, fluxDispatcher: typeof Flux
                 }
             };
 
-            fluxDispatcher.subscribe(event as FluxEvents, wrappedHandler);
+            fluxDispatcher.subscribe(event, wrappedHandler);
+            handlers.set(event, wrappedHandler);
         }
     }
 }
 
 export function unsubscribePluginFluxEvents(p: Plugin, fluxDispatcher: typeof FluxDispatcher) {
-    if (p.flux) {
-        subscribedFluxEventsPlugins.delete(p.name);
-
+    const handlers = subscribedFluxEventsPlugins.get(p.name);
+    if (handlers) {
         logger.debug("Unsubscribing from flux events of plugin", p.name);
-        for (const [event, handler] of Object.entries(p.flux)) {
-            fluxDispatcher.unsubscribe(event as FluxEvents, handler!);
+        for (const [event, handler] of handlers) {
+            fluxDispatcher.unsubscribe(event, handler);
         }
+        subscribedFluxEventsPlugins.delete(p.name);
     }
 }
 

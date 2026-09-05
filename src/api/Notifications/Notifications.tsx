@@ -82,9 +82,9 @@ function _showNotification(notification: NotificationData, id: number) {
     return new Promise<void>(resolve => {
         root.render(
             <NotificationComponent key={id} {...notification} onClose={() => {
-                notification.onClose?.();
                 root.render(null);
                 resolve();
+                notification.onClose?.();
             }} />,
         );
     });

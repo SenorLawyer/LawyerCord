@@ -197,4 +197,3 @@ test("TTLMap matches a reference model over 10000 deterministic operations", t =
     t.mock.timers.tick(1000);
     assert.deepEqual(actualExpired, []);
 });
-

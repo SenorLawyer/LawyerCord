@@ -97,4 +97,3 @@ test("flux subscriptions preserve original handlers and clean up the functions a
     assert.equal(calls, 25);
     assert.equal(errors.length, 0);
 });
-

@@ -47,4 +47,3 @@ test("badge registration preserves caller objects and dynamic component identity
         api.addProfileBadge(badge);
     }
 });
-

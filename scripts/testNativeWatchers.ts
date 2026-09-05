@@ -71,4 +71,3 @@ test("reinitializing native CSS watchers closes old watchers and cancels pending
     assert.ok(watchers.every(watcher => watcher.closed));
     assert.equal(popout.listenerCount("destroyed"), 0);
 });
-

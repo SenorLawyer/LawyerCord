@@ -107,4 +107,3 @@ test("failed theme reads retain the active style and do not leak partial results
     assert.equal(await [...blobs.values()][0].text(), "initial {}");
     assert.equal(errors.length, 1);
 });
-

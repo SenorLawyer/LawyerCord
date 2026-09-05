@@ -42,8 +42,8 @@ async function engine(version) {
         } }],
     });
     const globals = { module: { exports: {} }, exports: {}, handlers: new Map(), data: new Map(), writes: 0, structuredClone, crypto: globalThis.crypto, AbortController, AbortSignal, setTimeout, clearTimeout, setInterval, clearInterval, Date, Intl, performance, console, URL, window: { setTimeout, clearTimeout }, fetch: () => { throw Error("Benchmark reached network."); } };
-    runInNewContext(bundled.outputFiles[0].text, globals);
-    return { api: globals.module.exports, globals };
+    const helpers = runInNewContext(bundled.outputFiles[0].text + (version === "after" ? "\n({ resolveTemplate, variableValue });" : ""), globals);
+    return { api: globals.module.exports, globals, helpers };
 }
 
 const now = Date.now();
@@ -62,7 +62,15 @@ function measure(fn, iterations) {
     return { medianMs: values[3], p95Ms: values[6], iterations };
 }
 if (storageTest) {
-    const { api, globals } = await engine("after");
+    const { api, globals, helpers } = await engine("after");
+    const variables = { messages: [{ content: "Hello" }], value: 0 };
+    assert.equal(helpers.resolveTemplate("{{messages.0.content}} {{value}}", variables), "Hello 0");
+    assert.equal(helpers.variableValue("messages.0.content", { variables }), "Hello");
+    assert.equal(helpers.resolveTemplate("{{inherited}}", Object.create({ inherited: "private" })), "");
+    for (const path of ["__proto__", "messages.constructor", "messages.0.prototype"]) {
+        assert.throws(() => helpers.resolveTemplate(`{{${path}}}`, variables), /not allowed/);
+        assert.throws(() => helpers.variableValue(path, { variables }), /not allowed/);
+    }
     const legacy = fixture(1);
     globals.data.set("LawyerCord_automations", [legacy]);
     await api.loadAutomationState();

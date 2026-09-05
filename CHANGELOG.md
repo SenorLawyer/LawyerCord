@@ -50,6 +50,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Delete unused automation cloning and linear-flow helpers.
 
+- Use the existing validated data-path reader for automation templates and AI inputs.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

@@ -83,6 +83,26 @@ test("declarative profile badges enable their API dependency", () => {
     assert.equal(api.isDependency, true);
 });
 
+test("nested dependency restart requirements and failures reach the caller", () => {
+    for (const fails of [false, true]) {
+        const { manager, add, settings } = loadManager();
+        let parentStarts = 0;
+        add({ name: "Leaf", requiresRestart: !fails, start() { throw new Error("Cannot start"); } });
+        add({ name: "Parent", dependencies: ["Leaf"], start() { parentStarts++; } });
+        const plugin = add({ name: "Fixture", dependencies: ["Parent"] });
+        const result = manager.startDependenciesRecursive(plugin);
+        assert.equal(result.restartNeeded, !fails);
+        assert.deepEqual(Array.from(result.failures), fails ? ["Leaf"] : []);
+        assert.equal(parentStarts, 0);
+        assert.equal(settings.Leaf.enabled, !fails);
+        assert.equal(settings.Parent.enabled, !fails);
+        const repeated = manager.startDependenciesRecursive(plugin);
+        assert.equal(repeated.restartNeeded, !fails);
+        assert.deepEqual(Array.from(repeated.failures), fails ? ["Leaf"] : []);
+        assert.equal(parentStarts, 0);
+    }
+});
+
 test("flux subscriptions preserve original handlers and clean up the functions actually registered", async () => {
     const { manager, add, dispatcher, handlers, errors } = loadManager();
     let calls = 0;

@@ -158,22 +158,29 @@ export function startDependenciesRecursive(p: Plugin) {
     const failures: string[] = [];
 
     p.dependencies?.forEach(d => {
-        if (!settings[d].enabled) {
+        if (!settings[d].enabled || !Plugins[d].started) {
             const dep = Plugins[d];
-            startDependenciesRecursive(dep);
+            const nested = startDependenciesRecursive(dep);
+            restartNeeded ||= nested.restartNeeded;
+            failures.push(...nested.failures);
+            if (nested.failures.length) return;
 
             // If the plugin has patches, don't start the plugin, just enable it.
             settings[d].enabled = true;
             dep.isDependency = true;
 
-            if (pluginRequiresRestart(dep)) {
+            if (nested.restartNeeded || pluginRequiresRestart(dep)) {
                 logger.warn(`Enabling dependency ${d} requires restart.`);
                 restartNeeded = true;
                 return;
             }
 
             const result = startPlugin(dep);
-            if (!result) failures.push(d);
+            if (!result) {
+                settings[d].enabled = false;
+                dep.isDependency = false;
+                failures.push(d);
+            }
         }
     });
 

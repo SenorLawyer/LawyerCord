@@ -26,6 +26,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Enable the badges API for plugins declaring profile badges.
 
+- Propagate nested dependency failures and restart requirements before starting plugins.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

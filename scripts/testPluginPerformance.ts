@@ -88,6 +88,26 @@ function decorFixture() {
     return { store, requests, scheduled, flush, advance, errors, clock };
 }
 
+test("queued task failures are reported without interrupting ordered work", async () => {
+    const errors: unknown[][] = [];
+    const { Queue } = loadComponent("src/utils/Queue.ts", {}, {
+        "./Logger": { Logger: class { error(...args: unknown[]) { errors.push(args); } } }
+    });
+    const queue = new Queue(2);
+    const calls: string[] = [];
+    queue.push(() => { calls.push("first"); throw new Error("Synchronous failure"); });
+    queue.push(() => calls.push("discarded"));
+    queue.unshift(async () => { calls.push("urgent"); throw new Error("Asynchronous failure"); });
+    queue.unshift(() => calls.push("newest"));
+    await setImmediate();
+    assert.deepEqual(calls, ["first", "newest", "urgent"]);
+    assert.equal(errors.length, 2);
+    assert.equal(queue.size, 0);
+    queue.push(() => calls.push("resumed"));
+    await setImmediate();
+    assert.equal(calls.at(-1), "resumed");
+});
+
 test("audio player preserves zero volume and clamps explicit values", () => {
     const plugin = loadComponent("src/equicordplugins/_api/audioPlayer.ts", {}, {
         "@api/AudioPlayer": { audioProcessorFunctions: {}, AudioType: {}, identifyAudioType: () => "url" },

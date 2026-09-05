@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Propagate nested dependency failures and restart requirements before starting plugins.
 
+- Handle queued task failures without unhandled promise rejections while continuing queued work.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

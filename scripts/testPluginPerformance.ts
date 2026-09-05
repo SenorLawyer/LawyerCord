@@ -88,6 +88,55 @@ function decorFixture() {
     return { store, requests, scheduled, flush, advance, errors, clock };
 }
 
+test("favourite attachment downloads validate IPC input and bound network responses", async () => {
+    let requests = 0;
+    let cancelled = 0;
+    let mode = "success";
+    const { fetchAttachment } = loadComponent("src/equicordplugins/favouriteAnything/native.ts", {}, {}, {
+        URL, Buffer, AbortSignal,
+        fetch: async (_url: URL, options: RequestInit) => {
+            requests++;
+            assert.equal(options.redirect, "error");
+            assert.ok(options.signal);
+            if (mode === "network") throw new Error("Private path or network details");
+            let read = false;
+            return {
+                ok: true,
+                headers: { get: (name: string) => name === "content-length" ? (mode === "header" ? "524288001" : null) : "text/plain" },
+                body: {
+                    cancel: async () => { cancelled++; },
+                    getReader: () => ({
+                        read: async () => {
+                            if (read) return { done: true };
+                            read = true;
+                            return { done: false, value: mode === "stream" ? { byteLength: 524288001 } : new Uint8Array([1, 2, 3]) };
+                        },
+                        cancel: async () => { cancelled++; },
+                        releaseLock() {}
+                    })
+                }
+            };
+        }
+    });
+    const attachment = { filename: "file.txt", url: "https://cdn.discordapp.com/attachments/file.txt" };
+    for (const invalid of [null, {}, { ...attachment, filename: 1 }, ...["http://cdn.discordapp.com/file", "https://cdn.discordapp.com:444/file", "https://user@cdn.discordapp.com/file", "https://example.com/file"].map(url => ({ ...attachment, url }))]) {
+        const result = await fetchAttachment({}, invalid);
+        assert.equal(result.success, false);
+    }
+    assert.equal(requests, 0);
+    const success = await fetchAttachment({}, attachment);
+    assert.equal(success.success, true);
+    assert.deepEqual(Array.from(success.data), [1, 2, 3]);
+    assert.equal(success.filename, "file.txt");
+    assert.equal(success.type, "text/plain");
+    for (mode of ["header", "stream", "network"]) {
+        const result = await fetchAttachment({}, attachment);
+        assert.equal(result.success, false);
+        assert.equal(result.error.includes("Private"), false);
+    }
+    assert.equal(cancelled, 2);
+});
+
 test("favourite attachment base64url encoding preserves bytes and rejects malformed input", () => {
     const { outputText } = transpileModule(readFileSync("src/equicordplugins/favouriteAnything/polyfills.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }

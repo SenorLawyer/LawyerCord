@@ -34,6 +34,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Replace the hand-written attachment metadata base64 codec with browser primitives.
 
+- Validate desktop favourite attachment downloads, reject redirects, cap downloads at 500 MiB and return safe errors.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

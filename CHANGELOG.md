@@ -48,6 +48,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Validate AI conversation entries before serialization and forward only their role and content.
 
+- Delete unused automation cloning and linear-flow helpers.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

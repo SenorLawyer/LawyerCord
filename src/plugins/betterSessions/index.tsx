@@ -56,7 +56,7 @@ const settings = definePluginSettings({
     }
 });
 
-const plugin = definePlugin({
+export default definePlugin({
     name: "BetterSessions",
     description: "Enhances the sessions (devices) menu. Allows you to view exact timestamps, give each session a custom name, and receive notifications about new sessions.",
     authors: [Devs.amia],
@@ -198,8 +198,8 @@ const plugin = definePlugin({
     },
 
     flux: {
-        LOGOUT() { plugin.stop(); },
-        CONNECTION_OPEN() { return plugin.start(); },
+        LOGOUT(this: { stop(): void; }) { this.stop(); },
+        CONNECTION_OPEN(this: { start(): Promise<void>; }) { return this.start(); },
         USER_SETTINGS_ACCOUNT_RESET_AND_CLOSE_FORM() {
             const lastFetchedHashes = new Set<string>(
                 AuthSessionsStore.getSessions().map((session: SessionInfo["session"]) => session.id_hash)
@@ -262,5 +262,3 @@ const plugin = definePlugin({
         this.checkInterval = undefined;
     }
 });
-
-export default plugin;

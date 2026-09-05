@@ -97,13 +97,29 @@ test("Custom RPC debounces settings changes and bounds very short timestamp loop
     const source = readFileSync("src/plugins/customRPC/index.tsx", "utf8");
     const start = source.indexOf("export async function setRpc");
     const end = source.indexOf("export default definePlugin");
-    const code = transpileModule(source.slice(start, end).replace("export async", "async"), {
+    const lifecycle = source.slice(source.indexOf("    start() {"), source.indexOf("    // Discord hides buttons"));
+    const code = transpileModule(source.slice(start, end).replace("export async", "async") + "\nconst lifecycle = {" + lifecycle + "};", {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
     }).outputText;
     const timers = new Map<() => void, number>();
     const activities: unknown[] = [];
     let builds = 0;
     const context = {
+        SettingsStore: { addGlobalChangeListener() { }, removeGlobalChangeListener() { } },
+        assetCache: new Map(),
+        proxyLazy: (factory: () => unknown) => factory(),
+        lodash: { debounce(callback: () => void, delay: number) {
+            let scheduled: (() => void) | undefined;
+            const cancel = () => {
+                if (scheduled) timers.delete(scheduled);
+                scheduled = undefined;
+            };
+            return Object.assign(() => {
+                cancel();
+                scheduled = () => { cancel(); callback(); };
+                timers.set(scheduled, delay);
+            }, { cancel });
+        } },
         settings: { store: { appName: "test", timestampMode: 3, startTime: 1, endTime: 2 } },
         TimestampMode: { CUSTOM: 3 }, UserStore: { getCurrentUser: () => ({ id: "user" }) },
         createActivity: async () => { builds++; return { name: "test" }; },
@@ -112,7 +128,7 @@ test("Custom RPC debounces settings changes and bounds very short timestamp loop
         setTimeout: (callback: () => void, delay: number) => { timers.set(callback, delay); return callback; },
         clearTimeout: (callback: () => void) => timers.delete(callback)
     };
-    const rpc = runInNewContext(code + "\npluginActive = true; ({ handleSettingsChange, setRpc });", context);
+    const rpc = runInNewContext(code + "\npluginActive = true; ({ handleSettingsChange, setRpc, lifecycle });", context);
     rpc.handleSettingsChange(undefined, "plugins.Other.setting");
     assert.equal(timers.size, 0);
     for (let index = 0; index < 10; index++) rpc.handleSettingsChange(undefined, "plugins.CustomRPC.details");
@@ -125,7 +141,11 @@ test("Custom RPC debounces settings changes and bounds very short timestamp loop
     await setImmediate();
     assert.equal(builds, 1);
     assert.equal(activities.length, 1);
-    await rpc.setRpc(true);
+    rpc.handleSettingsChange(undefined, "plugins.CustomRPC.details");
+    rpc.lifecycle.flux.LOGOUT();
+    assert.equal(timers.size, 0);
+    rpc.handleSettingsChange(undefined, "plugins.CustomRPC.details");
+    rpc.lifecycle.stop();
     assert.equal(timers.size, 0);
 });
 

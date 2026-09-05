@@ -26,6 +26,7 @@ import { Link } from "@components/Link";
 import { Paragraph } from "@components/Paragraph";
 import { Devs } from "@utils/constants";
 import { isTruthy } from "@utils/guards";
+import { proxyLazy } from "@utils/lazy";
 import { Logger } from "@utils/Logger";
 import { Margins } from "@utils/margins";
 import { classes } from "@utils/misc";
@@ -34,7 +35,7 @@ import definePlugin, { OptionType } from "@utils/types";
 import { Activity } from "@vencord/discord-types";
 import { ActivityType } from "@vencord/discord-types/enums";
 import { findByCodeLazy, findComponentByCodeLazy } from "@webpack";
-import { ApplicationAssetUtils, Button, FluxDispatcher, React, UserStore } from "@webpack/common";
+import { ApplicationAssetUtils, Button, FluxDispatcher, lodash, React, UserStore } from "@webpack/common";
 
 import { RPCSettings } from "./RpcSettings";
 
@@ -259,7 +260,7 @@ function queueSetRpc(disable = false) {
 const MAX_TIMEOUT_MS = 2_147_483_647;
 const MAX_TIMESTAMP = 8_640_000_000_000_000;
 let loopTimeout: ReturnType<typeof setTimeout> | undefined;
-let updateTimeout: ReturnType<typeof setTimeout> | undefined;
+const updateRpc = proxyLazy(() => lodash.debounce(queueSetRpc, 300));
 let loopAnchor: number | undefined;
 let loopDuration: number | undefined;
 let rpcGeneration = 0;
@@ -272,12 +273,8 @@ function validTimestamp(value: unknown) {
 function handleSettingsChange(_data?: unknown, path = "") {
     if (!pluginActive || (path && path !== "plugins" && path !== "plugins.CustomRPC" && !path.startsWith("plugins.CustomRPC."))) return;
     rpcGeneration++;
-    clearTimeout(updateTimeout);
     updateTimestampLoop();
-    updateTimeout = setTimeout(() => {
-        updateTimeout = undefined;
-        queueSetRpc();
-    }, 300);
+    updateRpc();
 }
 
 function updateTimestampLoop() {
@@ -336,8 +333,7 @@ export default definePlugin({
         if (!pluginActive) return;
         pluginActive = false;
         SettingsStore.removeGlobalChangeListener(handleSettingsChange);
-        clearTimeout(updateTimeout);
-        updateTimeout = undefined;
+        updateRpc.cancel();
         queueSetRpc(true);
         assetCache.clear();
     },
@@ -345,8 +341,7 @@ export default definePlugin({
     flux: {
         CONNECTION_OPEN() { queueSetRpc(); },
         LOGOUT() {
-            clearTimeout(updateTimeout);
-            updateTimeout = undefined;
+            updateRpc.cancel();
             queueSetRpc(true);
             assetCache.clear();
         }

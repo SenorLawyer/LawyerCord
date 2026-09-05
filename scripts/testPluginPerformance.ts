@@ -46,6 +46,46 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("status bypass checks the message channel without creating DMs", async () => {
+    const notifications: object[] = [];
+    const errors: unknown[] = [];
+    let createdDms = 0;
+    let mentioned = false;
+    const store = { guilds: "", channels: "", users: "123456789012345678", statusToUse: "dnd", allowOutsideOfDms: false, respectSilentPings: true, notificationSound: false };
+    const { default: plugin } = loadSource("src/equicordplugins/bypassStatus/index.tsx", {
+        "@api/AudioPlayer": {},
+        "@api/index": { Notifications: { showNotification: (notification: object) => { notifications.push(notification); } } },
+        "@api/Settings": { definePluginSettings: () => ({ store }) },
+        "@utils/constants": { Devs: {} }, "@utils/discord": { getCurrentChannel: () => null },
+        "@utils/Logger": { Logger: class { error(...args: unknown[]) { errors.push(args); } } },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+        "@webpack/common": {
+            ChannelActionCreators: { getOrEnsurePrivateChannel: async () => { createdDms++; return "dm"; } },
+            ChannelStore: { getChannel: (id: string) => ({ name: id, isDM: () => id === "dm" }) },
+            UserStore: { getCurrentUser: () => ({ id: "self" }), getUser: () => undefined },
+            PresenceStore: { getStatus: () => "dnd" }, MessageStore: { getMessage: () => ({ mentioned }) },
+            WindowStore: { isFocused: () => false }
+        }
+    });
+    plugin.start();
+    const dispatch = (channelId: string, flags = 0) => plugin.flux.MESSAGE_CREATE({
+        channelId, guildId: channelId === "dm" ? undefined : "guild",
+        message: { id: "message", channel_id: channelId, content: "hello", flags, author: { id: store.users, username: "author" } }
+    });
+    await dispatch("guild-channel");
+    assert.equal(notifications.length, 0);
+    await dispatch("dm");
+    assert.equal(notifications.length, 1);
+    store.allowOutsideOfDms = true;
+    mentioned = true;
+    await dispatch("guild-channel");
+    assert.equal(notifications.length, 2);
+    await dispatch("dm", 1 << 12);
+    assert.equal(notifications.length, 2);
+    assert.equal(createdDms, 0);
+    assert.deepEqual(errors, []);
+});
+
 test("audio downloads finishing after unmount do not allocate object URLs", async () => {
     const effects: (() => () => void)[] = [];
     const canvas = { getContext: () => null };

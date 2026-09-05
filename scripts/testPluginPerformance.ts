@@ -46,6 +46,40 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("audio downloads finishing after unmount do not allocate object URLs", async () => {
+    const effects: (() => () => void)[] = [];
+    const canvas = { getContext: () => null };
+    let firstRef = true;
+    const React = {
+        createElement() {},
+        useRef(value: unknown) {
+            const current = firstRef ? canvas : value;
+            firstRef = false;
+            return { current };
+        },
+        useEffect(effect: () => () => void) { effects.push(effect); }
+    };
+    let finishDownload: (response: Response) => void = () => assert.fail("Download did not start");
+    let allocated = 0;
+    const Visualizer = loadSource("src/equicordplugins/betterAudioPlayer/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+        "@webpack/common": { React }
+    }, {
+        URL: class extends URL { static createObjectURL() { allocated++; return "blob:fixture"; } },
+        fetch: () => new Promise<Response>(resolve => { finishDownload = resolve; }),
+        cancelAnimationFrame() {}
+    }, "Visualizer");
+    Visualizer({ playerRef: { current: { addEventListener() {}, removeEventListener() {} } }, src: "https://fixture.invalid/audio" });
+    const cleanup = effects[0]();
+    cleanup();
+    finishDownload(new Response("audio"));
+    await setImmediate();
+    assert.equal(allocated, 0);
+});
+
 test("Base64 decoding returns Unicode text and skips invalid encodings", () => {
     const decode = loadSource("src/equicordplugins/baseDecoder/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({ store: {} }) },

@@ -159,13 +159,6 @@ async function getAudioBlob(src: string): Promise<Blob | null> {
     return blobPromise;
 }
 
-async function fetchAudioBlob(src: string): Promise<string | null> {
-    const blob = await getAudioBlob(src);
-    if (!blob) return null;
-
-    return URL.createObjectURL(blob);
-}
-
 function Visualizer({ playerRef, src }: { playerRef: React.RefObject<HTMLAudioElement>; src: string; }) {
     const canvasRef = React.useRef<HTMLCanvasElement>(null);
     const audioCtxRef = React.useRef<AudioContext | null>(null);
@@ -183,9 +176,10 @@ function Visualizer({ playerRef, src }: { playerRef: React.RefObject<HTMLAudioEl
         let cancelled = false;
 
         const init = async () => {
-            const blobUrl = await fetchAudioBlob(src).catch(() => null);
-            if (cancelled || !blobUrl) return;
+            const blob = await getAudioBlob(src).catch(() => null);
+            if (cancelled || !blob) return;
 
+            const blobUrl = URL.createObjectURL(blob);
             blobUrlRef.current = blobUrl;
 
             const wasPlaying = !audio.paused;

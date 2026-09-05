@@ -46,6 +46,18 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("Base64 decoding returns Unicode text and skips invalid encodings", () => {
+    const decode = loadSource("src/equicordplugins/baseDecoder/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@components/CodeBlock": {}, "@components/ErrorBoundary": {}, "@components/Heading": {},
+        "@utils/constants": { EquicordDevs: {} }, "@utils/discord": {},
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+        "@webpack/common": {}
+    }, { atob, TextDecoder, console: { error() {} } }, "decodeBase64Strings");
+    const text = "Hello, café 😀";
+    assert.deepEqual(Array.from(decode([Buffer.from(text).toString("base64"), "/w==", "%%%"])), [text]);
+});
+
 function decorFixture() {
     const scheduled = new Map<() => Promise<void>, number>();
     const requests: { ids: string[]; signal?: AbortSignal; resolve: (result: Record<string, string | null>) => void; reject: (error: Error) => void; }[] = [];

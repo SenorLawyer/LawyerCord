@@ -88,6 +88,25 @@ function decorFixture() {
     return { store, requests, scheduled, flush, advance, errors, clock };
 }
 
+test("favourite attachment base64url encoding preserves bytes and rejects malformed input", () => {
+    const { outputText } = transpileModule(readFileSync("src/equicordplugins/favouriteAnything/polyfills.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    });
+    const { encode, decode } = runInNewContext(`Uint8Array.fromBase64 = undefined; Uint8Array.prototype.toBase64 = undefined;\n${outputText}\n({ encode: bytes => uint8ArrayToBase64(new Uint8Array(bytes)), decode: base64ToUint8Array });`, {
+        exports: {}, atob, btoa
+    });
+    for (let length = 0; length < 260; length++) {
+        const bytes = Array.from({ length }, (_, index) => (index * 37 + length) % 256);
+        const expected = Buffer.from(bytes).toString("base64url");
+        assert.equal(encode(bytes), expected);
+        assert.deepEqual(Array.from(decode(expected)), bytes);
+    }
+    assert.deepEqual(Array.from(decode(" A Q I =\r\n")), [1, 2]);
+    assert.deepEqual(Array.from(decode("AQ==")), [1]);
+    for (const invalid of ["A", "A=", "AQ=", "AQ===", "AQ=A", "AAAA=", "+w", "/w", "AA!", "AA\u00a0"])
+        assert.throws(() => decode(invalid), invalid);
+});
+
 test("linked message previews reject neighboring messages returned by an around lookup", async () => {
     const source = readFileSync("src/plugins/messageLinkEmbeds/index.tsx", "utf8");
     const code = transpileModule(source.slice(source.indexOf("async function fetchMessage("), source.indexOf("function getImages(")), {

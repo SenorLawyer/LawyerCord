@@ -32,6 +32,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Require linked-message previews to match the requested message ID.
 
+- Replace the hand-written attachment metadata base64 codec with browser primitives.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

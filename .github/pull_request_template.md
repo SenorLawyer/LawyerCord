@@ -12,7 +12,6 @@
 - [ ] Focused tests pass
 - [ ] Lint passes
 - [ ] Relevant builds pass
-- [ ] Privacy inventory regenerated when applicable
 - [ ] Release artifact audit passes
 - [ ] No credentials, private Discord data, or generated build output are included
 

@@ -18,19 +18,7 @@ LawyerCord is safe-by-default, not network-free:
 - CI rejects release artifacts containing Discord token-shaped values or LawyerCord runtime configuration, indexes, queues, ledgers, and downloads.
 - No generic Discord REST, token-export, webhook, moderation, membership, relationship, or arbitrary filesystem MCP tool is exposed.
 
-See [SECURITY.md](./SECURITY.md) and [PRIVACY_POLICY.md](./PRIVACY_POLICY.md) for the audit summary and network boundaries.
-
-## Local control panel
-
-Open the panel with the local `/lawyercord control panel` command. It is available only while LawyerCord is running and includes:
-
-- Discord account, server, relationship, channel, plugin, storage, and runtime-network statistics.
-- Encrypted-at-rest local hybrid semantic search over explicitly approved channels.
-- Evidence exports with automatic redaction, timestamps, SHA-256 file hashes, and a chained record manifest.
-- A generated per-plugin source inventory of external domains, local storage, and elevated capabilities.
-- Honest SecureMessaging protocol and migration status.
-
-The semantic index starts with no approved channels. Add channels explicitly from the dashboard; this indexing scope does not restrict Discord or the MCP. The panel binds only to loopback, embeds no remote assets, disables CORS, and uses an unguessable URL stored with mode `0600` where supported.
+See [PRIVACY_POLICY.md](./PRIVACY_POLICY.md) for network and storage behavior.
 
 ## Discord MCP verification
 
@@ -50,7 +38,7 @@ Requirements:
 
 - Git
 - Node.js 22 or newer
-- pnpm 11.13.0
+- The pnpm version specified by `packageManager` in `package.json`
 
 Install dependencies without running as administrator:
 
@@ -76,11 +64,6 @@ Run the static test suite:
 pnpm test
 ```
 
-Regenerate the privacy inventory after adding or changing plugins:
-
-```shell
-```
-
 Injecting into Discord modifies the local Discord installation. LawyerCord will not download and execute a mutable installer release; provide an installer binary you built or verified locally:
 
 ```powershell
@@ -94,7 +77,7 @@ Do not inject or run live Discord tests from an unreviewed branch. The live MCP 
 
 ## Releases
 
-Every merged pull request is built from its merge commit and defaults to a unique nightly prerelease. Apply one release label before merging to select a different result:
+Release builds use the exact merge commit. Apply exactly one release label before merging; an unlabeled pull request does not publish a release:
 
 - `release:nightly` creates an immutable nightly prerelease.
 - `release:beta` creates a versioned beta prerelease.

@@ -88,6 +88,22 @@ function decorFixture() {
     return { store, requests, scheduled, flush, advance, errors, clock };
 }
 
+test("audio player preserves zero volume and clamps explicit values", () => {
+    const plugin = loadComponent("src/equicordplugins/_api/audioPlayer.ts", {}, {
+        "@api/AudioPlayer": { audioProcessorFunctions: {}, AudioType: {}, identifyAudioType: () => "url" },
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin }
+    }, { structuredClone }).default;
+    for (const [volume, internalVolume, expected] of [
+        [0, null, 0], [undefined, 0, 0], [undefined, undefined, 1],
+        [50, null, 0.5], [100, 0.25, 0.25], [-10, null, 0], [200, null, 1]
+    ] as const) {
+        const player = { _volume: -1, destroyAudio() {} };
+        plugin.buildPlayer(player, { volume }, "https://example.com/sound.mp3", null, internalVolume, "default");
+        assert.equal(player._volume, expected);
+    }
+});
+
 test("Decor continuous arrivals cannot postpone the first batch and stopped timers cannot fetch", async () => {
     const f = decorFixture();
     f.store.getState().start();

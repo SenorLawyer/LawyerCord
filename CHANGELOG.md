@@ -18,6 +18,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Keep cloud sync failures retryable and report failed downloads or deletions instead of recording success.
 
+- Preserve zero volume when creating audio players.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

@@ -46,6 +46,25 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("channel tab animation selection can clear all and replace multiple choices", () => {
+    let onChange: (values: (string | { value: string; })[]) => void = () => assert.fail("Selector was not rendered");
+    const { AnimationSettings, settings } = loadSource("src/equicordplugins/channelTabs/util/constants.tsx", {
+        "@api/Settings": { definePluginSettings: (definitions: Record<string, { default?: unknown; }>) => ({ store: Object.fromEntries(Object.entries(definitions).map(([key, option]) => [key, option.default])) }) },
+        "@components/Heading": {}, "@components/Paragraph": {},
+        "@equicordplugins/channelTabs/components/ChannelTabsContainer": {},
+        "@equicordplugins/channelTabs/components/KeybindSettings": {},
+        "@utils/Logger": { Logger: class {} },
+        "@utils/types": { makeRange: () => [], OptionType: {} },
+        "@webpack/common": { SearchableSelect: "select", useState: (initial: unknown) => [initial, () => {}] }
+    }, { React: { createElement(type: string, props: { onChange: typeof onChange; }) { if (type === "select") onChange = props.onChange; } } }, "({ AnimationSettings, settings: exports.settings })");
+    AnimationSettings();
+    onChange([]);
+    const enabled = () => Object.keys(settings.store).filter(key => key.startsWith("animation") && settings.store[key] === true).sort();
+    assert.deepEqual(enabled(), []);
+    onChange(["hover", { value: "selection" }]);
+    assert.deepEqual(enabled(), ["animationHover", "animationSelection"]);
+});
+
 test("status bypass checks the message channel without creating DMs", async () => {
     const notifications: object[] = [];
     const errors: unknown[] = [];

@@ -50,10 +50,6 @@ function AnimationSettings(): JSX.Element {
     const [currentValue, setCurrentValue] = useState(getSelectedAnimationValues(animationOptions));
 
     function updateSettingsTruthy(enabledValues: string[]) {
-        animationOptions.forEach(option => {
-            option.selected = enabledValues.includes(option.value);
-        });
-
         settings.store.animationHover = enabledValues.includes("hover");
         settings.store.animationSelection = enabledValues.includes("selection");
         settings.store.animationDragDrop = enabledValues.includes("drag-drop");
@@ -74,21 +70,7 @@ function AnimationSettings(): JSX.Element {
     }
 
     function handleChange(values: Array<DynamicDropdownSettingOption | string>) {
-        const valueStrings = values.map(v => typeof v === "string" ? v : v.value);
-        const toggled = valueStrings.length > currentValue.length
-            ? valueStrings.find(v => !currentValue.includes(v))
-            : currentValue.find(v => !valueStrings.includes(v));
-
-        if (toggled == null) {
-            updateSettingsTruthy(valueStrings);
-            return;
-        }
-
-        if (currentValue.includes(toggled)) {
-            updateSettingsTruthy(currentValue.filter(v => v !== toggled));
-        } else {
-            updateSettingsTruthy([...currentValue, toggled]);
-        }
+        updateSettingsTruthy(values.map(v => typeof v === "string" ? v : v.value));
     }
 
     return (

@@ -7243,13 +7243,13 @@ test("theme downloads validate required IPC fields and scrub native failures", a
         "@main/utils/constants": { THEMES_DIR: "themes" }, path,
         fs: { mkdtempSync: () => "temporary", renameSync() {}, rmSync() {}, rmdirSync() {}, writeFileSync() { if (failWrite) throw new Error("EACCES private/home/themes"); writes++; }, existsSync: () => true }
     }, { Buffer, AbortSignal, fetch: async () => { requests++; return new Response(".theme {}"); } });
-    for (const theme of [null, {}, { id: "1" }, { id: "1", name: 7 }, { id: 7, name: "Theme" }, { id: "", name: "Theme" }, { id: "1", name: "../outside" }]) {
+    for (const theme of [null, {}, { id: "1" }, { id: "1", name: 7 }, { id: NaN, name: "Theme" }, { id: 1.5, name: "Theme" }, { id: -1, name: "Theme" }, { id: "", name: "Theme" }, { id: "1", name: "../outside" }]) {
         await assert.rejects(api.downloadTheme(null, theme), /Invalid theme details/);
     }
     assert.equal(requests, 0);
     assert.equal(writes, 0);
     assert.equal(await api.themeExists(null, { name: 7 }), false);
-    await api.downloadTheme(null, { id: "1", name: "Theme" });
+    await api.downloadTheme(null, { id: 91, name: "Theme" });
     assert.equal(writes, 1);
     failWrite = true;
     await assert.rejects(api.downloadTheme(null, { id: "1", name: "Theme" }), (error: Error) => error.message === "Theme download failed.");

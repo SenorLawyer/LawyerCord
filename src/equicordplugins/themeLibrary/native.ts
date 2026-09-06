@@ -24,7 +24,10 @@ export async function themeExists(_: IpcMainInvokeEvent, theme: Pick<Theme, "nam
 
 export async function downloadTheme(_: IpcMainInvokeEvent, theme: Pick<Theme, "id" | "name">) {
     const path = getThemePath(theme);
-    if (!path || typeof theme?.id !== "string" || !theme.id) throw new Error("Invalid theme details.");
+    const validId = typeof theme?.id === "number"
+        ? Number.isSafeInteger(theme.id) && theme.id > 0
+        : typeof theme?.id === "string" && theme.id.length > 0;
+    if (!path || !validId) throw new Error("Invalid theme details.");
 
     try {
         const maxBytes = 10 * 1024 * 1024;

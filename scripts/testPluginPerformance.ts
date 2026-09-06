@@ -1765,18 +1765,7 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
         "@utils/misc": { classes: (...names: unknown[]) => names.filter(Boolean).join(" ") },
         ...additionalMocks
     };
-    const code = transpileModule(readFileSync(path, "utf8"), {
-        fileName: path,
-        compilerOptions: { jsx: JsxEmit.React, module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
-    }).outputText;
-    return runInNewContext(code + "\nexports;", {
-        exports: {}, React, ...globals,
-        require(name: string) {
-            if (name.endsWith(".css")) return {};
-            assert.ok(name in mocks, name);
-            return mocks[name];
-        }
-    });
+    return loadSource(path, mocks, { React, ...globals });
 }
 
 test("hidden channel member requests omit missing owners and duplicate IDs", () => {

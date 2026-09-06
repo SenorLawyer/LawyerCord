@@ -46,9 +46,10 @@ function Icon({ height = 24, width = 24, className, children, viewBox, ...svgPro
 /**
  * Discord's link icon, as seen in the Message context menu "Copy Message Link" option
  */
-export function LinkIcon({ height = 24, width = 24, className }: IconProps) {
+export function LinkIcon({ height = 24, width = 24, className, ...props }: IconProps) {
     return (
         <Icon
+            {...props}
             height={height}
             width={width}
             className={classes(className, "vc-link-icon")}
@@ -149,9 +150,10 @@ export function InfoIcon(props: IconProps) {
     );
 }
 
-export function WarningIcon({ height = 32, width = 32, className }: IconProps) {
+export function WarningIcon({ height = 32, width = 32, className, ...props }: IconProps) {
     return (
         <Icon
+            {...props}
             height={height}
             width={width}
             className={classes(className, "vc-warning-icon")}

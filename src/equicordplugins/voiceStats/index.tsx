@@ -51,7 +51,7 @@ function flushActiveSessions() {
         if (accrued <= 0) continue;
 
         totalsByUser.set(userId, (totalsByUser.get(userId) ?? 0) + accrued);
-        sessionStarts.set(userId, now);
+        sessionStarts.set(userId, startedAt + accrued * 1000);
         totalsDirty = true;
     }
 }

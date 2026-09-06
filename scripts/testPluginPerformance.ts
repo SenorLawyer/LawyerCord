@@ -21,6 +21,24 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("voice statistics retain fractional seconds across periodic saves", () => {
+    let now = 1000;
+    const { sessionStarts, totalsByUser, flushActiveSessions, getLiveSeconds } = loadSource("src/equicordplugins/voiceStats/index.tsx", {
+        "@api/DataStore": {}, "@components/BaseText": {},
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+        "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
+        "@webpack/common": {},
+    }, { Date: { now: () => now } }, "({ sessionStarts, totalsByUser, flushActiveSessions, getLiveSeconds })");
+    sessionStarts.set("friend", now);
+    for (now of [31_400, 61_800, 92_200]) flushActiveSessions();
+    assert.equal(totalsByUser.get("friend"), 91);
+    assert.equal(sessionStarts.get("friend"), 92_000);
+    now = 93_000;
+    assert.equal(getLiveSeconds("friend"), 92);
+});
+
 test("transcription worker cancellation aborts model downloads and startup failures settle", async () => {
     let instance: { onmessage?: (event: object) => Promise<void>; onerror?: () => void; } = {};
     let signal: AbortSignal | undefined;

@@ -7872,8 +7872,10 @@ test("plugin clones use the exact metadata directory including Git suffixes", as
 });
 
 test("update link completion cannot become an install action or read a closed window", async () => {
-    for (const failure of [false, true]) {
-        let title = "openLink:https://github.com/owner/repo/commit/abc";
+    for (const failure of [false, true, "file:///private", "https://other.example/commit/" + "a".repeat(40), "https://github.com/owner/repo/commit/not-a-hash"]) {
+        let title = "openLink:https://github.com/owner/repo/commit/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        if (typeof failure === "string") title = `openLink:${failure}`;
+        let opened = 0;
         let commands = 0;
         let reads = 0;
         class ReviewWindow extends EventEmitter {
@@ -7886,6 +7888,7 @@ test("update link completion cannot become an install action or read a closed wi
         const mocks: Record<string, object> = {
             child_process: { exec: (_command: string, _options: object, callback: (error: null, stdout: string) => void) => { commands++; callback(null, ""); } },
             electron: { BrowserWindow: ReviewWindow, shell: { openExternal: async () => {
+                opened++;
                 title = "install";
                 if (failure) throw new Error("Private browser path");
             } } }, fs: {}, "fs/promises": {}, path, "yaml-js": {}
@@ -7894,8 +7897,8 @@ test("update link completion cannot become an install action or read a closed wi
             mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
         let window: ReviewWindow | undefined;
         mocks.electron = { ...mocks.electron, BrowserWindow: class extends ReviewWindow { constructor() { super(); window = this; } } };
-        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist"), Buffer },
-            "({ ...exports, setup() { getPluginDirectory = () => 'fixture'; getPluginMeta = async () => ({ name: 'Fixture', description: '', remote: '' }); } })");
+        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist"), Buffer, URL },
+            "({ ...exports, setup() { getPluginDirectory = () => 'fixture'; getPluginMeta = async () => ({ name: 'Fixture', description: '', remote: 'https://github.com/owner/repo' }); } })");
         api.setup();
         const pending = api.updatePlugin(null, "fixture");
         const rejected = assert.rejects(pending, failure ? /Could not open the update link/ : /Review window closed/);
@@ -7904,6 +7907,7 @@ test("update link completion cannot become an install action or read a closed wi
         await rejected;
         assert.equal(commands, 1);
         assert.equal(reads, 1);
+        assert.equal(opened, typeof failure === "string" ? 0 : 1);
     }
 });
 

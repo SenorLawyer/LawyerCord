@@ -404,7 +404,13 @@ export async function updatePlugin(_, directory: string) {
             const title = win.webContents.getTitle();
             if (title.startsWith("openLink:")) {
                 try {
-                    await shell.openExternal(title.slice("openLink:".length));
+                    const link = new URL(title.slice("openLink:".length));
+                    const source = new URL(pluginMeta.remote);
+                    const commitBase = `${pluginMeta.remote.replace("plugins.nin0.dev", "git.nin0.dev/userplugins")}/commit/`;
+                    if (source.protocol !== "https:" || source.username || source.password
+                        || (link.href !== source.href && (!link.href.startsWith(commitBase) || !/^[a-f\d]{40,64}$/.test(link.href.slice(commitBase.length)))))
+                        throw new Error("Invalid update link.");
+                    await shell.openExternal(link.href);
                 } catch {
                     if (!decided) {
                         decided = true;

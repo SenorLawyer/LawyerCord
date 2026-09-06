@@ -1,35 +1,3 @@
-/* Modal Header */
-.vc-scheduled-msg-modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px;
-    gap: 16px;
-}
-
-.vc-scheduled-msg-modal-title {
-    flex: 1;
-    margin: 0 !important;
-    color: var(--text-strong);
-    font-size: 20px;
-    font-weight: 600;
-}
-
-/* Modal Content */
-.vc-scheduled-msg-modal-content {
-    padding: 0 16px 16px;
-}
-
-/* Modal Footer */
-.vc-scheduled-msg-modal-footer {
-    display: flex;
-    flex-direction: row-reverse;
-    justify-content: flex-start;
-    align-items: center;
-    gap: 8px;
-    padding: 16px;
-}
-
 /* Channel Info */
 .vc-scheduled-msg-channel-info {
     display: flex;

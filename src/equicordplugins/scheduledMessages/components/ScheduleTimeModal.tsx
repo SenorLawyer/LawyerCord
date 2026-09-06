@@ -129,7 +129,6 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
                         className={cl("datetime-input")}
                         value={scheduledDateTime}
                         onChange={e => setScheduledDateTime(e.target.value)}
-                        min={new Date().toISOString().slice(0, 16)}
                     />
                 </>
             )}

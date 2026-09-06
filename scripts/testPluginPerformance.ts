@@ -46,6 +46,27 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("InstantScreenshare never substitutes a different media source", async () => {
+    const selected = { id: "window:selected", name: "Selected window" };
+    let sources = [{ id: "screen:other", name: "Other screen" }, selected];
+    let failures = 0;
+    const module = loadSource("src/equicordplugins/instantScreenshare/utils.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: { streamMedia: selected.id, includeVideoDevices: false } }) },
+        "@components/Heading": {}, "@components/margins": {}, "@components/Paragraph": {},
+        "@utils/constants": {}, "@utils/Logger": { Logger: class {} },
+        "@utils/types": { OptionType: {} },
+        "@webpack": { findByCodeLazy: () => async () => sources, findByPropsLazy: () => ({}) },
+        "@webpack/common": { MediaEngineStore: { getMediaEngine: () => ({}) }, showToast: () => { failures++; }, Toasts: { Type: {} } }
+    });
+    assert.equal(await module.getCurrentMedia(), selected);
+    sources = [sources[0]];
+    assert.equal(await module.getCurrentMedia(), null);
+    assert.equal(module.settings.store.streamMedia, selected.id);
+    sources = [];
+    assert.equal(await module.getCurrentMedia(), null);
+    assert.equal(failures, 2);
+});
+
 test("HideServers shutdown only persists pending edits", async () => {
     let finishLoad: (value: string[]) => void = () => {};
     const writes: string[][] = [];

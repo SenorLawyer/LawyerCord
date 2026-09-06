@@ -6,6 +6,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Cancel instant screensharing when its selected source is unavailable instead of sharing a different screen or window.
 - Use the managed message hook for Ingtoninator so its API dependency and cleanup are handled automatically.
 - Remove the empty contact-history startup wrapper and its unnecessary async yield.
 - Preserve saved hidden servers when the plugin stops before loading finishes, and flush only pending edits.

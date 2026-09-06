@@ -21,6 +21,19 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("Spotify embed volume changes use one listener across windows", () => {
+    let created: (_event: object, window: object) => void = () => assert.fail("missing window hook");
+    let listeners = 0;
+    loadSource("src/plugins/fixSpotifyEmbeds.desktop/native.ts", {
+        "@main/settings": { RendererSettings: { addChangeListener() { listeners++; } } },
+        electron: { app: { on(_event: string, callback: typeof created) { created = callback; } } },
+    });
+    const window = { webContents: { on() {} } };
+    created({}, window);
+    created({}, window);
+    assert.equal(listeners, 1);
+});
+
 test("Dearrow ignores duplicate results and results for replaced embeds", async () => {
     const requests: Array<ReturnType<typeof Promise.withResolvers<object>>> = [];
     const { embedDidMount } = loadSource("src/plugins/dearrow/index.tsx", {

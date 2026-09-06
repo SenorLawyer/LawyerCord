@@ -21,6 +21,24 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("name formatting preserves Discord user objects", () => {
+    const { getProcessedNames } = loadSource("src/plugins/showMeYourName/index.tsx", {
+        "@api/ContextMenu": {}, "@api/index": {}, "@api/PluginManager": {},
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) }, "@components/Button": {},
+        "@components/ErrorBoundary": {}, "@components/Heading": {}, "@plugins/ircColors": {}, "@plugins/mentionAvatars": {},
+        "@utils/constants": { Devs: {}, EquicordDevs: {} }, "@utils/index": { classNameFactory: () => () => "" },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack": { findStoreLazy: () => ({}), findByCodeLazy: () => () => {} },
+        "@webpack/common": { StreamerModeStore: { enabled: false }, RelationshipStore: { getNickname: () => null } },
+    }, {}, "({ getProcessedNames })");
+    const author = Object.freeze({ id: "bot", bot: true, username: "Bot", globalName: "Display", discriminator: "1234" });
+    const names = getProcessedNames(author, false, true, false, false, false);
+    assert.equal(names.username, "Bot#1234");
+    assert.equal(names.display, "Bot");
+    assert.equal(author.globalName, "Display");
+    assert.equal(getProcessedNames(author, false, false, false, false, false).display, "Display");
+});
+
 test("bulk webpack searches resolve multiple filters from the same module", () => {
     const { findBulk, _initWebpack } = loadSource("src/webpack/webpack.ts", {
         "@debug/Tracer": { traceFunction: (_name: string, fn: unknown) => fn }, "@utils/lazy": {},

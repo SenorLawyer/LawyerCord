@@ -275,10 +275,6 @@ function getProcessedNames(
 
         if (userAuthor?.bot && !isNaN(userAuthor?.discriminator as any) && Number(userAuthor?.discriminator) !== 0) {
             discriminator = userAuthor.discriminator;
-
-            if (!!userAuthor) {
-                userAuthor.globalName = userAuthor.username;
-            }
         }
     }
 
@@ -287,10 +283,11 @@ function getProcessedNames(
             ? author.username[0] + "..."
             : author.username as string + (discriminator ? `#${discriminator}` : "");
 
-    const display: string | null = !author?.globalName ? null
-        : StreamerModeStore.enabled && (truncateAllNamesWithStreamerMode || author.globalName.toLowerCase() === author.username.toLowerCase())
-            ? author.globalName[0] + "..."
-            : author.globalName as string;
+    const displayName = discriminator ? author.username : author?.globalName;
+    const display: string | null = !displayName ? null
+        : StreamerModeStore.enabled && (truncateAllNamesWithStreamerMode || displayName.toLowerCase() === author.username.toLowerCase())
+            ? displayName[0] + "..."
+            : displayName as string;
 
     const nick: string | null = !author?.nick ? null
         : StreamerModeStore.enabled && (truncateAllNamesWithStreamerMode || author.nick.toLowerCase() === author.username.toLowerCase())

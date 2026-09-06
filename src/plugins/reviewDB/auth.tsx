@@ -48,6 +48,8 @@ export async function updateAuth(newAuth: ReviewDBAuth) {
 }
 
 export function authorize(callback?: () => void) {
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return;
     openModal(props =>
         <OAuth2AuthorizeModal
             {...props}
@@ -58,21 +60,26 @@ export function authorize(callback?: () => void) {
             clientId="915703782174752809"
             cancelCompletesFlow={false}
             callback={async (response: { location: string }) => {
+                if (UserStore.getCurrentUser()?.id !== userId) return;
                 try {
                     const url = new URL(response.location);
                     url.searchParams.append("clientMod", "vencord");
                     const res = await fetch(url, {
                         headers: { Accept: "application/json" }
                     });
+                    if (UserStore.getCurrentUser()?.id !== userId) return;
 
                     if (!res.ok) {
                         const { message } = await res.json();
+                        if (UserStore.getCurrentUser()?.id !== userId) return;
                         showToast(message ?? "An error occured while authorizing", Toasts.Type.FAILURE);
                         return;
                     }
 
                     const { token } = await res.json();
-                    void updateAuth({ token });
+                    if (UserStore.getCurrentUser()?.id !== userId) return;
+                    await updateAuth({ token });
+                    if (UserStore.getCurrentUser()?.id !== userId) return;
                     showToast("Successfully logged in!", Toasts.Type.SUCCESS);
                     callback?.();
                 } catch (e) {

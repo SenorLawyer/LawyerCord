@@ -21,6 +21,52 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ReviewDB authorization stays with its initiating account and awaits storage", async () => {
+    for (const switchAt of ["before", "fetch", "json", "storage", "never"]) {
+        let userId = "first";
+        let onAuthorize: (response: { location: string; }) => Promise<void> = async () => assert.fail("missing OAuth callback");
+        const accounts: Record<string, { token?: string; }> = {};
+        const events: string[] = [];
+        const api = loadSource("src/plugins/reviewDB/auth.tsx", {
+            "@api/DataStore": { update: async (_key: string, update: (value: typeof accounts) => unknown) => {
+                if (switchAt === "storage") userId = "second";
+                await setImmediate();
+                update(accounts);
+                events.push("stored");
+            } },
+            "@utils/Logger": { Logger: class { error(error: unknown) { throw error; } } },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: userId }) },
+                OAuth2AuthorizeModal: "OAuth",
+                openModal: (render: (props: object) => { props: { callback: typeof onAuthorize; }; }) => { onAuthorize = render({}).props.callback; },
+                showToast: () => events.push("toast"), Toasts: { Type: {} },
+            },
+        }, {
+            React: { createElement: (_type: unknown, props: object) => ({ props }) }, URL,
+            fetch: async () => {
+                events.push("fetch");
+                if (switchAt === "fetch") userId = "second";
+                return { ok: true, json: async () => {
+                    if (switchAt === "json") userId = "second";
+                    return { token: "first-token" };
+                } };
+            },
+        });
+        api.authorize(() => events.push("callback"));
+        if (switchAt === "before") userId = "second";
+        await onAuthorize({ location: "https://manti.vendicated.dev/api/reviewdb/auth?code=test" });
+        assert.equal(accounts.second, undefined);
+        if (switchAt === "never") {
+            assert.equal(accounts.first.token, "first-token");
+            assert.deepEqual(events, ["fetch", "stored", "toast", "callback"]);
+        } else {
+            assert.equal(events.includes("toast"), false);
+            assert.equal(events.includes("callback"), false);
+            assert.equal(accounts.first?.token, switchAt === "storage" ? "first-token" : undefined);
+        }
+    }
+});
+
 test("ReviewDB storage operations retain their initiating account", async () => {
     let userId: string | undefined = "first";
     const accounts: Record<string, { token?: string; }> = { first: { token: "first-token" }, second: { token: "second-token" } };

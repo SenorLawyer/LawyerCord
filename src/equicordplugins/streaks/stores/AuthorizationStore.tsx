@@ -49,6 +49,8 @@ export const useAuthorizationStore = proxyLazy(() => zustandCreate(
                 if (id === UserStore.getCurrentUser()?.id) useStreaksStore.getState().clear();
             },
             async authorize() {
+                const userId = UserStore.getCurrentUser()?.id;
+                if (!userId) throw new Error("No Discord account is logged in.");
                 return new Promise((resolve, reject) => {
                     let hasCallbackStarted = false;
                     openModal(props =>
@@ -60,15 +62,17 @@ export const useAuthorizationStore = proxyLazy(() => zustandCreate(
                             permissions={0n}
                             clientId={CLIENT_ID}
                             cancelCompletesFlow={false}
-                            callback={async (response: any) => {
+                            callback={async (response: { location: string; }) => {
                                 hasCallbackStarted = true;
                                 try {
+                                    if (UserStore.getCurrentUser()?.id !== userId) throw new Error("Discord account changed during authorization.");
                                     const url = new URL(response.location);
                                     const code = url.searchParams.get("code");
                                     if (!code) throw new Error("No code in redirect");
                                     const req = await fetch(`${AUTHORIZE_URL}?code=${encodeURIComponent(code)}`);
                                     if (req?.ok) {
                                         const { access_token: token } = await req.json();
+                                        if (UserStore.getCurrentUser()?.id !== userId) throw new Error("Discord account changed during authorization.");
                                         if (token) get().setToken(token);
                                     } else {
                                         throw new Error(`Request not OK: ${req.status}`);

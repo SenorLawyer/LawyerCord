@@ -21,6 +21,38 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("Streaks authorization cannot attach a token to another account", async () => {
+    for (const change of ["before", "response", "none"]) {
+        let userId = "first";
+        let callback: (response: { location: string; }) => Promise<void> = async () => assert.fail("missing callback");
+        let state: Record<string, unknown> = {};
+        let requests = 0;
+        const api = loadSource("src/equicordplugins/streaks/stores/AuthorizationStore.tsx", {
+            "@api/DataStore": {}, "@utils/lazy": { proxyLazy: (factory: () => unknown) => factory() }, "@utils/Logger": { Logger: class { error() {} } },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: userId }) }, zustandPersist: (value: unknown) => value,
+                zustandCreate: (init: (set: (value: object) => void, get: () => object) => Record<string, unknown>) => {
+                    state = init(value => Object.assign(state, value), () => state); return { getState: () => state };
+                },
+                openModal: (render: (props: object) => { props: { callback: typeof callback; }; }) => { callback = render({}).props.callback; },
+                showToast() {}, Toasts: { Type: {} },
+            }, "../constants": { AUTHORIZE_URL: "https://example.com/auth" }, "./StreaksStore": {},
+        }, { URL, React: { createElement: (_type: unknown, props: object) => ({ props }) },
+            fetch: async () => { requests++; return { ok: true, json: async () => {
+                if (change === "response") userId = "second"; return { access_token: "first-token" };
+            } }; } });
+        const auth = api.useAuthorizationStore.getState();
+        const pending = auth.authorize();
+        const result = change === "none" ? pending : assert.rejects(pending, /account changed/);
+        if (change === "before") userId = "second";
+        await callback({ location: "https://example.com/auth?code=test" });
+        await result;
+        assert.equal(requests, change === "before" ? 0 : 1);
+        assert.equal(auth.tokens.second, undefined);
+        assert.equal(auth.tokens.first, change === "none" ? "first-token" : undefined);
+    }
+});
+
 test("Streaks ignores responses for changed accounts or tokens", async () => {
     for (const operation of ["fetch", "update", "refresh"]) {
         for (const change of ["account", "logout", "token", "clear", "none"]) {

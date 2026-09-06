@@ -21,6 +21,18 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("webpack tar archives contain only the supplied byte view", () => {
+    const { default: TarFile } = loadSource("src/equicordplugins/webpackTarball/tar.ts", {});
+    const tar = new TarFile();
+    const backing = Uint8Array.from([99, 1, 2, 3, 88]);
+    tar.addFile("first.bin", backing.subarray(1, 4));
+    tar.addFile("second.bin", Uint8Array.from([4, 5]));
+    const archive = Buffer.concat(tar.buffers.map((value: ArrayBuffer) => Buffer.from(value)));
+    assert.deepEqual(Array.from(archive.subarray(512, 515)), [1, 2, 3]);
+    assert.equal(archive.subarray(1024, 1034).toString(), "second.bin");
+    assert.equal(archive.length, 2048);
+});
+
 test("voice statistics retain fractional seconds across periodic saves", () => {
     let now = 1000;
     const { sessionStarts, totalsByUser, flushActiveSessions, getLiveSeconds } = loadSource("src/equicordplugins/voiceStats/index.tsx", {

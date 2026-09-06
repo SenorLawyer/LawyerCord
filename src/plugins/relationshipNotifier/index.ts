@@ -70,8 +70,8 @@ export default definePlugin({
         CHANNEL_DELETE: onChannelDelete,
         RELATIONSHIP_ADD: syncFriends,
         RELATIONSHIP_UPDATE: syncFriends,
-        RELATIONSHIP_REMOVE(e) {
-            return Promise.all([onRelationshipRemove(e), syncFriends()]);
+        async RELATIONSHIP_REMOVE(e) {
+            await Promise.all([onRelationshipRemove(e), syncFriends()]);
         },
         CONNECTION_OPEN: syncAndRunChecks
     },

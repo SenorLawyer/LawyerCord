@@ -218,9 +218,15 @@ function UserPluginsTab() {
                                     infoButton={<button
                                         role="switch"
                                         onClick={async () => {
-                                            await Native.rmPlugin(
-                                                plugin.directory!,
-                                            );
+                                            try {
+                                                await Native.rmPlugin(plugin.directory!);
+                                            } catch (error) {
+                                                Alerts.show({
+                                                    title: "Uninstall error",
+                                                    body: String(error),
+                                                });
+                                                return;
+                                            }
                                             Alerts.show({
                                                 title: "Done!",
                                                 body: `${plugin.name} has been uninstalled. A ${plugin.usesNative ? "restart" : "refresh"} is needed to fully remove the plugin.`,

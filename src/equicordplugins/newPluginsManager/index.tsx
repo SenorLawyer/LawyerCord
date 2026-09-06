@@ -18,8 +18,8 @@ export default definePlugin({
     authors: [Devs.Sqaaakoi],
     enabledByDefault: true,
     flux: {
-        async POST_CONNECTION_OPEN() {
-            openNewPluginsModal();
+        POST_CONNECTION_OPEN() {
+            return openNewPluginsModal();
         }
     },
     openNewPluginsModal,

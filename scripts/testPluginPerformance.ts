@@ -46,6 +46,16 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("new plugin notifications return failures to the flux dispatcher", async () => {
+    const { default: plugin } = loadSource("src/equicordplugins/newPluginsManager/index.tsx", {
+        "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+        "./knownSettings": {},
+        "./NewPluginsModal": { openNewPluginsModal: async () => { throw new Error("Storage unavailable"); } }
+    });
+    await assert.rejects(plugin.flux.POST_CONNECTION_OPEN(), /Storage unavailable/);
+});
+
 test("Tidal clears the previous track and position on an empty playback update", () => {
     let changes = 0;
     const { TidalStore: store } = loadSource("src/equicordplugins/musicControls/tidal/TidalStore.ts", {

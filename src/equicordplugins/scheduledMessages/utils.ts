@@ -340,13 +340,15 @@ async function postMessage(channelId: string, content: string, attachments?: { i
 
 async function addReactionsToMessage(channelId: string, messageId: string, reactions: ScheduledReaction[]): Promise<void> {
     const generation = schedulerGeneration;
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return;
     for (const reaction of reactions) {
         const emojiStr = reaction.emoji.id
             ? `${reaction.emoji.name}:${reaction.emoji.id}`
             : encodeURIComponent(reaction.emoji.name);
 
         for (let attempt = 0; attempt < 5; attempt++) {
-            if (generation !== schedulerGeneration) return;
+            if (generation !== schedulerGeneration || UserStore.getCurrentUser()?.id !== userId) return;
             try {
                 await RestAPI.put({ url: `/channels/${channelId}/messages/${messageId}/reactions/${emojiStr}/@me` });
                 break;

@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Stop scheduled reaction retries when the initiating account changes.
+
 - Use the configured check interval for overdue scheduled messages that cannot currently send.
 
 - Keep scheduled sends from proceeding under a different account after saving queue state.

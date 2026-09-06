@@ -5421,6 +5421,30 @@ test("screen recorder releases capture and discards work after disable", async (
     assert.equal(uploads, 1);
 });
 
+test("scheduled reaction retries stop after account changes or shutdown", async () => {
+    for (const change of ["account", "stop"]) {
+        let userId = "first";
+        let requests = 0;
+        const timers: (() => void)[] = [];
+        const add = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@api/DataStore": {}, "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) },
+                RestAPI: { put: async () => { requests++; throw { status: 429, body: { retry_after: 1 } }; } } },
+            ".": { settings: { store: {} } }
+        }, { setTimeout: (callback: () => void) => { timers.push(callback); return 1; } },
+        "Object.assign(addReactionsToMessage, { stop: exports.stopScheduler })");
+        const pending = add("channel", "message", [{ emoji: { name: "hello" } }]);
+        await setImmediate();
+        assert.equal(requests, 1);
+        assert.equal(timers.length, 1);
+        if (change === "account") userId = "second";
+        else add.stop();
+        timers[0]();
+        await pending;
+        assert.equal(requests, 1);
+    }
+});
+
 test("scheduled sends accepted after shutdown skip reactions but finish successfully", async () => {
     let finish: () => void = () => {};
     const send = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {

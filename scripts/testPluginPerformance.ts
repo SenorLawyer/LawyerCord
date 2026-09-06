@@ -5437,16 +5437,21 @@ test("scheduled phantom history loads cannot revive stale previews", async () =>
             ".": { settings: { store: { showPhantomMessages: true } } }
         }, { setTimeout: () => 1 });
         const message = { id: "queued", channelId: "channel", content: "Old", scheduledTime: 1 };
-        await module.createPhantomMessage(message);
+        let settled = false;
+        const pending = module.createPhantomMessage(message).then(() => { settled = true; });
+        await Promise.resolve();
+        assert.equal(settled, false);
+        let replacement: Promise<void> | undefined;
         if (change === "cleanup") module.cleanupAllPhantomMessages();
-        if (change === "replace") await module.createPhantomMessage({ ...message, content: "New" });
+        if (change === "replace") replacement = module.createPhantomMessage({ ...message, content: "New" });
         if (change === "account") userId = "second";
         reads[0]();
-        await setImmediate();
+        await pending;
+        assert.equal(settled, true);
         assert.deepEqual(created, change === "none" ? ["Old"] : []);
         if (change === "replace") {
             reads[1]();
-            await setImmediate();
+            await replacement;
             assert.deepEqual(created, ["New"]);
         }
     }

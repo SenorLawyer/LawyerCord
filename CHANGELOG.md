@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Wait for scheduled preview insertion before reporting completion and log preview failures without message content.
+
 - Ignore delayed scheduled-message previews after cleanup, replacement, or an account change.
 
 - Ignore stale scheduled-message storage reads after newer loads, queue edits, or shutdown.

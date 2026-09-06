@@ -198,7 +198,7 @@ export async function createPhantomMessage(msg: ScheduledMessage): Promise<void>
         ? Promise.resolve()
         : MessageActions.fetchMessages({ channelId: msg.channelId });
 
-    messagesLoaded.then(() => {
+    return messagesLoaded.then(() => {
         if (!isCurrent()) return;
         FluxDispatcher.dispatch({
             type: "MESSAGE_CREATE",
@@ -237,7 +237,9 @@ export async function createPhantomMessage(msg: ScheduledMessage): Promise<void>
         });
 
         applyPhantomClassToMessage(msg.channelId, messageId);
-    }).catch(() => { });
+    }).catch(() => {
+        if (isCurrent()) logger.warn("Could not create scheduled message preview.");
+    });
 }
 
 function applyPhantomClassToMessage(channelId: string, messageId: string): void {

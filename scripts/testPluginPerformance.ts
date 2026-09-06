@@ -7719,7 +7719,7 @@ test("plugin updates reject preparation failures before opening a review window"
             webContents = { getTitle: () => "abortInstall" };
             constructor() { super(); windows++; }
             loadURL(url: string) { assert.ok(url.startsWith("data:text/html;base64,")); }
-            close() {}
+            close() { this.emit("closed"); }
             show() { queueMicrotask(() => this.emit("page-title-updated")); }
         }
         const mocks: Record<string, object> = {
@@ -7753,7 +7753,7 @@ test("plugin updates build only after Git succeeds and report build failures", a
             static getAllWindows() { return []; }
             webContents = { getTitle: () => "install" };
             loadURL() {}
-            close() {}
+            close() { this.emit("closed"); }
             show() { queueMicrotask(() => this.emit("page-title-updated")); }
         }
         const mocks: Record<string, object> = {
@@ -7776,6 +7776,33 @@ test("plugin updates build only after Git succeeds and report build failures", a
         assert.equal(commands.length, failure === "git" ? 2 : 3);
         assert.equal(commands[1], "git rebase origin/HEAD");
         if (failure !== "git") assert.equal(commands[2], "pnpm build --dev");
+    }
+});
+
+test("closing plugin review windows rejects and prevents later install actions", async () => {
+    for (const operation of ["initPluginInstall", "updatePlugin"]) {
+        let commands = 0;
+        class ReviewWindow extends EventEmitter {
+            static getAllWindows() { return []; }
+            webContents = { getTitle: () => "install" };
+            loadURL() {}
+            close() { this.emit("closed"); }
+            show() { queueMicrotask(() => { this.close(); this.emit("page-title-updated"); }); }
+        }
+        const mocks: Record<string, object> = {
+            child_process: { exec: (_command: string, _options: object, callback: (error: null, stdout: string) => void) => { commands++; callback(null, ""); } },
+            electron: { BrowserWindow: ReviewWindow, dialog: { showMessageBox: async () => ({ response: 1 }) } },
+            fs: {}, "fs/promises": {}, path, "yaml-js": {}
+        };
+        for (const name of ["pluginValidate", "updateValidate"])
+            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist"), Buffer },
+            "({ ...exports, setup() { cloneRepo = async () => {}; getPluginDirectory = () => 'fixture'; getPluginMeta = async () => ({ name: 'Fixture', description: '', remote: '' }); } })");
+        api.setup();
+        const pending = operation === "updatePlugin" ? api.updatePlugin(null, "fixture")
+            : api.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "owner", "repo");
+        await assert.rejects(pending, /Review window closed/);
+        assert.equal(commands, operation === "updatePlugin" ? 1 : 0);
     }
 });
 

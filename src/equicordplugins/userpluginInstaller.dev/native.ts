@@ -144,10 +144,17 @@ export async function initPluginInstall(_, link: string, source: string, owner: 
             show: false,
             autoHideMenuBar: true
         });
+        let decided = false;
+        win.once("closed", () => {
+            if (!decided) reject(new Error("Review window closed."));
+            decided = true;
+        });
         win.loadURL(generateReviewPluginContent(meta));
         win.on("page-title-updated", async e => {
+            if (decided) return;
             switch (win.webContents.getTitle() as "abortInstall" | "reviewCode" | "install") {
                 case "abortInstall": {
+                    decided = true;
                     win.close();
                     await rm(join(vencordPath, "..", "src", "userplugins", repo), {
                         recursive: true
@@ -155,6 +162,7 @@ export async function initPluginInstall(_, link: string, source: string, owner: 
                     return reject("Rejected by user");
                 }
                 case "install": {
+                    decided = true;
                     win.close();
                     try {
                         await build();
@@ -352,6 +360,11 @@ export async function updatePlugin(_, directory: string) {
             autoHideMenuBar: true
         });
 
+        let decided = false;
+        win.once("closed", () => {
+            if (!decided) reject(new Error("Review window closed."));
+            decided = true;
+        });
         win.loadURL(generateUpdatePluginContent({
             name: pluginMeta.name,
             description: pluginMeta.description,
@@ -359,15 +372,18 @@ export async function updatePlugin(_, directory: string) {
             commit: formatCommitMessages(rawOutput, pluginMeta.remote)
         }));
         win.on("page-title-updated", async e => {
+            if (decided) return;
             if (win.webContents.getTitle().startsWith("openLink:")) {
                 await shell.openExternal(win.webContents.getTitle().replace("openLink:", ""));
             }
             switch (win.webContents.getTitle() as "abortInstall" | "install") {
                 case "abortInstall": {
+                    decided = true;
                     win.close();
                     return reject("Rejected by user");
                 }
                 case "install": {
+                    decided = true;
                     win.close();
                     try {
                         await new Promise<void>((resolve, reject) => exec("git rebase origin/HEAD", {

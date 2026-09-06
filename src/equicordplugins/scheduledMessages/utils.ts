@@ -142,38 +142,45 @@ function getVideoPreview(dataUrl: string): Promise<{ width: number; height: numb
         video.muted = true;
         video.playsInline = true;
 
-        const timeout = setTimeout(() => { video.src = ""; resolve(null); }, 5000);
+        const timeout = setTimeout(() => finish(), 5000);
+        function finish(preview: { width: number; height: number; previewUrl: string; } | null = null) {
+            clearTimeout(timeout);
+            video.onloadeddata = video.onerror = null;
+            video.removeAttribute("src");
+            video.load();
+            resolve(preview);
+        }
 
-        video.onloadeddata = () => { clearTimeout(timeout); video.currentTime = 0; };
-        video.onerror = () => { clearTimeout(timeout); resolve(null); };
+        video.onerror = () => finish();
+        video.onloadeddata = () => {
+            try {
+                const canvas = document.createElement("canvas");
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext("2d");
 
-        video.onseeked = () => {
-            const canvas = document.createElement("canvas");
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext("2d");
+                if (!ctx) { finish(); return; }
 
-            if (!ctx) { resolve(null); video.src = ""; return; }
+                ctx.drawImage(video, 0, 0);
+                const size = Math.min(canvas.width, canvas.height) * 0.2;
+                const cx = canvas.width / 2, cy = canvas.height / 2;
 
-            ctx.drawImage(video, 0, 0);
-            const size = Math.min(canvas.width, canvas.height) * 0.2;
-            const cx = canvas.width / 2, cy = canvas.height / 2;
+                ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+                ctx.beginPath();
+                ctx.arc(cx, cy, size, 0, Math.PI * 2);
+                ctx.fill();
 
-            ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-            ctx.beginPath();
-            ctx.arc(cx, cy, size, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.fillStyle = "white";
-            ctx.beginPath();
-            ctx.moveTo(cx - size * 0.3, cy - size * 0.4);
-            ctx.lineTo(cx - size * 0.3, cy + size * 0.4);
-            ctx.lineTo(cx + size * 0.5, cy);
-            ctx.closePath();
-            ctx.fill();
-
-            resolve({ width: video.videoWidth, height: video.videoHeight, previewUrl: canvas.toDataURL("image/png") });
-            video.src = "";
+                ctx.fillStyle = "white";
+                ctx.beginPath();
+                ctx.moveTo(cx - size * 0.3, cy - size * 0.4);
+                ctx.lineTo(cx - size * 0.3, cy + size * 0.4);
+                ctx.lineTo(cx + size * 0.5, cy);
+                ctx.closePath();
+                ctx.fill();
+                finish({ width: video.videoWidth, height: video.videoHeight, previewUrl: canvas.toDataURL("image/png") });
+            } catch {
+                finish();
+            }
         };
 
         video.src = dataUrl;

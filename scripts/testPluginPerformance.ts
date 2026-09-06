@@ -7105,3 +7105,45 @@ test("scheduled writes await initial storage validation and preserve existing en
         }
     }
 });
+
+test("scheduled video previews draw the loaded frame and release media on every outcome", async () => {
+    for (const mode of ["loaded", "decode", "timeout", "canvas", "draw", "encode"] as const) {
+        let timeout: () => void = () => assert.fail("Missing timeout");
+        let cleared = 0;
+        let released = 0;
+        let drawn = 0;
+        const video = { src: "", videoWidth: 64, videoHeight: 32,
+            onloadeddata: null as (() => void) | null, onerror: null as (() => void) | null,
+            set currentTime(_value: number) { assert.fail("The loaded frame does not need a seek"); },
+            removeAttribute(name: string) { assert.equal(name, "src"); this.src = ""; },
+            load() { released++; }
+        };
+        const canvas = { getContext: () => mode === "canvas" ? null : {
+            drawImage() { drawn++; if (mode === "draw") throw new Error("Frame unavailable"); },
+            beginPath() {}, arc() {}, fill() {}, moveTo() {}, lineTo() {}, closePath() {}
+        }, toDataURL() { if (mode === "encode") throw new Error("Encoding failed"); return "data:image/png;base64,fixture"; } };
+        const preview = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@utils/misc": {}, "@api/DataStore": {}, "@utils/Logger": { Logger: class {} },
+            "@vencord/discord-types/enums": {}, "@webpack/common": {}, ".": { settings: { store: {} } }
+        }, { document: { createElement: (tag: string) => tag === "video" ? video : canvas },
+            setTimeout(callback: () => void, delay: number) { assert.equal(delay, 5000); timeout = callback; return 7; },
+            clearTimeout(id: number) { assert.equal(id, 7); cleared++; }
+        }, "getVideoPreview");
+        const pending = preview("data:video/webm;base64,fixture");
+        if (mode === "timeout") timeout();
+        else if (mode === "decode") video.onerror?.();
+        else video.onloadeddata?.();
+        const result = await pending;
+        if (mode === "loaded") {
+            assert.equal(result.width, 64);
+            assert.equal(result.height, 32);
+            assert.equal(result.previewUrl, "data:image/png;base64,fixture");
+            assert.equal(drawn, 1);
+        } else assert.equal(result, null);
+        assert.equal(cleared, 1);
+        assert.equal(released, 1);
+        assert.equal(video.src, "");
+        assert.equal(video.onloadeddata, null);
+        assert.equal(video.onerror, null);
+    }
+});

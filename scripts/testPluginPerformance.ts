@@ -8033,3 +8033,32 @@ test("installer mutation guard remains held through review closure and build set
         await assert.rejects(native.initPluginInstall(null, "invalid", "", "", ""), /Invalid link/);
     }
 });
+
+test("installer background fetches wait for mutations and prevent deletion until settled", async () => {
+    let finishFetch: () => void = () => {};
+    let commands = 0;
+    const mocks: Record<string, object> = {
+        child_process: { exec: (command: string, options: unknown, callback: (error: Error | null, output: string) => void) => {
+            commands++;
+            if (command === "git fetch") finishFetch = () => callback(null, "");
+            else callback(null, "0");
+        } }, electron: {}, fs: {}, "fs/promises": {}, path, "yaml-js": {},
+    };
+    for (const name of ["pluginValidate", "updateValidate"])
+        mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+    const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") },
+        "({ ...exports, hold: runPluginMutation, setup() { getPluginDirectory = () => 'fixture'; } })");
+    api.setup();
+    let finishMutation: () => void = () => {};
+    const mutation = api.hold(() => new Promise<void>(resolve => { finishMutation = resolve; }));
+    const scan = api.isUpdateAvailableForPlugin(null, "fixture");
+    assert.equal(commands, 0);
+    finishMutation();
+    await mutation;
+    assert.equal(commands, 1);
+    await assert.rejects(api.rmPlugin(null, "fixture"), /Another plugin operation/);
+    finishFetch();
+    assert.equal(await scan, false);
+    assert.equal(commands, 2);
+    assert.equal(await api.hold(async () => "released"), "released");
+});

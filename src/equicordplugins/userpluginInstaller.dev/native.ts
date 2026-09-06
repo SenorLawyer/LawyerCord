@@ -45,15 +45,20 @@ export async function ensurePluginsDirectory() {
     }
 }
 
-let mutationPending = false;
+let mutationPending: Promise<void> | undefined;
 
-async function runPluginMutation<T>(operation: () => Promise<T>): Promise<T> {
-    if (mutationPending) throw new Error("Another plugin operation is in progress. Finish it before trying again.");
-    mutationPending = true;
+async function runPluginMutation<T>(operation: () => Promise<T>, wait = false): Promise<T> {
+    while (mutationPending) {
+        if (!wait) throw new Error("Another plugin operation is in progress. Finish it before trying again.");
+        await mutationPending;
+    }
+    let release: () => void = () => {};
+    mutationPending = new Promise<void>(resolve => { release = resolve; });
     try {
         return await operation();
     } finally {
-        mutationPending = false;
+        mutationPending = undefined;
+        release();
     }
 }
 
@@ -84,16 +89,18 @@ export async function rmPlugin(_, name: string): Promise<boolean> {
 }
 
 export async function isUpdateAvailableForPlugin(_, name: string): Promise<boolean> {
-    const pluginDir = getPluginDirectory(name);
-    return new Promise(resolve => {
-        exec("git fetch", { cwd: pluginDir }, error => {
-            if (error) return resolve(false);
-            exec("git rev-list --count HEAD..origin/HEAD", { cwd: pluginDir }, (error, stdout) => {
+    return runPluginMutation(async () => {
+        const pluginDir = getPluginDirectory(name);
+        return new Promise(resolve => {
+            exec("git fetch", { cwd: pluginDir }, error => {
                 if (error) return resolve(false);
-                resolve(Number(stdout.trim()) > 0);
+                exec("git rev-list --count HEAD..origin/HEAD", { cwd: pluginDir }, (error, stdout) => {
+                    if (error) return resolve(false);
+                    resolve(Number(stdout.trim()) > 0);
+                });
             });
         });
-    });
+    }, true);
 }
 
 export async function initPluginInstall(_, link: string, source: string, owner: string, repo: string): Promise<{ name: string; native: boolean; }> {

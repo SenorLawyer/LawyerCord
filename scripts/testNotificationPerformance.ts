@@ -160,6 +160,7 @@ function fixture(source: string, timeout = 5000, permanent = false) {
     const mocks: Record<string, object> = {
         "./styles.css": {},
         "@api/Settings": { useSettings: () => settings },
+        "@components/Button": { Button: "button" },
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@utils/misc": { classes: (...names: string[]) => names.filter(Boolean).join(" ") },
         "@webpack/common": common,

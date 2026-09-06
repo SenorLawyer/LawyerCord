@@ -19,6 +19,7 @@
 import "./styles.css";
 
 import { useSettings } from "@api/Settings";
+import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { classes } from "@utils/misc";
 import { React, useEffect, useRef, useState } from "@webpack/common";
@@ -75,7 +76,9 @@ export default ErrorBoundary.wrap(function NotificationComponent({
     }, [timeout, isHover, permanent, onClose]);
 
     return (
-        <button
+        <div
+            role="group"
+            aria-label={title}
             className={classes("vc-notification-root", className)}
             style={position === "bottom-right" ? { bottom: "1rem" } : { top: "3rem" }}
             onClick={() => {
@@ -91,12 +94,20 @@ export default ErrorBoundary.wrap(function NotificationComponent({
             onMouseEnter={() => setIsHover(true)}
             onMouseLeave={() => setIsHover(false)}
         >
+            <Button
+                variant="none"
+                type="button"
+                className="vc-notification-action"
+                aria-label={onClick ? "Open notification" : "Dismiss notification"}
+            />
             <div className="vc-notification">
                 {icon && <img className="vc-notification-icon" src={icon} alt="" />}
                 <div className="vc-notification-content">
                     <div className="vc-notification-header">
                         <h2 className="vc-notification-title">{title}</h2>
                         <button
+                            type="button"
+                            aria-label="Dismiss notification"
                             className="vc-notification-close-btn"
                             onClick={e => {
                                 e.preventDefault();
@@ -108,10 +119,8 @@ export default ErrorBoundary.wrap(function NotificationComponent({
                                 width="24"
                                 height="24"
                                 viewBox="0 0 24 24"
-                                role="img"
-                                aria-labelledby="vc-notification-dismiss-title"
+                                aria-hidden="true"
                             >
-                                <title id="vc-notification-dismiss-title">Dismiss Notification</title>
                                 <path fill="currentColor" d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />
                             </svg>
                         </button>
@@ -127,7 +136,7 @@ export default ErrorBoundary.wrap(function NotificationComponent({
                     style={{ backgroundColor: color || "var(--brand-500)" }}
                 />
             )}
-        </button>
+        </div>
     );
 }, {
     onError: ({ props }) => props.onClose!()

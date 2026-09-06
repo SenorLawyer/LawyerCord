@@ -7949,6 +7949,22 @@ test("plugin update checks use Git reference resolution and stop after fetch fai
     }
 });
 
+test("plugin directory setup reports filesystem failure without leaking its path", async () => {
+    for (const enabled of [false, true]) {
+        let calls = 0;
+        const mocks: Record<string, object> = {
+            child_process: {}, electron: {}, fs: {}, path, "yaml-js": {},
+            "fs/promises": { mkdir: async () => { calls++; throw new Error("Private directory path"); } }
+        };
+        for (const name of ["pluginValidate", "updateValidate"])
+            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist"), IS_DEV: enabled });
+        if (enabled) await assert.rejects(api.ensurePluginsDirectory(), /Could not create the userplugins directory/);
+        else await api.ensurePluginsDirectory();
+        assert.equal(calls, enabled ? 1 : 0);
+    }
+});
+
 test("installer setup failures reject the caller without exposing native errors", async () => {
     for (const stage of ["dialog", "clone", "metadata", "browser"]) {
         const fail = async () => { throw new Error("Private filesystem path"); };

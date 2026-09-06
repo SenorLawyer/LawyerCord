@@ -36,11 +36,13 @@ function getPluginDirectory(name: unknown): string {
     throw new Error("Invalid plugin directory.");
 }
 
-export async function ensurePluginsDirectory(_: any) {
+export async function ensurePluginsDirectory() {
     if (!IS_DEV) return;
     try {
         await mkdir(join(vencordPath, "../src/userplugins"), { recursive: true });
-    } catch(e) { }
+    } catch {
+        throw new Error("Could not create the userplugins directory.");
+    }
 }
 
 export async function rmPlugin(_, name: string): Promise<string> {

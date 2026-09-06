@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Remove unused scheduled-message rescheduling and channel-filter helpers.
+
 - Reject invalid and past scheduled dates before changing the queue or its previews.
 
 - Restore scheduled-message previews only for their saved account.

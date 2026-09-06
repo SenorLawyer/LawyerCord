@@ -50,12 +50,6 @@ export function getScheduledMessages(): ScheduledMessage[] {
     return [...scheduledMessages];
 }
 
-export function getScheduledMessagesForChannel(channelId?: string): ScheduledMessage[] {
-    const messages = getScheduledMessages();
-    if (!channelId) return messages;
-    return messages.filter(message => message.channelId === channelId);
-}
-
 export function getChannelDisplayInfo(channelId: string): { name: string; avatar: string; } {
     const channel = ChannelStore.getChannel(channelId);
     if (!channel) return { name: "Unknown", avatar: "" };
@@ -440,39 +434,6 @@ export async function addScheduledMessage(
     if (UserStore.getCurrentUser()?.id === userId) createPhantomMessage(newMessage);
     scheduleNextCheck();
 
-    return { success: true };
-}
-
-export async function updateScheduledMessageTime(id: string, scheduledTime: number): Promise<{ success: boolean; error?: string; }> {
-    const message = scheduledMessages.find(entry => entry.id === id);
-    if (!message) {
-        return { success: false, error: "Scheduled message not found" };
-    }
-
-    if (Number.isNaN(new Date(scheduledTime).getTime()) || scheduledTime <= Date.now()) {
-        return { success: false, error: "Please select a valid future date and time." };
-    }
-
-    const minuteStart = Math.floor(scheduledTime / 60000) * 60000;
-    const count = scheduledMessages.filter(entry =>
-        entry.id !== id
-        && entry.channelId === message.channelId
-        && entry.scheduledTime >= minuteStart
-        && entry.scheduledTime < minuteStart + 60000
-    ).length;
-
-    if (count >= settings.store.maxMessagesPerMinute) {
-        return { success: false, error: `Maximum of ${settings.store.maxMessagesPerMinute} messages per channel per minute reached` };
-    }
-
-    if (sendingMessages.has(id)) return { success: false, error: "Message is being sent." };
-    removePhantomMessage(message);
-    message.scheduledTime = scheduledTime;
-    delete message.attemptedAt;
-    scheduledMessages.sort((left, right) => left.scheduledTime - right.scheduledTime);
-    await saveScheduledMessages();
-    await createPhantomMessage(message);
-    scheduleNextCheck();
     return { success: true };
 }
 

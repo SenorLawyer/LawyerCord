@@ -6702,7 +6702,7 @@ test("scheduled previews reject missing and foreign owners before loading histor
 });
 
 
-test("scheduled writers reject invalid dates without mutating saved messages", async () => {
+test("scheduling rejects invalid dates without mutating saved messages", async () => {
     const originalTime = Date.now() + 60_000;
     const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
         "@api/DataStore": { get: async () => [{ id: "queued", userId: "account", scheduledTime: originalTime }],
@@ -6715,7 +6715,6 @@ test("scheduled writers reject invalid dates without mutating saved messages", a
     await api.loadScheduledMessages();
     for (const time of [NaN, Infinity, -Infinity, Number.MAX_VALUE, 0, Date.now() - 1]) {
         assert.equal((await api.addScheduledMessage("channel", "Text", time)).success, false);
-        assert.equal((await api.updateScheduledMessageTime("queued", time)).success, false);
         assert.equal(api.getScheduledMessages().length, 1);
         assert.equal(api.getScheduledMessages()[0].scheduledTime, originalTime);
     }

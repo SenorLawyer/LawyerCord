@@ -5635,6 +5635,34 @@ test("scheduled interval changes only replace an active timer", async () => {
     assert.deepEqual(cleared, [1, 2]);
 });
 
+test("scheduled composer discards attachment reads after account change or stop", async () => {
+    for (const change of ["account", "stop"]) {
+        let userId = "first";
+        let reader: Reader | undefined;
+        class Reader {
+            result = "data:text/plain;base64,ZmlsZQ==";
+            onload: () => void = () => {};
+            constructor() { reader = this; }
+            readAsDataURL() {}
+        }
+        const { default: plugin } = loadSource("src/equicordplugins/scheduledMessages/index.tsx", {
+            "@api/Settings": { definePluginSettings: () => ({}) }, "@utils/constants": { Devs: {}, EquicordDevs: {} },
+            "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) }, showToast: () => assert.fail("No stale toast") },
+            "./components/ChatBarButton": { isScheduleModeEnabled: true, setScheduleModeEnabled() {} },
+            "./components/Icons": {}, "./components/MessageAccessory": {}, "./components/ViewScheduledModal": {},
+            "./components/ScheduleTimeModal": { openScheduleTimeModal: () => assert.fail("No stale dialog") },
+            "./utils": { stopScheduler() {}, cleanupAllPhantomMessages() {} }
+        }, { FileReader: Reader });
+        const pending = plugin.onBeforeMessageSend("channel", { content: "Text" }, { uploads: [{ item: { file: {} }, filename: "file.txt" }] });
+        if (change === "account") userId = "second";
+        else plugin.stop();
+        assert.ok(reader);
+        reader.onload();
+        assert.equal((await pending).cancel, true);
+    }
+});
+
 test("scheduled composer keeps read failures out of the scheduling dialog", async () => {
     let notices = 0;
     class Reader {
@@ -5645,7 +5673,7 @@ test("scheduled composer keeps read failures out of the scheduling dialog", asyn
     const { default: plugin } = loadSource("src/equicordplugins/scheduledMessages/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({}) }, "@utils/constants": { Devs: {}, EquicordDevs: {} },
         "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
-        "@webpack/common": { showToast: () => notices++, Toasts: { Type: {} } },
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, showToast: () => notices++, Toasts: { Type: {} } },
         "./components/ChatBarButton": { isScheduleModeEnabled: true, setScheduleModeEnabled() {} },
         "./components/Icons": {}, "./components/MessageAccessory": {}, "./components/ViewScheduledModal": {},
         "./components/ScheduleTimeModal": { openScheduleTimeModal: () => assert.fail("Do not schedule partial attachments") }, "./utils": {}

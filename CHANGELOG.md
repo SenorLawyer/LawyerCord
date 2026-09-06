@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Discard pending scheduling attachment reads after an account change or plugin shutdown.
+
 - Check patch definitions with quoted keys or whitespace instead of skipping them before parsing.
 
 - Inspect individual patch properties so compact formatting cannot hide lint errors.

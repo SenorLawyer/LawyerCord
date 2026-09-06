@@ -10,7 +10,7 @@ import { MessageObject, SendMessageOptions } from "@api/MessageEvents";
 import { definePluginSettings } from "@api/Settings";
 import { Devs, EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { showToast, Toasts } from "@webpack/common";
+import { showToast, Toasts, UserStore } from "@webpack/common";
 
 import { isScheduleModeEnabled, ScheduledMessagesButton, setScheduleModeEnabled } from "./components/ChatBarButton";
 import { CalendarIcon } from "./components/Icons";
@@ -124,6 +124,10 @@ export default definePlugin({
         if (!isScheduleModeEnabled) return;
         if (!messageObj.content.trim() && !options.uploads?.length) return;
 
+        const userId = UserStore.getCurrentUser()?.id;
+        if (!userId) return { cancel: true };
+        const generation = lifecycleGeneration;
+        const isCurrent = () => generation === lifecycleGeneration && UserStore.getCurrentUser()?.id === userId;
         setScheduleModeEnabled(false);
 
         let attachments: ScheduledAttachment[] | undefined;
@@ -145,13 +149,14 @@ export default definePlugin({
                         reader.readAsDataURL(file);
                     });
 
+                    if (!isCurrent()) return { cancel: true };
                     attachments.push({
                         filename: upload.filename,
                         data: base64,
                         type: file.type
                     });
                 } catch {
-                    showToast("Could not read an attachment. The message was not scheduled.", Toasts.Type.FAILURE);
+                    if (isCurrent()) showToast("Could not read an attachment. The message was not scheduled.", Toasts.Type.FAILURE);
                     return { cancel: true };
                 }
             }

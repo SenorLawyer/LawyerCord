@@ -15,7 +15,7 @@ import { useStreaksStore } from "./StreaksStore";
 interface AuthorizationState {
     getToken: () => string | null;
     tokens: Record<string, string>;
-    authorize: () => Promise<void>;
+    authorize: () => Promise<boolean>;
     setToken: (token: string) => void;
     remove: (id: string) => void;
     isAuthorized: () => boolean;
@@ -50,8 +50,8 @@ export const useAuthorizationStore = proxyLazy(() => zustandCreate(
             },
             async authorize() {
                 const userId = UserStore.getCurrentUser()?.id;
-                if (!userId) throw new Error("No Discord account is logged in.");
-                return new Promise((resolve, reject) => {
+                if (!userId) return false;
+                return new Promise<boolean>(resolve => {
                     let hasCallbackStarted = false;
                     openModal(props =>
                         <OAuth2AuthorizeModal
@@ -80,18 +80,18 @@ export const useAuthorizationStore = proxyLazy(() => zustandCreate(
                                     } else {
                                         throw new Error(`Request not OK: ${req.status}`);
                                     }
-                                    resolve(void 0);
+                                    resolve(true);
                                 } catch (e) {
                                     showToast(e instanceof Error ? `Failed to authorize: ${e.message}` : "Failed to authorize with Streaks.", Toasts.Type.FAILURE);
                                     new Logger("Streaks").error("Failed to authorize", e);
-                                    reject(e);
+                                    resolve(false);
                                 }
                             }}
                         />, {
                         onCloseCallback() {
                             if (!hasCallbackStarted) {
                                 hasCallbackStarted = true;
-                                reject(new Error("Authorization cancelled"));
+                                resolve(false);
                             }
                         },
                     });

@@ -64,6 +64,25 @@ test("Streaks delayed message refresh stops with its account or plugin", async (
     }
 });
 
+test("Streaks login only refreshes after successful authorization", async () => {
+    let authorized = false;
+    let refreshes = 0;
+    const api = loadSource("src/equicordplugins/streaks/settings.tsx", {
+        "@api/Settings": { definePluginSettings: (value: unknown) => value },
+        "@components/Button": { Button: "button" }, "@components/Flex": { Flex: "flex" },
+        "@utils/types": { OptionType: {} },
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) }, useStateFromStores: (_stores: unknown, selector: () => unknown) => selector() },
+        "./stores/AuthorizationStore": { useAuthorizationStore: () => ({ isAuthorized: () => false, authorize: async () => authorized }) },
+        "./stores/StreaksStore": { useStreaksStore: { getState: () => ({ fetch: async () => { refreshes++; } }) } },
+    }, { React: { createElement: (_type: unknown, props: object, ...children: unknown[]) => ({ props, children }) } });
+    const button = api.settings.account.component().children[0];
+    await button.props.onClick();
+    assert.equal(refreshes, 0);
+    authorized = true;
+    await button.props.onClick();
+    assert.equal(refreshes, 1);
+});
+
 test("Streaks authorization cannot attach a token to another account", async () => {
     for (const change of ["before", "response", "non-error", "missing-token", "invalid-token", "empty-token", "cancelled", "duplicate", "none"]) {
         let userId = "first";
@@ -93,13 +112,10 @@ test("Streaks authorization cannot attach a token to another account", async () 
             } }; } });
         const auth = api.useAuthorizationStore.getState();
         const pending = auth.authorize();
-        const result = change === "none" || change === "duplicate" ? pending : change === "non-error"
-            ? assert.rejects(pending, reason => reason === "request failed")
-            : assert.rejects(pending, change.endsWith("-token") ? /invalid token/ : change === "cancelled" ? /cancelled/ : /account changed/);
         if (change === "before") userId = "second";
         if (change === "cancelled") close();
         await Promise.all(Array.from({ length: change === "duplicate" ? 2 : 1 }, () => callback({ location: "https://example.com/auth?code=test" })));
-        await result;
+        assert.equal(await pending, change === "none" || change === "duplicate");
         assert.equal(requests, change === "before" || change === "cancelled" ? 0 : 1);
         assert.equal(auth.tokens.second, undefined);
         assert.equal(auth.tokens.first, change === "none" || change === "duplicate" ? "first-token" : undefined);

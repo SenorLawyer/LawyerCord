@@ -21,6 +21,33 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("Streaks badges only display the current account's conversation", () => {
+    let currentId: string | undefined = "first";
+    const streak = { user_a_id: "first", user_b_id: "target", count: 2 };
+    const userStore = { getCurrentUser: () => currentId ? { id: currentId } : undefined };
+    let subscriptions = 0;
+    const api = loadSource("src/equicordplugins/streaks/index.tsx", {
+        "@equicordplugins/_core/concatenatedModules": {},
+        "@utils/constants": { Devs: {}, EquicordDevs: {} },
+        "@utils/css": { classNameFactory: () => () => "fixture" },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value },
+        "@webpack/common": { UserStore: userStore, moment: () => ({ format: () => "2026-09-06" }),
+            useStateFromStores: (stores: unknown[], selector: () => unknown) => {
+                assert.equal(stores[0], userStore); subscriptions++; return selector();
+            } },
+        "./settings": { settings: { store: {} } }, "./stores/AuthorizationStore": {},
+        "./stores/StreaksStore": { useStreaksStore: (selector: (state: object) => unknown) => selector({ streaks: { target: streak } }) },
+    }, { React: { createElement: () => ({}) } }, "({ StreakBadge })");
+    for (const id of ["first", "second", "target", undefined]) {
+        currentId = id;
+        assert.equal(api.StreakBadge({ userId: "target" }) !== null, id === "first");
+    }
+    currentId = "first";
+    [streak.user_a_id, streak.user_b_id] = [streak.user_b_id, streak.user_a_id];
+    assert.notEqual(api.StreakBadge({ userId: "target" }), null);
+    assert.equal(subscriptions, 5);
+});
+
 test("Streaks delayed message refresh stops with its account or plugin", async () => {
     for (const change of ["before", "response", "stop-before", "stop-response", "none"]) {
         let userId = "first";

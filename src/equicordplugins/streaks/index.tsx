@@ -12,7 +12,7 @@ import { Devs, EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import definePlugin from "@utils/types";
 import { Message } from "@vencord/discord-types";
-import { ChannelStore, moment, Tooltip, UserStore } from "@webpack/common";
+import { ChannelStore, moment, Tooltip, UserStore, useStateFromStores } from "@webpack/common";
 
 import { settings } from "./settings";
 import { useAuthorizationStore } from "./stores/AuthorizationStore";
@@ -42,10 +42,13 @@ const colorFor = (streak: number) => {
 };
 
 const StreakBadge = ({ userId }: { userId: string; }) => {
+    const currentUserId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
     const streaks = useStreaksStore(state => state.streaks);
     const streak = streaks[userId];
 
     if (!streak || streak.count < 1) return null;
+    if (!(streak.user_a_id === currentUserId && streak.user_b_id === userId
+        || streak.user_b_id === currentUserId && streak.user_a_id === userId)) return null;
 
     const today = moment().format("YYYY-MM-DD");
     const active = streak.last_streak_date === today;

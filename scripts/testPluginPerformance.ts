@@ -21,6 +21,37 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("voice panel selectors read current media settings and device lists", () => {
+    let volume = 20;
+    let selected = "first";
+    const devices: Record<string, { id: string; name: string; }> = { first: { id: "first", name: "First" } };
+    const media = { getOutputVolume: () => volume, getOutputDeviceId: () => selected, getOutputDevices: () => devices };
+    const hooks: Array<() => unknown> = [];
+    const { OutputVolumeComponent, OutputDeviceComponent } = loadSource("src/equicordplugins/vcPanelSettings/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@components/BaseText": {}, "@components/Heading": {}, "@components/Link": {},
+        "@utils/constants": { Devs: {} }, "@utils/misc": { identity: (value: unknown) => value },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+        "@webpack/common": {
+            MediaEngineStore: media, lodash: { isEqual: (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b) },
+            useStateFromStores: (stores: object[], selector: () => unknown) => {
+                assert.equal(stores[0], media);
+                hooks.push(selector);
+                return selector();
+            },
+        },
+    }, { React: { createElement: () => null, Fragment: "fragment" } }, "({ OutputVolumeComponent, OutputDeviceComponent })");
+    assert.equal(hooks.length, 0);
+    OutputVolumeComponent();
+    OutputDeviceComponent();
+    volume = 70;
+    selected = "second";
+    devices.second = { id: "second", name: "Second" };
+    assert.equal(hooks[0](), 70);
+    assert.equal(hooks[1](), "second");
+    assert.equal(JSON.stringify(hooks[2]()), JSON.stringify(Object.values(devices)));
+});
+
 test("voice buttons apply server actions to the selected user", () => {
     const settings = { useServer: true, serverSelf: false };
     const calls: string[] = [];

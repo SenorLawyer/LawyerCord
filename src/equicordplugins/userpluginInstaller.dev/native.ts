@@ -6,9 +6,9 @@
 
 import { exec, spawn } from "child_process";
 import { BrowserWindow, dialog, shell } from "electron";
-import { existsSync, readdirSync, readFileSync } from "fs";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "fs";
 import { mkdir, readdir, readFile, rm } from "fs/promises";
-import { basename, join } from "path";
+import { basename, dirname, join } from "path";
 import yaml from "yaml-js";
 
 // @ts-ignore fuck off
@@ -21,6 +21,20 @@ const PLUGIN_META_REGEX = /export default definePlugin\((?:\s|\/(?:\/|\*).*)*{\s
 const CLONE_LINK_REGEX = /https:\/\/(?:((?:git(?:hub|lab)\.com|git\.(?:[a-zA-Z0-9]|\.)+|codeberg\.org))\/(?!user-attachments)((?:[a-zA-Z0-9]|-)+)\/((?:[a-zA-Z0-9]|-|\.)+)(?:\.git)?|(plugins\.(nin0)\.dev)\/((?:[a-zA-Z0-9]|-|\.)+))(?:\/)?/;
 
 const vencordPath = ["desktop", "equibop"].includes(basename(__dirname)) ? join(__dirname, "../") : __dirname;
+
+function getPluginDirectory(name: unknown): string {
+    if (typeof name !== "string" || !name || name.length > 255 || name === "." || name === ".." || /[/\\:\0]/.test(name))
+        throw new Error("Invalid plugin directory.");
+
+    try {
+        const root = realpathSync(join(vencordPath, "../src/userplugins"));
+        const directory = realpathSync(join(root, name));
+        if (dirname(directory) === root) return directory;
+    } catch {
+        throw new Error("Invalid plugin directory.");
+    }
+    throw new Error("Invalid plugin directory.");
+}
 
 export async function ensurePluginsDirectory(_: any) {
     if (!IS_DEV) return;
@@ -53,8 +67,8 @@ export async function rmPlugin(_, name: string): Promise<string> {
 }
 
 export async function isUpdateAvailableForPlugin(_, name: string): Promise<boolean> {
+    const pluginDir = getPluginDirectory(name);
     return new Promise(resolve => {
-        const pluginDir = join(vencordPath, "../src/userplugins", name);
         const otherProc = exec("git fetch", {
             cwd: pluginDir
         });
@@ -311,8 +325,8 @@ export async function getUserplugins() {
 }
 
 export async function updatePlugin(_, directory: string) {
+    const pluginDir = getPluginDirectory(directory);
     return new Promise((resolve, reject) => {
-        const pluginDir = join(vencordPath, "../src/userplugins", directory);
 
         async function doStuff() {
             const pluginMeta = await getPluginMeta(pluginDir);

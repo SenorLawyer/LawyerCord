@@ -6,7 +6,8 @@
 
 import assert from "node:assert/strict";
 
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { Readable } from "node:stream";
 import { buffer } from "node:stream/consumers";
@@ -19,6 +20,34 @@ import { runInNewContext } from "node:vm";
 import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
+
+test("installer update commands reject traversal and directories linked outside the plugin root", async t => {
+    const prefix = path.join(tmpdir(), "lawyercord-installer-");
+    const temporary = mkdtempSync(prefix);
+    t.after(() => {
+        assert.ok(temporary.startsWith(prefix));
+        rmSync(temporary, { recursive: true, force: true });
+    });
+    const root = path.join(temporary, "src/userplugins");
+    mkdirSync(path.join(root, "valid"), { recursive: true });
+    const outside = path.join(temporary, "outside");
+    mkdirSync(outside);
+    symlinkSync(outside, path.join(root, "linked"), process.platform === "win32" ? "junction" : "dir");
+    let commands = 0;
+    const mocks: Record<string, object> = {
+        "child_process": { exec: () => { commands++; throw new Error("Unexpected command"); } },
+        "electron": {}, "fs": { realpathSync }, "fs/promises": {}, path, "yaml-js": {},
+    };
+    for (const name of ["pluginValidate", "updateValidate"])
+        mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+    const native = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.join(temporary, "dist") }, "({ ...exports, getPluginDirectory })");
+    assert.equal(native.getPluginDirectory("valid"), realpathSync(path.join(root, "valid")));
+    for (const name of ["../outside", "..", ".", outside, "linked", "missing", "", null, 1]) {
+        await assert.rejects(native.isUpdateAvailableForPlugin(null, name), { message: "Invalid plugin directory." });
+        await assert.rejects(native.updatePlugin(null, name), { message: "Invalid plugin directory." });
+    }
+    assert.equal(commands, 0);
+});
 
 test("installer update reviews render repository metadata as text", () => {
     const mocks: Record<string, object> = {

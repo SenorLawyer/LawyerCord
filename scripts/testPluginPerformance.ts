@@ -21,6 +21,29 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("installer builds settle subprocess failures without exposing process details", async () => {
+    let finish: (error: Error | null) => void = () => {};
+    const mocks: Record<string, object> = {
+        "child_process": { exec: (command: string, options: { cwd: string; }, callback: (error: Error | null) => void) => {
+            assert.equal(command, "pnpm build --dev");
+            assert.equal(options.cwd, path.resolve("fixture"));
+            finish = callback;
+        } },
+        "electron": {}, "fs": {}, "fs/promises": {}, path, "yaml-js": {},
+    };
+    for (const name of ["pluginValidate", "updateValidate"])
+        mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+    const { build } = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist"), process: { env: {} } }, "({ build })");
+    for (const error of [new Error("Missing shell at private path"), new Error("Build exited with private output")]) {
+        const pending = build();
+        finish(error);
+        await assert.rejects(pending, { message: "Could not build LawyerCord. Try building from the terminal." });
+    }
+    const pending = build();
+    finish(null);
+    assert.equal(await pending, undefined);
+});
+
 test("installer uninstall settles missing, cancelled, failed and successful requests", async () => {
     let confirmation = 0;
     let removals = 0;

@@ -170,17 +170,14 @@ export function initPluginInstall(_, link: string, source: string, owner: string
     });
 }
 
-async function build(): Promise<any> {
+function build(): Promise<void> {
     return new Promise((resolve, reject) => {
-        const proc = exec("pnpm build --dev", {
+        exec("pnpm build --dev", {
             cwd: join(vencordPath, ".."),
             shell: process.env.SHELL || process.env.ComSpec || "/bin/sh"
-        });
-        proc.once("close", () => {
-            if (proc.exitCode !== 0) {
-                reject("Failed to build Vencord, try building from console");
-            }
-            resolve("Success");
+        }, error => {
+            if (error) reject(new Error("Could not build LawyerCord. Try building from the terminal."));
+            else resolve();
         });
     });
 }
@@ -384,7 +381,7 @@ export async function updatePlugin(_, directory: string) {
                                     build().then(() => resolve(JSON.stringify({
                                         name: pluginMeta.name,
                                         native: pluginMeta.usesNative
-                                    })));
+                                    })), reject);
                                 });
                             }
                             catch (e) {

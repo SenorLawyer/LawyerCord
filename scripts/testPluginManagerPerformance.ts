@@ -21,6 +21,7 @@ interface TestPlugin {
     chatBarButtonWrapper?: object;
     userProfileBadges?: object[];
     renderMessageAccessory?: () => unknown;
+    onBeforeMessageSend?: () => void;
     start?(): void;
     onMessageClick?(this: TestPlugin): void;
     flux?: Record<string, (this: TestPlugin, data: unknown) => void | Promise<void>>;
@@ -30,6 +31,7 @@ function loadManager() {
     const plugins: Record<string, TestPlugin> = {};
     const settings: Record<string, { enabled: boolean; }> = {};
     const errors: unknown[][] = [];
+    const sendListeners = new Set<() => void>();
     const accessories = new Map<string, () => unknown>();
     const handlers = new Map<string, Set<(data: unknown) => void | Promise<void>>>();
     const dispatcher = {
@@ -43,6 +45,10 @@ function loadManager() {
     };
     const mocks: Record<string, object> = {
         "~plugins": { __esModule: true, default: plugins },
+        "@api/MessageEvents": {
+            addMessagePreSendListener: (listener: () => void) => sendListeners.add(listener),
+            removeMessagePreSendListener: (listener: () => void) => sendListeners.delete(listener),
+        },
         "@api/MessageAccessories": {
             addMessageAccessory: (name: string, render: () => unknown) => accessories.set(name, render),
             removeMessageAccessory: (name: string) => accessories.delete(name),
@@ -76,7 +82,7 @@ function loadManager() {
         settings[plugin.name] = { enabled: false };
         return plugin;
     }
-    return { manager, add, plugins, settings, dispatcher, handlers, errors, accessories };
+    return { manager, add, plugins, settings, dispatcher, handlers, errors, accessories, sendListeners };
 }
 
 test("declarative message accessories enable their API and follow plugin lifecycle", () => {
@@ -149,4 +155,23 @@ test("flux subscriptions preserve original handlers and clean up the functions a
     }
     assert.equal(calls, 25);
     assert.equal(errors.length, 0);
+});
+
+
+test("declarative send hooks enable their API and clean up on stop", () => {
+    const { manager, add, settings, sendListeners } = loadManager();
+    add({ name: "MessageEventsAPI" });
+    let calls = 0;
+    const plugin = add({ name: "Fixture", onBeforeMessageSend: () => { calls++; } });
+    settings.Fixture.enabled = true;
+    manager.initPluginManager();
+    assert.equal(settings.MessageEventsAPI.enabled, true);
+    for (let i = 0; i < 2; i++) {
+        manager.startPlugin(plugin);
+        assert.equal(sendListeners.size, 1);
+        for (const listener of sendListeners) listener();
+        manager.stopPlugin(plugin);
+        assert.equal(sendListeners.size, 0);
+    }
+    assert.equal(calls, 2);
 });

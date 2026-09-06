@@ -92,7 +92,7 @@ export async function isUpdateAvailableForPlugin(_, name: string): Promise<boole
     });
 }
 
-export function initPluginInstall(_, link: string, source: string, owner: string, repo: string): Promise<string> {
+export async function initPluginInstall(_, link: string, source: string, owner: string, repo: string): Promise<string> {
     if (typeof link !== "string" || link.length > 8192 || typeof source !== "string" || typeof owner !== "string"
         || typeof repo !== "string" || !repo || repo.length > 255 || repo === "." || repo === "..")
         return Promise.reject(new Error("Invalid link."));
@@ -101,33 +101,33 @@ export function initPluginInstall(_, link: string, source: string, owner: string
     if (!verifiedRegex || verifiedRegex[0] !== link || verifiedRegex[[1, 4][idpl]] !== source || verifiedRegex[[2, 5][idpl]] !== owner || verifiedRegex[[3, 6][idpl]] !== repo)
         return Promise.reject(new Error("Invalid link."));
 
-    // eslint-disable-next-line
-    return new Promise(async (resolve, reject) => {
-        // Ask for clone
-        const cloneDialog = await dialog.showMessageBox({
-            title: "Clone userplugin",
-            message: `You are about to clone a userplugin from ${source}.`,
-            type: "question",
-            detail: `The repository name is "${repo}" and it is owned by "${owner}".\nThe repository URL is ${link}\n\n(If you did not request this intentionally, choose Cancel)`,
-            buttons: ["Cancel", "Clone repository and continue install", "Open repository in browser"]
-        });
-        switch (cloneDialog.response) {
-            case 0: {
-                return reject("Rejected by user");
-            }
-            case 1: {
-                await cloneRepo(link, repo);
-                break;
-            }
-            case 2: {
-                await shell.openExternal(link);
-                return reject("silentStop");
-            }
+    // Ask for clone
+    const cloneDialog = await dialog.showMessageBox({
+        title: "Clone userplugin",
+        message: `You are about to clone a userplugin from ${source}.`,
+        type: "question",
+        detail: `The repository name is "${repo}" and it is owned by "${owner}".\nThe repository URL is ${link}\n\n(If you did not request this intentionally, choose Cancel)`,
+        buttons: ["Cancel", "Clone repository and continue install", "Open repository in browser"]
+    }).catch(() => { throw new Error("Could not open the clone confirmation."); });
+    switch (cloneDialog.response) {
+        case 0: {
+            throw new Error("Rejected by user");
         }
+        case 1: {
+            await cloneRepo(link, repo).catch(() => { throw new Error("Could not clone the plugin."); });
+            break;
+        }
+        case 2: {
+            await shell.openExternal(link).catch(() => { throw new Error("Could not open the repository."); });
+            throw new Error("silentStop");
+        }
+    }
 
-        // Get plugin meta
-        const meta = await getPluginMeta(join(vencordPath, "..", "src", "userplugins", repo));
+    // Get plugin meta
+    const meta = await getPluginMeta(join(vencordPath, "..", "src", "userplugins", repo))
+        .catch(() => { throw new Error("Could not read the plugin metadata."); });
 
+    return new Promise((resolve, reject) => {
         // Review plugin
         const win = new BrowserWindow({
             maximizable: false,

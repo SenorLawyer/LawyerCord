@@ -7633,5 +7633,24 @@ test("installer rejects unsafe clone names and malformed links before any side e
     }
     await assert.rejects(api.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "other", "repo"), /Invalid link/);
     allowDialog = true;
-    await assert.rejects(api.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "owner", "repo"), (error: unknown) => error === "Rejected by user");
+    await assert.rejects(api.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "owner", "repo"), /Rejected by user/);
+});
+
+test("installer setup failures reject the caller without exposing native errors", async () => {
+    for (const stage of ["dialog", "clone", "metadata", "browser"]) {
+        const fail = async () => { throw new Error("Private filesystem path"); };
+        const mocks: Record<string, object> = {
+            child_process: {},
+            electron: { dialog: { showMessageBox: stage === "dialog" ? fail : async () => ({ response: stage === "browser" ? 2 : 1 }) }, shell: { openExternal: fail } },
+            fs: {}, "fs/promises": {}, path, "yaml-js": {}
+        };
+        for (const name of ["pluginValidate", "updateValidate"])
+            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") },
+            "({ ...exports, setup(clone, metadata) { cloneRepo = clone; getPluginMeta = metadata; } })");
+        api.setup(stage === "clone" ? fail : async () => {}, fail);
+        const messages = { dialog: "Could not open the clone confirmation.", clone: "Could not clone the plugin.", metadata: "Could not read the plugin metadata.", browser: "Could not open the repository." };
+        await assert.rejects(api.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "owner", "repo"),
+            (error: Error) => error.message === messages[stage]);
+    }
 });

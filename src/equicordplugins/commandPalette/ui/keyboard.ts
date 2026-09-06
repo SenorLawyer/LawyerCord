@@ -9,6 +9,7 @@ import { IS_MAC } from "@utils/constants";
 const MODIFIERS = ["meta", "ctrl", "shift", "alt"] as const;
 
 export function comboFromEvent(e: KeyboardEvent): string[] | null {
+    if (e.isComposing) return null;
     const key = e.key.toLowerCase();
     if (key === "meta" || key === "control" || key === "shift" || key === "alt") return null;
 
@@ -95,6 +96,7 @@ export function isPaletteCapturing() {
 }
 
 function handleKeyDown(e: KeyboardEvent) {
+    if (e.isComposing) return;
     if (paletteHandler) {
         if (paletteHandler(e)) {
             e.preventDefault();
@@ -120,6 +122,7 @@ function handleKeyDown(e: KeyboardEvent) {
 }
 
 function handleKeyUp(e: KeyboardEvent) {
+    if (e.isComposing) return;
     if (!paletteHandler) return;
     if (isEditableTarget(e.target) || isEditableTarget(document.activeElement)) return;
     if ((e.metaKey || e.ctrlKey) && !isEditingCombo(e)) {

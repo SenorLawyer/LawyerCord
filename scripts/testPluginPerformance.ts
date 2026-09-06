@@ -46,6 +46,34 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("command palette leaves composition keys to the input method", () => {
+    const keyboard = loadSource("src/equicordplugins/commandPalette/ui/keyboard.ts", {
+        "@utils/constants": { IS_MAC: false }
+    }, {}, "({ ...exports, handleKeyDown, handleKeyUp })");
+    let actions = 0;
+    keyboard.setPaletteKeyHandler(() => { actions++; return true; });
+    const event = {
+        key: "Enter", isComposing: true,
+        preventDefault: () => assert.fail("Composition was prevented"),
+        stopImmediatePropagation: () => assert.fail("Composition was intercepted")
+    };
+    keyboard.handleKeyDown(event);
+    keyboard.handleKeyUp(event);
+    assert.equal(keyboard.comboFromEvent(event), null);
+    assert.equal(actions, 0);
+    keyboard.handleKeyDown({ ...event, isComposing: false, preventDefault() {}, stopImmediatePropagation() {} });
+    assert.equal(actions, 1);
+    const shouldSubmit = loadSource("src/equicordplugins/commandPalette/ui/pages/FormPage.tsx", {
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@webpack/common": {},
+        "../markdownPaste": {},
+        "../MessageMarkdownPreview": {},
+        "../PaletteIcon": {}
+    }, {}, "shouldSubmitOnEnter");
+    assert.equal(shouldSubmit({ key: "Enter", nativeEvent: { isComposing: true } }), false);
+    assert.equal(shouldSubmit({ key: "Enter", nativeEvent: { isComposing: false } }), true);
+});
+
 test("moving a bookmark into a later folder preserves the bookmark", () => {
     const bookmark = { channelId: "channel", guildId: "guild", name: "Bookmark" };
     const folder = { name: "Folder", bookmarks: [] as typeof bookmark[] };

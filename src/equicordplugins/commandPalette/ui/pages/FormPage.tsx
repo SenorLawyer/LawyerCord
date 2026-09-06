@@ -45,7 +45,7 @@ function getValues(states: Record<string, FieldState>, fields: FormField[]): For
 }
 
 function shouldSubmitOnEnter(e: KeyboardEvent) {
-    return e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey;
+    return !e.nativeEvent.isComposing && e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey;
 }
 
 function PickerField({ field, state, onChange, onSubmit, inputRef }: {
@@ -79,6 +79,7 @@ function PickerField({ field, state, onChange, onSubmit, inputRef }: {
 
     const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
         event.stopPropagation();
+        if (event.nativeEvent.isComposing) return;
         if (suggestions.length > 0) {
             if (event.key === "ArrowDown") {
                 event.preventDefault();

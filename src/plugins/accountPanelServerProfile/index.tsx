@@ -116,20 +116,18 @@ export default definePlugin({
     },
 
     UserProfile: ErrorBoundary.wrap(({ popoutProps, currentUser, originalRenderPopout }: UserProfileProps) => {
-        if (
-            (settings.store.prioritizeServerProfile && openAlternatePopout) ||
-            (!settings.store.prioritizeServerProfile && !openAlternatePopout)
-        ) {
+        if (settings.store.prioritizeServerProfile === openAlternatePopout) {
             return originalRenderPopout();
         }
 
         const currentChannel = getCurrentChannel();
-        if (currentChannel?.getGuildId() == null || !UserProfile.$$vencordGetWrappedComponent()) {
+        const guildId = currentChannel?.getGuildId();
+        if (!currentChannel || guildId == null || !UserProfile.$$vencordGetWrappedComponent()) {
             return originalRenderPopout();
         }
 
         if (isPluginEnabled(alwaysExpandProfiles.name)) {
-            return <ServerProfileLauncher popoutProps={popoutProps} userId={currentUser.id} guildId={currentChannel.getGuildId()!} />;
+            return <ServerProfileLauncher popoutProps={popoutProps} userId={currentUser.id} guildId={guildId} />;
         }
 
         return (
@@ -137,7 +135,7 @@ export default definePlugin({
                 {...popoutProps}
                 user={currentUser}
                 currentUser={currentUser}
-                guildId={currentChannel.getGuildId()}
+                guildId={guildId}
                 channelId={currentChannel.id}
             />
         );

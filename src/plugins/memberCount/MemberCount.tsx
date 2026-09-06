@@ -118,7 +118,7 @@ export function MemberCount({ isTooltip, tooltipGuildId }: { isTooltip?: true; t
 
     return (
         <div className={cl("widget", { tooltip: isTooltip, "member-list": !isTooltip })}>
-            <Tooltip text={`${formattedOnlineCount} online in this channel`} position="bottom">
+            <Tooltip text={`${formattedOnlineCount} online members`} position="bottom">
                 {props => (
                     <div {...props} className={cl("container")}>
                         <CircleIcon className={cl("online-count")} />

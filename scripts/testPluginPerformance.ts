@@ -2820,3 +2820,24 @@ test("chat badge layout ignores foreign drops and preserves previous state", () 
     assert.equal(state[0].shown, false);
     assert.equal(previous[0].shown, true);
 });
+
+
+test("failed embed requests report once without updating the message", async () => {
+    const toasts: string[] = [];
+    const { unfurlEmbed } = loadSource("src/equicordplugins/showMessageEmbeds/index.tsx", {
+        "@api/ContextMenu": {}, "@api/MessageUpdater": { updateMessage: () => assert.fail("failed requests cannot update embeds") },
+        "@components/Icons": {}, "@utils/constants": { EquicordDevs: {} },
+        "@utils/Logger": { Logger: class { error() {} } },
+        "@utils/misc": { parseUrl: () => ({}) },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+        "@webpack": { findByCodeLazy: () => () => assert.fail("failed requests cannot convert embeds") },
+        "@webpack/common": {
+            ChannelStore: { getChannel: () => ({ id: "channel" }) },
+            Constants: { Endpoints: { UNFURL_EMBED_URLS: "/unfurl" } },
+            RestAPI: { post: async () => { throw new Error("offline"); } },
+            showToast: (message: string) => toasts.push(message), Toasts: { Type: {}, Position: {} },
+        },
+    }, {}, "({ unfurlEmbed })");
+    await unfurlEmbed("https://example.com", { channel_id: "channel", id: "message" });
+    assert.deepEqual(toasts, ["Failed to get embed"]);
+});

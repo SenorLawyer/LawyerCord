@@ -2365,6 +2365,51 @@ test("quote preview ignores superseded and unmounted image work", async () => {
     assert.equal(states[4], null);
 });
 
+test("screen recorder releases capture and discards work after disable", async () => {
+    let resolvePicker: (stream: object) => void = () => {};
+    let trackStops = 0;
+    let uploads = 0;
+    const track = { onended: null, stop: () => trackStops++ };
+    const stream = { getTracks: () => [track], getVideoTracks: () => [track] };
+    class Recorder {
+        state = "inactive";
+        mimeType = "video/webm";
+        ondataavailable?: (event: { data: Blob; }) => void;
+        onstop?: () => void;
+        start() { this.state = "recording"; }
+        stop() {
+            this.state = "inactive";
+            queueMicrotask(() => { this.ondataavailable?.({ data: new Blob(["video"]) }); this.onstop?.(); });
+        }
+    }
+    const module = loadSource("src/equicordplugins/screenRecorder.equibop/index.tsx", {
+        "@components/Icons": {}, "@utils/constants": { Devs: {} },
+        "@utils/Logger": { Logger: class { error() {} } },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+        "@webpack/common": { DraftType: { ChannelMessage: 0 }, UploadHandler: { promptToUpload: () => uploads++ } }
+    }, { navigator: { mediaDevices: { getDisplayMedia: () => new Promise(resolve => { resolvePicker = resolve; }) } }, MediaRecorder: Recorder, File },
+    "({ start: startRecording, finish: stopRecording, disable: exports.default.stop })");
+    const pending = module.start({});
+    module.disable();
+    resolvePicker(stream);
+    await pending;
+    assert.equal(trackStops, 1);
+    assert.equal(uploads, 0);
+    const active = module.start({});
+    resolvePicker(stream);
+    await active;
+    module.disable();
+    await Promise.resolve();
+    assert.ok(trackStops >= 2);
+    assert.equal(uploads, 0);
+    const normal = module.start({});
+    resolvePicker(stream);
+    await normal;
+    module.finish();
+    await Promise.resolve();
+    assert.equal(uploads, 1);
+});
+
 test("scheduled reactions target the message returned by the send request", async () => {
     const reactions: string[] = [];
     const send = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {

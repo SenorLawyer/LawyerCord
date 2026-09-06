@@ -46,6 +46,24 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("InvisibleChat displays decrypted URLs without requesting a preview", async () => {
+    let updated = false;
+    const module = loadSource("src/equicordplugins/invisibleChat.desktop/index.tsx", {
+        "@api/ChatButtons": {}, "@api/Settings": { definePluginSettings: () => ({}) },
+        "@api/MessageUpdater": { updateMessage: () => { updated = true; } },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/constants": { Devs: {} }, "@utils/dependencies": {},
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {}, ReporterTestable: {} },
+        "@webpack/common": {}, "./components/DecryptionModal": {}, "./components/EncryptionModal": {}
+    });
+    const message = { channel_id: "channel", id: "message", embeds: [] as { rawDescription: string; }[] };
+    const plaintext = "Private link: https://example.test/private-token";
+    await module.buildEmbed(message, plaintext);
+    assert.equal(updated, true);
+    assert.equal(message.embeds.length, 1);
+    assert.equal(message.embeds[0].rawDescription, plaintext);
+});
+
 test("InstantScreenshare never substitutes a different media source", async () => {
     const selected = { id: "window:selected", name: "Selected window" };
     let sources = [{ id: "screen:other", name: "Other screen" }, selected];

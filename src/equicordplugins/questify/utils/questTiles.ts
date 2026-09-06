@@ -199,13 +199,7 @@ function getValidQuestOrder(value: unknown): QuestOrderStatus[] {
         : defaultQuestOrder;
     const order = configuredOrder.filter((status): status is QuestOrderStatus => validStatuses.has(status as QuestOrderStatus));
 
-    for (const status of defaultQuestOrder) {
-        if (!order.includes(status)) {
-            order.push(status);
-        }
-    }
-
-    return order;
+    return Array.from(new Set([...order, ...defaultQuestOrder]));
 }
 
 export function hasInjectedDesktopVideoCompatibility(quest?: Quest | string | null): boolean {

@@ -46,6 +46,28 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("quest sort settings keep every status exactly once", () => {
+    const defaults = ["UNCLAIMED", "CLAIMED", "IGNORED", "EXPIRED"];
+    const mocks = {
+        "../settings/access": {},
+        "../settings/def": { defaultQuestOrder: defaults },
+        "../settings/rerender": {},
+        "../settings/ignoredQuests": {},
+        "./questState": {},
+        "./ui": { q: (value: string) => value },
+        "./shared": {}
+    };
+    const sanitizers = [
+        loadSource("src/equicordplugins/questify/components/reorderQuestsSetting.tsx", mocks, {}, "sanitizeQuestOrder"),
+        loadSource("src/equicordplugins/questify/utils/questTiles.ts", mocks, {}, "getValidQuestOrder")
+    ];
+    for (const sanitize of sanitizers) {
+        assert.deepEqual(Array.from(sanitize(["EXPIRED", "EXPIRED", "invalid", "CLAIMED"])), ["EXPIRED", "CLAIMED", "UNCLAIMED", "IGNORED"]);
+        assert.deepEqual(Array.from(sanitize(null)), defaults);
+        assert.deepEqual(Array.from(sanitize(defaults)), defaults);
+    }
+});
+
 test("quest names only remove a separate Quest suffix", () => {
     const { normalizeQuestName } = loadSource("src/equicordplugins/questify/utils/filtering.ts", {});
     for (const [name, expected] of [

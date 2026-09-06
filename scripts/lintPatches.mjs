@@ -28,7 +28,6 @@ function warn(at, rule, msg) {
 
 for (const rel of tracked) {
     const text = readFileSync(join(ROOT, rel), "utf8");
-    if (!text.includes("match:") && !text.includes("find:")) continue;
 
     const source = createSourceFile(rel, text, ScriptTarget.Latest, true);
     const properties = [];

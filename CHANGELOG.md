@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Remove an invalid, ineffective transform from the hidden-message indicator.
+
 - Report attachment read failures instead of opening a schedule with missing files.
 
 - Stop scheduled reaction retries when the initiating account changes.

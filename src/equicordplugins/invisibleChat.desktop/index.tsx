@@ -55,7 +55,7 @@ function Indicator() {
                     src="https://github.com/SammCheese/invisible-chat/raw/NewReplugged/src/assets/lock.png"
                     width={20}
                     height={20}
-                    style={{ transform: "translateY(4p)", paddingInline: 4 }}
+                    style={{ paddingInline: 4 }}
                 />
             )}
         </Tooltip>

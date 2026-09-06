@@ -7,9 +7,7 @@
 import "./style.css";
 
 import { definePluginSettings } from "@api/Settings";
-import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { Devs, EquicordDevs } from "@utils/constants";
-import { loadFFmpeg } from "@utils/ffmpeg";
 import definePlugin, { OptionType } from "@utils/types";
 import { Channel } from "@vencord/discord-types";
 import { React } from "@webpack/common";
@@ -17,7 +15,7 @@ import { React } from "@webpack/common";
 import { Packs, PickerContent, PickerHeader, PickerSidebar, Wrapper } from "./components";
 import { getStickerPack, getStickerPackMetas } from "./stickers";
 import { StickerPack, StickerPackMeta } from "./types";
-import { cl, FFmpegStateContext } from "./utils";
+import { cl } from "./utils";
 
 export const settings = definePluginSettings({
     promptToUpload: {
@@ -113,17 +111,10 @@ export default definePlugin({
         channel: Channel,
         closePopout: () => void;
     }) {
-        if (FFmpegStateContext === undefined) {
-            return <div>FFmpegStateContext is undefined</div>;
-        }
-
         const [query, setQuery] = React.useState<string | undefined>();
         const [stickerPackMetas, setStickerPackMetas] = React.useState<StickerPackMeta[]>([]);
         const [stickerPacks, setStickerPacks] = React.useState<StickerPack[]>([]);
         const [selectedStickerPackId, setSelectedStickerPackId] = React.useState<string | null>(null);
-
-        const ffmpegLoaded = React.useState(false);
-        const ffmpeg = React.useState<FFmpeg>(new FFmpeg());
 
         React.useEffect(() => {
             (async () => {
@@ -143,14 +134,6 @@ export default definePlugin({
             return () => { active = false; };
         }, []);
 
-        React.useEffect(() => {
-            if (ffmpegLoaded[0]) return;
-
-            loadFFmpeg(ffmpeg[0]).then(() => {
-                ffmpegLoaded[1](true);
-            });
-        }, []);
-
         return (
             <Wrapper>
                 <svg width="1" height="1" viewBox="0 0 1 1" fill="none" xmlns="http://www.w3.org/2000/svg" id={cl("inspectedIndicatorMask")}>
@@ -158,19 +141,14 @@ export default definePlugin({
                 </svg>
 
                 <PickerHeader onQueryChange={setQuery} />
-                <FFmpegStateContext.Provider value={{
-                    ffmpeg: ffmpeg[0],
-                    isLoaded: ffmpegLoaded[0]
-                }}>
-                    <PickerContent
-                        stickerPacks={stickerPacks}
-                        selectedStickerPackId={selectedStickerPackId}
-                        setSelectedStickerPackId={setSelectedStickerPackId}
-                        channelId={channel.id}
-                        closePopout={closePopout}
-                        query={query}
-                    />
-                </FFmpegStateContext.Provider>
+                <PickerContent
+                    stickerPacks={stickerPacks}
+                    selectedStickerPackId={selectedStickerPackId}
+                    setSelectedStickerPackId={setSelectedStickerPackId}
+                    channelId={channel.id}
+                    closePopout={closePopout}
+                    query={query}
+                />
                 <PickerSidebar
                     packMetas={
                         stickerPackMetas.map(meta => ({

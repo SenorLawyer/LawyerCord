@@ -2842,7 +2842,7 @@ test("static sticker conversion labels PNG output and releases its temporary URL
         set src(_value: string) { this.onload(); }
     }
     const module = loadSource("src/equicordplugins/moreStickers/upload.ts", {
-        "@ffmpeg/ffmpeg": { FFmpeg: class {} }, "@utils/discord": {},
+        "@ffmpeg/ffmpeg": { FFmpeg: class {} }, "@utils/discord": {}, "@utils/ffmpeg": {},
         "@vencord/discord-types/enums": {},
         "@webpack/common": {
             PendingReplyStore: { getPendingReply: () => null }, DraftStore: { getDraft: () => "" },
@@ -2868,6 +2868,36 @@ test("static sticker conversion labels PNG output and releases its temporary URL
     assert.deepEqual(files.map(file => file.name), ["cat.png", "cat.png", "sticker.png"]);
     assert.equal(files.every(file => file.type === "image/png"), true);
     assert.equal(revoked, 3);
+});
+
+test("animated sticker conversions own and terminate their workers", async () => {
+    for (const failure of ["fetch", "load", "write", "exec", "read", "string", "none"]) {
+        const workers: { terminations: number; }[] = [];
+        const failAt = (stage: string) => { if (failure === stage) throw new Error("Conversion failed"); };
+        class Worker {
+            terminations = 0;
+            constructor() { workers.push(this); }
+            async writeFile() { failAt("write"); }
+            async exec() { failAt("exec"); return 0; }
+            async readFile() { failAt("read"); return failure === "string" ? "bad data" : new Uint8Array([1, 2]); }
+            terminate() { this.terminations++; }
+        }
+        const convert = loadSource("src/equicordplugins/moreStickers/upload.ts", {
+            "@ffmpeg/ffmpeg": { FFmpeg: Worker }, "@utils/discord": {},
+            "@utils/ffmpeg": { loadFFmpeg: async () => { failAt("load"); } },
+            "@vencord/discord-types/enums": {}, "@webpack/common": {}, ".": {},
+            "./utils": { corsFetch: async () => { failAt("fetch"); return { ok: true, arrayBuffer: async () => new ArrayBuffer(2) }; } }
+        }, { URL, File }, "toGIF");
+        if (failure === "none") {
+            const files = await Promise.all([convert("https://example.com/a.png"), convert("https://example.com/b.png")]);
+            assert.equal(workers.length, 2);
+            assert.equal(files.every((file: File) => file.type === "image/gif" && file.size === 2), true);
+        } else {
+            await assert.rejects(convert("https://example.com/a.png"));
+            assert.equal(workers.length, failure === "fetch" ? 0 : 1);
+        }
+        assert.equal(workers.every(worker => worker.terminations === 1), true);
+    }
 });
 
 test("mic loopback stop restores only deafening applied by the plugin", async () => {

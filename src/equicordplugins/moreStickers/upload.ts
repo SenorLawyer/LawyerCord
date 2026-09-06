@@ -4,13 +4,14 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import type { FFmpeg } from "@ffmpeg/ffmpeg";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { insertTextIntoChatInputBox, MessageOptions } from "@utils/discord";
+import { loadFFmpeg } from "@utils/ffmpeg";
 import { CloudUploadPlatform } from "@vencord/discord-types/enums";
 import { ChannelStore, CloudUploader, Constants, DraftStore, FluxDispatcher, MessageActions, PendingReplyStore, RestAPI, showToast, SnowflakeUtils, Toasts, UploadHandler } from "@webpack/common";
 
 import { settings } from ".";
-import { FFmpegState, Sticker } from "./types";
+import { Sticker } from "./types";
 import { corsFetch } from "./utils";
 
 type SendStickerOptions = {
@@ -18,7 +19,6 @@ type SendStickerOptions = {
     sticker: Sticker;
     ctrlKey: boolean;
     shiftKey: boolean;
-    ffmpegState?: FFmpegState;
 };
 
 async function resizeImage(url: string) {
@@ -64,40 +64,44 @@ async function resizeImage(url: string) {
     return blob;
 }
 
-async function toGIF(url: string, ffmpeg: FFmpeg): Promise<File> {
+async function toGIF(url: string): Promise<File> {
     const filename = (new URL(url)).pathname.split("/").pop() ?? "image.png";
     const res = await corsFetch(url);
     if (!res.ok) throw new Error("Failed to fetch image for GIF conversion");
     const arr = new Uint8Array(await res.arrayBuffer());
-    await ffmpeg.writeFile(filename, arr);
+    const ffmpeg = new FFmpeg();
+    try {
+        await loadFFmpeg(ffmpeg);
+        await ffmpeg.writeFile(filename, arr);
 
-    const outputFilename = "output.gif";
-    await ffmpeg.exec(["-i", filename,
-        "-filter_complex", `split[s0][s1];
-        [s0]palettegen=
-          stats_mode=single:
-          transparency_color=000000[p];
-        [s1][p]paletteuse=
-          new=1:
-          alpha_threshold=10`,
-        outputFilename]);
+        const outputFilename = "output.gif";
+        await ffmpeg.exec(["-i", filename,
+            "-filter_complex", `split[s0][s1];
+            [s0]palettegen=
+              stats_mode=single:
+              transparency_color=000000[p];
+            [s1][p]paletteuse=
+              new=1:
+              alpha_threshold=10`,
+            outputFilename]);
 
-    const data = await ffmpeg.readFile(outputFilename);
-    await ffmpeg.deleteFile(filename);
-    await ffmpeg.deleteFile(outputFilename);
-    if (typeof data === "string") {
-        throw new Error("Could not read file");
+        const data = await ffmpeg.readFile(outputFilename);
+        if (typeof data === "string") {
+            throw new Error("Could not read file");
+        }
+
+        const uint8 = new Uint8Array(data.length);
+        uint8.set(data);
+
+        return new File([uint8], outputFilename, {
+            type: "image/gif",
+        });
+    } finally {
+        ffmpeg.terminate();
     }
-
-    const uint8 = new Uint8Array(data.length);
-    uint8.set(data);
-
-    return new File([uint8], outputFilename, {
-        type: "image/gif",
-    });
 }
 
-export async function sendSticker({ channelId, sticker, ctrlKey, shiftKey, ffmpegState }: SendStickerOptions) {
+export async function sendSticker({ channelId, sticker, ctrlKey, shiftKey }: SendStickerOptions) {
     const reply = PendingReplyStore.getPendingReply(channelId);
     let content = DraftStore.getDraft(channelId, 0);
     let options: Partial<MessageOptions> = {};
@@ -118,8 +122,7 @@ export async function sendSticker({ channelId, sticker, ctrlKey, shiftKey, ffmpe
     }
 
     if (sticker?.isAnimated) {
-        if (!ffmpegState?.ffmpeg || !ffmpegState.isLoaded) throw new Error("FFmpeg not ready");
-        file = await toGIF(sticker.image, ffmpegState.ffmpeg);
+        file = await toGIF(sticker.image);
     } else {
         const res = await corsFetch(sticker.image);
         if (!res.ok) throw new Error("Failed to fetch sticker image");

@@ -6,7 +6,7 @@
 
 import { PickerContent, PickerContentHeader, PickerContentRow, PickerContentRowGrid, PickerHeaderProps, SidebarProps, Sticker, StickerCategoryType, StickerPack } from "@equicordplugins/moreStickers/types";
 import { sendSticker } from "@equicordplugins/moreStickers/upload";
-import { clPicker, FFmpegStateContext } from "@equicordplugins/moreStickers/utils";
+import { clPicker } from "@equicordplugins/moreStickers/utils";
 import { debounce } from "@shared/debounce";
 import { Modal,openModal, React, TextInput } from "@webpack/common";
 import { JSX } from "react";
@@ -95,12 +95,6 @@ function PickerContentRowGrid({
     onSend = () => { },
     isHovered = false
 }: PickerContentRowGrid) {
-    if (FFmpegStateContext === undefined) {
-        return <div>FFmpegStateContext is undefined</div>;
-    }
-
-    const ffmpegState = React.useContext(FFmpegStateContext);
-
     return (
         <div
             role="gridcell"
@@ -111,7 +105,7 @@ function PickerContentRowGrid({
             onClick={e => {
                 if (!channelId) return;
 
-                sendSticker({ channelId, sticker, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, ffmpegState });
+                sendSticker({ channelId, sticker, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey });
                 addRecentSticker(sticker);
                 onSend(sticker, e.ctrlKey);
             }}

@@ -7,9 +7,11 @@
 import * as DataStore from "@api/DataStore";
 import { showNotification } from "@api/Notifications";
 import { logger, themeRequest } from "@equicordplugins/themeLibrary/components/ThemeTab";
+import { parseUrl } from "@utils/misc";
 import { OAuth2AuthorizeModal, openModal,Toasts, UserStore } from "@webpack/common";
 
 const TOKEN_KEY = "ThemeLibrary_uniqueToken";
+const AUTH_URL = "https://themes.equicord.org/api/user/auth";
 
 export async function getThemeLibraryToken(): Promise<string | null> {
     const token = await DataStore.get<unknown>(TOKEN_KEY);
@@ -25,15 +27,18 @@ export async function authorizeUser(triggerModal: boolean = true) {
             {...props}
             scopes={["identify", "connections"]}
             responseType="code"
-            redirectUri="https://themes.equicord.org/api/user/auth"
+            redirectUri={AUTH_URL}
             permissions={0n}
             clientId="1464006702125940736"
             cancelCompletesFlow={false}
-            callback={async ({ location }: any) => {
-                if (!location) return logger.error("No redirect location returned");
+            callback={async ({ location }: { location?: unknown; }) => {
+                if (typeof location !== "string" || !location) return logger.error("No redirect location returned");
 
                 try {
-                    const response = await fetch(location, {
+                    const url = parseUrl(location);
+                    if (!url || `${url.origin}${url.pathname}` !== AUTH_URL || url.username || url.password) throw new Error("Invalid authorization redirect.");
+                    const response = await fetch(url.href, {
+                        redirect: "error",
                         headers: { Accept: "application/json" }
                     });
 

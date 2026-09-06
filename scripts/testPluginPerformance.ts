@@ -7459,6 +7459,7 @@ test("theme like requests lock before authorization and unlock after denied auth
 test("theme authorization rejects every unsuccessful HTTP response", async () => {
     let status = 200;
     const api = loadSource("src/equicordplugins/themeLibrary/utils/auth.tsx", {
+            "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } },
         "@api/DataStore": { get: async () => "fixture-token" },
         "@api/Notifications": {}, "@webpack/common": {},
         "@equicordplugins/themeLibrary/components/ThemeTab": { logger: {}, themeRequest: async (endpoint: string) => {
@@ -7475,6 +7476,7 @@ test("theme authorization rejects every unsuccessful HTTP response", async () =>
 test("theme token reads observe replacements and cannot repopulate a stale cache", async () => {
     const reads: ((token: string | undefined) => void)[] = [];
     const api = loadSource("src/equicordplugins/themeLibrary/utils/auth.tsx", {
+            "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } },
         "@api/DataStore": { get: () => new Promise<string | undefined>(resolve => reads.push(resolve)) },
         "@api/Notifications": {}, "@webpack/common": {},
         "@equicordplugins/themeLibrary/components/ThemeTab": { logger: {} }
@@ -7500,6 +7502,7 @@ test("theme revocation cannot clear a token saved while the request was pending"
         let finish: (value: Response) => void = () => {};
         let notices = 0;
         const api = loadSource("src/equicordplugins/themeLibrary/utils/auth.tsx", {
+            "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } },
             "@api/DataStore": { get: async () => stored,
                 update: async (_key: string, mutate: (token: string | undefined) => string | undefined) => { stored = mutate(stored); } },
             "@api/Notifications": { showNotification: () => { notices++; } },
@@ -7525,6 +7528,7 @@ test("theme authorization checks the provider once before offering a dialog", as
         let requests = 0;
         let dialogs = 0;
         const api = loadSource("src/equicordplugins/themeLibrary/utils/auth.tsx", {
+            "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } },
             "@api/DataStore": { get: async () => "fixture-token" }, "@api/Notifications": {},
             "@webpack/common": { openModal: () => { dialogs++; } },
             "@equicordplugins/themeLibrary/components/ThemeTab": { logger: {}, themeRequest: async () => {
@@ -7540,6 +7544,7 @@ test("theme authorization checks the provider once before offering a dialog", as
 test("theme authorization only saves string tokens from successful responses", async () => {
     for (const value of [undefined, null, {}, [], 7, "", "valid-token"]) {
         const api = loadSource("src/equicordplugins/themeLibrary/utils/auth.tsx", {
+            "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } },
             "@api/DataStore": { get: async () => value }, "@api/Notifications": {}, "@webpack/common": {},
             "@equicordplugins/themeLibrary/components/ThemeTab": {}
         });
@@ -7550,6 +7555,7 @@ test("theme authorization only saves string tokens from successful responses", a
         const notices: string[] = [];
         let callback: (result: { location: string; }) => Promise<void> = async () => {};
         const api = loadSource("src/equicordplugins/themeLibrary/utils/auth.tsx", {
+            "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } },
             "@api/DataStore": { get: async () => undefined, set: async (_key: string, value: unknown) => { saved.push(value); } },
             "@api/Notifications": { showNotification: (notice: { body: string; }) => notices.push(notice.body) },
             "@webpack/common": { openModal: (render: (props: object) => unknown) => render({}) },
@@ -7562,5 +7568,30 @@ test("theme authorization only saves string tokens from successful responses", a
         assert.deepEqual(saved, valid ? ["valid-token"] : []);
         assert.equal(notices.length, 1);
         assert.equal(notices[0].startsWith("Successfully"), valid);
+    }
+});
+
+test("theme OAuth callbacks only fetch the declared authorization endpoint", async () => {
+    const locations = ["https://themes.equicord.org/api/user/auth?code=fixture", "http://themes.equicord.org/api/user/auth", "https://other.example/api/user/auth",
+        "https://themes.equicord.org/api/other", "https://user:pass@themes.equicord.org/api/user/auth", "not a URL"];
+    for (const location of locations) {
+        let callback: (result: { location: string; }) => Promise<void> = async () => {};
+        let requests = 0;
+        let writes = 0;
+        const api = loadSource("src/equicordplugins/themeLibrary/utils/auth.tsx", {
+            "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } },
+            "@api/DataStore": { get: async () => undefined, set: async () => { writes++; } },
+            "@api/Notifications": { showNotification() {} },
+            "@webpack/common": { openModal: (render: (props: object) => unknown) => render({}) },
+            "@equicordplugins/themeLibrary/components/ThemeTab": { logger: { error() {} } }
+        }, { React: { createElement: (_type: unknown, props: { callback: typeof callback; }) => { callback = props.callback; return null; } },
+            fetch: async (url: string, options: RequestInit) => {
+                requests++; assert.equal(url, locations[0]); assert.equal(options.redirect, "error");
+                return new Response(JSON.stringify({ token: "fixture-token" }));
+            } });
+        await api.authorizeUser();
+        await callback({ location });
+        assert.equal(requests, location === locations[0] ? 1 : 0);
+        assert.equal(writes, requests);
     }
 });

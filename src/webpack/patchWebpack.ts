@@ -545,7 +545,7 @@ function patchFactory(moduleId: PropertyKey, originalFactory: AnyModuleFactory):
         });
 
         const previousCode = code;
-        const previousFactory = originalFactory;
+        const previousFactory = patchedFactory;
         let markedAsPatched = false;
 
         // We change all patch.replacement to array in PluginManager
@@ -559,7 +559,7 @@ function patchFactory(moduleId: PropertyKey, originalFactory: AnyModuleFactory):
             }
 
             const lastCode = code;
-            const lastFactory = originalFactory;
+            const lastFactory = patchedFactory;
 
             try {
                 const [newCode, totalTime] = executePatch(replacement.match, replacement.replace as string);

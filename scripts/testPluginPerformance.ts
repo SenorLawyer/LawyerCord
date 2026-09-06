@@ -21,6 +21,23 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("webpack replacement failures preserve earlier successful patches", () => {
+    for (const group of [false, true]) {
+        const { patchFactory, patches } = loadSource("src/webpack/patchWebpack.ts", {
+            "@api/Settings": {}, "@debug/reporterData": {},
+            "@debug/Tracer": { traceFunctionWithResults: (_name: string, fn: (match: RegExp, replace: string) => string) => (match: RegExp, replace: string) => [fn(match, replace), 0] },
+            "@utils/lazy": { makeLazy: () => () => 1 },
+            "@utils/Logger": { Logger: class { warn() {} error() {} } }, "@utils/misc": {}, "./webpack": {},
+        }, { IS_DEV: false, IS_REPORTER: false, IS_COMPANION_TEST: false }, "({ patchFactory, patches: exports.patches })");
+        patches.push({ plugin: "First", find: "return", replacement: [{ match: /base/, replace: "first" }] });
+        patches.push({ plugin: "Second", find: "return", group, replacement: group
+            ? [{ match: /first/, replace: "second" }, { match: /missing/, replace: "unused" }]
+            : [{ match: /first/, replace: '"(' }] });
+        const result = patchFactory("fixture", function () { return "base"; });
+        assert.equal(result(), "first", `earlier patch survives ${group ? "group rollback" : "invalid replacement"}`);
+    }
+});
+
 test("support messages cannot offer executable snippets", () => {
     let trusted = false;
     const React = { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props, children }) };

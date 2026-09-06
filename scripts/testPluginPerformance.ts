@@ -23,7 +23,7 @@ import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
 test("Streaks ignores responses for changed accounts or tokens", async () => {
     for (const operation of ["fetch", "update", "refresh"]) {
-        for (const change of ["account", "logout", "token", "none"]) {
+        for (const change of ["account", "logout", "token", "clear", "none"]) {
             let userId = "first";
             let token: string | null = "token";
             let writes = 0;
@@ -41,11 +41,13 @@ test("Streaks ignores responses for changed accounts or tokens", async () => {
                 if (change === "account") userId = "second";
                 if (change === "logout") token = null;
                 if (change === "token") token = "replacement";
+                if (change === "clear") api.useStreaksStore.getState().clear();
                 const streak = { user_a_id: "first", user_b_id: "target", count: 2 };
                 return operation === "fetch" ? [streak] : streak;
             } }) });
             await api.useStreaksStore.getState()[operation]("target");
-            assert.equal(writes, change === "none" ? 1 : 0, `${operation}: ${change}`);
+            assert.equal(writes, change === "none" || change === "clear" ? 1 : 0, `${operation}: ${change}`);
+            if (change === "clear") assert.deepEqual(Object.keys(api.useStreaksStore.getState().streaks), []);
         }
     }
 });

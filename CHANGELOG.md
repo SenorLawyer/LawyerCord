@@ -2,7 +2,12 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
-## 2.1.2.0 - 2026-09-05
+## 3.0.0.0 - Unreleased
+
+### Compatibility
+
+- Older scheduled messages without an account remain saved but paused. Recreate them under the intended account before sending.
+- Older versions do not enforce saved account ownership or attempted-send markers. Downgrading with saved scheduled messages can send them from the wrong account or repeat a previous attempt.
 
 ### Fixed
 

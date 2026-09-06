@@ -7869,6 +7869,42 @@ test("plugin clones use the exact metadata directory including Git suffixes", as
     }
 });
 
+test("update link completion cannot become an install action or read a closed window", async () => {
+    for (const failure of [false, true]) {
+        let title = "openLink:https://github.com/owner/repo/commit/abc";
+        let commands = 0;
+        let reads = 0;
+        class ReviewWindow extends EventEmitter {
+            static getAllWindows() { return []; }
+            webContents = { getTitle: () => { reads++; return title; } };
+            async loadURL() {}
+            close() { this.emit("closed"); }
+            show() { queueMicrotask(() => this.emit("page-title-updated")); }
+        }
+        const mocks: Record<string, object> = {
+            child_process: { exec: (_command: string, _options: object, callback: (error: null, stdout: string) => void) => { commands++; callback(null, ""); } },
+            electron: { BrowserWindow: ReviewWindow, shell: { openExternal: async () => {
+                title = "install";
+                if (failure) throw new Error("Private browser path");
+            } } }, fs: {}, "fs/promises": {}, path, "yaml-js": {}
+        };
+        for (const name of ["pluginValidate", "updateValidate"])
+            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+        let window: ReviewWindow | undefined;
+        mocks.electron = { ...mocks.electron, BrowserWindow: class extends ReviewWindow { constructor() { super(); window = this; } } };
+        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist"), Buffer },
+            "({ ...exports, setup() { getPluginDirectory = () => 'fixture'; getPluginMeta = async () => ({ name: 'Fixture', description: '', remote: '' }); } })");
+        api.setup();
+        const pending = api.updatePlugin(null, "fixture");
+        const rejected = assert.rejects(pending, failure ? /Could not open the update link/ : /Review window closed/);
+        await setImmediate();
+        if (!failure) window?.close();
+        await rejected;
+        assert.equal(commands, 1);
+        assert.equal(reads, 1);
+    }
+});
+
 test("installer setup failures reject the caller without exposing native errors", async () => {
     for (const stage of ["dialog", "clone", "metadata", "browser"]) {
         const fail = async () => { throw new Error("Private filesystem path"); };

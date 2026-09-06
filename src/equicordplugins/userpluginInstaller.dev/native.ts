@@ -383,10 +383,20 @@ export async function updatePlugin(_, directory: string) {
         });
         win.on("page-title-updated", async e => {
             if (decided) return;
-            if (win.webContents.getTitle().startsWith("openLink:")) {
-                await shell.openExternal(win.webContents.getTitle().replace("openLink:", ""));
+            const title = win.webContents.getTitle();
+            if (title.startsWith("openLink:")) {
+                try {
+                    await shell.openExternal(title.slice("openLink:".length));
+                } catch {
+                    if (!decided) {
+                        decided = true;
+                        reject(new Error("Could not open the update link."));
+                        win.close();
+                    }
+                }
+                return;
             }
-            switch (win.webContents.getTitle() as "abortInstall" | "install") {
+            switch (title) {
                 case "abortInstall": {
                     decided = true;
                     win.close();

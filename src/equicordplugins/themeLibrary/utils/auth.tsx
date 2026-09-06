@@ -11,30 +11,8 @@ import { OAuth2AuthorizeModal, openModal,Toasts, UserStore } from "@webpack/comm
 
 const TOKEN_KEY = "ThemeLibrary_uniqueToken";
 
-let tokenCache: string | null | undefined;
-let tokenLoadPromise: Promise<string | null> | null = null;
-
 export async function getThemeLibraryToken(): Promise<string | null> {
-    if (tokenCache !== undefined) return tokenCache;
-
-    tokenLoadPromise ??= DataStore.get<string>(TOKEN_KEY)
-        .then(token => token ?? null)
-        .finally(() => {
-            tokenLoadPromise = null;
-        });
-
-    tokenCache = await tokenLoadPromise;
-    return tokenCache;
-}
-
-async function setThemeLibraryToken(token: string) {
-    await DataStore.set(TOKEN_KEY, token);
-    tokenCache = token;
-}
-
-async function deleteThemeLibraryToken() {
-    await DataStore.del(TOKEN_KEY);
-    tokenCache = null;
+    return await DataStore.get<string>(TOKEN_KEY) ?? null;
 }
 
 export async function authorizeUser(triggerModal: boolean = true) {
@@ -61,7 +39,7 @@ export async function authorizeUser(triggerModal: boolean = true) {
                     const { token } = await response.json();
 
                     if (token) {
-                        await setThemeLibraryToken(token);
+                        await DataStore.set(TOKEN_KEY, token);
                         showNotification({
                             title: "ThemeLibrary",
                             body: "Successfully authorized with ThemeLibrary!"
@@ -121,7 +99,7 @@ export async function deauthorizeUser() {
     });
 
     if (res.ok) {
-        await deleteThemeLibraryToken();
+        await DataStore.del(TOKEN_KEY);
         showNotification({
             title: "ThemeLibrary",
             body: "Successfully deauthorized from ThemeLibrary!"
@@ -129,7 +107,7 @@ export async function deauthorizeUser() {
     } else {
         // try to delete anyway
         try {
-            await deleteThemeLibraryToken();
+            await DataStore.del(TOKEN_KEY);
         } catch (e) {
             logger.error("Failed to delete token", e);
             showNotification({

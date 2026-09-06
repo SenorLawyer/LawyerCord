@@ -580,7 +580,6 @@ function ChangelogContent() {
                         <div className={Margins.bottom16}>
                             <NewPluginsSection
                                 newPlugins={newPlugins}
-                                onPluginToggle={() => { }}
                             />
                         </div>
                     )}

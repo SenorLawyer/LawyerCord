@@ -2019,6 +2019,29 @@ test("toast shutdown settles pending notifications and releases its root", async
     }
 });
 
+test("toast arrivals enforce a lowered limit and settle every evicted notification", async () => {
+    const store = { maxNotifications: 5 };
+    let visible: string[] = [];
+    const notifications = loadSource("src/equicordplugins/toastNotifications/components/Notifications.tsx", {
+        "@equicordplugins/toastNotifications/index": { settings: { store } },
+        "@webpack/common": { createRoot: () => ({ render(tree: { children: { title: string; }[][]; }) { visible = tree.children[0].map(item => item.title); }, unmount() {} }) },
+        "./NotificationComponent": { __esModule: true, default: "notification" }
+    }, {
+        React: { Fragment: "fragment", createElement: (tag: string, props: object, ...children: unknown[]) => tag === "notification" ? props : { children } },
+        document: { createElement: () => ({ remove() {} }), body: { append() {} } }
+    });
+    const settled: number[] = [];
+    const pending = [1, 2, 3, 4, 5].map(id => notifications.showNotification({ title: String(id), body: "", permanent: true }).then(() => settled.push(id)));
+    store.maxNotifications = 2;
+    pending.push(notifications.showNotification({ title: "6", body: "", permanent: true }).then(() => settled.push(6)));
+    await setImmediate();
+    assert.deepEqual(Array.from(visible), ["5", "6"]);
+    assert.deepEqual(settled, [1, 2, 3, 4]);
+    notifications.teardownNotifications();
+    await Promise.all(pending);
+    assert.equal(settled.length, 6);
+});
+
 test("URL highlighting clears compiled matches when the last pattern is removed", () => {
     const store = { patterns: [{ pattern: "example.com", color: "#123456" }], boldUrls: false, highlightEmbeds: true };
     const { plugin, updatePatterns } = loadSource("src/equicordplugins/urlHighlighter/index.tsx", {

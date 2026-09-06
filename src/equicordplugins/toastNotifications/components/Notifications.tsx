@@ -95,11 +95,9 @@ export async function showNotification(notification: NotificationData) {
             resolve
         });
 
-        // If the queue exceeds the maximum number of notifications, remove the oldest one.
-        if (NotificationQueue.length > (PluginSettings.store.maxNotifications ?? 3)) {
-            const removed = NotificationQueue.shift();
-            removed?.resolve();
-        }
+        // If the queue exceeds the maximum number of notifications, remove the oldest ones.
+        const excess = Math.max(0, NotificationQueue.length - (PluginSettings.store.maxNotifications ?? 3));
+        for (const removed of NotificationQueue.splice(0, excess)) removed.resolve();
 
         renderQueue(root);
     });

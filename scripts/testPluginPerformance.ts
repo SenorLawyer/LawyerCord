@@ -21,6 +21,28 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("stopped emoji whitelist startup cannot restore stale entries", async () => {
+    let finish: (value: object[]) => void = () => {};
+    const { default: plugin } = loadSource("src/equicordplugins/whitelistedEmojis/index.tsx", {
+        "@api/index": { DataStore: { get: () => new Promise(resolve => { finish = resolve; }) } },
+        "@api/Settings": { definePluginSettings: () => ({ store: { defaultEmojis: true, serverEmojis: true } }) },
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+        "@utils/web": {}, "@webpack/common": {},
+    });
+    const emoji = { type: "emoji", id: "1", name: "test" };
+    const first = plugin.start();
+    plugin.stop();
+    finish([emoji]);
+    await first;
+    assert.equal(plugin.filterEmojis([emoji]).length, 0);
+    const second = plugin.start();
+    finish([emoji]);
+    await second;
+    assert.equal(plugin.filterEmojis([emoji]).length, 1);
+    assert.deepEqual(Object.keys(plugin.contextMenus).sort(), ["expression-picker", "guild-context"]);
+});
+
 test("webpack tar archives contain only the supplied byte view", () => {
     const { default: TarFile } = loadSource("src/equicordplugins/webpackTarball/tar.ts", {});
     const tar = new TarFile();

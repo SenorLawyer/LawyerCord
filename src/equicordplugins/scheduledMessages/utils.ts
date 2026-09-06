@@ -128,8 +128,15 @@ export function getChannelDisplayInfo(channelId: string): { name: string; avatar
 function getImageDimensions(dataUrl: string): Promise<{ width: number; height: number; }> {
     return new Promise(resolve => {
         const img = new Image();
-        img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
-        img.onerror = () => resolve({ width: 400, height: 300 });
+        const timeout = setTimeout(() => finish(), 5000);
+        function finish(dimensions = { width: 400, height: 300 }) {
+            clearTimeout(timeout);
+            img.onload = img.onerror = null;
+            img.removeAttribute("src");
+            resolve(dimensions);
+        }
+        img.onload = () => finish({ width: img.naturalWidth, height: img.naturalHeight });
+        img.onerror = () => finish();
         img.src = dataUrl;
     });
 }

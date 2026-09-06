@@ -7176,3 +7176,32 @@ test("delayed scheduled reaction previews use committed entries and cannot reviv
         if (mode === "edited") assert.equal(api.getScheduledMessages()[0].reactions[0].count, 2);
     }
 });
+
+test("scheduled image dimensions fall back on timeout and release their source", async () => {
+    for (const mode of ["loaded", "error", "timeout"] as const) {
+        let timeout: () => void = () => assert.fail("Missing timeout");
+        let cleared = 0;
+        const img = { src: "", naturalWidth: 64, naturalHeight: 32,
+            onload: null as (() => void) | null, onerror: null as (() => void) | null,
+            removeAttribute(name: string) { assert.equal(name, "src"); this.src = ""; }
+        };
+        const dimensions = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@utils/misc": {}, "@api/DataStore": {}, "@utils/Logger": { Logger: class {} },
+            "@vencord/discord-types/enums": {}, "@webpack/common": {}, ".": { settings: { store: {} } }
+        }, { Image: function () { return img; },
+            setTimeout(callback: () => void, delay: number) { assert.equal(delay, 5000); timeout = callback; return 3; },
+            clearTimeout(id: number) { assert.equal(id, 3); cleared++; }
+        }, "getImageDimensions");
+        const pending = dimensions("data:image/png;base64,fixture");
+        if (mode === "loaded") img.onload?.();
+        else if (mode === "error") img.onerror?.();
+        else timeout();
+        const result = await pending;
+        assert.equal(result.width, mode === "loaded" ? 64 : 400);
+        assert.equal(result.height, mode === "loaded" ? 32 : 300);
+        assert.equal(cleared, 1);
+        assert.equal(img.src, "");
+        assert.equal(img.onload, null);
+        assert.equal(img.onerror, null);
+    }
+});

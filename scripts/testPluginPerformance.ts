@@ -46,6 +46,44 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("static sticker conversion labels PNG output and releases its temporary URL", async () => {
+    const files: File[] = [];
+    let revoked = 0;
+    class TestImage {
+        width = 200;
+        height = 100;
+        onload = () => {};
+        set src(_value: string) { this.onload(); }
+    }
+    const module = loadSource("src/equicordplugins/moreStickers/upload.ts", {
+        "@ffmpeg/ffmpeg": { FFmpeg: class {} }, "@utils/discord": {},
+        "@vencord/discord-types/enums": {},
+        "@webpack/common": {
+            PendingReplyStore: { getPendingReply: () => null }, DraftStore: { getDraft: () => "" },
+            ChannelStore: { getChannel: () => ({ id: "channel" }) },
+            UploadHandler: { promptToUpload: (uploads: File[]) => files.push(...uploads) }
+        },
+        ".": { settings: { store: { promptToUpload: true } } },
+        "./utils": { corsFetch: async () => ({ ok: true, blob: async () => new Blob() }) }
+    }, {
+        File, Blob, Image: TestImage,
+        URL: class extends URL {
+            static createObjectURL() { return "blob:fixture"; }
+            static revokeObjectURL() { revoked++; }
+        },
+        document: { createElement: () => ({
+            getContext: () => ({ drawImage() {} }),
+            toBlob: (callback: (blob: Blob) => void, type: string) => callback(new Blob(["PNG fixture"], { type }))
+        }) }
+    });
+    for (const filename of ["cat.jpg", "cat", ""]) {
+        await module.sendSticker({ channelId: "channel", sticker: { image: "https://example.com/", filename }, ctrlKey: false, shiftKey: false });
+    }
+    assert.deepEqual(files.map(file => file.name), ["cat.png", "cat.png", "sticker.png"]);
+    assert.equal(files.every(file => file.type === "image/png"), true);
+    assert.equal(revoked, 3);
+});
+
 test("mic loopback stop restores only deafening applied by the plugin", async () => {
     for (const initiallyDeaf of [false, true]) {
         let deaf = initiallyDeaf;

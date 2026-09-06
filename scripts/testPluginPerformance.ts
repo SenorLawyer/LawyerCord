@@ -46,6 +46,24 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("logger export iteration preserves stored attachment URLs without populating display caches", async () => {
+    const record = { message_id: "1", message: { attachments: [{ url: "https://example.com/image.png", proxy_url: "https://example.com/proxy.png" }] } };
+    const module = loadSource("src/equicordplugins/messageLoggerEnhanced/db.ts", {
+        "@webpack/common": {},
+        idb: { openDB: async () => ({ transaction: () => ({ store: { openCursor: async () => ({ value: record, continue: async () => null }) } }) }) },
+        "./utils": {}, "./utils/cleanUp": { stripTransientRenderState: () => assert.fail("Export must not prepare display records") },
+        "./utils/constants": {},
+        "./utils/saveImage": { getAttachmentBlobUrl: () => assert.fail("Export must not read attachment files") }
+    });
+    await setImmediate();
+    const batches: (typeof record)[][] = [];
+    for await (const batch of module.iterateAllMessagesIDB()) batches.push(batch);
+    assert.equal(batches.length, 1);
+    assert.equal(batches[0][0], record);
+    assert.equal(record.message.attachments[0].url, "https://example.com/image.png");
+    assert.equal(module.cachedMessages.size, 0);
+});
+
 test("native logger imports preserve Unicode across bounded chunks", async () => {
     const text = "a".repeat(65535) + "🛒é終";
     const bytes = Buffer.from(text);

@@ -46,6 +46,42 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("background audio position effects settle after clamping", () => {
+    type Position = { left: number; top: number; } | null;
+    let position: Position = null;
+    let refIndex = 0;
+    const effects: (() => void)[] = [];
+    const viewport = { innerWidth: 800, innerHeight: 600 };
+    const widget = { getBoundingClientRect: () => ({ width: 200, height: 100 }) };
+    const render = loadSource("src/equicordplugins/persistentAudioPlayback/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: { BOOLEAN: 1 } },
+        "@webpack/common": { React: {
+            useReducer: () => [0, () => {}],
+            useState: () => [position, (update: (current: Position) => Position) => { position = update(position); }],
+            useRef: () => ({ current: refIndex++ === 1 ? widget : null }),
+            useCallback: (callback: () => void) => callback,
+            useEffect: (effect: () => void) => effects.push(effect)
+        } }
+    }, { window: viewport }, "DetachedAudioWidget");
+    render();
+    const clamp = effects[effects.length - 1];
+    clamp();
+    assert.equal(position, null);
+    const dragged = { left: 100, top: 100 };
+    position = dragged;
+    clamp();
+    assert.equal(position, dragged);
+    viewport.innerWidth = 250;
+    viewport.innerHeight = 180;
+    clamp();
+    assert.equal(JSON.stringify(position), JSON.stringify({ left: 42, top: 72 }));
+    const clamped = position;
+    clamp();
+    assert.equal(position, clamped);
+});
+
 test("new plugin notifications return failures to the flux dispatcher", async () => {
     const { default: plugin } = loadSource("src/equicordplugins/newPluginsManager/index.tsx", {
         "@utils/constants": { Devs: {} },

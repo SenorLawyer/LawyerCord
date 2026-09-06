@@ -21,6 +21,21 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("bulk webpack searches resolve multiple filters from the same module", () => {
+    const { findBulk, _initWebpack } = loadSource("src/webpack/webpack.ts", {
+        "@debug/Tracer": { traceFunction: (_name: string, fn: unknown) => fn }, "@utils/lazy": {},
+        "@utils/lazyReact": {}, "@utils/Logger": { Logger: class { warn() {} } },
+        "@utils/patches": {}, "@utils/text": {},
+    }, { IS_DEV: false, IS_ANTI_CRASH_TEST: false });
+    for (const moduleExports of [{ a: 1, b: 2 }, { first: { a: 1 }, second: { b: 2 } }, { a: 1, second: { b: 2 } }]) {
+        _initWebpack({ c: { fixture: { loaded: true, exports: moduleExports } } });
+        const result = findBulk((value: { a?: number; }) => value.a === 1, (value: { b?: number; }) => value.b === 2);
+        assert.equal(result.length, 2);
+        assert.equal(result[0]?.a, 1);
+        assert.equal(result[1]?.b, 2);
+    }
+});
+
 test("webpack replacement failures preserve successful factories and diagnostics", () => {
     for (const group of [false, true]) {
         for (const failure of ["syntax", "no effect"]) {

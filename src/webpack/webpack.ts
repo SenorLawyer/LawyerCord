@@ -323,7 +323,7 @@ export const findBulk = traceFunction("findBulk", function findBulk(...filterFns
                 results[j] = mod.exports;
                 filters[j] = undefined;
                 if (++found === length) break outer;
-                break;
+                continue;
             }
 
             if (typeof mod.exports !== "object")
@@ -335,7 +335,7 @@ export const findBulk = traceFunction("findBulk", function findBulk(...filterFns
                     results[j] = nested;
                     filters[j] = undefined;
                     if (++found === length) break outer;
-                    continue outer;
+                    break;
                 }
             }
         }

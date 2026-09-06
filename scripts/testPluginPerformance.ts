@@ -21,6 +21,27 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ReviewDB token preflights cannot authorize or send under a changed account", async () => {
+    for (const operation of ["getReviewVotes", "addReview", "voteReview", "deleteReviewVote"]) {
+        for (const token of [undefined, "first-token"]) {
+            let userId = "first";
+            let requests = 0;
+            let prompts = 0;
+            const api = loadSource("src/plugins/reviewDB/reviewDbApi.ts", {
+                "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) }, Toasts: { Type: {} } },
+                "./auth": {
+                    getToken: async () => { userId = "second"; return token; },
+                    authorize: () => { prompts++; },
+                },
+                "./entities": {}, "./settings": {}, "./utils": { showToast: () => { prompts++; } },
+            }, { fetch: async () => { requests++; return { ok: true, json: async () => ({}) }; } });
+            await api[operation](operation === "addReview" ? { userid: "target" } : "target", true);
+            assert.equal(requests, 0, operation);
+            assert.equal(prompts, 0, operation);
+        }
+    }
+});
+
 test("ReviewDB discards requests and responses after account changes", async () => {
     for (const switchAt of ["token", "response", "error", "never"]) {
         let userId = "first";

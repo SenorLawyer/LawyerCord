@@ -138,16 +138,18 @@ export async function getReviews(id: string, { limit, offset = 0, fetchVotes = f
 }
 
 export async function getReviewVotes(id: string): Promise<ReviewVote[]> {
+    const userId = UserStore.getCurrentUser()?.id;
     const token = await getToken();
-    if (!token) return [];
+    if (!token || UserStore.getCurrentUser()?.id !== userId) return [];
 
     const res = await rdbRequest<ReviewVotesData>(`/users/${id}/reviews/votes`);
     return res?.votes ?? [];
 }
 
 export async function addReview(review): Promise<UserReviewsData | null> {
-
+    const userId = UserStore.getCurrentUser()?.id;
     const token = await getToken();
+    if (UserStore.getCurrentUser()?.id !== userId) return null;
     if (!token) {
         showToast("Please authorize to add a review.");
         authorize();
@@ -184,7 +186,9 @@ export async function reportReview(id: number) {
 }
 
 export async function voteReview(id: number, isUpvote: boolean) {
+    const userId = UserStore.getCurrentUser()?.id;
     const token = await getToken();
+    if (UserStore.getCurrentUser()?.id !== userId) return false;
     if (!token) {
         showToast("Please authorize to vote on reviews.");
         authorize();
@@ -202,7 +206,9 @@ export async function voteReview(id: number, isUpvote: boolean) {
 }
 
 export async function deleteReviewVote(id: number) {
+    const userId = UserStore.getCurrentUser()?.id;
     const token = await getToken();
+    if (UserStore.getCurrentUser()?.id !== userId) return false;
     if (!token) {
         showToast("Please authorize to vote on reviews.");
         authorize();

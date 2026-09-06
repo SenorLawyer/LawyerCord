@@ -21,6 +21,27 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("completed updates do not wait for the restart prompt to close", async () => {
+    let opened = 0;
+    const { Updatable } = loadSource("src/components/settings/tabs/updater/Components.tsx", {
+        "@components/Button": {}, "@components/Card": {}, "@components/ErrorCard": {}, "@components/Flex": {},
+        "@components/Link": {}, "@components/Paragraph": {}, "@components/Span": {}, "@utils/margins": { Margins: {} },
+        "@utils/native": { relaunch() {} }, "@utils/updater": { changes: [{}], update: async () => true },
+        "@webpack/common": {
+            React: { createElement: (_type: unknown, props: object, ...children: unknown[]) => ({ props, children }) },
+            useState: (value: unknown) => [value, () => {}], openModal: () => { opened++; },
+        },
+        "./runWithDispatch": { runWithDispatch: (_dispatch: unknown, action: () => Promise<void>) => action },
+    });
+    const tree = Updatable({ repo: "", repoPending: false });
+    let finished = false;
+    const action = tree.children[0].children[1].props.onClick().then(() => { finished = true; });
+    await setImmediate();
+    assert.equal(opened, 1);
+    assert.equal(finished, true, "opening the prompt must not keep the update action pending");
+    await action;
+});
+
 test("failed local theme deletion preserves settings", async () => {
     const source = readFileSync("src/components/settings/tabs/themes/index.tsx", "utf8");
     const start = source.indexOf("onDelete={async () => {");

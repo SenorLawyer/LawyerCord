@@ -2790,3 +2790,33 @@ test("Sekai sticker images survive rerenders and exports keep their original cha
     tree = render();
     assert.equal(tree.props.actions[1].disabled, true, "a new character cannot export the previous image");
 });
+
+
+test("chat badge layout ignores foreign drops and preserves previous state", () => {
+    let state: Array<{ key: string; position: number; shown: boolean; }> = [];
+    let updates = 0;
+    const React = { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props: { ...props, children } }) };
+    const { BadgeSettings } = loadSource("src/equicordplugins/showBadgesInChat/settings.tsx", {
+        "@api/Settings": { definePluginSettings: (def: Record<string, { default?: unknown; }>) => ({ store: Object.fromEntries(Object.entries(def).map(([key, value]) => [key, value.default])) }) },
+        "@components/BaseText": {}, "@utils/types": { OptionType: {} },
+        "@webpack/common": {
+            useEffect() {}, UserStore: { getCurrentUser: () => null },
+            useState: (initial: typeof state) => { state = initial; return [state, (next: typeof state) => { state = next; updates++; }]; },
+        },
+    }, { React }, "({ BadgeSettings })");
+    const tree = BadgeSettings();
+    const items = tree.props.children[1].props.children[1];
+    const previous = state;
+    previous.forEach(Object.freeze);
+    Object.freeze(previous);
+    for (const value of ["", "other", "-1", "1.5", "6", "999999999999999999999999"])
+        items[0].props.onDrop({ dataTransfer: { getData: () => value } });
+    assert.equal(updates, 0);
+    items[0].props.onDrop({ dataTransfer: { getData: () => "2" } });
+    assert.equal(state[0].key, previous[2].key);
+    assert.equal(state[0].position, 0);
+    assert.equal(previous[2].position, 4);
+    items[0].props.onClick();
+    assert.equal(state[0].shown, false);
+    assert.equal(previous[0].shown, true);
+});

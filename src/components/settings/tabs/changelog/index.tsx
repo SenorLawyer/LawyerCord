@@ -36,7 +36,6 @@ import {
     getNewSettings,
     getNewSettingsEntries,
     getNewSettingsSize,
-    getUpdatedPlugins,
     initializeChangelog,
     saveUpdateSession,
     UpdateSession,
@@ -231,7 +230,6 @@ function ChangelogContent() {
     const [changelogHistory, setChangelogHistory] =
         React.useState<ChangelogHistory>([]);
     const [newPlugins, setNewPlugins] = React.useState<string[]>([]);
-    const [updatedPlugins, setUpdatedPlugins] = React.useState<string[]>([]);
     const [isLoading, setIsLoading] = React.useState(true);
     const [error, setError] = React.useState<string | null>(null);
     const [expandedLogs, setExpandedLogs] = React.useState<Set<string>>(
@@ -271,9 +269,7 @@ function ChangelogContent() {
     const loadNewPlugins = React.useCallback(async () => {
         try {
             const newPlgs = await getNewPlugins();
-            const updatedPlgs = await getUpdatedPlugins();
             setNewPlugins(newPlgs);
-            setUpdatedPlugins(updatedPlgs);
         } catch (err) {
             console.error("Failed to load new plugins:", err);
         }
@@ -289,14 +285,12 @@ function ChangelogContent() {
             if (commits.length === 0) return false;
 
             const newPlgs = await getNewPlugins();
-            const updatedPlgs = await getUpdatedPlugins();
             const newSettings = await getNewSettings();
 
-            await saveUpdateSession(commits, newPlgs, updatedPlgs, newSettings);
+            await saveUpdateSession(commits, newPlgs, newSettings);
 
             setChangelog(commits);
             setNewPlugins(newPlgs);
-            setUpdatedPlugins(updatedPlgs);
             await loadChangelogHistory();
             return true;
         } catch (err) {
@@ -369,15 +363,12 @@ function ChangelogContent() {
                     setChangelog(updates.value);
 
                     const newPlgs = await getNewPlugins();
-                    const updatedPlgs = await getUpdatedPlugins();
                     const newSettings = await getNewSettings();
                     setNewPlugins(newPlgs);
-                    setUpdatedPlugins(updatedPlgs);
 
                     await saveUpdateSession(
                         updates.value,
                         newPlgs,
-                        updatedPlgs,
                         newSettings,
                         true,
                     );
@@ -472,8 +463,7 @@ function ChangelogContent() {
 
     const hasCurrentChanges =
         changelog.length > 0 ||
-        newPlugins.length > 0 ||
-        updatedPlugins.length > 0;
+        newPlugins.length > 0;
 
     return (
         <>
@@ -581,15 +571,6 @@ function ChangelogContent() {
                             <NewPluginsSection
                                 newPlugins={newPlugins}
                             />
-                        </div>
-                    )}
-
-                    {updatedPlugins.length > 0 && (
-                        <div className={Margins.bottom16}>
-                            <Heading className={Margins.bottom8}>
-                                Updated Plugins ({updatedPlugins.length})
-                            </Heading>
-                            <NewPluginsCompact newPlugins={updatedPlugins} />
                         </div>
                     )}
 

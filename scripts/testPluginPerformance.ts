@@ -21,6 +21,41 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("Dearrow ignores duplicate results and results for replaced embeds", async () => {
+    const requests: Array<ReturnType<typeof Promise.withResolvers<object>>> = [];
+    const { embedDidMount } = loadSource("src/plugins/dearrow/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: { replaceElements: 1, dearrowByDefault: true } }) },
+        "@components/ErrorBoundary": {}, "@utils/constants": { Devs: {} },
+        "@utils/Logger": { Logger: class { error(error: unknown) { assert.fail(String(error)); } } },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack/common": {},
+    }, { fetch: async () => {
+        const request = Promise.withResolvers<object>();
+        requests.push(request);
+        return { ok: true, json: () => request.promise };
+    } }, "({ embedDidMount })");
+    const embed = { rawTitle: "Original", provider: { name: "YouTube" }, video: { url: "https://www.youtube.com/embed/abcdefghijk" }, dearrow: undefined as { oldTitle?: string; } | undefined };
+    let renders = 0;
+    const component = { props: { embed }, forceUpdate() { renders++; } };
+    const first = embedDidMount.call(component);
+    const duplicate = embedDidMount.call(component);
+    const response = { titles: [{ title: "Replacement", votes: 1 }], thumbnails: [] };
+    requests[0].resolve(response);
+    await first;
+    requests[1].resolve(response);
+    await duplicate;
+    assert.equal(embed.dearrow?.oldTitle, "Original");
+    assert.equal(renders, 1);
+    const oldEmbed = { ...embed, rawTitle: "Old", dearrow: undefined };
+    component.props.embed = oldEmbed;
+    const stale = embedDidMount.call(component);
+    component.props.embed = embed;
+    requests[2].resolve(response);
+    await stale;
+    assert.equal(oldEmbed.rawTitle, "Old");
+    assert.equal(renders, 1);
+});
+
 test("custom commands normalize argument names for deduplication and substitution", async () => {
     let command: { execute(args: object, context: object): Promise<void>; } | undefined;
     let content = "";

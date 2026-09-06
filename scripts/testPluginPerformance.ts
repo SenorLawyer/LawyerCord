@@ -20,6 +20,68 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("RandomVoice discards join actions and screen sources after cancellation", async () => {
+    let account = "first";
+    let channelId = "channel";
+    let tick: () => void = () => {};
+    let cleared = 0;
+    let actions = 0;
+    let streams = 0;
+    const pending: Array<(sources: object[]) => void> = [];
+    const { plugin, runAfterVoiceJoin, startChannelStream, cancelPendingJoin } = loadSource("src/equicordplugins/randomVoice/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@api/UserArea": {}, "@components/Button": {}, "@components/Switch": {},
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@shared/debounce": {}, "@utils/constants": { Devs: {}, EquicordDevs: {}, IS_MAC: false },
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, makeRange: () => [], OptionType: {} },
+        "@webpack": { findByCodeLazy: (code: string) => code.includes("STREAM_START")
+            ? () => streams++ : () => new Promise(resolve => pending.push(resolve)) },
+        "@webpack/common": {
+            UserStore: { getCurrentUser: () => ({ id: account }) },
+            VoiceStateStore: { getVoiceStateForUser: () => ({ channelId }) },
+            SelectedChannelStore: { getVoiceChannelId: () => channelId },
+            PermissionStore: { can: () => true }, PermissionsBits: {},
+            MediaEngineStore: { getMediaEngine: () => ({}) },
+        },
+    }, {
+        window: { removeEventListener() {} },
+        setInterval: (callback: () => void) => { tick = callback; return 1; },
+        clearInterval: () => cleared++,
+    }, "({ plugin: exports.default, runAfterVoiceJoin, startChannelStream, cancelPendingJoin })");
+    runAfterVoiceJoin("channel", [() => actions++]);
+    plugin.stop();
+    assert.equal(cleared, 1);
+    tick();
+    assert.equal(actions, 0, "a queued timer cannot run actions after stop");
+    const channel = { id: "channel", guild_id: "guild", type: 2, isGuildStageVoice: () => false };
+    const stopped = startChannelStream(channel);
+    plugin.stop();
+    pending[0]([{ id: "screen", name: "screen" }]);
+    await stopped;
+    assert.equal(streams, 0);
+    const switched = startChannelStream(channel);
+    channelId = "other";
+    pending[1]([{ id: "screen", name: "screen" }]);
+    await switched;
+    assert.equal(streams, 0);
+    channelId = "channel";
+    const replaced = startChannelStream(channel);
+    cancelPendingJoin();
+    pending[2]([{ id: "screen", name: "screen" }]);
+    await replaced;
+    assert.equal(streams, 0);
+    const differentAccount = startChannelStream(channel);
+    account = "second";
+    pending[3]([{ id: "screen", name: "screen" }]);
+    await differentAccount;
+    assert.equal(streams, 0);
+    const valid = startChannelStream(channel);
+    pending[4]([{ id: "screen", name: "screen" }]);
+    await valid;
+    assert.equal(streams, 1);
+});
+
 test("timezone dialog stays open when the database rejects a save", async () => {
     let succeeds = false;
     let closed = 0;

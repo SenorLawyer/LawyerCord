@@ -193,8 +193,7 @@ function endCycleSession() {
     cycleIndex = -1;
     activeToastId = null;
 
-    const visEnd = (settings as any).store?.visualStyle;
-    if (visEnd === "overlay") unmountOverlay();
+    unmountOverlay();
 }
 
 function stopEvent(e: KeyboardEvent) {
@@ -399,7 +398,6 @@ export default definePlugin({
         activeToastId = null;
         void persistHistoryNow();
 
-        const visEnd = (settings as any).store?.visualStyle;
-        if (visEnd === "overlay") unmountOverlay();
+        unmountOverlay();
     }
 });

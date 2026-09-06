@@ -2364,3 +2364,21 @@ test("quote preview ignores superseded and unmounted image work", async () => {
     assert.equal(created.length, 1);
     assert.equal(states[4], null);
 });
+
+test("recent DM cleanup closes an overlay after its setting changes", () => {
+    const closed: string[] = [];
+    const plugin = loadSource("src/equicordplugins/recentDMSwitcher/index.tsx", {
+        "@api/DataStore": {}, "@api/Settings": { definePluginSettings: () => ({ store: { visualStyle: "off" } }) },
+        "@utils/constants": { EquicordDevs: {} }, "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {}, makeRange: () => [] },
+        "@webpack/common": { closeModal: (key: string) => closed.push(key) }
+    }, { document: { removeEventListener() {} } },
+    '({ finish: endCycleSession, stop: exports.default.stop, open: () => { overlayModalKey = "overlay"; isCyclingSessionActive = true; } })');
+    plugin.open();
+    plugin.finish();
+    assert.deepEqual(closed, ["overlay"]);
+    plugin.open();
+    plugin.stop();
+    plugin.stop();
+    assert.deepEqual(closed, ["overlay", "overlay"]);
+});

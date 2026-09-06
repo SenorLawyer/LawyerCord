@@ -21,6 +21,29 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ImageZoom clears its mounted root when stopped", () => {
+    const { default: plugin } = loadSource("src/plugins/imageZoom/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) }, "@shared/debounce": {},
+        "@utils/constants": { Devs: {} }, "@utils/Logger": {},
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} }, "@webpack/common": {},
+        "./components/Magnifier": {}, "./constants": {}, "./styles.css?managed": {},
+    });
+    let unmounted = 0;
+    let removed = 0;
+    plugin.root = { unmount: () => unmounted++ };
+    plugin.element = { remove: () => removed++ };
+    plugin.currentMagnifierElement = {};
+    plugin.stop();
+    assert.equal(unmounted, 1);
+    assert.equal(removed, 1);
+    assert.equal(plugin.root, null);
+    assert.equal(plugin.currentMagnifierElement, null);
+    assert.equal(plugin.element, null);
+    plugin.stop();
+    assert.equal(unmounted, 1);
+    assert.equal(removed, 1);
+});
+
 test("Decor authorization rejects tokens received after switching accounts", async () => {
     let userId = "first";
     let callback: (response: object) => Promise<void> = async () => {};

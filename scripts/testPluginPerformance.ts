@@ -2002,6 +2002,21 @@ test("toast shutdown settles pending notifications and releases its root", async
     notifications.teardownNotifications();
     await next;
     assert.equal(unmounts, 2);
+    const { default: plugin } = loadSource("src/equicordplugins/toastNotifications/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@components/Button": {}, "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (plugin: unknown) => plugin, makeRange: () => [], OptionType: {} },
+        "@webpack": { findByPropsLazy: () => ({}), findStoreLazy: () => ({}) }, "@webpack/common": {},
+        "./components/Notifications": notifications
+    });
+    for (const event of ["LOGOUT", "CONNECTION_OPEN"]) {
+        const pending = notifications.showNotification({ title: "Previous session", body: "", permanent: true });
+        assert.equal(typeof plugin.flux[event], "function", event);
+        plugin.flux[event]();
+        await pending;
+        assert.equal(unmounts, roots);
+        assert.equal(removals, roots);
+    }
 });
 
 test("URL highlighting clears compiled matches when the last pattern is removed", () => {

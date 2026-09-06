@@ -46,6 +46,41 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("Filename plugins preserve names and apply extension fixes without anonymizing", () => {
+    const definitions = { __esModule: true, default: (plugin: object) => plugin, OptionType: {}, ReporterTestable: {} };
+    const fixer = loadSource("src/equicordplugins/fixFileExtensions/index.tsx", {
+        "@api/PluginManager": {}, "@plugins/anonymiseFileNames": { tarExtMatcher: /\.tar\.\w+$/ },
+        "@utils/constants": { Devs: {} }, "@utils/types": definitions
+    });
+    const store = { anonymiseByDefault: false, spoilerMessages: false, method: 1, consistent: "image" };
+    const enabled = { enabled: true };
+    const anonymizer = loadSource("src/plugins/anonymiseFileNames/index.tsx", {
+        "@api/Commands": { ApplicationCommandInputType: {}, ApplicationCommandOptionType: {} },
+        "@api/Settings": { definePluginSettings: () => ({ store }), Settings: { plugins: { FixFileExtensions: enabled } } },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@equicordplugins/fixFileExtensions": fixer, "@utils/constants": { Devs: {} },
+        "@utils/types": definitions, "@webpack": { findByCodeLazy: () => null }, "@webpack/common": {}
+    });
+    for (const [filename, expected] of [["README", "README"], ["archive.tar.gz", "archive.tar.gz"], ["photo.jpe", "photo.jpg"]]) {
+        const direct = { filename };
+        fixer.default.fixExt(direct);
+        assert.equal(direct.filename, expected);
+        const combined = { filename };
+        anonymizer.default.anonymise(combined);
+        assert.equal(combined.filename, expected);
+    }
+    enabled.enabled = false;
+    store.spoilerMessages = true;
+    const original = { filename: "photo.jpe" };
+    anonymizer.default.anonymise(original);
+    assert.equal(original.filename, "SPOILER_photo.jpe");
+    enabled.enabled = true;
+    store.anonymiseByDefault = true;
+    const anonymous = { filename: "photo.jpe" };
+    anonymizer.default.anonymise(anonymous);
+    assert.equal(anonymous.filename, "SPOILER_image.jpg");
+});
+
 test("File upload destination selection respects disabled fallbacks and host order", () => {
     const types = loadSource("src/equicordplugins/fileUpload/types.ts", {});
     const store = { disableFallbacks: true, fallbackOrder: "" };

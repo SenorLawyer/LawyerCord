@@ -146,7 +146,10 @@ export default definePlugin({
             ext = reverseExtensionMap[ext] || ext;
         }
 
-        if ((upload[ANONYMISE_UPLOAD_SYMBOL] ?? settings.store.anonymiseByDefault) === false) return addSpoilerPrefix(originalFileName + ext);
+        if ((upload[ANONYMISE_UPLOAD_SYMBOL] ?? settings.store.anonymiseByDefault) === false) {
+            upload.filename = addSpoilerPrefix((extIdx !== -1 ? originalFileName.slice(0, extIdx) : originalFileName) + ext);
+            return;
+        }
 
         const newFilename = (() => {
             switch (settings.store.method) {

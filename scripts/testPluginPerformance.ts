@@ -2365,6 +2365,30 @@ test("quote preview ignores superseded and unmounted image work", async () => {
     assert.equal(states[4], null);
 });
 
+test("encrypted attachment cache separates authenticated message contexts", async () => {
+    let userId = "local-a";
+    let decryptions = 0;
+    const cache = loadSource("src/equicordplugins/secureMessaging.desktop/attachmentCache.ts", {
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
+        "./messageMetadata": loadSource("src/equicordplugins/secureMessaging.desktop/messageMetadata.ts", {}),
+        "./protocol": { isEncryptedMessage: () => true }
+    }, { VencordNative: { pluginHelpers: { SecureMessaging: { decryptIncomingAttachments: async () => { decryptions++; return { status: "invalid_message" }; } } } } });
+    const message = { channel_id: "channel", id: "message", author: { id: "sender" }, content: "ciphertext", attachments: [{ id: "attachment", size: 1, url: "url", proxy_url: "proxy" }], edited_timestamp: null as string | null };
+    cache.encryptedAttachmentStatus(message);
+    await Promise.resolve();
+    cache.encryptedAttachmentStatus(message);
+    assert.equal(decryptions, 1);
+    message.author.id = "other-sender";
+    cache.encryptedAttachmentStatus(message);
+    assert.equal(decryptions, 2);
+    message.edited_timestamp = "2026-01-01T00:00:00.000Z";
+    cache.encryptedAttachmentStatus(message);
+    assert.equal(decryptions, 3);
+    userId = "local-b";
+    cache.encryptedAttachmentStatus(message);
+    assert.equal(decryptions, 4);
+});
+
 test("screen recorder releases capture and discards work after disable", async () => {
     let resolvePicker: (stream: object) => void = () => {};
     let trackStops = 0;

@@ -7147,3 +7147,32 @@ test("scheduled video previews draw the loaded frame and release media on every 
         assert.equal(video.onerror, null);
     }
 });
+
+test("delayed scheduled reaction previews use committed entries and cannot revive removed previews", async () => {
+    for (const mode of ["current", "edited", "deleted", "replaced", "stopped"] as const) {
+        let stored = [scheduledEntry({ id: "saved", reactions: [{ emoji: { id: null, name: "hello" }, count: 1 }] })];
+        const timers: (() => void)[] = [];
+        const counts: number[] = [];
+        const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+            "@api/DataStore": { get: async () => structuredClone(stored), set: async () => {} },
+            "@utils/Logger": { Logger: class { warn() {} } }, "@vencord/discord-types/enums": {},
+            "@webpack/common": { FluxDispatcher: { dispatch() {} } }, ".": { settings: { store: {} } }
+        }, { setTimeout: (callback: () => void) => { timers.push(callback); return timers.length; } },
+        "({ ...exports, doRecreatePhantomMessage, setPreview: callback => { createPhantomMessage = callback; } })");
+        await api.loadScheduledMessages();
+        api.setPreview((entry: { reactions: { count: number; }[]; }) => counts.push(entry.reactions[0].count));
+        api.phantomMessageMap.set("scheduled-saved", { messageId: "saved" });
+        api.doRecreatePhantomMessage("scheduled-saved", "channel");
+        assert.equal(timers.length, 1);
+        if (mode === "edited") {
+            stored = [scheduledEntry({ id: "saved", reactions: [{ emoji: { id: null, name: "hello" }, count: 2 }] })];
+            await api.loadScheduledMessages();
+        } else if (mode === "deleted") await api.removeScheduledMessage("saved");
+        else if (mode === "replaced") api.phantomMessageMap.set("scheduled-saved", { messageId: "saved" });
+        else if (mode === "stopped") api.cleanupAllPhantomMessages();
+        timers[0]();
+        assert.deepEqual(counts, mode === "current" ? [1] : mode === "edited" ? [2] : []);
+        if (mode === "edited") assert.equal(api.getScheduledMessages()[0].reactions[0].count, 2);
+    }
+});

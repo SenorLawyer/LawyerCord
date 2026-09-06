@@ -27,7 +27,6 @@ let isProcessingMessages = false;
 const sendingMessages = new Set<string>();
 
 export const phantomMessageMap = new Map<string, PhantomMessageData>();
-const pendingReactions = new Map<string, ScheduledReaction[]>();
 
 const recentReactionChanges = new Map<string, { action: string; timestamp: number; }>();
 const REACTION_COOLDOWN_MS = 2000;
@@ -234,7 +233,6 @@ export async function createPhantomMessage(msg: ScheduledMessage): Promise<void>
     const phantom = { scheduledTime: msg.scheduledTime, messageId: msg.id, channelId: msg.channelId };
     phantomMessageMap.set(messageId, phantom);
     const isCurrent = () => phantomMessageMap.get(messageId) === phantom && UserStore.getCurrentUser()?.id === currentUser.id;
-    if (msg.reactions?.length) pendingReactions.set(msg.id, [...msg.reactions]);
 
     const attachments = msg.attachments?.length ? await buildPhantomAttachments(msg.attachments) : [];
     if (!isCurrent()) return;
@@ -323,7 +321,7 @@ function removePhantomMessage(msg: ScheduledMessage): void {
     FluxDispatcher.dispatch({ type: "MESSAGE_DELETE", channelId: msg.channelId, id: messageId, mlDeleted: true });
 }
 
-function updatePhantomReactions(messageId: string, channelId: string, reactions: ScheduledReaction[]): void {
+function updatePhantomReactions(messageId: string, channelId: string): void {
     const existingTimeout = pendingRecreations.get(messageId);
     if (existingTimeout) {
         clearTimeout(existingTimeout);
@@ -334,13 +332,13 @@ function updatePhantomReactions(messageId: string, channelId: string, reactions:
         pendingRecreations.delete(messageId);
         if (generation !== phantomGeneration) return;
 
-        doRecreatePhantomMessage(messageId, channelId, reactions);
+        doRecreatePhantomMessage(messageId, channelId);
     }, RECREATE_DEBOUNCE_MS);
 
     pendingRecreations.set(messageId, timeout);
 }
 
-function doRecreatePhantomMessage(messageId: string, channelId: string, reactions: ScheduledReaction[]): void {
+function doRecreatePhantomMessage(messageId: string, channelId: string): void {
     const generation = phantomGeneration;
     const phantomData = phantomMessageMap.get(messageId);
     if (!phantomData) {
@@ -364,8 +362,9 @@ function doRecreatePhantomMessage(messageId: string, channelId: string, reaction
     setTimeout(() => {
         if (generation !== phantomGeneration) return;
 
-        msg.reactions = reactions;
-        createPhantomMessage(msg);
+        if (phantomMessageMap.get(messageId) !== phantomData) return;
+        const current = scheduledMessages.find(entry => entry.id === phantomData.messageId);
+        if (current) createPhantomMessage(current);
     }, 50);
 }
 
@@ -430,9 +429,8 @@ async function sendScheduledMessage(msg: ScheduledMessage): Promise<boolean> {
     try {
         if (!ChannelStore.getChannel(msg.channelId)) return false;
 
-        const reactions = pendingReactions.get(msg.id) ?? msg.reactions ?? [];
+        const reactions = msg.reactions ?? [];
         removePhantomMessage(msg);
-        pendingReactions.delete(msg.id);
 
         let messageId: string;
         if (msg.attachments?.length) {
@@ -621,7 +619,6 @@ export function cleanupAllPhantomMessages(): void {
     for (const msg of scheduledMessages) removePhantomMessage(msg);
 
     phantomMessageMap.clear();
-    pendingReactions.clear();
     recentReactionChanges.clear();
 }
 
@@ -655,8 +652,7 @@ function modifyReaction(messageId: string, channelId: string, emoji: { id: strin
         }
         await saveScheduledMessages(scheduledMessages.map(entry => entry === msg ? { ...entry, reactions } : entry));
         if (phantomMessageMap.get(messageId) !== phantomData) return;
-        pendingReactions.set(phantomData.messageId, reactions);
-        updatePhantomReactions(messageId, channelId, reactions);
+        updatePhantomReactions(messageId, channelId);
     }).catch(() => logger.warn("Could not save scheduled message reactions."));
 }
 
@@ -715,6 +711,5 @@ export function resyncPhantomReactions(messageId: string, channelId: string): vo
         return;
     }
 
-    const reactions = pendingReactions.get(phantomData.messageId) ?? [];
-    updatePhantomReactions(messageId, channelId, reactions);
+    updatePhantomReactions(messageId, channelId);
 }

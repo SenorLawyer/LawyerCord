@@ -101,34 +101,43 @@ export default definePlugin({
             cancelText: "Later"
         });
 
-        await Native.ensurePluginsDirectory();
-        if (run !== generation) return;
-        this.pluginsWithUpdates.value({ finished: false, plugins: [] });
+        try {
+            await Native.ensurePluginsDirectory();
+            if (run !== generation) return;
+            this.pluginsWithUpdates.value({ finished: false, plugins: [] });
 
-        plSettings.customEntries.push(this.section);
+            plSettings.customEntries.push(this.section);
 
-        notificationCallback = this.pluginsWithUpdates.registerCallback((value, id) => {
-            if (value.plugins.length === 0) return;
-            if (shouldSkipUpdateNotification(value.plugins[value.plugins.length - 1]))
-                return;
-            this.pluginsWithUpdates.deregisterCallback(id);
-            notificationCallback = undefined;
-            if (settings.store.notifyIfUpdate)
-                showNotification({
-                    title: "Some UserPlugins are out of date!",
-                    body: "Click to open the UserPlugin Updater",
-                    noPersist: true,
-                    permanent: true,
-                    onClick() {
-                        OpenSettingsModule.openUserSettings("vencord_userplugins_panel");
-                    },
-                });
-        });
-        const pls = await Native.getUserplugins();
-        if (run !== generation) return;
-        // @ts-ignore :trolley:
-        this.plugins.value(pls);
-        await this.checkPluginUpdates(run);
+            notificationCallback = this.pluginsWithUpdates.registerCallback((value, id) => {
+                if (value.plugins.length === 0) return;
+                if (shouldSkipUpdateNotification(value.plugins[value.plugins.length - 1]))
+                    return;
+                this.pluginsWithUpdates.deregisterCallback(id);
+                notificationCallback = undefined;
+                if (settings.store.notifyIfUpdate)
+                    showNotification({
+                        title: "Some UserPlugins are out of date!",
+                        body: "Click to open the UserPlugin Updater",
+                        noPersist: true,
+                        permanent: true,
+                        onClick() {
+                            OpenSettingsModule.openUserSettings("vencord_userplugins_panel");
+                        },
+                    });
+            });
+            const pls = await Native.getUserplugins();
+            if (run !== generation) return;
+            // @ts-ignore :trolley:
+            this.plugins.value(pls);
+            await this.checkPluginUpdates(run);
+        } catch {
+            if (run !== generation) return;
+            this.stop();
+            Alerts.show({
+                title: "Could not load userplugins",
+                body: "Check the userplugins directory and try enabling the plugin again."
+            });
+        }
     },
     stop() {
         generation++;

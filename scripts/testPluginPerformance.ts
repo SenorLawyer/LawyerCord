@@ -21,6 +21,39 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("voice activity lookups cannot log into a stopped or different session", async () => {
+    for (const change of ["none", "stop", "account", "channel"]) {
+        let account = "first";
+        let channel = "voice";
+        let lookups = 0;
+        const entries: object[] = [];
+        let finish: (value: { name: string; }) => void = () => {};
+        const actions = { get fetchApplication() {
+            lookups++;
+            return () => new Promise(resolve => { finish = resolve; });
+        } };
+        const { default: plugin } = loadSource("src/equicordplugins/voiceChannelLog/index.tsx", {
+            "@utils/constants": { Devs: {}, EquicordDevs: {} },
+            "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+            "@vencord/discord-types/enums": { ChannelType: {} },
+            "@webpack": { findByPropsLazy: () => actions },
+            "@webpack/common": { ApplicationStore: { getApplication: () => undefined }, UserStore: { getCurrentUser: () => ({ id: account }) }, SelectedChannelStore: { getVoiceChannelId: () => channel } },
+            "./components/LogsButton": {}, "./components/VoiceChannelLogModal": {},
+            "./logs": { addLogEntry: (entry: object) => entries.push(entry), setCallStartTime() {} },
+            "./settings": { __esModule: true, default: { store: { logActivity: true } } },
+        });
+        assert.equal(lookups, 0);
+        plugin.flux.EMBEDDED_ACTIVITY_UPDATE_V2({ applicationId: "app", location: { channel_id: "voice" }, participants: [{ user_id: "participant" }] });
+        assert.equal(lookups, 1);
+        if (change === "stop") plugin.stop();
+        if (change === "account") account = "second";
+        if (change === "channel") channel = "other";
+        finish({ name: "Activity" });
+        await setImmediate();
+        assert.equal(entries.length, change === "none" ? 1 : 0);
+    }
+});
+
 test("voice panel selectors read current media settings and device lists", () => {
     let volume = 20;
     let selected = "first";

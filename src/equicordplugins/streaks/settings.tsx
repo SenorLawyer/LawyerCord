@@ -37,7 +37,6 @@ export const settings = definePluginSettings({
                     <Flex>
                         <Button onClick={async () => {
                             await authorize();
-                            await useStreaksStore.getState().migrate();
                             await useStreaksStore.getState().fetch();
                         }}>
                             Log In to Streaks API

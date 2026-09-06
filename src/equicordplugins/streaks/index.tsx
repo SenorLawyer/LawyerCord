@@ -75,7 +75,6 @@ export default definePlugin({
         async CONNECTION_OPEN() {
             useStreaksStore.getState().clear();
             if (useAuthorizationStore.getState().isAuthorized()) {
-                await useStreaksStore.getState().migrate();
                 await useStreaksStore.getState().fetch();
             }
         },

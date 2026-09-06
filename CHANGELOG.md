@@ -6,6 +6,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Stop automatically uploading legacy Streaks records that lack an owning account. Preserve the local records.
 - Remove Navidrome instance artwork sharing to keep server authentication out of Discord asset requests, and migrate existing selections to None.
 
 - Remove SupportHelper execution of JavaScript snippets from messages and embeds while preserving diagnostic actions.

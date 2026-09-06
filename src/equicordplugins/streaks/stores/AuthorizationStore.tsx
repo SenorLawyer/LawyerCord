@@ -105,7 +105,6 @@ export const useAuthorizationStore = proxyLazy(() => zustandCreate(
                 if (!state) return;
                 useStreaksStore.getState().clear();
                 if (state.isAuthorized()) {
-                    await useStreaksStore.getState().migrate();
                     await useStreaksStore.getState().fetch();
                 }
             }

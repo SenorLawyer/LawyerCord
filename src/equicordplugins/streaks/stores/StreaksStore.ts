@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import * as DataStore from "@api/DataStore";
 import { proxyLazy } from "@utils/lazy";
 import { UserStore, zustandCreate } from "@webpack/common";
 
@@ -27,7 +26,6 @@ export interface StreaksState {
     fetch: () => Promise<void>;
     update: (recipientId: string) => Promise<void>;
     refresh: (recipientId: string) => Promise<void>;
-    migrate: () => Promise<void>;
     clear: () => void;
 }
 
@@ -100,31 +98,6 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: any, get: any
             }
         } catch (e) {
             console.error("Failed to refresh streak", e);
-        }
-    },
-    async migrate() {
-        const token = useAuthorizationStore.getState().getToken();
-        if (!token) return;
-
-        const legacyData = await DataStore.get("vc-streaks-data");
-        if (!legacyData || Object.keys(legacyData).length === 0) return;
-
-        try {
-            const res = await fetch(`${API_URL}/streaks/migrate`, {
-                method: "POST",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(legacyData)
-            });
-
-            if (res.ok) {
-                await DataStore.del("vc-streaks-data");
-                console.log("Successfully migrated local streaks to API");
-            }
-        } catch (e) {
-            console.error("Failed to migrate streaks", e);
         }
     }
 } as StreaksState)));

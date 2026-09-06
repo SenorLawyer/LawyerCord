@@ -45,7 +45,7 @@ export async function ensurePluginsDirectory() {
     }
 }
 
-export async function rmPlugin(_, name: string): Promise<string> {
+export async function rmPlugin(_, name: string): Promise<boolean> {
     getPluginDirectory(name);
     const plugins = await getUserplugins().catch(() => { throw new Error("Could not read installed plugins."); });
     const plugin = plugins.find(plugin => plugin.directory === name);
@@ -59,14 +59,14 @@ export async function rmPlugin(_, name: string): Promise<string> {
         buttons: ["No", "Yes"]
     });
 
-    if (confirmation.response !== 1) throw new Error("Uninstall cancelled.");
+    if (confirmation.response !== 1) return false;
     try {
         await rm(getPluginDirectory(name), { recursive: true });
         await build();
     } catch {
         throw new Error("Could not uninstall the plugin.");
     }
-    return "Done";
+    return true;
 }
 
 export async function isUpdateAvailableForPlugin(_, name: string): Promise<boolean> {

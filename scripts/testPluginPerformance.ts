@@ -1878,14 +1878,14 @@ test("installer uninstall settles missing, cancelled, failed and successful requ
     native.configure([]);
     await assert.rejects(native.rmPlugin(null, "plugin"), { message: "Plugin not found." });
     native.configure([{ name: "Example", directory: "plugin" }]);
-    await assert.rejects(native.rmPlugin(null, "plugin"), { message: "Uninstall cancelled." });
+    assert.equal(await native.rmPlugin(null, "plugin"), false);
     assert.equal(removals, 0);
     confirmation = 1;
     failRemoval = true;
     await assert.rejects(native.rmPlugin(null, "plugin"), { message: "Could not uninstall the plugin." });
     assert.equal(builds, 0);
     failRemoval = false;
-    assert.equal(await native.rmPlugin(null, "plugin"), "Done");
+    assert.equal(await native.rmPlugin(null, "plugin"), true);
     assert.equal(removals, 1);
     assert.equal(builds, 1);
 });

@@ -219,7 +219,7 @@ function UserPluginsTab() {
                                         role="switch"
                                         onClick={async () => {
                                             try {
-                                                await Native.rmPlugin(plugin.directory!);
+                                                if (!await Native.rmPlugin(plugin.directory!)) return;
                                             } catch (error) {
                                                 Alerts.show({
                                                     title: "Uninstall error",

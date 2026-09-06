@@ -21,6 +21,44 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ReviewDB storage operations retain their initiating account", async () => {
+    let userId: string | undefined = "first";
+    const accounts: Record<string, { token?: string; }> = { first: { token: "first-token" }, second: { token: "second-token" } };
+    const reads: (() => void)[] = [];
+    const writes: (() => void)[] = [];
+    const api = loadSource("src/plugins/reviewDB/auth.tsx", {
+        "@api/DataStore": {
+            get: () => new Promise(resolve => reads.push(() => resolve(accounts))),
+            update: (_key: string, update: (value: typeof accounts) => unknown) => new Promise(resolve => writes.push(() => resolve(update(accounts)))),
+        },
+        "@utils/Logger": {},
+        "@webpack/common": { UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined } },
+    });
+    const read = api.getAuth();
+    const write = api.updateAuth({ token: "updated-first" });
+    userId = "second";
+    reads.shift()?.();
+    assert.equal((await read).token, "first-token");
+    writes.shift()?.();
+    await write;
+    assert.equal(accounts.first.token, "updated-first");
+    assert.equal(accounts.second.token, "second-token");
+    assert.equal(api.Auth.token, undefined);
+    const secondInit = api.initAuth();
+    userId = "first";
+    const firstInit = api.initAuth();
+    reads.pop()?.();
+    await firstInit;
+    reads.shift()?.();
+    await secondInit;
+    assert.equal(api.Auth.token, "updated-first");
+    userId = undefined;
+    await api.initAuth();
+    await api.updateAuth({ token: "logged-out" });
+    assert.equal(api.Auth.token, undefined);
+    assert.equal(writes.length, 0);
+});
+
 test("FakeNitro checks emoji and sticker access in the destination guild", async () => {
     let preSend: (channel: string, message: { content: string; }, options: { stickerIds: string[]; }) => Promise<unknown> = async () => {};
     const { default: plugin } = loadSource("src/plugins/fakeNitro/index.tsx", {

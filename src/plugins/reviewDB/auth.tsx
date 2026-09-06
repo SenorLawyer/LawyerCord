@@ -15,12 +15,16 @@ const DATA_STORE_KEY = "rdb-auth";
 export let Auth: ReviewDBAuth = {};
 
 export async function initAuth() {
-    Auth = await getAuth() ?? {};
+    const userId = UserStore.getCurrentUser()?.id;
+    Auth = {};
+    const auth = await getAuth(userId);
+    if (UserStore.getCurrentUser()?.id === userId) Auth = auth ?? {};
 }
 
-export async function getAuth(): Promise<ReviewDBAuth | undefined> {
+export async function getAuth(userId = UserStore.getCurrentUser()?.id): Promise<ReviewDBAuth | undefined> {
+    if (!userId) return;
     const auth = await DataStore.get(DATA_STORE_KEY);
-    return auth?.[UserStore.getCurrentUser()?.id];
+    return auth?.[userId];
 }
 
 export async function getToken() {
@@ -29,15 +33,15 @@ export async function getToken() {
 }
 
 export async function updateAuth(newAuth: ReviewDBAuth) {
+    const currentUserId = UserStore.getCurrentUser()?.id;
+    if (!currentUserId) return;
     return DataStore.update(DATA_STORE_KEY, auth => {
-        const currentUserId = UserStore.getCurrentUser()?.id;
-        if (!currentUserId) return auth ?? {};
-
         auth ??= {};
-        Auth = auth[currentUserId] ??= {};
+        const accountAuth = auth[currentUserId] ??= {};
 
-        if (newAuth.token) Auth.token = newAuth.token;
-        if (newAuth.user) Auth.user = newAuth.user;
+        if (newAuth.token) accountAuth.token = newAuth.token;
+        if (newAuth.user) accountAuth.user = newAuth.user;
+        if (UserStore.getCurrentUser()?.id === currentUserId) Auth = accountAuth;
 
         return auth;
     });

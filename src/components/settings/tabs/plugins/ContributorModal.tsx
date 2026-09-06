@@ -44,7 +44,7 @@ function ContributorModal({ user, modalProps }: { user: User; modalProps: Render
     const plugins = useMemo(() => {
         const allPlugins = Object.values(Plugins);
         const pluginsByAuthor = (VencordDevsById[user.id] || EquicordDevsById[user.id])
-            ? allPlugins.filter(p => p.authors.includes(VencordDevsById[user.id] || EquicordDevsById[user.id]))
+            ? allPlugins.filter(p => p.authors.some(a => a.id.toString() === user.id))
             : allPlugins.filter(p =>
                 PluginMeta[p.name]?.userPlugin && p.authors.some(a => a.id.toString() === user.id)
                 || p.authors.some(a => a.name === user.username)

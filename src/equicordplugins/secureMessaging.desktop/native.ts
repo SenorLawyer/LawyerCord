@@ -329,10 +329,6 @@ function hasExactKeys(value: Record<string, unknown>, expected: readonly string[
     return actual.length === sortedExpected.length && actual.every((key, index) => key === sortedExpected[index]);
 }
 
-function isTimestamp(value: unknown): value is number {
-    return Number.isSafeInteger(value) && (value as number) >= 1_700_000_000_000 && (value as number) <= 9_999_999_999_999;
-}
-
 function isOrderedSnowflakeList(value: unknown, allowEmpty: boolean): value is string[] {
     if (!Array.isArray(value) || value.length > MAX_SELECTED_RECIPIENTS || (!allowEmpty && value.length === 0)) return false;
     let previous = "";
@@ -356,7 +352,7 @@ function isEncodedKey(value: unknown, bytes: number): value is string {
 
 function parsePrivateIdentity(value: unknown): PrivateIdentity | null {
     if (!isRecord(value) || !hasExactKeys(value, ["createdAt", "hpkePrivateKey", "hpkePublicKey", "signingPrivateKey", "signingPublicKey"]) ||
-        !isTimestamp(value.createdAt) || !isEncodedKey(value.hpkePrivateKey, 32) || !isEncodedKey(value.hpkePublicKey, 32) ||
+        !isProtocolTimestamp(value.createdAt) || !isEncodedKey(value.hpkePrivateKey, 32) || !isEncodedKey(value.hpkePublicKey, 32) ||
         !isEncodedKey(value.signingPrivateKey, 48) || !isEncodedKey(value.signingPublicKey, 32))
         return null;
     return {
@@ -387,12 +383,12 @@ function parseTrustedPeer(value: unknown, userId: string): TrustedPeerRecord | n
             !hasExactKeys(value, ["announcedAt", "identity", "keyChanged", "keyChangedAt", "trustedAt"]) &&
             !hasExactKeys(value, ["announcedAt", "identity", "keyChanged", "trustedAt"]) &&
             !hasExactKeys(value, ["announcedAt", "identity", "trustedAt"])) ||
-        !isTimestamp(value.announcedAt) ||
+        !isProtocolTimestamp(value.announcedAt) ||
         (value.keyChanged !== undefined && typeof value.keyChanged !== "boolean") ||
         (value.keyChangedAt !== undefined && value.keyChangedAt !== null &&
             (!Number.isSafeInteger(value.keyChangedAt) || (value.keyChangedAt as number) < 0)) ||
-        (value.publishedAt !== undefined && value.publishedAt !== null && !isTimestamp(value.publishedAt)) ||
-        value.keyChangedAt != null && value.keyChanged !== true || !isTimestamp(value.trustedAt))
+        (value.publishedAt !== undefined && value.publishedAt !== null && !isProtocolTimestamp(value.publishedAt)) ||
+        value.keyChangedAt != null && value.keyChanged !== true || !isProtocolTimestamp(value.trustedAt))
         return null;
     const identity = parsePublicIdentity(value.identity);
     if (!identity || identity.userId !== userId) return null;
@@ -408,7 +404,7 @@ function parseTrustedPeer(value: unknown, userId: string): TrustedPeerRecord | n
 
 function parseHistoricalPeerIdentity(value: unknown, userId: string, fingerprint: string): HistoricalPeerIdentityRecord | null {
     if (!isRecord(value) || !hasExactKeys(value, ["announcedAt", "identity", "retiredAt"]) ||
-        !isTimestamp(value.announcedAt) || !Number.isSafeInteger(value.retiredAt) || (value.retiredAt as number) < 0)
+        !isProtocolTimestamp(value.announcedAt) || !Number.isSafeInteger(value.retiredAt) || (value.retiredAt as number) < 0)
         return null;
     const identity = parsePublicIdentity(value.identity);
     if (!identity || identity.userId !== userId || identity.fingerprint !== fingerprint) return null;
@@ -437,7 +433,7 @@ function parseConversation(value: unknown): ConversationRecord | null {
         typeof value.enabled !== "boolean" || (value.kind !== "DM" && value.kind !== "GROUP_DM") ||
         (value.reviewRequired !== undefined && value.reviewRequired !== null &&
             value.reviewRequired !== "participant_changed" && value.reviewRequired !== "unverified_recipients") ||
-        !isOrderedSnowflakeList(value.participantUserIds, false) || !isTimestamp(value.updatedAt) || !Array.isArray(value.selectedRecipients) ||
+        !isOrderedSnowflakeList(value.participantUserIds, false) || !isProtocolTimestamp(value.updatedAt) || !Array.isArray(value.selectedRecipients) ||
         value.selectedRecipients.length > MAX_SELECTED_RECIPIENTS || (value.enabled && value.selectedRecipients.length === 0) ||
         (value.kind === "DM" && value.participantUserIds.length !== 1))
         return null;
@@ -466,7 +462,7 @@ function parseReplayRecord(value: unknown): ReplayRecord | null {
         "channelId", "contentDigest", "counter", "discordMessageId", "envelopeId", "seenAt", "senderFingerprint", "senderUserId",
     ]) || !isSnowflake(value.channelId) || !isEncodedKey(value.contentDigest, 32) ||
         !Number.isSafeInteger(value.counter) || (value.counter as number) < 1 || !isSnowflake(value.discordMessageId) ||
-        typeof value.envelopeId !== "string" || !UUID.test(value.envelopeId) || !isTimestamp(value.seenAt) ||
+        typeof value.envelopeId !== "string" || !UUID.test(value.envelopeId) || !isProtocolTimestamp(value.seenAt) ||
         !isEncodedKey(value.senderFingerprint, 32) || !isSnowflake(value.senderUserId))
         return null;
     return {
@@ -804,12 +800,8 @@ async function persistVolatileQuarantines(): Promise<void> {
     volatileQuarantines.clear();
 }
 
-async function getVaultSignature(): Promise<string> {
-    return getFileSignature(VAULT_PATH);
-}
-
 async function synchronizeCachedVault(): Promise<void> {
-    const signature = await getVaultSignature();
+    const signature = await getFileSignature(VAULT_PATH);
     if (cachedVaultSignature === signature) return;
     cachedVault = null;
     cachedVaultSignature = signature;
@@ -900,7 +892,7 @@ async function loadVault(): Promise<VaultFile> {
             }
         }
         cachedVault = structuredClone(vault);
-        cachedVaultSignature = await getVaultSignature();
+        cachedVaultSignature = await getFileSignature(VAULT_PATH);
         return structuredClone(vault);
     } catch (error) {
         if (error instanceof VaultOperationError) throw error;
@@ -926,7 +918,7 @@ async function saveVault(vault: VaultFile): Promise<void> {
         if (process.platform === "win32") await syncEncryptedFile(VAULT_PATH);
         await syncVaultDirectoryEntry();
         await chmod(VAULT_PATH, 0o600).catch(() => undefined);
-        cachedVaultSignature = await getVaultSignature();
+        cachedVaultSignature = await getFileSignature(VAULT_PATH);
     } catch (error) {
         if (error instanceof VaultOperationError) throw error;
         throw new VaultOperationError("storage_error");

@@ -15,6 +15,7 @@ import { FluxDispatcher, GuildStore, IconUtils, React, useEffect, useMemo, useSt
 import { MessageNotification, NotificationData } from "./Notifications";
 
 export const cl = classNameFactory("vc-toast-notifications-");
+const NOTIFICATION_SETTINGS: ("timeout" | "opacity")[] = ["timeout", "opacity"];
 const MessageComponent = findComponentByCodeLazy("childrenExecutedCommand:", ".hideAccessories");
 
 function isMessageNotification(props: NotificationData): props is MessageNotification {
@@ -71,8 +72,9 @@ type NotificationProps = NotificationData & { onClose(): void; };
 export default ErrorBoundary.wrap(function NotificationComponent(props: NotificationProps) {
     const [isHover, setIsHover] = useState(false);
 
-    const timeout = (PluginSettings.store.timeout ?? 5) * 1000;
-    const opacity = PluginSettings.store.opacity / 100;
+    const { timeout: duration, opacity: opacityPercent } = PluginSettings.use(NOTIFICATION_SETTINGS);
+    const timeout = (duration ?? 5) * 1000;
+    const opacity = opacityPercent / 100;
 
     useEffect(() => {
         if (isHover || props.permanent) return;

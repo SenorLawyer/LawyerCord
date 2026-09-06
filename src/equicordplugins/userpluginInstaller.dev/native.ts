@@ -180,7 +180,7 @@ export async function initPluginInstall(_, link: string, source: string, owner: 
                             await build();
                         }
                         catch (e) {
-                            reject((e as Error).toString());
+                            return reject(e);
                         }
                         resolve({
                             name: meta.name,

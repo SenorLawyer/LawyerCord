@@ -372,12 +372,8 @@ export async function getUserplugins() {
     });
     const plugins = await Promise.allSettled(
         folderContents
-            .filter(item => item.isDirectory())
-            .map(item => ({
-                path: join(item.parentPath, item.name),
-                directory: item.name
-            }))
-            .map(({ path, directory }) => getPluginMeta(path, { directory }))
+            .filter(item => item.isDirectory() && !item.name.startsWith(".") && !item.name.startsWith("_"))
+            .map(item => getPluginMeta(join(item.parentPath, item.name), { directory: item.name }))
     );
 
     return plugins

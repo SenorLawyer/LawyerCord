@@ -8152,3 +8152,25 @@ test("installer holds ownership until failed-install cleanup settles", async () 
         await assert.rejects(api.initPluginInstall(null, "invalid", "", "", ""), /Invalid link/);
     }
 });
+
+test("installer inventory excludes hidden folders and files before reading metadata", async () => {
+    const reads: string[] = [];
+    const mocks: Record<string, object> = {
+        child_process: {}, electron: {}, fs: {}, path, "yaml-js": {},
+        "fs/promises": { readdir: async () => ["visible", ".staged", "_disabled", "file", "invalid"].map(name => ({ name, parentPath: "fixture", isDirectory: () => name !== "file" })) },
+    };
+    for (const name of ["pluginValidate", "updateValidate"])
+        mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+    const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, {
+        __dirname: path.resolve("fixture/dist"),
+        metadata: async (directory: string, extra: { directory: string; }) => {
+            reads.push(directory);
+            if (extra.directory === "invalid") throw new Error("Invalid metadata");
+            return { name: "Visible", ...extra };
+        },
+    }, "({ ...exports, setup() { getPluginMeta = metadata; } })");
+    api.setup();
+    const plugins = await api.getUserplugins();
+    assert.deepEqual(reads, [path.join("fixture", "visible"), path.join("fixture", "invalid")]);
+    assert.deepEqual(Array.from(plugins, (plugin: { name: string; directory: string; }) => ({ ...plugin })), [{ name: "Visible", directory: "visible" }]);
+});

@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Reject invalid and past scheduled dates before changing the queue or its previews.
+
 - Restore scheduled-message previews only for their saved account.
 
 - Reject scheduled sends from another account and pause older entries whose account is unknown.

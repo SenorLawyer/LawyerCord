@@ -412,6 +412,9 @@ export async function addScheduledMessage(
 ): Promise<{ success: boolean; error?: string; }> {
     const userId = UserStore.getCurrentUser()?.id;
     if (!userId) return { success: false, error: "Sign in before scheduling a message." };
+    if (Number.isNaN(new Date(scheduledTime).getTime()) || scheduledTime <= Date.now()) {
+        return { success: false, error: "Please select a valid future date and time." };
+    }
     const minuteStart = Math.floor(scheduledTime / 60000) * 60000;
     const count = scheduledMessages.filter(m =>
         m.channelId === channelId && m.scheduledTime >= minuteStart && m.scheduledTime < minuteStart + 60000
@@ -446,8 +449,8 @@ export async function updateScheduledMessageTime(id: string, scheduledTime: numb
         return { success: false, error: "Scheduled message not found" };
     }
 
-    if (scheduledTime <= Date.now()) {
-        return { success: false, error: "Please select a future date and time" };
+    if (Number.isNaN(new Date(scheduledTime).getTime()) || scheduledTime <= Date.now()) {
+        return { success: false, error: "Please select a valid future date and time." };
     }
 
     const minuteStart = Math.floor(scheduledTime / 60000) * 60000;

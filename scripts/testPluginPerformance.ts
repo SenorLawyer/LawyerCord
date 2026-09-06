@@ -2871,14 +2871,15 @@ test("static sticker conversion labels PNG output and releases its temporary URL
 });
 
 test("animated sticker conversions own and terminate their workers", async () => {
-    for (const failure of ["fetch", "load", "write", "exec", "read", "string", "none"]) {
+    for (const failure of ["fetch", "load", "write", "exec", "exit", "read", "string", "none"]) {
         const workers: { terminations: number; }[] = [];
         const failAt = (stage: string) => { if (failure === stage) throw new Error("Conversion failed"); };
         class Worker {
             terminations = 0;
+            inputName = "";
             constructor() { workers.push(this); }
-            async writeFile() { failAt("write"); }
-            async exec() { failAt("exec"); return 0; }
+            async writeFile(name: string) { this.inputName = name; failAt("write"); }
+            async exec(args: string[]) { assert.notEqual(this.inputName, args.at(-1)); failAt("exec"); return failure === "exit" ? 1 : 0; }
             async readFile() { failAt("read"); return failure === "string" ? "bad data" : new Uint8Array([1, 2]); }
             terminate() { this.terminations++; }
         }
@@ -2889,7 +2890,7 @@ test("animated sticker conversions own and terminate their workers", async () =>
             "./utils": { corsFetch: async () => { failAt("fetch"); return { ok: true, arrayBuffer: async () => new ArrayBuffer(2) }; } }
         }, { URL, File }, "toGIF");
         if (failure === "none") {
-            const files = await Promise.all([convert("https://example.com/a.png"), convert("https://example.com/b.png")]);
+            const files = await Promise.all([convert("https://example.com/output.gif"), convert("https://example.com/")]);
             assert.equal(workers.length, 2);
             assert.equal(files.every((file: File) => file.type === "image/gif" && file.size === 2), true);
         } else {

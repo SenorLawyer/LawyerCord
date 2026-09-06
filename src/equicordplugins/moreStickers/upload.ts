@@ -65,7 +65,7 @@ async function resizeImage(url: string) {
 }
 
 async function toGIF(url: string): Promise<File> {
-    const filename = (new URL(url)).pathname.split("/").pop() ?? "image.png";
+    const filename = "input";
     const res = await corsFetch(url);
     if (!res.ok) throw new Error("Failed to fetch image for GIF conversion");
     const arr = new Uint8Array(await res.arrayBuffer());
@@ -75,7 +75,7 @@ async function toGIF(url: string): Promise<File> {
         await ffmpeg.writeFile(filename, arr);
 
         const outputFilename = "output.gif";
-        await ffmpeg.exec(["-i", filename,
+        const exitCode = await ffmpeg.exec(["-i", filename,
             "-filter_complex", `split[s0][s1];
             [s0]palettegen=
               stats_mode=single:
@@ -84,6 +84,7 @@ async function toGIF(url: string): Promise<File> {
               new=1:
               alpha_threshold=10`,
             outputFilename]);
+        if (exitCode !== 0) throw new Error("Could not convert sticker to GIF.");
 
         const data = await ffmpeg.readFile(outputFilename);
         if (typeof data === "string") {

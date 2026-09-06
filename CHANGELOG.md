@@ -6,6 +6,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep sticker conversion input and output filenames distinct and reject failed FFmpeg executions.
 - Load FFmpeg only for animated sticker conversions and terminate each worker afterward. Remove the picker’s FFmpeg state and context.
 - Save sticker payloads and metadata atomically, and delete packs and recent entries in one transaction.
 - Reject malformed saved sticker metadata while preserving the original records.

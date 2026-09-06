@@ -1144,7 +1144,7 @@ async function testNativeLifecycle(bundlePath: string, dataDir: string): Promise
     for (const privateKey of privateKeys)
         assert.equal(vaultBytes.includes(Buffer.from(privateKey, "utf8")), false, "vault bytes do not expose raw private keys");
     for (const plaintext of [dmPlaintext, bobHistoricalPlaintext, "second native secret", "trusted again", "counter after fresh module load"])
-        assert.equal(vaultBytes.includes(Buffer.from(plaintext, "utf8")), false, "vault bytes do not expose message plaintext");
+        assert.equal(vaultPlaintext.includes(plaintext), false, "vault state does not persist message plaintext");
 }
 
 async function main(): Promise<void> {

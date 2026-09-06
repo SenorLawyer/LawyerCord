@@ -2727,3 +2727,66 @@ test("secure key reviews from a stopped session cannot change the new session ga
     await setImmediate();
     assert.equal(source.blocked(), false, "old failure must not poison the new gate");
 });
+
+
+test("Sekai sticker images survive rerenders and exports keep their original channel", () => {
+    const states: unknown[] = [];
+    let stateIndex = 0;
+    const effects: Array<() => () => void> = [];
+    const ref = { current: null as unknown };
+    const images: Array<{ onload: (() => void) | null; width: number; height: number; }> = [];
+    class TestImage {
+        onload: (() => void) | null = null;
+        width = 296;
+        height = 256;
+        constructor() { images.push(this); }
+    }
+    const React = {
+        createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props: { ...props, children } }),
+        useState: (initial: unknown) => {
+            const index = stateIndex++;
+            if (!(index in states)) states[index] = initial;
+            return [states[index], (value: unknown) => { states[index] = value; }];
+        },
+        useRef: () => ref,
+        useEffect: (effect: () => () => void) => effects.push(effect),
+    };
+    let selectedChannel = "original";
+    let uploadedChannel: unknown;
+    let closed = 0;
+    const { default: Editor } = loadSource("src/equicordplugins/sekaiStickers/Components/SekaiStickersModal.tsx", {
+        "@components/Flex": { Flex: "flex" }, "@components/FormSwitch": {}, "@components/Heading": {},
+        "@equicordplugins/sekaiStickers/characters.json": { characters: Array.from({ length: 51 }, () => ({ character: "fixture", img: "fixture.png", defaultText: { x: 1, y: 1, r: 0, s: 20 } })) },
+        "@webpack/common": { React, Modal: "modal", SelectedChannelStore: { getChannelId: () => selectedChannel }, ChannelStore: { getChannel: (id: string) => id }, UploadHandler: { promptToUpload: (_files: unknown, channel: unknown) => { uploadedChannel = channel; } } },
+        "./Canvas": { __esModule: true, default: "canvas" }, "./Picker": {},
+    }, { React, Image: TestImage, File, document: { fonts: { check: () => true } } });
+    const render = () => {
+        stateIndex = 0;
+        return Editor({ modalProps: { onClose: () => closed++ }, settings: { store: { AutoCloseModal: true } } });
+    };
+    let tree = render();
+    const cleanup = effects[0]();
+    assert.equal(tree.props.actions[1].disabled, true);
+    images[0].onload?.();
+    tree = render();
+    assert.equal(images.length, 1, "a render reuses the loaded image");
+    const callbacks: Array<(blob: Blob | null) => void> = [];
+    const canvas = { toBlob: (callback: (blob: Blob | null) => void) => callbacks.push(callback) };
+    let drawnImage: unknown;
+    const context = { canvas, clearRect() {}, drawImage: (image: unknown) => { drawnImage = image; }, save() {}, restore() {}, translate() {}, rotate() {}, strokeText() {}, fillText() {} };
+    tree.props.children[0].props.children[0].props.children[0].props.draw(context);
+    assert.equal(drawnImage, images[0]);
+    tree.props.actions[1].onClick();
+    callbacks[0](null);
+    assert.equal(closed, 0, "failed encoding preserves the editor");
+    tree.props.actions[1].onClick();
+    selectedChannel = "different";
+    callbacks[1](new Blob(["png"]));
+    assert.equal(uploadedChannel, "original");
+    assert.equal(closed, 1);
+    cleanup();
+    assert.equal(images[0].onload, null, "cleanup detaches the obsolete load handler");
+    states[1] = 50;
+    tree = render();
+    assert.equal(tree.props.actions[1].disabled, true, "a new character cannot export the previous image");
+});

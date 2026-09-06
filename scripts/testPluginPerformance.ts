@@ -5474,6 +5474,7 @@ test("scheduled sends stopped during persistence remain saved without posting", 
         });
         await module.loadScheduledMessages();
         const pending = module.sendScheduledMessageNow("queued");
+        await setImmediate();
         if (changed) userId = "other";
         else module.stopScheduler();
         finish();
@@ -5578,6 +5579,7 @@ test("scheduled queue ignores stale reads after reload, edits, or stop", async (
     });
     const older = module.loadScheduledMessages();
     const newer = module.loadScheduledMessages();
+    await setImmediate();
     reads[1]([{ id: "new", scheduledTime: 2 }]);
     await newer;
     reads[0]([{ id: "old", scheduledTime: 1 }]);
@@ -5590,6 +5592,7 @@ test("scheduled queue ignores stale reads after reload, edits, or stop", async (
     assert.equal(module.getScheduledMessages().length, 0);
     const beforeStop = module.loadScheduledMessages();
     module.stopScheduler();
+    await setImmediate();
     reads[3]([{ id: "stopped", scheduledTime: 0 }]);
     await beforeStop;
     assert.equal(module.getScheduledMessages().length, 0);
@@ -6657,6 +6660,7 @@ test("new scheduled entries retain their initiating account across persistence",
             ".": { settings: { store: { maxMessagesPerMinute: 5, get showPhantomMessages() { previewChecks++; return false; } } } }
         });
         const pending = api.addScheduledMessage("channel", "Text", Date.now() + 60_000);
+        await setImmediate();
         if (scenario === "switched") userId = "second";
         finish();
         const result = await pending;
@@ -6842,5 +6846,77 @@ test("scheduled message lists only render the current account and legacy entries
         }, { React: { createElement: () => null } }, "ViewScheduledModalInner");
         component({});
         assert.deepEqual(rendered, userId ? [userId === "account" ? "mine" : "theirs", "legacy"] : []);
+    }
+});
+
+
+test("scheduled additions commit in order and failed additions never enter later saves", async () => {
+    for (const failFirst of [false, true]) {
+        const writes: { entries: { content: string; }[]; resolve: () => void; reject: (error: Error) => void; }[] = [];
+        const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@api/DataStore": { set: (_key: string, entries: { content: string; }[]) => new Promise<void>((resolve, reject) => writes.push({ entries: structuredClone(entries), resolve, reject })) },
+            "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) } },
+            ".": { settings: { store: { maxMessagesPerMinute: 1, showPhantomMessages: false } } }
+        });
+        const time = Date.now() + 120_000;
+        const first = api.addScheduledMessage("channel", "First", time);
+        const rejected = failFirst ? assert.rejects(first, /Storage failed/) : undefined;
+        const second = api.addScheduledMessage("channel", "Second", time);
+        await setImmediate();
+        assert.equal(writes.length, 1);
+        assert.equal(api.getScheduledMessages().length, 0);
+        if (failFirst) writes[0].reject(new Error("Storage failed"));
+        else writes[0].resolve();
+        if (rejected) await rejected;
+        else assert.equal((await first).success, true);
+        await setImmediate();
+        if (failFirst) {
+            assert.equal(api.getScheduledMessages().length, 0);
+            assert.deepEqual(writes[1].entries.map(entry => entry.content), ["Second"]);
+            writes[1].resolve();
+        }
+        assert.equal((await second).success, failFirst);
+        assert.equal(writes.length, failFirst ? 2 : 1);
+        assert.equal(api.getScheduledMessages()[0].content, failFirst ? "Second" : "First");
+    }
+});
+
+test("failed scheduled deletion preserves the queue and previews", async () => {
+    for (const clear of [false, true]) {
+        const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@api/DataStore": { get: async () => [{ id: "saved", userId: "account" }], set: async () => { throw new Error("Storage failed"); } },
+            "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) },
+                FluxDispatcher: { dispatch: () => assert.fail("Do not remove previews before committing") } },
+            ".": { settings: { store: {} } }
+        });
+        await api.loadScheduledMessages();
+        await assert.rejects(clear ? api.clearAllScheduledMessages() : api.removeScheduledMessage("saved"), /Storage failed/);
+        assert.equal(api.getScheduledMessages()[0].id, "saved");
+    }
+});
+
+
+test("scheduled reaction writes preserve committed counts on failure and ignore removed previews", async () => {
+    for (const scenario of ["success", "failure", "removed"]) {
+        let writes = 0;
+        let warnings = 0;
+        const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@api/DataStore": { get: async () => [{ id: "saved", reactions: [{ emoji: { id: null, name: "hello" }, count: 1 }] }],
+                set: async () => { writes++; if (scenario === "failure") throw new Error("Storage failed"); } },
+            "@utils/Logger": { Logger: class { warn() { warnings++; } } }, "@vencord/discord-types/enums": {}, "@webpack/common": {},
+            ".": { settings: { store: {} } }
+        }, { setTimeout: () => 1 });
+        await api.loadScheduledMessages();
+        const original = api.getScheduledMessages()[0];
+        api.phantomMessageMap.set("scheduled-saved", { messageId: "saved" });
+        api.handleReactionAdd("scheduled-saved", "channel", { id: null, name: "hello" });
+        if (scenario === "removed") api.phantomMessageMap.clear();
+        await setImmediate();
+        assert.equal(original.reactions[0].count, 1);
+        assert.equal(api.getScheduledMessages()[0].reactions[0].count, scenario === "success" ? 2 : 1);
+        assert.equal(writes, scenario === "removed" ? 0 : 1);
+        assert.equal(warnings, scenario === "failure" ? 1 : 0);
     }
 });

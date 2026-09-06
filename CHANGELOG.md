@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Commit scheduled queue mutations in order and publish them only after storage succeeds, preventing failed additions from being sent or persisted by later saves.
+
 - Keep other accounts out of the scheduled-message list and preserve their entries when clearing the queue.
 
 - Count scheduled-message limits separately for each account.

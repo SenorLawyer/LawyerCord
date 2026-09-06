@@ -17,6 +17,7 @@ const STORAGE_KEY = "ScheduledMessages_queue";
 
 let scheduledMessages: ScheduledMessage[] = [];
 let queueRevision = 0;
+let queueOperation: Promise<void> = Promise.resolve();
 let checkTimeout: ReturnType<typeof setTimeout> | null = null;
 let schedulerRunning = false;
 let schedulerGeneration = 0;
@@ -35,15 +36,24 @@ let phantomGeneration = 0;
 
 export async function loadScheduledMessages(): Promise<void> {
     const revision = ++queueRevision;
+    await queueOperation;
     const saved = await DataStore.get<ScheduledMessage[]>(STORAGE_KEY);
     if (revision !== queueRevision) return;
     scheduledMessages = Array.isArray(saved) ? saved : [];
     scheduledMessages.sort((a, b) => a.scheduledTime - b.scheduledTime);
 }
 
-async function saveScheduledMessages(): Promise<void> {
+function runQueueOperation<T>(operation: () => Promise<T>): Promise<T> {
     queueRevision++;
-    await DataStore.set(STORAGE_KEY, scheduledMessages);
+    const result = queueOperation.then(operation);
+    queueOperation = result.then(() => undefined, () => undefined);
+    return result;
+}
+
+async function saveScheduledMessages(messages: ScheduledMessage[]): Promise<void> {
+    await DataStore.set(STORAGE_KEY, messages);
+    scheduledMessages = messages;
+    queueRevision++;
 }
 
 export function getScheduledMessages(): ScheduledMessage[] {
@@ -409,36 +419,32 @@ export async function addScheduledMessage(
     if (Number.isNaN(new Date(scheduledTime).getTime()) || scheduledTime <= Date.now()) {
         return { success: false, error: "Please select a valid future date and time." };
     }
-    const minuteStart = Math.floor(scheduledTime / 60000) * 60000;
-    const count = scheduledMessages.filter(m =>
-        m.userId === userId && m.channelId === channelId && m.scheduledTime >= minuteStart && m.scheduledTime < minuteStart + 60000
-    ).length;
-
-    if (count >= settings.store.maxMessagesPerMinute) {
-        return { success: false, error: `Maximum of ${settings.store.maxMessagesPerMinute} messages per channel per minute reached` };
-    }
-
-    const newMessage: ScheduledMessage = {
-        userId,
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-        channelId,
-        content,
-        scheduledTime,
-        createdAt: Date.now(),
-        attachments
-    };
-
-    scheduledMessages.push(newMessage);
-    scheduledMessages.sort((a, b) => a.scheduledTime - b.scheduledTime);
-    await saveScheduledMessages();
-    if (UserStore.getCurrentUser()?.id === userId) createPhantomMessage(newMessage);
-    scheduleNextCheck();
-
-    return { success: true };
+    return runQueueOperation(async () => {
+        const minuteStart = Math.floor(scheduledTime / 60000) * 60000;
+        const count = scheduledMessages.filter(m =>
+            m.userId === userId && m.channelId === channelId && m.scheduledTime >= minuteStart && m.scheduledTime < minuteStart + 60000
+        ).length;
+        if (count >= settings.store.maxMessagesPerMinute) {
+            return { success: false, error: `Maximum of ${settings.store.maxMessagesPerMinute} messages per channel per minute reached` };
+        }
+        const newMessage: ScheduledMessage = {
+            userId,
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            channelId,
+            content,
+            scheduledTime,
+            createdAt: Date.now(),
+            attachments
+        };
+        await saveScheduledMessages([...scheduledMessages, newMessage].sort((a, b) => a.scheduledTime - b.scheduledTime));
+        if (UserStore.getCurrentUser()?.id === userId) createPhantomMessage(newMessage);
+        scheduleNextCheck();
+        return { success: true };
+    });
 }
 
 export async function sendScheduledMessageNow(id: string): Promise<{ success: boolean; error?: string; }> {
-    const message = scheduledMessages.find(entry => entry.id === id);
+    let message = scheduledMessages.find(entry => entry.id === id);
     if (!message) {
         return { success: false, error: "Scheduled message not found" };
     }
@@ -451,11 +457,11 @@ export async function sendScheduledMessageNow(id: string): Promise<{ success: bo
     sendingMessages.add(id);
     const generation = schedulerGeneration;
     try {
-        message.attemptedAt = Date.now();
-        await saveScheduledMessages();
+        await runQueueOperation(() => saveScheduledMessages(scheduledMessages.map(entry => entry.id === id ? { ...entry, attemptedAt: Date.now() } : entry)));
+        message = scheduledMessages.find(entry => entry.id === id);
         if (generation !== schedulerGeneration) return { success: false, error: "Scheduled sending was stopped. The message remains saved." };
         if (UserStore.getCurrentUser()?.id !== userId) return { success: false, error: "Account changed. The scheduled message remains saved." };
-        if (!scheduledMessages.includes(message)) return { success: false, error: "Scheduled message was removed." };
+        if (!message) return { success: false, error: "Scheduled message was removed." };
         const sent = await sendScheduledMessage(message);
         if (!sent) return { success: false, error: "Failed to send scheduled message. It remains saved." };
         await removeScheduledMessage(id);
@@ -469,20 +475,22 @@ export async function sendScheduledMessageNow(id: string): Promise<{ success: bo
 }
 
 export async function removeScheduledMessage(id: string): Promise<void> {
-    const msg = scheduledMessages.find(m => m.id === id);
-    if (msg) removePhantomMessage(msg);
-    scheduledMessages = scheduledMessages.filter(m => m.id !== id);
-    await saveScheduledMessages();
+    await runQueueOperation(async () => {
+        const msg = scheduledMessages.find(m => m.id === id);
+        await saveScheduledMessages(scheduledMessages.filter(m => m.id !== id));
+        if (msg) removePhantomMessage(msg);
+    });
     scheduleNextCheck();
 }
 
 export async function clearAllScheduledMessages(): Promise<void> {
     const userId = UserStore.getCurrentUser()?.id;
     if (!userId) return;
-    const removed = scheduledMessages.filter(msg => !msg.userId || msg.userId === userId);
-    for (const msg of removed) removePhantomMessage(msg);
-    scheduledMessages = scheduledMessages.filter(msg => !removed.includes(msg));
-    await saveScheduledMessages();
+    await runQueueOperation(async () => {
+        const removed = scheduledMessages.filter(msg => !msg.userId || msg.userId === userId);
+        await saveScheduledMessages(scheduledMessages.filter(msg => !removed.includes(msg)));
+        for (const msg of removed) removePhantomMessage(msg);
+    });
     scheduleNextCheck();
 }
 
@@ -581,28 +589,24 @@ function modifyReaction(messageId: string, channelId: string, emoji: { id: strin
         return;
     }
 
-    const msg = scheduledMessages.find(m => m.id === phantomData.messageId);
-    if (!msg) {
-        logger.warn("modifyReaction: No scheduled message found for id =", phantomData.messageId);
-        return;
-    }
-
-    const reactions = pendingReactions.get(phantomData.messageId) ?? [];
-    const idx = reactions.findIndex(r => r.emoji.name === emoji.name && r.emoji.id === emoji.id);
-
-    if (delta > 0) {
-        if (idx >= 0) reactions[idx].count += delta;
-        else reactions.push({ emoji: { id: emoji.id ?? null, name: emoji.name, animated: emoji.animated }, count: 1 });
-    } else if (idx >= 0) {
-        reactions[idx].count += delta;
-        if (reactions[idx].count <= 0) reactions.splice(idx, 1);
-    }
-
-    pendingReactions.set(phantomData.messageId, reactions);
-    msg.reactions = reactions;
-    void saveScheduledMessages();
-
-    updatePhantomReactions(messageId, channelId, reactions);
+    void runQueueOperation(async () => {
+        if (phantomMessageMap.get(messageId) !== phantomData) return;
+        const msg = scheduledMessages.find(m => m.id === phantomData.messageId);
+        if (!msg) return;
+        const reactions = (msg.reactions ?? []).map(reaction => ({ ...reaction }));
+        const idx = reactions.findIndex(r => r.emoji.name === emoji.name && r.emoji.id === emoji.id);
+        if (delta > 0) {
+            if (idx >= 0) reactions[idx].count += delta;
+            else reactions.push({ emoji: { id: emoji.id ?? null, name: emoji.name, animated: emoji.animated }, count: 1 });
+        } else if (idx >= 0) {
+            reactions[idx].count += delta;
+            if (reactions[idx].count <= 0) reactions.splice(idx, 1);
+        }
+        await saveScheduledMessages(scheduledMessages.map(entry => entry === msg ? { ...entry, reactions } : entry));
+        if (phantomMessageMap.get(messageId) !== phantomData) return;
+        pendingReactions.set(phantomData.messageId, reactions);
+        updatePhantomReactions(messageId, channelId, reactions);
+    }).catch(() => logger.warn("Could not save scheduled message reactions."));
 }
 
 function getReactionKey(messageId: string, emoji: { id: string | null; name: string; }): string {

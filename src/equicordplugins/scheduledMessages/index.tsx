@@ -10,7 +10,7 @@ import { MessageObject, SendMessageOptions } from "@api/MessageEvents";
 import { definePluginSettings } from "@api/Settings";
 import { Devs, EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { showToast, Toasts, UserStore } from "@webpack/common";
+import { FluxDispatcher, showToast, Toasts, UserStore } from "@webpack/common";
 
 import { isScheduleModeEnabled, ScheduledMessagesButton, setScheduleModeEnabled } from "./components/ChatBarButton";
 import { CalendarIcon } from "./components/Icons";
@@ -61,6 +61,20 @@ export const settings = definePluginSettings({
     }
 });
 
+async function resetAccountSession(restart: boolean): Promise<void> {
+    const generation = ++lifecycleGeneration;
+    stopScheduler();
+    setScheduleModeEnabled(false);
+    await new Promise<void>(resolve => FluxDispatcher.wait(resolve));
+    if (generation !== lifecycleGeneration) return;
+    cleanupAllPhantomMessages();
+    if (!restart) return;
+    await loadScheduledMessages();
+    if (generation !== lifecycleGeneration) return;
+    startScheduler();
+    await recreatePhantomMessages();
+}
+
 function handleReactionEvent(event: FluxReactionEvent): void {
     const { messageId, channelId, emoji } = event;
 
@@ -93,6 +107,8 @@ export default definePlugin({
     settings,
 
     flux: {
+        LOGOUT: () => resetAccountSession(false),
+        CONNECTION_OPEN: () => resetAccountSession(true),
         MESSAGE_REACTION_ADD: handleReactionEvent,
         MESSAGE_REACTION_REMOVE: handleReactionEvent
     },

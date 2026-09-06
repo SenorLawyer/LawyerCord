@@ -6719,3 +6719,34 @@ test("scheduling rejects invalid dates without mutating saved messages", async (
         assert.equal(api.getScheduledMessages()[0].scheduledTime, originalTime);
     }
 });
+
+
+test("scheduled account events defer cleanup and cannot restart after stop", async () => {
+    for (const scenario of ["logout", "connect", "stop-wait", "stop-load"]) {
+        const events: string[] = [];
+        let flush: () => void = () => {};
+        let load: () => void = () => {};
+        const { default: plugin } = loadSource("src/equicordplugins/scheduledMessages/index.tsx", {
+            "@api/Settings": { definePluginSettings: () => ({}) }, "@utils/constants": { Devs: {}, EquicordDevs: {} },
+            "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+            "@webpack/common": { FluxDispatcher: { wait: (callback: () => void) => { flush = callback; } } },
+            "./components/ChatBarButton": { setScheduleModeEnabled: (value: boolean) => { assert.equal(value, false); } },
+            "./components/Icons": {}, "./components/MessageAccessory": {}, "./components/ViewScheduledModal": {},
+            "./components/ScheduleTimeModal": {},
+            "./utils": { stopScheduler: () => events.push("stop"), cleanupAllPhantomMessages: () => events.push("cleanup"),
+                loadScheduledMessages: () => { events.push("load"); return new Promise<void>(resolve => { load = resolve; }); },
+                startScheduler: () => events.push("start"), recreatePhantomMessages: async () => { events.push("preview"); } }
+        });
+        const pending = scenario === "logout" ? plugin.flux.LOGOUT() : plugin.flux.CONNECTION_OPEN();
+        assert.deepEqual(events, ["stop"]);
+        if (scenario === "stop-wait") plugin.stop();
+        flush();
+        await setImmediate();
+        if (scenario === "stop-load") plugin.stop();
+        load();
+        await pending;
+        assert.deepEqual(events, scenario === "logout" ? ["stop", "cleanup"]
+            : scenario === "connect" ? ["stop", "cleanup", "load", "start", "preview"]
+                : scenario === "stop-wait" ? ["stop", "stop", "cleanup"] : ["stop", "cleanup", "load", "stop", "cleanup"]);
+    }
+});

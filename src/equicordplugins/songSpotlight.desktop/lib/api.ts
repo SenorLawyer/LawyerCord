@@ -137,13 +137,13 @@ export async function saveData(data: UserData): Promise<true> {
             "Content-Type": "application/json",
         },
     })
-        .then(res => res?.json())
-        .then(json => {
+        .then(async res => {
+            const json = await res?.json();
             useSongStore
                 .getState().update({
                     userId,
                     data,
-                    at: new Date().toUTCString(),
+                    at: res?.headers.get("Last-Modified") || undefined,
                 });
             return json;
         });

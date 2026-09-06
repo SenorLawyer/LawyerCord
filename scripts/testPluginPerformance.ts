@@ -4935,3 +4935,21 @@ test("SongSpotlight sends conditional headers only for cached timestamps", async
     }
     assert.equal(updates, 4, "invalid responses never replace cached data");
 });
+
+
+test("SongSpotlight saves use only server modification timestamps", async () => {
+    let at: string | undefined;
+    const updates: { at?: string; }[] = [];
+    const token = { access: "token" };
+    const api = loadSource("src/equicordplugins/songSpotlight.desktop/lib/api.ts", {
+        "@song-spotlight/api/structs": await import("@song-spotlight/api/structs"),
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "self" }) }, showToast() {}, Toasts: { Type: {} } },
+        "./stores/AuthorizationStore": { useAuthorizationStore: { getState: () => ({ getToken: () => token }) } },
+        "./stores/SongStore": { useSongStore: { getState: () => ({ update: (value: { at?: string; }) => updates.push(value) }) } },
+    }, { URL, Headers, fetch: async () => new Response("true", { headers: at ? { "Last-Modified": at } : {} }) });
+    await api.saveData([]);
+    assert.equal(updates[0].at, undefined);
+    at = "Mon, 01 Jan 2024 00:00:00 GMT";
+    await api.saveData([]);
+    assert.equal(updates[1].at, at);
+});

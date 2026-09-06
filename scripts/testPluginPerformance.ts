@@ -21,6 +21,19 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("quick reactions scroll back from the visible offset after the list shrinks", () => {
+    const { default: plugin } = loadSource("src/plugins/moreQuickReactions/index.ts", {
+        "@api/Settings": { definePluginSettings: () => ({ store: { rows: 2, columns: 4, scroll: true } }), migratePluginSettings() {} },
+        "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {}, makeRange: () => [] },
+    });
+    let offset = 20;
+    const emojis = Array.from({ length: 12 }, (_, i) => i);
+    assert.equal(plugin.applyScroll(emojis, offset)[0], 4);
+    plugin.onWheelWrapper(offset, (value: number) => { offset = value; }, emojis.length)({ deltaY: -1, shiftKey: false, stopPropagation() {} });
+    assert.equal(offset, 0);
+});
+
 test("Spotify embed volume changes use one listener across windows", () => {
     let created: (_event: object, window: object) => void = () => assert.fail("missing window hook");
     let listeners = 0;

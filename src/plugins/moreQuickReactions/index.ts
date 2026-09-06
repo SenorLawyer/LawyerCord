@@ -144,7 +144,7 @@ export default definePlugin({
             if (e.deltaY === 0 || e.shiftKey) return;
             e.stopPropagation(); // does this do anything?
             const modifier = e.deltaY < 0 ? -1 : 1;
-            const newValue = currentScrollValue + (modifier * settings.store.columns);
+            const newValue = Math.max(0, Math.min(currentScrollValue, maxScroll)) + (modifier * settings.store.columns);
             setScrollHook(Math.max(0, Math.min(newValue, maxScroll)));
         };
     },

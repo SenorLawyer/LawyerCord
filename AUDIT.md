@@ -46,10 +46,10 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `15b106af2` | 340 tests and timezone correctness checks passed. |
-| Repository-wide ESLint | `5e869fea9` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
+| Broader performance/correctness suite | `ccc765596` | 342 tests and timezone correctness checks passed. |
+| Repository-wide ESLint | `ccc765596` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
 | CSS and internationalization lint | `5e869fea9` | Passed. CSS excludes userplugins; internationalization checks tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest plugin regressions and TypeScript | `15b106af2` | 290 plugin tests and full TypeScript passed; focused source lint passed. |
+| Latest plugin regressions and TypeScript | `ccc765596` | 292 plugin tests and full TypeScript passed; focused source lint passed. |
 | Standalone and development builds | `333abeffb` | Passed. Release native source maps exclude the installer and TypeScript parser. This does not establish installed-client behavior. |
 | Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |
 | Web build | `57b19a728` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
@@ -60,7 +60,7 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Theme provider download | `9b03d446d` | The actual native handler downloaded catalog entry 91 with HTTP 200 and no redirect into an isolated directory. All 136 catalog entries were separately checked against ID, filename, and catalog-content size rules. |
 | Other isolated browser checks | Earlier audit commits | Specific sticker-storage transactions, codec conversion, and CSS behavior were exercised. These are not general live-client acceptance. |
 
-Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. Current-head CI success has not been established.
+Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `ccc765596`, GitHub reported an empty check rollup for the draft PR. Current-head CI success has not been established.
 
 ## Remaining work
 

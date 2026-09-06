@@ -127,19 +127,6 @@ export const messageJsonToMessageClass = memoize((log: { message: LoggedMessageJ
     return message;
 });
 
-export function parseJSON(json?: string | null) {
-    try {
-        return JSON.parse(json!);
-    } finally {
-        return null;
-    }
-}
-
-export async function doesBlobUrlExist(url: string) {
-    const res = await fetch(url);
-    return res.ok;
-}
-
 export function getNative(): PluginNative<typeof import("../native")> {
     if (IS_WEB) {
         const Native = {

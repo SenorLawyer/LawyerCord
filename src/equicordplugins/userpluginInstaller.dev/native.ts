@@ -93,12 +93,16 @@ export async function isUpdateAvailableForPlugin(_, name: string): Promise<boole
 }
 
 export function initPluginInstall(_, link: string, source: string, owner: string, repo: string): Promise<string> {
+    if (typeof link !== "string" || link.length > 8192 || typeof source !== "string" || typeof owner !== "string"
+        || typeof repo !== "string" || !repo || repo.length > 255 || repo === "." || repo === "..")
+        return Promise.reject(new Error("Invalid link."));
+    const verifiedRegex = link.match(CLONE_LINK_REGEX);
+    const idpl = source === "plugins.nin0.dev" ? 1 : 0;
+    if (!verifiedRegex || verifiedRegex[0] !== link || verifiedRegex[[1, 4][idpl]] !== source || verifiedRegex[[2, 5][idpl]] !== owner || verifiedRegex[[3, 6][idpl]] !== repo)
+        return Promise.reject(new Error("Invalid link."));
+
     // eslint-disable-next-line
     return new Promise(async (resolve, reject) => {
-        const verifiedRegex = link.match(CLONE_LINK_REGEX)!;
-        const idpl = source === "plugins.nin0.dev" ? 1 : 0;
-        if (![4, 7].includes(verifiedRegex.length) || verifiedRegex[0] !== link || verifiedRegex[[1, 4][idpl]] !== source || verifiedRegex[[2, 5][idpl]] !== owner || verifiedRegex[[3, 6][idpl]] !== repo) return reject("Invalid link");
-
         // Ask for clone
         const cloneDialog = await dialog.showMessageBox({
             title: "Clone userplugin",

@@ -7614,3 +7614,24 @@ test("theme revocation reports storage and network failures without clearing aut
         assert.equal(errors, 1);
     }
 });
+
+test("installer rejects unsafe clone names and malformed links before any side effects", async () => {
+    let allowDialog = false;
+    const mocks: Record<string, object> = {
+        child_process: { spawn: () => assert.fail("No clone") },
+        electron: { dialog: { showMessageBox: () => { if (!allowDialog) assert.fail("No dialog"); return Promise.resolve({ response: 0 }); } } },
+        fs: {}, "fs/promises": { rm: () => assert.fail("No cleanup") }, path, "yaml-js": {}
+    };
+    for (const name of ["pluginValidate", "updateValidate"])
+        mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+    const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") });
+    for (const repo of [".", "..", "", "x".repeat(256)]) {
+        await assert.rejects(api.initPluginInstall(null, `https://github.com/owner/${repo}`, "github.com", "owner", repo), /Invalid link/);
+    }
+    for (const link of [null, 7, "not a repository", "https://github.com/owner/repo extra", "x".repeat(8193)]) {
+        await assert.rejects(api.initPluginInstall(null, link, "github.com", "owner", "repo"), /Invalid link/);
+    }
+    await assert.rejects(api.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "other", "repo"), /Invalid link/);
+    allowDialog = true;
+    await assert.rejects(api.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "owner", "repo"), (error: unknown) => error === "Rejected by user");
+});

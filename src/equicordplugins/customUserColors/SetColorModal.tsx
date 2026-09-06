@@ -16,15 +16,12 @@ import { colors, DATASTORE_KEY } from "./index";
 const cl = classNameFactory("vc-customColors-");
 
 export function SetColorModal({ id, modalProps }: { id: string, modalProps: RenderModalProps; }) {
-    const initialColor = parseInt(colors[id], 16) || 372735;
+    const parsedColor = parseInt(colors[id], 16);
+    const initialColor = Number.isNaN(parsedColor) ? 372735 : parsedColor;
     // color picker default to current color set for user (if null it's 0x05afff :3 )
 
     const [colorPickerColor, setColorPickerColor] = useState(initialColor);
     // hex color code as an int (NOT rgb 0-255)
-
-    function setUserColor(color: number) {
-        setColorPickerColor(color);
-    }
 
     function handleKey(e: React.KeyboardEvent) {
         if (e.key === "Enter")
@@ -68,7 +65,7 @@ export function SetColorModal({ id, modalProps }: { id: string, modalProps: Rend
                     </HeadingSecondary>
                     <ColorPicker
                         color={colorPickerColor}
-                        onChange={setUserColor}
+                        onChange={color => setColorPickerColor(color ?? 372735)}
                         showEyeDropper={false}
                     />
                 </section>

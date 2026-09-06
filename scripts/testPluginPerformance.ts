@@ -46,6 +46,23 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("custom user colors preserve black when reopening the picker", () => {
+    let initialColor: unknown;
+    const colors: Record<string, string> = { user: "000000" };
+    const { SetColorModal } = loadComponent("src/equicordplugins/customUserColors/SetColorModal.tsx", {
+        useState: (value: unknown) => { initialColor = value; return [value, (next: unknown) => { initialColor = next; }]; }
+    }, {
+        "@api/DataStore": {}, "@components/Heading": {},
+        "@utils/margins": { Margins: {} }, "./index": { colors }
+    });
+    const tree = SetColorModal({ id: "user", modalProps: {} });
+    assert.equal(initialColor, 0);
+    tree.props.children[0].props.children[0].props.children[1].props.onChange(null);
+    assert.equal(initialColor, 372735);
+    SetColorModal({ id: "missing", modalProps: {} });
+    assert.equal(initialColor, 372735);
+});
+
 test("sound imports validate all overrides before replacing settings", () => {
     const soundTypes = [{ id: "message1", name: "Message" }, { id: "mute", name: "Mute" }];
     const makeEmptyOverride = () => ({ enabled: false, selectedSound: "default", volume: 100, useFile: false });

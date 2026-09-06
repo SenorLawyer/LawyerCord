@@ -2870,3 +2870,25 @@ test("sidebar DM lookups cannot override newer navigation or a closed sidebar", 
     assert.equal(SidebarStore.getState().guildId, "guild");
     assert.equal(SidebarStore.getState().channelId, "newer-channel");
 });
+
+
+test("SongLink waits for command delivery and reports rejected sends", async () => {
+    const replies: string[] = [];
+    const delivery = Promise.withResolvers<void>();
+    const { default: plugin } = loadSource("src/equicordplugins/songLink.desktop/index.tsx", {
+        "@api/Commands": { ApplicationCommandInputType: {}, ApplicationCommandOptionType: {}, findOption: () => "https://example.com/song", sendBotMessage: (_id: string, message: { content: string; }) => replies.push(message.content) },
+        "@api/Settings": { definePluginSettings: () => ({ store: { servicesSettings: { spotify: { enabled: true } } } }) },
+        "@utils/constants": { Devs: {}, EquicordDevs: {} },
+        "@utils/discord": { sendMessage: () => delivery.promise },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack/common": {}, "./Providers": { Providers: { spotify: { name: "Spotify" } } }, "./Settings": {}, "./SongLinker": {},
+    }, { VencordNative: { pluginHelpers: { SongLink: { getTrackData: async () => ({ links: { spotify: { url: "https://example.com/song" } } }) } } } });
+    let finished = false;
+    const command = plugin.commands[0].execute([], { channel: { id: "channel" } }).then(() => { finished = true; });
+    await setImmediate();
+    const returnedBeforeDelivery = finished;
+    delivery.reject(new Error("delivery failed"));
+    await command;
+    assert.equal(returnedBeforeDelivery, false, "command stays pending until delivery settles");
+    assert.equal(replies.at(-1), "Failed to resolve or send the music link.");
+});

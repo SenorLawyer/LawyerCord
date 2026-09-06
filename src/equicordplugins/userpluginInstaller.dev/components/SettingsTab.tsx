@@ -18,7 +18,7 @@ import {
     SettingsTab as STab,
     wrapTab,
 } from "@components/settings/tabs/BaseTab";
-import { classes, isObjectEmpty } from "@utils/misc";
+import { classes } from "@utils/misc";
 import { relaunch } from "@utils/native";
 import { Alerts, closeAllModals,NavigationRouter, Toasts, useEffect, useState } from "@webpack/common";
 
@@ -54,30 +54,17 @@ function UserPluginsTab() {
     >([]);
     const [url, setUrl] = useState("");
     const [valid, setValid] = useState(false);
-    const [pluginsWithUpdates, setPluginsWithUpdates] = useState<
-        Record<string, string>
-    >({});
-    const [updatesLoaded, loadUpdates] = useState(false);
+    const [updates, setUpdates] = useState({ plugins: [] as string[], finished: false });
 
     useEffect(() => {
         const { plugins: plgobj, pluginsWithUpdates: pwug } =
             userpluginInstaller;
         setPlugins(plgobj.value());
         loadPlugins(true);
-        const cid2 = plgobj.registerCallback(value => setPlugins(value));
+        const cid2 = plgobj.registerCallback(setPlugins);
 
-        const setPWU = value => {
-            const pwu = value.plugins.map(pg => ({
-                [pg]: plgobj.value().find(pfjh => pfjh.directory === pg)
-                    ?.name,
-            }));
-            setPluginsWithUpdates(Object.assign({}, ...pwu));
-            loadUpdates(value.finished);
-        };
-        const cid = pwug.registerCallback(value => {
-            setPWU(value);
-        });
-        setPWU(pwug.value());
+        const cid = pwug.registerCallback(setUpdates);
+        setUpdates(pwug.value());
 
         return () => {
             pwug.deregisterCallback(cid);
@@ -85,7 +72,7 @@ function UserPluginsTab() {
         };
     }, []);
 
-    const pendingDirectories = new Set(Object.keys(pluginsWithUpdates));
+    const pendingDirectories = new Set(updates.plugins);
 
     return (
         <STab
@@ -93,8 +80,8 @@ function UserPluginsTab() {
             title={`UserPlugins${pluginsLoaded ? ` (${plugins.length}, ${countEnabledUserPlugins(plugins)} enabled)` : ""}`}
         >
             <div className={cl("update-check-container")}>
-                {isObjectEmpty(pluginsWithUpdates) ? (
-                    !updatesLoaded && (
+                {pendingDirectories.size === 0 ? (
+                    !updates.finished && (
                         <BaseText>Checking for updates...</BaseText>
                     )
                 ) : (
@@ -107,13 +94,14 @@ function UserPluginsTab() {
                         <Paragraph className={cl("install-desc")}>
                             The following plugins are out-of-date:
                             <ul className={cl("outdated-list")}>
-                                {Object.values(pluginsWithUpdates)
-                                    .toSorted()
-                                    .map(pl => (
-                                        <li key={pl}>{pl}</li>
+                                {[...pendingDirectories]
+                                    .map(directory => ({ directory, name: plugins.find(plugin => plugin.directory === directory)?.name ?? directory }))
+                                    .toSorted((a, b) => a.name.localeCompare(b.name))
+                                    .map(plugin => (
+                                        <li key={plugin.directory}>{plugin.name}</li>
                                     ))}
                             </ul>
-                            {!updatesLoaded &&
+                            {!updates.finished &&
                                 "and possibly more, as update checking is not finished. "}
                             You can update plugins below.
                         </Paragraph>

@@ -6,7 +6,7 @@
 
 import { Toasts, UserStore } from "@webpack/common";
 
-import { Auth, authorize, getToken, updateAuth } from "./auth";
+import { authorize, getToken, updateAuth } from "./auth";
 import { Review, ReviewDBCurrentUser, ReviewDBUser, ReviewType } from "./entities";
 import { settings } from "./settings";
 import { showToast } from "./utils";
@@ -235,12 +235,13 @@ async function patchBlock(action: "block" | "unblock", userId: string) {
 
     if (!data) return false;
 
-    if (Auth?.user?.blockedUsers) {
-        const newBlockedUsers = action === "block"
-            ? [...Auth.user.blockedUsers, userId]
-            : Auth.user.blockedUsers.filter(id => id !== userId);
-        await updateAuth({ user: { ...Auth.user, blockedUsers: newBlockedUsers } });
-    }
+    await updateAuth(auth => {
+        if (!auth.user?.blockedUsers) return auth;
+        const blockedUsers = action === "block"
+            ? [...new Set([...auth.user.blockedUsers, userId])]
+            : auth.user.blockedUsers.filter(id => id !== userId);
+        return { user: { ...auth.user, blockedUsers } };
+    });
     showToast(`Successfully ${action}ed user`, Toasts.Type.SUCCESS);
     return true;
 }

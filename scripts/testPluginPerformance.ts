@@ -21,6 +21,30 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ReviewDB concurrent blocks preserve both stored changes", async () => {
+    const accounts = { first: { token: "token", user: { blockedUsers: [] as string[] } } };
+    const writes: (() => void)[] = [];
+    const common = { UserStore: { getCurrentUser: () => ({ id: "first" }) }, Toasts: { Type: {} } };
+    const auth = loadSource("src/plugins/reviewDB/auth.tsx", {
+        "@webpack/common": common, "@utils/Logger": {},
+        "@api/DataStore": {
+            get: async () => accounts,
+            update: (_key: string, update: (value: typeof accounts) => unknown) => new Promise(resolve => writes.push(() => resolve(update(accounts)))),
+        },
+    });
+    await auth.initAuth();
+    const api = loadSource("src/plugins/reviewDB/reviewDbApi.ts", {
+        "@webpack/common": common, "./auth": auth, "./entities": {}, "./settings": {}, "./utils": { showToast() {} },
+    }, { fetch: async () => ({ ok: true, json: async () => ({}) }) });
+    const first = api.blockUser("one");
+    const second = api.blockUser("two");
+    await setImmediate();
+    assert.equal(writes.length, 2);
+    for (const write of writes) write();
+    await Promise.all([first, second]);
+    assert.deepEqual(Array.from(accounts.first.user.blockedUsers), ["one", "two"]);
+});
+
 test("ReviewDB distinguishes failed block loads from empty lists", async () => {
     for (const success of [false, true]) {
         const api = loadSource("src/plugins/reviewDB/reviewDbApi.ts", {

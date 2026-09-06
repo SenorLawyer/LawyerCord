@@ -33,15 +33,16 @@ export async function getToken() {
     return auth?.token;
 }
 
-export async function updateAuth(newAuth: ReviewDBAuth) {
+export async function updateAuth(newAuth: ReviewDBAuth | ((auth: ReviewDBAuth) => ReviewDBAuth)) {
     const currentUserId = UserStore.getCurrentUser()?.id;
     if (!currentUserId) return;
     return DataStore.update(DATA_STORE_KEY, auth => {
         auth ??= {};
         const accountAuth = auth[currentUserId] ??= {};
+        const update = typeof newAuth === "function" ? newAuth(accountAuth) : newAuth;
 
-        if (newAuth.token) accountAuth.token = newAuth.token;
-        if (newAuth.user) accountAuth.user = newAuth.user;
+        if (update.token) accountAuth.token = update.token;
+        if (update.user) accountAuth.user = update.user;
         if (UserStore.getCurrentUser()?.id === currentUserId) Auth = accountAuth;
 
         return auth;

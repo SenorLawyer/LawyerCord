@@ -35,6 +35,7 @@ import { EquicordDonorModal, EquicordTranslatorModal, VencordDonorModal } from "
 const CONTRIBUTOR_BADGE = "https://cdn.discordapp.com/emojis/1092089799109775453.png?size=64";
 const EQUICORD_CONTRIBUTOR_BADGE = "https://equicord.org/assets/favicon.png";
 const USERPLUGIN_CONTRIBUTOR_BADGE = "https://equicord.org/assets/icons/misc/userplugin.png";
+const logger = new Logger("BadgeAPI");
 
 const ContributorBadge: ProfileBadge = {
     id: "vencord_contributor_badge",
@@ -205,10 +206,12 @@ export default definePlugin({
     async start() {
         const generation = ++badgeLoadGeneration;
         clearInterval(intervalId);
-        await loadAllBadges();
+        await loadAllBadges().catch(error => logger.warn("Failed to load badges", error));
         if (generation !== badgeLoadGeneration) return;
 
-        intervalId = setInterval(() => void loadAllBadges(), 1000 * 60 * 30); // 30 minutes
+        intervalId = setInterval(() => {
+            void loadAllBadges().catch(error => logger.warn("Failed to refresh badges", error));
+        }, 1000 * 60 * 30); // 30 minutes
     },
 
     async stop() {
@@ -223,7 +226,7 @@ export default definePlugin({
         try {
             return _getBadges(profile);
         } catch (e) {
-            new Logger("BadgeAPI#getBadges").error(e);
+            logger.error("Failed to get badges", e);
             return [];
         }
     },

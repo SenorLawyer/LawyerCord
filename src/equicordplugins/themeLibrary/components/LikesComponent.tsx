@@ -24,25 +24,25 @@ export const LikesComponent = ({ themeId, likedThemes: initialLikedThemes }: { t
     }, [likedThemes, themeId]);
 
     function getThemeLikes(themeId: Theme["id"]): number {
-        const themeLike = likedThemes?.likes.find(like => like.themeId === themeId as unknown as Number);
+        const themeLike = likedThemes?.likes.find(like => like.themeId === themeId);
         return themeLike ? themeLike.likes : 0;
     }
 
     const handleLikeClick = async (themeId: Theme["id"]) => {
-        if (!await isAuthorized()) return;
         if (debounce.current) return;
-
-        const theme = likedThemes?.likes.find(like => like.themeId === themeId as unknown as Number);
-        const hasLiked: boolean = theme?.hasLiked ?? false;
-        const endpoint = hasLiked ? "/likes/remove" : "/likes/add";
-        const token = await getThemeLibraryToken();
-        if (!token) return;
-
-        // doing this so the delay is not visible to the user
-        setLikesCount(likesCount + (hasLiked ? -1 : 1));
         debounce.current = true;
 
         try {
+            if (!await isAuthorized()) return;
+            const theme = likedThemes?.likes.find(like => like.themeId === themeId);
+            const hasLiked: boolean = theme?.hasLiked ?? false;
+            const endpoint = hasLiked ? "/likes/remove" : "/likes/add";
+            const token = await getThemeLibraryToken();
+            if (!token) return;
+
+            // doing this so the delay is not visible to the user
+            setLikesCount(likesCount + (hasLiked ? -1 : 1));
+
             const response = await themeRequest(endpoint, {
                 method: "POST",
                 headers: {
@@ -82,7 +82,7 @@ export const LikesComponent = ({ themeId, likedThemes: initialLikedThemes }: { t
         }
     };
 
-    const hasLiked = likedThemes?.likes.some(like => like.themeId === themeId as unknown as Number && like?.hasLiked === true) ?? false;
+    const hasLiked = likedThemes?.likes.some(like => like.themeId === themeId && like?.hasLiked === true) ?? false;
 
     return (
         <Button onClick={() => handleLikeClick(themeId)}

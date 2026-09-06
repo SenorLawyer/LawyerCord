@@ -7418,3 +7418,40 @@ test("theme tab cleanup aborts catalog work and suppresses late token requests",
     finish(new Response("[]", { status: 503 }));
     await assert.rejects(failed, /Could not fetch the theme list/);
 });
+
+test("theme like requests lock before authorization and unlock after denied authorization", async () => {
+    let authorize: (value: boolean) => void = () => {};
+    let checks = 0;
+    let posts = 0;
+    let click: () => Promise<void> = async () => {};
+    const Button = {};
+    const api = loadSource("src/equicordplugins/themeLibrary/components/LikesComponent.tsx", {
+        "@components/Button": { Button }, "@components/margins": { Margins: {} },
+        "@equicordplugins/themeLibrary/utils/auth": {
+            isAuthorized: () => { checks++; return new Promise<boolean>(resolve => { authorize = resolve; }); },
+            getThemeLibraryToken: async () => "fixture-token"
+        }, "@equicordplugins/themeLibrary/utils/Icons": { LikeIcon: () => null },
+        "@webpack/common": { useEffect() {}, useRef: () => ({ current: false }), useState: (initial: unknown) => {
+            return [initial, () => {}];
+        } }, "./ThemeTab": { logger: { error() {} }, themeRequest: async (_endpoint: string, options?: RequestInit) => {
+            if (options?.method === "POST") posts++;
+            return new Response(JSON.stringify({ likes: [] }));
+        } }
+    }, { React: { createElement(type: unknown, props: { onClick: () => Promise<void>; }) {
+        if (type === Button) click = props.onClick;
+        return null;
+    } } });
+    api.LikesComponent({ themeId: 91, likedThemes: { likes: [] } });
+    const first = click();
+    await click();
+    assert.equal(checks, 1);
+    authorize(false);
+    await first;
+    assert.equal(posts, 0);
+    const second = click();
+    await click();
+    assert.equal(checks, 2);
+    authorize(true);
+    await second;
+    assert.equal(posts, 1);
+});

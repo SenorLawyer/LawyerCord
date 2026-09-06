@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createSourceFile, forEachChild, isPropertyAssignment, ScriptTarget } from "typescript";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const VERBOSE = process.env.LINT_PATCHES_VERBOSE === "1" || process.argv.includes("--verbose");
@@ -29,8 +30,21 @@ for (const rel of tracked) {
     const text = readFileSync(join(ROOT, rel), "utf8");
     if (!text.includes("match:") && !text.includes("find:")) continue;
 
+    const source = createSourceFile(rel, text, ScriptTarget.Latest, true);
+    const patchLines = new Set();
+    const visit = node => {
+        if (isPropertyAssignment(node) && node.name.text === "patches") {
+            const first = source.getLineAndCharacterOfPosition(node.initializer.getStart(source)).line;
+            const last = source.getLineAndCharacterOfPosition(node.initializer.end).line;
+            for (let line = first; line <= last; line++) patchLines.add(line);
+        }
+        forEachChild(node, visit);
+    };
+    visit(source);
+
     const lines = text.split("\n");
     for (let i = 0; i < lines.length; i++) {
+        if (!patchLines.has(i)) continue;
         const line = lines[i];
         const at = `${rel.replace(/\\/g, "/")}:${i + 1}`;
 

@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Limit patch lint to patch definitions instead of flagging unrelated URL rewrite rules.
+
 - Remove an invalid, ineffective transform from the hidden-message indicator.
 
 - Report attachment read failures instead of opening a schedule with missing files.

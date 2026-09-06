@@ -120,11 +120,11 @@ export async function sendSticker({ channelId, sticker, ctrlKey, shiftKey }: Sen
         let file: File;
 
         if (reply) {
-            FluxDispatcher.dispatch({ type: "DELETE_PENDING_REPLY", channelId });
             options = MessageActions.getSendMessageOptionsForReply(reply);
         }
 
         if (shiftKey) {
+            if (reply) FluxDispatcher.dispatch({ type: "DELETE_PENDING_REPLY", channelId });
             return await MessageActions._sendMessage(channelId, { content: sticker.image }, options);
         }
 
@@ -166,6 +166,12 @@ export async function sendSticker({ channelId, sticker, ctrlKey, shiftKey }: Sen
                         uploaded_filename: upload.uploadedFilename,
                     }],
                     message_reference: reply ? options?.messageReference : null,
+                }
+            }).then(() => {
+                if (!reply || UserStore.getCurrentUser()?.id !== userId) return;
+                const pending = PendingReplyStore.getPendingReply(channelId);
+                if (pending?.message.id === reply.message.id && pending.shouldMention === reply.shouldMention) {
+                    FluxDispatcher.dispatch({ type: "DELETE_PENDING_REPLY", channelId });
                 }
             }).catch(onError);
         });

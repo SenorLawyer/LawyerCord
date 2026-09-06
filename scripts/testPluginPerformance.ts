@@ -2905,6 +2905,42 @@ test("sticker sends retain their account through conversion and upload", async (
     }
 });
 
+test("sticker upload clears only the matching reply after a successful post", async () => {
+    for (const outcome of ["success", "post-error", "conversion-error", "prompt", "new-reply", "new-mention", "new-account"]) {
+        let userId = "first";
+        let pending = { message: { id: "reply" }, shouldMention: false };
+        const dispatches: unknown[] = [];
+        const handlers: Record<string, () => void> = {};
+        let finish: () => void = () => {};
+        const posted = new Promise<void>(resolve => { finish = resolve; });
+        const module = loadSource("src/equicordplugins/moreStickers/upload.ts", {
+            "@ffmpeg/ffmpeg": {}, "@utils/discord": {}, "@utils/ffmpeg": {},
+            "@vencord/discord-types/enums": { CloudUploadPlatform: { WEB: "web" } },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: userId }) }, DraftStore: { getDraft: () => "" },
+                PendingReplyStore: { getPendingReply: () => pending },
+                MessageActions: { getSendMessageOptionsForReply: () => ({ messageReference: { message_id: "reply" } }) },
+                FluxDispatcher: { dispatch: (event: unknown) => dispatches.push(event) },
+                ChannelStore: { getChannel: () => ({ id: "channel" }) }, UploadHandler: { promptToUpload() {} },
+                CloudUploader: class { on(event: string, callback: () => void) { handlers[event] = callback; } upload() {} },
+                Constants: { Endpoints: { MESSAGES: () => "/messages" } }, SnowflakeUtils: { fromTimestamp: () => "nonce" },
+                RestAPI: { post: () => outcome === "post-error" ? Promise.reject(new Error("Failed")) : posted },
+                Toasts: { Type: {} }, showToast() {}
+            }, ".": { settings: { store: { promptToUpload: outcome === "prompt" } } }, "./utils": {}
+        }, { convert: async () => { if (outcome === "conversion-error") throw new Error("Failed"); return new File(["gif"], "sticker.gif"); } }, "(toGIF = convert, exports)");
+        await module.sendSticker({ channelId: "channel", sticker: { isAnimated: true, image: "image" }, ctrlKey: false, shiftKey: false });
+        assert.equal(dispatches.length, 0);
+        handlers.complete?.();
+        assert.equal(dispatches.length, 0);
+        if (outcome === "new-reply") pending = { ...pending, message: { id: "different" } };
+        if (outcome === "new-mention") pending = { ...pending, shouldMention: true };
+        if (outcome === "new-account") userId = "second";
+        finish();
+        await setImmediate();
+        assert.equal(dispatches.length, outcome === "success" ? 1 : 0);
+    }
+});
+
 test("sticker link insertion preserves draft text and the pending reply", async () => {
     for (const draft of ["", "draft", "draft ", "draft\n"]) {
         const inserted: string[] = [];

@@ -5,6 +5,7 @@
  */
 
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -7634,6 +7635,44 @@ test("installer rejects unsafe clone names and malformed links before any side e
     await assert.rejects(api.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "other", "repo"), /Invalid link/);
     allowDialog = true;
     await assert.rejects(api.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "owner", "repo"), /Rejected by user/);
+});
+
+test("plugin cloning settles launch and re-clone failures outside subprocess callbacks", async () => {
+    for (const stage of ["launch", "dialog", "cleanup", "retry", "success"]) {
+        let clones = 0;
+        let dialogs = 0;
+        let cleanups = 0;
+        const mocks: Record<string, object> = {
+            child_process: { spawn: () => {
+                const proc = new EventEmitter();
+                const attempt = ++clones;
+                queueMicrotask(() => {
+                    if (stage === "launch" || stage === "retry" && attempt === 2) {
+                        proc.emit("error", new Error("Private executable path"));
+                        proc.emit("close", -2);
+                    } else proc.emit("close", attempt === 1 ? 1 : 0);
+                });
+                return proc;
+            } },
+            electron: { dialog: { showMessageBox: async () => {
+                dialogs++;
+                if (stage === "dialog") throw new Error("Dialog failed");
+                return { response: 1 };
+            } } },
+            fs: { existsSync: () => true },
+            "fs/promises": { rm: async () => { cleanups++; if (stage === "cleanup") throw new Error("Cleanup failed"); } },
+            path, "yaml-js": {}
+        };
+        for (const name of ["pluginValidate", "updateValidate"])
+            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") }, "({ cloneRepo })");
+        const pending = api.cloneRepo("https://github.com/owner/repo", "repo");
+        if (stage === "success") await pending;
+        else await assert.rejects(pending, stage === "dialog" ? /Dialog failed/ : stage === "cleanup" ? /Cleanup failed/ : /Could not start Git/);
+        assert.equal(dialogs, stage === "launch" ? 0 : 1);
+        assert.equal(cleanups, stage === "launch" || stage === "dialog" ? 0 : 1);
+        assert.equal(clones, stage === "retry" || stage === "success" ? 2 : 1);
+    }
 });
 
 test("installer setup failures reject the caller without exposing native errors", async () => {

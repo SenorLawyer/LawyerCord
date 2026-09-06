@@ -241,30 +241,28 @@ async function getPluginMeta(path: string, extra: object = {}): Promise<{
 }
 
 async function cloneRepo(link: string, repo: string): Promise<void> {
-    return new Promise((resolve, reject) => {
+    const exitCode = await new Promise<number | null>((resolve, reject) => {
         const proc = spawn("git", ["clone", link], {
             cwd: join(vencordPath, "..", "src", "userplugins")
         });
-        proc.once("close", async () => {
-            if (proc.exitCode !== 0) {
-                if (!existsSync(join(vencordPath, "..", "src", "userplugins", repo)))
-                    return reject("Failed to clone");
-                const deleteReqDialog = await dialog.showMessageBox({
-                    title: "Error",
-                    message: "Plugin already exists",
-                    type: "error",
-                    detail: `The plugin that you tried to clone already exists at ${join(vencordPath, "..", "src", "userplugins")}.\nWould you like to reclone it? Only do this if you want to reinstall or update the plugin.`,
-                    buttons: ["No", "Yes"]
-                });
-                if (deleteReqDialog.response !== 1) return reject("User rejected");
-                await rm(join(vencordPath, "..", "src", "userplugins", repo), {
-                    recursive: true
-                });
-                await cloneRepo(link, repo);
-            }
-            resolve();
-        });
+        proc.once("error", () => reject(new Error("Could not start Git.")));
+        proc.once("close", resolve);
     });
+    if (exitCode === 0) return;
+    if (!existsSync(join(vencordPath, "..", "src", "userplugins", repo)))
+        throw new Error("Failed to clone the plugin.");
+    const deleteReqDialog = await dialog.showMessageBox({
+        title: "Error",
+        message: "Plugin already exists",
+        type: "error",
+        detail: `The plugin that you tried to clone already exists at ${join(vencordPath, "..", "src", "userplugins")}.\nWould you like to reclone it? Only do this if you want to reinstall or update the plugin.`,
+        buttons: ["No", "Yes"]
+    });
+    if (deleteReqDialog.response !== 1) throw new Error("User rejected");
+    await rm(join(vencordPath, "..", "src", "userplugins", repo), {
+        recursive: true
+    });
+    await cloneRepo(link, repo);
 }
 
 function escapeHtml(value: string): string {

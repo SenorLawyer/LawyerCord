@@ -20,6 +20,25 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("theme library requests preserve authentication in Headers objects", async () => {
+    const { themeRequest } = loadSource("src/equicordplugins/themeLibrary/components/ThemeTab.tsx", {
+        "@api/DataStore": {}, "@api/Settings": {}, "@components/ErrorCard": {},
+        "@components/Heading": {}, "@components/Icons": {}, "@components/Paragraph": {},
+        "@components/settings": { wrapTab: (component: unknown) => component },
+        "@equicordplugins/themeLibrary/types": { SearchStatus: {} },
+        "@utils/Logger": { Logger: class {} }, "@utils/margins": {}, "@utils/misc": {},
+        "@webpack": { findCssClassesLazy: () => ({}) }, "@webpack/common": {}, "./ThemeCard": {},
+    }, {
+        fetch: async (_url: string, options: RequestInit) => {
+            const headers = new Headers(options.headers);
+            assert.equal(headers.get("Authorization"), "Bearer test-token");
+            assert.equal(headers.get("Accept"), "application/json");
+            return new Response("{}");
+        },
+    });
+    await themeRequest("/likes/get", { headers: new Headers({ Authorization: "Bearer test-token", Accept: "application/json" }) });
+});
+
 test("Song Spotlight validation does not trust a failed render cached as valid", async () => {
     const handlers = await import("@song-spotlight/api/handlers");
     const util = await import("@song-spotlight/api/util");

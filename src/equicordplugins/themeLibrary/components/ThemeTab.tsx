@@ -40,12 +40,7 @@ export async function fetchAllThemes(): Promise<Theme[]> {
 }
 
 export async function themeRequest(path: string, options: RequestInit = {}) {
-    return fetch(apiUrl + path, {
-        ...options,
-        headers: {
-            ...options.headers,
-        }
-    });
+    return fetch(apiUrl + path, options);
 }
 
 const SearchTags = {

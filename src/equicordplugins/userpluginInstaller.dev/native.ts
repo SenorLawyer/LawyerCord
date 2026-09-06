@@ -22,13 +22,21 @@ const CLONE_LINK_REGEX = /https:\/\/(?:((?:git(?:hub|lab)\.com|git\.(?:[a-zA-Z0-
 
 const vencordPath = ["desktop", "equibop"].includes(basename(__dirname)) ? join(__dirname, "../") : __dirname;
 
-function getPluginDirectory(name: unknown): string {
+function getPluginDirectory(name: unknown): string;
+function getPluginDirectory(name: unknown, allowMissing: true): string | undefined;
+function getPluginDirectory(name: unknown, allowMissing = false): string | undefined {
     if (typeof name !== "string" || !name || name.length > 255 || name === "." || name === ".." || /[/\\:\0]/.test(name))
         throw new Error("Invalid plugin directory.");
 
     try {
         const root = realpathSync(join(vencordPath, "../src/userplugins"));
-        const directory = realpathSync(join(root, name));
+        let directory: string;
+        try {
+            directory = realpathSync(join(root, name));
+        } catch (error) {
+            if (allowMissing && typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return;
+            throw error;
+        }
         if (dirname(directory) === root) return directory;
     } catch {
         throw new Error("Invalid plugin directory.");
@@ -90,7 +98,8 @@ export async function rmPlugin(_, name: string): Promise<boolean> {
 
 export async function isUpdateAvailableForPlugin(_, name: string): Promise<boolean> {
     return runPluginMutation(async () => {
-        const pluginDir = getPluginDirectory(name);
+        const pluginDir = getPluginDirectory(name, true);
+        if (pluginDir === undefined) return false;
         return new Promise(resolve => {
             exec("git fetch", { cwd: pluginDir }, error => {
                 if (error) return resolve(false);

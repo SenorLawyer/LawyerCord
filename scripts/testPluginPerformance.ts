@@ -1912,7 +1912,8 @@ test("installer update commands reject traversal and directories linked outside 
     const native = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.join(temporary, "dist") }, "({ ...exports, getPluginDirectory })");
     assert.equal(native.getPluginDirectory("valid"), realpathSync(path.join(root, "valid")));
     for (const name of ["../outside", "..", ".", outside, "linked", "missing", "", null, 1]) {
-        await assert.rejects(native.isUpdateAvailableForPlugin(null, name), { message: "Invalid plugin directory." });
+        if (name === "missing") assert.equal(await native.isUpdateAvailableForPlugin(null, name), false);
+        else await assert.rejects(native.isUpdateAvailableForPlugin(null, name), { message: "Invalid plugin directory." });
         await assert.rejects(native.updatePlugin(null, name), { message: "Invalid plugin directory." });
     }
     assert.equal(commands, 0);

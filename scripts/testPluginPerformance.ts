@@ -6925,3 +6925,40 @@ test("scheduled reaction writes preserve committed counts on failure and ignore 
         assert.equal(warnings, scenario === "failure" ? 1 : 0);
     }
 });
+
+
+test("scheduled queue controls report failures without stale account feedback", async () => {
+    for (const action of ["delete", "clear"]) for (const timing of ["current", "before", "during"]) {
+        let userId = "account";
+        let writes = 0;
+        const notices: string[] = [];
+        let reject: (error: Error) => void = () => {};
+        let remove: () => Promise<void> = async () => assert.fail("Missing delete action");
+        let clear: () => Promise<void> = async () => assert.fail("Missing clear action");
+        const Button = Symbol("Button");
+        const Modal = Symbol("Modal");
+        const write = () => { writes++; return new Promise<void>((_resolve, fail) => { reject = fail; }); };
+        const component = loadSource("src/equicordplugins/scheduledMessages/components/ViewScheduledModal.tsx", {
+            "@components/Button": { Button }, "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+            "@utils/css": { classNameFactory: () => () => "" },
+            "@webpack/common": { Modal, useState: (value: unknown) => [value, () => assert.fail("Failed saves must not replace the list")],
+                useStateFromStores: (_stores: unknown, selector: () => unknown) => selector(),
+                UserStore: { getCurrentUser: () => ({ id: userId }) }, ChannelStore: { getChannel: () => undefined }, Toasts: { Type: { FAILURE: "failure" } },
+                showToast: (message: string, type: string) => { assert.equal(type, "failure"); notices.push(message); } },
+            "../utils": { getScheduledMessages: () => [{ id: "saved", userId: "account", content: "Text", scheduledTime: 0 }],
+                getChannelDisplayInfo: () => ({ name: "Channel" }), removeScheduledMessage: write, clearAllScheduledMessages: write }, "./Icons": {}
+        }, { React: { createElement: (type: unknown, props: { onClick: () => Promise<void>; actions: { text: string; onClick: () => Promise<void>; }[]; }) => {
+            if (type === Button) remove = props.onClick;
+            if (type === Modal) clear = props.actions[0].onClick;
+            return null;
+        } } }, "ViewScheduledModalInner");
+        component({});
+        if (timing === "before") userId = "other";
+        const pending = action === "delete" ? remove() : clear();
+        if (timing === "during") userId = "other";
+        reject(new Error("Private storage details"));
+        await pending;
+        assert.equal(writes, timing === "before" ? 0 : 1);
+        assert.deepEqual(notices, timing === "current" ? [action === "delete" ? "Could not remove the scheduled message. Try again." : "Could not clear scheduled messages. Try again."] : []);
+    }
+});

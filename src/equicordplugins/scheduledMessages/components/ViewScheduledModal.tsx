@@ -27,18 +27,18 @@ function ViewScheduledModalInner({ rootProps, close }: ViewScheduledModalProps) 
 
     const handleDelete = async (id: string) => {
         if (!userId || UserStore.getCurrentUser()?.id !== userId) return;
-        await removeScheduledMessage(id);
+        const removed = await removeScheduledMessage(id).then(() => true, () => false);
         if (UserStore.getCurrentUser()?.id !== userId) return;
-        setMessages(getScheduledMessages());
-        showToast("Scheduled message removed", Toasts.Type.SUCCESS);
+        if (removed) setMessages(getScheduledMessages());
+        showToast(removed ? "Scheduled message removed" : "Could not remove the scheduled message. Try again.", removed ? Toasts.Type.SUCCESS : Toasts.Type.FAILURE);
     };
 
     const handleClearAll = async () => {
         if (!userId || UserStore.getCurrentUser()?.id !== userId) return;
-        await clearAllScheduledMessages();
+        const cleared = await clearAllScheduledMessages().then(() => true, () => false);
         if (UserStore.getCurrentUser()?.id !== userId) return;
-        setMessages(getScheduledMessages());
-        showToast("Scheduled messages cleared", Toasts.Type.SUCCESS);
+        if (cleared) setMessages(getScheduledMessages());
+        showToast(cleared ? "Scheduled messages cleared" : "Could not clear scheduled messages. Try again.", cleared ? Toasts.Type.SUCCESS : Toasts.Type.FAILURE);
     };
 
     const actions = [

@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Report failed scheduled-message deletions without clearing the list or showing feedback after an account switch.
+
 - Show failed scheduling saves in the dialog while preserving its draft and attachments.
 
 - Commit scheduled queue mutations in order and publish them only after storage succeeds, preventing failed additions from being sent or persisted by later saves.

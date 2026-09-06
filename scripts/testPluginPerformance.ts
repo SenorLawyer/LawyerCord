@@ -46,6 +46,23 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("Element highlighter escapes inspected text in its tooltip", () => {
+    const escape = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+    const highlighter = loadSource("src/equicordplugins/elementHighlighter.dev/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: { showId: true, showClasses: true, showFont: true } }) },
+        "@components/Button": {}, "@utils/constants": { Devs: {} },
+        "@utils/css": { classNameFactory: () => (name: string) => name },
+        "@utils/discord": {}, "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+        "@webpack": { findComponentByCodeLazy: () => null }, "@webpack/common": { lodash: { escape } }
+    }, { HTMLElement: class {} }, "({ buildTooltipContent })");
+    const payload = '<img src=x onerror="alert(1)">';
+    const html = highlighter.buildTooltipContent({ tagName: "DIV", id: payload, className: payload, getAttribute: () => null },
+        { color: "rgb(1, 2, 3)", fontFamily: payload, fontSize: "12px" }, { width: 20, height: 10 });
+    assert.equal(html.includes("<img"), false);
+    assert.ok(html.includes(escape(payload)));
+    assert.ok(html.includes("20x10"));
+});
+
 test("Toolbox reflects plugin toggles without changing its search", () => {
     let enabled = true;
     let hook = 0;

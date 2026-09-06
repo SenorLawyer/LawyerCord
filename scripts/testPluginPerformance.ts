@@ -21,6 +21,31 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ReviewDB reload dependencies include the profile and current account", () => {
+    let userId = "first";
+    const dependencies: unknown[][] = [];
+    const store = { getCurrentUser: () => ({ id: userId }) };
+    const { default: ReviewsView } = loadSource("src/plugins/reviewDB/components/ReviewsView.tsx", {
+        "@components/Paragraph": {}, "@plugins/reviewDB/auth": {}, "@plugins/reviewDB/entities": {},
+        "@plugins/reviewDB/reviewDbApi": {}, "@plugins/reviewDB/settings": {}, "@plugins/reviewDB/utils": {},
+        "@utils/react": {
+            useForceUpdater: () => [0, () => {}],
+            useAwaiter: (_factory: unknown, options: { deps: unknown[]; }) => { dependencies.push(Array.from(options.deps)); return [null]; },
+        },
+        "@webpack": { findByPropsLazy: () => ({}), findComponentByCodeLazy: () => ({}), findByCodeLazy: () => ({}) },
+        "@webpack/common": { UserStore: store, useStateFromStores: (stores: unknown[], select: () => unknown) => {
+            assert.equal(stores[0], store); return select();
+        } }, "./ReviewComponent": {},
+    });
+    ReviewsView({ discordId: "profile-one", onFetchReviews() {} });
+    ReviewsView({ discordId: "profile-two", onFetchReviews() {} });
+    userId = "second";
+    ReviewsView({ discordId: "profile-two", onFetchReviews() {} });
+    assert.notDeepEqual(dependencies[0], dependencies[1]);
+    assert.notDeepEqual(dependencies[1], dependencies[2]);
+    assert.ok(dependencies[2].includes("profile-two") && dependencies[2].includes("second"));
+});
+
 test("ReviewDB vote callbacks ignore stale accounts and results", async () => {
     const source = readFileSync("src/plugins/reviewDB/components/ReviewComponent.tsx", "utf8");
     const start = source.indexOf("    async function submitVote(");

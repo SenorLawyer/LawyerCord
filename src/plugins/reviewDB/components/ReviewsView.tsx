@@ -24,7 +24,7 @@ import { settings } from "@plugins/reviewDB/settings";
 import { cl, showToast } from "@plugins/reviewDB/utils";
 import { useAwaiter, useForceUpdater } from "@utils/react";
 import { findByCodeLazy, findByPropsLazy, findComponentByCodeLazy } from "@webpack";
-import { React, RelationshipStore, useRef, UserStore } from "@webpack/common";
+import { React, RelationshipStore, useRef, UserStore, useStateFromStores } from "@webpack/common";
 
 import ReviewComponent from "./ReviewComponent";
 
@@ -61,10 +61,11 @@ export default function ReviewsView({
     type,
 }: Props) {
     const [signal, refetch] = useForceUpdater(true);
+    const currentUserId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
 
     const [reviewData] = useAwaiter(() => getReviews(discordId, { offset: (page - 1) * REVIEWS_PER_PAGE, fetchVotes: true }), {
         fallbackValue: null,
-        deps: [refetchSignal, signal, page],
+        deps: [discordId, currentUserId, refetchSignal, signal, page],
         onSuccess: data => {
             if (settings.store.hideBlockedUsers) data!.reviews = data!.reviews?.filter(r => !RelationshipStore.isBlocked(r.sender.discordID));
             const systemReviews = data!.reviews.filter(r => r.type === ReviewType.System);
@@ -77,8 +78,6 @@ export default function ReviewsView({
     });
 
     if (!reviewData) return null;
-
-    const currentUserId = UserStore.getCurrentUser()?.id;
 
     return (
         <>

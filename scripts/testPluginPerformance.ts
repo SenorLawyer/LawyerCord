@@ -21,6 +21,22 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("Unindent preserves code fence placement while removing indentation", () => {
+    const { default: plugin } = loadSource("src/plugins/unindent/index.ts", {
+        "@utils/constants": { Devs: {} }, "@utils/types": { __esModule: true, default: (value: object) => value },
+    });
+    for (const [input, expected] of [
+        ["```js\n    code```", "```js\ncode```"],
+        ["```js\n    code\n```", "```js\ncode\n```"],
+        ["```inline```", "```inline```"],
+        ["before ```js\n    first\n      second\n``` after", "before ```js\nfirst\n  second\n``` after"],
+    ]) {
+        const message = { content: input };
+        plugin.unindentMsg(message);
+        assert.equal(message.content, expected);
+    }
+});
+
 test("voice metadata closes its audio context after success and decoding failures", async () => {
     let decode: () => Promise<unknown> = async () => ({ getChannelData: () => new Float32Array([0]), sampleRate: 48000, duration: 1 });
     let closes = 0;

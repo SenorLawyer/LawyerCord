@@ -48,12 +48,10 @@ export default definePlugin({
     },
 
     unindentMsg(msg: MessageObject) {
-        msg.content = msg.content.replace(/```(.|\n)*?```/g, m => {
-            const lines = m.split("\n");
-            if (lines.length < 2) return m; // Do not affect inline codeblocks
-            let suffix = "";
-            if (lines[lines.length - 1] === "```") suffix = lines.pop()!;
-            return `${lines[0]}\n${this.unindent(lines.slice(1).join("\n"))}\n${suffix}`;
+        msg.content = msg.content.replace(/```[\s\S]*?```/g, m => {
+            const newline = m.indexOf("\n");
+            if (newline === -1) return m; // Do not affect inline codeblocks
+            return m.slice(0, newline + 1) + this.unindent(m.slice(newline + 1, -3)) + "```";
         });
     },
 

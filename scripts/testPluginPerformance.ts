@@ -21,6 +21,31 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ReviewDB vote callbacks ignore stale accounts and results", async () => {
+    const source = readFileSync("src/plugins/reviewDB/components/ReviewComponent.tsx", "utf8");
+    const start = source.indexOf("    async function submitVote(");
+    const end = source.indexOf("\n    return (", start);
+    assert.ok(start >= 0 && end > start);
+    const code = transpileModule(source.slice(start, end), { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
+    for (const localVote of [null, true]) {
+        for (const switchAt of ["before", "response", "never"]) {
+            let userId = switchAt === "before" ? "second" : "first";
+            let requests = 0;
+            let changes = 0;
+            const send = async () => { requests++; if (switchAt === "response") userId = "second"; return true; };
+            const submit = runInNewContext(`${code}; submitVote`, {
+                accountId: "first", UserStore: { getCurrentUser: () => ({ id: userId }) },
+                isVoting: false, localVote, Auth: {}, review: { id: 1, sender: { discordID: "target" } },
+                voteReview: send, deleteReviewVote: send, setIsVoting() {},
+                setLocalVote: () => { changes++; }, setScore: () => { changes++; },
+            });
+            await submit(true);
+            assert.equal(requests, switchAt === "before" ? 0 : 1);
+            assert.equal(changes, switchAt === "never" ? 2 : 0);
+        }
+    }
+});
+
 test("ReviewDB confirmations reject account changes before and during token lookup", async () => {
     const source = readFileSync("src/plugins/reviewDB/components/ReviewComponent.tsx", "utf8");
     const callbacks = Array.from(source.matchAll(/onConfirm=\{async \(\) => \{([\s\S]*?)\n\s*\}\}/g));

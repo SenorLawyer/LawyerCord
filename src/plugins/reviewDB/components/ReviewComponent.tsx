@@ -100,6 +100,7 @@ export default function ReviewComponent({ review, refetch, profileId }: { review
     const isAuthorBlocked = Auth?.user?.blockedUsers?.includes(review.sender.discordID) ?? false;
 
     function blockReviewSender() {
+        if (UserStore.getCurrentUser()?.id !== accountId) return;
         if (isAuthorBlocked)
             return unblockUser(review.sender.discordID);
 
@@ -124,7 +125,7 @@ export default function ReviewComponent({ review, refetch, profileId }: { review
     }
 
     async function submitVote(isUpvote: boolean) {
-        if (isVoting) return;
+        if (isVoting || UserStore.getCurrentUser()?.id !== accountId) return;
 
         if (review.sender.discordID === Auth.user?.discordID) {
             return showToast("You cannot vote on your own review.");
@@ -134,14 +135,14 @@ export default function ReviewComponent({ review, refetch, profileId }: { review
 
         try {
             if (localVote === isUpvote) {
-                if (await deleteReviewVote(review.id)) {
+                if (await deleteReviewVote(review.id) && UserStore.getCurrentUser()?.id === accountId) {
                     setLocalVote(null);
                     setScore(currentScore => currentScore + (isUpvote ? -1 : 1));
                 }
                 return;
             }
 
-            if (await voteReview(review.id, isUpvote)) {
+            if (await voteReview(review.id, isUpvote) && UserStore.getCurrentUser()?.id === accountId) {
                 const delta = localVote == null
                     ? isUpvote ? 1 : -1
                     : isUpvote ? 2 : -2;

@@ -5512,7 +5512,7 @@ test("scheduled preview restoration stops between messages after invalidation", 
         const reads: (() => void)[] = [];
         let userId = "first";
         const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
-            "@api/DataStore": { get: async () => [1, 2].map(id => ({ id: String(id), channelId: "channel", scheduledTime: id })), set: async () => {} },
+            "@api/DataStore": { get: async () => [1, 2].map(id => ({ id: String(id), userId: "first", channelId: "channel", scheduledTime: id })), set: async () => {} },
             "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) },
                 MessageStore: { hasPresent: () => false }, FluxDispatcher: { dispatch() {} },
@@ -5548,7 +5548,7 @@ test("scheduled phantom history loads cannot revive stale previews", async () =>
                 } } },
             ".": { settings: { store: { showPhantomMessages: true } } }
         }, { setTimeout: () => 1 });
-        const message = { id: "queued", channelId: "channel", content: "Old", scheduledTime: 1 };
+        const message = { id: "queued", userId: "first", channelId: "channel", content: "Old", scheduledTime: 1 };
         let settled = false;
         const pending = module.createPhantomMessage(message).then(() => { settled = true; });
         await Promise.resolve();
@@ -6683,5 +6683,20 @@ test("scheduled sends reject unowned and foreign entries without marking them at
         assert.equal(api.getScheduledMessages().length, 1);
         assert.equal(api.getScheduledMessages()[0].attemptedAt, undefined);
         assert.equal(api.getScheduledMessages()[0].userId, owner);
+    }
+});
+
+
+test("scheduled previews reject missing and foreign owners before loading history", async () => {
+    const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+        "@api/DataStore": {}, "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) },
+            MessageStore: { hasPresent: () => assert.fail("Do not load history for another account") },
+            FluxDispatcher: { dispatch: () => assert.fail("Do not insert a foreign preview") } },
+        ".": { settings: { store: { showPhantomMessages: true } } }
+    });
+    for (const userId of [undefined, "other"]) {
+        await api.createPhantomMessage({ id: "queued", userId, channelId: "channel" });
+        assert.equal(api.phantomMessageMap.size, 0);
     }
 });

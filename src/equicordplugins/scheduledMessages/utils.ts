@@ -172,7 +172,7 @@ export async function createPhantomMessage(msg: ScheduledMessage): Promise<void>
     if (!settings.store.showPhantomMessages) return;
 
     const currentUser = UserStore.getCurrentUser();
-    if (!currentUser) return;
+    if (!currentUser || msg.userId !== currentUser.id) return;
 
     const messageId = `scheduled-${msg.id}`;
 

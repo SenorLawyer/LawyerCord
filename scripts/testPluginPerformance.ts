@@ -46,6 +46,13 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("ShareX response substitutions preserve literal dollar sequences", () => {
+    const sharex = loadSource("src/equicordplugins/fileUpload/utils/sharex.ts", {});
+    const response = "https://example.test/$&/$$/$`/$'";
+    assert.equal(sharex.resolveShareXTemplate("$response$", response, null), response);
+    assert.equal(sharex.resolveShareXTemplate("{response}", response, null), response);
+});
+
 test("Element highlighter escapes inspected text in its tooltip", () => {
     const escape = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
     const highlighter = loadSource("src/equicordplugins/elementHighlighter.dev/index.tsx", {

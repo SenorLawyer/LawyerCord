@@ -225,6 +225,7 @@ export async function deleteReviewVote(id: number) {
 }
 
 async function patchBlock(action: "block" | "unblock", userId: string) {
+    const accountId = UserStore.getCurrentUser()?.id;
     const data = await rdbRequest("/blocks", {
         method: "PATCH",
         body: JSON.stringify({
@@ -233,7 +234,7 @@ async function patchBlock(action: "block" | "unblock", userId: string) {
         })
     });
 
-    if (!data) return false;
+    if (!data || UserStore.getCurrentUser()?.id !== accountId) return false;
 
     await updateAuth(auth => {
         if (!auth.user?.blockedUsers) return auth;
@@ -242,6 +243,7 @@ async function patchBlock(action: "block" | "unblock", userId: string) {
             : auth.user.blockedUsers.filter(id => id !== userId);
         return { user: { ...auth.user, blockedUsers } };
     });
+    if (UserStore.getCurrentUser()?.id !== accountId) return false;
     showToast(`Successfully ${action}ed user`, Toasts.Type.SUCCESS);
     return true;
 }

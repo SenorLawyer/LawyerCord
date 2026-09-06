@@ -21,6 +21,18 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ReviewDB block persistence cannot report success to another account", async () => {
+    let userId = "first";
+    let toasts = 0;
+    const api = loadSource("src/plugins/reviewDB/reviewDbApi.ts", {
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) }, Toasts: { Type: {} } },
+        "./auth": { getToken: async () => "token", updateAuth: async () => { userId = "second"; } },
+        "./entities": {}, "./settings": {}, "./utils": { showToast: () => { toasts++; } },
+    }, { fetch: async () => ({ ok: true, json: async () => ({}) }) });
+    assert.equal(await api.blockUser("target"), false);
+    assert.equal(toasts, 0);
+});
+
 test("ReviewDB concurrent blocks preserve both stored changes", async () => {
     const accounts = { first: { token: "token", user: { blockedUsers: [] as string[] } } };
     const writes: (() => void)[] = [];

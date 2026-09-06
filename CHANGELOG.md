@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep other accounts out of the scheduled-message list and preserve their entries when clearing the queue.
+
 - Count scheduled-message limits separately for each account.
 
 - Reset scheduled-message work on logout and restore the current account after reconnecting.

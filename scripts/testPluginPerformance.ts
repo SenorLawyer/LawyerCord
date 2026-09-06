@@ -6807,3 +6807,40 @@ test("scheduled minute limits count only the initiating account", async () => {
         assert.equal(api.getScheduledMessages().length, owner === "account" ? 1 : 2);
     }
 });
+
+
+test("clearing scheduled messages preserves other accounts and does nothing signed out", async () => {
+    for (const userId of ["account", undefined]) {
+        const removed: string[] = [];
+        let writes = 0;
+        const entries = [{ id: "mine", userId: "account" }, { id: "theirs", userId: "other" }, { id: "legacy" }];
+        const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@api/DataStore": { get: async () => structuredClone(entries), set: async () => { writes++; } },
+            "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+            "@webpack/common": { UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined },
+                FluxDispatcher: { dispatch: ({ id }: { id: string; }) => removed.push(id) } },
+            ".": { settings: { store: {} } }
+        });
+        await api.loadScheduledMessages();
+        await api.clearAllScheduledMessages();
+        assert.deepEqual(Array.from(api.getScheduledMessages(), (entry: { id: string; }) => entry.id), userId ? ["theirs"] : ["mine", "theirs", "legacy"]);
+        assert.deepEqual(removed, userId ? ["scheduled-mine", "scheduled-legacy"] : []);
+        assert.equal(writes, userId ? 1 : 0);
+    }
+});
+
+test("scheduled message lists only render the current account and legacy entries", () => {
+    for (const userId of ["account", "other", undefined]) {
+        const rendered: string[] = [];
+        const entries = [{ id: "mine", userId: "account" }, { id: "theirs", userId: "other" }, { id: "legacy" }].map(entry => ({ ...entry, channelId: entry.id, content: "Text", scheduledTime: 0 }));
+        const component = loadSource("src/equicordplugins/scheduledMessages/components/ViewScheduledModal.tsx", {
+            "@components/Button": {}, "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+            "@utils/css": { classNameFactory: () => () => "" },
+            "@webpack/common": { useState: (value: unknown) => [value, () => {}], useStateFromStores: (_stores: unknown, selector: () => unknown) => selector(),
+                UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined }, ChannelStore: { getChannel: () => undefined } },
+            "../utils": { getScheduledMessages: () => entries, getChannelDisplayInfo: (id: string) => { rendered.push(id); return { name: id }; } }, "./Icons": {}
+        }, { React: { createElement: () => null } }, "ViewScheduledModalInner");
+        component({});
+        assert.deepEqual(rendered, userId ? [userId === "account" ? "mine" : "theirs", "legacy"] : []);
+    }
+});

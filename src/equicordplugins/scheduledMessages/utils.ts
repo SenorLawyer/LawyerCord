@@ -477,10 +477,11 @@ export async function removeScheduledMessage(id: string): Promise<void> {
 }
 
 export async function clearAllScheduledMessages(): Promise<void> {
-    for (const msg of scheduledMessages) {
-        removePhantomMessage(msg);
-    }
-    scheduledMessages = [];
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return;
+    const removed = scheduledMessages.filter(msg => !msg.userId || msg.userId === userId);
+    for (const msg of removed) removePhantomMessage(msg);
+    scheduledMessages = scheduledMessages.filter(msg => !removed.includes(msg));
     await saveScheduledMessages();
     scheduleNextCheck();
 }

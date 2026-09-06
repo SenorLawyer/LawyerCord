@@ -8,7 +8,7 @@ import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { classNameFactory } from "@utils/css";
 import { RenderModalProps } from "@vencord/discord-types";
-import { ChannelStore, closeModal, Modal, openModal, showToast, Toasts, useState } from "@webpack/common";
+import { ChannelStore, closeModal, Modal, openModal, showToast, Toasts, UserStore, useState, useStateFromStores } from "@webpack/common";
 
 import { clearAllScheduledMessages, getChannelDisplayInfo, getScheduledMessages, removeScheduledMessage } from "../utils";
 import { CalendarIcon, TimerIcon } from "./Icons";
@@ -21,18 +21,24 @@ interface ViewScheduledModalProps {
 }
 
 function ViewScheduledModalInner({ rootProps, close }: ViewScheduledModalProps) {
-    const [messages, setMessages] = useState(getScheduledMessages());
+    const [savedMessages, setMessages] = useState(getScheduledMessages());
+    const userId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
+    const messages = savedMessages.filter(msg => userId && (!msg.userId || msg.userId === userId));
 
     const handleDelete = async (id: string) => {
+        if (!userId || UserStore.getCurrentUser()?.id !== userId) return;
         await removeScheduledMessage(id);
+        if (UserStore.getCurrentUser()?.id !== userId) return;
         setMessages(getScheduledMessages());
         showToast("Scheduled message removed", Toasts.Type.SUCCESS);
     };
 
     const handleClearAll = async () => {
+        if (!userId || UserStore.getCurrentUser()?.id !== userId) return;
         await clearAllScheduledMessages();
-        setMessages([]);
-        showToast("All scheduled messages cleared", Toasts.Type.SUCCESS);
+        if (UserStore.getCurrentUser()?.id !== userId) return;
+        setMessages(getScheduledMessages());
+        showToast("Scheduled messages cleared", Toasts.Type.SUCCESS);
     };
 
     const actions = [

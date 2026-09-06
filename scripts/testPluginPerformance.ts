@@ -2841,3 +2841,32 @@ test("failed embed requests report once without updating the message", async () 
     await unfurlEmbed("https://example.com", { channel_id: "channel", id: "message" });
     assert.deepEqual(toasts, ["Failed to get embed"]);
 });
+
+
+test("sidebar DM lookups cannot override newer navigation or a closed sidebar", async () => {
+    const pending: Array<(id: string) => void> = [];
+    let handlers: Record<string, (payload?: object) => Promise<void> | void> = {};
+    const { SidebarStore } = loadSource("src/equicordplugins/sidebarChat/store.ts", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@utils/lazy": { proxyLazy: (factory: () => object) => factory() },
+        "@utils/types": { OptionType: {} },
+        "@webpack/common": {
+            Flux: { PersistedStore: class {
+                constructor(_dispatcher: unknown, events: typeof handlers) { handlers = events; }
+                emitChange() {}
+            } },
+            ChannelActionCreators: { getOrEnsurePrivateChannel: () => new Promise(resolve => pending.push(resolve)) },
+        },
+    });
+    const first = handlers.VC_SIDEBAR_CHAT_NEW({ guildId: null, id: "first-user" });
+    handlers.VC_SIDEBAR_CHAT_CLOSE();
+    pending[0]("first-dm");
+    await first;
+    assert.equal(SidebarStore.getState().channelId, "", "close invalidates pending DM navigation");
+    const second = handlers.VC_SIDEBAR_CHAT_NEW({ guildId: null, id: "second-user" });
+    await handlers.VC_SIDEBAR_CHAT_NEW({ guildId: "guild", id: "newer-channel" });
+    pending[1]("second-dm");
+    await second;
+    assert.equal(SidebarStore.getState().guildId, "guild");
+    assert.equal(SidebarStore.getState().channelId, "newer-channel");
+});

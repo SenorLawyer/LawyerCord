@@ -74,7 +74,6 @@ export interface LoadedZipEntry extends ZipEntry {
 
 export interface ZipPreviewResult {
     entries: ZipEntry[];
-    truncated: boolean;
 }
 
 export type ZipPreviewCacheState =
@@ -306,10 +305,7 @@ export function parseZipBuffer(buffer: ArrayBuffer): ZipPreviewResult {
         })
         .sort((left, right) => left.path.localeCompare(right.path));
 
-    return {
-        entries,
-        truncated: false
-    };
+    return { entries };
 }
 
 export async function loadZipEntry(entry: ZipEntry): Promise<LoadedZipEntry> {

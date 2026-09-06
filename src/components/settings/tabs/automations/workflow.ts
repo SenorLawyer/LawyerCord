@@ -5,7 +5,9 @@
  */
 
 import { outputKind, SAFE_RETRY_TYPES } from "./catalog";
+import { isClientEventType } from "./clientEvents";
 import { type Automation, AUTOMATION_BLOCK_TYPES, type AutomationBlock, type AutomationFile, BLOCK_DEFINITIONS, cloneAutomation, duplicateAutomation, graphEntry, isAutomation, isRecord, MESSAGE_BLOCKS, migrateToGraph } from "./model";
+import { eventOutputFields, outputFields } from "./outputs";
 import { validateSchedule } from "./scheduling";
 
 export interface WorkflowIssue {
@@ -50,12 +52,13 @@ export function ancestors(automation: Automation, id: string): Set<string> {
 
 export function blockOutputs(automation: Automation, beforeId: string) {
     const upstream = ancestors(automation, beforeId);
-    return automation.blocks.filter(block => upstream.has(block.id)).flatMap(block => {
+    const outputs = automation.blocks.filter(block => upstream.has(block.id)).flatMap(block => {
         const kind = outputKind(block.type);
         const label = block.config.variable || BLOCK_DEFINITIONS.find(item => item.type === block.type)?.label || block.type;
-        const fields = kind === "message" ? ["", ".id", ".channel_id", ".author.id", ".content"] : kind === "list" ? ["", ".0", ".0.content"] : [""];
-        return fields.map(field => ({ value: `blocks.${block.id}.value${field}`, label: `${label}${field} · ${kind}` }));
+        return [{ value: `blocks.${block.id}.value`, label: `${label} · ${kind}` }, ...outputFields(block.type, block.config.eventType).map(field => ({ value: `blocks.${block.id}.value.${field.path}`, label: `${label} → ${field.path} · ${field.type}` }))];
     });
+    if (isClientEventType(automation.trigger.type)) outputs.unshift(...eventOutputFields(automation.trigger.type).map(field => ({ value: `triggerEvent.${field.path}`, label: `Trigger → ${field.path} · ${field.type}` })));
+    return outputs;
 }
 
 function messageSources(automation: Automation, id: string): Set<string> {
@@ -127,6 +130,9 @@ export function validateWorkflow(automation: Automation, workflows: Automation[]
     if (automation.runMode && !["queue", "skip", "parallel"].includes(automation.runMode)) add("Choose a supported run mode.");
     for (const block of automation.blocks) {
         const { config } = block;
+        if (block.type === "wait-client-event" && config.eventType !== undefined && !isClientEventType(config.eventType)) add("Choose a supported Discord event.", block.id);
+        if (["wait-presence", "wait-client-event"].includes(block.type) && config.timeoutSeconds !== undefined && (config.timeoutSeconds < 1 || config.timeoutSeconds > 86400)) add("Wait between 1 and 86400 seconds.", block.id);
+        if (config.status && !["online", "idle", "dnd", "offline"].includes(config.status)) add("Choose a supported presence status.", block.id);
         if (["reply-message", "edit-message", "delete-message", "add-reaction", "remove-reaction", "wait-reply", "wait-reaction", "interact-button", "interact-select", "interact-modal"].includes(block.type) && !config.input && (!config.sourceVariable || config.sourceVariable === "lastMessage") && !config.messageId && messageSources(automation, block.id).size > 1) add("Several messages can reach this block. Select its input explicitly.", block.id);
         if (config.jsonDrafts && Object.keys(config.jsonDrafts).length) add("Fix the invalid JSON input before saving or testing.", block.id);
         if (config.cases !== undefined && (!Array.isArray(config.cases) || config.cases.some(item => !isRecord(item) || typeof item.target !== "string" || typeof item.value !== "string"))) add("Switch routes must contain a match value and a block ID.", block.id);

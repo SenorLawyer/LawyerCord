@@ -2,6 +2,20 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 2.2.0.0 - 2026-09-06
+
+### Added
+
+- Trigger workflows on presence, typing, channel selection, user updates, member updates, and relationship changes. Wait for those events inside a workflow, with user filters and separate timeout routes.
+- Read current user presence, server membership, and the open channel directly from Discord stores.
+- Show typed output fields, descriptions, and copyable references in the block inspector and saved-value picker. User lookups include display names, status, activities, and connected devices.
+- Add user-presence and author-search templates.
+
+### Fixed
+
+- Search messages by author in a server or DM, paginate up to the requested result count, exclude surrounding context messages, and stop fetching when cancelled.
+- Index triggers by event, channel, and user. Group run history without copying earlier entries for each log.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

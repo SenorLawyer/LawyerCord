@@ -69,7 +69,7 @@ const variables = createAutomation();
 variables.blocks = [createAutomationBlock("wait-reply"), createAutomationBlock("set-variable"), createAutomationBlock("delete-variable")];
 variables.blocks[1].config.variable = "ticket";
 variables.blocks[2].config.sourceVariable = "ticket";
-assert.deepEqual(getAutomationVariableNames(variables, variables.blocks[2].id), ["reply", "replyUserId", "lastMessage", "lastMessage.id", "lastMessage.channel_id", "lastMessage.author.id", "lastMessage.content", "reply.id", "reply.channel_id", "reply.author.id", "reply.content", "ticket"]);
+for (const name of ["reply", "replyUserId", "lastMessage", "lastMessage.id", "lastMessage.channel_id", "lastMessage.author.id", "lastMessage.content", "reply.id", "reply.channel_id", "reply.author.id", "reply.content", "ticket", "reply.guild_id", "reply.embeds"]) assert.ok(getAutomationVariableNames(variables, variables.blocks[2].id).includes(name), name);
 assert.ok(!getAutomationVariableNames(variables).includes("ticket"));
 
 const live = createAutomation();

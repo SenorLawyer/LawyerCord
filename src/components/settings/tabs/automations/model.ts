@@ -6,6 +6,8 @@
 
 // Bump this on every change that gets injected locally, so the settings tab shows whether the rebuild landed.
 import { EXTENDED_BLOCKS, EXTENDED_DEFAULTS, EXTENDED_TYPES } from "./catalog";
+import { CLIENT_EVENT_TYPES, type ClientEventType, isClientEventType } from "./clientEvents";
+import { eventOutputFields, outputFields } from "./outputs";
 import { SYSTEM_TRIGGER_TYPES } from "./system";
 
 export const LAYOUT_VERSION = 2;
@@ -14,7 +16,7 @@ export const AUTOMATION_FILE_VERSION = 2;
 
 export const AUTOMATION_UNITS = ["minutes", "hours", "days", "weeks", "months", "years"] as const;
 export type AutomationUnit = typeof AUTOMATION_UNITS[number];
-export const AUTOMATION_TRIGGER_TYPES = ["schedule", "mention", "message", "dm", "startup", "message-edit", "message-delete", "reaction-add", "reaction-remove", "voice-join", "voice-leave", "voice-move", ...SYSTEM_TRIGGER_TYPES] as const;
+export const AUTOMATION_TRIGGER_TYPES = ["schedule", "mention", "message", "dm", "startup", "message-edit", "message-delete", "reaction-add", "reaction-remove", "voice-join", "voice-leave", "voice-move", ...CLIENT_EVENT_TYPES, ...SYSTEM_TRIGGER_TYPES] as const;
 export type AutomationTriggerType = typeof AUTOMATION_TRIGGER_TYPES[number];
 
 export const AUTOMATION_BLOCK_TYPES = [
@@ -212,6 +214,7 @@ export interface Schedule {
 }
 
 export interface AutomationTrigger {
+    status?: string;
     emoji?: string;
     includeBots?: boolean;
     type: AutomationTriggerType;
@@ -277,6 +280,8 @@ export type AutomationOptionMode = "exact" | "contains" | "regex" | "index";
 export type AutomationPort = "next" | "alternate" | "error";
 export type ValueInput = { kind: "literal"; value: unknown; } | { kind: "reference" | "template"; value: string; };
 export interface AutomationBlockConfig {
+    eventType?: ClientEventType;
+    status?: string;
     jsonDrafts?: Record<string, string>;
     input?: ValueInput;
     secondInput?: ValueInput;
@@ -465,7 +470,11 @@ export function getAutomationVariableNames(automation: Automation, beforeBlockId
     if (type.startsWith("roblox-")) for (const name of ["game", "game.name", "game.playing", "game.visits", "game.url", "game.icon", "game.placeId", "game.creator", "joinedAt", ...(type === "roblox-leave" ? ["duration", "durationMs"] : [])]) names.add(name);
     if (type.startsWith("process-")) { names.add("process.name"); names.add("process.pid"); }
     if (type.startsWith("codex-")) for (const name of ["codex", "codex.project", "codex.cwd", "codex.message", "codex.question", "codex.duration", "codex.durationMs"]) names.add(name);
-    if (type !== "schedule" && type !== "startup" && !SYSTEM_TRIGGER_TYPES.some(candidate => candidate === type)) {
+    if (isClientEventType(type)) {
+        for (const field of eventOutputFields(type)) names.add(`triggerEvent.${field.path}`);
+        names.add("triggerUserId");
+    }
+    if (!isClientEventType(type) && type !== "schedule" && type !== "startup" && !SYSTEM_TRIGGER_TYPES.some(candidate => candidate === type)) {
         names.add("triggerMessage");
         names.add("triggerMessage.id");
         names.add("triggerMessage.channel_id");
@@ -496,7 +505,7 @@ export function getAutomationVariableNames(automation: Automation, beforeBlockId
             continue;
         }
         if (variable) names.add(variable);
-        if (variable) for (const field of BLOCK_VARIABLE_FIELDS[block.type] ?? []) names.add(`${variable}.${field}`);
+        if (variable) for (const field of [...BLOCK_VARIABLE_FIELDS[block.type] ?? [], ...outputFields(block.type, block.config.eventType).map(field => field.path)]) names.add(`${variable}.${field}`);
         if (block.type === "wait-reply" || block.type === "wait-dm") names.add("replyUserId");
         if (["send-message", "send-embed", "send-components", "send-dm", "reply-message", "edit-message", "forward-message", "wait-reply", "wait-dm", "interact-button", "interact-select", "interact-modal"].includes(block.type)) {
             addMessage("lastMessage");
@@ -936,7 +945,7 @@ export function findStartRepeat(blocks: AutomationBlock[], end: number): number 
 }
 
 /** Blocks with two outputs. Everything else has one, and stop/fail have none. */
-export const BRANCH_TYPES: AutomationBlockType[] = ["condition", "chance", "repeat", "for-each", "switch", "wait-reply", "wait-dm", "wait-reaction", "check-process", "wait-process"];
+export const BRANCH_TYPES: AutomationBlockType[] = ["wait-presence", "wait-client-event", "condition", "chance", "repeat", "for-each", "switch", "wait-reply", "wait-dm", "wait-reaction", "check-process", "wait-process"];
 /** Structural markers from the old linear format. Converted away by migrateToGraph. */
 export const MARKER_TYPES: AutomationBlockType[] = ["else", "end-if", "end-repeat"];
 export const TERMINAL_TYPES: AutomationBlockType[] = ["stop", "stop-run", "return", "break-loop"];
@@ -954,7 +963,7 @@ export function outputPorts(type: AutomationBlockType): AutomationPort[] {
 export function portLabel(type: AutomationBlockType, port: AutomationPort): string {
     if (port === "error") return "On error";
     if (type === "repeat" || type === "for-each") return port === "next" ? "Each pass" : "When done";
-    if (type === "wait-reply" || type === "wait-dm" || type === "wait-reaction" || type === "wait-process") return port === "next" ? "Got one" : "Timed out";
+    if (type === "wait-presence" || type === "wait-client-event" || type === "wait-reply" || type === "wait-dm" || type === "wait-reaction" || type === "wait-process") return port === "next" ? "Got one" : "Timed out";
     if (type === "check-process") return port === "next" ? "Running" : "Not running";
     if (BRANCH_TYPES.includes(type)) return port === "next" ? "Yes" : "No";
     return "Next";

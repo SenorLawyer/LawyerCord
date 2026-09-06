@@ -92,10 +92,9 @@ export async function getStickerPackMetas(packsKey: string | undefined = PACKS_K
  * @return {Promise<StickerPack | null>}
  * */
 export async function getStickerPack(id: string): Promise<StickerPack | null> {
-    const pack = await DataStore.get<StickerPack | null>(`MoreStickers:PackData:${id}`);
-    if (pack !== undefined) return pack;
-    const legacy = await DataStore.get<StickerPack>(id);
-    return legacy?.id === id && typeof legacy.title === "string" && Array.isArray(legacy.stickers) ? legacy : null;
+    const stored = await DataStore.get<unknown>(`MoreStickers:PackData:${id}`);
+    const pack = stored === undefined ? await DataStore.get<unknown>(id) : stored;
+    return isStickerPack(pack) && pack.id === id ? pack : null;
 }
 
 /**

@@ -6,6 +6,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Reject malformed or mismatched stored sticker packs without deleting the stored records.
 - Validate every sticker pack in an imported file before saving any of them.
 - Refresh sticker settings after migration, handle storage failures, and remove the unused recent-sticker setter.
 - Allow interrupted sticker migrations to resume without replacing current packs or recent stickers.

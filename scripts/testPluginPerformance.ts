@@ -4752,14 +4752,14 @@ test("sticker pack metadata updates preserve concurrent packs without holding a 
     const original = { enabled: true };
     entries.set(key, original);
     assert.equal(await module.getStickerPack(key), null);
-    const imported = { id: key, title: "Imported", stickers: [] };
+    const imported = { id: key, title: "Imported", logo: { id: "logo", title: "Logo", image: "image", stickerPackId: key }, stickers: [] };
     await module.saveStickerPack(imported);
     assert.equal(entries.get(key), original);
     assert.equal(await module.getStickerPack(key), imported);
     await module.deleteStickerPack(key);
     assert.equal(entries.get(key), original);
     assert.equal(await module.getStickerPack(key), null);
-    const legacy = { id: "custom-legacy", title: "Legacy", stickers: [] };
+    const legacy = { id: "custom-legacy", title: "Legacy", logo: { id: "logo", title: "Logo", image: "image", stickerPackId: "custom-legacy" }, stickers: [] };
     entries.set(legacy.id, legacy);
     assert.equal(await module.getStickerPack(legacy.id), legacy);
     await module.deleteStickerPack(legacy.id);
@@ -4767,6 +4767,15 @@ test("sticker pack metadata updates preserve concurrent packs without holding a 
     assert.equal(entries.get(legacy.id), legacy);
     await module.saveStickerPack(legacy);
     assert.equal(await module.getStickerPack(legacy.id), legacy);
+    for (const malformed of [{ ...legacy, logo: null }, { ...legacy, stickers: [null] }, { ...legacy, id: "other-pack" }]) {
+        entries.set(`MoreStickers:PackData:${legacy.id}`, malformed);
+        assert.equal(await module.getStickerPack(legacy.id), null);
+        assert.equal(entries.get(`MoreStickers:PackData:${legacy.id}`), malformed);
+        entries.delete(`MoreStickers:PackData:${legacy.id}`);
+        entries.set(legacy.id, malformed);
+        assert.equal(await module.getStickerPack(legacy.id), null);
+        assert.equal(entries.get(legacy.id), malformed);
+    }
 });
 
 test("v1 sticker migration preserves unchanged IDs and saved packs after cleanup failures", async () => {
@@ -4777,7 +4786,7 @@ test("v1 sticker migration preserves unchanged IDs and saved packs after cleanup
         ["Vencord-MoreStickers-Line-Pack-123", "MoreStickers:Line:Pack:123", true, false],
         ["missing-pack", "missing-pack", false, true]
     ] as const) {
-        const pack = { id: oldId, title: "Legacy", logo: { id: "logo", stickerPackId: oldId }, stickers: [{ id: "sticker", stickerPackId: oldId }] };
+        const pack = { id: oldId, title: "Legacy", logo: { id: "logo", title: "Logo", image: "image", stickerPackId: oldId }, stickers: [{ id: "sticker", title: "Sticker", image: "image", stickerPackId: oldId }] };
         const entries = new Map<string, unknown>([[oldId, pack], ["Vencord-MoreStickers-Packs", [{ id: oldId, title: pack.title }]]]);
         if (missing) entries.delete(oldId);
         let cleanupBlocked = failCleanup;

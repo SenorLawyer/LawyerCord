@@ -7842,6 +7842,26 @@ test("cancelled plugin installs validate cleanup paths and settle removal failur
     }
 });
 
+test("plugin clones use the exact metadata directory including Git suffixes", async () => {
+    for (const repo of ["repo", "repo.git", "-repo"]) {
+        const link = `https://github.com/owner/${repo}`;
+        const mocks: Record<string, object> = {
+            child_process: { spawn: (command: string, args: string[], options: { cwd: string; }) => {
+                assert.equal(command, "git");
+                assert.deepEqual(Array.from(args), ["clone", "--", link, path.join(options.cwd, repo)]);
+                assert.equal(options.cwd, path.resolve("fixture/src/userplugins"));
+                const proc = new EventEmitter();
+                queueMicrotask(() => proc.emit("close", 0));
+                return proc;
+            } }, electron: {}, fs: {}, "fs/promises": {}, path, "yaml-js": {}
+        };
+        for (const name of ["pluginValidate", "updateValidate"])
+            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") }, "({ cloneRepo })");
+        await api.cloneRepo(link, repo);
+    }
+});
+
 test("installer setup failures reject the caller without exposing native errors", async () => {
     for (const stage of ["dialog", "clone", "metadata", "browser"]) {
         const fail = async () => { throw new Error("Private filesystem path"); };

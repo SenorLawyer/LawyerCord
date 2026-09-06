@@ -255,7 +255,7 @@ async function getPluginMeta(path: string, extra: object = {}): Promise<{
 
 async function cloneRepo(link: string, repo: string): Promise<void> {
     const exitCode = await new Promise<number | null>((resolve, reject) => {
-        const proc = spawn("git", ["clone", link], {
+        const proc = spawn("git", ["clone", "--", link, join(vencordPath, "..", "src", "userplugins", repo)], {
             cwd: join(vencordPath, "..", "src", "userplugins")
         });
         proc.once("error", () => reject(new Error("Could not start Git.")));

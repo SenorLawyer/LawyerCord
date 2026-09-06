@@ -119,8 +119,21 @@ function AccountSettings({ templateData, userId }: AccountSettingsProps) {
             ? self.data.length === localData.length && self.data.map(sid).join(",") === localData.map(sid).join(",")
             : true, [self?.data, localData]);
 
+    async function loadData() {
+        if (!isCurrentAccount()) return;
+        setPending(true);
+        try {
+            const data = await getData();
+            if (isCurrentAccount()) setLocalData(data);
+        } catch {
+            if (isCurrentAccount()) setPending(false);
+            return;
+        }
+        if (isCurrentAccount()) setPending(false);
+    }
+
     useEffect(() => {
-        if (isAuthorized() && !localData) getData().then(() => setPending(false));
+        if (isAuthorized() && !localData) loadData();
     }, [isAuthorized()]);
 
     if (!isAuthorized()) return <Button onClick={() => presentOAuth2Modal()}>Sign in to Song Spotlight</Button>;
@@ -183,7 +196,9 @@ function AccountSettings({ templateData, userId }: AccountSettingsProps) {
                         </Flex>
                     </Flex>
                 )
-                : <Spinner type={Spinner.Type.WANDERING_CUBES} />}
+                : pending
+                    ? <Spinner type={Spinner.Type.WANDERING_CUBES} />
+                    : <Button onClick={loadData}>Retry loading songs</Button>}
             <Flex flexDirection="column" gap="12px">
                 <BaseText size="lg" weight="semibold">Authorization</BaseText>
                 <div className={cl("twin-buttons")}>

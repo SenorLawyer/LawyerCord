@@ -4865,3 +4865,39 @@ test("SongSpotlight parsed songs preserve account and concurrent list updates", 
         assert.deepEqual(opened, switched ? [] : [[{ id: "existing" }, { id: "concurrent" }, { id: "parsed" }]]);
     }
 });
+
+
+test("SongSpotlight failed loads can retry without creating an empty draft", async () => {
+    const source = readFileSync("src/equicordplugins/songSpotlight.desktop/ui/settings/index.tsx", "utf8");
+    const start = source.indexOf("    async function loadData() {");
+    const end = source.indexOf("\n    useEffect", start);
+    assert.ok(start >= 0 && end > start);
+    let current = true;
+    let pending = false;
+    let data: unknown;
+    let result = Promise.withResolvers<unknown>();
+    const load = runInNewContext(`(${source.slice(start, end).trim()})`, {
+        isCurrentAccount: () => current, setPending: (value: boolean) => { pending = value; },
+        setLocalData: (value: unknown) => { data = value; }, getData: () => result.promise,
+    });
+    const failed = load();
+    assert.equal(pending, true);
+    result.reject(new Error("offline"));
+    await failed;
+    assert.equal(pending, false);
+    assert.equal(data, undefined);
+    result = Promise.withResolvers();
+    const retry = load();
+    const songs = [{ id: "saved" }];
+    result.resolve(songs);
+    await retry;
+    assert.equal(data, songs);
+    assert.equal(pending, false);
+    result = Promise.withResolvers();
+    const stale = load();
+    current = false;
+    result.resolve([]);
+    await stale;
+    assert.equal(data, songs);
+    assert.match(source, /<Button onClick=\{loadData\}>Retry loading songs<\/Button>/);
+});

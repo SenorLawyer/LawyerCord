@@ -2365,6 +2365,21 @@ test("quote preview ignores superseded and unmounted image work", async () => {
     assert.equal(states[4], null);
 });
 
+test("scheduled reactions target the message returned by the send request", async () => {
+    const reactions: string[] = [];
+    const send = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+        "@api/DataStore": {}, "@utils/Logger": { Logger: class {} },
+        "@vencord/discord-types/enums": {},
+        "@webpack/common": { ChannelStore: { getChannel: () => ({}) }, FluxDispatcher: { dispatch() {} },
+            Constants: { Endpoints: { MESSAGES: (id: string) => id } }, SnowflakeUtils: { fromTimestamp: () => "nonce" },
+            MessageStore: { getMessages: () => assert.fail("Must not guess from message history") },
+            RestAPI: { post: async () => ({ body: { id: "sent-id" } }), put: async ({ url }: { url: string; }) => reactions.push(url) } },
+        ".": { settings: { store: { showNotifications: false } } }
+    }, { setTimeout: (callback: () => void) => callback() }, "sendScheduledMessage");
+    assert.equal(await send({ id: "scheduled", channelId: "channel", content: "Repeated text", reactions: [{ emoji: { name: "hello", id: "emoji" }, count: 1 }] }), true);
+    assert.deepEqual(reactions, ["/channels/channel/messages/sent-id/reactions/hello:emoji/@me"]);
+});
+
 test("GIF export reports the save result once", async () => {
     const notices: { body: string; }[] = [];
     let fail = true;

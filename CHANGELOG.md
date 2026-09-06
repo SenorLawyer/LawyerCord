@@ -6,6 +6,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Remove unused MarkdownTables parser entry points and a dead helper.
 - Retain outgoing MessageBurst text until the edit resolves, and remove its unused popover dependency.
 - Preserve Source resolution when changing screenshare frame rate.
 - Keep InvisibleChat decryption local by removing automatic URL preview requests to Discord.

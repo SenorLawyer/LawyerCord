@@ -46,6 +46,36 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("native logger imports preserve Unicode across bounded chunks", async () => {
+    const text = "a".repeat(65535) + "🛒é終";
+    const bytes = Buffer.from(text);
+    let position = 0;
+    let closed = 0;
+    const module = loadSource("src/equicordplugins/messageLoggerEnhanced/native/import.ts", {
+        "node:crypto": { randomUUID: () => "fixture" },
+        "node:fs/promises": { open: async () => ({
+            async read(target: Buffer, offset: number, length: number) {
+                assert.equal(length, 65536);
+                const bytesRead = bytes.copy(target, offset, position, position + length);
+                position += bytesRead;
+                return { bytesRead };
+            },
+            async close() { closed++; }
+        }) },
+        electron: { dialog: { showOpenDialog: async () => ({ filePaths: ["fixture.json"] }) } }
+    }, { Buffer, TextDecoder });
+    const id = await module.startNativeLogImport({});
+    let result = "";
+    for (;;) {
+        const chunk = await module.readNativeLogChunk({}, id, Number.MAX_SAFE_INTEGER);
+        if (chunk === null) break;
+        result += chunk;
+    }
+    assert.equal(result, text);
+    await module.closeNativeLogImport({}, id);
+    assert.equal(closed, 1);
+});
+
 test("MessageBurst retains outgoing text until its edit resolves", async () => {
     for (const success of [false, true]) {
         let finish: () => void = () => {};

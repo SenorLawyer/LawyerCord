@@ -24,7 +24,7 @@ export function getCachedApplicationAsset(applicationId: string, key: string): P
     const assetPromise = ApplicationAssetUtils.fetchAssetIds(applicationId, [key])
         .then(assetIds => assetIds[0]!)
         .catch(error => {
-            applicationAssetCache.delete(cacheKey);
+            if (applicationAssetCache.get(cacheKey) === assetPromise) applicationAssetCache.delete(cacheKey);
             throw error;
         });
 

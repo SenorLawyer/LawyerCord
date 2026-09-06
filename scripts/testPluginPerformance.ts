@@ -2365,6 +2365,26 @@ test("quote preview ignores superseded and unmounted image work", async () => {
     assert.equal(states[4], null);
 });
 
+test("an evicted asset rejection preserves its replacement request", async () => {
+    let rejectOld: (reason: Error) => void = () => {};
+    let requests = 0;
+    const { getCachedApplicationAsset } = loadSource("src/equicordplugins/richPresence/services/assetCache.ts", {
+        "@webpack/common": { ApplicationAssetUtils: { fetchAssetIds: () => {
+            requests++;
+            if (requests === 1) return new Promise<string[]>((_resolve, reject) => { rejectOld = reject; });
+            return Promise.resolve(["asset"]);
+        } } }
+    });
+    const old = getCachedApplicationAsset("app", "first");
+    const rejection = assert.rejects(old, /failed/);
+    for (let i = 0; i < 150; i++) await getCachedApplicationAsset("app", String(i));
+    const replacement = getCachedApplicationAsset("app", "first");
+    rejectOld(new Error("failed"));
+    await rejection;
+    assert.equal(getCachedApplicationAsset("app", "first"), replacement);
+    assert.equal(requests, 152);
+});
+
 test("magnet filenames decode once and preserve literal punctuation", () => {
     const { default: plugin } = loadSource("src/equicordplugins/richMagnetLinks/index.tsx", {
         "@utils/constants": { EquicordDevs: {} },

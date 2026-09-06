@@ -21,6 +21,25 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("plugin reset restores selected defaults without changing definitions", () => {
+    const source = readFileSync("src/components/settings/tabs/plugins/PluginModal.tsx", "utf8");
+    const resetSource = source.slice(source.indexOf("function resetSettings("), source.indexOf("export function openWarningModal("));
+    const code = transpileModule(resetSource, { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
+    const reset = runInNewContext(code + "\nresetSettings;", {
+        OptionType: { SELECT: 1, STRING: 2 },
+        Toasts: { show() {}, genId: () => "test", Type: { SUCCESS: 1 }, Position: { TOP: 1 } },
+    });
+    const def = Object.freeze({
+        choice: Object.freeze({ type: 1, options: [{ value: "first" }, { value: "default", default: true }] }),
+        text: Object.freeze({ type: 2, default: "original" }),
+    });
+    const store = { choice: "first", text: "changed", enabled: true };
+    reset({ name: "Fixture", settings: { def, store } });
+    assert.equal(store.choice, "default");
+    assert.equal(store.text, "original");
+    assert.equal(store.enabled, true);
+});
+
 test("editable text begins each edit with the current parent value", () => {
     const states: unknown[] = [];
     let cursor = 0;

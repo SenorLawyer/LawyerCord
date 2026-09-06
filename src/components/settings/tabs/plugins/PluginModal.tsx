@@ -297,9 +297,9 @@ function resetSettings(plugin: Plugin, onRestartNeeded?: (pluginName: string) =>
         if (key === "enabled") continue;
 
         const setting = defaultSettings[key];
-        setting.type = setting.type ?? OptionType.STRING;
-
-        if (setting.type === OptionType.STRING) {
+        if (setting.type === OptionType.SELECT) {
+            newSettings[key] = setting.options.find(option => option.default)?.value;
+        } else if (setting.type === OptionType.STRING) {
             newSettings[key] = setting.default !== undefined && setting.default !== "" ? setting.default : "";
         } else if ("default" in setting && setting.default !== undefined) {
             newSettings[key] = setting.default;

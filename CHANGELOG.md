@@ -6,6 +6,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Derive the sticker inspector’s pack label from the hovered sticker, removing stale duplicate selection state.
 - Use the shared async hook for sticker picker loads and derive its sidebar from loaded packs, removing duplicate state and effects.
 - Handle partial sticker settings load failures and ignore completions after the settings close.
 - Preserve pending replies during sticker conversion and upload failures, and clear only the matching reply after a successful upload message post.

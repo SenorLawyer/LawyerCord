@@ -5070,6 +5070,31 @@ test("sticker file imports validate the entire batch before writing packs", asyn
     }
 });
 
+test("sticker inspector derives its pack from the current hover", () => {
+    let hovered = { id: "sticker", stickerPackId: "second" };
+    let stateIndex = 0;
+    const titles: unknown[] = [];
+    const React = {
+        createElement: (type: unknown, _props: unknown, ...children: unknown[]) => { if (type === "strong") titles.push(children[0]); return null; },
+        useState: (initial: unknown) => [stateIndex++ === 0 ? hovered : initial, () => {}],
+        useRef: () => ({ current: null }), useEffect() {}
+    };
+    const picker = loadSource("src/equicordplugins/moreStickers/components/picker.tsx", {
+        "@equicordplugins/moreStickers/types": {},
+        "@equicordplugins/moreStickers/upload": {}, "@equicordplugins/moreStickers/utils": { clPicker: () => "" },
+        "@shared/debounce": { debounce: (callback: unknown) => callback }, "@webpack/common": { React },
+        "./categories": {}, "./icons": {}, "./misc": { RECENT_STICKERS_ID: "recent", RECENT_STICKERS_TITLE: "Recent" }
+    });
+    let packs = [{ id: "first", title: "First", logo: {}, stickers: [] }, { id: "second", title: "Second", logo: {}, stickers: [] }];
+    const render = () => { stateIndex = 0; picker.PickerContent({ stickerPacks: packs, setSelectedStickerPackId() {}, closePopout() {} }); };
+    render();
+    packs = packs.map(pack => pack.id === "second" ? { ...pack, title: "Updated" } : pack);
+    render();
+    hovered = { ...hovered, stickerPackId: "missing" };
+    render();
+    assert.deepEqual(titles, ["Second", "Updated", ""]);
+});
+
 test("sticker picker uses shared async cleanup for pack loading", async () => {
     for (const failure of ["none", "metadata", "payload"]) {
         for (const unmounted of [false, true]) {

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { PickerContent, PickerContentHeader, PickerContentRow, PickerContentRowGrid, PickerHeaderProps, SidebarProps, Sticker, StickerCategoryType, StickerPack } from "@equicordplugins/moreStickers/types";
+import { PickerContent, PickerContentHeader, PickerContentRow, PickerContentRowGrid, PickerHeaderProps, SidebarProps, Sticker, StickerCategoryType } from "@equicordplugins/moreStickers/types";
 import { sendSticker } from "@equicordplugins/moreStickers/upload";
 import { clPicker } from "@equicordplugins/moreStickers/utils";
 import { debounce } from "@shared/debounce";
@@ -248,7 +248,7 @@ export function PickerContent({ stickerPacks, selectedStickerPackId, setSelected
         )
     );
 
-    const [currentStickerPack, setCurrentStickerPack] = React.useState<StickerPack | null>(stickerPacks.length ? stickerPacks[0] : null);
+    const currentStickerPack = stickerPacks.find(pack => pack.id === currentSticker?.stickerPackId);
     const [recentStickers, setRecentStickers] = React.useState<Sticker[]>([]);
 
     const stickerPacksElemRef = React.useRef<HTMLDivElement>(null);
@@ -267,12 +267,6 @@ export function PickerContent({ stickerPacks, selectedStickerPackId, setSelected
     React.useEffect(() => {
         fetchRecentStickers();
     }, []);
-
-    React.useEffect(() => {
-        if (currentStickerPack?.id !== currentSticker?.stickerPackId) {
-            setCurrentStickerPack(stickerPacks.find(p => p.id === currentSticker?.stickerPackId) ?? currentStickerPack);
-        }
-    }, [currentSticker]);
 
     const stickersToRows = (stickers: Sticker[]): JSX.Element[] => stickers
         .reduce((acc, sticker, i) => {

@@ -115,11 +115,8 @@ function QuoteModal({ message, ...props }: RenderModalProps & { message: Message
         });
         setQuoteImage(image);
 
-        if (previewUrl) URL.revokeObjectURL(previewUrl);
-
         const newUrl = URL.createObjectURL(image);
         setPreviewUrl(newUrl);
-        document.getElementById("quoterPreview")?.setAttribute("src", newUrl);
     };
 
     useEffect(() => { generateImage(); }, [gray, showWatermark, saveAsGif, watermarkText, quoteFont]);
@@ -181,7 +178,7 @@ function QuoteModal({ message, ...props }: RenderModalProps & { message: Message
                 }
             ]}
         >
-            <img alt="Quote preview" src="" id="quoterPreview" style={{ borderRadius: "20px", width: "100%", marginBottom: "20px" }} />
+            <img alt="Quote preview" src={previewUrl ?? undefined} style={{ borderRadius: "20px", width: "100%", marginBottom: "20px" }} />
 
             <FormSwitch title="Grayscale" value={gray} onChange={setGray} />
             <FormSwitch

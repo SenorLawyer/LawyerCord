@@ -21,6 +21,24 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("dynamic sticker credentials go only to the configured pack endpoint", async () => {
+    const headers = { Authorization: "fixture-token" };
+    let requests = 0;
+    const pack = { id: "fixture-pack" };
+    const api = loadSource("src/equicordplugins/moreStickers/stickers.ts", {
+        "@api/DataStore": {}, "./components": {},
+        "./utils": { corsFetch: () => assert.fail("credentials sent to proxy") },
+    }, { fetch: async (url: string, options: RequestInit) => {
+        requests++;
+        assert.equal(url, "https://packs.example/refresh");
+        assert.equal(options.headers, headers);
+        assert.equal(options.redirect, "error");
+        return { ok: true, json: async () => pack };
+    } });
+    assert.equal(await api.getDynamicStickerPack({ dynamic: { refreshUrl: "https://packs.example/refresh", authHeaders: headers } }), pack);
+    assert.equal(requests, 1);
+});
+
 test("Streaks badges only display the current account's conversation", () => {
     let currentId: string | undefined = "first";
     const streak = { user_a_id: "first", user_b_id: "target", count: 2 };

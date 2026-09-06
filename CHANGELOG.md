@@ -6,6 +6,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Send dynamic sticker pack credentials directly to the configured endpoint instead of a third-party proxy.
 - Fetch audio directly for visualizations instead of forwarding audio URLs through a third-party proxy.
 - Stop automatically uploading legacy Streaks records that lack an owning account. Preserve the local records.
 - Remove Navidrome instance artwork sharing to keep server authentication out of Discord asset requests, and migrate existing selections to None.

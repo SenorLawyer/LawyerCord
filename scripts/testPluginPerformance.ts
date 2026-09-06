@@ -2682,3 +2682,48 @@ test("recent DM cleanup closes an overlay after its setting changes", () => {
     plugin.stop();
     assert.deepEqual(closed, ["overlay", "overlay"]);
 });
+
+
+test("secure key reviews from a stopped session cannot change the new session gate", async () => {
+    const pending: Array<(result: { status: string; }) => void> = [];
+    const mocks: Record<string, object> = {};
+    for (const name of ["@api/ChatButtons", "@api/MessageEvents", "@components/BaseText", "@components/Button", "@components/Heading", "@components/Span", "@utils/clipboard", "@utils/discord", "./attachments", "./attachmentUploads", "./conversationSelection", "./wireAuthorizations"])
+        mocks[name] = {};
+    mocks["@utils/constants"] = { EquicordDevs: { creations: {} } };
+    mocks["@utils/types"] = { __esModule: true, default: (plugin: object) => plugin };
+    mocks["@webpack/common"] = {
+        UserStore: { getCurrentUser: () => ({ id: "local" }) },
+        ChannelStore: { getChannel: () => undefined },
+        CloudUploader: { prototype: {} }, RestAPI: {},
+    };
+    mocks["./attachmentCache"] = { clearEncryptedAttachmentCache() {} };
+    mocks["./embedCache"] = { clearEncryptedEmbedCache() {} };
+    mocks["./wireAuthorizations"] = { clearWirePayloadAuthorizations() {} };
+    mocks["./keyReviewGate"] = loadSource("src/equicordplugins/secureMessaging.desktop/keyReviewGate.ts", {});
+    mocks["./messageMetadata"] = { discordEditedTimestamp: () => null };
+    mocks["./protocol"] = { isKeyAnnouncement: () => true };
+    const source = loadSource("src/equicordplugins/secureMessaging.desktop/index.tsx", mocks, {
+        VencordNative: { pluginHelpers: { SecureMessaging: {
+            reviewAnnouncement: () => new Promise(resolve => pending.push(resolve)),
+            setScreenCaptureProtection: async () => ({ status: "applied" }),
+        } } },
+    }, "({ plugin: exports.default, blocked: () => keyReviewGate.isBlocked('local', 'peer') })");
+    const dispatch = () => source.plugin.flux.MESSAGE_CREATE({ message: { author: { id: "peer" }, channel_id: "channel", id: "message", content: "announcement" } });
+    dispatch();
+    source.plugin.stop();
+    dispatch();
+    pending[0]({ status: "trusted" });
+    await setImmediate();
+    assert.equal(source.blocked(), true, "old completion must not finish the new pending review");
+    pending[1]({ status: "trusted" });
+    await setImmediate();
+    assert.equal(source.blocked(), false);
+    dispatch();
+    source.plugin.stop();
+    dispatch();
+    pending[3]({ status: "trusted" });
+    await setImmediate();
+    pending[2]({ status: "failed" });
+    await setImmediate();
+    assert.equal(source.blocked(), false, "old failure must not poison the new gate");
+});

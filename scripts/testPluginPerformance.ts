@@ -21,6 +21,27 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("editable text begins each edit with the current parent value", () => {
+    const states: unknown[] = [];
+    let cursor = 0;
+    const { EditableText } = loadSource("src/components/settings/EditableText.tsx", {
+        "@components/BaseText": {},
+        "@webpack/common": {
+            React: { createElement: (_type: unknown, props: object) => props },
+            useEffect() {}, useRef: () => ({ current: null }),
+            useState(initial: unknown) {
+                const index = cursor++;
+                if (index >= states.length) states.push(initial);
+                return [states[index], (value: unknown) => { states[index] = value; }];
+            },
+        },
+    });
+    const render = (value: string) => { cursor = 0; return EditableText({ value, onChange() {} }); };
+    render("original");
+    render("updated elsewhere").onClick();
+    assert.equal(render("updated elsewhere").value, "updated elsewhere");
+});
+
 test("disabled links remove navigation and click activation", () => {
     const { Link } = loadSource("src/components/Link.tsx", {
         "@utils/misc": { classes: () => "" },

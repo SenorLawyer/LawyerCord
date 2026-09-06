@@ -22,7 +22,6 @@ export const RecentPack = {
 
 export const PickerSidebar = ({ packMetas, onPackSelect }: SidebarProps) => {
     const [activePack, setActivePack] = React.useState<StickerCategoryType>(RecentPack);
-    const [hovering, setHovering] = React.useState(false);
 
     return (
         <CategoryWrapper>
@@ -62,9 +61,8 @@ export const PickerSidebar = ({ packMetas, onPackSelect }: SidebarProps) => {
             </CategoryScroller>
             <div className={clPicker("settings-cog-container")}>
                 <button
-                    className={clPicker("settings-cog") + (
-                        hovering ? ` ${clPicker("settings-cog-active")}` : ""
-                    )}
+                    className={clPicker("settings-cog")}
+                    aria-label="Sticker pack settings"
                     onClick={() => {
                         openModal(modalProps => {
                             return (
@@ -74,8 +72,6 @@ export const PickerSidebar = ({ packMetas, onPackSelect }: SidebarProps) => {
                             );
                         });
                     }}
-                    onMouseEnter={() => setHovering(true)}
-                    onMouseLeave={() => setHovering(false)}
                 >
                     <CogIcon width={20} height={20} />
                 </button>

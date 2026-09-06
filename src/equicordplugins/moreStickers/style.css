@@ -410,7 +410,7 @@
     transition: all 0.15s ease-out;
 }
 
-.vc-more-stickers-picker-settings-cog-active {
+.vc-more-stickers-picker-settings-cog:hover {
     border-radius: 1em;
     background-color: var(--green-300);
 }
@@ -423,7 +423,7 @@
 }
 
 /* prettier-ignore */
-.vc-more-stickers-picker-settings-cog-active > svg {
+.vc-more-stickers-picker-settings-cog:hover > svg {
     color: var(--white-360) !important;
 }
 

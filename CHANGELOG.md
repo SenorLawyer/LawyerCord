@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Use CSS for sticker settings hover styling and give the icon button an accessible name.
+
 - Remove duplicate sticker search state and its shared timer so clearing search cannot restore an older query.
 
 - Reuse shared async loading for recent stickers, removing the manual loader and handling failures and unmounts.

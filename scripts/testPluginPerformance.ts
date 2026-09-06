@@ -1938,6 +1938,23 @@ test("installer update reviews render repository metadata as text", () => {
     assert.ok(html.includes('href="https://github.com/example/plugin/commit/123456789"'));
 });
 
+test("installer review templates keep placeholder text in metadata literal", () => {
+    const mocks: Record<string, object> = { child_process: {}, electron: {}, fs: {}, "fs/promises": {}, path, "yaml-js": {} };
+    for (const name of ["pluginValidate", "updateValidate"])
+        mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: readFileSync(`src/equicordplugins/userpluginInstaller.dev/misc/${name}.txt`, "utf8") };
+    const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: "/fixture/dist", Buffer }, "({ generateReviewPluginContent, generateUpdatePluginContent })");
+    const name = "%PLUGINDESC% %REMOTE% %COMMITMESSAGE%";
+    const description = "%REMOTE% %COMMITMESSAGE% & <text>";
+    for (const url of [
+        api.generateReviewPluginContent({ name, description, usesNative: true, usesPreSend: true }),
+        api.generateUpdatePluginContent({ name, description, remote: "https://github.com/example/plugin", commit: "A real commit" })
+    ]) {
+        const html = Buffer.from(url.split(",")[1], "base64").toString("utf8");
+        assert.ok(html.includes(`<h3>${name}</h3>`));
+        assert.ok(html.includes("<p>%REMOTE% %COMMITMESSAGE% &amp; &lt;text></p>"));
+    }
+});
+
 test("installer subscriptions keep unique identities and allow self-removal", () => {
     const { VariableWithCallbacks } = loadSource("src/equicordplugins/userpluginInstaller.dev/VariableWithCallbacks.ts", {}, { Date: { now: () => 1 } });
     const value = new VariableWithCallbacks(0);

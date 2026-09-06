@@ -351,7 +351,14 @@ function generateReviewPluginContent(meta: {
     usesPreSend: boolean;
     usesNative: boolean;
 }): string {
-    const template = pluginValidateContent.replace("%PLUGINNAME%", () => escapeHtml(meta.name)).replace("%PLUGINDESC%", () => escapeHtml(meta.description)).replace("%WARNINGHIDER%", !meta.usesNative && !meta.usesPreSend ? "[data-useless=\"warning\"] { display: none !important; }" : "").replace("%NATIVETSHIDER%", meta.usesNative ? "" : "#native-ts-warning { display: none !important; }").replace("%PRESENDHIDER%", meta.usesPreSend ? "" : "#pre-send-warning { display: none !important; }");
+    const replacements: Record<string, string> = {
+        "%PLUGINNAME%": escapeHtml(meta.name),
+        "%PLUGINDESC%": escapeHtml(meta.description),
+        "%WARNINGHIDER%": !meta.usesNative && !meta.usesPreSend ? "[data-useless=\"warning\"] { display: none !important; }" : "",
+        "%NATIVETSHIDER%": meta.usesNative ? "" : "#native-ts-warning { display: none !important; }",
+        "%PRESENDHIDER%": meta.usesPreSend ? "" : "#pre-send-warning { display: none !important; }"
+    };
+    const template = pluginValidateContent.replace(/%(?:PLUGINNAME|PLUGINDESC|WARNINGHIDER|NATIVETSHIDER|PRESENDHIDER)%/g, token => replacements[token]);
     const buf = Buffer.from(template).toString("base64");
     return `data:text/html;base64,${buf}`;
 }
@@ -362,7 +369,13 @@ function generateUpdatePluginContent(meta: {
     remote: string;
     commit: string;
 }): string {
-    const template = updateValidateContent.replace("%PLUGINNAME%", () => escapeHtml(meta.name)).replace("%PLUGINDESC%", () => escapeHtml(meta.description)).replace("%REMOTE%", () => escapeHtml(meta.remote)).replace("%COMMITMESSAGE%", () => meta.commit.replaceAll("\n", "<br />"));
+    const replacements: Record<string, string> = {
+        "%PLUGINNAME%": escapeHtml(meta.name),
+        "%PLUGINDESC%": escapeHtml(meta.description),
+        "%REMOTE%": escapeHtml(meta.remote),
+        "%COMMITMESSAGE%": meta.commit.replaceAll("\n", "<br />")
+    };
+    const template = updateValidateContent.replace(/%(?:PLUGINNAME|PLUGINDESC|REMOTE|COMMITMESSAGE)%/g, token => replacements[token]);
     const buf = Buffer.from(template).toString("base64");
     return `data:text/html;base64,${buf}`;
 }

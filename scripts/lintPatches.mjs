@@ -31,22 +31,19 @@ for (const rel of tracked) {
     if (!text.includes("match:") && !text.includes("find:")) continue;
 
     const source = createSourceFile(rel, text, ScriptTarget.Latest, true);
-    const patchLines = new Set();
-    const visit = node => {
-        if (isPropertyAssignment(node) && node.name.text === "patches") {
-            const first = source.getLineAndCharacterOfPosition(node.initializer.getStart(source)).line;
-            const last = source.getLineAndCharacterOfPosition(node.initializer.end).line;
-            for (let line = first; line <= last; line++) patchLines.add(line);
-        }
-        forEachChild(node, visit);
+    const properties = [];
+    const visit = (node, inPatches = false) => {
+        const property = isPropertyAssignment(node);
+        const inside = inPatches || (property && node.name.text === "patches");
+        if (inPatches && property && ["match", "find", "replace"].includes(node.name.text)) properties.push(node);
+        forEachChild(node, child => visit(child, inside));
     };
     visit(source);
 
-    const lines = text.split("\n");
-    for (let i = 0; i < lines.length; i++) {
-        if (!patchLines.has(i)) continue;
-        const line = lines[i];
-        const at = `${rel.replace(/\\/g, "/")}:${i + 1}`;
+    for (const property of properties) {
+        const line = `${property.name.text}: ${property.initializer.getText(source)}`;
+        const lineNumber = source.getLineAndCharacterOfPosition(property.getStart(source)).line + 1;
+        const at = `${rel.replace(/\\/g, "/")}:${lineNumber}`;
 
         const matchM = line.match(/\bmatch\s*:\s*\/((?:\\.|[^/\\\n])+)\/[gimsuy]*/);
         if (matchM) {
@@ -59,7 +56,7 @@ for (const rel of tracked) {
 
         const findM = line.match(/\bfind\s*:\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\/(?:\\.|[^/\\\n])+\/[gimsuy]*)/);
         if (findM) {
-            const window = lines.slice(i, i + 12).join("\n");
+            const window = property.parent.getText(source);
             if (/\b(replacement|match)\s*:/.test(window)) {
                 const v = findM[1];
                 if (v === '""' || v === "''" || v === "``") {

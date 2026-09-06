@@ -6,6 +6,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Normalize missing sticker pack titles without mutating the imported object, and remove the single-use metadata conversion helper.
 - Reject malformed or mismatched stored sticker packs without deleting the stored records.
 - Validate every sticker pack in an imported file before saving any of them.
 - Refresh sticker settings after migration, handle storage failures, and remove the unused recent-sticker setter.

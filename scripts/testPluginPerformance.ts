@@ -4767,6 +4767,13 @@ test("sticker pack metadata updates preserve concurrent packs without holding a 
     assert.equal(entries.get(legacy.id), legacy);
     await module.saveStickerPack(legacy);
     assert.equal(await module.getStickerPack(legacy.id), legacy);
+    for (const id of ["pack123", "custom"]) {
+        const untitled = Object.freeze({ ...legacy, id, title: "null" });
+        await module.saveStickerPack(untitled);
+        assert.equal(untitled.title, "null");
+        assert.equal((await module.getStickerPack(id)).title, id === "pack123" ? "123" : "custom");
+        assert.equal((await module.getStickerPackMetas()).find((meta: { id: string; }) => meta.id === id).title, id === "pack123" ? "123" : "custom");
+    }
     for (const malformed of [{ ...legacy, logo: null }, { ...legacy, stickers: [null] }, { ...legacy, id: "other-pack" }]) {
         entries.set(`MoreStickers:PackData:${legacy.id}`, malformed);
         assert.equal(await module.getStickerPack(legacy.id), null);

@@ -44,29 +44,15 @@ export function isStickerPack(value: unknown): value is StickerPack {
 }
 
 /**
-  * Convert StickerPack to StickerPackMeta
-  *
-  * @param {StickerPack} sp The StickerPack to convert.
-  * @return {StickerPackMeta} The sticker pack metadata.
-  */
-function stickerPackToMeta(sp: StickerPack): StickerPackMeta {
-    return {
-        id: sp.id,
-        title: sp.title = sp.title === "null" ? sp.id.match(/\d+/)?.[0] ?? sp.id : sp.title,
-        author: sp.author,
-        logo: sp.logo,
-        dynamic: sp.dynamic,
-    };
-}
-
-/**
   * Save a sticker pack to the DataStore
   *
   * @param {StickerPack} sp The StickerPack to save.
   * @return {Promise<void>}
   */
 export async function saveStickerPack(sp: StickerPack, packsKey: string = PACKS_KEY): Promise<void> {
-    const meta = stickerPackToMeta(sp);
+    if (sp.title === "null") sp = { ...sp, title: sp.id.match(/\d+/)?.[0] ?? sp.id };
+    const { id, title, author, logo, dynamic } = sp;
+    const meta = { id, title, author, logo, dynamic };
 
     await Promise.all([
         DataStore.set(`MoreStickers:PackData:${sp.id}`, sp),

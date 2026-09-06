@@ -103,22 +103,22 @@ function HiddenChannelLockScreen({ channel }: { channel: Channel; }) {
     } = channel;
 
     useEffect(() => {
-        const membersToFetch: Array<string> = [];
+        const membersToFetch = new Set<string>();
 
         const guildOwnerId = GuildStore.getGuild(guild_id)?.ownerId;
-        if (!GuildMemberStore.getMember(guild_id, guildOwnerId)) membersToFetch.push(guildOwnerId);
+        if (guildOwnerId && !GuildMemberStore.getMember(guild_id, guildOwnerId)) membersToFetch.add(guildOwnerId);
 
         Object.values(permissionOverwrites).forEach(({ type, id: userId }) => {
             if (type === 1 && !GuildMemberStore.getMember(guild_id, userId)) {
-                membersToFetch.push(userId);
+                membersToFetch.add(userId);
             }
         });
 
-        if (membersToFetch.length > 0) {
+        if (membersToFetch.size > 0) {
             FluxDispatcher.dispatch({
                 type: "GUILD_MEMBERS_REQUEST",
                 guildIds: [guild_id],
-                userIds: membersToFetch
+                userIds: Array.from(membersToFetch)
             });
         }
 

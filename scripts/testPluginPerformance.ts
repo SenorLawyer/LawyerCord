@@ -46,6 +46,42 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("hidden channel member requests omit missing owners and duplicate IDs", () => {
+    const requests: { userIds: string[]; }[] = [];
+    let ownerId: string | undefined;
+    const enums = {
+        ...loadSource("packages/discord-types/enums/channel.ts", {}),
+        ...loadSource("packages/discord-types/enums/voice.ts", {})
+    };
+    const { default: Screen } = loadSource("src/plugins/showHiddenChannels/components/HiddenChannelLockScreen.tsx", {
+        "@api/PluginManager": { isPluginEnabled: () => false },
+        "@components/BaseText": {},
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+        "@plugins/permissionsViewer": { __esModule: true, default: { name: "PermissionsViewer" } },
+        "@plugins/permissionsViewer/components/RolesAndUsersPermissions": {},
+        "@plugins/permissionsViewer/utils": {},
+        "@utils/misc": { classes: () => "" },
+        "@utils/text": {},
+        "@vencord/discord-types/enums": enums,
+        "@webpack": { findCssClassesLazy: () => ({}), findByPropsLazy: () => ({}), findComponentByCodeLazy: () => null },
+        "@webpack/common": {
+            GuildStore: { getGuild: () => ownerId ? { ownerId } : undefined },
+            GuildMemberStore: { getMember: () => null },
+            FluxDispatcher: { dispatch: (request: { userIds: string[]; }) => requests.push(request) },
+            PermissionStore: { can: () => false }, PermissionsBits: {},
+            useState: () => [[], () => {}], useEffect: (effect: () => void) => effect()
+        },
+        "..": { cl: () => "", settings: { use: () => ({}) } }
+    }, { React: { createElement: () => null } });
+    const channel = { id: "channel", guild_id: "guild", type: 0, permissionOverwrites: {}, isNSFW: () => false, isForumChannel: () => false, isGuildVoice: () => false, isGuildStageVoice: () => false, hasFlag: () => false };
+    Screen({ channel });
+    assert.equal(requests.length, 0);
+    ownerId = "owner";
+    Screen({ channel: { ...channel, permissionOverwrites: { owner: { type: 1, id: "owner" }, other: { type: 1, id: "other" } } } });
+    assert.equal(requests.length, 1);
+    assert.deepEqual(Array.from(requests[0].userIds), ["owner", "other"]);
+});
+
 test("quest progress uses the current Discord store after automation removal", () => {
     const taskTypes = new Proxy({}, { get: (_target, key) => key });
     const task = { type: "WATCH_VIDEO", target: 100 };

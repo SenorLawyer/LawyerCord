@@ -224,7 +224,7 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
     if (albumArtMode === "lastfm" && track.artist) {
         const trimmedKey = nd_lastfmApiKey?.trim();
         const apiKey = trimmedKey || "feff915bf5987580c9dc354d523dc6b9";
-        const cacheKey = `${track.id}:${apiKey}`;
+        const cacheKey = JSON.stringify([track.artist, track.album, track.title]);
 
         if (lastFmCache.has(cacheKey)) {
             resolvedCoverArtUrl = lastFmCache.get(cacheKey) ?? null;

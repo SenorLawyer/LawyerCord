@@ -4701,6 +4701,7 @@ test("Navidrome format substitutions preserve literal metadata", () => {
 test("Navidrome retries failed Last.fm artwork requests", async () => {
     for (const failure of ["network", "http"]) {
         let requests = 0;
+        const track = { id: "track", username: "listener", artist: "Artist", album: "Album", title: "Song" };
         const getActivity = loadSource("src/equicordplugins/richPresence/services/navidrome.ts", {
             "@utils/Logger": { Logger: class { error() {} warn() {} } },
             "@utils/misc": { parseUrl: (value: string) => new URL(value) },
@@ -4710,7 +4711,7 @@ test("Navidrome retries failed Last.fm artwork requests", async () => {
             "../settings": { settings: { store: { nd_serverUrl: "https://music.example", nd_username: "listener", nd_password: "password", nd_albumArtMode: "lastfm" } } },
         }, { fetch: async (url: string) => {
             if (new URL(url).origin === "https://music.example")
-                return response({ "subsonic-response": { nowPlaying: { entry: [{ id: "track", username: "listener", artist: "Artist", album: "Album" }] } } });
+                return response({ "subsonic-response": { nowPlaying: { entry: [track] } } });
             requests++;
             if (requests === 1) {
                 if (failure === "network") throw new Error("offline");
@@ -4722,5 +4723,15 @@ test("Navidrome retries failed Last.fm artwork requests", async () => {
         assert.equal((await getActivity()).assets.large_image, "https://images.example/cover.png");
         await getActivity();
         assert.equal(requests, 2, "successful artwork stays cached");
+        for (const key of ["artist", "album", "title"] as const) {
+            track[key] += " changed";
+            const previous = requests;
+            await getActivity();
+            assert.equal(requests, previous + 1, `${key} changes invalidate artwork`);
+        }
+        track.id = "another-server-track-id";
+        const previous = requests;
+        await getActivity();
+        assert.equal(requests, previous, "identical metadata reuses artwork across track IDs");
     }
 });

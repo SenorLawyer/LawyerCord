@@ -47,7 +47,7 @@ function UserPluginsTab() {
             description: string;
             usesPreSend: boolean;
             usesNative: boolean;
-            directory?: string;
+            directory: string;
             remote: string;
             supportChannelID?: string;
         }[]
@@ -84,6 +84,8 @@ function UserPluginsTab() {
             plgobj.deregisterCallback(cid2);
         };
     }, []);
+
+    const pendingDirectories = new Set(Object.keys(pluginsWithUpdates));
 
     return (
         <STab
@@ -188,23 +190,9 @@ function UserPluginsTab() {
                     <div className={cl("plugins-grid")}>
                         {plugins
                             .toSorted((a, b) =>
-                                a.name.localeCompare(b.name, "en", {
-                                    sensitivity: "base",
-                                }),
+                                Number(pendingDirectories.has(b.directory)) - Number(pendingDirectories.has(a.directory))
+                                || a.name.localeCompare(b.name, "en", { sensitivity: "base" }),
                             )
-                            .toSorted((a, b) => {
-                                const updatePendingNames =
-                                    Object.keys(pluginsWithUpdates);
-                                const [aa, bb] = [
-                                    updatePendingNames.includes(a.directory!)
-                                        ? 1000
-                                        : 0,
-                                    updatePendingNames.includes(b.directory!)
-                                        ? 1000
-                                        : 0,
-                                ];
-                                return bb - aa;
-                            })
                             .map(plugin => {
 
                                 const pl = Vencord.Plugins.plugins[
@@ -219,7 +207,7 @@ function UserPluginsTab() {
                                         role="switch"
                                         onClick={async () => {
                                             try {
-                                                if (!await Native.rmPlugin(plugin.directory!)) return;
+                                                if (!await Native.rmPlugin(plugin.directory)) return;
                                             } catch (error) {
                                                 Alerts.show({
                                                     title: "Uninstall error",
@@ -261,15 +249,13 @@ function UserPluginsTab() {
                                     }}
                                     footer={(
                                         <div className={cl("plugin-footer")}>
-                                            {Object.keys(
-                                                pluginsWithUpdates,
-                                            ).includes(plugin.directory!) && (
+                                            {pendingDirectories.has(plugin.directory) && (
                                                     <Button
                                                         size="small"
                                                         onClick={async () => {
                                                             try {
                                                                 const { native } = await Native.updatePlugin(
-                                                                    plugin.directory!,
+                                                                    plugin.directory,
                                                                 );
                                                                 const updates = userpluginInstaller.pluginsWithUpdates.value();
                                                                 userpluginInstaller.pluginsWithUpdates.value({

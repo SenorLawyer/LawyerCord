@@ -4,19 +4,13 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import type { Quest } from "@vencord/discord-types";
+import type { Quest, QuestTask } from "@vencord/discord-types";
 import { QuestTaskType } from "@vencord/discord-types/enums";
 import { QuestStore } from "@webpack/common";
 
 import { getQuestifySettings, useQuestifySettings } from "../settings/access";
 import { ignoredQuestIDsKey } from "../settings/def";
 import { type QuestIncludedTypes, questMatchesIncludedTypes } from "./filtering";
-
-export interface QuestTask {
-    type: QuestTaskType;
-    target: number;
-    applications?: { id: string; }[];
-}
 
 export enum QuestStatus {
     Claimed = "CLAIMED",
@@ -69,9 +63,7 @@ export function isVideoQuestTask(taskType: QuestTaskType): boolean {
 }
 
 function getQuestTaskByType(quest: Quest, taskType: QuestTaskType): QuestTask | null {
-    const task = quest.config.taskConfigV2?.tasks[taskType] as QuestTask | undefined;
-
-    return task ?? null;
+    return quest.config.taskConfigV2?.tasks[taskType] ?? null;
 }
 
 function getVideoQuestTask(quest: Quest): QuestTask | null {

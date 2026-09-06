@@ -18,9 +18,11 @@ import {
     ChannelStore,
     Constants,
     FluxDispatcher,
+    GuildMemberStore,
     GuildStore,
     MessageActions,
     MessageStore,
+    PresenceStore,
     ReadStateStore,
     RestAPI,
     SelectedChannelStore,
@@ -29,7 +31,8 @@ import {
 } from "@webpack/common";
 
 import { parseConversation, validateResult } from "./ai";
-import { compileTriggers, matchTriggers } from "./events";
+import { CLIENT_EVENTS } from "./clientEvents";
+import { compileTriggers, matchesClientEvent, matchTriggers, normalizeClientEvents } from "./events";
 import {
     addScheduleInterval,
     type Automation,
@@ -74,6 +77,7 @@ const LOGS_KEY = "LawyerCord_automationLogs";
 const GUILDS_KEY = "LawyerCord_automationGuilds";
 const COMMANDS_KEY = "LawyerCord_automationCommands";
 const MAX_LOGS = 2000;
+const CLIENT_EVENT_NAMES = new Set<string>(Object.values(CLIENT_EVENTS).map(definition => definition.event));
 
 interface RuntimeMessage {
     id: string;
@@ -1011,6 +1015,37 @@ async function fetchRecentMentions(config: AutomationBlock["config"]): Promise<R
     return messages.slice(0, limit);
 }
 
+function waitForClientEvent(config: AutomationBlock["config"], context: ExecutionContext, presence: boolean): Promise<unknown> {
+    const eventType = presence ? "presence-update" : config.eventType ?? "presence-update";
+    const definition = CLIENT_EVENTS[eventType];
+    if (!definition) throw new Error("Choose a supported Discord event.");
+    const filter = {
+        authorId: resolveTemplate(config.authorId || config.userId, context.variables).trim(),
+        channelId: definition.channel ? resolveTemplate(config.channelId, context.variables).trim() : "",
+        guildId: definition.channel || eventType === "member-update" ? resolveTemplate(config.guildId, context.variables).trim() : "",
+        status: eventType === "presence-update" ? config.status : "",
+    };
+    checkCancelled(context.signal);
+    return new Promise((resolve, reject) => {
+        const finish = (value: unknown) => {
+            clearTimeout(timer);
+            unsubscribe();
+            context.signal.removeEventListener("abort", cancel);
+            if (value instanceof Error) reject(value); else resolve(value);
+        };
+        const cancel = () => finish(new Error("Run cancelled."));
+        const unsubscribe = listen(definition.event, payload => {
+            const event = normalizeClientEvents(definition.event, payload).find(event => {
+                if (event.channelId) event.guildId ||= ChannelStore.getChannel(event.channelId)?.guild_id ?? "";
+                return matchesClientEvent(event, filter);
+            });
+            if (event) finish(event);
+        });
+        const timer = setTimeout(() => finish(null), Math.min(86_400, Math.max(1, config.timeoutSeconds ?? 60)) * 1000);
+        context.signal.addEventListener("abort", cancel, { once: true });
+    });
+}
+
 function waitForReaction(config: AutomationBlock["config"], context: ExecutionContext): Promise<unknown> {
     const message = sourceMessage(config, context);
     checkCancelled(context.signal);
@@ -1468,24 +1503,68 @@ async function executeBlock(block: AutomationBlock, context: ExecutionContext): 
             value = toRuntimeMessage(response.body) ?? message;
             break;
         }
-        case "search-messages": {
+        case "get-presence": {
+            const userId = resolveUserId(config, context, "User ID");
+            value = { userId, status: PresenceStore.getStatus(userId), activities: PresenceStore.getActivities(userId), clientStatus: PresenceStore.getClientStatus(userId) };
+            break;
+        }
+        case "get-member": {
+            const userId = resolveUserId(config, context, "User ID");
             const guildId = requireSnowflake(resolveTemplate(config.guildId, context.variables), "Server ID");
-            const query: Record<string, string | number> = { content: resolveTemplate(config.matchText, context.variables) };
+            const member = GuildMemberStore.getMember(guildId, userId);
+            value = member ? { userId, guildId, nick: member.nick ?? null, roles: member.roles } : null;
+            break;
+        }
+        case "get-selected-channel": {
+            const channelId = SelectedChannelStore.getChannelId();
+            const channel = channelId ? ChannelStore.getChannel(channelId) : undefined;
+            value = channel ? { id: channel.id, name: channel.name ?? "", type: channel.type, guild_id: channel.guild_id ?? null } : null;
+            break;
+        }
+        case "wait-presence":
+        case "wait-client-event":
+            value = await waitForClientEvent(config, context, block.type === "wait-presence");
+            if (value === null) {
+                if (config.variable) context.variables[config.variable] = null;
+                return false;
+            }
+            break;
+        case "search-messages": {
+            const guildId = resolveTemplate(config.guildId, context.variables).trim();
             const channelId = resolveTemplate(config.channelId, context.variables).trim();
-            if (channelId) query.channel_id = channelId;
-            const response = await RestAPI.get({ url: `${Constants.Endpoints.GUILD(guildId)}/messages/search`, query });
-            const hits = isRecord(response.body) && Array.isArray(response.body.messages) ? response.body.messages : [];
-            value = hits
-                .flat()
-                .map(toRuntimeMessage)
-                .filter((message): message is RuntimeMessage => message !== null)
-                .slice(0, Math.min(100, Math.max(1, Math.trunc(config.limit || 25))));
+            const url = guildId && guildId !== "@me"
+                ? Constants.Endpoints.SEARCH_GUILD(requireSnowflake(guildId, "Server ID"))
+                : Constants.Endpoints.SEARCH_CHANNEL(requireSnowflake(channelId, "DM channel ID"));
+            const query: Record<string, string | number> = { sort_by: "timestamp", sort_order: "desc" };
+            const content = resolveTemplate(config.matchText, context.variables).trim();
+            const authorId = resolveTemplate(config.authorId, context.variables).trim();
+            if (content) query.content = content;
+            if (authorId) query.author_id = requireSnowflake(authorId, "Author ID");
+            if (channelId && guildId !== "@me" && guildId) query.channel_id = requireSnowflake(channelId, "Channel ID");
+            const limit = Math.min(100, Math.max(1, Math.trunc(config.limit || 25)));
+            const messages = new Map<string, RuntimeMessage>();
+            for (let offset = 0; offset < limit; offset += 25) {
+                checkCancelled(context.signal);
+                const response = await RestAPI.get({ url, query: { ...query, offset } });
+                checkCancelled(context.signal);
+                if (response.status === 202) throw new Error("Discord is indexing this search. Try again shortly.");
+                if (!isRecord(response.body) || !Array.isArray(response.body.messages)) throw new Error("Discord returned an unreadable search result.");
+                for (const hit of response.body.messages.flat()) {
+                    if (!isRecord(hit) || hit.hit === false) continue;
+                    const message = toRuntimeMessage(hit);
+                    if (message && (!authorId || message.author.id === authorId)) messages.set(message.id, message);
+                }
+                if (messages.size >= limit || response.body.messages.length < 25) break;
+            }
+            value = [...messages.values()].slice(0, limit);
             break;
         }
         case "get-user": {
             const userId = resolveUserId(config, context, "User ID");
-            const response = await RestAPI.get({ url: Constants.Endpoints.USER(userId) });
-            value = response.body;
+            const cached = UserStore.getUser(userId);
+            const raw: unknown = cached ?? (await RestAPI.get({ url: Constants.Endpoints.USER(userId) })).body;
+            if (!isRecord(raw)) throw new Error("Discord could not find this user.");
+            value = { ...raw, id: userId, username: String(raw.username ?? ""), global_name: raw.global_name ?? raw.globalName ?? null, displayName: String(raw.global_name ?? raw.globalName ?? raw.username ?? userId), bot: raw.bot === true, avatar: raw.avatar ?? null, status: PresenceStore.getStatus(userId), activities: PresenceStore.getActivities(userId), clientStatus: PresenceStore.getClientStatus(userId) };
             break;
         }
         case "list-connections":
@@ -1760,6 +1839,15 @@ function handleTriggerEvent(type: string, payload: unknown): void {
     if (!engineRunning || !triggerIndex.has(type) || !isRecord(payload) || payload.optimistic) return;
     const user = UserStore.getCurrentUser();
     if (!user) return;
+    if (CLIENT_EVENT_NAMES.has(type)) {
+        for (const event of normalizeClientEvents(type, payload)) {
+            const channel = event.channelId ? ChannelStore.getChannel(event.channelId) : undefined;
+            event.guildId ||= channel?.guild_id ?? "";
+            const matches = matchTriggers(triggerIndex, { type, channelId: event.channelId, guildId: event.guildId, authorId: event.userId, status: event.status, content: "", self: event.userId === user.id, bot: event.user?.bot === true, mention: false, fromEngine: false });
+            for (const automation of matches) void runAutomationWithVariables(automation.id, { triggerEvent: event, triggerUserId: event.userId, __channelId: event.channelId });
+        }
+        return;
+    }
     const events = type === "VOICE_STATE_UPDATES" && Array.isArray(payload.voiceStates) ? payload.voiceStates : [payload];
     for (const event of events) {
         if (!isRecord(event)) continue;

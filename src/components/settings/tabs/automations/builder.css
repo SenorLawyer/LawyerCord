@@ -1503,3 +1503,13 @@ div:has(> [data-mana-component="modal"] .vc-ab-workspace) {
         grid-column: 1 / -1;
     }
 }
+
+.vc-ab-output-field {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    align-items: start;
+    gap: 10px;
+    padding-block: 8px;
+    border-bottom: 1px solid var(--background-modifier-accent);
+    overflow-wrap: anywhere;
+}

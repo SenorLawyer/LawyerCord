@@ -21,6 +21,30 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ReviewDB submissions cannot send or clear under a changed account", async () => {
+    const source = readFileSync("src/plugins/reviewDB/components/ReviewsView.tsx", "utf8");
+    const match = source.match(/async res => \{([\s\S]*?)\n\s*\}\n\s*\}\n\s*\/>/);
+    assert.ok(match);
+    for (const switchAt of ["before", "response", "never"]) {
+        let userId = switchAt === "before" ? "second" : "first";
+        let sends = 0;
+        let clears = 0;
+        let reloads = 0;
+        const submit = runInNewContext(`(async res => {${match[1]}})`, {
+            accountId: "first", UserStore: { getCurrentUser: () => ({ id: userId }) },
+            discordId: "target", repliesTo: undefined,
+            addReview: async () => { sends++; if (switchAt === "response") userId = "second"; return {}; },
+            refetch: () => { reloads++; }, editorRef: { current: { ref: { current: { getSlateEditor: () => ({}) } } } },
+            Transforms: { delete: () => { clears++; } }, Editor: { start() {}, end() {} },
+        });
+        const result = await submit({ value: "review" });
+        assert.equal(sends, switchAt === "before" ? 0 : 1);
+        assert.equal(clears, switchAt === "never" ? 1 : 0);
+        assert.equal(reloads, switchAt === "never" ? 1 : 0);
+        assert.equal(result.shouldRefocus, switchAt === "never");
+    }
+});
+
 test("ReviewDB modal state is keyed to the current account", async () => {
     let userId = "first";
     let factory: (() => Promise<(props: object) => { props: { key: string; discordId: string; }; }>) | undefined;
@@ -137,7 +161,7 @@ test("ReviewDB input leaves Discord's shared input configuration unchanged", () 
             findByPropsLazy: (prop: string) => prop === "FORM" ? { USER_PROFILE_REPLY: inputType } : {},
             findComponentByCodeLazy: () => "Input", findByCodeLazy: () => () => ({}),
         },
-        "@webpack/common": { React, useRef: () => ({ current: null }) }, "./ReviewComponent": {},
+        "@webpack/common": { React, UserStore: { getCurrentUser: () => ({ id: "first" }) }, useRef: () => ({ current: null }) }, "./ReviewComponent": {},
     });
     const tree = ReviewsInputComponent({ discordId: "target", name: "Target", refetch() {} });
     const type = tree.children[0].children[0].props.type;

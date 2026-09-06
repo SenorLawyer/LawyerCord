@@ -135,6 +135,7 @@ function ReviewList({ refetch, reviews, hideOwnReview, profileId, type }: { refe
 export function ReviewsInputComponent(
     { discordId, isAuthor, refetch, name, modalKey, repliesTo }: { discordId: string, name: string; isAuthor: boolean; refetch(): void; modalKey?: string; repliesTo?: number; }
 ) {
+    const accountId = UserStore.getCurrentUser()?.id;
     const { token } = Auth;
     const editorRef = useRef<any>(null);
     const inputType = { ...ChatInputTypes.USER_PROFILE_REPLY, disableAutoFocus: true };
@@ -167,6 +168,8 @@ export function ReviewsInputComponent(
                     textValue=""
                     onSubmit={
                         async res => {
+                            if (UserStore.getCurrentUser()?.id !== accountId)
+                                return { shouldClear: false, shouldRefocus: false };
                             // I know this naming is deranged, but for compatibility it has to stay this way
 
                             const response = await addReview({
@@ -175,7 +178,7 @@ export function ReviewsInputComponent(
                                 repliesto: repliesTo,
                             });
 
-                            if (response) {
+                            if (response && UserStore.getCurrentUser()?.id === accountId) {
                                 refetch();
 
                                 const slateEditor = editorRef.current.ref.current.getSlateEditor();
@@ -192,7 +195,7 @@ export function ReviewsInputComponent(
                             // even tho we need to return this, it doesnt do anything
                             return {
                                 shouldClear: false,
-                                shouldRefocus: true,
+                                shouldRefocus: UserStore.getCurrentUser()?.id === accountId,
                             };
                         }
                     }

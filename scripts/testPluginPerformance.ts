@@ -21,6 +21,19 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("missing friendship dates preserve the original status text", () => {
+    const { default: plugin } = loadSource("src/plugins/sortFriendRequests/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }), migratePluginSettings() {} },
+        "@components/BaseText": {}, "@components/Flex": {}, "@components/TooltipContainer": {},
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+        "@utils/constants": { Devs: {}, EquicordDevs: {} }, "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack/common": { RelationshipStore: { getSince: () => undefined } },
+    });
+    const original = { text: "Incoming friend request" };
+    assert.equal(plugin.makeSubtext({ id: "user" }, original), original);
+});
+
 test("relationship removal returns notification and storage work to the flux wrapper", async () => {
     let synced = false;
     const { default: plugin } = loadSource("src/plugins/relationshipNotifier/index.ts", {

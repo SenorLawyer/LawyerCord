@@ -25,9 +25,7 @@ let abortController: AbortController | undefined;
 let currentTrackId: string | undefined;
 let cachedStartTimestamp: number | undefined;
 let cachedPauseTimestamp: number | undefined;
-let cachedTrackState: string | undefined;
 let lastMinutesAgo: number | undefined;
-let cachedActivity: Activity | undefined;
 let cachedSettingsJSON: string | undefined;
 const lastFmCache = new Map<string, string | null>();
 
@@ -146,17 +144,6 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
     const currentSettingsJSON = getSettingsJSON();
 
     const isPaused = track.state?.toLowerCase() === "paused";
-
-    if (track.id === currentTrackId && cachedActivity && cachedSettingsJSON === currentSettingsJSON) {
-        let drift = false;
-        if (track.positionMs !== undefined && !isPaused && cachedStartTimestamp) {
-            const expectedPosition = Date.now() - cachedStartTimestamp;
-            if (Math.abs(expectedPosition - track.positionMs) > 2000) drift = true;
-        }
-        if (track.state === cachedTrackState && (track.minutesAgo ?? 0) === (lastMinutesAgo ?? 0) && !drift) {
-            return cachedActivity;
-        }
-    }
 
     const { nd_clientId, nd_showSmallImage, nd_showAlbum, nd_nameString, nd_detailsString, nd_stateString, nd_largeTextString, nd_activityType, nd_statusDisplayType, nd_lastfmApiKey, nd_hideOnPause } = settings.store;
 
@@ -320,8 +307,6 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
     };
 
     cachedSettingsJSON = currentSettingsJSON;
-    cachedActivity = activity;
-    cachedTrackState = track.state;
     return activity;
 }
 
@@ -333,9 +318,7 @@ async function updatePresence() {
             currentTrackId = undefined;
             cachedStartTimestamp = undefined;
             lastMinutesAgo = undefined;
-            cachedActivity = undefined;
             cachedSettingsJSON = undefined;
-            cachedTrackState = undefined;
             cachedPauseTimestamp = undefined;
         }
     } catch (e: unknown) {
@@ -346,9 +329,7 @@ async function updatePresence() {
         cachedStartTimestamp = undefined;
         cachedPauseTimestamp = undefined;
         lastMinutesAgo = undefined;
-        cachedActivity = undefined;
         cachedSettingsJSON = undefined;
-        cachedTrackState = undefined;
     }
 
     if (abortController && !abortController.signal.aborted) {
@@ -387,8 +368,6 @@ export function stop() {
     cachedStartTimestamp = undefined;
     cachedPauseTimestamp = undefined;
     lastMinutesAgo = undefined;
-    cachedActivity = undefined;
     cachedSettingsJSON = undefined;
-    cachedTrackState = undefined;
     setActivity(null);
 }

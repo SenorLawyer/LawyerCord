@@ -21,6 +21,24 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("XSOverlay applies each channel notification setting independently", () => {
+    const store = { dmNotifications: false, groupDmNotifications: false, serverNotifications: false };
+    const { shouldIgnoreForChannelType } = loadSource("src/plugins/xsOverlay/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store }) },
+        "@utils/constants": { Devs: {} }, "@utils/Logger": { Logger: class {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value, makeRange: () => [], OptionType: {}, ReporterTestable: {} },
+        "@webpack": { findByCodeLazy: () => () => true, findLazy: () => ({ DM: 1, GROUP_DM: 3 }) }, "@webpack/common": {},
+    }, { VencordNative: { pluginHelpers: { XSOverlay: {} } } }, "({ shouldIgnoreForChannelType })");
+    for (let mask = 0; mask < 8; mask++) {
+        store.dmNotifications = !!(mask & 1);
+        store.groupDmNotifications = !!(mask & 2);
+        store.serverNotifications = !!(mask & 4);
+        assert.equal(shouldIgnoreForChannelType({ type: 1 }), !store.dmNotifications);
+        assert.equal(shouldIgnoreForChannelType({ type: 3 }), !store.groupDmNotifications);
+        assert.equal(shouldIgnoreForChannelType({ type: 0 }), !store.serverNotifications);
+    }
+});
+
 test("NoBlockedMessages preserves notifications for unsuppressed AutoMod messages", () => {
     let suppressed = false;
     const { default: plugin } = loadSource("src/plugins/noBlockedMessages/index.ts", {

@@ -46,6 +46,54 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("quest progress uses the current Discord store after automation removal", () => {
+    const taskTypes = new Proxy({}, { get: (_target, key) => key });
+    const task = { type: "WATCH_VIDEO", target: 100 };
+    const quest = { id: "quest", config: { taskConfigV2: { tasks: { WATCH_VIDEO: task } } }, userStatus: { progress: { WATCH_VIDEO: { value: 25 } } } };
+    const { getQuestPanelPercentComplete } = loadSource("src/equicordplugins/questify/utils/questState.ts", {
+        "@vencord/discord-types/enums": { QuestTaskType: taskTypes },
+        "@webpack/common": { QuestStore: { getQuest: () => quest } },
+        "../settings/access": {},
+        "../settings/def": {},
+        "./filtering": {}
+    });
+    assert.equal(getQuestPanelPercentComplete({ quest: { id: "quest" } }).percentComplete, 0.25);
+    quest.userStatus.progress.WATCH_VIDEO.value = 80;
+    assert.equal(getQuestPanelPercentComplete({ quest: { id: "quest" }, percentCompleteText: "native" }).percentCompleteText, "80%");
+    assert.equal(getQuestPanelPercentComplete({ quest: null }), null);
+});
+
+test("quest settings migration removes retired automation state and preserves preferences", () => {
+    const current = { enabled: true, migrationVersion: 1, questButtonDisplay: "never", ignoredQuestIDs: { questIDs: ["keep"] }, resumeQuestIDs: { user: ["old"] }, autoCompleteQuestTypes: { WATCH_VIDEO: true } };
+    const plain = { plugins: { Questify: current } };
+    let saves = 0;
+    const mocks = {
+        "@api/Settings": { PlainSettings: plain, SettingsStore: { markAsChanged: () => saves++ }, definePluginSettings: (value: object) => value },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+        "@utils/types": { OptionType: {} },
+        "../components/questButtonSettings": {},
+        "../components/questFeaturesSetting": {},
+        "../components/questNotificationsSetting": {},
+        "../components/questTilesSetting": {},
+        "../components/reorderQuestsSetting": {},
+        "./def": { defaultQuestOrder: [] }
+    };
+    loadSource("src/equicordplugins/questify/settings/store.ts", mocks);
+    assert.equal(current.migrationVersion, 2);
+    assert.equal(current.questButtonDisplay, "never");
+    assert.deepEqual(current.ignoredQuestIDs, { questIDs: ["keep"] });
+    assert.equal("resumeQuestIDs" in current, false);
+    assert.equal("autoCompleteQuestTypes" in current, false);
+    assert.equal(saves, 1);
+    loadSource("src/equicordplugins/questify/settings/store.ts", mocks);
+    assert.equal(saves, 1);
+    current.migrationVersion = 0;
+    loadSource("src/equicordplugins/questify/settings/store.ts", mocks);
+    assert.equal(plain.plugins.Questify.migrationVersion, 2);
+    assert.equal(plain.plugins.Questify.enabled, true);
+    assert.equal(saves, 2);
+});
+
 test("quest sort settings keep every status exactly once", () => {
     const defaults = ["UNCLAIMED", "CLAIMED", "IGNORED", "EXPIRED"];
     const mocks = {
@@ -1233,8 +1281,10 @@ test("channel tab limits preserve foreground and background opening behavior", (
 
 test("channel tab animation selection can clear all and replace multiple choices", () => {
     let onChange: (values: (string | { value: string; })[]) => void = () => assert.fail("Selector was not rendered");
+    const previousSettings = { animationQuestsActive: true, animationHover: true };
+    let saves = 0;
     const { AnimationSettings, settings } = loadSource("src/equicordplugins/channelTabs/util/constants.tsx", {
-        "@api/Settings": { definePluginSettings: (definitions: Record<string, { default?: unknown; }>) => ({ store: Object.fromEntries(Object.entries(definitions).map(([key, option]) => [key, option.default])) }) },
+        "@api/Settings": { PlainSettings: { plugins: { ChannelTabs: previousSettings } }, SettingsStore: { markAsChanged: () => saves++ }, definePluginSettings: (definitions: Record<string, { default?: unknown; }>) => ({ store: Object.fromEntries(Object.entries(definitions).map(([key, option]) => [key, option.default])) }) },
         "@components/Heading": {}, "@components/Paragraph": {},
         "@equicordplugins/channelTabs/components/ChannelTabsContainer": {},
         "@equicordplugins/channelTabs/components/KeybindSettings": {},
@@ -1242,6 +1292,9 @@ test("channel tab animation selection can clear all and replace multiple choices
         "@utils/types": { makeRange: () => [], OptionType: {} },
         "@webpack/common": { SearchableSelect: "select", useState: (initial: unknown) => [initial, () => {}] }
     }, { React: { createElement(type: string, props: { onChange: typeof onChange; }) { if (type === "select") onChange = props.onChange; } } }, "({ AnimationSettings, settings: exports.settings })");
+    assert.equal("animationQuestsActive" in previousSettings, false);
+    assert.equal(previousSettings.animationHover, true);
+    assert.equal(saves, 1);
     AnimationSettings();
     onChange([]);
     const enabled = () => Object.keys(settings.store).filter(key => key.startsWith("animation") && settings.store[key] === true).sort();

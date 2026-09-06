@@ -63,27 +63,6 @@ const questTaskTypes = [
     QuestTaskType.PLAY_ON_XBOX,
 ] as const satisfies readonly QuestTaskType[];
 
-export const autoCompleteQuestTaskTypes = [
-    QuestTaskType.PLAY_ON_DESKTOP,
-    QuestTaskType.PLAY_ON_XBOX,
-    QuestTaskType.PLAY_ON_PLAYSTATION,
-    QuestTaskType.PLAY_ACTIVITY,
-    QuestTaskType.WATCH_VIDEO,
-    QuestTaskType.WATCH_VIDEO_ON_MOBILE,
-    QuestTaskType.ACHIEVEMENT_IN_ACTIVITY,
-] as const satisfies readonly QuestTaskType[];
-
-const desktopOnlyAutoCompleteQuestTypes = new Set<QuestTaskType>([
-    QuestTaskType.PLAY_ON_DESKTOP,
-    QuestTaskType.PLAY_ON_PLAYSTATION,
-    QuestTaskType.PLAY_ON_XBOX,
-    QuestTaskType.PLAY_ACTIVITY,
-]);
-
-export function isDesktopCompatible(questType: QuestTaskType): boolean {
-    return IS_DISCORD_DESKTOP || !desktopOnlyAutoCompleteQuestTypes.has(questType);
-}
-
 export type QuestButtonIncludedTypes = Record<QuestTaskType | QuestRewardType, boolean>;
 
 export const defaultQuestButtonIncludedTypes: QuestButtonIncludedTypes = {
@@ -113,5 +92,3 @@ export const defaultLastQuestPageSort = "questify";
 export const defaultLastQuestPageFilters = {} as Record<string, { group: string, filter: string; }>;
 export const ignoredQuestIDsKey = "questIDs";
 export const defaultIgnoredQuestIDs = { [ignoredQuestIDsKey]: [] } as Record<typeof ignoredQuestIDsKey, string[]>;
-export const defaultResumeQuestIDs = {} as Record<string, // key: UserID
-    { timestamp: number, questIDs: string[]; }>;

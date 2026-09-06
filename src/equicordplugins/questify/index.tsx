@@ -6,35 +6,31 @@
 
 import { playAudio } from "@api/AudioPlayer";
 import { addServerListElement, removeServerListElement, ServerListRenderPosition } from "@api/ServerList";
-import { PlainSettings, Settings } from "@api/Settings";
+import { PlainSettings } from "@api/Settings";
 import { ErrorBoundary } from "@components/index";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { StartAt } from "@utils/types";
 import type { Quest, QuestUserStatus } from "@vencord/discord-types";
-import { findComponentByCodeLazy, onceReady } from "@webpack";
+import { onceReady } from "@webpack";
 import { QuestStore } from "@webpack/common";
-import type { JSX } from "react";
 
 import { disguiseHomeButton, QuestButton, showQuestButton } from "./components/questButton";
 import { QuestTileContextMenu } from "./components/questTileContextMenu";
 import { getQuestifySettings } from "./settings/access";
-import { resetQuestsToResume, startAutoFetchingQuests, stopAutoFetchingQuests } from "./settings/fetching";
+import { startAutoFetchingQuests, stopAutoFetchingQuests } from "./settings/fetching";
 import { validateIgnoredQuests } from "./settings/ignoredQuests";
 import { rerenderQuests, useQuestRerender } from "./settings/rerender";
 import { disposeRestartTracking, initializeRestartTracking, promptToRestartIfDirty, setRestartDirty } from "./settings/restartTracking";
 import { settings } from "./settings/store";
-import { getSettingsModalOpen, initialQuestDataFetched, setInitialQuestDataFetched, setSettingsModalOpen } from "./state";
+import { getSettingsModalOpen, setInitialQuestDataFetched, setSettingsModalOpen } from "./state";
 import managedStyle from "./styles.css?managed";
-import { canAutoCompleteQuest, getActiveAutoCompletes, getQuestAutoCompleteProgress, getQuestButtonProps, getQuestPanelSubtitleText, hasEnabledAutoCompleteQuestTypes, processQuestForAutoComplete, resumeInterruptedAutoCompletes, setHeartbeatStackTracePatchSucceeded, setVideoProgressStackTracePatchSucceeded, stopAllAutoCompletes, stopAutoCompletesForRunningGames, stopQuestAutoComplete } from "./utils/completion";
 import { canOpenDevToolsWindow, fetchAndDispatchQuests, openDevToolsWindow, snakeToCamel } from "./utils/fetching";
-import { normalizeQuestName } from "./utils/filtering";
 import { notifyQuestCompletion, QL } from "./utils/logging";
-import { getQuestEmbedProgress, getQuestPanelOverride, getQuestPanelPercentComplete, shouldForceQuestPanelVisible } from "./utils/questState";
+import { getQuestEmbedProgress, getQuestPanelOverride, getQuestPanelPercentComplete } from "./utils/questState";
 import { getLastFilterChoices, getLastSortChoice, getQuestTileClasses, getQuestTileStyle, setLastFilterChoices, setLastSortChoice, shouldPreloadQuestAssets, sortQuests } from "./utils/questTiles";
 import { formatLowerBadge, QUEST_PAGE } from "./utils/ui";
 
 let isSwitchingAccount = false;
-let didAttemptAutoCompleteResume = false;
 const notifiedCompletedQuests = new Set<string>();
 export const enabledOnStartup = PlainSettings.plugins.Questify?.enabled;
 
@@ -47,52 +43,19 @@ function startPerAccountTasks(source: string): void {
 
     setOnQuestsPage();
     startAutoFetchingQuests();
-    resumeAutoCompletesIfReady();
     fetchAndDispatchQuests();
 
     QL.info(`START_TASKS-${source.toUpperCase()}`, { startedAt });
 }
 
-function stopPerAccountTasks(source: string, preserveResume: boolean = true): void {
+function stopPerAccountTasks(source: string): void {
     const stoppedAt = Date.now();
 
     setOnQuestsPage();
     stopAutoFetchingQuests();
     notifiedCompletedQuests.clear();
-    stopAllAutoCompletes({ manual: false, preserveResume, terminalHeartbeat: true });
 
     QL.info(`STOP_TASKS-${source.toUpperCase()}`, { stoppedAt });
-}
-
-function resumeAutoCompletesIfReady(): void {
-    if (didAttemptAutoCompleteResume || !initialQuestDataFetched) {
-        return;
-    }
-
-    didAttemptAutoCompleteResume = true;
-    resumeInterruptedAutoCompletes();
-}
-
-const Button = findComponentByCodeLazy("BUTTON_LOADING_STARTED_LABEL)),");
-
-function enrolledIncompleteButton(args: { quest: Quest, size: string; }): JSX.Element | null {
-    const props = getQuestButtonProps({ quest: args.quest });
-
-    if (!props) {
-        return null;
-    }
-
-    return (
-        <ErrorBoundary noop>
-            <Button
-                size={args.size}
-                variant="secondary"
-                disabled={false}
-                fullWidth={true}
-                {...props}
-            />
-        </ErrorBoundary>
-    );
 }
 
 export default definePlugin({
@@ -106,35 +69,22 @@ export default definePlugin({
     settings,
 
     canOpenDevToolsWindow,
-    canAutoCompleteQuest,
     disguiseHomeButton,
-    enrolledIncompleteButton,
     formatLowerBadge,
-    getActiveAutoCompletes,
     getLastFilterChoices,
     getLastSortChoice,
-    getQuestAutoCompleteProgress,
     getQuestEmbedProgress,
-    getQuestButtonProps,
     getQuestPanelOverride,
     getQuestPanelPercentComplete,
-    getQuestPanelSubtitleText,
     getQuestTileClasses,
     getQuestTileStyle,
     getSettingsModalOpen,
-    hasEnabledAutoCompleteQuestTypes,
-    normalizeQuestName,
     openDevToolsWindow,
-    processQuestForAutoComplete,
     rerenderQuests,
-    setHeartbeatStackTracePatchSucceeded,
     setLastFilterChoices,
     setLastSortChoice,
-    setVideoProgressStackTracePatchSucceeded,
-    shouldForceQuestPanelVisible,
     shouldPreloadQuestAssets,
     sortQuests,
-    stopQuestAutoComplete,
     useQuestRerender,
 
     patches: [
@@ -265,15 +215,6 @@ export default definePlugin({
             }
         },
         {
-            // Overrides the title and subtitle to provide more useful information for Quests being completed.
-            find: '"progress-title"',
-            predicate: () => !getQuestifySettings().disableQuestsEverything,
-            replacement: {
-                match: /(?<={quest:(\i).{0,250}?return.{0,150}?,percentComplete:\i.{0,280}?"progress-title",children.{0,115}?children:)(\i.{0,50}"progress-subtitle",isTextTransition:!0,children.{0,115}?children:)/,
-                replace: "$self.normalizeQuestName($1)??$2$self.getQuestPanelSubtitleText($1)??"
-            }
-        },
-        {
             // Formats the Orbs balance on the Quests page with locale string formatting.
             find: '("BalanceCounter")',
             predicate: () => !getQuestifySettings().disableQuestsEverything,
@@ -285,22 +226,6 @@ export default definePlugin({
                 {
                     match: /(?<=children:\i.to\(\i=>`\${\i).toFixed\(0\)/,
                     replace: ".toLocaleString(undefined,{maximumFractionDigits:0})"
-                }
-            ]
-        },
-        {
-            // Removes stack traces from Quest auto-complete network actions and marks both patches as healthy.
-            find: "NetworkActionNames.QUEST_VIDEO_PROGRESS,",
-            group: true,
-            predicate: () => !getQuestifySettings().disableQuestsEverything && hasEnabledAutoCompleteQuestTypes(),
-            replacement: [
-                {
-                    match: /(async function \i\(\i,\i\)\{await \i\.\i\.post\(\{url:\i\.\i\.QUESTS_VIDEO_PROGRESS.{0,250}?stack_trace:)Error\(\)\.stack\?\?""/,
-                    replace: '$self.setVideoProgressStackTracePatchSucceeded();$1""'
-                },
-                {
-                    match: /(async function \i\(\i\)\{let\{questId:\i,streamKey:\i.{0,450}?stack_trace:)Error\(\)\.stack\?\?""/,
-                    replace: '$self.setHeartbeatStackTracePatchSucceeded();$1""'
                 }
             ]
         },
@@ -332,55 +257,10 @@ export default definePlugin({
             ]
         },
         {
-            find: "config.taskConfigV2.tasks).length)return",
-            group: true,
-            predicate: () => !getQuestifySettings().disableQuestsEverything && hasEnabledAutoCompleteQuestTypes(),
-            replacement: [
-                {
-                    // Overwrite button props for UNENROLLED Quests.
-                    match: /(?<=onClick:\(\)=>{.[^}]+},text:\i,icon:\i,fullWidth:!0)/,
-                    replace: ",...($self.getQuestButtonProps(arguments[0])??{})"
-                },
-                {
-                    // Overwrite button props for ENROLLED/INCOMPLETE Quests.
-                    match: /(?<=let{quest:\i,taskType:\i,surface:\i.{0,150}?size:\i}=\i;return)(.{0,300}?,size:\i,surface:\i,analyticsCtxQuestContent:\i,analyticsCtxSourceQuestContent:\i}\))/,
-                    replace: " $self.enrolledIncompleteButton(arguments[0])||($1)"
-                }
-            ]
-        },
-        {
-            // Overwrite button props for Quest bar.
-            find: "collapsed-with-rewards\":\"collapsed-without-rewards",
-            predicate: () => !getQuestifySettings().disableQuestsEverything && hasEnabledAutoCompleteQuestTypes(),
-            replacement: {
-                match: /(?<=SELECT&&!\i&&!\i,(\i)=null;)(return )(\i\?\i=\(0,\i.\i\)\(\i,{quest:(\i))/,
-                replace: "const questifyButton=$self.enrolledIncompleteButton({quest:$4,size:\"sm\"});$2questifyButton?$1=questifyButton:$3"
-            }
-        },
-        {
-            // Keeps Questify completion progress visible when Discord marks the native Quest bar dismissed.
-            find: "prevIsQuestAccepted:",
-            predicate: () => !getQuestifySettings().disableQuestsEverything && !getQuestifySettings().disableAccountPanelQuestProgress,
-            replacement: {
-                match: /(?<=isLoading:\i}=\(0,\i.\i\)\(\),\i=\i\.useContext\(\i\.\i\)\|\|\i&&)(\i)/,
-                replace: "($1||$self.shouldForceQuestPanelVisible(arguments[0].quest))"
-            }
-        },
-        {
             find: "QUEST_HOME_TILE_HEADER_WATCH_VIDEO})},",
             group: true,
             predicate: () => !getQuestifySettings().disableQuestsEverything,
             replacement: [
-                {
-                    // Prefer the auto-complete CTA over the console platform selector.
-                    match: /(\i===\i\.\i\.ENROLLED&&)(?=\(0,\i\.\i\)\((\i)\))/,
-                    replace: "$1!$self.canAutoCompleteQuest($2)&&"
-                },
-                {
-                    // Prefer the auto-complete CTA over the desktop-only external-link row.
-                    match: /(\(\i===\i\.\i\.ENROLLED\|\|\i===\i\.\i\.INCOMPLETE\)&&)(?=\(0,\i\.\i\)\((\i)\))/,
-                    replace: "$1!$self.canAutoCompleteQuest($2)&&"
-                },
                 {
                     // Let completed/claimed Quests with CTAs use the generalized CTA row.
                     match: /(\(\i===\i\.\i\.COMPLETED\|\|\i===\i\.\i\.CLAIMED\)&&)(?=\(0,\i\.\i\)\((\i)\))/,
@@ -552,7 +432,6 @@ export default definePlugin({
             setInitialQuestDataFetched(true);
             QL.log("QUESTS_FETCH_CURRENT_QUESTS_SUCCESS", data);
             validateIgnoredQuests(data.quests);
-            resumeAutoCompletesIfReady();
         },
 
         QUESTS_ENROLL_SUCCESS(data: any): void {
@@ -609,7 +488,6 @@ export default definePlugin({
             }
 
             setInitialQuestDataFetched(false);
-            didAttemptAutoCompleteResume = false;
             startPerAccountTasks("LOGIN_SUCCESS");
         },
 
@@ -623,10 +501,6 @@ export default definePlugin({
             setInitialQuestDataFetched(false);
             stopPerAccountTasks("LOGOUT");
         },
-
-        RUNNING_GAMES_CHANGE(data: { games: { id: string; }[]; }): void {
-            stopAutoCompletesForRunningGames(data.games.map(game => game.id));
-        }
     },
 
     contextMenus: {
@@ -656,14 +530,8 @@ export default definePlugin({
     },
 
     stop() {
-        const pluginEnabled = Settings.plugins.Questify?.enabled;
-
         disposeRestartTracking();
         removeServerListElement(ServerListRenderPosition.Above, this.renderQuestifyButton);
-        stopPerAccountTasks("PLUGIN_STOP", pluginEnabled);
-
-        if (!pluginEnabled) {
-            resetQuestsToResume();
-        }
+        stopPerAccountTasks("PLUGIN_STOP");
     }
 });

@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Finish removing retired Questify auto-completion code, network handlers, and the related ChannelTabs animation. Preserve quest browsing preferences and genuine progress displays.
+
 - Remove unused message logger native write handlers, cache exposure, and obsolete types.
 
 - Remove unused MarkdownTables parser entry points and a dead helper.

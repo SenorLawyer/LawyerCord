@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { definePluginSettings } from "@api/Settings";
+import { definePluginSettings, PlainSettings, SettingsStore } from "@api/Settings";
 import { Heading } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
 import { ChannelTabsPreview } from "@equicordplugins/channelTabs/components/ChannelTabsContainer";
@@ -13,6 +13,12 @@ import { Logger } from "@utils/Logger";
 import { makeRange, OptionType } from "@utils/types";
 import { SearchableSelect, useState } from "@webpack/common";
 import { JSX } from "react";
+
+const previousSettings = PlainSettings.plugins.ChannelTabs;
+if (previousSettings && "animationQuestsActive" in previousSettings) {
+    delete previousSettings.animationQuestsActive;
+    SettingsStore.markAsChanged();
+}
 
 interface DynamicDropdownSettingOption {
     label: string;
@@ -44,7 +50,6 @@ function AnimationSettings(): JSX.Element {
         { label: "Tab Shadow Effects", value: "tab-shadows", selected: settings.store.animationTabShadows },
         { label: "Tab Repositioning (smooth position changes)", value: "tab-positioning", selected: settings.store.animationTabPositioning },
         { label: "Resize Handle Fade", value: "resize-handle", selected: settings.store.animationResizeHandle },
-        { label: "Active Quests Gradient", value: "quests-active", selected: settings.store.animationQuestsActive }
     ];
 
     const [currentValue, setCurrentValue] = useState(getSelectedAnimationValues(animationOptions));
@@ -64,7 +69,6 @@ function AnimationSettings(): JSX.Element {
         settings.store.animationTabShadows = enabledValues.includes("tab-shadows");
         settings.store.animationTabPositioning = enabledValues.includes("tab-positioning");
         settings.store.animationResizeHandle = enabledValues.includes("resize-handle");
-        settings.store.animationQuestsActive = enabledValues.includes("quests-active");
 
         setCurrentValue(enabledValues);
     }
@@ -375,12 +379,6 @@ export const settings = definePluginSettings({
     animationResizeHandle: {
         type: OptionType.BOOLEAN,
         description: "Enable fade animation for resize handle",
-        default: true,
-        hidden: true
-    },
-    animationQuestsActive: {
-        type: OptionType.BOOLEAN,
-        description: "Enable gradient animations on Quests tab when quests are actively running",
         default: true,
         hidden: true
     },

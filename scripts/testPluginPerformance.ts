@@ -4683,3 +4683,16 @@ test("Navidrome refreshes track metadata and expires unchanged now-playing entri
     now += 10_000;
     assert.equal(await getActivity(), null);
 });
+
+
+test("Navidrome format substitutions preserve literal metadata", () => {
+    const format = loadSource("src/equicordplugins/richPresence/services/navidrome.ts", {
+        "@utils/Logger": { Logger: class {} }, "@utils/misc": {},
+        "@vencord/discord-types/enums": {}, "@webpack/common": {},
+        "md5": {}, "../settings": {}, "./assetCache": {},
+    }, {}, "customFormat");
+    assert.equal(format("{song} / {artist} / {song} / {unknown}", { title: "$& {artist}", artist: "Singer" }), "$& {artist} / Singer / $& {artist} / {unknown}");
+    assert.equal(format("{album} {year} {quality}", { album: "Album", year: 2026, suffix: "flac", bitRate: 800 }), "Album 2026 FLAC 800kbps");
+    assert.equal(format("{song}{artist}{album}{year}{quality}", {}), "");
+    assert.equal(format(undefined, {}), "");
+});

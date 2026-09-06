@@ -49,12 +49,14 @@ interface NdTrack {
 
 function customFormat(formatStr: string | undefined, track: NdTrack): string {
     if (!formatStr) return "";
-    return formatStr
-        .replaceAll("{song}", track.title ?? "")
-        .replaceAll("{artist}", track.artist ?? "")
-        .replaceAll("{album}", track.album ?? "")
-        .replaceAll("{year}", track.year ? `${track.year}` : "")
-        .replaceAll("{quality}", track.suffix ? `${track.suffix.toUpperCase()}${track.bitRate ? " " + track.bitRate + "kbps" : ""}` : "");
+    const values: Record<string, string> = {
+        song: track.title ?? "",
+        artist: track.artist ?? "",
+        album: track.album ?? "",
+        year: track.year ? `${track.year}` : "",
+        quality: track.suffix ? `${track.suffix.toUpperCase()}${track.bitRate ? " " + track.bitRate + "kbps" : ""}` : ""
+    };
+    return formatStr.replace(/\{(song|artist|album|year|quality)\}/g, (_, key: string) => values[key]);
 }
 
 function setActivity(activity: Activity | null) {

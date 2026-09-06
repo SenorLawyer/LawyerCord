@@ -46,6 +46,27 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("Friendship ranks cover milestone days without gaps or duplicate badges", () => {
+    const now = Date.parse("2026-01-01T00:00:00Z");
+    let days = 0;
+    let friend = true;
+    const ranks = loadSource("src/equicordplugins/friendshipRanks/index.tsx", {
+        "@api/Badges": { BadgePosition: {} }, "@components/ErrorBoundary": {}, "@components/Flex": {},
+        "@components/Paragraph": {}, "@utils/constants": { Devs: {} },
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+        "@webpack/common": { RelationshipStore: { isFriend: () => friend, getSince: () => new Date(now - days * 86400000).toISOString() } }
+    }, { Date: class extends Date { constructor(value: string | number = now) { super(value); } } });
+    const badges: { description: string; shouldShow(info: { userId: string; }): boolean; }[] = ranks.default.userProfileBadges;
+    const shown = () => badges.filter(badge => badge.shouldShow({ userId: "fixture" })).map(badge => badge.description);
+    for (const [age, title] of [[0, "Sprout"], [29, "Sprout"], [30, "Blooming"], [90, "Burning"], [182, "Burning"], [183, "Fighter"], [365, "Star"], [730, "Royal"], [1826, "Royal"], [1827, "Besties"]] as const) {
+        days = age;
+        assert.equal(JSON.stringify(shown()), JSON.stringify([title]));
+    }
+    friend = false;
+    assert.equal(shown().length, 0);
+});
+
 test("Friend codes clear only after successful revocation", async () => {
     for (const success of [false, true]) {
         let finish: () => void = () => {};

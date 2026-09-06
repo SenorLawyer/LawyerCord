@@ -4773,17 +4773,19 @@ test("v1 sticker migration preserves unchanged IDs and saved packs after cleanup
         ["custom-pack", "custom-pack", false, false],
         ["Vencord-MoreStickers-Line-Pack-123", "MoreStickers:Line:Pack:123", false, false],
         ["custom-pack", "custom-pack", true, false],
+        ["Vencord-MoreStickers-Line-Pack-123", "MoreStickers:Line:Pack:123", true, false],
         ["missing-pack", "missing-pack", false, true]
     ] as const) {
         const pack = { id: oldId, title: "Legacy", logo: { id: "logo", stickerPackId: oldId }, stickers: [{ id: "sticker", stickerPackId: oldId }] };
         const entries = new Map<string, unknown>([[oldId, pack], ["Vencord-MoreStickers-Packs", [{ id: oldId, title: pack.title }]]]);
         if (missing) entries.delete(oldId);
+        let cleanupBlocked = failCleanup;
         const DataStore = {
             async set(key: string, value: unknown) { entries.set(key, value); },
             async get(key: string) { return entries.get(key); },
             async del(key: string) { entries.delete(key); },
             async update(key: string, change: (value: unknown) => unknown) {
-                if (failCleanup && key === "Vencord-MoreStickers-Packs") throw new Error("Storage unavailable");
+                if (cleanupBlocked && key === "Vencord-MoreStickers-Packs") throw new Error("Storage unavailable");
                 entries.set(key, change(entries.get(key)));
             }
         };
@@ -4806,7 +4808,45 @@ test("v1 sticker migration preserves unchanged IDs and saved packs after cleanup
         assert.deepEqual(notices, [failCleanup || missing ? "Migration incomplete. Some sticker packs could not be migrated." : "Sticker Pack Migration Complete"]);
         assert.equal(recentReads, failCleanup || missing ? 0 : 1);
         if (oldId !== newId) assert.equal(await stickers.getStickerPack(oldId), null);
+        if (failCleanup) {
+            cleanupBlocked = false;
+            const edited = { ...await stickers.getStickerPack(newId), title: "Edited after interruption" };
+            await stickers.saveStickerPack(edited);
+            assert.equal(await migration.isV1(), true);
+            await migration.migrate();
+            assert.equal(await stickers.getStickerPack(newId), edited);
+            assert.equal(entries.has("Vencord-MoreStickers-Packs"), false);
+            assert.equal(await migration.isV1(), false);
+        }
     }
+});
+
+test("recent sticker migration resumes without old packs and preserves current entries", async () => {
+    const current = { id: "custom", stickerPackId: "pack", title: "Current" };
+    const oldKey = "Vencord-MoreStickers-RecentStickers";
+    const newKey = "MoreStickers:RecentStickers";
+    const entries = new Map<string, unknown>([
+        [oldKey, [{ ...current, title: "Old" }, ...Array.from({ length: 20 }, (_, index) => ({ id: `legacy${index}`, stickerPackId: "pack" }))]],
+        [newKey, [current]]
+    ]);
+    const DataStore = {
+        async del(key: string) { entries.delete(key); },
+        async update(key: string, change: (value: unknown) => unknown) { entries.set(key, change(entries.get(key))); }
+    };
+    const migration = loadSource("src/equicordplugins/moreStickers/migrate-v1.ts", {
+        "@api/index": { DataStore }, "@utils/Logger": { Logger: class {} },
+        "@webpack/common": { Toasts: { show() {}, genId: () => "toast", Type: {} } },
+        "./components/misc": { getRecentStickers: async (key: string) => entries.get(key) ?? [] },
+        "./stickers": { getStickerPackMetas: async () => [] }
+    });
+    assert.equal(await migration.isV1(), true);
+    await migration.migrate();
+    const recents = entries.get(newKey) as { id: string; title?: string; }[];
+    assert.equal(recents.length, 16);
+    assert.equal(recents[0], current);
+    assert.equal(new Set(recents.map(sticker => sticker.id)).size, 16);
+    assert.equal(entries.has(oldKey), false);
+    assert.equal(await migration.isV1(), false);
 });
 
 test("legacy LINE stickers and recent entries migrate to current importer identities", () => {

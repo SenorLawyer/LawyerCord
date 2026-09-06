@@ -173,19 +173,11 @@ async function persistKnownSettings(
     await DataStore.set(KNOWN_SETTINGS_KEY, serializeKnownSettings(map));
 }
 
-function isMapLike(value: any): value is Map<string, string[]> {
-    return (
-        value &&
-        typeof value.get === "function" &&
-        typeof value.size === "number"
-    );
-}
-
 export function getNewSettingsSize(
     newSettings: Map<string, string[]> | Record<string, string[]> | undefined,
 ): number {
     if (!newSettings) return 0;
-    if (isMapLike(newSettings)) return newSettings.size;
+    if (newSettings instanceof Map) return newSettings.size;
     return Object.keys(newSettings).length;
 }
 
@@ -193,7 +185,7 @@ export function getNewSettingsEntries(
     newSettings: Map<string, string[]> | Record<string, string[]> | undefined,
 ): [string, string[]][] {
     if (!newSettings) return [];
-    if (isMapLike(newSettings)) return Array.from(newSettings.entries());
+    if (newSettings instanceof Map) return Array.from(newSettings.entries());
     return Object.entries(newSettings);
 }
 

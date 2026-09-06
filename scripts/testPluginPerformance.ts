@@ -4768,6 +4768,42 @@ test("sticker pack metadata updates preserve concurrent packs without holding a 
     assert.equal(await module.getStickerPack(legacy.id), legacy);
 });
 
+test("v1 sticker migration preserves unchanged IDs and saved packs after cleanup failures", async () => {
+    for (const [oldId, newId, failCleanup] of [
+        ["custom-pack", "custom-pack", false],
+        ["Vencord-MoreStickers-Line-Pack-123", "MoreStickers:Line:Pack:123", false],
+        ["custom-pack", "custom-pack", true]
+    ] as const) {
+        const pack = { id: oldId, title: "Legacy", logo: { id: "logo" }, stickers: [{ id: "sticker" }] };
+        const entries = new Map<string, unknown>([[oldId, pack], ["Vencord-MoreStickers-Packs", [{ id: oldId, title: pack.title }]]]);
+        const DataStore = {
+            async set(key: string, value: unknown) { entries.set(key, value); },
+            async get(key: string) { return entries.get(key); },
+            async del(key: string) { entries.delete(key); },
+            async update(key: string, change: (value: unknown) => unknown) {
+                if (failCleanup && key === "Vencord-MoreStickers-Packs") throw new Error("Storage unavailable");
+                entries.set(key, change(entries.get(key)));
+            }
+        };
+        const stickers = loadSource("src/equicordplugins/moreStickers/stickers.ts", {
+            "@api/DataStore": DataStore, "./components": { async removeRecentStickerByPackId() {} }
+        });
+        const notices: string[] = [];
+        const migration = loadSource("src/equicordplugins/moreStickers/migrate-v1.ts", {
+            "@api/index": { DataStore },
+            "@webpack/common": { Toasts: { show: ({ message }: { message: string; }) => notices.push(message), genId: () => "toast", Type: {} } },
+            "./components/misc": { getRecentStickers: async () => [], setRecentStickers: async () => {} },
+            "./stickers": stickers
+        }, { console: { error() {} } });
+        await migration.migrate();
+        assert.equal((await stickers.getStickerPack(newId))?.id, newId);
+        assert.deepEqual(Array.from(await stickers.getStickerPackMetas(), (meta: { id: string; }) => meta.id), [newId]);
+        assert.equal(entries.has("Vencord-MoreStickers-Packs"), failCleanup);
+        assert.equal(notices.some(message => message.startsWith("Migration failed:")), failCleanup);
+        if (oldId !== newId) assert.equal(await stickers.getStickerPack(oldId), null);
+    }
+});
+
 test("theme watcher detects empty-folder changes and notifies once", async () => {
     let files: { fileName: string; }[] = [];
     const notices: string[] = [];

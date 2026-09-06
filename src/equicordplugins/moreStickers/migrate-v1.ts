@@ -9,7 +9,7 @@ import { Toasts } from "@webpack/common";
 
 import { getRecentStickers, setRecentStickers } from "./components/misc";
 import { deleteStickerPack, getStickerPack, getStickerPackMetas, saveStickerPack } from "./stickers";
-import { Sticker, StickerPack } from "./types";
+import { Sticker, StickerPack, StickerPackMeta } from "./types";
 
 const PACKS_KEY = "MoreStickers:Packs";
 const PACKS_KEY_OLD = "Vencord-MoreStickers-Packs";
@@ -104,11 +104,11 @@ export async function migrate() {
             if (oldStickerPack === null) continue;
             const newStickerPack = migrateStickerPack(oldStickerPack);
 
-            try {
-                await saveStickerPack(newStickerPack, PACKS_KEY);
+            await saveStickerPack(newStickerPack, PACKS_KEY);
+            if (newStickerPack.id === oldStickerPackMeta.id) {
+                await DataStore.update<StickerPackMeta[]>(PACKS_KEY_OLD, packs => packs?.filter(pack => pack.id !== oldStickerPackMeta.id) ?? []);
+            } else {
                 await deleteStickerPack(oldStickerPackMeta.id, PACKS_KEY_OLD);
-            } catch (e) {
-                await deleteStickerPack(newStickerPack.id, PACKS_KEY);
             }
         } catch (e) {
             console.error(e);

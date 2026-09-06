@@ -20,6 +20,25 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("installer subscriptions keep unique identities and allow self-removal", () => {
+    const { VariableWithCallbacks } = loadSource("src/equicordplugins/userpluginInstaller.dev/VariableWithCallbacks.ts", {}, { Date: { now: () => 1 } });
+    const value = new VariableWithCallbacks(0);
+    const calls: number[] = [];
+    const first = value.registerCallback((current: number, id: number) => {
+        calls.push(current);
+        value.deregisterCallback(id);
+    });
+    const second = value.registerCallback((current: number) => calls.push(current * 10));
+    assert.notEqual(first, second);
+    value.value(1);
+    assert.deepEqual(calls, [1, 10]);
+    value.value(2);
+    assert.deepEqual(calls, [1, 10, 20]);
+    value.deregisterCallback(second);
+    value.value(3);
+    assert.deepEqual(calls, [1, 10, 20]);
+});
+
 test("toast shutdown settles pending notifications and releases its root", async () => {
     let unmounts = 0;
     let removals = 0;

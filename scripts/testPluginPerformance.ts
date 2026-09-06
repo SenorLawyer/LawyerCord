@@ -46,6 +46,50 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("cursor sprites release listeners, frames and body styles on cleanup", () => {
+    for (const name of ["oneko", "fathorse"]) {
+        const listeners = new Set<unknown>();
+        const frames = new Map<number, (time: number) => void>();
+        const nodes = new Set<object>();
+        let frameId = 0;
+        const events = {
+            addEventListener: (_name: string, listener: unknown) => listeners.add(listener),
+            removeEventListener: (_name: string, listener: unknown) => listeners.delete(listener)
+        };
+        const body = {
+            style: { transform: "scale(1)", willChange: "opacity" },
+            appendChild(node: { parentElement: object | null; isConnected: boolean }) {
+                node.parentElement = body; node.isConnected = true; nodes.add(node);
+            }
+        };
+        const requestAnimationFrame = (callback: (time: number) => void) => { frames.set(++frameId, callback); return frameId; };
+        const cancelAnimationFrame = (id: number) => frames.delete(id);
+        const { default: start } = loadSource(`src/equicordplugins/cursorBuddy/${name}.js`, {}, {
+            document: {
+                ...events, body,
+                createElement: () => ({
+                    style: {}, parentElement: null, isConnected: false,
+                    remove() { this.parentElement = null; this.isConnected = false; nodes.delete(this); }
+                })
+            },
+            window: { ...events, requestAnimationFrame, cancelAnimationFrame, innerWidth: 1000, innerHeight: 800 },
+            requestAnimationFrame, cancelAnimationFrame, Image: class {}
+        });
+        for (let i = 0; i < 3; i++) {
+            const cleanup = start({ shake: true, image: "fixture" });
+            assert.equal(nodes.size, 1);
+            assert.equal(listeners.size, 1);
+            assert.equal(frames.size, 1);
+            for (const [id, callback] of [...frames]) { frames.delete(id); callback(100); }
+            cleanup();
+            assert.equal(nodes.size, 0);
+            assert.equal(listeners.size, 0);
+            assert.equal(frames.size, 0);
+            assert.deepEqual(body.style, { transform: "scale(1)", willChange: "opacity" });
+        }
+    }
+});
+
 test("favorite emote drags preserve favorites when an endpoint disappears", () => {
     let update: (state: { emojis: string[] }) => unknown = () => assert.fail("No update scheduled");
     const { default: plugin } = loadSource("src/equicordplugins/dragFavoriteEmotes/index.tsx", {

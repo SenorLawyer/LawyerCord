@@ -21,6 +21,7 @@ export default function oneko(options = {}) {
     } = options;
 
     const nekoEl = document.createElement("div");
+    let frameRequest = 0;
     let nekoPosX = 32;
     let nekoPosY = 32;
 
@@ -180,12 +181,14 @@ export default function oneko(options = {}) {
 
         document.body.appendChild(nekoEl);
 
-        document.addEventListener("mousemove", function (event) {
-            mousePosX = event.clientX;
-            mousePosY = event.clientY;
-        });
+        document.addEventListener("mousemove", onMouseMove);
 
-        window.requestAnimationFrame(onAnimationFrame);
+        frameRequest = window.requestAnimationFrame(onAnimationFrame);
+    }
+
+    function onMouseMove(event) {
+        mousePosX = event.clientX;
+        mousePosY = event.clientY;
     }
 
     let lastFrameTimestamp;
@@ -197,7 +200,7 @@ export default function oneko(options = {}) {
             lastFrameTimestamp = timestamp;
             frame();
         }
-        window.requestAnimationFrame(onAnimationFrame);
+        frameRequest = window.requestAnimationFrame(onAnimationFrame);
     }
 
     function setSprite(name, frame) {
@@ -300,4 +303,9 @@ export default function oneko(options = {}) {
     }
 
     init();
+    return () => {
+        window.cancelAnimationFrame(frameRequest);
+        document.removeEventListener("mousemove", onMouseMove);
+        nekoEl.remove();
+    };
 }

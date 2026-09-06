@@ -97,7 +97,7 @@ const StatusSubMenuComponent = () => {
                             id={"status-presets-delete-" + index}
                             label="Delete Preset"
                             action={() => {
-                                const newPresets = JSON.parse(JSON.stringify(settings.store.StatusPresets));
+                                const newPresets = { ...settings.store.StatusPresets };
                                 delete newPresets[status.text];
                                 settings.store.StatusPresets = newPresets;
                                 update();

@@ -2179,8 +2179,8 @@ test("failed theme downloads preserve the installed stylesheet", async () => {
     let status = 503;
     const { downloadTheme } = loadSource("src/equicordplugins/themeLibrary/native.ts", {
         "@main/ipcMain": { ensureSafePath: (_root: string, file: string) => file },
-        "@main/utils/constants": { THEMES_DIR: "themes" },
-        fs: { writeFileSync: (_file: string, content: string) => { contents = content; } },
+        "@main/utils/constants": { THEMES_DIR: "themes" }, path,
+        fs: { mkdtempSync: () => "temporary", renameSync() {}, rmSync() {}, rmdirSync() {}, writeFileSync: (_file: string, content: string) => { contents = content; } },
     }, { Buffer, AbortSignal, fetch: async () => new Response(status === 200 ? ".new { color: blue; }" : "Service unavailable", { status }) });
     const theme = { name: "existing", id: "123", content: "metadata" };
     await assert.rejects(downloadTheme(null, theme), /download/i);
@@ -7240,8 +7240,8 @@ test("theme downloads validate required IPC fields and scrub native failures", a
     let writes = 0;
     const api = loadSource("src/equicordplugins/themeLibrary/native.ts", {
         "@main/ipcMain": { ensureSafePath: (_root: string, file: string) => file.includes("../") ? null : file },
-        "@main/utils/constants": { THEMES_DIR: "themes" },
-        fs: { writeFileSync() { if (failWrite) throw new Error("EACCES private/home/themes"); writes++; }, existsSync: () => true }
+        "@main/utils/constants": { THEMES_DIR: "themes" }, path,
+        fs: { mkdtempSync: () => "temporary", renameSync() {}, rmSync() {}, rmdirSync() {}, writeFileSync() { if (failWrite) throw new Error("EACCES private/home/themes"); writes++; }, existsSync: () => true }
     }, { Buffer, AbortSignal, fetch: async () => { requests++; return new Response(".theme {}"); } });
     for (const theme of [null, {}, { id: "1" }, { id: "1", name: 7 }, { id: 7, name: "Theme" }, { id: "", name: "Theme" }, { id: "1", name: "../outside" }]) {
         await assert.rejects(api.downloadTheme(null, theme), /Invalid theme details/);
@@ -7270,7 +7270,7 @@ test("theme downloads bound streamed responses before replacing the installed fi
         });
         const api = loadSource("src/equicordplugins/themeLibrary/native.ts", {
             "@main/ipcMain": { ensureSafePath: (_root: string, file: string) => file },
-            "@main/utils/constants": { THEMES_DIR: "themes" }, fs: { writeFileSync() { writes++; } }
+            "@main/utils/constants": { THEMES_DIR: "themes" }, path, fs: { mkdtempSync: () => "temporary", renameSync() {}, rmSync() {}, rmdirSync() {}, writeFileSync() { writes++; } }
         }, { Buffer, AbortSignal: { timeout(ms: number) { deadline = ms; return new AbortController().signal; } },
             fetch: async (_url: string, options: RequestInit) => {
                 assert.equal(options.redirect, "error");
@@ -7285,5 +7285,40 @@ test("theme downloads bound streamed responses before replacing the installed fi
         assert.equal(writes, mode === "valid" ? 1 : 0);
         assert.equal(cancelled, mode === "declared" || mode === "streamed" ? 1 : 0);
         assert.equal(deadline, 30_000);
+    }
+});
+
+test("theme replacement preserves real installed files after partial writes and rename failures", async () => {
+    const fs = await import("node:fs");
+    for (const mode of ["success", "partial", "rename"] as const) {
+        const root = fs.mkdtempSync(path.join(tmpdir(), "theme-replacement-"));
+        const installed = path.join(root, "Existing.theme.css");
+        const original = ".existing { color: red; }";
+        const replacement = ".replacement { color: blue; }";
+        fs.writeFileSync(installed, original);
+        try {
+            const api = loadSource("src/equicordplugins/themeLibrary/native.ts", {
+                "@main/ipcMain": { ensureSafePath: (_root: string, file: string) => path.join(root, file) },
+                "@main/utils/constants": { THEMES_DIR: root }, path,
+                fs: { ...fs, writeFileSync(file: string, content: string) {
+                    assert.notEqual(file, installed);
+                    assert.equal(path.dirname(path.dirname(file)), root);
+                    fs.writeFileSync(file, mode === "partial" ? content.slice(0, 4) : content);
+                    if (mode === "partial") throw new Error("Disk failed after a partial write");
+                }, renameSync(source: string, destination: string) {
+                    assert.equal(fs.readFileSync(installed, "utf8"), original);
+                    if (mode === "rename") throw new Error("Replacement denied");
+                    fs.renameSync(source, destination);
+                } }
+            }, { Buffer, AbortSignal, fetch: async () => new Response(replacement) });
+            const pending = api.downloadTheme(null, { id: "1", name: "Existing" });
+            if (mode === "success") await pending;
+            else await assert.rejects(pending, /Theme download failed/);
+            assert.equal(fs.readFileSync(installed, "utf8"), mode === "success" ? replacement : original);
+            assert.deepEqual(fs.readdirSync(root), ["Existing.theme.css"]);
+        } finally {
+            fs.unlinkSync(installed);
+            fs.rmdirSync(root);
+        }
     }
 });

@@ -7,7 +7,8 @@
 import { ensureSafePath } from "@main/ipcMain";
 import { THEMES_DIR } from "@main/utils/constants";
 import { IpcMainInvokeEvent } from "electron";
-import { existsSync, writeFileSync } from "fs";
+import { existsSync, mkdtempSync, renameSync, rmdirSync, rmSync, writeFileSync } from "fs";
+import { join } from "path";
 
 import type { Theme } from "./types";
 
@@ -51,7 +52,15 @@ export async function downloadTheme(_: IpcMainInvokeEvent, theme: Pick<Theme, "i
         } finally {
             reader.releaseLock();
         }
-        writeFileSync(path, Buffer.concat(chunks, size).toString("utf8"));
+        const temporaryDirectory = mkdtempSync(join(THEMES_DIR, ".theme-"));
+        const temporaryFile = join(temporaryDirectory, "theme.css");
+        try {
+            writeFileSync(temporaryFile, Buffer.concat(chunks, size).toString("utf8"));
+            renameSync(temporaryFile, path);
+        } finally {
+            rmSync(temporaryFile, { force: true });
+            rmdirSync(temporaryDirectory);
+        }
     } catch {
         throw new Error("Theme download failed.");
     }

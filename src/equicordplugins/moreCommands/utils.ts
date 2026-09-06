@@ -260,30 +260,6 @@ export function calculateAffinityScore(affinity): number {
     return Math.round(Math.min(100, Math.max(0, score)) * 100) / 100;
 }
 
-// stolen from petpet thanks vee
-export function loadFriendImage(source: File | string): Promise<HTMLImageElement> {
-    const isFile = source instanceof File;
-    const url = isFile ? URL.createObjectURL(source) : source;
-
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        const revokeUrl = () => {
-            if (isFile) URL.revokeObjectURL(url);
-        };
-
-        img.onload = () => {
-            revokeUrl();
-            resolve(img);
-        };
-        img.onerror = (event, _source, _lineno, _colno, err) => {
-            revokeUrl();
-            reject(err || event);
-        };
-        img.crossOrigin = "anonymous";
-        img.src = url;
-    });
-}
-
 export function generatePoissonDiskPosition(
     existingPositions: Array<{ x: number, y: number, size: number; }>,
     canvasWidth: number,

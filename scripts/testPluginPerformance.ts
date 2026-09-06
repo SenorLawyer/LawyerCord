@@ -7798,6 +7798,7 @@ test("closed or failed plugin reviews reject and prevent later install actions",
     for (const [operation, failure] of [["initPluginInstall", "close"], ["updatePlugin", "close"], ["initPluginInstall", "load"], ["updatePlugin", "load"]]) {
         let commands = 0;
         let closed = 0;
+        let removals = 0;
         class ReviewWindow extends EventEmitter {
             static getAllWindows() { return []; }
             webContents = { getTitle: () => "install" };
@@ -7808,7 +7809,7 @@ test("closed or failed plugin reviews reject and prevent later install actions",
         const mocks: Record<string, object> = {
             child_process: { exec: (_command: string, _options: object, callback: (error: null, stdout: string) => void) => { if (_command === "git rev-parse origin/HEAD") return callback(null, "a".repeat(40)); commands++; callback(null, ""); } },
             electron: { BrowserWindow: ReviewWindow, dialog: { showMessageBox: async () => ({ response: 1 }) } },
-            fs: {}, "fs/promises": {}, path, "yaml-js": {}
+            fs: {}, "fs/promises": { rm: async (directory: string) => { assert.equal(directory, "fixture"); removals++; } }, path, "yaml-js": {}
         };
         for (const name of ["pluginValidate", "updateValidate"])
             mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
@@ -7819,6 +7820,7 @@ test("closed or failed plugin reviews reject and prevent later install actions",
             : api.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "owner", "repo");
         await assert.rejects(pending, failure === "close" ? /Review window closed/ : /Could not load the plugin review/);
         assert.equal(closed, 1);
+        assert.equal(removals, operation === "initPluginInstall" ? 1 : 0);
         assert.equal(commands, operation === "updatePlugin" ? 1 : 0);
     }
 });

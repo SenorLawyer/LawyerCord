@@ -151,6 +151,7 @@ export async function initPluginInstall(_, link: string, source: string, owner: 
         const meta = await getPluginMeta(join(vencordPath, "..", "src", "userplugins", repo))
             .catch(() => { throw new Error("Could not read the plugin metadata."); });
 
+        let approved = false;
         return new Promise<{ name: string; native: boolean; }>((resolve, reject) => {
             // Review plugin
             const win = new BrowserWindow({
@@ -185,14 +186,10 @@ export async function initPluginInstall(_, link: string, source: string, owner: 
                     case "abortInstall": {
                         decided = true;
                         win.close();
-                        try {
-                            await rm(getPluginDirectory(repo), { recursive: true });
-                        } catch {
-                            return reject(new Error("Could not remove the cancelled plugin installation."));
-                        }
                         return reject("Rejected by user");
                     }
                     case "install": {
+                        approved = true;
                         decided = true;
                         win.close();
                         try {
@@ -210,6 +207,15 @@ export async function initPluginInstall(_, link: string, source: string, owner: 
                 }
             });
             win.show();
+        }).catch(async error => {
+            if (!approved) {
+                try {
+                    await rm(getPluginDirectory(repo), { recursive: true });
+                } catch {
+                    throw new Error("Could not remove the cancelled plugin installation.");
+                }
+            }
+            throw error;
         });
     });
 }

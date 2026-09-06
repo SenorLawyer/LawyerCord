@@ -21,6 +21,23 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("disabled links remove navigation and click activation", () => {
+    const { Link } = loadSource("src/components/Link.tsx", {
+        "@utils/misc": { classes: () => "" },
+    }, { React: { createElement: (_type: unknown, props: object) => props } });
+    const onClick = () => {};
+    const props = { href: "https://example.com", onClick, tabIndex: 0 };
+    const disabled = Link({ ...props, disabled: true });
+    assert.equal(disabled.href, undefined);
+    assert.equal(disabled.onClick, undefined);
+    assert.equal(disabled.tabIndex, -1);
+    assert.equal(disabled["aria-disabled"], true);
+    const enabled = Link(props);
+    assert.equal(enabled.href, props.href);
+    assert.equal(enabled.onClick, onClick);
+    assert.equal(enabled.tabIndex, 0);
+});
+
 test("compatibility text does not mutate caller-owned styles", () => {
     const { TextCompat } = loadSource("src/components/BaseText.tsx", {
         "@utils/css": { classNameFactory: () => () => "" },

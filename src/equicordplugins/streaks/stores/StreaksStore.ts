@@ -31,7 +31,7 @@ export interface StreaksState {
 
 let generation = 0;
 
-export const useStreaksStore = proxyLazy(() => zustandCreate((set: any, get: any) => ({
+export const useStreaksStore = proxyLazy(() => zustandCreate((set: (state: Partial<StreaksState>) => void, get: () => StreaksState): StreaksState => ({
     streaks: {},
     clear: () => {
         generation++;
@@ -100,4 +100,4 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: any, get: any
             console.error("Failed to refresh streak", e);
         }
     }
-} as StreaksState)));
+})));

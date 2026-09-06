@@ -20,20 +20,9 @@ interface AuthorizationState {
     remove: (id: string) => void;
     isAuthorized: () => boolean;
 }
-const indexedDBStorage = {
-    async getItem(name: string): Promise<string | null> {
-        return DataStore.get(name).then(v => v ?? null);
-    },
-    async setItem(name: string, value: string): Promise<void> {
-        await DataStore.set(name, value);
-    },
-    async removeItem(name: string): Promise<void> {
-        await DataStore.del(name);
-    },
-};
 export const useAuthorizationStore = proxyLazy(() => zustandCreate(
     zustandPersist(
-        (set: any, get: any) => ({
+        (set: (state: Partial<AuthorizationState>) => void, get: () => AuthorizationState): AuthorizationState => ({
             tokens: {},
             getToken: () => get().tokens[UserStore.getCurrentUser()?.id] ?? null,
             setToken: (token: string) => {
@@ -98,12 +87,16 @@ export const useAuthorizationStore = proxyLazy(() => zustandCreate(
                 });
             },
             isAuthorized: () => !!get().getToken(),
-        } as AuthorizationState),
+        }),
         {
             name: "vc-streaks-auth",
-            storage: indexedDBStorage,
-            partialize: state => ({ tokens: state.tokens }),
-            onRehydrateStorage: () => async state => {
+            storage: {
+                getItem: (name: string) => DataStore.get<unknown>(name).then(value => value ?? null),
+                setItem: (name: string, value: unknown) => DataStore.set(name, value),
+                removeItem: (name: string) => DataStore.del(name),
+            },
+            partialize: (state: AuthorizationState) => ({ tokens: state.tokens }),
+            onRehydrateStorage: () => async (state?: AuthorizationState) => {
                 if (!state) return;
                 useStreaksStore.getState().clear();
                 if (state.isAuthorized()) {

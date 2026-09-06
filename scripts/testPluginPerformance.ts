@@ -21,20 +21,28 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
-test("webpack replacement failures preserve earlier successful patches", () => {
+test("webpack replacement failures preserve successful factories and diagnostics", () => {
     for (const group of [false, true]) {
-        const { patchFactory, patches } = loadSource("src/webpack/patchWebpack.ts", {
-            "@api/Settings": {}, "@debug/reporterData": {},
-            "@debug/Tracer": { traceFunctionWithResults: (_name: string, fn: (match: RegExp, replace: string) => string) => (match: RegExp, replace: string) => [fn(match, replace), 0] },
-            "@utils/lazy": { makeLazy: () => () => 1 },
-            "@utils/Logger": { Logger: class { warn() {} error() {} } }, "@utils/misc": {}, "./webpack": {},
-        }, { IS_DEV: false, IS_REPORTER: false, IS_COMPANION_TEST: false }, "({ patchFactory, patches: exports.patches })");
-        patches.push({ plugin: "First", find: "return", replacement: [{ match: /base/, replace: "first" }] });
-        patches.push({ plugin: "Second", find: "return", group, replacement: group
-            ? [{ match: /first/, replace: "second" }, { match: /missing/, replace: "unused" }]
-            : [{ match: /first/, replace: '"(' }] });
-        const result = patchFactory("fixture", function () { return "base"; });
-        assert.equal(result(), "first", `earlier patch survives ${group ? "group rollback" : "invalid replacement"}`);
+        for (const failure of ["syntax", "no effect"]) {
+            const { patchFactory, patches, SYM_PATCHED_SOURCE, SYM_PATCHED_BY } = loadSource("src/webpack/patchWebpack.ts", {
+                "@api/Settings": {}, "@debug/reporterData": {},
+                "@debug/Tracer": { traceFunctionWithResults: (_name: string, fn: (match: RegExp, replace: string) => string) => (match: RegExp, replace: string) => [fn(match, replace), 0] },
+                "@utils/lazy": { makeLazy: () => () => 1 },
+                "@utils/Logger": { Logger: class { warn() {} error() {} debug() {} errorCustomFmt() {} static makeTitle() { return [""]; } } },
+                "@utils/misc": {}, "./webpack": {}, "diff": { diffWordsWithSpace: () => [] },
+            }, { IS_DEV: true, IS_REPORTER: false, IS_COMPANION_TEST: false }, "({ ...exports, patchFactory })");
+            patches.push({ plugin: "First", find: "return", replacement: [{ match: /base/, replace: "first" }] });
+            patches.push({ plugin: "Second", find: "return", group, replacement: [
+                { match: /first/, replace: "second" },
+                failure === "syntax" ? { match: /second/, replace: '"(' } : { match: /missing/, replace: "unused" },
+            ] });
+            const original = function () { return "base"; };
+            const result = patchFactory("fixture", original);
+            const expected = group ? "first" : "second";
+            assert.equal(result(), expected, `factory after ${failure} with group=${group}`);
+            assert.deepEqual(Array.from(original[SYM_PATCHED_BY]), group ? ["First"] : ["First", "Second"]);
+            assert.equal(runInNewContext(original[SYM_PATCHED_SOURCE])(), expected, "diagnostic source matches the running factory");
+        }
     }
 });
 

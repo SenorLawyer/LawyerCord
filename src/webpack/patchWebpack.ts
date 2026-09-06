@@ -546,6 +546,7 @@ function patchFactory(moduleId: PropertyKey, originalFactory: AnyModuleFactory):
 
         const previousCode = code;
         const previousFactory = patchedFactory;
+        const previousSource = patchedSource;
         let markedAsPatched = false;
 
         // We change all patch.replacement to array in PluginManager
@@ -560,6 +561,7 @@ function patchFactory(moduleId: PropertyKey, originalFactory: AnyModuleFactory):
 
             const lastCode = code;
             const lastFactory = patchedFactory;
+            const lastSource = patchedSource;
 
             try {
                 const [newCode, totalTime] = executePatch(replacement.match, replacement.replace as string);
@@ -585,6 +587,7 @@ function patchFactory(moduleId: PropertyKey, originalFactory: AnyModuleFactory):
                         logger.warn(`Undoing patch group ${patch.find} by ${patch.plugin} because replacement ${replacement.match} had no effect`);
                         code = previousCode;
                         patchedFactory = previousFactory;
+                        patchedSource = previousSource;
 
                         if (markedAsPatched) {
                             patchedBy.delete(patch.plugin);
@@ -634,7 +637,7 @@ function patchFactory(moduleId: PropertyKey, originalFactory: AnyModuleFactory):
                     }
                 }
 
-                if (markedAsPatched) {
+                if (patch.group && markedAsPatched) {
                     patchedBy.delete(patch.plugin);
                 }
 
@@ -647,11 +650,13 @@ function patchFactory(moduleId: PropertyKey, originalFactory: AnyModuleFactory):
                         });
                     code = previousCode;
                     patchedFactory = previousFactory;
+                    patchedSource = previousSource;
                     break;
                 }
 
                 code = lastCode;
                 patchedFactory = lastFactory;
+                patchedSource = lastSource;
             }
         }
 

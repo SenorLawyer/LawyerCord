@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Reschedule interval changes without starting the scheduled-message plugin while it is disabled.
+
 - Prevent a pending scheduled-message startup from restarting the scheduler after the plugin is disabled.
 
 - Preserve attempted scheduled messages until sending succeeds and prevent automatic retries after failed or interrupted attempts.

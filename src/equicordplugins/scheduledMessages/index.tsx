@@ -25,6 +25,7 @@ import {
     loadScheduledMessages,
     recreatePhantomMessages,
     resyncPhantomReactions,
+    scheduleNextCheck,
     startScheduler,
     stopScheduler
 } from "./utils";
@@ -45,10 +46,7 @@ export const settings = definePluginSettings({
         markers: [5, 10, 15, 30, 60],
         default: 10,
         stickToMarkers: true,
-        onChange: () => {
-            stopScheduler();
-            startScheduler();
-        }
+        onChange: scheduleNextCheck
     },
     showNotifications: {
         type: OptionType.BOOLEAN,

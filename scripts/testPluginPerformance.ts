@@ -5421,6 +5421,31 @@ test("screen recorder releases capture and discards work after disable", async (
     assert.equal(uploads, 1);
 });
 
+test("scheduled interval changes only replace an active timer", async () => {
+    let delay = 10;
+    const timers: number[] = [];
+    const cleared: number[] = [];
+    const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+        "@api/DataStore": { get: async () => [{ id: "future", scheduledTime: Date.now() + 100000 }] },
+        "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+        "@webpack/common": {}, ".": { settings: { store: { get checkIntervalSeconds() { return delay; } } } }
+    }, { setTimeout: (_callback: unknown, ms: number) => { timers.push(ms); return timers.length; },
+        clearTimeout: (id: number) => cleared.push(id) });
+    await module.loadScheduledMessages();
+    module.scheduleNextCheck();
+    assert.deepEqual(timers, []);
+    module.startScheduler();
+    assert.deepEqual(timers, [10000]);
+    delay = 5;
+    module.scheduleNextCheck();
+    assert.deepEqual(timers, [10000, 5000]);
+    assert.deepEqual(cleared, [1]);
+    module.stopScheduler();
+    module.scheduleNextCheck();
+    assert.deepEqual(timers, [10000, 5000]);
+    assert.deepEqual(cleared, [1, 2]);
+});
+
 test("scheduled startup ignores completion after stop or a newer start", async () => {
     const reads: (() => void)[] = [];
     let starts = 0;

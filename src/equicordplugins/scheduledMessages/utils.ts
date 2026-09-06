@@ -521,7 +521,7 @@ export function stopScheduler(): void {
     }
 }
 
-function scheduleNextCheck(): void {
+export function scheduleNextCheck(): void {
     if (!schedulerRunning || isProcessingMessages) return;
 
     if (checkTimeout) {

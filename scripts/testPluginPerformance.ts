@@ -46,6 +46,28 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("Toolbox reflects plugin toggles without changing its search", () => {
+    let enabled = true;
+    let hook = 0;
+    const memo: unknown[] = [];
+    const menu = loadComponent("src/equicordplugins/equicordToolbox/menu.tsx", {
+        Menu: {}, useState: () => ["", () => {}],
+        useMemo: (factory: () => unknown) => { const index = hook++; return memo[index] ??= factory(); }
+    }, {
+        "@api/Notifications/notificationLog": {},
+        "@api/PluginManager": { isPluginEnabled: () => enabled, isSettingHidden: () => false, isSettingDisabled: () => false,
+            plugins: { Fixture: { name: "Fixture", settings: { def: { option: { type: 1 } } } } } },
+        "@api/Settings": { useSettings: () => ({ plugins: { Fixture: { option: true } } }) },
+        "@components/settings": {}, "@utils/react": {},
+        "@utils/text": { wordsFromCamel: (value: string) => value, wordsToTitle: (value: string) => value },
+        "@utils/types": { OptionType: { BOOLEAN: 1 } }, ".": {}
+    });
+    assert.ok(JSON.stringify(menu.buildPluginMenuEntries()).includes("Fixture-menu"));
+    enabled = false;
+    hook = 0;
+    assert.equal(JSON.stringify(menu.buildPluginMenuEntries()).includes("Fixture-menu"), false);
+});
+
 test("Cancelling a dependency restart leaves the requested plugin disabled", async () => {
     const settings = { enabled: false };
     let confirm = false;

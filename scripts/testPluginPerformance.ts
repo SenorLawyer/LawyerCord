@@ -6787,3 +6787,23 @@ test("a newer account connection supersedes pending logout and connection work",
         assert.equal(previews, 1);
     }
 });
+
+
+test("scheduled minute limits count only the initiating account", async () => {
+    for (const owner of ["account", "other", undefined]) {
+        const scheduledTime = Date.now() + 120_000;
+        let writes = 0;
+        const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@api/DataStore": { get: async () => [{ id: "saved", userId: owner, channelId: "channel", scheduledTime }],
+                set: async () => { writes++; } },
+            "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) } },
+            ".": { settings: { store: { maxMessagesPerMinute: 1, showPhantomMessages: false } } }
+        });
+        await api.loadScheduledMessages();
+        assert.equal((await api.addScheduledMessage("channel", "Text", scheduledTime)).success, owner !== "account");
+        assert.equal(writes, owner === "account" ? 0 : 1);
+        assert.equal(api.getScheduledMessages()[0].userId, owner);
+        assert.equal(api.getScheduledMessages().length, owner === "account" ? 1 : 2);
+    }
+});

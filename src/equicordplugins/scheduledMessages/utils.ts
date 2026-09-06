@@ -411,7 +411,7 @@ export async function addScheduledMessage(
     }
     const minuteStart = Math.floor(scheduledTime / 60000) * 60000;
     const count = scheduledMessages.filter(m =>
-        m.channelId === channelId && m.scheduledTime >= minuteStart && m.scheduledTime < minuteStart + 60000
+        m.userId === userId && m.channelId === channelId && m.scheduledTime >= minuteStart && m.scheduledTime < minuteStart + 60000
     ).length;
 
     if (count >= settings.store.maxMessagesPerMinute) {

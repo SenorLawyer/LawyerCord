@@ -21,6 +21,28 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ReviewDB OAuth errors tolerate malformed response bodies", async () => {
+    let callback: (response: { location: string; }) => Promise<void> = async () => assert.fail("missing callback");
+    let payload: unknown;
+    const messages: string[] = [];
+    const api = loadSource("src/plugins/reviewDB/auth.tsx", {
+        "@api/DataStore": {}, "@utils/Logger": { Logger: class { error() { assert.fail("error response escaped handling"); } } },
+        "@webpack/common": {
+            UserStore: { getCurrentUser: () => ({ id: "first" }) }, OAuth2AuthorizeModal: "OAuth",
+            openModal: (render: (props: object) => { props: { callback: typeof callback; }; }) => { callback = render({}).props.callback; },
+            showToast: (message: string) => messages.push(message), Toasts: { Type: {} },
+        },
+    }, {
+        URL, React: { createElement: (_type: unknown, props: object) => ({ props }) },
+        fetch: async () => ({ ok: false, json: async () => { if (payload === undefined) throw new Error("Not JSON"); return payload; } }),
+    });
+    api.authorize();
+    for (payload of [undefined, null, {}, { message: {} }, { message: 5 }, { message: " " }, { message: "Please retry." }]) {
+        await callback({ location: "https://manti.vendicated.dev/api/reviewdb/auth?code=test" });
+    }
+    assert.deepEqual(messages, [...Array(6).fill("Failed to authorize with ReviewDB."), "Please retry."]);
+});
+
 test("ReviewDB request errors display only nonempty string messages", async () => {
     for (const payload of [null, {}, { message: {} }, { message: 42 }, { message: "" }, { message: "  " }, { message: "Please retry later." }]) {
         const messages: string[] = [];

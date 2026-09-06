@@ -75,9 +75,12 @@ export function authorize(callback?: () => void) {
                     if (UserStore.getCurrentUser()?.id !== userId) return;
 
                     if (!res.ok) {
-                        const { message } = await res.json();
+                        const data: unknown = await res.json().catch(() => null);
                         if (UserStore.getCurrentUser()?.id !== userId) return;
-                        showToast(message ?? "An error occured while authorizing", Toasts.Type.FAILURE);
+                        const message = typeof data === "object" && data !== null && "message" in data && typeof data.message === "string" && data.message.trim()
+                            ? data.message
+                            : "Failed to authorize with ReviewDB.";
+                        showToast(message, Toasts.Type.FAILURE);
                         return;
                     }
 

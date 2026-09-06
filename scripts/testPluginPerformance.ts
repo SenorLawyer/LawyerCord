@@ -7983,3 +7983,53 @@ test("installer setup failures reject the caller without exposing native errors"
             (error: Error) => error.message === messages[stage]);
     }
 });
+
+test("installer mutation guard remains held through review closure and build settlement", async () => {
+    for (const failBuild of [false, true]) {
+        let openReview: (window: ReviewWindow) => void = () => {};
+        const reviewOpened = new Promise<ReviewWindow>(resolve => { openReview = resolve; });
+        let finishBuild: () => void = () => {};
+        const pendingBuild = new Promise<void>((resolve, reject) => {
+            finishBuild = () => failBuild ? reject(new Error("Build failed")) : resolve();
+        });
+        let builds = 0;
+        let clones = 0;
+        class ReviewWindow extends EventEmitter {
+            static getAllWindows() { return []; }
+            webContents = { getTitle: () => "install" };
+            async loadURL() {}
+            show() { openReview(this); }
+            close() { this.emit("closed"); }
+        }
+        const mocks: Record<string, object> = {
+            "child_process": {},
+            "electron": { BrowserWindow: ReviewWindow, dialog: { showMessageBox: async () => ({ response: 1 }) } },
+            "fs": {}, "fs/promises": {}, path, "yaml-js": {},
+        };
+        for (const name of ["pluginValidate", "updateValidate"])
+            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+        const native = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, {
+            __dirname: path.resolve("fixture/dist"), Buffer,
+            onClone: async () => { clones++; },
+            onBuild: () => { builds++; return pendingBuild; },
+        }, "({ ...exports, setup() { cloneRepo = onClone; build = onBuild; getPluginMeta = async () => ({ name: 'Fixture', description: 'Fixture', usesNative: false }); } })");
+        native.setup();
+        const installation = native.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "owner", "repo");
+        const settled = installation.then((value: unknown) => ({ value }), (error: unknown) => ({ error }));
+        const review = await reviewOpened;
+        for (const action of [
+            () => native.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "owner", "repo"),
+            () => native.updatePlugin(null, "repo"),
+            () => native.rmPlugin(null, "repo"),
+        ]) await assert.rejects(action(), /Another plugin operation/);
+        review.emit("page-title-updated");
+        assert.equal(builds, 1);
+        await assert.rejects(native.rmPlugin(null, "repo"), /Another plugin operation/);
+        assert.equal(clones, 1);
+        finishBuild();
+        const result = await settled;
+        if (failBuild) assert.match(String(result.error), /Build failed/);
+        else assert.deepEqual({ ...result.value }, { name: "Fixture", native: false });
+        await assert.rejects(native.initPluginInstall(null, "invalid", "", "", ""), /Invalid link/);
+    }
+});

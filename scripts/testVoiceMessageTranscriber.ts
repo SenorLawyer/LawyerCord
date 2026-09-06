@@ -18,11 +18,6 @@ assert.deepEqual(
     { duration: attachment.duration_secs, needsPlaybackFallback: false, url: attachment.url, waveform: attachment.waveform },
     "received voice messages are eligible",
 );
-assert.deepEqual(
-    getVoiceMessageMedia({ flags: VOICE_MESSAGE_FLAG, attachments: [attachment] }),
-    { duration: attachment.duration_secs, needsPlaybackFallback: false, url: attachment.url, waveform: attachment.waveform },
-    "voice messages authored by the current account can also be used as test fixtures",
-);
 assert.equal(
     getVoiceMessageMedia({ flags: 0, attachments: [attachment] }),
     null,

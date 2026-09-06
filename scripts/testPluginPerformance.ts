@@ -46,6 +46,32 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("command palette forms prevent duplicate submissions before rendering", async () => {
+    const { FormPage } = loadComponent("src/equicordplugins/commandPalette/ui/pages/FormPage.tsx", {
+        useState: (initial: unknown) => [typeof initial === "function" ? initial() : initial, () => {}],
+        useRef: (current: unknown) => ({ current }),
+        useEffect() {},
+        useLayoutEffect: (effect: () => void) => effect(),
+        useMemo: (factory: () => unknown) => factory()
+    }, { "../markdownPaste": {}, "../MessageMarkdownPreview": {}, "../PaletteIcon": {} });
+    let submissions = 0;
+    let finish = () => {};
+    const pending = new Promise<void>(resolve => { finish = resolve; });
+    const formRef = { current: { submit() {} } };
+    FormPage({
+        spec: { fields: [], submit: () => { submissions++; return pending; } },
+        ctx: {}, formRef
+    });
+    formRef.current.submit();
+    formRef.current.submit();
+    assert.equal(submissions, 1);
+    finish();
+    await pending;
+    await setImmediate();
+    formRef.current.submit();
+    assert.equal(submissions, 2);
+});
+
 test("command palette leaves composition keys to the input method", () => {
     const keyboard = loadSource("src/equicordplugins/commandPalette/ui/keyboard.ts", {
         "@utils/constants": { IS_MAC: false }

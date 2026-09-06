@@ -161,7 +161,7 @@ export function FormPage({ spec, ctx, formRef }: FormPageProps) {
         return initial;
     });
     const [error, setError] = useState<string | null>(null);
-    const [submitting, setSubmitting] = useState(false);
+    const submitting = useRef(false);
     const [files, setFiles] = useState<Record<string, File[]>>({});
     const firstInputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
     const statesRef = useRef(states);
@@ -173,7 +173,7 @@ export function FormPage({ spec, ctx, formRef }: FormPageProps) {
     const visibleFields = spec.fields.filter(f => !f.visible || f.visible(values));
 
     const submit = async () => {
-        if (submitting) return;
+        if (submitting.current) return;
 
         const currentValues = getValues(statesRef.current, spec.fields);
         const extras: FormSubmitExtras = { files: filesRef.current };
@@ -184,13 +184,13 @@ export function FormPage({ spec, ctx, formRef }: FormPageProps) {
         }
 
         setError(null);
-        setSubmitting(true);
+        submitting.current = true;
         try {
             await spec.submit(currentValues, ctx, extras);
         } catch (e) {
             setError(e instanceof Error ? e.message : "Something went wrong.");
         } finally {
-            setSubmitting(false);
+            submitting.current = false;
         }
     };
 

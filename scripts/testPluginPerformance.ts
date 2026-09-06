@@ -21,6 +21,27 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("Streaks delayed message refresh stays on its initiating account", async () => {
+    const source = readFileSync("src/equicordplugins/streaks/index.tsx", "utf8");
+    const match = source.match(/setTimeout\(async \(\) => \{([\s\S]*?)\}, 1000\)/);
+    assert.ok(match);
+    for (const change of ["before", "response", "none"]) {
+        let userId = change === "before" ? "second" : "first";
+        let refreshes = 0;
+        let updates = 0;
+        const callback = runInNewContext(`(async () => {${match[1]}})`, {
+            me: "first", recipientId: "target", UserStore: { getCurrentUser: () => ({ id: userId }) },
+            useStreaksStore: { getState: () => ({ streaks: {},
+                refresh: async () => { refreshes++; if (change === "response") userId = "second"; },
+                update: () => { updates++; },
+            }) },
+        });
+        await callback();
+        assert.equal(refreshes, change === "before" ? 0 : 1);
+        assert.equal(updates, change === "none" ? 1 : 0);
+    }
+});
+
 test("Streaks authorization cannot attach a token to another account", async () => {
     for (const change of ["before", "response", "non-error", "missing-token", "invalid-token", "empty-token", "none"]) {
         let userId = "first";

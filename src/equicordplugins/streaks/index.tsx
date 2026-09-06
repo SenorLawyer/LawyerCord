@@ -103,8 +103,10 @@ export default definePlugin({
             } else if (message.author.id === recipientId) {
                 if (!theirFlag) {
                     setTimeout(async () => {
+                        if (UserStore.getCurrentUser()?.id !== me) return;
                         const before = useStreaksStore.getState().streaks[recipientId]?.count;
                         await useStreaksStore.getState().refresh(recipientId);
+                        if (UserStore.getCurrentUser()?.id !== me) return;
                         const after = useStreaksStore.getState().streaks[recipientId]?.count;
 
                         if (before === after) {

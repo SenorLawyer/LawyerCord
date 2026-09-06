@@ -21,6 +21,48 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("MusicRichPresence discards stopped, superseded and foreign account updates", async () => {
+    const activities: unknown[] = [];
+    const requests: Array<ReturnType<typeof Promise.withResolvers<unknown>>> = [];
+    let userId = "first";
+    const { default: plugin } = loadSource("src/plugins/musicRichPresence/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }), migratePluginSetting() {}, migratePluginSettings() {} },
+        "@components/Button": {}, "@components/Card": {}, "@components/Heading": {}, "@components/margins": {}, "@components/Paragraph": {},
+        "@utils/constants": { Devs: {} }, "@utils/Logger": { Logger: class { error() {} } },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@vencord/discord-types/enums": {},
+        "@webpack/common": { AuthenticationStore: { getId: () => userId }, FluxDispatcher: { dispatch: (event: { activity: unknown; }) => activities.push(event.activity) } },
+        "./lastfm": {}, "./listenbrainz": { clearListenBrainzCache() {} },
+    }, { setInterval: () => 1, clearInterval() {} });
+    plugin.getActivity = () => {
+        const request = Promise.withResolvers<unknown>();
+        requests.push(request);
+        return request.promise;
+    };
+    plugin.start();
+    plugin.stop();
+    assert.deepEqual(activities, [null], "stop clears the published activity");
+    requests[0].resolve({ name: "stopped" });
+    await setImmediate();
+    assert.deepEqual(activities, [null]);
+    plugin.start();
+    const newest = plugin.updatePresence();
+    requests[2].resolve({ name: "newest" });
+    await newest;
+    requests[1].resolve({ name: "older" });
+    await setImmediate();
+    assert.deepEqual(activities, [null, { name: "newest" }]);
+    const foreign = plugin.updatePresence();
+    userId = "second";
+    requests[3].resolve({ name: "foreign" });
+    await foreign;
+    assert.deepEqual(activities, [null, { name: "newest" }]);
+    const failed = plugin.updatePresence();
+    requests[4].reject(new Error("asset unavailable"));
+    await failed;
+    plugin.stop();
+});
+
 test("ImageZoom clears its mounted root when stopped", () => {
     const { default: plugin } = loadSource("src/plugins/imageZoom/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({ store: {} }) }, "@shared/debounce": {},

@@ -39,6 +39,7 @@ export const CspPolicies: PolicyMap = {
     "api.spotify.com": ConnectSrc, // Spotify playback control for automation blocks, using Discord's own connection token
 
     "fonts.googleapis.com": CssSrc, // Google Fonts, used by many themes
+    "fonts.google.com": ConnectSrc,
 
     "i.imgur.com": ImageSrc, // Imgur, used by some themes
     "i.ibb.co": ImageSrc, // ImgBB, used by some themes

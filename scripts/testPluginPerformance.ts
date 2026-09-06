@@ -3381,7 +3381,7 @@ test("Desktop CSP preserves explicit hosts without allowing every origin", () =>
     assert.ok(policy.includes("api.github.com"));
     assert.ok(policy.includes("example.test"));
     const connect = policy.split("; ").find(directive => directive.startsWith("connect-src "));
-    for (const host of ["streaks.equicord.org", "badges.equicord.org", "dc.songspotlight.nexpid.xyz"])
+    for (const host of ["streaks.equicord.org", "badges.equicord.org", "dc.songspotlight.nexpid.xyz", "fonts.google.com"])
         assert.ok(connect?.split(" ").includes(host), host);
 });
 

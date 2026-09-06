@@ -272,9 +272,7 @@ async function cloneRepo(link: string, repo: string): Promise<void> {
         buttons: ["No", "Yes"]
     });
     if (deleteReqDialog.response !== 1) throw new Error("User rejected");
-    await rm(join(vencordPath, "..", "src", "userplugins", repo), {
-        recursive: true
-    });
+    await rm(getPluginDirectory(repo), { recursive: true });
     await cloneRepo(link, repo);
 }
 

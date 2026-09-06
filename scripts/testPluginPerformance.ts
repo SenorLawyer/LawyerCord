@@ -2365,6 +2365,35 @@ test("quote preview ignores superseded and unmounted image work", async () => {
     assert.equal(states[4], null);
 });
 
+test("encrypted embeds discard decrypted content after invalidation or account change", async () => {
+    let userId = "first";
+    let extracted = 0;
+    const pending: ((value: object) => void)[] = [];
+    const cache = loadSource("src/equicordplugins/secureMessaging.desktop/embedCache.ts", {
+        "@webpack": { findByCodeLazy: () => () => null },
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
+        "./embedUrls": { extractSecureEmbedUrls: () => { extracted++; return []; } },
+        "./messageMetadata": { discordEditedTimestamp: () => null },
+        "./protocol": { isEncryptedMessage: () => true }
+    }, { VencordNative: { pluginHelpers: { SecureMessaging: { decryptIncoming: () => new Promise(resolve => pending.push(resolve)) } } } });
+    const message = { channel_id: "channel", id: "message", author: { id: "sender" }, content: "ciphertext" };
+    cache.patchEncryptedMessageEmbeds(message, () => {});
+    cache.clearEncryptedEmbedCache();
+    pending[0]({ status: "decrypted", plaintext: "private URL" });
+    await setImmediate();
+    assert.equal(extracted, 0);
+    cache.patchEncryptedMessageEmbeds(message, () => {});
+    userId = "second";
+    cache.patchEncryptedMessageEmbeds(message, () => {});
+    assert.equal(pending.length, 3);
+    pending[1]({ status: "decrypted", plaintext: "old account" });
+    await setImmediate();
+    assert.equal(extracted, 0);
+    pending[2]({ status: "decrypted", plaintext: "current account" });
+    await setImmediate();
+    assert.equal(extracted, 1);
+});
+
 test("encrypted attachment cache separates authenticated message contexts", async () => {
     let userId = "local-a";
     let decryptions = 0;

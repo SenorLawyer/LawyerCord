@@ -20,6 +20,26 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("tone indicators preserve empty descriptions and resolve aliases without prototype properties", () => {
+    const settings = { prefix: "/", customIndicators: "empty=; _constructor=Constructor alias" };
+    const { default: plugin } = loadSource("src/equicordplugins/toneIndicators/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: settings }) },
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/text": loadSource("src/utils/text.ts", {}),
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+        "@webpack/common": { React: { createElement: (type: unknown, props: object) => ({ type, props }) } },
+        "./indicators": loadSource("src/equicordplugins/toneIndicators/indicators.ts", {}),
+        "./ToneIndicator": { __esModule: true, default: "indicator" },
+    });
+    const empty = plugin.patchToneIndicators("keep /empty intact");
+    assert.equal(Array.from(empty).join(""), "keep /empty intact");
+    const alias = plugin.patchToneIndicators("/constructor");
+    assert.equal(alias.props.desc, "Constructor alias");
+    assert.equal(plugin.patchToneIndicators("/srs").props.desc, "Serious");
+    settings.prefix = "+";
+    assert.equal(plugin.patchToneIndicators("+srs").props.desc, "Serious");
+});
+
 test("RandomVoice discards join actions and screen sources after cancellation", async () => {
     let account = "first";
     let channelId = "channel";

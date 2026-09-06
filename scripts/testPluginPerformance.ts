@@ -20,6 +20,64 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("Song Spotlight metadata ignores replaced songs and unmounted requests", async () => {
+    let state: unknown;
+    let deps: unknown[] = [];
+    let effect: (() => (() => void)) | undefined;
+    let cleanup: (() => void) | undefined;
+    let updates = 0;
+    const common = {
+        useState: (initial: unknown) => {
+            state ??= initial;
+            return [state, (next: unknown) => { state = next; updates++; }];
+        },
+        useEffect: (next: () => () => void, nextDeps: unknown[]) => {
+            if (nextDeps.some((value, index) => value !== deps[index])) {
+                deps = nextDeps;
+                effect = next;
+            }
+        },
+    };
+    const commit = () => {
+        if (!effect) return;
+        cleanup?.();
+        cleanup = effect();
+        effect = undefined;
+    };
+    const requests: Array<{ resolve(value: object): void; reject(error: Error): void; }> = [];
+    const { useAwaiter } = loadSource("src/utils/react.tsx", {
+        "@webpack/common": common, "./misc": {}, "./lazyReact": {},
+    });
+    const { useRender } = loadSource("src/equicordplugins/songSpotlight.desktop/service.ts", {
+        "@song-spotlight/api/util": { sid: (song: { id: string; }) => song.id },
+        "@utils/react": { useAwaiter },
+    }, { VencordNative: { pluginHelpers: { SongSpotlight: {
+        renderSong: () => new Promise((resolve, reject) => requests.push({ resolve, reject })),
+    } } } });
+    useRender({ id: "first" });
+    commit();
+    useRender({ id: "second" });
+    commit();
+    requests[1].resolve({ label: "second" });
+    await setImmediate();
+    assert.equal(useRender({ id: "second" }).render.label, "second");
+    requests[0].resolve({ label: "first" });
+    await setImmediate();
+    assert.equal(useRender({ id: "second" }).render.label, "second");
+    assert.equal(useRender({ id: "third" }).render, null, "old metadata disappears before the new effect runs");
+    commit();
+    requests[2].reject(new Error("missing"));
+    await setImmediate();
+    assert.equal(useRender({ id: "third" }).failed, true);
+    assert.equal(useRender({ id: "fourth" }).failed, false);
+    commit();
+    cleanup?.();
+    const previous = updates;
+    requests[3].resolve({ label: "unmounted" });
+    await setImmediate();
+    assert.equal(updates, previous);
+});
+
 test("Song Spotlight keeps refreshes, logout and pending data bound to their account", async () => {
     let account = "first";
     const requests: Array<{ url: URL; options: RequestInit; resolve(response: Response): void; }> = [];

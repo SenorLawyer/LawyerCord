@@ -37,7 +37,7 @@ pnpm tsx scripts/testDiscordMcpLive.ts
 Requirements:
 
 - Git
-- Node.js 22 or newer
+- Node.js 22.13 or newer within Node 22, or Node.js 24 or newer
 - The pnpm version specified by `packageManager` in `package.json`
 
 Install dependencies without running as administrator:

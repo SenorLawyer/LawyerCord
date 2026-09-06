@@ -24,7 +24,7 @@ const loadRoleMembers = findByCodeLazy(".GUILD_ROLE_MEMBER_IDS(", "requestMember
 
 const DeveloperMode = getUserSettingLazy("appearance", "developerMode")!;
 
-async function openRoleIconModal(roleId: string, roleIcon: string, roleName: string) {
+function openRoleIconModal(roleId: string, roleIcon: string) {
     const format = settings.store.roleIconFileFormat;
     const original = `${location.protocol}//${window.GLOBAL_ENV.CDN_HOST}/role-icons/${roleId}/${roleIcon}.${format}`;
     const url = original.replace(`//${window.GLOBAL_ENV.CDN_HOST}/`, "//media.discordapp.net/");
@@ -253,8 +253,6 @@ export default definePlugin({
 
     contextMenus: {
         "dev-context"(children, { id }: { id: string; }) {
-            const popoutRef = useRef(null);
-
             const guild = getCurrentGuild();
             if (!guild) return;
 
@@ -292,7 +290,7 @@ export default definePlugin({
                     <Menu.MenuItem
                         id="vc-view-role-icon"
                         label="View Role Icon"
-                        action={() => openRoleIconModal(role.id, roleIcon, role.name)}
+                        action={() => openRoleIconModal(role.id, roleIcon)}
                         icon={ImageIcon}
                     />
 

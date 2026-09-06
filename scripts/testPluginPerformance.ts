@@ -20,6 +20,45 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("video shortcut reads live settings and waits until invocation to access the media store", () => {
+    let ready = false;
+    let enabled = false;
+    let listener: ((event: object) => void) | undefined;
+    const settings = { keyBind: "KeyX", reqCtrl: true, reqShift: true, reqAlt: false };
+    const dispatched: boolean[] = [];
+    const common = {
+        get MediaEngineStore() {
+            assert.equal(ready, true, "store access must be deferred");
+            return { isVideoEnabled: () => enabled };
+        },
+        FluxDispatcher: { dispatch: (event: { enabled: boolean; }) => dispatched.push(event.enabled) },
+    };
+    const { default: plugin } = loadSource("src/equicordplugins/toggleVideoBind/index.ts", {
+        "@api/Settings": { definePluginSettings: () => ({ plain: settings }) },
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+        "@webpack/common": common,
+    }, { document: {
+        addEventListener: (_type: string, callback: typeof listener) => { listener = callback; },
+        removeEventListener: (_type: string, callback: typeof listener) => { assert.equal(callback, listener); listener = undefined; },
+    } });
+    ready = true;
+    plugin.start();
+    const event = { code: "KeyX", ctrlKey: true, shiftKey: true, altKey: false, repeat: false };
+    listener?.(event);
+    assert.deepEqual(dispatched, [true]);
+    enabled = true;
+    settings.keyBind = "KeyY";
+    listener?.(event);
+    listener?.({ ...event, code: "KeyY", repeat: true });
+    listener?.({ ...event, code: "KeyY", altKey: true });
+    assert.equal(dispatched.length, 1);
+    listener?.({ ...event, code: "KeyY" });
+    assert.deepEqual(dispatched, [true, false]);
+    plugin.stop();
+    assert.equal(listener, undefined);
+});
+
 test("failed theme downloads preserve the installed stylesheet", async () => {
     let contents = ".existing { color: red; }";
     let status = 503;

@@ -8,10 +8,11 @@ import { Logger } from "@utils/Logger";
 import { parseUrl } from "@utils/misc";
 import { Activity } from "@vencord/discord-types";
 import { ActivityFlags, ActivityStatusDisplayType } from "@vencord/discord-types/enums";
-import { ApplicationAssetUtils, FluxDispatcher } from "@webpack/common";
+import { FluxDispatcher } from "@webpack/common";
 import md5 from "md5";
 
 import { settings } from "../settings";
+import { getCachedApplicationAsset } from "./assetCache";
 
 function md5Hex(str: string): string {
     return md5(str);
@@ -54,10 +55,6 @@ function customFormat(formatStr: string | undefined, track: NdTrack): string {
         .replaceAll("{album}", track.album ?? "")
         .replaceAll("{year}", track.year ? `${track.year}` : "")
         .replaceAll("{quality}", track.suffix ? `${track.suffix.toUpperCase()}${track.bitRate ? " " + track.bitRate + "kbps" : ""}` : "");
-}
-
-async function getAsset(applicationId: string, key: string): Promise<string> {
-    return (await ApplicationAssetUtils.fetchAssetIds(applicationId, [key]))[0];
 }
 
 function setActivity(activity: Activity | null) {
@@ -258,14 +255,14 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
 
     let largeImagePromise: Promise<string>;
     if (resolvedCoverArtUrl) {
-        largeImagePromise = getAsset(appId, resolvedCoverArtUrl).catch(() => "navidrome");
+        largeImagePromise = getCachedApplicationAsset(appId, resolvedCoverArtUrl).catch(() => "navidrome");
     } else {
-        largeImagePromise = getAsset(appId, "navidrome").catch(() => "navidrome");
+        largeImagePromise = getCachedApplicationAsset(appId, "navidrome").catch(() => "navidrome");
     }
 
     let smallImagePromise: Promise<string> | undefined;
     if (nd_showSmallImage) {
-        smallImagePromise = getAsset(appId, "navidrome").catch(() => "navidrome");
+        smallImagePromise = getCachedApplicationAsset(appId, "navidrome").catch(() => "navidrome");
         assets.small_text = "Navidrome";
     }
 

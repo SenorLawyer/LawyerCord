@@ -4622,7 +4622,10 @@ test("Navidrome never shares server credentials through artwork", async () => {
         "@utils/Logger": { Logger: class { error() {} warn() {} } },
         "@utils/misc": { parseUrl: (value: string) => new URL(value) },
         "@vencord/discord-types/enums": { ActivityFlags: { INSTANCE: 1 }, ActivityStatusDisplayType: {} },
-        "@webpack/common": { ApplicationAssetUtils: { fetchAssetIds: async (_app: string, keys: string[]) => { assets.push(...keys); return keys; } } },
+        "@webpack/common": {},
+        "./assetCache": loadSource("src/equicordplugins/richPresence/services/assetCache.ts", {
+            "@webpack/common": { ApplicationAssetUtils: { fetchAssetIds: async (_app: string, keys: string[]) => { assets.push(...keys); return keys; } } },
+        }),
         "md5": { __esModule: true, default: () => "authentication-token" },
         "../settings": { settings: { store } },
     }, { fetch: async (url: string) => {
@@ -4652,18 +4655,23 @@ test("Navidrome removes retired artwork selection even after earlier migrations"
 
 test("Navidrome refreshes track metadata and expires unchanged now-playing entries", async () => {
     let now = 100_000;
+    let assetRequests = 0;
     const track = { id: "track", username: "listener", title: "First title", duration: 10, minutesAgo: 0 };
     const { getActivity } = loadSource("src/equicordplugins/richPresence/services/navidrome.ts", {
         "@utils/Logger": { Logger: class { error() {} warn() {} } },
         "@utils/misc": { parseUrl: (value: string) => new URL(value) },
         "@vencord/discord-types/enums": { ActivityFlags: { INSTANCE: 1 }, ActivityStatusDisplayType: {} },
-        "@webpack/common": { ApplicationAssetUtils: { fetchAssetIds: async (_app: string, keys: string[]) => keys } },
+        "@webpack/common": {},
+        "./assetCache": loadSource("src/equicordplugins/richPresence/services/assetCache.ts", {
+            "@webpack/common": { ApplicationAssetUtils: { fetchAssetIds: async (_app: string, keys: string[]) => { assetRequests++; return keys; } } },
+        }),
         "md5": { __esModule: true, default: () => "token" },
         "../settings": { settings: { store: { nd_serverUrl: "https://music.example", nd_username: "listener", nd_password: "password", nd_detailsString: "{song}" } } },
     }, { Date: { now: () => now }, fetch: async () => response({ "subsonic-response": { nowPlaying: { entry: [track] } } }) }, "({ getActivity })");
     assert.equal((await getActivity()).details, "First title");
     track.title = "Corrected title";
     assert.equal((await getActivity()).details, "Corrected title");
+    assert.equal(assetRequests, 1, "metadata refresh reuses the artwork lookup");
     now += 10_000;
     assert.equal(await getActivity(), null);
 });

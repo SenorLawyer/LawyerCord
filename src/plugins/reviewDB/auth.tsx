@@ -11,6 +11,7 @@ import { OAuth2AuthorizeModal, openModal, showToast, Toasts, UserStore } from "@
 import { ReviewDBAuth } from "./entities";
 
 const DATA_STORE_KEY = "rdb-auth";
+const AUTH_URL = "https://manti.vendicated.dev/api/reviewdb/auth";
 
 export let Auth: ReviewDBAuth = {};
 
@@ -55,7 +56,7 @@ export function authorize(callback?: () => void) {
             {...props}
             scopes={["identify"]}
             responseType="code"
-            redirectUri="https://manti.vendicated.dev/api/reviewdb/auth"
+            redirectUri={AUTH_URL}
             permissions={0n}
             clientId="915703782174752809"
             cancelCompletesFlow={false}
@@ -63,8 +64,11 @@ export function authorize(callback?: () => void) {
                 if (UserStore.getCurrentUser()?.id !== userId) return;
                 try {
                     const url = new URL(response.location);
-                    url.searchParams.append("clientMod", "vencord");
+                    if (url.origin + url.pathname !== AUTH_URL || url.username || url.password)
+                        throw new Error("Unexpected ReviewDB authorization URL.");
+                    url.searchParams.set("clientMod", "vencord");
                     const res = await fetch(url, {
+                        redirect: "error",
                         headers: { Accept: "application/json" }
                     });
                     if (UserStore.getCurrentUser()?.id !== userId) return;
@@ -76,9 +80,11 @@ export function authorize(callback?: () => void) {
                         return;
                     }
 
-                    const { token } = await res.json();
+                    const data: unknown = await res.json();
                     if (UserStore.getCurrentUser()?.id !== userId) return;
-                    await updateAuth({ token });
+                    if (typeof data !== "object" || data === null || !("token" in data) || typeof data.token !== "string" || !data.token.trim())
+                        throw new Error("ReviewDB returned an invalid authorization token.");
+                    await updateAuth({ token: data.token });
                     if (UserStore.getCurrentUser()?.id !== userId) return;
                     showToast("Successfully logged in!", Toasts.Type.SUCCESS);
                     callback?.();

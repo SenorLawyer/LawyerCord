@@ -21,6 +21,47 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ReviewDB validates the OAuth destination and token before persistence", async () => {
+    let authorizeResponse: (response: { location: string; }) => Promise<void> = async () => assert.fail("missing OAuth callback");
+    let responseData: unknown = { token: "valid-token" };
+    const requests: { url: URL; options: RequestInit; }[] = [];
+    let writes = 0;
+    let successes = 0;
+    const api = loadSource("src/plugins/reviewDB/auth.tsx", {
+        "@api/DataStore": { update: async () => { writes++; } },
+        "@utils/Logger": { Logger: class { error() {} } },
+        "@webpack/common": {
+            UserStore: { getCurrentUser: () => ({ id: "first" }) }, OAuth2AuthorizeModal: "OAuth",
+            openModal: (render: (props: object) => { props: { callback: typeof authorizeResponse; }; }) => { authorizeResponse = render({}).props.callback; },
+            showToast: () => { successes++; }, Toasts: { Type: {} },
+        },
+    }, {
+        URL, React: { createElement: (_type: unknown, props: object) => ({ props }) },
+        fetch: async (url: URL, options: RequestInit) => {
+            requests.push({ url, options });
+            return { ok: true, json: async () => responseData };
+        },
+    });
+    api.authorize();
+    for (const location of ["https://example.com/api/reviewdb/auth", "http://manti.vendicated.dev/api/reviewdb/auth", "https://manti.vendicated.dev/api/reviewdb/auth/other", "https://user:password@manti.vendicated.dev/api/reviewdb/auth", "javascript:alert(1)"]) {
+        await authorizeResponse({ location });
+    }
+    assert.equal(requests.length, 0);
+    const location = "https://manti.vendicated.dev/api/reviewdb/auth?code=test&clientMod=other";
+    for (const invalid of [null, {}, { token: 1 }, { token: "" }, { token: "   " }, "token"]) {
+        responseData = invalid;
+        await authorizeResponse({ location });
+    }
+    assert.equal(writes, 0);
+    assert.equal(successes, 0);
+    responseData = { token: "valid-token" };
+    await authorizeResponse({ location });
+    assert.equal(writes, 1);
+    assert.equal(successes, 1);
+    assert.equal(requests[0].options.redirect, "error");
+    assert.deepEqual(requests[0].url.searchParams.getAll("clientMod"), ["vencord"]);
+});
+
 test("ReviewDB authorization stays with its initiating account and awaits storage", async () => {
     for (const switchAt of ["before", "fetch", "json", "storage", "never"]) {
         let userId = "first";

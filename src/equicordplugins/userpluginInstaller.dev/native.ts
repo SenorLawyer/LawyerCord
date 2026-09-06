@@ -250,10 +250,13 @@ async function getPluginMeta(path: string, extra: object = {}): Promise<{
         const object = call.arguments[0];
         if (!object || !isObjectLiteralExpression(object)) continue;
         for (const property of object.properties) {
-            if (!isPropertyAssignment(property) || !isStringLiteralLike(property.initializer)) continue;
-            if (!isIdentifier(property.name) && !isStringLiteralLike(property.name)) continue;
-            if (property.name.text === "name") name = property.initializer.text;
-            if (property.name.text === "description") description = property.initializer.text;
+            if (!property.name || (!isIdentifier(property.name) && !isStringLiteralLike(property.name))) {
+                name = description = undefined;
+                continue;
+            }
+            const value = isPropertyAssignment(property) && isStringLiteralLike(property.initializer) ? property.initializer.text : undefined;
+            if (property.name.text === "name") name = value;
+            if (property.name.text === "description") description = value;
         }
     }
     if (name === undefined || description === undefined) throw new Error("Plugin metadata is invalid.");

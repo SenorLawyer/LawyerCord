@@ -7907,6 +7907,22 @@ test("update link completion cannot become an install action or read a closed wi
     }
 });
 
+test("plugin metadata does not trust literals overwritten by dynamic properties", async () => {
+    for (const override of ['name: getName()', 'get name() { throw new Error("Do not execute"); }', '...other', '[key]: "other"', 'description: `Value ${getValue()}`']) {
+        const mocks: Record<string, object> = {
+            child_process: {}, electron: {}, "fs/promises": {}, path, "yaml-js": {},
+            fs: { readdirSync: () => ["index.ts"], readFileSync: (file: string) => {
+                if (!file.endsWith("index.ts")) throw new Error("Optional file missing");
+                return `export default definePlugin({ name: "Earlier", description: "Earlier description", ${override} });`;
+            } }
+        };
+        for (const name of ["pluginValidate", "updateValidate"])
+            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") }, "({ getPluginMeta })");
+        await assert.rejects(api.getPluginMeta("fixture"), /Plugin metadata is invalid/);
+    }
+});
+
 test("installer setup failures reject the caller without exposing native errors", async () => {
     for (const stage of ["dialog", "clone", "metadata", "browser"]) {
         const fail = async () => { throw new Error("Private filesystem path"); };

@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Stop automatic scheduled-send batches from starting another message after shutdown.
+
 - Stop restoring scheduled previews after cleanup or an account change, and skip messages removed during restoration.
 
 - Wait for scheduled preview insertion before reporting completion and log preview failures without message content.

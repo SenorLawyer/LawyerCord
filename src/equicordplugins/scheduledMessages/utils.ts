@@ -19,6 +19,7 @@ let scheduledMessages: ScheduledMessage[] = [];
 let queueRevision = 0;
 let checkTimeout: ReturnType<typeof setTimeout> | null = null;
 let schedulerRunning = false;
+let schedulerGeneration = 0;
 let isProcessingMessages = false;
 const sendingMessages = new Set<string>();
 
@@ -503,12 +504,14 @@ export async function clearAllScheduledMessages(): Promise<void> {
 async function checkAndSendMessages(): Promise<void> {
     if (isProcessingMessages) return;
     isProcessingMessages = true;
+    const generation = schedulerGeneration;
 
     try {
         const now = Date.now();
         const dueMessages = scheduledMessages.filter(m => m.attemptedAt === undefined && m.scheduledTime <= now);
 
         for (const msg of dueMessages) {
+            if (generation !== schedulerGeneration) return;
             if (msg.attemptedAt === undefined) await sendScheduledMessageNow(msg.id);
         }
     } finally {
@@ -524,6 +527,7 @@ export function startScheduler(): void {
 }
 
 export function stopScheduler(): void {
+    schedulerGeneration++;
     queueRevision++;
     schedulerRunning = false;
     if (checkTimeout) {

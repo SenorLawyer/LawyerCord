@@ -5421,6 +5421,30 @@ test("screen recorder releases capture and discards work after disable", async (
     assert.equal(uploads, 1);
 });
 
+test("scheduled send batches stop before starting the next message", async () => {
+    let posts = 0;
+    let finish: () => void = () => {};
+    const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+        "@api/DataStore": { get: async () => [1, 2].map(id => ({ id: String(id), channelId: "channel", scheduledTime: 0 })), set: async () => {} },
+        "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+        "@webpack/common": { ChannelStore: { getChannel: () => ({}) }, FluxDispatcher: { dispatch() {} },
+            Constants: { Endpoints: { MESSAGES: (id: string) => id } }, SnowflakeUtils: { fromTimestamp: () => "nonce" },
+            RestAPI: { post: async () => { posts++; await new Promise<void>(resolve => { finish = resolve; }); return { body: { id: "sent" } }; } } },
+        ".": { settings: { store: { showNotifications: false } } }
+    }, {}, "({ ...exports, checkAndSendMessages })");
+    await module.loadScheduledMessages();
+    const pending = module.checkAndSendMessages();
+    await setImmediate();
+    assert.equal(posts, 1);
+    module.stopScheduler();
+    finish();
+    await pending;
+    assert.equal(posts, 1);
+    assert.equal(module.getScheduledMessages().length, 1);
+    assert.equal(module.getScheduledMessages()[0].id, "2");
+    assert.equal(module.getScheduledMessages()[0].attemptedAt, undefined);
+});
+
 test("scheduled preview restoration stops between messages after invalidation", async () => {
     for (const change of ["none", "cleanup", "account", "remove"]) {
         const reads: (() => void)[] = [];

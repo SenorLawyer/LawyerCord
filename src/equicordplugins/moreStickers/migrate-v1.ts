@@ -5,6 +5,7 @@
  */
 
 import { DataStore } from "@api/index";
+import { Logger } from "@utils/Logger";
 import { Toasts } from "@webpack/common";
 
 import { getRecentStickers, setRecentStickers } from "./components/misc";
@@ -16,6 +17,7 @@ const PACKS_KEY_OLD = "Vencord-MoreStickers-Packs";
 
 const RECENT_STICKERS_KEY = "MoreStickers:RecentStickers";
 const RECENT_STICKERS_KEY_OLD = "Vencord-MoreStickers-RecentStickers";
+const logger = new Logger("MoreStickers");
 
 function migrateStickerPackId(oldStickerPackId: string): string {
     if (oldStickerPackId.startsWith("Vencord-MoreStickers-Line-Pack")) {
@@ -112,22 +114,21 @@ export async function migrate() {
                 await deleteStickerPack(oldStickerPackMeta.id, PACKS_KEY_OLD);
             }
         } catch (e) {
-            console.error(e);
-            Toasts.show({
-                message: `Migration failed: ${oldStickerPackMeta.title} (${oldStickerPackMeta.id})`,
-                type: Toasts.Type.FAILURE,
-                id: Toasts.genId(),
-                options: {
-                    duration: 1000
-                }
-            });
+            logger.error("Failed to migrate sticker pack", e);
         }
     }
 
     oldPackMetas = await getStickerPackMetas(PACKS_KEY_OLD);
-    if (oldPackMetas.length === 0) {
-        await DataStore.del(PACKS_KEY_OLD);
+    if (oldPackMetas.length > 0) {
+        Toasts.show({
+            message: "Migration incomplete. Some sticker packs could not be migrated.",
+            type: Toasts.Type.FAILURE,
+            id: Toasts.genId(),
+            options: { duration: 1000 }
+        });
+        return;
     }
+    await DataStore.del(PACKS_KEY_OLD);
 
     const oldRecentStickers = await getRecentStickers(RECENT_STICKERS_KEY_OLD);
     if (oldRecentStickers.length > 0) {

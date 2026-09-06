@@ -4769,13 +4769,15 @@ test("sticker pack metadata updates preserve concurrent packs without holding a 
 });
 
 test("v1 sticker migration preserves unchanged IDs and saved packs after cleanup failures", async () => {
-    for (const [oldId, newId, failCleanup] of [
-        ["custom-pack", "custom-pack", false],
-        ["Vencord-MoreStickers-Line-Pack-123", "MoreStickers:Line:Pack:123", false],
-        ["custom-pack", "custom-pack", true]
+    for (const [oldId, newId, failCleanup, missing] of [
+        ["custom-pack", "custom-pack", false, false],
+        ["Vencord-MoreStickers-Line-Pack-123", "MoreStickers:Line:Pack:123", false, false],
+        ["custom-pack", "custom-pack", true, false],
+        ["missing-pack", "missing-pack", false, true]
     ] as const) {
         const pack = { id: oldId, title: "Legacy", logo: { id: "logo", stickerPackId: oldId }, stickers: [{ id: "sticker", stickerPackId: oldId }] };
         const entries = new Map<string, unknown>([[oldId, pack], ["Vencord-MoreStickers-Packs", [{ id: oldId, title: pack.title }]]]);
+        if (missing) entries.delete(oldId);
         const DataStore = {
             async set(key: string, value: unknown) { entries.set(key, value); },
             async get(key: string) { return entries.get(key); },
@@ -4789,24 +4791,27 @@ test("v1 sticker migration preserves unchanged IDs and saved packs after cleanup
             "@api/DataStore": DataStore, "./components": { async removeRecentStickerByPackId() {} }
         });
         const notices: string[] = [];
+        let recentReads = 0;
         const migration = loadSource("src/equicordplugins/moreStickers/migrate-v1.ts", {
             "@api/index": { DataStore },
+            "@utils/Logger": { Logger: class { error() {} } },
             "@webpack/common": { Toasts: { show: ({ message }: { message: string; }) => notices.push(message), genId: () => "toast", Type: {} } },
-            "./components/misc": { getRecentStickers: async () => [], setRecentStickers: async () => {} },
+            "./components/misc": { getRecentStickers: async () => { recentReads++; return []; }, setRecentStickers: async () => {} },
             "./stickers": stickers
         }, { console: { error() {} } });
         await migration.migrate();
-        assert.equal((await stickers.getStickerPack(newId))?.id, newId);
-        assert.deepEqual(Array.from(await stickers.getStickerPackMetas(), (meta: { id: string; }) => meta.id), [newId]);
-        assert.equal(entries.has("Vencord-MoreStickers-Packs"), failCleanup);
-        assert.equal(notices.some(message => message.startsWith("Migration failed:")), failCleanup);
+        assert.equal((await stickers.getStickerPack(newId))?.id, missing ? undefined : newId);
+        assert.deepEqual(Array.from(await stickers.getStickerPackMetas(), (meta: { id: string; }) => meta.id), missing ? [] : [newId]);
+        assert.equal(entries.has("Vencord-MoreStickers-Packs"), failCleanup || missing);
+        assert.deepEqual(notices, [failCleanup || missing ? "Migration incomplete. Some sticker packs could not be migrated." : "Sticker Pack Migration Complete"]);
+        assert.equal(recentReads, failCleanup || missing ? 0 : 1);
         if (oldId !== newId) assert.equal(await stickers.getStickerPack(oldId), null);
     }
 });
 
 test("legacy LINE stickers and recent entries migrate to current importer identities", () => {
     const migration = loadSource("src/equicordplugins/moreStickers/migrate-v1.ts", {
-        "@api/index": {}, "@webpack/common": {}, "./components/misc": {}, "./stickers": {}
+        "@api/index": {}, "@utils/Logger": { Logger: class {} }, "@webpack/common": {}, "./components/misc": {}, "./stickers": {}
     }, {}, "({ migrateStickerPack, migrateSticker })");
     for (const [file, oldPackId, oldStickerId] of [
         ["lineStickers", "Vencord-MoreStickers-Line-Pack-123", "Vencord-MoreStickers-Line-Sticker123-456"],

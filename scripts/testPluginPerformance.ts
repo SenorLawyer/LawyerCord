@@ -21,6 +21,32 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("FakeNitro checks emoji and sticker access in the destination guild", async () => {
+    let preSend: (channel: string, message: { content: string; }, options: { stickerIds: string[]; }) => Promise<unknown> = async () => {};
+    const { default: plugin } = loadSource("src/plugins/fakeNitro/index.tsx", {
+        "@api/MessageEvents": { addMessagePreSendListener: (fn: typeof preSend) => { preSend = fn; }, addMessagePreEditListener() {} },
+        "@api/Settings": { definePluginSettings: () => ({ store: { enableStickerBypass: true, enableEmojiBypass: false } }) },
+        "@components/Paragraph": {}, "@utils/apng": {}, "@utils/constants": { Devs: {} },
+        "@utils/discord": { getCurrentGuild: () => ({ id: "selected" }) }, "@utils/Logger": {},
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@vencord/discord-types/enums": { StickerFormatType: {} }, "gifenc": {},
+        "@webpack": { findByPropsLazy: () => ({}), proxyLazyWebpack: () => ({}), findByCodeLazy: () => () => false },
+        "@webpack/common": {
+            ChannelStore: { getChannel: () => ({ guild_id: "destination" }) },
+            OverridePremiumTypeStore: { getState: () => ({ premiumTypeActual: 0 }) },
+            StickersStore: { getStickerById: () => ({ id: "sticker", guild_id: "destination", available: true }) },
+        },
+    });
+    assert.equal(plugin.canUseEmote({ guildId: "destination", animated: false }, "channel"), true);
+    assert.equal(plugin.canUseEmote({ guildId: "selected", animated: false }, "channel"), false);
+    plugin.start();
+    const message = { content: "original" };
+    const options = { stickerIds: ["sticker"] };
+    await preSend("channel", message, options);
+    assert.equal(message.content, "original");
+    assert.deepEqual(options.stickerIds, ["sticker"]);
+});
+
 test("name formatting preserves Discord user objects", () => {
     const { getProcessedNames } = loadSource("src/plugins/showMeYourName/index.tsx", {
         "@api/ContextMenu": {}, "@api/index": {}, "@api/PluginManager": {},

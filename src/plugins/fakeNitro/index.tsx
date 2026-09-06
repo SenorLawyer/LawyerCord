@@ -21,7 +21,6 @@ import { definePluginSettings } from "@api/Settings";
 import { Paragraph } from "@components/Paragraph";
 import { ApngBlendOp, ApngDisposeOp, parseAPNG } from "@utils/apng";
 import { Devs } from "@utils/constants";
-import { getCurrentGuild } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 import type { Emoji, Message, RenderModalProps, Sticker } from "@vencord/discord-types";
@@ -413,10 +412,6 @@ export default definePlugin({
             }
         },
     ],
-
-    get guildId() {
-        return getCurrentGuild()?.id;
-    },
 
     get canUseEmotes() {
         return (OverridePremiumTypeStore.getState().premiumTypeActual ?? 0) > 0;
@@ -812,7 +807,8 @@ export default definePlugin({
         if (e.type === 0) return true;
         if (e.available === false) return false;
 
-        if (isUnusableRoleSubscriptionEmoji(e, this.guildId, true)) return false;
+        const guildId = ChannelStore.getChannel(channelId)?.guild_id;
+        if (isUnusableRoleSubscriptionEmoji(e, guildId, true)) return false;
 
         let isUsableTwitchSubEmote = false;
         if (e.managed && e.guildId) {
@@ -821,9 +817,9 @@ export default definePlugin({
         }
 
         if (this.canUseEmotes || isUsableTwitchSubEmote)
-            return e.guildId === this.guildId || hasExternalEmojiPerms(channelId);
+            return e.guildId === guildId || hasExternalEmojiPerms(channelId);
         else
-            return !e.animated && e.guildId === this.guildId;
+            return !e.animated && e.guildId === guildId;
     },
 
     start() {
@@ -834,7 +830,7 @@ export default definePlugin({
         }
 
         this.preSend = addMessagePreSendListener(async (channelId, messageObj, options) => {
-            const { guildId } = this;
+            const guildId = ChannelStore.getChannel(channelId)?.guild_id;
 
             let hasBypass = false;
 

@@ -46,6 +46,34 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("mic loopback stop restores only deafening applied by the plugin", async () => {
+    for (const initiallyDeaf of [false, true]) {
+        let deaf = initiallyDeaf;
+        let finish: () => void = () => {};
+        const stopped = new Promise<void>(resolve => { finish = resolve; });
+        const module = loadSource("src/equicordplugins/micLoopbackTester/index.tsx", {
+            "@api/UserArea": {}, "@utils/constants": { EquicordDevs: {} },
+            "@utils/types": { __esModule: true, default: (value: object) => value },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: "self" }) },
+                VoiceStateStore: { getVoiceStateForUser: () => ({ channelId: "voice" }) },
+                MediaEngineStore: { isSelfDeaf: () => deaf },
+                VoiceActions: {
+                    setLoopback: (_name: string, active: boolean) => active ? Promise.resolve() : stopped,
+                    toggleSelfDeaf: () => { deaf = !deaf; }
+                }
+            }
+        }, {}, "({ plugin: exports.default, enableLoopback })");
+        await module.enableLoopback();
+        assert.equal(deaf, true);
+        const pending = module.plugin.stop();
+        assert.equal(deaf, true);
+        finish();
+        await pending;
+        assert.equal(deaf, initiallyDeaf);
+    }
+});
+
 test("middle click settings preserve paste protection and stopped listeners stay removed", () => {
     const listeners = new Map<string, (event: object) => void>();
     const store = { openScope: "links", pasteScope: "always", pasteThreshold: 100 };

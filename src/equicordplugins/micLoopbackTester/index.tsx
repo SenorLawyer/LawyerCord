@@ -124,8 +124,6 @@ export default definePlugin({
     },
 
     stop() {
-        void disableLoopback();
-        loopbackActive = false;
-        selfDeafenedByPlugin = false;
+        return disableLoopback();
     },
 });

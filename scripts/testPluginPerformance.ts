@@ -7493,3 +7493,29 @@ test("theme token reads observe replacements and cannot repopulate a stale cache
     reads[3]("replacement-token");
     assert.equal(await replacement, "replacement-token");
 });
+
+test("theme revocation cannot clear a token saved while the request was pending", async () => {
+    for (const newer of [false, true]) for (const status of [200, 503]) {
+        let stored: string | undefined = "old-token";
+        let finish: (value: Response) => void = () => {};
+        let notices = 0;
+        const api = loadSource("src/equicordplugins/themeLibrary/utils/auth.tsx", {
+            "@api/DataStore": { get: async () => stored,
+                update: async (_key: string, mutate: (token: string | undefined) => string | undefined) => { stored = mutate(stored); } },
+            "@api/Notifications": { showNotification: () => { notices++; } },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) } },
+            "@equicordplugins/themeLibrary/components/ThemeTab": { logger: {}, themeRequest: (endpoint: string, options: RequestInit) => {
+                assert.equal(endpoint, "/user/revoke");
+                assert.equal((options.headers as Record<string, string>).Authorization, "Bearer old-token");
+                return new Promise<Response>(resolve => { finish = resolve; });
+            } }
+        });
+        const pending = api.deauthorizeUser();
+        await setImmediate();
+        if (newer) stored = "new-token";
+        finish(new Response("{}", { status }));
+        await pending;
+        assert.equal(stored, newer ? "new-token" : undefined);
+        assert.equal(notices, !newer && status === 200 ? 1 : 0);
+    }
+});

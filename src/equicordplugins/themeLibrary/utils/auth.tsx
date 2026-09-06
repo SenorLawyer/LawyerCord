@@ -98,23 +98,24 @@ export async function deauthorizeUser() {
         body: JSON.stringify({ userId: currentUser.id })
     });
 
-    if (res.ok) {
-        await DataStore.del(TOKEN_KEY);
-        showNotification({
+    try {
+        let cleared = false;
+        // try to delete anyway
+        await DataStore.update<string | undefined>(TOKEN_KEY, token => {
+            if (token !== uniqueToken) return token;
+            cleared = true;
+            return undefined;
+        });
+        if (res.ok && cleared) showNotification({
             title: "ThemeLibrary",
             body: "Successfully deauthorized from ThemeLibrary!"
         });
-    } else {
-        // try to delete anyway
-        try {
-            await DataStore.del(TOKEN_KEY);
-        } catch (e) {
-            logger.error("Failed to delete token", e);
-            showNotification({
-                title: "ThemeLibrary",
-                body: "Failed to deauthorize, check console"
-            });
-        }
+    } catch (e) {
+        logger.error("Failed to delete token", e);
+        showNotification({
+            title: "ThemeLibrary",
+            body: "Failed to deauthorize, check console"
+        });
     }
 }
 

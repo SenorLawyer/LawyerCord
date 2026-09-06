@@ -481,6 +481,8 @@ export async function sendScheduledMessageNow(id: string): Promise<{ success: bo
 
     const userId = UserStore.getCurrentUser()?.id;
     if (!userId) return { success: false, error: "Sign in before sending a scheduled message." };
+    if (!message.userId) return { success: false, error: "This older message has no saved account. Recreate it before sending." };
+    if (message.userId !== userId) return { success: false, error: "Switch to the account that scheduled this message." };
     if (sendingMessages.has(id)) return { success: false, error: "Message is being sent." };
     sendingMessages.add(id);
     const generation = schedulerGeneration;

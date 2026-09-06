@@ -84,7 +84,7 @@ function ViewScheduledModalInner({ rootProps, close }: ViewScheduledModalProps) 
                                     </div>
                                     <div className={cl("message-time")}>
                                         <TimerIcon width={14} height={14} />
-                                        <span>{msg.attemptedAt === undefined ? new Date(msg.scheduledTime).toLocaleString() : "Send attempted. Check the channel before retrying."}</span>
+                                        <span>{!msg.userId ? "Paused. This older message has no saved account. Recreate it before sending." : msg.attemptedAt === undefined ? new Date(msg.scheduledTime).toLocaleString() : "Send attempted. Check the channel before retrying."}</span>
                                     </div>
                                     <div className={cl("message-content")}>{displayContent}</div>
                                 </div>

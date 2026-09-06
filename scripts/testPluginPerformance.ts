@@ -5466,7 +5466,7 @@ test("scheduled sends stopped during persistence remain saved without posting", 
         let userId = "account";
         let finish: () => void = () => {};
         const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
-            "@api/DataStore": { get: async () => [{ id: "queued", scheduledTime: 0 }],
+            "@api/DataStore": { get: async () => [{ id: "queued", userId: "account", scheduledTime: 0 }],
                 set: () => new Promise<void>(resolve => { finish = resolve; }) },
             "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) }, ChannelStore: { getChannel: () => assert.fail("Must stop before sending") } },
@@ -5487,7 +5487,7 @@ test("scheduled send batches stop before starting the next message", async () =>
     let posts = 0;
     let finish: () => void = () => {};
     const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
-        "@api/DataStore": { get: async () => [1, 2].map(id => ({ id: String(id), channelId: "channel", scheduledTime: 0 })), set: async () => {} },
+        "@api/DataStore": { get: async () => [1, 2].map(id => ({ id: String(id), userId: "account", channelId: "channel", scheduledTime: 0 })), set: async () => {} },
         "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
         "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, ChannelStore: { getChannel: () => ({}) }, FluxDispatcher: { dispatch() {} },
             Constants: { Endpoints: { MESSAGES: (id: string) => id } }, SnowflakeUtils: { fromTimestamp: () => "nonce" },
@@ -5756,7 +5756,7 @@ test("scheduled startup ignores completion after stop or a newer start", async (
 
 test("scheduled attempts remain saved on failure and do not automatically replay", async () => {
     for (const outcome of ["success", "request", "channel", "storage"]) {
-        let saved = [{ id: "queued", channelId: "channel", content: "Text", scheduledTime: 0, createdAt: 0, attemptedAt: undefined as number | undefined }];
+        let saved = [{ id: "queued", userId: "account", channelId: "channel", content: "Text", scheduledTime: 0, createdAt: 0, attemptedAt: undefined as number | undefined }];
         let posts = 0;
         let release: () => void = () => {};
         const pendingPost = new Promise<void>(resolve => { release = resolve; });
@@ -6663,5 +6663,25 @@ test("new scheduled entries retain their initiating account across persistence",
         assert.equal(result.success, scenario !== "signed-out");
         assert.deepEqual(saved.map(entry => entry.userId), scenario === "signed-out" ? [] : ["first"]);
         assert.equal(previewChecks, scenario === "same" ? 1 : 0);
+    }
+});
+
+
+test("scheduled sends reject unowned and foreign entries without marking them attempted", async () => {
+    for (const owner of [undefined, "other"]) {
+        const entry = { id: "queued", userId: owner, scheduledTime: 0 };
+        const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@api/DataStore": { get: async () => [structuredClone(entry)], set: () => assert.fail("Rejected sends must not change storage") },
+            "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) },
+                ChannelStore: { getChannel: () => assert.fail("Rejected sends must not enter the sender") } },
+            ".": { settings: { store: {} } }
+        }, {}, "({ ...exports, checkAndSendMessages })");
+        await api.loadScheduledMessages();
+        assert.equal((await api.sendScheduledMessageNow("queued")).success, false);
+        await api.checkAndSendMessages();
+        assert.equal(api.getScheduledMessages().length, 1);
+        assert.equal(api.getScheduledMessages()[0].attemptedAt, undefined);
+        assert.equal(api.getScheduledMessages()[0].userId, owner);
     }
 });

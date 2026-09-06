@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Reject scheduled sends from another account and pause older entries whose account is unknown.
+
 - Record the initiating account on new scheduled messages and avoid restoring previews after an account switch during saving.
 
 - Preserve composer uploads changed while a scheduled message is being saved.

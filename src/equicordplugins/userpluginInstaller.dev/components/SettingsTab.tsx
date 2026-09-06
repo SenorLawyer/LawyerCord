@@ -160,11 +160,12 @@ function UserPluginsTab() {
                                     gitLink[[3, 6][idpl]],
                                 );
                                 showInstallFinishedAlert(name, native);
-                            } catch (e: any) {
-                                if (e.toString().includes("silentStop")) return;
+                            } catch (e) {
+                                const error = String(e);
+                                if (error.includes("silentStop")) return;
                                 Alerts.show({
                                     title: "Install error",
-                                    body: e.toString(),
+                                    body: error,
                                 });
                             }
                         }}
@@ -264,18 +265,12 @@ function UserPluginsTab() {
                                                                             : window.location.reload();
                                                                     },
                                                                 });
-                                                            } catch (e: any) {
-                                                                if (
-                                                                    e
-                                                                        .toString()
-                                                                        .includes(
-                                                                            "silentStop",
-                                                                        )
-                                                                )
-                                                                    return;
+                                                            } catch (e) {
+                                                                const error = String(e);
+                                                                if (error.includes("silentStop")) return;
                                                                 Alerts.show({
                                                                     title: "Update error",
-                                                                    body: e.toString(),
+                                                                    body: error,
                                                                 });
                                                             }
                                                         }}

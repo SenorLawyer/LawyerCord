@@ -21,6 +21,28 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("theme uploads finish after read failures and refresh successful files", async () => {
+    const source = readFileSync("src/components/settings/tabs/themes/index.tsx", "utf8");
+    const handler = source.slice(source.indexOf("    async function onFileUpload("), source.indexOf("    function addThemeLink("));
+    const code = transpileModule(handler, { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
+    const uploaded: string[] = [];
+    const messages: string[] = [];
+    let refreshes = 0;
+    const upload = runInNewContext(code + "\nonFileUpload;", {
+        VencordNative: { themes: { uploadTheme: async (name: string) => { uploaded.push(name); } } },
+        refreshLocalThemes: async () => { refreshes++; },
+        showToast: (message: string) => messages.push(message), Toasts: { Type: { FAILURE: 1 } },
+    });
+    await upload({ stopPropagation() {}, preventDefault() {}, currentTarget: { files: [
+        { name: "good.css", text: async () => "body {}" },
+        { name: "broken.css", text: async () => { throw new Error("read failed"); } },
+        { name: "ignore.txt", text: () => assert.fail("non-CSS file should not be read") },
+    ] } });
+    assert.deepEqual(uploaded, ["good.css"]);
+    assert.deepEqual(messages, ["Some themes could not be uploaded."]);
+    assert.equal(refreshes, 1);
+});
+
 test("theme validation belongs to the current URL and cancels obsolete requests", async () => {
     let state: unknown = null;
     let effect: () => (() => void) | undefined;

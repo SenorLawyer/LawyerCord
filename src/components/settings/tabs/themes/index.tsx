@@ -115,23 +115,17 @@ function ThemesTab() {
         if (!e.currentTarget?.files?.length) return;
         const { files } = e.currentTarget;
 
-        const uploads = Array.from(files, file => {
+        const uploads = Array.from(files, async file => {
             const { name } = file;
             if (!name.endsWith(".css")) return;
 
-            return new Promise<void>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => {
-                    VencordNative.themes.uploadTheme(name, reader.result as string)
-                        .then(resolve)
-                        .catch(reject);
-                };
-                reader.readAsText(file);
-            });
+            await VencordNative.themes.uploadTheme(name, await file.text());
         });
 
-        await Promise.all(uploads);
-        refreshLocalThemes();
+        const results = await Promise.allSettled(uploads);
+        if (results.some(result => result.status === "rejected"))
+            showToast("Some themes could not be uploaded.", Toasts.Type.FAILURE);
+        await refreshLocalThemes();
     }
 
     function addThemeLink(link: string) {

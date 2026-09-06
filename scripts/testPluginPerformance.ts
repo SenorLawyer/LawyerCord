@@ -21,6 +21,37 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("voice buttons apply server actions to the selected user", () => {
+    const settings = { useServer: true, serverSelf: false };
+    const calls: string[] = [];
+    const react = { createElement: (_type: unknown, props: object) => ({ props }) };
+    const source = loadSource("src/equicordplugins/voiceButtons/utils.tsx", {
+        "./settings": { settings: { store: settings } },
+        "@webpack": { findComponentByCodeLazy: () => null, findStoreLazy: () => ({ isLocalSoundboardMuted: () => false }) },
+        "@webpack/common": {
+            UserStore: { getCurrentUser: () => ({ id: "self" }) },
+            ChannelStore: { getChannel: () => ({ guild_id: "guild" }) },
+            VoiceStateStore: { getVoiceStateForUser: () => ({ channelId: "voice", mute: false, deaf: false }) },
+            PermissionsBits: {}, PermissionStore: { can: () => true },
+            MediaEngineStore: { isSelfMute: () => false, isSelfDeaf: () => false, isLocalMute: () => false, isLocalVideoDisabled: () => false },
+            GuildActions: { setServerMute: (_guild: string, id: string) => calls.push(`serverMute:${id}`), setServerDeaf: (_guild: string, id: string) => calls.push(`serverDeaf:${id}`) },
+            VoiceActions: { toggleSelfMute: () => calls.push("selfMute"), toggleSelfDeaf: () => calls.push("selfDeaf"), toggleLocalMute: (id: string) => calls.push(`localMute:${id}`) },
+        },
+    }, { React: react });
+    for (const id of ["other", "self"]) {
+        source.UserMuteButton({ user: { id } }).props.onClick();
+        source.UserDeafenButton({ user: { id } }).props.onClick();
+    }
+    assert.deepEqual(calls, ["serverMute:other", "serverDeaf:other", "selfMute", "selfDeaf"]);
+    settings.serverSelf = true;
+    source.UserMuteButton({ user: { id: "self" } }).props.onClick();
+    source.UserDeafenButton({ user: { id: "self" } }).props.onClick();
+    assert.deepEqual(calls.slice(-2), ["serverMute:self", "serverDeaf:self"]);
+    settings.useServer = false;
+    source.UserMuteButton({ user: { id: "other" } }).props.onClick();
+    assert.equal(calls.at(-1), "localMute:other");
+});
+
 test("installer builds settle subprocess failures without exposing process details", async () => {
     let finish: (error: Error | null) => void = () => {};
     const mocks: Record<string, object> = {

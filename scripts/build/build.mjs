@@ -91,6 +91,7 @@ const globNativesPlugin = {
                 const plugins = await readdir(dirPath, { withFileTypes: true });
                 for (const file of plugins) {
                     const fileName = file.name;
+                    if (fileName.startsWith("_") || fileName.startsWith(".")) continue;
                     if (fileName.endsWith(".dev") && !IS_DEV && !IS_REPORTER) continue;
                     const nativePath = join(dirPath, fileName, "native.ts");
                     const indexNativePath = join(dirPath, fileName, "native/index.ts");

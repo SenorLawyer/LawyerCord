@@ -7519,3 +7519,20 @@ test("theme revocation cannot clear a token saved while the request was pending"
         assert.equal(notices, !newer && status === 200 ? 1 : 0);
     }
 });
+
+test("theme authorization checks the provider once before offering a dialog", async () => {
+    for (const valid of [false, true]) for (const triggerModal of [false, true]) {
+        let requests = 0;
+        let dialogs = 0;
+        const api = loadSource("src/equicordplugins/themeLibrary/utils/auth.tsx", {
+            "@api/DataStore": { get: async () => "fixture-token" }, "@api/Notifications": {},
+            "@webpack/common": { openModal: () => { dialogs++; } },
+            "@equicordplugins/themeLibrary/components/ThemeTab": { logger: {}, themeRequest: async () => {
+                requests++; return new Response("{}", { status: valid ? 200 : 401 });
+            } }
+        });
+        assert.equal(await api.isAuthorized(triggerModal), valid);
+        assert.equal(requests, 1);
+        assert.equal(dialogs, !valid && triggerModal ? 1 : 0);
+    }
+});

@@ -134,12 +134,5 @@ export async function getAuthorization() {
 }
 
 export async function isAuthorized(triggerModal: boolean = true) {
-    const authorization = await getAuthorization();
-
-    if (authorization === false) {
-        await authorizeUser(triggerModal);
-        return false;
-    }
-
-    return true;
+    return Boolean(await authorizeUser(triggerModal));
 }

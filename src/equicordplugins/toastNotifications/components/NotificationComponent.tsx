@@ -66,7 +66,9 @@ function renderContextHeader(channel: MessageNotification["channel"]): React.Rea
     return null;
 }
 
-export default ErrorBoundary.wrap(function NotificationComponent(props: NotificationData) {
+type NotificationProps = NotificationData & { onClose(): void; };
+
+export default ErrorBoundary.wrap(function NotificationComponent(props: NotificationProps) {
     const [isHover, setIsHover] = useState(false);
 
     const timeout = (PluginSettings.store.timeout ?? 5) * 1000;
@@ -75,13 +77,13 @@ export default ErrorBoundary.wrap(function NotificationComponent(props: Notifica
     useEffect(() => {
         if (isHover || props.permanent) return;
 
-        const closeTimeout = setTimeout(() => props.onClose!(), timeout);
+        const closeTimeout = setTimeout(() => props.onClose(), timeout);
         return () => clearTimeout(closeTimeout);
     }, [isHover, props.permanent, timeout]);
 
     const handleClick = () => {
         props.onClick?.();
-        if (props.dismissOnClick !== false) props.onClose!();
+        if (props.dismissOnClick !== false) props.onClose();
     };
 
     const handleContextMenu = (e: React.MouseEvent) => {
@@ -101,7 +103,7 @@ export default ErrorBoundary.wrap(function NotificationComponent(props: Notifica
             });
         }
 
-        props.onClose!();
+        props.onClose();
     };
 
     const closeButton = useMemo(() => (
@@ -110,7 +112,7 @@ export default ErrorBoundary.wrap(function NotificationComponent(props: Notifica
             onClick={e => {
                 e.preventDefault();
                 e.stopPropagation();
-                props.onClose!();
+                props.onClose();
             }}
         >
             <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-labelledby="vc-toast-notifications-dismiss-title">
@@ -174,5 +176,5 @@ export default ErrorBoundary.wrap(function NotificationComponent(props: Notifica
         </button>
     );
 }, {
-    onError: ({ props }) => props.onClose!()
+    onError: ({ props }) => props.onClose()
 });

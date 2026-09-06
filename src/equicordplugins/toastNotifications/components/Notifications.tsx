@@ -16,7 +16,6 @@ interface QueuedNotification {
     key: string;
     element: JSX.Element;
     resolve(): void;
-    onClose?(): void;
 }
 
 let NotificationQueue: QueuedNotification[] = [];
@@ -53,7 +52,6 @@ interface BaseNotification {
     permanent?: boolean;
     dismissOnClick?: boolean;
     onClick?(): void;
-    onClose?(): void;
 }
 
 export interface MessageNotification extends BaseNotification {
@@ -84,7 +82,6 @@ export async function showNotification(notification: NotificationData) {
                     NotificationQueue = NotificationQueue.filter(n => n.key !== notificationKey);
                     if (NotificationQueue.length === oldLength) return;
 
-                    notification.onClose?.();
                     renderQueue(root);
                     resolve();
                 }}
@@ -95,14 +92,12 @@ export async function showNotification(notification: NotificationData) {
         NotificationQueue.push({
             key: notificationKey,
             element: ToastNotification,
-            resolve,
-            onClose: notification.onClose
+            resolve
         });
 
         // If the queue exceeds the maximum number of notifications, remove the oldest one.
         if (NotificationQueue.length > (PluginSettings.store.maxNotifications ?? 3)) {
             const removed = NotificationQueue.shift();
-            removed?.onClose?.();
             removed?.resolve();
         }
 

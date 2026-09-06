@@ -18,6 +18,7 @@ import { setImmediate } from "node:timers/promises";
 
 import { runInNewContext } from "node:vm";
 
+import * as typescript from "typescript";
 import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
@@ -4705,6 +4706,7 @@ test("DevCompanion replacement closes the old socket and ignores its late events
 });
 
 function loadSource(path: string, mocks: Record<string, object>, globals: Record<string, unknown> = {}, result = "exports") {
+    if (path === "src/equicordplugins/userpluginInstaller.dev/native.ts") mocks = { typescript, ...mocks };
     const code = transpileModule(readFileSync(path, "utf8"), {
         fileName: path,
         compilerOptions: { jsx: JsxEmit.React, module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
@@ -7693,7 +7695,7 @@ test("plugin metadata stops at missing entries and rejects malformed declaration
                         reads++;
                         if (filename.endsWith("meta.yml") || filename.endsWith("config")) throw new Error("Optional file missing");
                         assert.ok(entry && filename.endsWith(entry));
-                        return valid ? 'export default definePlugin({ name: "Fixture", authors: [], description: "A fixture.", onBeforeMessageSend() {} });' : "export default {};";
+                        return valid ? 'export default definePlugin({ authors: [], description: "A fixture.", tags: [], name: "Fixture", onBeforeMessageSend() {} });' : "export default {};";
                     } }
             };
             for (const name of ["pluginValidate", "updateValidate"])

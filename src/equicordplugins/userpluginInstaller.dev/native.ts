@@ -9,6 +9,7 @@ import { BrowserWindow, dialog, shell } from "electron";
 import { existsSync, readdirSync, readFileSync, realpathSync } from "fs";
 import { mkdir, readdir, readFile, rm } from "fs/promises";
 import { basename, dirname, join } from "path";
+import { createSourceFile, isCallExpression, isExportAssignment, isIdentifier, isObjectLiteralExpression, isPropertyAssignment, isStringLiteralLike, ScriptTarget } from "typescript";
 import yaml from "yaml-js";
 
 // @ts-ignore fuck off
@@ -16,7 +17,6 @@ import pluginValidateContent from "./misc/pluginValidate.txt"; // i would use HT
 // @ts-ignore fuck off
 import updateValidateContent from "./misc/updateValidate.txt"; // see above
 
-const PLUGIN_META_REGEX = /export default definePlugin\((?:\s|\/(?:\/|\*).*)*{\s*(?:\s|\/(?:\/|\*).*)*name:\s*(?:"|'|`)(.*)(?:"|'|`)(?:\s|\/(?:\/|\*).*)*,(?:\s|\/(?:\/|\*).*)*.+(?:\s|\/(?:\/|\*).*)*description:\s*(?:"|'|`)(.*)(?:"|'|`)(?:\s|\/(?:\/|\*).*)*/;
 // if edited, also edit in misc/constants.ts!!!
 const CLONE_LINK_REGEX = /https:\/\/(?:((?:git(?:hub|lab)\.com|git\.(?:[a-zA-Z0-9]|\.)+|codeberg\.org))\/(?!user-attachments)((?:[a-zA-Z0-9]|-)+)\/((?:[a-zA-Z0-9]|-|\.)+)(?:\.git)?|(plugins\.(nin0)\.dev)\/((?:[a-zA-Z0-9]|-|\.)+))(?:\/)?/;
 
@@ -240,11 +240,26 @@ async function getPluginMeta(path: string, extra: object = {}): Promise<{
         supportChannelID = null;
     }
 
-    const rawMeta = file.match(PLUGIN_META_REGEX);
-    if (!rawMeta) throw new Error("Plugin metadata is invalid.");
+    const syntax = createSourceFile(fileToRead, file, ScriptTarget.Latest, true);
+    let name: string | undefined;
+    let description: string | undefined;
+    for (const statement of syntax.statements) {
+        if (!isExportAssignment(statement) || !isCallExpression(statement.expression)) continue;
+        const call = statement.expression;
+        if (!isIdentifier(call.expression) || call.expression.text !== "definePlugin") continue;
+        const object = call.arguments[0];
+        if (!object || !isObjectLiteralExpression(object)) continue;
+        for (const property of object.properties) {
+            if (!isPropertyAssignment(property) || !isStringLiteralLike(property.initializer)) continue;
+            if (!isIdentifier(property.name) && !isStringLiteralLike(property.name)) continue;
+            if (property.name.text === "name") name = property.initializer.text;
+            if (property.name.text === "description") description = property.initializer.text;
+        }
+    }
+    if (name === undefined || description === undefined) throw new Error("Plugin metadata is invalid.");
     return {
-        name: rawMeta[1],
-        description: rawMeta[2],
+        name,
+        description,
         usesPreSend: file.includes("PreSendListener") || file.includes("onBeforeMessage"),
         usesNative: files.includes("native.ts") || files.includes("native.js"),
         remote: remoteURL ? remoteURL[1] : "",

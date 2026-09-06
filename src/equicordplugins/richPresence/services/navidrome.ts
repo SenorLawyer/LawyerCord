@@ -23,7 +23,7 @@ const logger = new Logger("RichPresence:Navidrome");
 
 let updateTimer: NodeJS.Timeout | undefined;
 let abortController: AbortController | undefined;
-let currentTrackId: string | undefined;
+let currentTrackKey: string | undefined;
 let cachedStartTimestamp: number | undefined;
 let cachedPauseTimestamp: number | undefined;
 let lastMinutesAgo: number | undefined;
@@ -156,8 +156,10 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
 
     const trackMinutesAgo = track.minutesAgo ?? 0;
 
-    if (track.id !== currentTrackId || !cachedStartTimestamp) {
-        currentTrackId = track.id;
+    const trackKey = JSON.stringify([settings.store.nd_serverUrl, settings.store.nd_username, track.id]);
+    if (trackKey !== currentTrackKey || !cachedStartTimestamp) {
+        currentTrackKey = trackKey;
+        cachedPauseTimestamp = undefined;
         const elapsedMs = track.positionMs ?? (trackMinutesAgo * 60 * 1000);
         cachedStartTimestamp = Date.now() - elapsedMs;
         lastMinutesAgo = trackMinutesAgo;
@@ -312,7 +314,7 @@ async function updatePresence() {
         const activity = await getActivity(abortController?.signal);
         setActivity(activity);
         if (!activity) {
-            currentTrackId = undefined;
+            currentTrackKey = undefined;
             cachedStartTimestamp = undefined;
             lastMinutesAgo = undefined;
             cachedSettingsJSON = undefined;
@@ -322,7 +324,7 @@ async function updatePresence() {
         if (e instanceof Error && e.name === "AbortError") return;
         logger.error("Failed to update presence", e);
         setActivity(null);
-        currentTrackId = undefined;
+        currentTrackKey = undefined;
         cachedStartTimestamp = undefined;
         cachedPauseTimestamp = undefined;
         lastMinutesAgo = undefined;
@@ -361,7 +363,7 @@ export function stop() {
     clearTimeout(updateTimer);
     lastFmCache.clear();
     updateTimer = undefined;
-    currentTrackId = undefined;
+    currentTrackKey = undefined;
     cachedStartTimestamp = undefined;
     cachedPauseTimestamp = undefined;
     lastMinutesAgo = undefined;

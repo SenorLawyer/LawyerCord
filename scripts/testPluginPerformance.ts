@@ -4656,6 +4656,7 @@ test("Navidrome removes retired artwork selection even after earlier migrations"
 test("Navidrome refreshes track metadata and expires unchanged now-playing entries", async () => {
     let now = 100_000;
     let assetRequests = 0;
+    const store = { nd_serverUrl: "https://music.example", nd_username: "listener", nd_password: "password", nd_detailsString: "{song}" };
     const track = { id: "track", username: "listener", title: "First title", duration: 10, minutesAgo: 0 };
     const { getActivity } = loadSource("src/equicordplugins/richPresence/services/navidrome.ts", {
         "@utils/Logger": { Logger: class { error() {} warn() {} } },
@@ -4666,12 +4667,19 @@ test("Navidrome refreshes track metadata and expires unchanged now-playing entri
             "@webpack/common": { ApplicationAssetUtils: { fetchAssetIds: async (_app: string, keys: string[]) => { assetRequests++; return keys; } } },
         }),
         "md5": { __esModule: true, default: () => "token" },
-        "../settings": { settings: { store: { nd_serverUrl: "https://music.example", nd_username: "listener", nd_password: "password", nd_detailsString: "{song}" } } },
+        "../settings": { settings: { store } },
     }, { Date: { now: () => now }, fetch: async () => response({ "subsonic-response": { nowPlaying: { entry: [track] } } }) }, "({ getActivity })");
     assert.equal((await getActivity()).details, "First title");
     track.title = "Corrected title";
     assert.equal((await getActivity()).details, "Corrected title");
     assert.equal(assetRequests, 1, "metadata refresh reuses the artwork lookup");
+    now += 1000;
+    store.nd_serverUrl = "https://other.example";
+    assert.equal((await getActivity()).timestamps.start, now);
+    now += 1000;
+    store.nd_username = track.username = "other-listener";
+    assert.equal((await getActivity()).timestamps.start, now);
+    assert.equal(assetRequests, 1);
     now += 10_000;
     assert.equal(await getActivity(), null);
 });

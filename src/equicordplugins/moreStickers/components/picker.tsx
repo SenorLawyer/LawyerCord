@@ -8,7 +8,8 @@ import { PickerContent, PickerContentHeader, PickerContentRow, PickerContentRowG
 import { sendSticker } from "@equicordplugins/moreStickers/upload";
 import { clPicker } from "@equicordplugins/moreStickers/utils";
 import { debounce } from "@shared/debounce";
-import { Modal,openModal, React, TextInput } from "@webpack/common";
+import { useAwaiter } from "@utils/react";
+import { Modal,openModal, React, showToast, TextInput, Toasts } from "@webpack/common";
 import { JSX } from "react";
 
 import { CategoryImage, CategoryScroller, CategoryWrapper, StickerCategory } from "./categories";
@@ -249,7 +250,11 @@ export function PickerContent({ stickerPacks, selectedStickerPackId, setSelected
     );
 
     const currentStickerPack = stickerPacks.find(pack => pack.id === currentSticker?.stickerPackId);
-    const [recentStickers, setRecentStickers] = React.useState<Sticker[]>([]);
+    const [loadedRecents] = useAwaiter(getRecentStickers, {
+        fallbackValue: [],
+        onError: () => showToast("Could not load recent stickers.", Toasts.Type.FAILURE)
+    });
+    const recentStickers = loadedRecents ?? [];
 
     const stickerPacksElemRef = React.useRef<HTMLDivElement>(null);
     const scrollerRef = React.useRef<HTMLDivElement>(null);
@@ -258,15 +263,6 @@ export function PickerContent({ stickerPacks, selectedStickerPackId, setSelected
         if (!query) return stickers;
         return stickers.filter(sticker => sticker.title.toLowerCase().includes(query.toLowerCase()));
     }
-
-    async function fetchRecentStickers() {
-        const recentStickers = await getRecentStickers();
-        setRecentStickers(recentStickers);
-    }
-
-    React.useEffect(() => {
-        fetchRecentStickers();
-    }, []);
 
     const stickersToRows = (stickers: Sticker[]): JSX.Element[] => stickers
         .reduce((acc, sticker, i) => {

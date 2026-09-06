@@ -5081,6 +5081,7 @@ test("sticker inspector derives its pack from the current hover", () => {
     };
     const picker = loadSource("src/equicordplugins/moreStickers/components/picker.tsx", {
         "@equicordplugins/moreStickers/types": {},
+        "@utils/react": { useAwaiter: () => [[]] },
         "@equicordplugins/moreStickers/upload": {}, "@equicordplugins/moreStickers/utils": { clPicker: () => "" },
         "@shared/debounce": { debounce: (callback: unknown) => callback }, "@webpack/common": { React },
         "./categories": {}, "./icons": {}, "./misc": { RECENT_STICKERS_ID: "recent", RECENT_STICKERS_TITLE: "Recent" }
@@ -5093,6 +5094,38 @@ test("sticker inspector derives its pack from the current hover", () => {
     hovered = { ...hovered, stickerPackId: "missing" };
     render();
     assert.deepEqual(titles, ["Second", "Updated", ""]);
+});
+
+test("recent sticker loads handle errors and ignore unmounted results", async () => {
+    for (const failed of [false, true]) {
+        for (const unmounted of [false, true]) {
+            const effects: (() => () => void)[] = [];
+            const updates: { value?: unknown; error?: unknown; }[] = [];
+            let notices = 0;
+            const React = {
+                createElement: () => null, useRef: () => ({ current: null }),
+                useState: (initial: unknown) => [initial, (value: { value?: unknown; error?: unknown; }) => updates.push(value)],
+                useEffect: (effect: () => () => void) => effects.push(effect)
+            };
+            const shared = loadSource("src/utils/react.tsx", { "@webpack/common": { ...React, React }, "./misc": {}, "./lazyReact": {} });
+            const recent = [{ id: "recent-sticker" }];
+            const picker = loadSource("src/equicordplugins/moreStickers/components/picker.tsx", {
+                "@equicordplugins/moreStickers/types": {}, "@equicordplugins/moreStickers/upload": {},
+                "@equicordplugins/moreStickers/utils": { clPicker: () => "" },
+                "@shared/debounce": { debounce: (callback: unknown) => callback }, "@utils/react": shared,
+                "@webpack/common": { React, showToast: () => notices++, Toasts: { Type: {} } }, "./categories": {}, "./icons": {},
+                "./misc": { getRecentStickers: async () => { if (failed) throw new Error("Load failed"); return recent; } }
+            });
+            picker.PickerContent({ stickerPacks: [] });
+            assert.equal(effects.length, 1);
+            const cleanup = effects[0]();
+            if (unmounted) cleanup();
+            await setImmediate();
+            assert.equal(updates.length, unmounted ? 0 : 1);
+            assert.equal(notices, failed && !unmounted ? 1 : 0);
+            if (!failed && !unmounted) assert.equal(updates[0].value, recent);
+        }
+    }
 });
 
 test("sticker picker uses shared async cleanup for pack loading", async () => {

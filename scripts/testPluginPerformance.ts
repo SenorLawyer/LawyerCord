@@ -1628,6 +1628,7 @@ test("Song Spotlight keeps refreshes, logout and pending data bound to their acc
     auth.getState().setToken("first-access", "first-refresh", "first");
     auth.getState().setToken("second-access", "second-refresh", "second");
     const api = loadSource("src/equicordplugins/songSpotlight.desktop/lib/api.ts", {
+        "@song-spotlight/api/structs": await import("@song-spotlight/api/structs"),
         "@webpack/common": common, "./stores/AuthorizationStore": authModule, "./stores/SongStore": songModule,
     }, {
         URL, Headers,
@@ -1675,9 +1676,9 @@ test("Song Spotlight keeps refreshes, logout and pending data bound to their acc
     account = "first";
     const read = api.getData();
     account = "second";
-    requests[8].resolve(new Response('["read first"]'));
+    requests[8].resolve(new Response('[{"service":"spotify","type":"track","id":"read-first"}]'));
     await read;
-    assert.deepEqual(Array.from(songs.getState().users.first.data), ["read first"]);
+    assert.deepEqual(Array.from(songs.getState().users.first.data), [{ service: "spotify", type: "track", id: "read-first" }]);
     assert.deepEqual(Array.from(songs.getState().users.second.data), ["keep"]);
     account = "first";
     const deletion = api.deleteData();
@@ -4904,15 +4905,18 @@ test("SongSpotlight failed loads can retry without creating an empty draft", asy
 
 
 test("SongSpotlight sends conditional headers only for cached timestamps", async () => {
+    let responseData: unknown = [];
+    let updates = 0;
     const users: Record<string, { at?: string; }> = {};
     const headers: Headers[] = [];
     const token = { access: "token" };
     const api = loadSource("src/equicordplugins/songSpotlight.desktop/lib/api.ts", {
+        "@song-spotlight/api/structs": await import("@song-spotlight/api/structs"),
         "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "self" }) }, showToast() {}, Toasts: { Type: {} } },
         "./stores/AuthorizationStore": { useAuthorizationStore: { getState: () => ({ getToken: () => token }) } },
-        "./stores/SongStore": { useSongStore: { getState: () => ({ users, update() {} }) } },
+        "./stores/SongStore": { useSongStore: { getState: () => ({ users, update() { updates++; } }) } },
     }, { URL, Headers, fetch: async (_url: URL, options: RequestInit) => {
-        headers.push(new Headers(options.headers)); return response([]);
+        headers.push(new Headers(options.headers)); return response(responseData);
     } });
     await api.getData();
     await api.listData("other");
@@ -4924,4 +4928,10 @@ test("SongSpotlight sends conditional headers only for cached timestamps", async
     await api.listData("other");
     assert.equal(headers[2].get("If-Modified-Since"), users.self.at);
     assert.equal(headers[3].get("If-Modified-Since"), users.other.at);
+    for (const invalid of [null, {}, ["invalid"], [{ service: "unknown", type: "track", id: "id" }], Array.from({ length: 7 }, () => ({ service: "spotify", type: "track", id: "id" }))]) {
+        responseData = invalid;
+        await assert.rejects(api.getData());
+        await assert.rejects(api.listData("other"));
+    }
+    assert.equal(updates, 4, "invalid responses never replace cached data");
 });

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import type { UserData } from "@song-spotlight/api/structs";
+import { UserData, UserDataSchema } from "@song-spotlight/api/structs";
 import { showToast, Toasts, UserStore } from "@webpack/common";
 
 import { Token, useAuthorizationStore } from "./stores/AuthorizationStore";
@@ -101,7 +101,7 @@ export async function getData(): Promise<UserData | undefined> {
     }).then(async res => {
         if (!res) return useSongStore.getState().users[userId]?.data;
 
-        const data = await res.json();
+        const data = UserDataSchema.max(apiConstants.songLimit).parse(await res.json());
         useSongStore.getState().update({
             userId,
             data,
@@ -119,7 +119,7 @@ export async function listData(userId: string): Promise<UserData | undefined> {
     }).then(async res => {
         if (!res) return useSongStore.getState().users[userId]?.data;
 
-        const data = await res.json();
+        const data = UserDataSchema.max(apiConstants.songLimit).parse(await res.json());
         useSongStore.getState().update({
             userId,
             data,

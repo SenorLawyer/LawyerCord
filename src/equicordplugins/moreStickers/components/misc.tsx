@@ -405,8 +405,19 @@ export const Packs = () => {
                         >Export Sticker Packs</Button>
                         <Button
                             size={Button.Sizes.SMALL}
-                            onClick={async e => {
-                                await migrate();
+                            onClick={async () => {
+                                try {
+                                    await migrate();
+                                    await refreshStickerPackMetas();
+                                    setV1(await isV1());
+                                } catch {
+                                    Toasts.show({
+                                        message: "Could not finish sticker migration. Try again.",
+                                        type: Toasts.Type.FAILURE,
+                                        id: Toasts.genId(),
+                                        options: { duration: 1000 }
+                                    });
+                                }
                             }}
                             style={{
                                 display: _isV1 ? "unset" : "none"
@@ -468,10 +479,6 @@ export function Wrapper(props: { children: JSX.Element | JSX.Element[]; }) {
 
 export async function getRecentStickers(key: string = KEY): Promise<Sticker[]> {
     return (await DataStore.get(key)) ?? [];
-}
-
-export async function setRecentStickers(stickers: Sticker[], key: string = KEY): Promise<void> {
-    await DataStore.set(key, stickers);
 }
 
 export async function addRecentSticker(sticker: Sticker): Promise<void> {

@@ -6,6 +6,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Refresh sticker settings after migration, handle storage failures, and remove the unused recent-sticker setter.
 - Allow interrupted sticker migrations to resume without replacing current packs or recent stickers.
 - Report incomplete sticker migrations once and retain legacy recent stickers while packs remain unmigrated.
 - Match migrated LINE emoji IDs and sticker pack references to the current importers.

@@ -4798,7 +4798,7 @@ test("v1 sticker migration preserves unchanged IDs and saved packs after cleanup
             "@api/index": { DataStore },
             "@utils/Logger": { Logger: class { error() {} } },
             "@webpack/common": { Toasts: { show: ({ message }: { message: string; }) => notices.push(message), genId: () => "toast", Type: {} } },
-            "./components/misc": { getRecentStickers: async () => { recentReads++; return []; }, setRecentStickers: async () => {} },
+            "./components/misc": { getRecentStickers: async () => { recentReads++; return []; } },
             "./stickers": stickers
         }, { console: { error() {} } });
         await migration.migrate();
@@ -4847,6 +4847,27 @@ test("recent sticker migration resumes without old packs and preserves current e
     assert.equal(new Set(recents.map(sticker => sticker.id)).size, 16);
     assert.equal(entries.has(oldKey), false);
     assert.equal(await migration.isV1(), false);
+});
+
+test("sticker migration button refreshes results and handles rejected storage work", async () => {
+    const source = readFileSync("src/equicordplugins/moreStickers/components/misc.tsx", "utf8");
+    const callback = source.match(/onClick=\{async \(\) => \{(\s*try \{\s*await migrate\(\);[\s\S]*?)\n\s*\}\}/);
+    assert.ok(callback);
+    for (const failure of ["none", "migration", "refresh", "status"]) {
+        const calls: string[] = [];
+        const notices: string[] = [];
+        const click = runInNewContext(`(async () => {${callback[1]}})`, {
+            migrate: async () => { calls.push("migration"); if (failure === "migration") throw new Error("Storage unavailable"); },
+            refreshStickerPackMetas: async () => { calls.push("refresh"); if (failure === "refresh") throw new Error("Storage unavailable"); },
+            isV1: async () => { calls.push("status"); if (failure === "status") throw new Error("Storage unavailable"); return false; },
+            setV1: (pending: boolean) => { assert.equal(pending, false); calls.push("updated"); },
+            Toasts: { show: ({ message }: { message: string; }) => notices.push(message), genId: () => "toast", Type: {} }
+        });
+        await click();
+        assert.equal(notices.length, failure === "none" ? 0 : 1);
+        assert.deepEqual(calls, failure === "none" ? ["migration", "refresh", "status", "updated"]
+            : ["migration", "refresh", "status"].slice(0, ["migration", "refresh", "status"].indexOf(failure) + 1));
+    }
 });
 
 test("legacy LINE stickers and recent entries migrate to current importer identities", () => {

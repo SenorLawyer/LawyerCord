@@ -21,6 +21,7 @@ import { useStreaksStore } from "./stores/StreaksStore";
 const cl = classNameFactory("vc-streaks-");
 const pendingRefreshes = new Set<ReturnType<typeof setTimeout>>();
 let generation = 0;
+const COLOR_SETTINGS = ["eliteColor", "diamondColor", "platinumColor", "goldColor", "silverColor", "bronzeColor", "defaultColor"] satisfies (keyof typeof settings.def)[];
 
 const STREAK_THRESHOLDS = {
     ELITE: 100,
@@ -42,6 +43,7 @@ const colorFor = (streak: number) => {
 };
 
 const StreakBadge = ({ userId }: { userId: string; }) => {
+    settings.use(COLOR_SETTINGS);
     const currentUserId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
     const streaks = useStreaksStore(state => state.streaks);
     const streak = streaks[userId];

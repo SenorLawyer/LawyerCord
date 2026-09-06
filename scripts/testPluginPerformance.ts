@@ -35,7 +35,7 @@ test("Streaks badges only display the current account's conversation", () => {
             useStateFromStores: (stores: unknown[], selector: () => unknown) => {
                 assert.equal(stores[0], userStore); subscriptions++; return selector();
             } },
-        "./settings": { settings: { store: {} } }, "./stores/AuthorizationStore": {},
+        "./settings": { settings: { store: {}, use() {} } }, "./stores/AuthorizationStore": {},
         "./stores/StreaksStore": { useStreaksStore: (selector: (state: object) => unknown) => selector({ streaks: { target: streak } }) },
     }, { React: { createElement: () => ({}) } }, "({ StreakBadge })");
     for (const id of ["first", "second", "target", undefined]) {

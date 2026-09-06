@@ -46,6 +46,72 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("MusicControls reconnects cached Tidal stores without initializing unused stores", async () => {
+    const cached = Symbol("cached");
+    const tidal: Record<symbol, object> = {};
+    const lyrics: Record<symbol, object> = {};
+    const calls: string[] = [];
+    const { default: plugin } = loadSource("src/equicordplugins/musicControls/index.tsx", {
+        "@components/ErrorBoundary": {},
+        "@utils/constants": { Devs: {}, EquicordDevs: {} },
+        "@utils/lazy": { SYM_LAZY_CACHED: cached },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+        "./settings": { settings: { store: {} }, toggleHoverControls() {} },
+        "./spotify/lyrics/api": { migrateOldLyrics: async () => {} },
+        "./spotify/lyrics/components/lyrics": {},
+        "./spotify/PlayerComponent": {},
+        "./tidal/lyrics/components/lyrics": {},
+        "./tidal/lyrics/providers/store": { TidalLrcStore: lyrics },
+        "./tidal/TidalPlayer": {},
+        "./tidal/TidalStore": { TidalStore: tidal }
+    });
+    await plugin.start();
+    plugin.stop();
+    assert.equal(calls.length, 0);
+    tidal[cached] = { socket: { reconnect: () => calls.push("connect") }, destroy: () => calls.push("disconnect") };
+    lyrics[cached] = { init: () => calls.push("subscribe"), destroy: () => calls.push("unsubscribe") };
+    for (let i = 0; i < 2; i++) {
+        await plugin.start();
+        plugin.stop();
+    }
+    assert.deepEqual(calls, ["connect", "subscribe", "unsubscribe", "disconnect", "connect", "subscribe", "unsubscribe", "disconnect"]);
+});
+
+test("Tidal lyrics resume after shutdown and ignore old requests", async () => {
+    const listeners = new Set<() => void>();
+    const requests: ((lyrics: { time: number; text: string; }[]) => void)[] = [];
+    const tidal = {
+        track: { id: "track" },
+        addChangeListener: (listener: () => void) => listeners.add(listener),
+        removeChangeListener: (listener: () => void) => listeners.delete(listener)
+    };
+    const { TidalLrcStore: store } = loadSource("src/equicordplugins/musicControls/tidal/lyrics/providers/store.ts", {
+        "@api/Notifications": { showNotification() {} },
+        "@equicordplugins/musicControls/settings": { settings: { store: {} } },
+        "@equicordplugins/musicControls/tidal/lyrics/api": { getLyrics: () => new Promise(resolve => requests.push(resolve)) },
+        "@equicordplugins/musicControls/tidal/TidalStore": { TidalStore: tidal },
+        "@webpack": { proxyLazyWebpack: (factory: () => unknown) => factory() },
+        "@webpack/common": { Flux: { Store: class { emitChange() {} } }, FluxDispatcher: {} }
+    });
+    store.init();
+    store.init();
+    assert.equal(listeners.size, 1);
+    assert.equal(requests.length, 1);
+    store.destroy();
+    assert.equal(listeners.size, 0);
+    store.init();
+    assert.equal(listeners.size, 1);
+    assert.equal(requests.length, 2);
+    requests[0]([{ time: 0, text: "old" }]);
+    await setImmediate();
+    assert.equal(store.lyrics, null);
+    requests[1]([{ time: 0, text: "current" }]);
+    await setImmediate();
+    assert.equal(store.lyrics[0].text, "current");
+    store.destroy();
+    assert.equal(listeners.size, 0);
+});
+
 test("lyrics fetching respects disabled fallback for either selected provider", async () => {
     for (const lyricsProvider of ["Spotify", "LRCLIB"]) {
         for (const fallbackProvider of [false, true]) {

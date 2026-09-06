@@ -6,6 +6,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Insert sticker links without duplicating existing draft text or clearing a pending reply.
 - Handle sticker conversion, upload, and message-post failures without unhandled rejections or stale-account notices.
 - Stop stale sticker sends after the active Discord account changes during conversion or upload.
 - Keep sticker conversion input and output filenames distinct and reject failed FFmpeg executions.

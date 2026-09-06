@@ -109,8 +109,13 @@ export async function sendSticker({ channelId, sticker, ctrlKey, shiftKey }: Sen
         if (UserStore.getCurrentUser()?.id === userId) showToast("Could not send sticker.", Toasts.Type.FAILURE);
     };
     try {
+        const content = DraftStore.getDraft(channelId, 0);
+        if (shiftKey && ctrlKey) {
+            const separator = content && !content.endsWith(" ") && !content.endsWith("\n") ? " " : "";
+            return await insertTextIntoChatInputBox(separator + sticker.image);
+        }
+
         const reply = PendingReplyStore.getPendingReply(channelId);
-        let content = DraftStore.getDraft(channelId, 0);
         let options: Partial<MessageOptions> = {};
         let file: File;
 
@@ -120,12 +125,7 @@ export async function sendSticker({ channelId, sticker, ctrlKey, shiftKey }: Sen
         }
 
         if (shiftKey) {
-            if (!content.endsWith(" ") && !content.endsWith("\n")) content = " ";
-            content += sticker.image;
-
-            return await (ctrlKey
-                ? insertTextIntoChatInputBox(content)
-                : MessageActions._sendMessage(channelId, { content: sticker.image }, options));
+            return await MessageActions._sendMessage(channelId, { content: sticker.image }, options);
         }
 
         if (sticker?.isAnimated) {

@@ -2905,6 +2905,27 @@ test("sticker sends retain their account through conversion and upload", async (
     }
 });
 
+test("sticker link insertion preserves draft text and the pending reply", async () => {
+    for (const draft of ["", "draft", "draft ", "draft\n"]) {
+        const inserted: string[] = [];
+        let replyReads = 0;
+        const notices: string[] = [];
+        const module = loadSource("src/equicordplugins/moreStickers/upload.ts", {
+            "@ffmpeg/ffmpeg": {}, "@utils/discord": { insertTextIntoChatInputBox: (text: string) => inserted.push(text) },
+            "@utils/ffmpeg": {}, "@vencord/discord-types/enums": {},
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: "self" }) }, DraftStore: { getDraft: () => draft },
+                PendingReplyStore: { getPendingReply: () => { replyReads++; throw new Error("Insertion must not consume a reply"); } },
+                Toasts: { Type: {} }, showToast: (message: string) => notices.push(message)
+            }, ".": {}, "./utils": {}
+        });
+        await module.sendSticker({ channelId: "channel", sticker: { image: "https://example.com/sticker.png" }, ctrlKey: true, shiftKey: true });
+        assert.deepEqual(inserted, [(draft === "draft" ? " " : "") + "https://example.com/sticker.png"]);
+        assert.equal(replyReads, 0);
+        assert.deepEqual(notices, []);
+    }
+});
+
 test("sticker send failures settle and notify only the initiating account", async () => {
     for (const failure of ["conversion", "prompt", "upload", "post", "link"]) {
         for (const stale of [false, true]) {

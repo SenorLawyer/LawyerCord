@@ -125,23 +125,6 @@ export default definePlugin({
         const ffmpegLoaded = React.useState(false);
         const ffmpeg = React.useState<FFmpeg>(new FFmpeg());
 
-        const getMetasSignature = (m: StickerPackMeta[]) => {
-            const ids: string[] = [];
-            for (const meta of m) {
-                ids.push(meta.id);
-            }
-
-            ids.sort();
-
-            let signature = "";
-            for (const id of ids) {
-                if (signature) signature += ",";
-                signature += id;
-            }
-
-            return signature;
-        };
-
         React.useEffect(() => {
             (async () => {
                 const sps = (await Promise.all(
@@ -153,12 +136,11 @@ export default definePlugin({
         }, [stickerPackMetas]);
 
         React.useEffect(() => {
-            (async () => {
-                const metas = await getStickerPackMetas();
-                if (getMetasSignature(metas) !== getMetasSignature(stickerPackMetas)) {
-                    setStickerPackMetas(metas);
-                }
-            })();
+            let active = true;
+            getStickerPackMetas().then(metas => {
+                if (active) setStickerPackMetas(metas);
+            });
+            return () => { active = false; };
         }, []);
 
         React.useEffect(() => {

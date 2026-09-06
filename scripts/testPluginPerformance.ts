@@ -21,6 +21,15 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("Apple Music format substitutions preserve literal metadata", () => {
+    const source = readFileSync("src/plugins/appleMusic.desktop/index.tsx", "utf8");
+    const handler = source.slice(source.indexOf("function customFormat("), source.indexOf("function getLink("));
+    const code = transpileModule(handler, { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
+    const format = runInNewContext(code + "\ncustomFormat;");
+    assert.equal(format("{name} / {artist} / {album}", { name: "$& {artist}", artist: "$'", album: "$$" }), "$& {artist} / $' / $$");
+    assert.equal(format("{name} {name} {album}", { name: "Song" }), "Song Song ");
+});
+
 test("Apple Music preserves empty metadata fields when parsing a track", async () => {
     const source = readFileSync("src/plugins/appleMusic.desktop/native.ts", "utf8");
     const code = transpileModule(source.slice(source.indexOf("export async function fetchTrackData")), { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;

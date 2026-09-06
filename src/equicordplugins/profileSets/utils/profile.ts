@@ -110,6 +110,7 @@ function normalizeDisplayNameStyles(value: DisplayNameStylesLike | null | undefi
 export async function imageUrlToBase64(url: string): Promise<string | null> {
     try {
         const response = await fetch(url);
+        if (!response.ok) return null;
         const blob = await response.blob();
         return await new Promise((resolve, reject) => {
             const reader = new FileReader();

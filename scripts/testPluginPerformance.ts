@@ -46,6 +46,31 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("profile images fall back after failed guild downloads", async () => {
+    const urls: string[] = [];
+    let blobReads = 0;
+    const processImage = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+        "@api/UserSettings": { getUserSettingLazy: () => ({}) },
+        "@webpack": { findStoreLazy: () => ({}) },
+        "@webpack/common": {}
+    }, {
+        fetch: async (url: string) => {
+            urls.push(url);
+            return { ok: !url.includes("/guilds/"), blob: async () => { blobReads++; return {}; } };
+        },
+        FileReader: class {
+            result = "data:image/png;base64,fixture";
+            onloadend = () => {};
+            readAsDataURL() { this.onloadend(); }
+        }
+    }, "processImage");
+    assert.equal(await processImage("avatar", "user", "avatar", "guild", true), "data:image/png;base64,fixture");
+    assert.equal(urls.length, 2);
+    assert.match(urls[0], /\/guilds\/guild\/users\/user\/avatars\//);
+    assert.match(urls[1], /\/avatars\/user\//);
+    assert.equal(blobReads, 1);
+});
+
 test("primary stream audio reads stores initialized after module evaluation", () => {
     const common: Record<string, unknown> = {};
     const logic = loadSource("src/equicordplugins/primaryStreamAudio/logic.ts", {});

@@ -7455,3 +7455,21 @@ test("theme like requests lock before authorization and unlock after denied auth
     await second;
     assert.equal(posts, 1);
 });
+
+test("theme authorization rejects every unsuccessful HTTP response", async () => {
+    let status = 200;
+    let reads = 0;
+    const api = loadSource("src/equicordplugins/themeLibrary/utils/auth.tsx", {
+        "@api/DataStore": { get: async () => { reads++; return "fixture-token"; } },
+        "@api/Notifications": {}, "@webpack/common": {},
+        "@equicordplugins/themeLibrary/components/ThemeTab": { logger: {}, themeRequest: async (endpoint: string) => {
+            assert.equal(endpoint, "/user/findUserByToken");
+            return new Response("{}", { status });
+        } }
+    });
+    for (const code of [200, 400, 401, 403, 404, 429, 500, 503]) {
+        status = code;
+        assert.equal(await api.getAuthorization(), code === 200 ? "fixture-token" : false);
+    }
+    assert.equal(reads, 1);
+});

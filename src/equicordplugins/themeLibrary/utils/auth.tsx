@@ -142,25 +142,16 @@ export async function deauthorizeUser() {
 
 export async function getAuthorization() {
     const uniqueToken = await getThemeLibraryToken();
+    if (!uniqueToken) return false;
 
-    if (!uniqueToken) {
-        return false;
-    } else {
-        // check if valid
-        const res = await themeRequest("/user/findUserByToken", {
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${uniqueToken}`
-            },
-        });
-
-        if (res.status === 400 || res.status === 500) {
-            return false;
-        } else {
-            return uniqueToken;
-        }
-    }
-
+    // check if valid
+    const res = await themeRequest("/user/findUserByToken", {
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${uniqueToken}`
+        },
+    });
+    return res.ok ? uniqueToken : false;
 }
 
 export async function isAuthorized(triggerModal: boolean = true) {

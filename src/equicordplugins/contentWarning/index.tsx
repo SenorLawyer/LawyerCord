@@ -14,6 +14,7 @@ import { DeleteIcon } from "@components/Icons";
 import { EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import { useForceUpdater } from "@utils/react";
+import { escapeRegExp } from "@utils/text";
 import definePlugin, { OptionType } from "@utils/types";
 import { Button, TextInput, useState } from "@webpack/common";
 
@@ -23,10 +24,6 @@ const WORDS_KEY = "ContentWarning_words";
 
 let triggerWords = [""];
 let triggerWordRegex: RegExp | null = null;
-
-function escapeRegExp(value: string) {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 function compileTriggerWords() {
     const escapedWords: string[] = [];
@@ -53,14 +50,12 @@ function TriggerContainer({ child }) {
     const [visible, setVisible] = useState(false);
     const { onClick } = settings.store;
 
-    const className = onClick ? cl("container") : "";
-
     if (visible) {
         return child;
     } else {
         return (
             <div
-                className={className}
+                className={cl("container")}
                 onClick={() => onClick && setVisible(true)}
                 onMouseEnter={event => {
                     if (!onClick) {

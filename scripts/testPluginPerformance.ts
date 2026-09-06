@@ -46,6 +46,26 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("content warnings are blurred before the first hover", () => {
+    const TriggerContainer = loadSource("src/equicordplugins/contentWarning/index.tsx", {
+        "@api/index": {},
+        "@api/Settings": { definePluginSettings: () => ({ store: { onClick: false } }) },
+        "@components/Flex": {}, "@components/Heading": {}, "@components/Icons": {},
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/css": { classNameFactory: (prefix: string) => (name: string) => prefix + name },
+        "@utils/react": {}, "@utils/text": { escapeRegExp: RegExp.escape },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+        "@webpack/common": { useState: () => [false, () => {}] }
+    }, { React: { createElement: (type: unknown, props: object) => ({ type, props }) } }, "TriggerContainer");
+    const element = TriggerContainer({ child: "flagged content" });
+    assert.equal(element.props.className, "vc-content-warning-container");
+    const target = { className: element.props.className };
+    element.props.onMouseEnter({ currentTarget: target });
+    assert.equal(target.className, "vc-content-warning-enter");
+    element.props.onMouseLeave({ currentTarget: target });
+    assert.equal(target.className, "vc-content-warning-leave");
+});
+
 test("command palette forms prevent duplicate submissions before rendering", async () => {
     const { FormPage } = loadComponent("src/equicordplugins/commandPalette/ui/pages/FormPage.tsx", {
         useState: (initial: unknown) => [typeof initial === "function" ? initial() : initial, () => {}],

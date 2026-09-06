@@ -4739,9 +4739,13 @@ test("sticker pack metadata updates preserve concurrent packs without holding a 
             async set(key: string, value: unknown) { entries.set(key, value); },
             async get(key: string) { return entries.get(key); },
             async del(key: string) { entries.delete(key); },
-            async update(key: string, change: (value: unknown) => unknown) { updates++; entries.set(key, change(entries.get(key))); }
+            async update(key: string, change: (value: unknown) => unknown) { updates++; entries.set(key, change(entries.get(key))); },
+            async updateMany(changes: [string, (value: unknown) => unknown][]) {
+                updates++;
+                const pending = changes.map(([key, change]) => [key, change(entries.get(key))] as const);
+                for (const [key, value] of pending) entries.set(key, value);
+            }
         },
-        "./components": { async removeRecentStickerByPackId() {} }, "./utils": {}
     });
     await Promise.all(["a", "b"].map(id => module.saveStickerPack({ id, title: id.toUpperCase(), logo: { id: "logo", title: "Logo", image: "image", stickerPackId: id }, stickers: [] })));
     assert.equal(updates, 2);
@@ -4811,11 +4815,18 @@ test("v1 sticker migration preserves unchanged IDs and saved packs after cleanup
             async update(key: string, change: (value: unknown) => unknown) {
                 if (cleanupBlocked && key === "Vencord-MoreStickers-Packs") throw new Error("Storage unavailable");
                 entries.set(key, change(entries.get(key)));
+            },
+            async updateMany(changes: [string, (value: unknown) => unknown][]) {
+                const pending = changes.map(([key, change]) => {
+                    if (cleanupBlocked && key === "Vencord-MoreStickers-Packs") throw new Error("Storage unavailable");
+                    return [key, change(entries.get(key))] as const;
+                });
+                for (const [key, value] of pending) entries.set(key, value);
             }
         };
         const stickers = loadSource("src/equicordplugins/moreStickers/stickers.ts", {
             "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
-            "@api/DataStore": DataStore, "./components": { async removeRecentStickerByPackId() {} }
+            "@api/DataStore": DataStore
         });
         const notices: string[] = [];
         let recentReads = 0;
@@ -4832,7 +4843,7 @@ test("v1 sticker migration preserves unchanged IDs and saved packs after cleanup
         assert.equal(entries.has("Vencord-MoreStickers-Packs"), failCleanup || missing);
         assert.deepEqual(notices, [failCleanup || missing ? "Migration incomplete. Some sticker packs could not be migrated." : "Sticker Pack Migration Complete"]);
         assert.equal(recentReads, failCleanup || missing ? 0 : 1);
-        if (oldId !== newId) assert.equal(await stickers.getStickerPack(oldId), null);
+        if (oldId !== newId) assert.equal(await stickers.getStickerPack(oldId), failCleanup ? pack : null);
         if (failCleanup) {
             cleanupBlocked = false;
             const edited = { ...await stickers.getStickerPack(newId), title: "Edited after interruption" };

@@ -481,7 +481,3 @@ export async function addRecentSticker(sticker: Sticker): Promise<void> {
     await DataStore.update<Sticker[]>(KEY, stickers =>
         [sticker, ...(stickers ?? []).filter(s => s.id !== sticker.id)].slice(0, 16));
 }
-
-export async function removeRecentStickerByPackId(packId: string): Promise<void> {
-    await DataStore.update<Sticker[]>(KEY, stickers => stickers?.filter(s => s.stickerPackId !== packId) ?? []);
-}

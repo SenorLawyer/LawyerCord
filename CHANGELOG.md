@@ -6,6 +6,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Save sticker payloads and metadata atomically, and delete packs and recent entries in one transaction.
 - Reject malformed saved sticker metadata while preserving the original records.
 - Normalize missing sticker pack titles without mutating the imported object, and remove the single-use metadata conversion helper.
 - Reject malformed or mismatched stored sticker packs without deleting the stored records.

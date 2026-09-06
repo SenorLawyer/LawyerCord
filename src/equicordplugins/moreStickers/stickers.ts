@@ -7,7 +7,6 @@
 import * as DataStore from "@api/DataStore";
 import { isObject } from "@utils/misc";
 
-import { removeRecentStickerByPackId } from "./components";
 import { Sticker, StickerPack, StickerPackMeta } from "./types";
 
 const PACKS_KEY = "MoreStickers:Packs";
@@ -58,11 +57,11 @@ export async function saveStickerPack(sp: StickerPack, packsKey: string = PACKS_
     const { id, title, author, logo, dynamic } = sp;
     const meta = { id, title, author, logo, dynamic };
 
-    await Promise.all([
-        DataStore.set(`MoreStickers:PackData:${sp.id}`, sp),
-        DataStore.update<StickerPackMeta[]>(packsKey, packs => packs?.some(p => p.id === sp.id)
+    await DataStore.updateMany<[StickerPack, StickerPackMeta[]]>([
+        [`MoreStickers:PackData:${sp.id}`, () => sp],
+        [packsKey, packs => packs?.some(p => p.id === sp.id)
             ? packs.map(p => p.id === sp.id ? meta : p)
-            : [...packs ?? [], meta])
+            : [...packs ?? [], meta]]
     ]);
 }
 
@@ -96,9 +95,9 @@ export async function getStickerPack(id: string): Promise<StickerPack | null> {
  * @return {Promise<void>}
  * */
 export async function deleteStickerPack(id: string, packsKey: string = PACKS_KEY): Promise<void> {
-    await Promise.all([
-        DataStore.set(`MoreStickers:PackData:${id}`, null),
-        removeRecentStickerByPackId(id),
-        DataStore.update<StickerPackMeta[]>(packsKey, packs => packs?.filter(p => p.id !== id) ?? [])
+    await DataStore.updateMany<[null, Sticker[], StickerPackMeta[]]>([
+        [`MoreStickers:PackData:${id}`, () => null],
+        ["MoreStickers:RecentStickers", stickers => stickers?.filter(sticker => sticker.stickerPackId !== id) ?? []],
+        [packsKey, packs => packs?.filter(p => p.id !== id) ?? []]
     ]);
 }

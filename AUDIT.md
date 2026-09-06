@@ -34,7 +34,11 @@ The accumulated changes cover storage consistency, asynchronous lifecycle handli
 
 ThemeLibrary changes remove duplicate filtering state, cancel closed-tab requests, and lock like actions before authorization. Native downloads validate IDs and filenames, bound response size and duration, reject redirects, and replace installed files only after a temporary write succeeds. Live provider testing corrected an inaccurate string-only ID declaration.
 
-The development-only userplugin installer now propagates installation and update preparation failures, stops on missing or malformed metadata, handles Git launch failures, and checks Git results before building updates. Review closure, page-load failures, cancellation cleanup, and external-link failures now settle the pending operation. Cleanup revalidates directories; clone destinations are explicit; review links are restricted to repository URLs. Install, update, and uninstall now reject overlapping mutations within the same native instance, holding ownership through review and build settlement. External filesystem changes, separate native instances, and live Electron behavior still require review. Regression fixtures mock subprocesses and windows; they do not clone, delete, or update real plugins.
+The development-only userplugin installer now propagates installation and update preparation failures, stops on missing or malformed metadata, handles Git launch failures, and checks Git results before building updates. Review closure, page-load failures, cancellation cleanup, and external-link failures now settle the pending operation. Cleanup revalidates directories; clone destinations are explicit; review links are restricted to repository URLs. Install, update, and uninstall reject overlapping mutations within the same native instance, holding ownership through review, build, and cleanup settlement. Background update scans wait for mutations and skip directories removed before scanning. Git fetch disables terminal and Git Credential Manager prompts. External filesystem changes, separate native instances, custom credential helpers, and live Electron behavior still require review.
+
+New installations clone into hidden staging directories excluded from plugin discovery and native builds. Replacement requires confirmation after review, preserves the installed source until promotion, and attempts to restore it if promotion fails. Replacing native code with a renderer-only plugin still requires restart. Isolated real-filesystem fixtures verified fresh installation, replacement, cancellation, and rollback after an injected promotion failure; an actual local Git clone verified the empty staging-directory boundary. These fixtures do not install or modify user plugins. Process crashes, rollback failures, and failed builds after promotion remain open.
+
+Review templates use typed file imports and substitute placeholders in one pass, preserving literal metadata. Warning styles render directly in the stylesheet; the custom staging element and runtime style-copy step were removed.
 
 Installer UI changes preserve existing settings when enabling unloaded plugins, render installed plugins absent from the running bundle, honor direct custom channel allowlists, and handle cancellation without treating it as an error. Duplicate update-name state and sorting work were removed. The uninstall control uses the shared button with an accessible name and consistent sizing.
 
@@ -48,11 +52,13 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `ca4a1e605` | 342 tests and timezone correctness checks passed. |
+| Broader performance/correctness suite | `d7b99b737` | 349 tests and timezone correctness checks passed. |
 | Repository-wide ESLint | `ccc765596` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
 | CSS and internationalization lint | `5e869fea9` | Passed. CSS excludes userplugins; internationalization checks tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest plugin regressions and TypeScript | `447d1afd8` | 293 plugin tests and full TypeScript passed; focused source lint passed. |
-| Standalone and development builds | `e39e09f57` | Passed. Release native source maps exclude the installer and TypeScript parser. This does not establish installed-client behavior. |
+| Latest plugin regressions and TypeScript | `8b3c0dc94` | 299 plugin tests and full TypeScript passed; focused source lint passed. |
+| Standalone build | `1f7dab047` | Passed. Release native source maps exclude the installer and TypeScript parser. This does not establish installed-client behavior. |
+| Development build | `d7b99b737` | Passed after template and staging changes. |
+| Installer review browser checks | `d7b99b737` | Actual templates and generator functions in isolated Chrome preserved literal metadata, all four native/pre-send warning combinations, the native acknowledgement gate, and cancellation. Electron IPC and real installation were not exercised. |
 | Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |
 | Web build | `57b19a728` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
 | Release artifact audit | `57b19a728` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
@@ -63,7 +69,7 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Uninstall button browser checks | `d4efc449d` | Actual shared component props and styles in isolated Chrome verified the accessible name, keyboard focus indicator, and consistent 32px sizing in both stylesheet orders. Full Discord layout was not exercised. |
 | Other isolated browser checks | Earlier audit commits | Specific sticker-storage transactions, codec conversion, and CSS behavior were exercised. These are not general live-client acceptance. |
 
-Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `ca4a1e605`, GitHub reported an empty check rollup for the draft PR. Current-head CI success has not been established.
+Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `d7b99b737`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
 
 ## Remaining work
 

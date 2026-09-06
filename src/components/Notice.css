@@ -11,7 +11,7 @@
     transition-timing-function: var(--expand-easing-function, ease);
 }
 
-.vc-notice-hidden {
+.vc-notice-container.vc-notice-hidden {
     border-width: 0;
     grid-template-rows: 0fr;
     padding-bottom: 0;

@@ -67,7 +67,7 @@ export function Notice({ children, variant = "info", icon, action, hidden = fals
     const Icon = icon ?? DefaultIcons[variant];
 
     return (
-        <div className={classes(cl("container", variant), hidden && cl("hidden"), className)} {...restProps}>
+        <div className={classes(cl("container", variant), hidden && cl("hidden"), className)} {...restProps} inert={hidden || restProps.inert}>
             <div className={cl("inner")}>
                 <div className={cl("icon-wrapper")}>
                     <Icon className={cl("icon")} />

@@ -345,8 +345,15 @@ export async function updatePlugin(_, directory: string) {
     const pluginDir = getPluginDirectory(directory);
     const pluginMeta = await getPluginMeta(pluginDir)
         .catch(() => { throw new Error("Could not read the plugin metadata."); });
+    const target = await new Promise<string>((resolve, reject) => {
+        exec("git rev-parse origin/HEAD", { cwd: pluginDir }, (error, stdout) => {
+            const commit = stdout.trim();
+            if (error || !/^(?:[a-f\d]{40}|[a-f\d]{64})$/.test(commit)) reject(new Error("Could not resolve the plugin update."));
+            else resolve(commit);
+        });
+    });
     const rawOutput = await new Promise<string>((resolve, reject) => {
-        exec("git log HEAD..origin/HEAD --oneline --pretty=format:%an////////%h////////%H////////%s", {
+        exec(`git log HEAD..${target} --oneline --pretty=format:%an////////%h////////%H////////%s`, {
             cwd: pluginDir
         }, (error, stdout) => {
             if (error) reject(new Error("Could not read the plugin update history."));
@@ -418,7 +425,7 @@ export async function updatePlugin(_, directory: string) {
                     decided = true;
                     win.close();
                     try {
-                        await new Promise<void>((resolve, reject) => exec("git rebase origin/HEAD", {
+                        await new Promise<void>((resolve, reject) => exec(`git rebase ${target}`, {
                             cwd: pluginDir
                         }, error => {
                             if (error) reject(new Error("Could not apply the plugin update. Check for conflicting local changes."));

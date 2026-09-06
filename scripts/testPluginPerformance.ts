@@ -7720,7 +7720,7 @@ test("plugin metadata stops at missing entries and rejects malformed declaration
 });
 
 test("plugin updates reject preparation failures before opening a review window", async () => {
-    for (const stage of ["metadata", "history", "success"]) {
+    for (const stage of ["metadata", "target", "history", "success"]) {
         let commands = 0;
         let windows = 0;
         class ReviewWindow extends EventEmitter {
@@ -7733,8 +7733,9 @@ test("plugin updates reject preparation failures before opening a review window"
         }
         const mocks: Record<string, object> = {
             child_process: { exec: (command: string, options: { cwd: string; }, callback: (error: Error | null, stdout: string) => void) => {
+                if (command === "git rev-parse origin/HEAD") return callback(null, stage === "target" ? "invalid; command" : "a".repeat(40));
                 commands++;
-                assert.ok(command.startsWith("git log HEAD..origin/HEAD "));
+                assert.ok(command.startsWith("git log HEAD.." + "a".repeat(40) + " "));
                 assert.equal(options.cwd, "fixture");
                 callback(stage === "history" ? new Error("Private Git path") : null, "");
             } },
@@ -7749,8 +7750,8 @@ test("plugin updates reject preparation failures before opening a review window"
             return { name: "Fixture", description: "A fixture.", remote: "https://github.com/owner/repo" };
         });
         await assert.rejects(api.updatePlugin(null, "fixture"), (error: unknown) => stage === "success" ? error === "Rejected by user"
-            : (error as Error).message === (stage === "metadata" ? "Could not read the plugin metadata." : "Could not read the plugin update history."));
-        assert.equal(commands, stage === "metadata" ? 0 : 1);
+            : (error as Error).message === (stage === "metadata" ? "Could not read the plugin metadata." : stage === "target" ? "Could not resolve the plugin update." : "Could not read the plugin update history."));
+        assert.equal(commands, stage === "metadata" || stage === "target" ? 0 : 1);
         assert.equal(windows, stage === "success" ? 1 : 0);
     }
 });
@@ -7767,6 +7768,7 @@ test("plugin updates build only after Git succeeds and report build failures", a
         }
         const mocks: Record<string, object> = {
             child_process: { exec: (command: string, _options: object, callback: (error: Error | null, stdout: string, stderr: string) => void) => {
+                if (command === "git rev-parse origin/HEAD") return callback(null, "a".repeat(40), "");
                 commands.push(command);
                 const fails = failure === "git" && command.startsWith("git rebase") || failure === "build" && command.startsWith("pnpm");
                 callback(fails ? new Error("Private path") : null, "", "Success is not an exit status");
@@ -7783,7 +7785,7 @@ test("plugin updates build only after Git succeeds and report build failures", a
         if (failure === "none") assert.deepEqual(JSON.parse(await pending), { name: "Fixture", native: false });
         else await assert.rejects(pending, /Could not update the plugin/);
         assert.equal(commands.length, failure === "git" ? 2 : 3);
-        assert.equal(commands[1], "git rebase origin/HEAD");
+        assert.equal(commands[1], "git rebase " + "a".repeat(40));
         if (failure !== "git") assert.equal(commands[2], "pnpm build --dev");
     }
 });
@@ -7800,7 +7802,7 @@ test("closed or failed plugin reviews reject and prevent later install actions",
             show() { if (failure === "close") queueMicrotask(() => this.close()); }
         }
         const mocks: Record<string, object> = {
-            child_process: { exec: (_command: string, _options: object, callback: (error: null, stdout: string) => void) => { commands++; callback(null, ""); } },
+            child_process: { exec: (_command: string, _options: object, callback: (error: null, stdout: string) => void) => { if (_command === "git rev-parse origin/HEAD") return callback(null, "a".repeat(40)); commands++; callback(null, ""); } },
             electron: { BrowserWindow: ReviewWindow, dialog: { showMessageBox: async () => ({ response: 1 }) } },
             fs: {}, "fs/promises": {}, path, "yaml-js": {}
         };
@@ -7886,7 +7888,7 @@ test("update link completion cannot become an install action or read a closed wi
             show() { queueMicrotask(() => this.emit("page-title-updated")); }
         }
         const mocks: Record<string, object> = {
-            child_process: { exec: (_command: string, _options: object, callback: (error: null, stdout: string) => void) => { commands++; callback(null, ""); } },
+            child_process: { exec: (_command: string, _options: object, callback: (error: null, stdout: string) => void) => { if (_command === "git rev-parse origin/HEAD") return callback(null, "a".repeat(40)); commands++; callback(null, ""); } },
             electron: { BrowserWindow: ReviewWindow, shell: { openExternal: async () => {
                 opened++;
                 title = "install";

@@ -21,6 +21,56 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("transcription worker cancellation aborts model downloads and startup failures settle", async () => {
+    let instance: { onmessage?: (event: object) => Promise<void>; onerror?: () => void; } = {};
+    let signal: AbortSignal | undefined;
+    let writes = 0;
+    let terminations = 0;
+    let revocations = 0;
+    const errors: Error[] = [];
+    const { TranscriptionWorker } = loadSource("src/equicordplugins/voiceMessageTranscriber.desktop/utils.ts", {
+        "@api/index": { DataStore: { get: async () => undefined, set: async () => { writes++; } } },
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@webpack/common": { lodash: { isArrayBuffer: () => false } },
+    }, {
+        Blob, AbortController,
+        URL: class extends URL {
+            static createObjectURL() { return "blob:worker"; }
+            static revokeObjectURL() { revocations++; }
+        },
+        Worker: class {
+            constructor() { instance = this; }
+            onmessage?: (event: object) => Promise<void>;
+            onerror?: () => void;
+            terminate() { terminations++; }
+            postMessage() {}
+        },
+        fetch: async (_url: string, options: RequestInit) => {
+            signal = options.signal ?? undefined;
+            return new Promise((_resolve, reject) => signal?.addEventListener("abort", () => reject(new Error("Aborted")), { once: true }));
+        },
+    });
+    const worker = new TranscriptionWorker(() => {}, () => {}, (error: Error) => errors.push(error), () => {});
+    const pending = instance.onmessage?.({ data: { type: "fetch_request", id: "model", url: "https://huggingface.co/model" } });
+    await setImmediate();
+    assert.equal(signal?.aborted, false);
+    worker.terminate();
+    await pending;
+    assert.equal(signal?.aborted, true);
+    assert.equal(writes, 0);
+    assert.equal(errors.length, 0);
+    worker.terminate();
+    assert.equal(terminations, 1);
+    assert.equal(revocations, 1);
+    new TranscriptionWorker(() => {}, () => {}, (error: Error) => errors.push(error), () => {});
+    instance.onerror?.();
+    instance.onerror?.();
+    assert.equal(errors.length, 1);
+    assert.match(errors[0].message, /worker failed/);
+    assert.equal(terminations, 2);
+    assert.equal(revocations, 2);
+});
+
 test("voice transcription downloads reject untrusted URLs and bound streamed audio", async () => {
     const validation = loadSource("src/equicordplugins/voiceMessageTranscriber.desktop/audioValidation.ts", {});
     const audio = Uint8Array.from([0x4f, 0x67, 0x67, 0x53, 0, 0, 0, 0, 0, 0, 0, 0]);

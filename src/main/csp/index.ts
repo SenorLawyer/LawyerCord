@@ -73,6 +73,13 @@ export const CspPolicies: PolicyMap = {
     "translate.googleapis.com": ConnectSrc,
     "timezone.creations.works": ConnectSrc,
     "themes.equicord.org": ConnectSrc,
+    "lrclib.net": ConnectSrc,
+    "spotify-lyrics-api-pi.vercel.app": ConnectSrc,
+    "api.stats.fm": ConnectSrc,
+    "www.reddit.com": ConnectSrc,
+    "nekos.best": ConnectSrc,
+    "api.thecatapi.com": ConnectSrc,
+    "api.thedogapi.com": ConnectSrc,
     "ugc.decor.fieryflames.dev": ImageSrc, // Decor CDN
     "sponsor.ajay.app": ConnectSrc, // Dearrow API
     "dearrow-thumb.ajay.app": ImageSrc, // Dearrow Thumbnail CDN

@@ -4787,3 +4787,55 @@ test("cancelled Navidrome artwork cannot refill caches or resolve assets", async
     assert.equal(module.cacheSize(), 0);
     assert.equal(assetRequests, 0);
 });
+
+test("SongSpotlight settings reject stale account actions", async () => {
+    let userId = "first";
+    const calls: string[] = [];
+    const effects: (() => (() => void) | void)[] = [];
+    let confirm: () => Promise<void> = async () => {};
+    const prefix = "@equicordplugins/songSpotlight.desktop/";
+    const mocks: Record<string, object> = {};
+    for (const name of ["@components/ErrorBoundary", "@components/Flex", "@utils/clipboard", prefix + "lib/oauth2", prefix + "service", prefix + "ui/common", prefix + "ui/settings/SongList", "@song-spotlight/api/structs"])
+        mocks[name] = {};
+    mocks["@components/Button"] = { Button: "button" };
+    mocks["@utils/discord"] = {};
+    mocks["@song-spotlight/api/util"] = { sid: JSON.stringify };
+    mocks[prefix + "lib/utils"] = { cl: () => "" };
+    mocks[prefix + "lib/api"] = { saveData: async () => calls.push("save"), deleteData: async () => calls.push("delete") };
+    mocks[prefix + "lib/stores/AuthorizationStore"] = { useAuthorizationStore: () => ({ isAuthorized: () => true, deleteTokens: () => calls.push("logout") }) };
+    mocks[prefix + "lib/stores/SongStore"] = { useSongStore: () => ({ users: { first: { data: [{ id: "song" }] }, second: { data: [] } }, self: { data: [{ id: "wrong-mirror" }] } }) };
+    const module = loadComponent("src/equicordplugins/songSpotlight.desktop/ui/settings/index.tsx", {
+        UserStore: { getCurrentUser: () => ({ id: userId }) }, useStateFromStores: (_stores: unknown[], select: () => unknown) => select(),
+        useRef: (value: unknown) => ({ current: value }), useState: (value: unknown) => [value, () => {}],
+        useMemo: (fn: () => unknown) => fn(), useEffect: (effect: () => (() => void) | void) => effects.push(effect),
+        Parser: { parse: () => "" }, Toasts: { Type: {} }, showToast() {},
+        Alerts: { show: (options: { onConfirm(): Promise<void>; }) => { confirm = options.onConfirm; } },
+    }, mocks);
+    const wrapper = module.default({});
+    const tree = wrapper.type(wrapper.props);
+    const nodes: { props: { children?: unknown[]; onClick?(): unknown; }; }[] = [];
+    const visit = (value: unknown) => {
+        if (Array.isArray(value)) return value.forEach(visit);
+        if (value && typeof value === "object" && "props" in value) {
+            const node = value as typeof nodes[number]; nodes.push(node); visit(node.props.children);
+        }
+    };
+    visit(tree);
+    const action = (label: string) => nodes.find(node => node.props.children?.includes(label))?.props.onClick;
+    for (const label of ["Delete songs", "Save", "Sign out"]) assert.equal(typeof action(label), "function");
+    await action("Save")?.();
+    assert.deepEqual(calls, ["save"]);
+    calls.length = 0;
+    action("Delete songs")?.();
+    userId = "second";
+    await confirm();
+    await action("Save")?.();
+    action("Sign out")?.();
+    assert.deepEqual(calls, []);
+    assert.equal(module.default({}).props.userId, "second");
+    assert.equal(module.default({}).props.key, "second");
+    userId = "first";
+    for (const effect of effects) effect()?.();
+    await confirm();
+    assert.deepEqual(calls, [], "unmounted editor cannot act after switching back");
+});

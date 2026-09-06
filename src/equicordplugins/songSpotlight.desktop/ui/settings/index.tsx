@@ -21,7 +21,7 @@ import { sid } from "@song-spotlight/api/util";
 import { readClipboard } from "@utils/clipboard";
 import { copyWithToast } from "@utils/discord";
 import { RenderModalProps } from "@vencord/discord-types";
-import { Alerts, Modal,openModal, Parser, showToast, Toasts, useCallback, useEffect, useMemo, useRef, useState } from "@webpack/common";
+import { Alerts, Modal, openModal, Parser, showToast, Toasts, useCallback, useEffect, useMemo, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
 
 interface ImportButtonProps {
     overwrite: boolean;
@@ -85,8 +85,25 @@ interface SettingsProps {
 }
 
 export default function Settings({ templateData }: SettingsProps) {
+    const userId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
+    const templateUserId = useRef(userId);
+    return <AccountSettings key={userId} userId={userId} templateData={templateUserId.current === userId ? templateData : undefined} />;
+}
+
+interface AccountSettingsProps extends SettingsProps {
+    userId: string | undefined;
+}
+
+function AccountSettings({ templateData, userId }: AccountSettingsProps) {
     const { isAuthorized, deleteTokens } = useAuthorizationStore();
-    const { self } = useSongStore();
+    const { users } = useSongStore();
+    const self = userId ? users[userId] : undefined;
+    const mounted = useRef(true);
+    useEffect(() => {
+        mounted.current = true;
+        return () => { mounted.current = false; };
+    }, []);
+    const isCurrentAccount = () => mounted.current && !!userId && UserStore.getCurrentUser()?.id === userId;
 
     const ticked = useRef(false);
     const [localData, setLocalData] = useState(templateData ?? self?.data);
@@ -152,6 +169,7 @@ export default function Settings({ templateData }: SettingsProps) {
                                 onClick={async () => {
                                     setPending(true);
                                     try {
+                                        if (!isCurrentAccount()) return;
                                         await saveData(localData);
                                         showToast("Successfully saved songs!", Toasts.Type.SUCCESS);
                                     } finally {
@@ -172,7 +190,8 @@ export default function Settings({ templateData }: SettingsProps) {
                     <Button
                         variant="dangerPrimary"
                         onClick={() => {
-                            deleteTokens();
+                            if (!isCurrentAccount()) return;
+                            deleteTokens(userId);
                             showToast("Successfully signed out!", Toasts.Type.SUCCESS);
                         }}
                         disabled={pending}
@@ -188,6 +207,7 @@ export default function Settings({ templateData }: SettingsProps) {
                                 onConfirm: async () => {
                                     setPending(true);
                                     try {
+                                        if (!isCurrentAccount()) return;
                                         await deleteData();
 
                                         showToast("Successfully deleted songs!", Toasts.Type.SUCCESS);

@@ -23,6 +23,7 @@ import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
 test("ReviewDB reload dependencies include the profile and current account", () => {
     let userId = "first";
+    let retained: { discordId: string; currentUserId: string; data: { reviews: unknown[]; }; } | null = null;
     const dependencies: unknown[][] = [];
     const store = { getCurrentUser: () => ({ id: userId }) };
     const { default: ReviewsView } = loadSource("src/plugins/reviewDB/components/ReviewsView.tsx", {
@@ -30,10 +31,10 @@ test("ReviewDB reload dependencies include the profile and current account", () 
         "@plugins/reviewDB/reviewDbApi": {}, "@plugins/reviewDB/settings": {}, "@plugins/reviewDB/utils": {},
         "@utils/react": {
             useForceUpdater: () => [0, () => {}],
-            useAwaiter: (_factory: unknown, options: { deps: unknown[]; }) => { dependencies.push(Array.from(options.deps)); return [null]; },
+            useAwaiter: (_factory: unknown, options: { deps: unknown[]; }) => { dependencies.push(Array.from(options.deps)); return [retained]; },
         },
         "@webpack": { findByPropsLazy: () => ({}), findComponentByCodeLazy: () => ({}), findByCodeLazy: () => ({}) },
-        "@webpack/common": { UserStore: store, useStateFromStores: (stores: unknown[], select: () => unknown) => {
+        "@webpack/common": { React: { createElement: () => ({}) }, UserStore: store, useStateFromStores: (stores: unknown[], select: () => unknown) => {
             assert.equal(stores[0], store); return select();
         } }, "./ReviewComponent": {},
     });
@@ -44,6 +45,13 @@ test("ReviewDB reload dependencies include the profile and current account", () 
     assert.notDeepEqual(dependencies[0], dependencies[1]);
     assert.notDeepEqual(dependencies[1], dependencies[2]);
     assert.ok(dependencies[2].includes("profile-two") && dependencies[2].includes("second"));
+    retained = { discordId: "profile-one", currentUserId: "second", data: { reviews: [] } };
+    assert.equal(ReviewsView({ discordId: "profile-two", onFetchReviews() {} }), null);
+    retained.discordId = "profile-two";
+    retained.currentUserId = "first";
+    assert.equal(ReviewsView({ discordId: "profile-two", onFetchReviews() {} }), null);
+    retained.currentUserId = "second";
+    assert.notEqual(ReviewsView({ discordId: "profile-two", onFetchReviews() {} }), null);
 });
 
 test("ReviewDB vote callbacks ignore stale accounts and results", async () => {

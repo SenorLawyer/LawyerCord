@@ -63,27 +63,34 @@ export default function ReviewsView({
     const [signal, refetch] = useForceUpdater(true);
     const currentUserId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
 
-    const [reviewData] = useAwaiter(() => getReviews(discordId, { offset: (page - 1) * REVIEWS_PER_PAGE, fetchVotes: true }), {
+    const [result] = useAwaiter(async () => ({
+        discordId,
+        currentUserId,
+        data: await getReviews(discordId, { offset: (page - 1) * REVIEWS_PER_PAGE, fetchVotes: true }),
+    }), {
         fallbackValue: null,
         deps: [discordId, currentUserId, refetchSignal, signal, page],
-        onSuccess: data => {
-            if (settings.store.hideBlockedUsers) data!.reviews = data!.reviews?.filter(r => !RelationshipStore.isBlocked(r.sender.discordID));
-            const systemReviews = data!.reviews.filter(r => r.type === ReviewType.System);
-            const normalReviews = data!.reviews.filter(r => r.type !== ReviewType.System);
+        onSuccess: result => {
+            if (!result) return;
+            const { data } = result;
+            if (settings.store.hideBlockedUsers) data.reviews = data.reviews.filter(r => !RelationshipStore.isBlocked(r.sender.discordID));
+            const systemReviews = data.reviews.filter(r => r.type === ReviewType.System);
+            const normalReviews = data.reviews.filter(r => r.type !== ReviewType.System);
 
-            data!.reviews = [...systemReviews, ...normalReviews.reverse()];
+            data.reviews = [...systemReviews, ...normalReviews.reverse()];
             scrollToTop?.();
-            onFetchReviews(data!);
+            onFetchReviews(data);
         }
     });
 
-    if (!reviewData) return null;
+    if (!result || result.discordId !== discordId || result.currentUserId !== currentUserId) return null;
+    const reviewData = result.data;
 
     return (
         <>
             <ReviewList
                 refetch={refetch}
-                reviews={reviewData!.reviews}
+                reviews={reviewData.reviews}
                 hideOwnReview={hideOwnReview}
                 profileId={discordId}
                 type={type}
@@ -94,7 +101,7 @@ export default function ReviewsView({
                     name={name}
                     discordId={discordId}
                     refetch={refetch}
-                    isAuthor={Boolean(currentUserId && reviewData!.reviews?.some(r => r.sender.discordID === currentUserId))}
+                    isAuthor={Boolean(currentUserId && reviewData.reviews.some(r => r.sender.discordID === currentUserId))}
                 />
             )}
         </>

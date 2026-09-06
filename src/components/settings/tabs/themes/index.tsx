@@ -420,12 +420,15 @@ function ThemesTab() {
                                 enabled={theme.enabled}
                                 onChange={enabled => onLocalThemeChange(localTheme.fileName, enabled)}
                                 onDelete={async () => {
-                                    onLocalThemeChange(localTheme.fileName, false);
+                                    try {
+                                        await VencordNative.themes.deleteTheme(localTheme.fileName);
+                                    } catch {
+                                        showToast("Could not delete the theme.", Toasts.Type.FAILURE);
+                                        return;
+                                    }
                                     clearThemeState(localTheme.fileName);
-                                    await VencordNative.themes.deleteTheme(localTheme.fileName);
-                                    refreshLocalThemes();
+                                    await refreshLocalThemes();
                                 }}
-                                showDeleteButton
                                 onPin={() => togglePinTheme(localTheme.fileName)}
                                 isPinned={settings.pinnedThemes.includes(localTheme.fileName)}
                                 onRefresh={refreshLocalThemes}

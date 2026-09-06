@@ -21,6 +21,26 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("failed local theme deletion preserves settings", async () => {
+    const source = readFileSync("src/components/settings/tabs/themes/index.tsx", "utf8");
+    const start = source.indexOf("onDelete={async () => {");
+    const handler = source.slice(start + "onDelete={".length, source.indexOf("}}", start) + 1);
+    const calls: string[] = [];
+    let fail = true;
+    const remove = runInNewContext("(" + handler + ")", {
+        localTheme: { fileName: "theme.css" },
+        VencordNative: { themes: { deleteTheme: async () => { calls.push("delete"); if (fail) throw new Error("denied"); } } },
+        clearThemeState: () => calls.push("clear"), refreshLocalThemes: async () => { calls.push("refresh"); },
+        showToast: () => calls.push("error"), Toasts: { Type: { FAILURE: 1 } },
+    });
+    await remove();
+    assert.deepEqual(calls, ["delete", "error"]);
+    calls.length = 0;
+    fail = false;
+    await remove();
+    assert.deepEqual(calls, ["delete", "clear", "refresh"]);
+});
+
 test("theme uploads finish after read failures and refresh successful files", async () => {
     const source = readFileSync("src/components/settings/tabs/themes/index.tsx", "utf8");
     const handler = source.slice(source.indexOf("    async function onFileUpload("), source.indexOf("    function addThemeLink("));

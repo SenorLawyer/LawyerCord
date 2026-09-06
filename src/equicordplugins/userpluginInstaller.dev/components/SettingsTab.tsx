@@ -266,21 +266,11 @@ function UserPluginsTab() {
                                                                 await Native.updatePlugin(
                                                                     plugin.directory!,
                                                                 );
-                                                                const oldPWU =
-                                                                    userpluginInstaller.pluginsWithUpdates.value()
-                                                                        .plugins;
-                                                                oldPWU.splice(
-                                                                    oldPWU.indexOf(
-                                                                        plugin.directory!,
-                                                                    ),
-                                                                    1,
-                                                                );
-                                                                userpluginInstaller.pluginsWithUpdates.value(
-                                                                    {
-                                                                        finished: true,
-                                                                        plugins: oldPWU,
-                                                                    },
-                                                                );
+                                                                const updates = userpluginInstaller.pluginsWithUpdates.value();
+                                                                userpluginInstaller.pluginsWithUpdates.value({
+                                                                    ...updates,
+                                                                    plugins: updates.plugins.filter(directory => directory !== plugin.directory),
+                                                                });
                                                                 Alerts.show({
                                                                     title: "Done!",
                                                                     body: `${plugin.name} has been updated. A ${plugin.usesNative ? "restart" : "refresh"} is needed to apply the update.`,

@@ -7,7 +7,7 @@
 import { exec, spawn } from "child_process";
 import { BrowserWindow, dialog, shell } from "electron";
 import { existsSync, readdirSync, readFileSync, realpathSync } from "fs";
-import { mkdir, readdir, readFile, rm } from "fs/promises";
+import { mkdir, readdir, rm } from "fs/promises";
 import { basename, dirname, join } from "path";
 import { createSourceFile, isCallExpression, isExportAssignment, isIdentifier, isObjectLiteralExpression, isPropertyAssignment, isStringLiteralLike, ScriptTarget } from "typescript";
 import yaml from "yaml-js";
@@ -70,24 +70,13 @@ export async function rmPlugin(_, name: string): Promise<string> {
 export async function isUpdateAvailableForPlugin(_, name: string): Promise<boolean> {
     const pluginDir = getPluginDirectory(name);
     return new Promise(resolve => {
-        const otherProc = exec("git fetch", {
-            cwd: pluginDir
-        });
-        otherProc.once("close", () => {
-            async function doStuff() {
-                try {
-                    const head = (await readFile(join(pluginDir, ".git/HEAD"), "utf8")).match(/^ref: (.+)/)![1];
-                    const remoteHead = (await readFile(join(pluginDir, ".git/refs/remotes/origin/HEAD"), "utf8")).match(/^ref: (.+)/)![1];
-                    const localCommit = await readFile(join(pluginDir, ".git", head), "utf8");
-                    const remoteCommit = await readFile(join(pluginDir, ".git", remoteHead), "utf8");
-
-                    resolve(localCommit !== remoteCommit);
-                }
-                catch (e) {
-                    resolve(false);
-                }
-            }
-            doStuff();
+        exec("git fetch", { cwd: pluginDir }, error => {
+            if (error) return resolve(false);
+            exec("git rev-parse HEAD origin/HEAD", { cwd: pluginDir }, (error, stdout) => {
+                if (error) return resolve(false);
+                const [localCommit, remoteCommit] = stdout.trim().split("\n");
+                resolve(localCommit !== remoteCommit);
+            });
         });
     });
 }

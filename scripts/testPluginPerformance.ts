@@ -7927,6 +7927,26 @@ test("plugin metadata does not trust literals overwritten by dynamic properties"
     }
 });
 
+test("plugin update checks use Git reference resolution and stop after fetch failure", async () => {
+    for (const result of ["fetch-error", "refs-error", "same", "different"]) {
+        const commands: string[] = [];
+        const mocks: Record<string, object> = {
+            child_process: { exec: (command: string, options: { cwd: string; }, callback: (error: Error | null, stdout: string) => void) => {
+                commands.push(command); assert.equal(options.cwd, "fixture");
+                callback(result === "fetch-error" || result === "refs-error" && commands.length === 2 ? new Error("Git failed") : null,
+                    "a".repeat(40) + "\n" + (result === "different" ? "b" : "a").repeat(40) + "\n");
+            } }, electron: {}, fs: {}, "fs/promises": {}, path, "yaml-js": {}
+        };
+        for (const name of ["pluginValidate", "updateValidate"])
+            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") },
+            "({ ...exports, setup() { getPluginDirectory = () => 'fixture'; } })");
+        api.setup();
+        assert.equal(await api.isUpdateAvailableForPlugin(null, "fixture"), result === "different");
+        assert.deepEqual(commands, result === "fetch-error" ? ["git fetch"] : ["git fetch", "git rev-parse HEAD origin/HEAD"]);
+    }
+});
+
 test("installer setup failures reject the caller without exposing native errors", async () => {
     for (const stage of ["dialog", "clone", "metadata", "browser"]) {
         const fail = async () => { throw new Error("Private filesystem path"); };

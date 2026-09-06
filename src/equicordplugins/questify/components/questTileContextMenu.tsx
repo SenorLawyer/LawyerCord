@@ -27,19 +27,13 @@ export function QuestTileContextMenu(
 
     children.unshift((
         <Menu.MenuGroup>
-            {!isClaimedMenu && (!isIgnored ? (
+            {!isClaimedMenu && (
                 <Menu.MenuItem
-                    id={q("ignore-quest")}
-                    label="Mark as Ignored"
-                    action={() => addIgnoredQuest(quest.id)}
+                    id={q(isIgnored ? "unignore-quest" : "ignore-quest")}
+                    label={isIgnored ? "Unmark as Ignored" : "Mark as Ignored"}
+                    action={() => isIgnored ? removeIgnoredQuest(quest.id) : addIgnoredQuest(quest.id)}
                 />
-            ) : (
-                <Menu.MenuItem
-                    id={q("unignore-quest")}
-                    label="Unmark as Ignored"
-                    action={() => removeIgnoredQuest(quest.id)}
-                />
-            ))}
+            )}
             <Menu.MenuItem
                 id={q("copy-quest-id")}
                 label="Copy Quest ID"

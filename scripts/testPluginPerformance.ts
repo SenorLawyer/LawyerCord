@@ -4737,3 +4737,28 @@ test("Navidrome retries failed Last.fm artwork requests", async () => {
         assert.equal(requests, previous, "identical metadata reuses artwork across track IDs");
     }
 });
+
+
+test("Navidrome ignores invalid artwork URLs without caching them", async () => {
+    for (const image of [42, {}, "invalid", "javascript:alert(1)", "data:image/png;base64,a", "https://user:password@images.example/cover.png"]) {
+        let requests = 0;
+        const assets: string[] = [];
+        const getActivity = loadSource("src/equicordplugins/richPresence/services/navidrome.ts", {
+            "@utils/Logger": { Logger: class { error() {} warn() {} } },
+            "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } },
+            "@vencord/discord-types/enums": { ActivityFlags: { INSTANCE: 1 }, ActivityStatusDisplayType: {} },
+            "@webpack/common": {}, "md5": { __esModule: true, default: () => "token" },
+            "./assetCache": { getCachedApplicationAsset: async (_app: string, key: string) => { assets.push(key); return key; } },
+            "../settings": { settings: { store: { nd_serverUrl: "https://music.example", nd_username: "listener", nd_password: "password", nd_albumArtMode: "lastfm" } } },
+        }, { fetch: async (url: string) => {
+            if (new URL(url).origin === "https://music.example")
+                return response({ "subsonic-response": { nowPlaying: { entry: [{ id: "track", username: "listener", artist: "Artist", album: "Album" }] } } });
+            requests++;
+            return response({ album: { image: [{ "#text": image }] } });
+        } }, "getActivity");
+        await getActivity();
+        await getActivity();
+        assert.deepEqual(assets, ["navidrome", "navidrome"]);
+        assert.equal(requests, 2);
+    }
+});

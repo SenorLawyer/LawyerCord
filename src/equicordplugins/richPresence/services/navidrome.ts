@@ -231,7 +231,7 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
         } else {
             try {
                 const artist = encodeURIComponent(track.artist);
-                let image: string | undefined;
+                let image: unknown;
 
                 if (track.album) {
                     const album = encodeURIComponent(track.album);
@@ -249,8 +249,11 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
                     image = json?.track?.album?.image?.at(-1)?.["#text"];
                 }
 
-                resolvedCoverArtUrl = image ?? null;
-                if (resolvedCoverArtUrl) lastFmCache.set(cacheKey, resolvedCoverArtUrl);
+                const imageUrl = typeof image === "string" ? parseUrl(image) : null;
+                if (imageUrl && (imageUrl.protocol === "https:" || imageUrl.protocol === "http:") && !imageUrl.username && !imageUrl.password) {
+                    resolvedCoverArtUrl = imageUrl.href;
+                    lastFmCache.set(cacheKey, resolvedCoverArtUrl);
+                }
             } catch (e: unknown) {
                 if (e instanceof Error && e.name === "AbortError") throw e;
                 resolvedCoverArtUrl = null;

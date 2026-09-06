@@ -7718,7 +7718,7 @@ test("plugin updates reject preparation failures before opening a review window"
             static getAllWindows() { return []; }
             webContents = { getTitle: () => "abortInstall" };
             constructor() { super(); windows++; }
-            loadURL(url: string) { assert.ok(url.startsWith("data:text/html;base64,")); }
+            async loadURL(url: string) { assert.ok(url.startsWith("data:text/html;base64,")); }
             close() { this.emit("closed"); }
             show() { queueMicrotask(() => this.emit("page-title-updated")); }
         }
@@ -7752,7 +7752,7 @@ test("plugin updates build only after Git succeeds and report build failures", a
         class ReviewWindow extends EventEmitter {
             static getAllWindows() { return []; }
             webContents = { getTitle: () => "install" };
-            loadURL() {}
+            async loadURL() {}
             close() { this.emit("closed"); }
             show() { queueMicrotask(() => this.emit("page-title-updated")); }
         }
@@ -7779,15 +7779,16 @@ test("plugin updates build only after Git succeeds and report build failures", a
     }
 });
 
-test("closing plugin review windows rejects and prevents later install actions", async () => {
-    for (const operation of ["initPluginInstall", "updatePlugin"]) {
+test("closed or failed plugin reviews reject and prevent later install actions", async () => {
+    for (const [operation, failure] of [["initPluginInstall", "close"], ["updatePlugin", "close"], ["initPluginInstall", "load"], ["updatePlugin", "load"]]) {
         let commands = 0;
+        let closed = 0;
         class ReviewWindow extends EventEmitter {
             static getAllWindows() { return []; }
             webContents = { getTitle: () => "install" };
-            loadURL() {}
-            close() { this.emit("closed"); }
-            show() { queueMicrotask(() => { this.close(); this.emit("page-title-updated"); }); }
+            async loadURL() { if (failure === "load") throw new Error("Private load error"); }
+            close() { closed++; this.emit("closed"); this.emit("page-title-updated"); }
+            show() { if (failure === "close") queueMicrotask(() => this.close()); }
         }
         const mocks: Record<string, object> = {
             child_process: { exec: (_command: string, _options: object, callback: (error: null, stdout: string) => void) => { commands++; callback(null, ""); } },
@@ -7801,7 +7802,8 @@ test("closing plugin review windows rejects and prevents later install actions",
         api.setup();
         const pending = operation === "updatePlugin" ? api.updatePlugin(null, "fixture")
             : api.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "owner", "repo");
-        await assert.rejects(pending, /Review window closed/);
+        await assert.rejects(pending, failure === "close" ? /Review window closed/ : /Could not load the plugin review/);
+        assert.equal(closed, 1);
         assert.equal(commands, operation === "updatePlugin" ? 1 : 0);
     }
 });

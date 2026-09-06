@@ -149,7 +149,12 @@ export async function initPluginInstall(_, link: string, source: string, owner: 
             if (!decided) reject(new Error("Review window closed."));
             decided = true;
         });
-        win.loadURL(generateReviewPluginContent(meta));
+        win.loadURL(generateReviewPluginContent(meta)).catch(() => {
+            if (decided) return;
+            decided = true;
+            reject(new Error("Could not load the plugin review."));
+            win.close();
+        });
         win.on("page-title-updated", async e => {
             if (decided) return;
             switch (win.webContents.getTitle() as "abortInstall" | "reviewCode" | "install") {
@@ -370,7 +375,12 @@ export async function updatePlugin(_, directory: string) {
             description: pluginMeta.description,
             remote: pluginMeta.remote,
             commit: formatCommitMessages(rawOutput, pluginMeta.remote)
-        }));
+        })).catch(() => {
+            if (decided) return;
+            decided = true;
+            reject(new Error("Could not load the plugin review."));
+            win.close();
+        });
         win.on("page-title-updated", async e => {
             if (decided) return;
             if (win.webContents.getTitle().startsWith("openLink:")) {

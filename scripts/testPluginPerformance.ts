@@ -21,6 +21,45 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ReviewDB startup work stops with the plugin", async () => {
+    for (const stopAt of ["init", "timer", "request", "never"]) {
+        let resolveInit: () => void = () => {};
+        let resolveRequest: (user: object) => void = () => {};
+        let timer: (() => Promise<void>) | undefined;
+        let requests = 0;
+        let writes = 0;
+        const { default: plugin } = loadSource("src/plugins/reviewDB/index.tsx", {
+            "@components/Icons": {}, "@components/Paragraph": {}, "@components/Span": {},
+            "@utils/constants": { Devs: {} }, "@utils/misc": {}, "@utils/react": {},
+            "@utils/types": { __esModule: true, default: (value: object) => value },
+            "@webpack": { findCssClassesLazy: () => ({}) }, "@webpack/common": {},
+            "./auth": { Auth: { token: "token" }, initAuth: () => new Promise<void>(resolve => { resolveInit = resolve; }), updateAuth: () => { writes++; } },
+            "./components/ReviewModal": {}, "./entities": {},
+            "./reviewDbApi": { getCurrentUserInfo: () => { requests++; return new Promise(resolve => { resolveRequest = resolve; }); } },
+            "./settings": { settings: { store: {} } }, "./utils": {},
+        }, {
+            setTimeout: (callback: typeof timer) => { timer = callback; return 1; },
+            clearTimeout: () => { timer = undefined; },
+        });
+        const start = plugin.start();
+        if (stopAt === "init") plugin.stop();
+        resolveInit();
+        await start;
+        if (stopAt === "timer") plugin.stop();
+        if (stopAt === "init" || stopAt === "timer") {
+            assert.equal(timer, undefined);
+            assert.equal(requests, 0);
+            continue;
+        }
+        assert.ok(timer);
+        const pending = timer();
+        if (stopAt === "request") plugin.stop();
+        resolveRequest({ lastReviewID: 0 });
+        await pending;
+        assert.equal(writes, stopAt === "never" ? 1 : 0);
+    }
+});
+
 test("ReviewDB token preflights cannot authorize or send under a changed account", async () => {
     for (const operation of ["getReviewVotes", "addReview", "voteReview", "deleteReviewVote"]) {
         for (const token of [undefined, "first-token"]) {

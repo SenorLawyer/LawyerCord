@@ -41,6 +41,8 @@ const DMSideBarClasses = findCssClassesLazy("widgetPreviews");
 const ProfileCardClasses = findCssClassesLazy("cardsList", "firstCardContainer", "card", "container");
 const ProfileCardContainerClasses = findCssClassesLazy("innerContainer", "icons", "icon", "displayCount", "displayCountText", "displayCountTextColor", "breadcrumb");
 const ProfileCardOverlayClasses = findCssClassesLazy("overlay", "isPrivate", "outer");
+let startupGeneration = 0;
+let startupTimer: ReturnType<typeof setTimeout> | undefined;
 
 const guildPopoutPatch: NavContextMenuPatchCallback = (children, { guild }: { guild: Guild, onClose(): void; }) => {
     if (!guild) return;
@@ -88,15 +90,20 @@ export default definePlugin({
     },
 
     async start() {
+        const generation = ++startupGeneration;
         const s = settings.store;
         const { lastReviewId, notifyReviews } = s;
 
         await initAuth();
+        if (generation !== startupGeneration) return;
 
-        setTimeout(async () => {
+        startupTimer = setTimeout(async () => {
+            if (generation !== startupGeneration) return;
+            startupTimer = undefined;
             if (!Auth.token) return;
 
             const user = await getCurrentUserInfo();
+            if (generation !== startupGeneration) return;
             if (user) {
                 updateAuth({ user });
 
@@ -143,6 +150,12 @@ export default definePlugin({
                 }
             }
         }, 4000);
+    },
+
+    stop() {
+        startupGeneration++;
+        clearTimeout(startupTimer);
+        startupTimer = undefined;
     },
 
     renderProfileCollection: {

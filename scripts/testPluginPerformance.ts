@@ -46,6 +46,28 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("Cancelling a dependency restart leaves the requested plugin disabled", async () => {
+    const settings = { enabled: false };
+    let confirm = false;
+    let reloads = 0;
+    const helper = loadSource("src/equicordplugins/equicordHelper/utils.tsx", {
+        "@api/Notices": {},
+        "@api/PluginManager": {
+            plugins: { Fixture: { name: "Fixture" } },
+            startDependenciesRecursive: () => ({ restartNeeded: true, failures: [] })
+        },
+        "@api/Settings": { Settings: { plugins: { Fixture: settings } } },
+        "@webpack/common": { Alerts: { show: (options: { onCancel(): void; onConfirm(): void; }) => confirm ? options.onConfirm() : options.onCancel() } }
+    }, { React: { createElement: () => null }, location: { reload: () => reloads++ } });
+    assert.equal(await helper.toggleEnabled("Fixture"), false);
+    assert.equal(settings.enabled, false);
+    assert.equal(reloads, 0);
+    confirm = true;
+    assert.equal(await helper.toggleEnabled("Fixture"), true);
+    assert.equal(settings.enabled, true);
+    assert.equal(reloads, 1);
+});
+
 test("Desktop CSP preserves explicit hosts without allowing every origin", () => {
     const csp = loadSource("src/main/csp/index.ts", {
         "@main/settings": { NativeSettings: { store: { customCspRules: { "example.test": ["connect-src"] } } } },

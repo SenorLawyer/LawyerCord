@@ -5636,7 +5636,10 @@ test("scheduled interval changes only replace an active timer", async () => {
 });
 
 test("scheduling dialogs ignore account changes before and during saves", async () => {
-    for (const before of [true, false]) {
+    for (const scenario of ["before", "during", "unchanged", "edited"]) {
+        const before = scenario === "before";
+        const stale = before || scenario === "during";
+        const cleared: string[] = [];
         let userId = "first";
         let writes = 0;
         let finish: () => void = () => {};
@@ -5649,19 +5652,22 @@ test("scheduling dialogs ignore account changes before and during saves", async 
         const component = loadSource("src/equicordplugins/scheduledMessages/components/ScheduleTimeModal.tsx", {
             "@components/Button": {}, "@components/Heading": {}, "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
             "@utils/css": { classNameFactory: () => () => "" }, "@webpack": { findByPropsLazy: () => ({ dispatchToLastSubscribed: () => assert.fail("No stale clear") }) },
-            "@webpack/common": { Modal, UserStore: { getCurrentUser: () => ({ id: userId }) },
+            "@webpack/common": { Modal, DraftType: { ChannelMessage: 0 },
+                DraftStore: { getDraft: () => scenario === "edited" ? "New text" : "Text" },
+                DraftActions: { clearDraft: (channelId: string) => cleared.push(channelId) }, Toasts: { Type: {} }, UserStore: { getCurrentUser: () => ({ id: userId }) },
                 ChannelStore: { getChannel: () => ({ isPrivate: () => true }) }, useState: (value: unknown) => [value, () => {}],
-                showToast: () => assert.fail("No stale toast"), UploadManager: { clearAll: () => assert.fail("No stale upload clear") } },
+                showToast: () => { assert.equal(stale, false); }, UploadManager: { clearAll: () => { assert.equal(stale, false); } } },
             "../utils": { getChannelDisplayInfo: () => ({ name: "DM" }), addScheduledMessage: async () => {
                 writes++; await new Promise<void>(resolve => { finish = resolve; }); return { success: true };
             } }, "./Icons": {}
         }, { React }, "ScheduleTimeModalInner");
-        component({ userId: "first", channelId: "channel", content: "Text", close: () => assert.fail("No stale close") });
+        component({ userId: "first", channelId: "channel", content: "Text", close: () => { assert.equal(stale, false); } });
         if (before) userId = "second";
         const pending = schedule();
-        if (!before) { userId = "second"; finish(); }
+        if (!before) { if (scenario === "during") userId = "second"; finish(); }
         await pending;
         assert.equal(writes, before ? 0 : 1);
+        assert.deepEqual(cleared, scenario === "unchanged" ? ["channel"] : []);
     }
 });
 

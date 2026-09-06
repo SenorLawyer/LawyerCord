@@ -9,15 +9,13 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { Heading } from "@components/Heading";
 import { classNameFactory } from "@utils/css";
 import { RenderModalProps } from "@vencord/discord-types";
-import { findByPropsLazy } from "@webpack";
-import { ChannelStore, closeModal, DraftType, Modal, openModal, showToast, TextInput, Toasts, UploadManager, UserStore,useState } from "@webpack/common";
+import { ChannelStore, closeModal, DraftActions, DraftStore, DraftType, Modal, openModal, showToast, TextInput, Toasts, UploadManager, UserStore,useState } from "@webpack/common";
 
 import { ScheduledAttachment } from "../types";
 import { addScheduledMessage, getChannelDisplayInfo } from "../utils";
 import { ErrorIcon } from "./Icons";
 
 const cl = classNameFactory("vc-scheduled-msg-");
-const ComponentDispatch = findByPropsLazy("dispatchToLastSubscribed");
 
 function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, close, userId }: {
     userId: string;
@@ -65,7 +63,9 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
 
         if (UserStore.getCurrentUser()?.id !== userId) return;
         if (result.success) {
-            ComponentDispatch.dispatchToLastSubscribed("CLEAR_TEXT");
+            if (DraftStore.getDraft(channelId, DraftType.ChannelMessage) === content) {
+                DraftActions.clearDraft(channelId, DraftType.ChannelMessage);
+            }
             UploadManager.clearAll(channelId, DraftType.ChannelMessage);
             showToast("Message scheduled!", Toasts.Type.SUCCESS);
             close();

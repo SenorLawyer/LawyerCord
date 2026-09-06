@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Clear only the scheduled channel draft when its text still matches, instead of clearing the last active editor.
+
 - Keep an open scheduling dialog from acting on a different account or clearing its composer.
 
 - Discard pending scheduling attachment reads after an account change or plugin shutdown.

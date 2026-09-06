@@ -103,27 +103,6 @@
     font-weight: 400;
 }
 
-.questify-notice-card {
-    margin: 12px 0;
-    padding: 12px;
-    border-radius: 4px;
-    line-height: 0.2em;
-}
-
-.questify-notice-card-red {
-    border-left: 3px solid var(--status-danger);
-    background-color: color-mix(in srgb, var(--status-danger) 12%, transparent);
-}
-
-.questify-notice-card-blue {
-    border-left: 3px solid var(--background-brand);
-    background-color: color-mix(in srgb, var(--background-brand) 12%, transparent);
-}
-
-.questify-notice-card-solo {
-    margin: 12px 0 0;
-}
-
 .questify-settings-button > button[data-mana-component="button"] {
     border-radius: 3px;
 }

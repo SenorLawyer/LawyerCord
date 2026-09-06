@@ -239,3 +239,9 @@
 .visual-refresh .vc-toast-notifications-notification-root {
     background-color: var(--background-base-low);
 }
+
+.vc-toast-notifications-notification-root:focus-visible,
+.vc-toast-notifications-notification-close-btn:focus-visible {
+    outline: 2px solid var(--border-focus, #00b0f4);
+    outline-offset: -2px;
+}

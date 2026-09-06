@@ -13,7 +13,7 @@ import { join } from "path";
 import type { Theme } from "./types";
 
 function getThemePath(theme: Pick<Theme, "name">): string | null {
-    if (typeof theme?.name !== "string" || !theme.name) return null;
+    if (typeof theme?.name !== "string" || !theme.name || /[/\\:]/.test(theme.name) || theme.name.includes("\0")) return null;
     return ensureSafePath(THEMES_DIR, `${theme.name}.theme.css`);
 }
 

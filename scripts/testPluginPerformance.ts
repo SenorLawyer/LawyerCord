@@ -7322,3 +7322,21 @@ test("theme replacement preserves real installed files after partial writes and 
         }
     }
 });
+
+test("theme names cannot traverse directories or address file streams", async () => {
+    let pathChecks = 0;
+    const api = loadSource("src/equicordplugins/themeLibrary/native.ts", {
+        "@main/ipcMain": { ensureSafePath: (_root: string, file: string) => { pathChecks++; return file; } },
+        "@main/utils/constants": { THEMES_DIR: "themes" }, path,
+        fs: { existsSync: () => true }
+    }, { fetch: () => assert.fail("Invalid names must not start a download") });
+    for (const name of ["../outside", "folder/theme", "folder\\theme", "theme:stream", "bad\0name"]) {
+        assert.equal(await api.themeExists(null, { name }), false);
+        await assert.rejects(api.downloadTheme(null, { id: "1", name }), /Invalid theme details/);
+    }
+    assert.equal(pathChecks, 0);
+    for (const name of ["Material Discord", "日本語", "Dots.in.name"]) {
+        assert.equal(await api.themeExists(null, { name }), true);
+    }
+    assert.equal(pathChecks, 3);
+});

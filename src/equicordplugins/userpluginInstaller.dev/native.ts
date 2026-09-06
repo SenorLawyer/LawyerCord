@@ -45,28 +45,42 @@ export async function ensurePluginsDirectory() {
     }
 }
 
-export async function rmPlugin(_, name: string): Promise<boolean> {
-    getPluginDirectory(name);
-    const plugins = await getUserplugins().catch(() => { throw new Error("Could not read installed plugins."); });
-    const plugin = plugins.find(plugin => plugin.directory === name);
-    if (!plugin) throw new Error("Plugin not found.");
+let mutationPending = false;
 
-    const confirmation = await dialog.showMessageBox({
-        title: "Uninstall plugin",
-        message: `Uninstall ${plugin.name}`,
-        type: "error",
-        detail: `The uninstall of the userplugin ${plugin.name} has been requested. Would you like to do so?\n\nIf you did not initiate this, press No.`,
-        buttons: ["No", "Yes"]
-    });
-
-    if (confirmation.response !== 1) return false;
+async function runPluginMutation<T>(operation: () => Promise<T>): Promise<T> {
+    if (mutationPending) throw new Error("Another plugin operation is in progress. Finish it before trying again.");
+    mutationPending = true;
     try {
-        await rm(getPluginDirectory(name), { recursive: true });
-        await build();
-    } catch {
-        throw new Error("Could not uninstall the plugin.");
+        return await operation();
+    } finally {
+        mutationPending = false;
     }
-    return true;
+}
+
+export async function rmPlugin(_, name: string): Promise<boolean> {
+    return runPluginMutation(async () => {
+        getPluginDirectory(name);
+        const plugins = await getUserplugins().catch(() => { throw new Error("Could not read installed plugins."); });
+        const plugin = plugins.find(plugin => plugin.directory === name);
+        if (!plugin) throw new Error("Plugin not found.");
+
+        const confirmation = await dialog.showMessageBox({
+            title: "Uninstall plugin",
+            message: `Uninstall ${plugin.name}`,
+            type: "error",
+            detail: `The uninstall of the userplugin ${plugin.name} has been requested. Would you like to do so?\n\nIf you did not initiate this, press No.`,
+            buttons: ["No", "Yes"]
+        });
+
+        if (confirmation.response !== 1) return false;
+        try {
+            await rm(getPluginDirectory(name), { recursive: true });
+            await build();
+        } catch {
+            throw new Error("Could not uninstall the plugin.");
+        }
+        return true;
+    });
 }
 
 export async function isUpdateAvailableForPlugin(_, name: string): Promise<boolean> {
@@ -83,99 +97,101 @@ export async function isUpdateAvailableForPlugin(_, name: string): Promise<boole
 }
 
 export async function initPluginInstall(_, link: string, source: string, owner: string, repo: string): Promise<{ name: string; native: boolean; }> {
-    if (typeof link !== "string" || link.length > 8192 || typeof source !== "string" || typeof owner !== "string"
-        || typeof repo !== "string" || !repo || repo.length > 255 || repo === "." || repo === "..")
-        return Promise.reject(new Error("Invalid link."));
-    const verifiedRegex = link.match(CLONE_LINK_REGEX);
-    const idpl = source === "plugins.nin0.dev" ? 1 : 0;
-    if (!verifiedRegex || verifiedRegex[0] !== link || verifiedRegex[[1, 4][idpl]] !== source || verifiedRegex[[2, 5][idpl]] !== owner || verifiedRegex[[3, 6][idpl]] !== repo)
-        return Promise.reject(new Error("Invalid link."));
+    return runPluginMutation(async () => {
+        if (typeof link !== "string" || link.length > 8192 || typeof source !== "string" || typeof owner !== "string"
+            || typeof repo !== "string" || !repo || repo.length > 255 || repo === "." || repo === "..")
+            return Promise.reject(new Error("Invalid link."));
+        const verifiedRegex = link.match(CLONE_LINK_REGEX);
+        const idpl = source === "plugins.nin0.dev" ? 1 : 0;
+        if (!verifiedRegex || verifiedRegex[0] !== link || verifiedRegex[[1, 4][idpl]] !== source || verifiedRegex[[2, 5][idpl]] !== owner || verifiedRegex[[3, 6][idpl]] !== repo)
+            return Promise.reject(new Error("Invalid link."));
 
-    // Ask for clone
-    const cloneDialog = await dialog.showMessageBox({
-        title: "Clone userplugin",
-        message: `You are about to clone a userplugin from ${source}.`,
-        type: "question",
-        detail: `The repository name is "${repo}" and it is owned by "${owner}".\nThe repository URL is ${link}\n\n(If you did not request this intentionally, choose Cancel)`,
-        buttons: ["Cancel", "Clone repository and continue install", "Open repository in browser"]
-    }).catch(() => { throw new Error("Could not open the clone confirmation."); });
-    switch (cloneDialog.response) {
-        case 0: {
-            throw new Error("Rejected by user");
-        }
-        case 1: {
-            await cloneRepo(link, repo).catch(() => { throw new Error("Could not clone the plugin."); });
-            break;
-        }
-        case 2: {
-            await shell.openExternal(link).catch(() => { throw new Error("Could not open the repository."); });
-            throw new Error("silentStop");
-        }
-    }
-
-    // Get plugin meta
-    const meta = await getPluginMeta(join(vencordPath, "..", "src", "userplugins", repo))
-        .catch(() => { throw new Error("Could not read the plugin metadata."); });
-
-    return new Promise<{ name: string; native: boolean; }>((resolve, reject) => {
-        // Review plugin
-        const win = new BrowserWindow({
-            maximizable: false,
-            minimizable: false,
-            width: 560,
-            height: meta.usesNative || meta.usesPreSend ? 650 : 360,
-            resizable: false,
-            webPreferences: {
-                devTools: true
-            },
-            title: "Review userplugin",
-            modal: true,
-            parent: BrowserWindow.getAllWindows()[0],
-            show: false,
-            autoHideMenuBar: true
-        });
-        let decided = false;
-        win.once("closed", () => {
-            if (!decided) reject(new Error("Review window closed."));
-            decided = true;
-        });
-        win.loadURL(generateReviewPluginContent(meta)).catch(() => {
-            if (decided) return;
-            decided = true;
-            reject(new Error("Could not load the plugin review."));
-            win.close();
-        });
-        win.on("page-title-updated", async e => {
-            if (decided) return;
-            switch (win.webContents.getTitle() as "abortInstall" | "reviewCode" | "install") {
-                case "abortInstall": {
-                    decided = true;
-                    win.close();
-                    try {
-                        await rm(getPluginDirectory(repo), { recursive: true });
-                    } catch {
-                        return reject(new Error("Could not remove the cancelled plugin installation."));
-                    }
-                    return reject("Rejected by user");
-                }
-                case "install": {
-                    decided = true;
-                    win.close();
-                    try {
-                        await build();
-                    }
-                    catch (e) {
-                        reject((e as Error).toString());
-                    }
-                    resolve({
-                        name: meta.name,
-                        native: meta.usesNative
-                    });
-                    break;
-                }
+        // Ask for clone
+        const cloneDialog = await dialog.showMessageBox({
+            title: "Clone userplugin",
+            message: `You are about to clone a userplugin from ${source}.`,
+            type: "question",
+            detail: `The repository name is "${repo}" and it is owned by "${owner}".\nThe repository URL is ${link}\n\n(If you did not request this intentionally, choose Cancel)`,
+            buttons: ["Cancel", "Clone repository and continue install", "Open repository in browser"]
+        }).catch(() => { throw new Error("Could not open the clone confirmation."); });
+        switch (cloneDialog.response) {
+            case 0: {
+                throw new Error("Rejected by user");
             }
+            case 1: {
+                await cloneRepo(link, repo).catch(() => { throw new Error("Could not clone the plugin."); });
+                break;
+            }
+            case 2: {
+                await shell.openExternal(link).catch(() => { throw new Error("Could not open the repository."); });
+                throw new Error("silentStop");
+            }
+        }
+
+        // Get plugin meta
+        const meta = await getPluginMeta(join(vencordPath, "..", "src", "userplugins", repo))
+            .catch(() => { throw new Error("Could not read the plugin metadata."); });
+
+        return new Promise<{ name: string; native: boolean; }>((resolve, reject) => {
+            // Review plugin
+            const win = new BrowserWindow({
+                maximizable: false,
+                minimizable: false,
+                width: 560,
+                height: meta.usesNative || meta.usesPreSend ? 650 : 360,
+                resizable: false,
+                webPreferences: {
+                    devTools: true
+                },
+                title: "Review userplugin",
+                modal: true,
+                parent: BrowserWindow.getAllWindows()[0],
+                show: false,
+                autoHideMenuBar: true
+            });
+            let decided = false;
+            win.once("closed", () => {
+                if (!decided) reject(new Error("Review window closed."));
+                decided = true;
+            });
+            win.loadURL(generateReviewPluginContent(meta)).catch(() => {
+                if (decided) return;
+                decided = true;
+                reject(new Error("Could not load the plugin review."));
+                win.close();
+            });
+            win.on("page-title-updated", async e => {
+                if (decided) return;
+                switch (win.webContents.getTitle() as "abortInstall" | "reviewCode" | "install") {
+                    case "abortInstall": {
+                        decided = true;
+                        win.close();
+                        try {
+                            await rm(getPluginDirectory(repo), { recursive: true });
+                        } catch {
+                            return reject(new Error("Could not remove the cancelled plugin installation."));
+                        }
+                        return reject("Rejected by user");
+                    }
+                    case "install": {
+                        decided = true;
+                        win.close();
+                        try {
+                            await build();
+                        }
+                        catch (e) {
+                            reject((e as Error).toString());
+                        }
+                        resolve({
+                            name: meta.name,
+                            native: meta.usesNative
+                        });
+                        break;
+                    }
+                }
+            });
+            win.show();
         });
-        win.show();
     });
 }
 
@@ -344,109 +360,111 @@ export async function getUserplugins() {
 }
 
 export async function updatePlugin(_, directory: string) {
-    const pluginDir = getPluginDirectory(directory);
-    const pluginMeta = await getPluginMeta(pluginDir)
-        .catch(() => { throw new Error("Could not read the plugin metadata."); });
-    const target = await new Promise<string>((resolve, reject) => {
-        exec("git rev-parse origin/HEAD", { cwd: pluginDir }, (error, stdout) => {
-            const commit = stdout.trim();
-            if (error || !/^(?:[a-f\d]{40}|[a-f\d]{64})$/.test(commit)) reject(new Error("Could not resolve the plugin update."));
-            else resolve(commit);
+    return runPluginMutation(async () => {
+        const pluginDir = getPluginDirectory(directory);
+        const pluginMeta = await getPluginMeta(pluginDir)
+            .catch(() => { throw new Error("Could not read the plugin metadata."); });
+        const target = await new Promise<string>((resolve, reject) => {
+            exec("git rev-parse origin/HEAD", { cwd: pluginDir }, (error, stdout) => {
+                const commit = stdout.trim();
+                if (error || !/^(?:[a-f\d]{40}|[a-f\d]{64})$/.test(commit)) reject(new Error("Could not resolve the plugin update."));
+                else resolve(commit);
+            });
         });
-    });
-    const rawOutput = await new Promise<string>((resolve, reject) => {
-        exec(`git log HEAD..${target} --oneline --pretty=format:%an////////%h////////%H////////%s`, {
-            cwd: pluginDir
-        }, (error, stdout) => {
-            if (error) reject(new Error("Could not read the plugin update history."));
-            else resolve(stdout);
+        const rawOutput = await new Promise<string>((resolve, reject) => {
+            exec(`git log HEAD..${target} --oneline --pretty=format:%an////////%h////////%H////////%s`, {
+                cwd: pluginDir
+            }, (error, stdout) => {
+                if (error) reject(new Error("Could not read the plugin update history."));
+                else resolve(stdout);
+            });
         });
-    });
-    return new Promise<{ name: string; native: boolean; }>((resolve, reject) => {
+        return new Promise<{ name: string; native: boolean; }>((resolve, reject) => {
 
-        const win = new BrowserWindow({
-            maximizable: false,
-            minimizable: false,
-            width: 560,
-            height: 600,
-            resizable: false,
-            webPreferences: {
-                devTools: true
-            },
-            title: "Review userplugin",
-            modal: true,
-            parent: BrowserWindow.getAllWindows()[0],
-            show: false,
-            autoHideMenuBar: true
-        });
+            const win = new BrowserWindow({
+                maximizable: false,
+                minimizable: false,
+                width: 560,
+                height: 600,
+                resizable: false,
+                webPreferences: {
+                    devTools: true
+                },
+                title: "Review userplugin",
+                modal: true,
+                parent: BrowserWindow.getAllWindows()[0],
+                show: false,
+                autoHideMenuBar: true
+            });
 
-        let decided = false;
-        win.once("closed", () => {
-            if (!decided) reject(new Error("Review window closed."));
-            decided = true;
-        });
-        win.loadURL(generateUpdatePluginContent({
-            name: pluginMeta.name,
-            description: pluginMeta.description,
-            remote: pluginMeta.remote,
-            commit: formatCommitMessages(rawOutput, pluginMeta.remote)
-        })).catch(() => {
-            if (decided) return;
-            decided = true;
-            reject(new Error("Could not load the plugin review."));
-            win.close();
-        });
-        win.on("page-title-updated", async e => {
-            if (decided) return;
-            const title = win.webContents.getTitle();
-            if (title.startsWith("openLink:")) {
-                try {
-                    const link = new URL(title.slice("openLink:".length));
-                    const source = new URL(pluginMeta.remote);
-                    const commitBase = `${pluginMeta.remote.replace("plugins.nin0.dev", "git.nin0.dev/userplugins")}/commit/`;
-                    if (source.protocol !== "https:" || source.username || source.password
-                        || (link.href !== source.href && (!link.href.startsWith(commitBase) || !/^[a-f\d]{40,64}$/.test(link.href.slice(commitBase.length)))))
-                        throw new Error("Invalid update link.");
-                    await shell.openExternal(link.href);
-                } catch {
-                    if (!decided) {
-                        decided = true;
-                        reject(new Error("Could not open the update link."));
-                        win.close();
-                    }
-                }
-                return;
-            }
-            switch (title) {
-                case "abortInstall": {
-                    decided = true;
-                    win.close();
-                    return reject("Rejected by user");
-                }
-                case "install": {
-                    decided = true;
-                    win.close();
+            let decided = false;
+            win.once("closed", () => {
+                if (!decided) reject(new Error("Review window closed."));
+                decided = true;
+            });
+            win.loadURL(generateUpdatePluginContent({
+                name: pluginMeta.name,
+                description: pluginMeta.description,
+                remote: pluginMeta.remote,
+                commit: formatCommitMessages(rawOutput, pluginMeta.remote)
+            })).catch(() => {
+                if (decided) return;
+                decided = true;
+                reject(new Error("Could not load the plugin review."));
+                win.close();
+            });
+            win.on("page-title-updated", async e => {
+                if (decided) return;
+                const title = win.webContents.getTitle();
+                if (title.startsWith("openLink:")) {
                     try {
-                        await new Promise<void>((resolve, reject) => exec(`git rebase ${target}`, {
-                            cwd: pluginDir
-                        }, error => {
-                            if (error) reject(new Error("Could not apply the plugin update. Check for conflicting local changes."));
-                            else resolve();
-                        }));
-                        await build();
-                        const updatedMeta = await getPluginMeta(pluginDir);
-                        resolve({
-                            name: updatedMeta.name,
-                            native: pluginMeta.usesNative || updatedMeta.usesNative
-                        });
+                        const link = new URL(title.slice("openLink:".length));
+                        const source = new URL(pluginMeta.remote);
+                        const commitBase = `${pluginMeta.remote.replace("plugins.nin0.dev", "git.nin0.dev/userplugins")}/commit/`;
+                        if (source.protocol !== "https:" || source.username || source.password
+                            || (link.href !== source.href && (!link.href.startsWith(commitBase) || !/^[a-f\d]{40,64}$/.test(link.href.slice(commitBase.length)))))
+                            throw new Error("Invalid update link.");
+                        await shell.openExternal(link.href);
+                    } catch {
+                        if (!decided) {
+                            decided = true;
+                            reject(new Error("Could not open the update link."));
+                            win.close();
+                        }
                     }
-                    catch {
-                        reject(new Error("Could not update the plugin. Check the repository and try building from the terminal."));
-                    }
-                    break;
+                    return;
                 }
-            }
+                switch (title) {
+                    case "abortInstall": {
+                        decided = true;
+                        win.close();
+                        return reject("Rejected by user");
+                    }
+                    case "install": {
+                        decided = true;
+                        win.close();
+                        try {
+                            await new Promise<void>((resolve, reject) => exec(`git rebase ${target}`, {
+                                cwd: pluginDir
+                            }, error => {
+                                if (error) reject(new Error("Could not apply the plugin update. Check for conflicting local changes."));
+                                else resolve();
+                            }));
+                            await build();
+                            const updatedMeta = await getPluginMeta(pluginDir);
+                            resolve({
+                                name: updatedMeta.name,
+                                native: pluginMeta.usesNative || updatedMeta.usesNative
+                            });
+                        }
+                        catch {
+                            reject(new Error("Could not update the plugin. Check the repository and try building from the terminal."));
+                        }
+                        break;
+                    }
+                }
+            });
+            win.show();
         });
-        win.show();
     });
 }

@@ -6,6 +6,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Remove the empty contact-history startup wrapper and its unnecessary async yield.
 - Preserve saved hidden servers when the plugin stops before loading finishes, and flush only pending edits.
 - Preserve existing Chromium feature flags when applying startup workarounds.
 - Remove an unused native download helper and correct the pull request release instructions.

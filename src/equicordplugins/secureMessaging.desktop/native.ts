@@ -1894,7 +1894,7 @@ export async function decryptIncoming(
     if (!checkedInput.ok) return invalidInput(checkedInput.error);
     if (!screenCaptureProtectionEnabled || !screenCaptureProtectionHealthy)
         return { status: "failed", error: "screen_capture_protection_failed" };
-    return runSerialized(async (): Promise<DecryptIncomingResult> => {
+    const result = await runSerialized(async (): Promise<DecryptIncomingResult> => {
         const context = await loadAccount(user.value);
         if (context.created) await saveVault(context.vault);
 
@@ -2011,6 +2011,9 @@ export async function decryptIncoming(
         await saveVault(context.vault);
         return { status: "decrypted", plaintext, attachmentBundle, stickers, counter: envelope.q, envelopeId: envelope.i };
     });
+    if (result.status === "decrypted" && (!screenCaptureProtectionEnabled || !screenCaptureProtectionHealthy))
+        return { status: "failed", error: "screen_capture_protection_failed" };
+    return result;
 }
 
 export async function decryptIncomingAttachments(
@@ -2054,6 +2057,10 @@ export async function decryptIncomingAttachments(
                     senderUserId: message.discordAuthorId,
                 }),
             })));
+            if (!screenCaptureProtectionEnabled || !screenCaptureProtectionHealthy) {
+                for (const attachment of resolved) attachment.data.fill(0);
+                return { status: "failed", error: "screen_capture_protection_failed" };
+            }
             return { status: "decrypted", plaintext: decrypted.plaintext, attachments: resolved };
         } finally {
             masterKey.fill(0);

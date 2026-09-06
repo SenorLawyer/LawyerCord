@@ -15,7 +15,7 @@ import { pathToFileURL } from "node:url";
 import { build, type Plugin } from "esbuild";
 import type { IpcMainInvokeEvent } from "electron";
 
-import { generateAttachmentBundleMaterial, serializeSecurePlaintext } from "../src/equicordplugins/secureMessaging.desktop/attachments";
+import { attachmentBundleRoot, encryptAttachmentBytes, generateAttachmentBundleMaterial, serializeSecurePlaintext } from "../src/equicordplugins/secureMessaging.desktop/attachments";
 import type { ConversationSnapshot } from "../src/equicordplugins/secureMessaging.desktop/native";
 
 type NativeModule = typeof import("../src/equicordplugins/secureMessaging.desktop/native");
@@ -625,6 +625,12 @@ async function testNativeLifecycle(bundlePath: string, dataDir: string): Promise
     decrypted = await native.decryptIncoming(DISCORD_EVENT, BOB_ID, bobDmInput);
     expectStatus(decrypted, "decrypted", "Bob decrypts Alice DM");
     assert.equal(decrypted.plaintext, dmPlaintext);
+    const pendingDecrypt = native.decryptIncoming(DISCORD_EVENT, BOB_ID, bobDmInput);
+    expectStatus(await native.setScreenCaptureProtection(DISCORD_EVENT, false), "applied", "disable protection during pending decryption");
+    const unprotectedResult = await pendingDecrypt;
+    expectStatus(unprotectedResult, "failed", "pending decryption cannot return plaintext after protection is disabled");
+    assert.equal(unprotectedResult.error, "screen_capture_protection_failed");
+    expectStatus(await native.setScreenCaptureProtection(DISCORD_EVENT, true), "applied", "restore protection after pending decryption");
     const aliceOwnDmInput = {
         ...bobDmInput,
         discordMessageId: messageId(11),
@@ -661,6 +667,52 @@ async function testNativeLifecycle(bundlePath: string, dataDir: string): Promise
     assert.equal(decryptedAttachmentMessage.plaintext, "");
     assert.equal(decryptedAttachmentMessage.attachmentBundle?.count, 2);
     assert.deepEqual(decryptedAttachmentMessage.stickers, []);
+    const downloadMaterial = generateAttachmentBundleMaterial(1);
+    const ciphertext = await encryptAttachmentBytes({
+        bundleId: downloadMaterial.descriptor.id,
+        channelId: DM_CHANNEL_ID,
+        count: 1,
+        data: new Uint8Array([42]),
+        index: 0,
+        masterKey: downloadMaterial.keyBytes,
+        metadata: { name: "test.bin", mimeType: "application/octet-stream", size: 1, spoiler: false, description: null, width: null, height: null, duration: null },
+        senderUserId: ALICE_ID,
+    });
+    downloadMaterial.keyBytes.fill(0);
+    const downloadMessage = await native.encryptOutgoing(DISCORD_EVENT, ALICE_ID, {
+        plaintext: serializeSecurePlaintext("", {
+            ...downloadMaterial.descriptor,
+            root: await attachmentBundleRoot(downloadMaterial.descriptor.id, [ciphertext]),
+        }),
+        snapshot: aliceDm,
+    });
+    expectStatus(downloadMessage, "encrypted", "encrypt downloadable attachment");
+    const downloadStarted = Promise.withResolvers<void>();
+    const downloadResponse = Promise.withResolvers<Response>();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+        downloadStarted.resolve();
+        return downloadResponse.promise;
+    };
+    try {
+        const attachmentId = "300000000000000001";
+        const url = `https://cdn.discordapp.com/attachments/${DM_CHANNEL_ID}/${attachmentId}/test.pcaf`;
+        const pendingAttachments = native.decryptIncomingAttachments(DISCORD_EVENT, BOB_ID, {
+            ...attachmentMessageInput,
+            content: downloadMessage.content,
+            discordMessageId: messageId(16),
+            attachments: [{ id: attachmentId, url, proxyUrl: url, size: ciphertext.byteLength }],
+        });
+        await downloadStarted.promise;
+        expectStatus(await native.setScreenCaptureProtection(DISCORD_EVENT, false), "applied", "disable protection during attachment download");
+        downloadResponse.resolve(new Response(new Uint8Array(ciphertext)));
+        const result = await pendingAttachments;
+        expectStatus(result, "failed", "attachment download cannot expose plaintext after protection is disabled");
+        assert.equal(result.error, "screen_capture_protection_failed");
+    } finally {
+        globalThis.fetch = originalFetch;
+        await native.setScreenCaptureProtection(DISCORD_EVENT, true);
+    }
     const secureSticker = { formatType: 3, id: "749054660769218631", name: "Wave" };
     const encryptedStickerMessage = await native.encryptOutgoing(DISCORD_EVENT, ALICE_ID, {
         plaintext: serializeSecurePlaintext("", null, [secureSticker]),

@@ -21,6 +21,24 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("typing summaries name two people and count only the remaining people", () => {
+    const React = { Fragment: "fragment", createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props, children }) };
+    const { buildSeveralUsers } = loadSource("src/plugins/typingTweaks/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }), migratePluginToSettings() {} },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+        "@equicordplugins/customUserColors": {}, "@utils/constants": { Devs: {}, EquicordDevs: {} },
+        "@utils/css": { classNameFactory: () => () => "" }, "@utils/discord": {}, "@utils/guards": {}, "@utils/Logger": {},
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack/common": { React }, "./style.css?managed": {},
+    });
+    for (const total of [4, 5, 8]) {
+        const users = Array.from({ length: total }, (_, id) => ({ id: String(id) }));
+        const tree = buildSeveralUsers({ users, count: total - 2, guildId: "guild" });
+        assert.equal(tree.children[0].length, 2);
+        assert.equal(tree.children[2], total - 2);
+    }
+});
+
 test("missing friendship dates preserve the original status text", () => {
     const { default: plugin } = loadSource("src/plugins/sortFriendRequests/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({ store: {} }), migratePluginSettings() {} },

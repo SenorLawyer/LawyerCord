@@ -7,7 +7,7 @@
 import type { UserData } from "@song-spotlight/api/structs";
 import { showToast, Toasts, UserStore } from "@webpack/common";
 
-import { useAuthorizationStore } from "./stores/AuthorizationStore";
+import { Token, useAuthorizationStore } from "./stores/AuthorizationStore";
 import { useSongStore } from "./stores/SongStore";
 
 const api = "https://dc.songspotlight.nexpid.xyz/";
@@ -20,63 +20,72 @@ export const apiConstants = {
     songLimit: 6,
 };
 
-let refreshPromise: Promise<boolean> | undefined;
-async function refreshAccessToken() {
-    const token = useAuthorizationStore.getState().getToken();
-    if (!token) return false;
+const refreshes = new WeakMap<Token, Promise<Token | undefined>>();
+function refreshAccessToken(userId: string, token: Token) {
+    const pending = refreshes.get(token);
+    if (pending) return pending;
 
-    return refreshPromise ??= fetch(new URL("api/auth/refresh", apiConstants.api), {
+    const promise = fetch(new URL("api/auth/refresh", apiConstants.api), {
         method: "POST",
         headers: {
             "X-Refresh-Token": token.refresh,
         },
         body: token.access,
+        redirect: "error",
     }).then(async res => {
-        if (!res.ok) return false;
+        if (!res.ok) return;
 
         const access = await res.text();
-        useAuthorizationStore.getState().setToken(access, token.refresh);
-        return true;
-    }).finally(() => refreshPromise = undefined);
+        const auth = useAuthorizationStore.getState();
+        if (auth.getToken(userId) !== token) return;
+        auth.setToken(access, token.refresh, userId);
+        return auth.getToken(userId);
+    }).finally(() => refreshes.delete(token));
+    refreshes.set(token, promise);
+    return promise;
 }
 
-export async function authFetch(url: string | URL, options?: RequestInit, retried = false) {
+export async function authFetch(url: string | URL, options?: RequestInit, userId = UserStore.getCurrentUser()?.id) {
     url = new URL(url);
     try {
-        const token = useAuthorizationStore.getState().getToken();
-        const res = await fetch(url, {
-            ...options,
-            headers: {
-                ...options?.headers,
-                Authorization: token?.access,
-            } as HeadersInit,
-        });
+        if (url.origin !== new URL(api).origin) throw new Error("Invalid Song Spotlight URL.");
+        let token = useAuthorizationStore.getState().getToken(userId);
+        for (let attempt = 0; attempt < 2; attempt++) {
+            if (!userId || UserStore.getCurrentUser()?.id !== userId || useAuthorizationStore.getState().getToken(userId) !== token)
+                throw new Error("The Song Spotlight account changed. Please try again.");
+            const headers = new Headers(options?.headers);
+            if (token) headers.set("Authorization", token.access);
+            const res = await fetch(url, {
+                ...options,
+                headers,
+                redirect: "error",
+            });
 
-        if (res.ok) return res;
+            if (res.ok) return res;
 
-        // not modified
-        if (res.status === 304) return null;
+            // not modified
+            if (res.status === 304) return null;
 
-        const text = await res.text();
+            const text = await res.text();
 
-        // unauthorized
-        if (res.status === 401) {
-            const retry = !retried && await refreshAccessToken();
-            if (retry) return await authFetch(url, options, true);
-            else {
-                useAuthorizationStore.getState().deleteTokens();
-                showToast("You have been signed out from Song Spotlight. Please sign in again.", Toasts.Type.FAILURE);
+            // unauthorized
+            if (res.status === 401) {
+                const refreshed = attempt === 0 && token ? await refreshAccessToken(userId, token) : undefined;
+                if (refreshed) {
+                    token = refreshed;
+                    continue;
+                }
+                if (useAuthorizationStore.getState().getToken(userId) === token)
+                    useAuthorizationStore.getState().deleteTokens(userId);
+                throw new Error("You have been signed out from Song Spotlight. Please sign in again.");
+            } else {
+                throw new Error(
+                    !text.includes("<body>") && res.status >= 400 && res.status <= 599
+                        ? `Song Spotlight: ${text}`
+                        : `Song Spotlight fetch error at ${url.pathname}`,
+                );
             }
-        } else {
-            showToast(
-                !text.includes("<body>") && res.status >= 400 && res.status <= 599
-                    ? `Song Spotlight: ${text}`
-                    : `Song Spotlight fetch error at ${url.pathname}`,
-                Toasts.Type.FAILURE,
-            );
         }
-
-        throw new Error(text);
     } catch (error) {
         showToast(`Song Spotlight: ${error}`, Toasts.Type.FAILURE);
 
@@ -85,15 +94,17 @@ export async function authFetch(url: string | URL, options?: RequestInit, retrie
 }
 
 export async function getData(): Promise<UserData | undefined> {
+    const userId = UserStore.getCurrentUser()?.id;
     return await authFetch(new URL("api/data", apiConstants.api), {
         headers: {
-            "If-Modified-Since": useSongStore.getState().self?.at,
+            "If-Modified-Since": useSongStore.getState().users[userId]?.at,
         } as HeadersInit,
     }).then(async res => {
-        if (!res) return useSongStore.getState().self?.data;
+        if (!res) return useSongStore.getState().users[userId]?.data;
 
         const data = await res.json();
         useSongStore.getState().update({
+            userId,
             data,
             at: res.headers.get("Last-Modified") || undefined,
         });
@@ -120,6 +131,7 @@ export async function listData(userId: string): Promise<UserData | undefined> {
     });
 }
 export async function saveData(data: UserData): Promise<true> {
+    const userId = UserStore.getCurrentUser()?.id;
     return await authFetch(new URL("api/data", apiConstants.api), {
         method: "PUT",
         body: JSON.stringify(data),
@@ -131,6 +143,7 @@ export async function saveData(data: UserData): Promise<true> {
         .then(json => {
             useSongStore
                 .getState().update({
+                    userId,
                     data,
                     at: new Date().toUTCString(),
                 });
@@ -138,12 +151,17 @@ export async function saveData(data: UserData): Promise<true> {
         });
 }
 export async function deleteData(): Promise<true> {
+    const userId = UserStore.getCurrentUser()?.id;
+    const token = useAuthorizationStore.getState().getToken(userId);
     return await authFetch(new URL("api/data", apiConstants.api), {
         method: "DELETE",
     })
         .then(res => res?.json())
         .then(json => {
-            useSongStore.getState().delete();
+            useSongStore.getState().delete(userId);
+            const current = useAuthorizationStore.getState().getToken(userId);
+            if (current === token || (token?.refresh && current?.refresh === token.refresh))
+                useAuthorizationStore.getState().deleteTokens(userId);
             return json;
         });
 }

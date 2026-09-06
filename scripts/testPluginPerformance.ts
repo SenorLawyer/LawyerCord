@@ -20,6 +20,155 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("Song Spotlight keeps refreshes, logout and pending data bound to their account", async () => {
+    let account = "first";
+    const requests: Array<{ url: URL; options: RequestInit; resolve(response: Response): void; }> = [];
+    const common = {
+        UserStore: { getCurrentUser: () => ({ id: account }) },
+        showToast() {}, Toasts: { Type: {} },
+        zustandPersist: (definition: unknown) => definition,
+        zustandCreate: (definition: (set: (next: object) => void, get: () => object) => object) => {
+            let state = definition(next => { state = { ...state, ...next }; }, () => state);
+            return { getState: () => state };
+        },
+    };
+    const storeMocks = {
+        "@webpack/common": common,
+        "@utils/lazy": { proxyLazy: (factory: () => object) => factory() },
+        "@api/index": { DataStore: {} },
+    };
+    const authModule = loadSource("src/equicordplugins/songSpotlight.desktop/lib/stores/AuthorizationStore.ts", storeMocks);
+    const songModule = loadSource("src/equicordplugins/songSpotlight.desktop/lib/stores/SongStore.ts", storeMocks);
+    const auth = authModule.useAuthorizationStore;
+    const songs = songModule.useSongStore;
+    auth.getState().setToken("first-access", "first-refresh", "first");
+    auth.getState().setToken("second-access", "second-refresh", "second");
+    const api = loadSource("src/equicordplugins/songSpotlight.desktop/lib/api.ts", {
+        "@webpack/common": common, "./stores/AuthorizationStore": authModule, "./stores/SongStore": songModule,
+    }, {
+        URL, Headers,
+        fetch: (url: URL, options: RequestInit) => new Promise<Response>(resolve => requests.push({ url, options, resolve })),
+    });
+    const first = api.authFetch(new URL("api/data", api.apiConstants.api), { method: "PUT", body: "first songs" });
+    const firstRejected = assert.rejects(first, /account changed/);
+    requests[0].resolve(new Response("expired", { status: 401 }));
+    await setImmediate();
+    assert.equal(requests[1].options.body, "first-access");
+    account = "second";
+    const second = api.authFetch(new URL("api/data", api.apiConstants.api));
+    requests[2].resolve(new Response("expired", { status: 401 }));
+    await setImmediate();
+    assert.equal(requests[3].options.body, "second-access", "accounts never share a refresh");
+    requests[1].resolve(new Response("first-renewed"));
+    await firstRejected;
+    assert.equal(requests.length, 4, "an account switch must not retry the old PUT");
+    assert.equal(auth.getState().getToken("first").access, "first-renewed");
+    assert.equal(auth.getState().getToken("second").access, "second-access");
+    requests[3].resolve(new Response("second-renewed"));
+    await setImmediate();
+    assert.equal(new Headers(requests[4].options.headers).get("Authorization"), "second-renewed");
+    requests[4].resolve(new Response("[]"));
+    await second;
+
+    const pending = api.authFetch(new URL("api/data", api.apiConstants.api));
+    const signedOut = assert.rejects(pending);
+    requests[5].resolve(new Response("expired", { status: 401 }));
+    await setImmediate();
+    auth.getState().deleteTokens();
+    requests[6].resolve(new Response("must-not-restore"));
+    await signedOut;
+    assert.equal(auth.getState().getToken("second"), undefined);
+    assert.equal(auth.getState().getToken("first").access, "first-renewed");
+
+    account = "first";
+    songs.getState().update({ userId: "second", data: ["keep"] });
+    const save = api.saveData(["first song"]);
+    account = "second";
+    requests[7].resolve(new Response("true"));
+    await save;
+    assert.deepEqual(Array.from(songs.getState().users.first.data), ["first song"]);
+    assert.deepEqual(Array.from(songs.getState().users.second.data), ["keep"]);
+    account = "first";
+    const read = api.getData();
+    account = "second";
+    requests[8].resolve(new Response('["read first"]'));
+    await read;
+    assert.deepEqual(Array.from(songs.getState().users.first.data), ["read first"]);
+    assert.deepEqual(Array.from(songs.getState().users.second.data), ["keep"]);
+    account = "first";
+    const deletion = api.deleteData();
+    auth.getState().setToken("new-login", "new-refresh", "first");
+    auth.getState().setToken("keep-login", "keep-refresh", "second");
+    account = "second";
+    requests[9].resolve(new Response("true"));
+    await deletion;
+    assert.equal(songs.getState().users.first, undefined);
+    assert.deepEqual(Array.from(songs.getState().users.second.data), ["keep"]);
+    assert.equal(auth.getState().getToken("first").access, "new-login");
+    assert.equal(auth.getState().getToken("second").access, "keep-login");
+    account = "first";
+    const refreshedDeletion = api.deleteData();
+    requests[10].resolve(new Response("expired", { status: 401 }));
+    await setImmediate();
+    requests[11].resolve(new Response("new-login-refreshed"));
+    await setImmediate();
+    requests[12].resolve(new Response("true"));
+    await refreshedDeletion;
+    assert.equal(auth.getState().getToken("first"), undefined, "deletion signs out the same refresh session");
+    assert.equal(auth.getState().getToken("second").access, "keep-login");
+    await assert.rejects(api.authFetch("https://other.example/api/data"), /Invalid Song Spotlight URL/);
+    assert.equal(requests.length, 13, "foreign URLs never receive credentials");
+});
+
+test("Song Spotlight OAuth accepts only its redirect and the initiating account", async () => {
+    let account = "first";
+    let token: object | undefined;
+    let callback: (value: { location: string; }) => Promise<void> = async () => assert.fail("modal missing");
+    const requests: Array<{ options: RequestInit; resolve(response: Response): void; }> = [];
+    const writes: string[] = [];
+    const redirectURL = "https://dc.songspotlight.nexpid.xyz/api/auth/authorize";
+    const { presentOAuth2Modal } = loadSource("src/equicordplugins/songSpotlight.desktop/lib/oauth2.tsx", {
+        "@vencord/discord-types/enums": { ApplicationIntegrationType: {} },
+        "@webpack/common": {
+            UserStore: { getCurrentUser: () => ({ id: account }) },
+            OAuth2AuthorizeModal: "modal", openModal: (render: (props: object) => void) => render({}),
+            showToast() {}, Toasts: { Type: {} },
+        },
+        "./api": { apiConstants: { oauth2: { redirectURL } }, getData: async () => {} },
+        "./utils": { logger: { error() {} } },
+        "./stores/AuthorizationStore": { useAuthorizationStore: { getState: () => ({
+            getToken: () => token,
+            setToken: (_access: string, _refresh: string, userId: string) => writes.push(userId),
+        }) } },
+    }, {
+        URL,
+        React: { createElement: (_type: unknown, props: { callback: typeof callback; }) => { callback = props.callback; } },
+        fetch: (_url: URL, options: RequestInit) => new Promise<Response>(resolve => requests.push({ options, resolve })),
+    });
+    presentOAuth2Modal();
+    await callback({ location: "https://other.example/api/auth/authorize?code=code" });
+    await callback({ location: "https://dc.songspotlight.nexpid.xyz/other?code=code" });
+    assert.equal(requests.length, 0);
+    const first = callback({ location: `${redirectURL}?code=code` });
+    assert.equal(requests[0].options.headers, undefined, "the code exchange does not send stored credentials");
+    assert.equal(requests[0].options.redirect, "error");
+    account = "second";
+    requests[0].resolve(new Response("access", { headers: { "X-Refresh-Token": "refresh" } }));
+    await first;
+    assert.equal(writes.length, 0);
+    presentOAuth2Modal();
+    const superseded = callback({ location: `${redirectURL}?code=code` });
+    token = {};
+    requests[1].resolve(new Response("access", { headers: { "X-Refresh-Token": "refresh" } }));
+    await superseded;
+    assert.equal(writes.length, 0);
+    presentOAuth2Modal();
+    const valid = callback({ location: `${redirectURL}?code=code` });
+    requests[2].resolve(new Response("access", { headers: { "X-Refresh-Token": "refresh" } }));
+    await valid;
+    assert.deepEqual(writes, ["second"]);
+});
+
 function loadComponent(path: string, hooks: Record<string, unknown> = {}, additionalMocks: Record<string, object> = {}, globals: Record<string, unknown> = {}) {
     const React = { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props: { ...props, children } }) };
     const mocks: Record<string, object> = {

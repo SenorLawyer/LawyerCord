@@ -189,7 +189,6 @@ export default function Settings({ templateData }: SettingsProps) {
                                     setPending(true);
                                     try {
                                         await deleteData();
-                                        deleteTokens();
 
                                         showToast("Successfully deleted songs!", Toasts.Type.SUCCESS);
                                     } finally {

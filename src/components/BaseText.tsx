@@ -139,8 +139,7 @@ export const TextCompat: DiscordText = function TextCompat({ color, variant, ...
     }
 
     if (color) {
-        newBaseTextProps.style ??= {};
-        newBaseTextProps.style.color = `var(--${color}, var(--text-default))`;
+        newBaseTextProps.style = { ...newBaseTextProps.style, color: `var(--${color}, var(--text-default))` };
     }
 
     return <BaseText {...newBaseTextProps} />;

@@ -21,6 +21,19 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("compatibility text does not mutate caller-owned styles", () => {
+    const { TextCompat } = loadSource("src/components/BaseText.tsx", {
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/misc": { classes: () => "" },
+    }, { React: { createElement: (_component: unknown, props: object) => props } });
+    const style = Object.freeze({ color: "red", margin: 4 });
+    const result = TextCompat({ color: "text-muted", style, children: "Text" });
+    assert.equal(style.color, "red");
+    assert.equal(result.style.margin, 4);
+    assert.equal(result.style.color, "var(--text-muted, var(--text-default))");
+    assert.notEqual(result.style, style);
+});
+
 test("stopped emoji whitelist startup cannot restore stale entries", async () => {
     let finish: (value: object[]) => void = () => {};
     const { default: plugin } = loadSource("src/equicordplugins/whitelistedEmojis/index.tsx", {

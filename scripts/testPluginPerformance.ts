@@ -5421,6 +5421,37 @@ test("screen recorder releases capture and discards work after disable", async (
     assert.equal(uploads, 1);
 });
 
+test("scheduled phantom history loads cannot revive stale previews", async () => {
+    for (const change of ["none", "cleanup", "replace", "account"]) {
+        const reads: (() => void)[] = [];
+        const created: string[] = [];
+        let userId = "first";
+        const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@api/DataStore": {}, "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) },
+                MessageStore: { hasPresent: () => false },
+                MessageActions: { fetchMessages: () => new Promise<void>(resolve => reads.push(resolve)) },
+                FluxDispatcher: { dispatch: ({ type, message }: { type: string; message: { content: string; }; }) => {
+                    if (type === "MESSAGE_CREATE") created.push(message.content);
+                } } },
+            ".": { settings: { store: { showPhantomMessages: true } } }
+        }, { setTimeout: () => 1 });
+        const message = { id: "queued", channelId: "channel", content: "Old", scheduledTime: 1 };
+        await module.createPhantomMessage(message);
+        if (change === "cleanup") module.cleanupAllPhantomMessages();
+        if (change === "replace") await module.createPhantomMessage({ ...message, content: "New" });
+        if (change === "account") userId = "second";
+        reads[0]();
+        await setImmediate();
+        assert.deepEqual(created, change === "none" ? ["Old"] : []);
+        if (change === "replace") {
+            reads[1]();
+            await setImmediate();
+            assert.deepEqual(created, ["New"]);
+        }
+    }
+});
+
 test("scheduled queue ignores stale reads after reload, edits, or stop", async () => {
     const reads: ((value: { id: string; scheduledTime: number; }[]) => void)[] = [];
     const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {

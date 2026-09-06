@@ -175,10 +175,13 @@ export async function createPhantomMessage(msg: ScheduledMessage): Promise<void>
 
     const messageId = `scheduled-${msg.id}`;
 
-    phantomMessageMap.set(messageId, { scheduledTime: msg.scheduledTime, messageId: msg.id, channelId: msg.channelId });
+    const phantom = { scheduledTime: msg.scheduledTime, messageId: msg.id, channelId: msg.channelId };
+    phantomMessageMap.set(messageId, phantom);
+    const isCurrent = () => phantomMessageMap.get(messageId) === phantom && UserStore.getCurrentUser()?.id === currentUser.id;
     if (msg.reactions?.length) pendingReactions.set(msg.id, [...msg.reactions]);
 
     const attachments = msg.attachments?.length ? await buildPhantomAttachments(msg.attachments) : [];
+    if (!isCurrent()) return;
 
     const initialReactions = (msg.reactions ?? []).map(r => ({
         emoji: r.emoji,
@@ -196,6 +199,7 @@ export async function createPhantomMessage(msg: ScheduledMessage): Promise<void>
         : MessageActions.fetchMessages({ channelId: msg.channelId });
 
     messagesLoaded.then(() => {
+        if (!isCurrent()) return;
         FluxDispatcher.dispatch({
             type: "MESSAGE_CREATE",
             channelId: msg.channelId,

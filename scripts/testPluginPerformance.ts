@@ -21,6 +21,20 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("Apple Music preserves empty metadata fields when parsing a track", async () => {
+    const source = readFileSync("src/plugins/appleMusic.desktop/native.ts", "utf8");
+    const code = transpileModule(source.slice(source.indexOf("export async function fetchTrackData")), { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;
+    const outputs = ["playing", "12", "42\nSong\n\nArtist\n180\n"];
+    const getTrack = runInNewContext(code + "\nexports.fetchTrackData;", {
+        exports: {}, exec: async () => {}, applescript: async () => outputs.shift(), fetchRemoteData: async () => null,
+    });
+    const track = await getTrack();
+    assert.equal(track.name, "Song");
+    assert.equal(track.album, "");
+    assert.equal(track.artist, "Artist");
+    assert.equal(track.duration, 180);
+});
+
 test("chunk-map inspection removes its prototype hook when webpack throws", () => {
     const source = readFileSync("src/debug/loadLazyChunks.ts", "utf8");
     const handler = source.slice(source.indexOf("function getWebpackChunkMap()"), source.indexOf("export async function loadLazyChunks"));

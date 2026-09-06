@@ -339,12 +339,14 @@ async function postMessage(channelId: string, content: string, attachments?: { i
 }
 
 async function addReactionsToMessage(channelId: string, messageId: string, reactions: ScheduledReaction[]): Promise<void> {
+    const generation = schedulerGeneration;
     for (const reaction of reactions) {
         const emojiStr = reaction.emoji.id
             ? `${reaction.emoji.name}:${reaction.emoji.id}`
             : encodeURIComponent(reaction.emoji.name);
 
         for (let attempt = 0; attempt < 5; attempt++) {
+            if (generation !== schedulerGeneration) return;
             try {
                 await RestAPI.put({ url: `/channels/${channelId}/messages/${messageId}/reactions/${emojiStr}/@me` });
                 break;
@@ -384,14 +386,15 @@ async function sendScheduledMessage(msg: ScheduledMessage): Promise<boolean> {
             messageId = await postMessage(msg.channelId, msg.content);
         }
 
+        if (generation !== schedulerGeneration) return true;
         if (reactions.length) await addReactionsToMessage(msg.channelId, messageId, reactions);
 
-        if (settings.store.showNotifications) {
+        if (generation === schedulerGeneration && settings.store.showNotifications) {
             showToast(`Scheduled message sent to ${getChannelDisplayInfo(msg.channelId).name}`, Toasts.Type.SUCCESS);
         }
         return true;
     } catch {
-        if (settings.store.showNotifications) showToast("Failed to send scheduled message", Toasts.Type.FAILURE);
+        if (generation === schedulerGeneration && settings.store.showNotifications) showToast("Failed to send scheduled message", Toasts.Type.FAILURE);
         return false;
     }
 }

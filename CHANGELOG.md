@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Suppress scheduled reactions and notifications after shutdown while preserving successful-send cleanup.
+
 - Prevent scheduled message requests from starting after shutdown during storage or attachment loading.
 
 - Stop automatic scheduled-send batches from starting another message after shutdown.

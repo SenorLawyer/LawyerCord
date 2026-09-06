@@ -5421,6 +5421,22 @@ test("screen recorder releases capture and discards work after disable", async (
     assert.equal(uploads, 1);
 });
 
+test("scheduled sends accepted after shutdown skip reactions but finish successfully", async () => {
+    let finish: () => void = () => {};
+    const send = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+        "@api/DataStore": {}, "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+        "@webpack/common": { ChannelStore: { getChannel: () => ({}) }, FluxDispatcher: { dispatch() {} },
+            Constants: { Endpoints: { MESSAGES: (id: string) => id } }, SnowflakeUtils: { fromTimestamp: () => "nonce" },
+            RestAPI: { post: async () => { await new Promise<void>(resolve => { finish = resolve; }); return { body: { id: "sent" } }; },
+                put: () => assert.fail("No reactions after stop") }, showToast: () => assert.fail("No toast after stop") },
+        ".": { settings: { store: { showNotifications: true } } }
+    }, {}, "Object.assign(sendScheduledMessage, { stop: exports.stopScheduler })");
+    const pending = send({ id: "queued", channelId: "channel", reactions: [{ emoji: { name: "hello" } }] });
+    send.stop();
+    finish();
+    assert.equal(await pending, true);
+});
+
 test("scheduled sends stopped during persistence remain saved without posting", async () => {
     let finish: () => void = () => {};
     const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {

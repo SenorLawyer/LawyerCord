@@ -46,6 +46,30 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("FontLoader uses the escaped selected family for body and code fonts", async () => {
+    const store = { selectedFont: 'Font";{}', applyOnCodeBlocks: true };
+    const elements: { textContent: string; remove(): void; }[] = [];
+    const plugin = loadSource("src/equicordplugins/fontLoader/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store }), migratePluginSetting: () => {} },
+        "@components/Card": {}, "@components/Heading": {}, "@components/Paragraph": {},
+        "@shared/debounce": {}, "@utils/constants": { EquicordDevs: {} },
+        "@utils/margins": {}, "@utils/misc": {},
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+        "@webpack/common": {}
+    }, {
+        CSS: { escape: (value: string) => { assert.equal(value, store.selectedFont); return "escaped-family"; } },
+        document: { createElement: () => ({ textContent: "", remove() {} }), head: { appendChild: (element: typeof elements[number]) => elements.push(element) } }
+    });
+    await plugin.default.start();
+    const css = elements[0].textContent;
+    assert.equal((css.match(/escaped-family/g) || []).length, 4);
+    assert.ok(css.includes("--font-code: escaped-family, monospace"));
+    assert.equal(css.includes(store.selectedFont), false);
+    store.applyOnCodeBlocks = false;
+    await plugin.default.start();
+    assert.equal(elements[0].textContent.includes("--font-code"), false);
+});
+
 test("Filename plugins preserve names and apply extension fixes without anonymizing", () => {
     const definitions = { __esModule: true, default: (plugin: object) => plugin, OptionType: {}, ReporterTestable: {} };
     const fixer = loadSource("src/equicordplugins/fixFileExtensions/index.tsx", {

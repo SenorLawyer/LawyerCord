@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Toasts } from "@webpack/common";
+import { Toasts, UserStore } from "@webpack/common";
 
 import { Auth, authorize, getToken, updateAuth } from "./auth";
 import { Review, ReviewDBCurrentUser, ReviewDBUser, ReviewType } from "./entities";
@@ -37,9 +37,12 @@ interface ReviewVotesData {
 const WarningFlag = 0b00000010;
 
 async function rdbRequest<T = unknown>(path: string, options: RequestInit = {}): Promise<T | null> {
+    const userId = UserStore.getCurrentUser()?.id;
+    const token = await getToken();
+    if (UserStore.getCurrentUser()?.id !== userId) return null;
     const headers: Record<string, string> = {
         Accept: "application/json",
-        Authorization: await getToken() ?? "",
+        Authorization: token ?? "",
         ...options.headers as Record<string, string>,
     };
 
@@ -51,13 +54,15 @@ async function rdbRequest<T = unknown>(path: string, options: RequestInit = {}):
         ...options,
         headers,
     }).catch(err => {
-        showToast("Network error: Failed to connect to ReviewDB.", Toasts.Type.FAILURE);
+        if (UserStore.getCurrentUser()?.id === userId)
+            showToast("Network error: Failed to connect to ReviewDB.", Toasts.Type.FAILURE);
         return null;
     });
 
     if (!res) return null;
 
     const data = await res.json().catch(() => null);
+    if (UserStore.getCurrentUser()?.id !== userId) return null;
 
     if (!res.ok) {
         const message = data?.message ?? `ReviewDB: Request failed with status ${res.status}`;

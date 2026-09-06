@@ -21,6 +21,40 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ReviewDB discards requests and responses after account changes", async () => {
+    for (const switchAt of ["token", "response", "error", "never"]) {
+        let userId = "first";
+        let requests = 0;
+        let toasts = 0;
+        const api = loadSource("src/plugins/reviewDB/reviewDbApi.ts", {
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) }, Toasts: { Type: {} } },
+            "./auth": { getToken: async () => {
+                if (switchAt === "token") userId = "second";
+                return "first-token";
+            } },
+            "./entities": {}, "./settings": {}, "./utils": { showToast: () => { toasts++; } },
+        }, {
+            fetch: async (_url: string, options: RequestInit) => {
+                requests++;
+                assert.equal(new Headers(options.headers).get("Authorization"), "first-token");
+                if (switchAt === "error") {
+                    userId = "second";
+                    throw new Error("Network failed");
+                }
+                return { ok: true, json: async () => {
+                    if (switchAt === "response") userId = "second";
+                    return { discordID: "first" };
+                } };
+            },
+        });
+        const result = await api.getCurrentUserInfo();
+        assert.equal(requests, switchAt === "token" ? 0 : 1);
+        assert.equal(toasts, 0);
+        if (switchAt === "never") assert.equal(result.discordID, "first");
+        else assert.equal(result, null);
+    }
+});
+
 test("ReviewDB validates the OAuth destination and token before persistence", async () => {
     let authorizeResponse: (response: { location: string; }) => Promise<void> = async () => assert.fail("missing OAuth callback");
     let responseData: unknown = { token: "valid-token" };

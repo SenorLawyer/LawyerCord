@@ -553,7 +553,12 @@ export function scheduleNextCheck(): void {
 }
 
 export async function recreatePhantomMessages(): Promise<void> {
-    for (const msg of scheduledMessages) await createPhantomMessage(msg);
+    const generation = phantomGeneration;
+    const userId = UserStore.getCurrentUser()?.id;
+    for (const msg of scheduledMessages) {
+        if (generation !== phantomGeneration || UserStore.getCurrentUser()?.id !== userId) return;
+        if (scheduledMessages.includes(msg)) await createPhantomMessage(msg);
+    }
 }
 
 export function cleanupAllPhantomMessages(): void {

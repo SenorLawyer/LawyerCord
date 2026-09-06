@@ -5421,6 +5421,32 @@ test("screen recorder releases capture and discards work after disable", async (
     assert.equal(uploads, 1);
 });
 
+test("scheduled preview restoration stops between messages after invalidation", async () => {
+    for (const change of ["none", "cleanup", "account", "remove"]) {
+        const reads: (() => void)[] = [];
+        let userId = "first";
+        const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@api/DataStore": { get: async () => [1, 2].map(id => ({ id: String(id), channelId: "channel", scheduledTime: id })), set: async () => {} },
+            "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) },
+                MessageStore: { hasPresent: () => false }, FluxDispatcher: { dispatch() {} },
+                MessageActions: { fetchMessages: () => new Promise<void>(resolve => reads.push(resolve)) } },
+            ".": { settings: { store: { showPhantomMessages: true } } }
+        }, { setTimeout: () => 1 });
+        await module.loadScheduledMessages();
+        const pending = module.recreatePhantomMessages();
+        assert.equal(reads.length, 1);
+        if (change === "cleanup") module.cleanupAllPhantomMessages();
+        if (change === "account") userId = "second";
+        if (change === "remove") await module.removeScheduledMessage("2");
+        reads[0]();
+        await setImmediate();
+        assert.equal(reads.length, change === "none" ? 2 : 1);
+        if (change === "none") reads[1]();
+        await pending;
+    }
+});
+
 test("scheduled phantom history loads cannot revive stale previews", async () => {
     for (const change of ["none", "cleanup", "replace", "account"]) {
         const reads: (() => void)[] = [];

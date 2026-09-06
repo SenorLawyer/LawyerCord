@@ -7643,48 +7643,27 @@ test("installer rejects unsafe clone names and malformed links before any side e
     await assert.rejects(api.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "owner", "repo"), /Rejected by user/);
 });
 
-test("plugin cloning settles launch and re-clone failures outside subprocess callbacks", async () => {
-    for (const stage of ["launch", "dialog", "path", "cleanup", "retry", "success"]) {
+test("plugin cloning settles launch failures and unsuccessful exits without deleting source", async () => {
+    for (const stage of ["launch", "exit", "success"]) {
         let clones = 0;
-        let dialogs = 0;
-        let cleanups = 0;
-        let validations = 0;
         const mocks: Record<string, object> = {
             child_process: { spawn: () => {
+                clones++;
                 const proc = new EventEmitter();
-                const attempt = ++clones;
                 queueMicrotask(() => {
-                    if (stage === "launch" || stage === "retry" && attempt === 2) {
-                        proc.emit("error", new Error("Private executable path"));
-                        proc.emit("close", -2);
-                    } else proc.emit("close", attempt === 1 ? 1 : 0);
+                    if (stage === "launch") proc.emit("error", new Error("Private executable path"));
+                    proc.emit("close", stage === "success" ? 0 : 1);
                 });
                 return proc;
-            } },
-            electron: { dialog: { showMessageBox: async () => {
-                dialogs++;
-                if (stage === "dialog") throw new Error("Dialog failed");
-                return { response: 1 };
-            } } },
-            fs: { existsSync: () => true },
-            "fs/promises": { rm: async (directory: string) => { assert.equal(directory, "validated-fixture"); cleanups++; if (stage === "cleanup") throw new Error("Cleanup failed"); } },
-            path, "yaml-js": {}
+            } }, electron: {}, fs: {}, "fs/promises": {}, path, "yaml-js": {}
         };
         for (const name of ["pluginValidate", "updateValidate"])
             mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
-        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") }, "({ cloneRepo, setup(validate) { getPluginDirectory = validate; } })");
-        api.setup((name: string) => {
-            validations++; assert.equal(name, "repo"); assert.equal(dialogs, 1);
-            if (stage === "path") throw new Error("Invalid plugin directory.");
-            return "validated-fixture";
-        });
-        const pending = api.cloneRepo("https://github.com/owner/repo", "repo");
+        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") }, "({ cloneRepo })");
+        const pending = api.cloneRepo("https://github.com/owner/repo", ".install-fixture");
         if (stage === "success") await pending;
-        else await assert.rejects(pending, stage === "dialog" ? /Dialog failed/ : stage === "cleanup" ? /Cleanup failed/ : stage === "path" ? /Invalid plugin directory/ : /Could not start Git/);
-        assert.equal(dialogs, stage === "launch" ? 0 : 1);
-        assert.equal(cleanups, stage === "launch" || stage === "dialog" || stage === "path" ? 0 : 1);
-        assert.equal(validations, stage === "launch" || stage === "dialog" ? 0 : 1);
-        assert.equal(clones, stage === "retry" || stage === "success" ? 2 : 1);
+        else await assert.rejects(pending, stage === "launch" ? /Could not start Git/ : /Failed to clone the plugin/);
+        assert.equal(clones, 1);
     }
 });
 
@@ -7809,7 +7788,7 @@ test("closed or failed plugin reviews reject and prevent later install actions",
         const mocks: Record<string, object> = {
             child_process: { exec: (_command: string, _options: object, callback: (error: null, stdout: string) => void) => { if (_command === "git rev-parse origin/HEAD") return callback(null, "a".repeat(40)); commands++; callback(null, ""); } },
             electron: { BrowserWindow: ReviewWindow, dialog: { showMessageBox: async () => ({ response: 1 }) } },
-            fs: {}, "fs/promises": { rm: async (directory: string) => { assert.equal(directory, "fixture"); removals++; } }, path, "yaml-js": {}
+            fs: {}, "fs/promises": { mkdtemp: async (prefix: string) => prefix + "fixture", rename: async () => {}, rm: async (directory: string) => { assert.equal(directory, "fixture"); removals++; } }, path, "yaml-js": {}
         };
         for (const name of ["pluginValidate", "updateValidate"])
             mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
@@ -7838,7 +7817,7 @@ test("cancelled plugin installs validate cleanup paths and settle removal failur
         }
         const mocks: Record<string, object> = {
             child_process: {}, electron: { BrowserWindow: ReviewWindow, dialog: { showMessageBox: async () => ({ response: 1 }) } },
-            fs: {}, "fs/promises": { rm: async (directory: string) => {
+            fs: {}, "fs/promises": { mkdtemp: async (prefix: string) => prefix + "fixture", rename: async () => {}, rm: async (directory: string) => {
                 removals++; assert.equal(directory, "validated-fixture");
                 if (failure === "remove") throw new Error("Private filesystem path");
             } }, path, "yaml-js": {}
@@ -7848,13 +7827,13 @@ test("cancelled plugin installs validate cleanup paths and settle removal failur
         const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist"), Buffer },
             "({ ...exports, setup(validate) { getPluginDirectory = validate; cloneRepo = async () => {}; getPluginMeta = async () => ({ name: 'Fixture', description: '' }); } })");
         api.setup((name: string) => {
-            validations++; assert.equal(name, "repo");
-            if (failure === "path") throw new Error("Invalid plugin directory.");
+            validations++; assert.equal(name, ".install-fixture");
+            if (failure === "path" && validations === 2) throw new Error("Invalid plugin directory.");
             return "validated-fixture";
         });
         await assert.rejects(api.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "owner", "repo"),
             (error: unknown) => failure === "none" ? error === "Rejected by user" : (error as Error).message === "Could not remove the cancelled plugin installation.");
-        assert.equal(validations, 1);
+        assert.equal(validations, 2);
         assert.equal(removals, failure === "path" ? 0 : 1);
     }
 });
@@ -7983,7 +7962,7 @@ test("installer setup failures reject the caller without exposing native errors"
         const mocks: Record<string, object> = {
             child_process: {},
             electron: { dialog: { showMessageBox: stage === "dialog" ? fail : async () => ({ response: stage === "browser" ? 2 : 1 }) }, shell: { openExternal: fail } },
-            fs: {}, "fs/promises": { rm: async (directory: string) => { assert.equal(directory, "fixture"); removals++; } }, path, "yaml-js": {}
+            fs: {}, "fs/promises": { mkdtemp: async (prefix: string) => prefix + "fixture", rename: async () => {}, rm: async (directory: string) => { assert.equal(directory, "fixture"); removals++; } }, path, "yaml-js": {}
         };
         for (const name of ["pluginValidate", "updateValidate"])
             mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
@@ -7993,7 +7972,7 @@ test("installer setup failures reject the caller without exposing native errors"
         const messages = { dialog: "Could not open the clone confirmation.", clone: "Could not clone the plugin.", metadata: "Could not read the plugin metadata.", browser: "Could not open the repository." };
         await assert.rejects(api.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "owner", "repo"),
             (error: Error) => error.message === messages[stage]);
-        assert.equal(removals, stage === "metadata" ? 1 : 0);
+        assert.equal(removals, stage === "metadata" || stage === "clone" ? 1 : 0);
     }
 });
 
@@ -8017,7 +7996,7 @@ test("installer mutation guard remains held through review closure and build set
         const mocks: Record<string, object> = {
             "child_process": {},
             "electron": { BrowserWindow: ReviewWindow, dialog: { showMessageBox: async () => ({ response: 1 }) } },
-            "fs": {}, "fs/promises": {}, path, "yaml-js": {},
+            "fs": { existsSync: () => false }, "fs/promises": { mkdtemp: async (prefix: string) => prefix + "fixture", rename: async () => {},}, path, "yaml-js": {},
         };
         for (const name of ["pluginValidate", "updateValidate"])
             mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
@@ -8025,7 +8004,7 @@ test("installer mutation guard remains held through review closure and build set
             __dirname: path.resolve("fixture/dist"), Buffer,
             onClone: async () => { clones++; },
             onBuild: () => { builds++; return pendingBuild; },
-        }, "({ ...exports, setup() { cloneRepo = onClone; build = onBuild; getPluginMeta = async () => ({ name: 'Fixture', description: 'Fixture', usesNative: false }); } })");
+        }, "({ ...exports, setup() { getPluginDirectory = () => 'fixture'; cloneRepo = onClone; build = onBuild; getPluginMeta = async () => ({ name: 'Fixture', description: 'Fixture', usesNative: false }); } })");
         native.setup();
         const installation = native.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "owner", "repo");
         const settled = installation.then((value: unknown) => ({ value }), (error: unknown) => ({ error }));
@@ -8036,6 +8015,7 @@ test("installer mutation guard remains held through review closure and build set
             () => native.rmPlugin(null, "repo"),
         ]) await assert.rejects(action(), /Another plugin operation/);
         review.emit("page-title-updated");
+        await setImmediate();
         assert.equal(builds, 1);
         await assert.rejects(native.rmPlugin(null, "repo"), /Another plugin operation/);
         assert.equal(clones, 1);
@@ -8133,7 +8113,7 @@ test("installer holds ownership until failed-install cleanup settles", async () 
         const started = new Promise<void>(resolve => { cleanupStarted = resolve; });
         const mocks: Record<string, object> = {
             child_process: {}, electron: { dialog: { showMessageBox: async () => ({ response: 1 }) } },
-            fs: {}, "fs/promises": { rm: () => new Promise<void>((resolve, reject) => {
+            fs: {}, "fs/promises": { mkdtemp: async (prefix: string) => prefix + "fixture", rename: async () => {}, rm: () => new Promise<void>((resolve, reject) => {
                 finishCleanup = () => failCleanup ? reject(new Error("Private cleanup error")) : resolve();
                 cleanupStarted();
             }) }, path, "yaml-js": {},

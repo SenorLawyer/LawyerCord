@@ -7,7 +7,7 @@
 import { exec, execFile, spawn } from "child_process";
 import { BrowserWindow, dialog, shell } from "electron";
 import { existsSync, readdirSync, readFileSync, realpathSync } from "fs";
-import { mkdir, readdir, rm } from "fs/promises";
+import { mkdir, mkdtemp, readdir, rename, rm } from "fs/promises";
 import { basename, dirname, join } from "path";
 import { createSourceFile, isCallExpression, isExportAssignment, isIdentifier, isObjectLiteralExpression, isPropertyAssignment, isStringLiteralLike, ScriptTarget } from "typescript";
 import yaml from "yaml-js";
@@ -138,7 +138,6 @@ export async function initPluginInstall(_, link: string, source: string, owner: 
                 throw new Error("Rejected by user");
             }
             case 1: {
-                await cloneRepo(link, repo).catch(() => { throw new Error("Could not clone the plugin."); });
                 break;
             }
             case 2: {
@@ -147,10 +146,14 @@ export async function initPluginInstall(_, link: string, source: string, owner: 
             }
         }
 
+        const stagingPath = await mkdtemp(join(vencordPath, "..", "src", "userplugins", ".install-"))
+            .catch(() => { throw new Error("Could not create the plugin staging directory."); });
+        const stagingName = basename(stagingPath);
         let approved = false;
         try {
+            await cloneRepo(link, stagingName).catch(() => { throw new Error("Could not clone the plugin."); });
             // Get plugin meta
-            const meta = await getPluginMeta(join(vencordPath, "..", "src", "userplugins", repo))
+            const meta = await getPluginMeta(getPluginDirectory(stagingName))
                 .catch(() => { throw new Error("Could not read the plugin metadata."); });
 
             return await new Promise<{ name: string; native: boolean; }>((resolve, reject) => {
@@ -190,10 +193,35 @@ export async function initPluginInstall(_, link: string, source: string, owner: 
                             return reject("Rejected by user");
                         }
                         case "install": {
-                            approved = true;
                             decided = true;
                             win.close();
                             try {
+                                try {
+                                    const destination = join(vencordPath, "..", "src", "userplugins", repo);
+                                    const backup = `${stagingPath}.previous`;
+                                    const replacing = existsSync(destination);
+                                    if (replacing) {
+                                        const confirmation = await dialog.showMessageBox({
+                                            title: "Replace plugin",
+                                            message: `Replace the installed copy of ${repo}?`,
+                                            detail: "Local changes in the installed copy will be removed.",
+                                            buttons: ["Cancel", "Replace"]
+                                        });
+                                        if (confirmation.response !== 1) return reject(new Error("Installation cancelled."));
+                                        if (existsSync(backup)) throw new Error("Plugin backup already exists.");
+                                        await rename(getPluginDirectory(repo), backup);
+                                    }
+                                    try {
+                                        await rename(getPluginDirectory(stagingName), destination);
+                                    } catch {
+                                        if (replacing) await rename(backup, destination);
+                                        throw new Error("Could not install the staged plugin.");
+                                    }
+                                    approved = true;
+                                    if (replacing) await rm(getPluginDirectory(basename(backup)), { recursive: true });
+                                } catch {
+                                    throw new Error("Could not install the staged plugin.");
+                                }
                                 await build();
                             }
                             catch (e) {
@@ -212,7 +240,7 @@ export async function initPluginInstall(_, link: string, source: string, owner: 
         } catch (error) {
             if (!approved) {
                 try {
-                    await rm(getPluginDirectory(repo), { recursive: true });
+                    await rm(getPluginDirectory(stagingName), { recursive: true });
                 } catch {
                     throw new Error("Could not remove the cancelled plugin installation.");
                 }
@@ -311,19 +339,7 @@ async function cloneRepo(link: string, repo: string): Promise<void> {
         proc.once("error", () => reject(new Error("Could not start Git.")));
         proc.once("close", resolve);
     });
-    if (exitCode === 0) return;
-    if (!existsSync(join(vencordPath, "..", "src", "userplugins", repo)))
-        throw new Error("Failed to clone the plugin.");
-    const deleteReqDialog = await dialog.showMessageBox({
-        title: "Error",
-        message: "Plugin already exists",
-        type: "error",
-        detail: `The plugin that you tried to clone already exists at ${join(vencordPath, "..", "src", "userplugins")}.\nWould you like to reclone it? Only do this if you want to reinstall or update the plugin.`,
-        buttons: ["No", "Yes"]
-    });
-    if (deleteReqDialog.response !== 1) throw new Error("User rejected");
-    await rm(getPluginDirectory(repo), { recursive: true });
-    await cloneRepo(link, repo);
+    if (exitCode !== 0) throw new Error("Failed to clone the plugin.");
 }
 
 function escapeHtml(value: string): string {

@@ -24,5 +24,5 @@ export function questMatchesIncludedTypes(quest: Quest, includedTypes: QuestIncl
 
 export function normalizeQuestName(quest: Quest): string {
     const normalized = quest.config.messages.questName.trim().toUpperCase();
-    return normalized.endsWith("QUEST") ? normalized.slice(0, -5).trim() : normalized;
+    return normalized.replace(/(?:^|\s+)QUEST$/, "");
 }

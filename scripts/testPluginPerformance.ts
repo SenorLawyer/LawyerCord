@@ -46,6 +46,16 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("quest names only remove a separate Quest suffix", () => {
+    const { normalizeQuestName } = loadSource("src/equicordplugins/questify/utils/filtering.ts", {});
+    for (const [name, expected] of [
+        [" Conquest ", "CONQUEST"], ["Request", "REQUEST"], ["Game Quest", "GAME"],
+        ["Game   Quest ", "GAME"], ["Quest", ""], ["Game", "GAME"]
+    ]) {
+        assert.equal(normalizeQuestName({ config: { messages: { questName: name } } }), expected);
+    }
+});
+
 test("profile images fall back after failed guild downloads", async () => {
     const urls: string[] = [];
     let blobReads = 0;

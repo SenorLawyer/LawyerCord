@@ -20,6 +20,8 @@ interface TestPlugin {
     chatBarButton?: object;
     chatBarButtonWrapper?: object;
     userProfileBadges?: object[];
+    renderMessageAccessory?: () => unknown;
+    onBeforeMessageSend?: () => void;
     start?(): void;
     onMessageClick?(this: TestPlugin): void;
     flux?: Record<string, (this: TestPlugin, data: unknown) => void | Promise<void>>;
@@ -29,6 +31,8 @@ function loadManager() {
     const plugins: Record<string, TestPlugin> = {};
     const settings: Record<string, { enabled: boolean; }> = {};
     const errors: unknown[][] = [];
+    const sendListeners = new Set<() => void>();
+    const accessories = new Map<string, () => unknown>();
     const handlers = new Map<string, Set<(data: unknown) => void | Promise<void>>>();
     const dispatcher = {
         subscribe(event: string, handler: (data: unknown) => void | Promise<void>) {
@@ -41,6 +45,14 @@ function loadManager() {
     };
     const mocks: Record<string, object> = {
         "~plugins": { __esModule: true, default: plugins },
+        "@api/MessageEvents": {
+            addMessagePreSendListener: (listener: () => void) => sendListeners.add(listener),
+            removeMessagePreSendListener: (listener: () => void) => sendListeners.delete(listener),
+        },
+        "@api/MessageAccessories": {
+            addMessageAccessory: (name: string, render: () => unknown) => accessories.set(name, render),
+            removeMessageAccessory: (name: string) => accessories.delete(name),
+        },
         "@api/Settings": { Settings: { plugins: settings }, SettingsStore: { addChangeListener() {} } },
         "@webpack/common": { FluxDispatcher: dispatcher },
         "@debug/Tracer": { traceFunction: (_name: string, fn: unknown) => fn },
@@ -70,8 +82,55 @@ function loadManager() {
         settings[plugin.name] = { enabled: false };
         return plugin;
     }
-    return { manager, add, plugins, settings, dispatcher, handlers, errors };
+    return { manager, add, plugins, settings, dispatcher, handlers, errors, accessories, sendListeners };
 }
+
+test("declarative message accessories enable their API and follow plugin lifecycle", () => {
+    const { manager, add, settings, accessories } = loadManager();
+    add({ name: "MessageAccessoriesAPI" });
+    const renderMessageAccessory = () => "conversion";
+    const plugin = add({ name: "Fixture", renderMessageAccessory });
+    settings.Fixture.enabled = true;
+    manager.initPluginManager();
+    assert.equal(settings.MessageAccessoriesAPI.enabled, true);
+    manager.startPlugin(plugin);
+    assert.equal(accessories.get("Fixture")?.(), "conversion");
+    manager.stopPlugin(plugin);
+    assert.equal(accessories.size, 0);
+    manager.startPlugin(plugin);
+    assert.equal(accessories.size, 1);
+    assert.equal(accessories.get("Fixture")?.(), "conversion");
+});
+
+test("declarative profile badges enable their API dependency", () => {
+    const { manager, add, settings } = loadManager();
+    const api = add({ name: "BadgeAPI" });
+    add({ name: "Fixture", userProfileBadges: [{ id: "fixture" }] });
+    settings.Fixture.enabled = true;
+    manager.initPluginManager();
+    assert.equal(settings.BadgeAPI.enabled, true);
+    assert.equal(api.isDependency, true);
+});
+
+test("nested dependency restart requirements and failures reach the caller", () => {
+    for (const fails of [false, true]) {
+        const { manager, add, settings } = loadManager();
+        let parentStarts = 0;
+        add({ name: "Leaf", requiresRestart: !fails, start() { throw new Error("Cannot start"); } });
+        add({ name: "Parent", dependencies: ["Leaf"], start() { parentStarts++; } });
+        const plugin = add({ name: "Fixture", dependencies: ["Parent"] });
+        const result = manager.startDependenciesRecursive(plugin);
+        assert.equal(result.restartNeeded, !fails);
+        assert.deepEqual(Array.from(result.failures), fails ? ["Leaf"] : []);
+        assert.equal(parentStarts, 0);
+        assert.equal(settings.Leaf.enabled, !fails);
+        assert.equal(settings.Parent.enabled, !fails);
+        const repeated = manager.startDependenciesRecursive(plugin);
+        assert.equal(repeated.restartNeeded, !fails);
+        assert.deepEqual(Array.from(repeated.failures), fails ? ["Leaf"] : []);
+        assert.equal(parentStarts, 0);
+    }
+});
 
 test("flux subscriptions preserve original handlers and clean up the functions actually registered", async () => {
     const { manager, add, dispatcher, handlers, errors } = loadManager();
@@ -96,4 +155,23 @@ test("flux subscriptions preserve original handlers and clean up the functions a
     }
     assert.equal(calls, 25);
     assert.equal(errors.length, 0);
+});
+
+
+test("declarative send hooks enable their API and clean up on stop", () => {
+    const { manager, add, settings, sendListeners } = loadManager();
+    add({ name: "MessageEventsAPI" });
+    let calls = 0;
+    const plugin = add({ name: "Fixture", onBeforeMessageSend: () => { calls++; } });
+    settings.Fixture.enabled = true;
+    manager.initPluginManager();
+    assert.equal(settings.MessageEventsAPI.enabled, true);
+    for (let i = 0; i < 2; i++) {
+        manager.startPlugin(plugin);
+        assert.equal(sendListeners.size, 1);
+        for (const listener of sendListeners) listener();
+        manager.stopPlugin(plugin);
+        assert.equal(sendListeners.size, 0);
+    }
+    assert.equal(calls, 2);
 });

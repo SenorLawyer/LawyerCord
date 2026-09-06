@@ -28,7 +28,6 @@ import { HighlighterContainer } from "./components/Highlighter";
 import deviconStyle from "./devicon.css?managed";
 import { settings } from "./settings";
 import { DeviconSetting } from "./types";
-import { clearStyles } from "./utils/createStyle";
 
 export default definePlugin({
     name: "ShikiCodeblocks",
@@ -63,7 +62,6 @@ export default definePlugin({
     },
     stop: () => {
         shiki.destroy();
-        clearStyles();
     },
 
     settingsAboutComponent: () => <HighlighterContainer lang="tsx" content={previewExampleText} isPreview />,

@@ -21,6 +21,5 @@ export interface SavedEmoji {
     name: string;
     guildId?: string;
     surrogates?: string;
-    url?: string;
     animated?: boolean;
 }

@@ -119,7 +119,7 @@ function PatchHelper() {
                 setFind={onFindChange}
                 setParsedFind={setParsedFind}
                 setMatch={onMatchChange}
-                setReplacement={setReplacement}
+                setReplacement={value => setReplacement(() => value)}
             />
 
             <div className={Margins.top20}>

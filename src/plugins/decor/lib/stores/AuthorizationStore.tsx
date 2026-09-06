@@ -56,6 +56,8 @@ export const useAuthorizationStore = proxyLazy(() => zustandCreate(
                 init();
             },
             async authorize() {
+                const userId = UserStore.getCurrentUser()?.id;
+                if (!userId) throw new Error("Sign in before authorizing Decor.");
                 return new Promise((resolve, reject) => openModal(props =>
                     <OAuth2AuthorizeModal
                         {...props}
@@ -67,6 +69,7 @@ export const useAuthorizationStore = proxyLazy(() => zustandCreate(
                         cancelCompletesFlow={false}
                         callback={async (response: any) => {
                             try {
+                                if (UserStore.getCurrentUser()?.id !== userId) throw new Error("Account changed during authorization.");
                                 const url = new URL(response.location);
                                 url.searchParams.append("client", "vencord");
 
@@ -74,6 +77,7 @@ export const useAuthorizationStore = proxyLazy(() => zustandCreate(
 
                                 if (req?.ok) {
                                     const token = await req.text();
+                                    if (UserStore.getCurrentUser()?.id !== userId) throw new Error("Account changed during authorization.");
                                     get().setToken(token);
                                 } else {
                                     throw new Error("Request not OK");

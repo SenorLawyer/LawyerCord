@@ -30,8 +30,6 @@ const headerClasses = findCssClassesLazy("privateChannelsHeaderContainer", "head
 
 export const PrivateChannelSortStore = findStoreLazy("PrivateChannelSortStore") as { getPrivateChannelIds: () => string[]; };
 
-export let instance: any;
-
 export const enum PinOrder {
     LastMessage,
     Custom
@@ -160,11 +158,6 @@ export default definePlugin({
 
     sections: null as number[] | null,
 
-    set _instance(i: any) {
-        this.instance = i;
-        instance = i;
-    },
-
     startAt: StartAt.WebpackReady,
     start: init,
     flux: {
@@ -179,7 +172,7 @@ export default definePlugin({
     requireSettingsMenu: requireSettingsModal,
 
     makeProps(instance, { sections }: { sections: number[]; }) {
-        this._instance = instance;
+        this.instance = instance;
         this.sections = sections;
 
         this.sections.splice(1, 0, ...this.getSections());

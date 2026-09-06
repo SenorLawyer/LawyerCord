@@ -8,7 +8,6 @@ import { definePluginSettings } from "@api/Settings";
 import { Notice } from "@components/Notice";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { User } from "@vencord/discord-types";
 import { ChannelStore, UserStore } from "@webpack/common";
 
 const settings = definePluginSettings({
@@ -25,15 +24,6 @@ const settings = definePluginSettings({
         restartNeeded: true
     }
 });
-
-let cachedUsers: User[] | null = null;
-
-function getCachedUsers(): User[] {
-    if (!cachedUsers) {
-        cachedUsers = Object.values(UserStore.getUsers());
-    }
-    return cachedUsers;
-}
 
 export default definePlugin({
     name: "UniversalMention",
@@ -68,7 +58,7 @@ export default definePlugin({
         },
     ],
     useFilter(map: boolean = false) {
-        const foundUsers = getCachedUsers();
+        const foundUsers = Object.values(UserStore.getUsers());
         const users = settings.store.onlyDMUsers ? foundUsers.filter(user => ChannelStore.getDMFromUserId(user.id)) : foundUsers;
         return map ? users.map(user => ({ userId: user.id, nick: null })) : users;
     }

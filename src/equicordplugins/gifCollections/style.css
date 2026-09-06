@@ -54,30 +54,6 @@
     color: var(--text-strong);
 }
 
-.vc-gif-collections-modal {
-    background-color: var(--modal-background) !important;
-    border-radius: 8px;
-}
-
-.vc-gif-collections-modal-header {
-    padding: 16px;
-    background-color: var(--background-secondary-alt);
-    border-bottom: 1px solid var(--border-subtle);
-}
-
-.vc-gif-collections-modal-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-strong);
-}
-
-.vc-gif-collections-modal-content {
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-
 .vc-gif-collections-info-row {
     display: flex;
     justify-content: space-between;
@@ -103,13 +79,6 @@
     white-space: normal;
     overflow: hidden;
     text-overflow: ellipsis;
-}
-
-.vc-gif-collections-modal-footer {
-    padding: 16px;
-    background-color: var(--background-secondary-alt);
-    display: flex;
-    justify-content: flex-end;
 }
 
 .vc-gif-collections-rename-text {

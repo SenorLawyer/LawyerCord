@@ -45,6 +45,9 @@ export const Canvas = ({ file }: { file: File; }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
+        const targetCanvas = canvasRef.current;
+        if (!targetCanvas) return;
+
         const nextImage = new Image();
         const imageUrl = URL.createObjectURL(file);
         let cleanupInput: (() => void) | undefined;
@@ -54,9 +57,7 @@ export const Canvas = ({ file }: { file: File; }) => {
             if (cancelled) return;
 
             image = nextImage;
-            canvas = canvasRef.current;
-
-            if (!canvas) return;
+            canvas = targetCanvas;
 
             canvas.width = image.width;
             canvas.height = image.height;
@@ -80,7 +81,7 @@ export const Canvas = ({ file }: { file: File; }) => {
             cleanupInput?.();
             nextImage.onload = null;
             URL.revokeObjectURL(imageUrl);
-            if (canvas === canvasRef.current) {
+            if (canvas === targetCanvas) {
                 canvas = null;
                 ctx = null;
             }

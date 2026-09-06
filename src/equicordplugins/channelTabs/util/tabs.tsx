@@ -157,9 +157,9 @@ export function createTab(props: BasicChannelTabsProps | ChannelTabsProps, switc
             currentTab.messageId = messageId;
             currentTab.compact = "compact" in props ? props.compact : settings.store.openNewTabsInCompactMode;
             if (switchToTab) {
-                update(save);
-            } else {
                 moveToTab(currentTab.id);
+            } else {
+                update(save);
             }
         }
         return;

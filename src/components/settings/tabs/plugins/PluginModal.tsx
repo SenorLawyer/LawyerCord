@@ -47,7 +47,6 @@ import { GithubButton, WebsiteButton } from "./LinkIconButton";
 const cl = classNameFactory("vc-plugin-modal-");
 
 const AvatarStyles = findCssClassesLazy("moreUsers", "avatar", "clickableAvatar");
-const CloseButton = findComponentByCodeLazy("CLOSE_BUTTON_LABEL");
 const ConfirmModal = findComponentByCodeLazy('parentComponent:"ConfirmModal"');
 const WarningIcon = findComponentByCodeLazy("3.15H3.29c-1.74");
 const UserRecord: Constructor<Partial<User>> = proxyLazy(() => UserStore.getCurrentUser().constructor) as any;
@@ -173,7 +172,7 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
     }
 
     const pluginMeta = PluginMeta[plugin.name];
-    const isEquicordPlugin = pluginMeta.folderName.startsWith("src/equicordplugins/") ?? false;
+    const isEquicordPlugin = pluginMeta.folderName.startsWith("src/equicordplugins/");
 
     return (
         <Modal
@@ -217,7 +216,7 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
                                 renderUser={(user: User) => (
                                     <Clickable
                                         className={AvatarStyles.clickableAvatar}
-                                        onClick={() => isEquicordPlugin ? openContributorModal(user) : openContributorModal(user)}
+                                        onClick={() => openContributorModal(user)}
                                     >
                                         <img
                                             className={AvatarStyles.avatar}
@@ -298,9 +297,9 @@ function resetSettings(plugin: Plugin, onRestartNeeded?: (pluginName: string) =>
         if (key === "enabled") continue;
 
         const setting = defaultSettings[key];
-        setting.type = setting.type ?? OptionType.STRING;
-
-        if (setting.type === OptionType.STRING) {
+        if (setting.type === OptionType.SELECT) {
+            newSettings[key] = setting.options.find(option => option.default)?.value;
+        } else if (setting.type === OptionType.STRING) {
             newSettings[key] = setting.default !== undefined && setting.default !== "" ? setting.default : "";
         } else if ("default" in setting && setting.default !== undefined) {
             newSettings[key] = setting.default;

@@ -48,7 +48,7 @@ interface CompletionInput {
     json: boolean;
 }
 
-interface CompletionResult {
+export interface CompletionResult {
     success: boolean;
     content?: string;
     model?: string;
@@ -90,7 +90,7 @@ function completionInput(value: unknown): CompletionInput | null {
         typeof input.requestId !== "string"
         || !/^[\w-]{1,80}$/.test(input.requestId)
         || typeof input.timeoutSeconds !== "number" || !Number.isFinite(input.timeoutSeconds) || input.timeoutSeconds < 1 || input.timeoutSeconds > 300
-        || !Array.isArray(input.messages) || input.messages.length > 40 || JSON.stringify(input.messages).length > 100000
+        || !Array.isArray(input.messages) || input.messages.length > 40
         || !input.messages.every(message => typeof message === "object" && message !== null && (message.role === "user" || message.role === "assistant") && typeof message.content === "string" && message.content.length <= 20000)
         || typeof input.model !== "string"
         || !MODEL_ID.test(input.model)
@@ -111,7 +111,9 @@ function completionInput(value: unknown): CompletionInput | null {
         || input.temperature > 2
         || typeof input.json !== "boolean"
     ) return null;
-    return input as CompletionInput;
+    const messages = input.messages.map(({ role, content }) => ({ role, content }));
+    if (JSON.stringify(messages).length > 100000) return null;
+    return { ...input, messages } as CompletionInput;
 }
 
 async function responseText(response: Response): Promise<string> {
@@ -426,11 +428,9 @@ async function readAppended(path: string, offset: number): Promise<{ lines: stri
         if (size === start) return { lines: [], offset: size };
         const length = Math.min(size - start, READ_CAP);
         const buffer = Buffer.alloc(length);
-        await handle.read(buffer, 0, length, start);
-        const text = buffer.toString("utf8");
-        const lines = text.split("\n");
-        const partial = text.endsWith("\n") || start + length === size ? "" : lines.pop() ?? "";
-        return { lines, offset: start + length - Buffer.byteLength(partial) };
+        const { bytesRead } = await handle.read(buffer, 0, length, start);
+        const end = buffer.subarray(0, bytesRead).lastIndexOf(0x0A) + 1;
+        return { lines: buffer.subarray(0, end).toString("utf8").split("\n"), offset: start + end };
     } finally {
         await handle.close();
     }

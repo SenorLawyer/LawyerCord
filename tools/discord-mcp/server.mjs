@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 
 import { randomUUID } from "node:crypto";
-import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createInterface } from "node:readline";
+import { setTimeout as sleep } from "node:timers/promises";
 
 const SERVER_NAME = "discord-mcp";
 const SERVER_VERSION = "0.1.0";
@@ -207,31 +208,9 @@ export const TOOLS = [
 ];
 
 const toolMap = new Map(TOOLS.map(tool => [tool.name, tool]));
-const bridgeToolNames = new Map([
-    ["discord_connection_status", "connection_status"],
-    ["discord_list_servers", "list_servers"],
-    ["discord_list_server_channels", "list_server_channels"],
-    ["discord_list_dms", "list_dms"],
-    ["discord_read_messages", "read_messages"],
-    ["discord_bulk_read_messages", "bulk_read_messages"],
-    ["discord_search_messages", "search_messages"],
-    ["discord_get_message", "get_message"],
-    ["discord_download_attachment", "download_attachment"],
-    ["discord_send_message", "send_message"],
-    ["discord_delete_own_message", "delete_own_message"],
-    ["discord_subscribe_channel", "subscribe_channel"],
-    ["discord_wait_for_message", "wait_for_message"],
-    ["discord_list_subscriptions", "list_subscriptions"],
-    ["discord_unsubscribe_channel", "unsubscribe_channel"],
-]);
-
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 function candidateBridgeDirectories() {
+    if (process.env.LAWYERCORD_DISCORD_MCP_DIR) return [process.env.LAWYERCORD_DISCORD_MCP_DIR];
     const candidates = [];
-    if (process.env.LAWYERCORD_DISCORD_MCP_DIR) candidates.push(process.env.LAWYERCORD_DISCORD_MCP_DIR);
     const appData = process.env.APPDATA;
     if (appData) {
         candidates.push(join(appData, "LawyerCord", "discord-mcp"));
@@ -277,7 +256,6 @@ export async function callBridge(tool, args = {}, timeoutMs = DEFAULT_TIMEOUT_MS
     try {
         while (Date.now() < deadline) {
             try {
-                await access(responsePath);
                 const response = JSON.parse(await readFile(responsePath, "utf8"));
                 if (response?.id !== id) throw new Error("Discord MCP returned a mismatched response ID");
                 if (!response.ok) throw new Error(response.error || "Discord MCP request failed");
@@ -382,7 +360,7 @@ async function handleRequest(message) {
         }
         try {
             const args = message.params?.arguments ?? {};
-            const result = await callBridge(bridgeToolNames.get(name), args, bridgeTimeoutForTool(name, args));
+            const result = await callBridge(name.slice("discord_".length), args, bridgeTimeoutForTool(name, args));
             send({
                 jsonrpc: "2.0",
                 id: message.id,

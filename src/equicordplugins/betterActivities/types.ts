@@ -9,11 +9,6 @@ import { CSSProperties, ImgHTMLAttributes, JSX } from "react";
 
 export type { Application, User } from "@vencord/discord-types";
 
-export interface Developer {
-    id: string;
-    name: string;
-}
-
 export interface ActivityViewProps {
     activity: Activity | null;
     user: User;
@@ -29,12 +24,6 @@ export interface ApplicationIcon {
     element?: JSX.Element;
     activity: Activity;
     application?: Application;
-}
-
-export interface Executable {
-    os: string;
-    name: string;
-    is_launcher: boolean;
 }
 
 export interface ActivityListIcon {
@@ -70,11 +59,4 @@ export interface CarouselControlsProps {
     activities: Activity[];
     currentActivity: Activity;
     onActivityChange: (activity: Activity) => void;
-}
-
-export interface ActivityViewProps {
-    activity: Activity | null;
-    user: User;
-    application?: Application;
-    currentUser: User;
 }

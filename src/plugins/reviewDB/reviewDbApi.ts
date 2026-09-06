@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Toasts } from "@webpack/common";
+import { Toasts, UserStore } from "@webpack/common";
 
-import { Auth, authorize, getToken, updateAuth } from "./auth";
+import { authorize, getToken, updateAuth } from "./auth";
 import { Review, ReviewDBCurrentUser, ReviewDBUser, ReviewType } from "./entities";
 import { settings } from "./settings";
 import { showToast } from "./utils";
@@ -37,9 +37,12 @@ interface ReviewVotesData {
 const WarningFlag = 0b00000010;
 
 async function rdbRequest<T = unknown>(path: string, options: RequestInit = {}): Promise<T | null> {
+    const userId = UserStore.getCurrentUser()?.id;
+    const token = await getToken();
+    if (UserStore.getCurrentUser()?.id !== userId) return null;
     const headers: Record<string, string> = {
         Accept: "application/json",
-        Authorization: await getToken() ?? "",
+        Authorization: token ?? "",
         ...options.headers as Record<string, string>,
     };
 
@@ -51,16 +54,20 @@ async function rdbRequest<T = unknown>(path: string, options: RequestInit = {}):
         ...options,
         headers,
     }).catch(err => {
-        showToast("Network error: Failed to connect to ReviewDB.", Toasts.Type.FAILURE);
+        if (UserStore.getCurrentUser()?.id === userId)
+            showToast("Network error: Failed to connect to ReviewDB.", Toasts.Type.FAILURE);
         return null;
     });
 
     if (!res) return null;
 
-    const data = await res.json().catch(() => null);
+    const data: unknown = await res.json().catch(() => null);
+    if (UserStore.getCurrentUser()?.id !== userId) return null;
 
     if (!res.ok) {
-        const message = data?.message ?? `ReviewDB: Request failed with status ${res.status}`;
+        const message = typeof data === "object" && data !== null && "message" in data && typeof data.message === "string" && data.message.trim()
+            ? data.message
+            : `ReviewDB: Request failed with status ${res.status}`;
         showToast(message, Toasts.Type.FAILURE);
         return null;
     }
@@ -133,16 +140,18 @@ export async function getReviews(id: string, { limit, offset = 0, fetchVotes = f
 }
 
 export async function getReviewVotes(id: string): Promise<ReviewVote[]> {
+    const userId = UserStore.getCurrentUser()?.id;
     const token = await getToken();
-    if (!token) return [];
+    if (!token || UserStore.getCurrentUser()?.id !== userId) return [];
 
     const res = await rdbRequest<ReviewVotesData>(`/users/${id}/reviews/votes`);
     return res?.votes ?? [];
 }
 
 export async function addReview(review): Promise<UserReviewsData | null> {
-
+    const userId = UserStore.getCurrentUser()?.id;
     const token = await getToken();
+    if (UserStore.getCurrentUser()?.id !== userId) return null;
     if (!token) {
         showToast("Please authorize to add a review.");
         authorize();
@@ -179,7 +188,9 @@ export async function reportReview(id: number) {
 }
 
 export async function voteReview(id: number, isUpvote: boolean) {
+    const userId = UserStore.getCurrentUser()?.id;
     const token = await getToken();
+    if (UserStore.getCurrentUser()?.id !== userId) return false;
     if (!token) {
         showToast("Please authorize to vote on reviews.");
         authorize();
@@ -197,7 +208,9 @@ export async function voteReview(id: number, isUpvote: boolean) {
 }
 
 export async function deleteReviewVote(id: number) {
+    const userId = UserStore.getCurrentUser()?.id;
     const token = await getToken();
+    if (UserStore.getCurrentUser()?.id !== userId) return false;
     if (!token) {
         showToast("Please authorize to vote on reviews.");
         authorize();
@@ -214,6 +227,7 @@ export async function deleteReviewVote(id: number) {
 }
 
 async function patchBlock(action: "block" | "unblock", userId: string) {
+    const accountId = UserStore.getCurrentUser()?.id;
     const data = await rdbRequest("/blocks", {
         method: "PATCH",
         body: JSON.stringify({
@@ -222,23 +236,25 @@ async function patchBlock(action: "block" | "unblock", userId: string) {
         })
     });
 
-    if (!data) return;
+    if (!data || UserStore.getCurrentUser()?.id !== accountId) return false;
 
+    await updateAuth(auth => {
+        if (!auth.user?.blockedUsers) return auth;
+        const blockedUsers = action === "block"
+            ? [...new Set([...auth.user.blockedUsers, userId])]
+            : auth.user.blockedUsers.filter(id => id !== userId);
+        return { user: { ...auth.user, blockedUsers } };
+    });
+    if (UserStore.getCurrentUser()?.id !== accountId) return false;
     showToast(`Successfully ${action}ed user`, Toasts.Type.SUCCESS);
-
-    if (Auth?.user?.blockedUsers) {
-        const newBlockedUsers = action === "block"
-            ? [...Auth.user.blockedUsers, userId]
-            : Auth.user.blockedUsers.filter(id => id !== userId);
-        updateAuth({ user: { ...Auth.user, blockedUsers: newBlockedUsers } });
-    }
+    return true;
 }
 
 export const blockUser = (userId: string) => patchBlock("block", userId);
 export const unblockUser = (userId: string) => patchBlock("unblock", userId);
 
-export async function fetchBlocks(): Promise<ReviewDBUser[]> {
-    return await rdbRequest<ReviewDBUser[]>("/blocks") ?? [];
+export function fetchBlocks(): Promise<ReviewDBUser[] | null> {
+    return rdbRequest<ReviewDBUser[]>("/blocks");
 }
 
 export function getCurrentUserInfo(): Promise<ReviewDBCurrentUser | null> {

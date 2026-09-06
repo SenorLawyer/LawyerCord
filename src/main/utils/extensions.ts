@@ -20,7 +20,8 @@ import { session } from "electron";
 import { unzip } from "fflate";
 import { constants as fsConstants } from "fs";
 import { access, mkdir, rm, writeFile } from "fs/promises";
-import { join } from "path";
+import { dirname, join, resolve, sep } from "path";
+import { promisify } from "util";
 
 import { DATA_DIR } from "./constants";
 import { crxToZip } from "./crxToZip";
@@ -30,35 +31,24 @@ const extensionCacheDir = join(DATA_DIR, "ExtensionCache");
 
 async function extract(data: Buffer, outDir: string) {
     await mkdir(outDir, { recursive: true });
-    return new Promise<void>((resolve, reject) => {
-        unzip(data, (err, files) => {
-            if (err) return void reject(err);
-            Promise.all(Object.keys(files).map(async f => {
-                // Signature stuff
-                // 'Cannot load extension with file or directory name
-                // _metadata. Filenames starting with "_" are reserved for use by the system.';
-                if (f.startsWith("_metadata/")) return;
+    try {
+        const files = await promisify(unzip)(data);
+        for (const [name, content] of Object.entries(files)) {
+            // Signature stuff
+            // 'Cannot load extension with file or directory name
+            // _metadata. Filenames starting with "_" are reserved for use by the system.';
+            if (name.startsWith("_metadata/")) continue;
 
-                if (f.endsWith("/")) return void mkdir(join(outDir, f), { recursive: true });
+            const destination = resolve(outDir, name);
+            if (!destination.startsWith(resolve(outDir) + sep)) throw new Error("Extension archive contains an unsafe path.");
 
-                const pathElements = f.split("/");
-                const name = pathElements.pop()!;
-                const directories = pathElements.join("/");
-                const dir = join(outDir, directories);
-
-                if (directories) {
-                    await mkdir(dir, { recursive: true });
-                }
-
-                await writeFile(join(dir, name), files[f]);
-            }))
-                .then(() => resolve())
-                .catch(err => {
-                    rm(outDir, { recursive: true, force: true });
-                    reject(err);
-                });
-        });
-    });
+            await mkdir(name.endsWith("/") ? destination : dirname(destination), { recursive: true });
+            if (!name.endsWith("/")) await writeFile(destination, content);
+        }
+    } catch (error) {
+        await rm(outDir, { recursive: true, force: true });
+        throw error;
+    }
 }
 
 export async function installExt(id: string) {
@@ -75,10 +65,9 @@ export async function installExt(id: string) {
             }
         });
 
-        await extract(crxToZip(buf), extDir)
-            .catch(err => console.error(`Failed to extract extension ${id}`, err));
+        await extract(crxToZip(buf), extDir);
     }
 
     // Electron 36 Deprecates session.defaultSession.loadExtension()
-    session.defaultSession.extensions ? session.defaultSession.extensions.loadExtension(extDir) : session.defaultSession.loadExtension(extDir);
+    return session.defaultSession.extensions ? session.defaultSession.extensions.loadExtension(extDir) : session.defaultSession.loadExtension(extDir);
 }

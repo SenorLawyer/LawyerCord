@@ -71,13 +71,7 @@ export function isServiceType(value: string): value is ServiceType {
 }
 
 export function formatFallbackServiceOrder(order: readonly ServiceType[] = fallbackServiceOrder): string {
-    let output = "";
-    for (const service of order) {
-        if (output) output += ",";
-        output += service;
-    }
-
-    return output;
+    return order.join(",");
 }
 
 export function parseFallbackServiceOrder(value?: string): ServiceType[] {

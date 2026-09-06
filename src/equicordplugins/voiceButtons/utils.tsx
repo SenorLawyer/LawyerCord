@@ -107,14 +107,14 @@ export function UserMuteButton({ user }: { user: User; }) {
     const { canMute: canServerMute } = canServerMuteDeafen(user.id);
     const { isServerMuted } = getServerMuteDeafenState(user.id);
 
-    const useServerMuteForSelf = isCurrent && settings.store.serverSelf;
+    const useServerMute = canServerMute && (!isCurrent || settings.store.serverSelf);
 
     const isLocalMuted = (isCurrent && MediaEngineStore.isSelfMute()) || MediaEngineStore.isLocalMute(user.id);
-    const isMuted = canServerMute ? isServerMuted : isLocalMuted;
+    const isMuted = useServerMute ? isServerMuted : isLocalMuted;
     const color = isMuted ? "var(--status-danger)" : "var(--channels-default)";
 
-    const muteAction = canServerMute && (useServerMuteForSelf || !isCurrent) ? "Server Mute" : "Mute";
-    const tooltipAction = isMuted ? (canServerMute && (useServerMuteForSelf || !isCurrent) ? "Unserver Mute" : "Unmute") : muteAction;
+    const muteAction = useServerMute ? "Server Mute" : "Mute";
+    const tooltipAction = isMuted ? (useServerMute ? "Unserver Mute" : "Unmute") : muteAction;
 
     return (
         <VoiceUserButton
@@ -122,12 +122,7 @@ export function UserMuteButton({ user }: { user: User; }) {
             tooltip={`${tooltipAction} ${isCurrent ? "yourself" : `${getUserName(user)}`}`}
             icon={isCurrent ? <MuteIconSelf muted={isMuted} size="sm" color={color} /> : <MuteIconOther muted={isMuted} size="sm" color={color} />}
             onClick={() => {
-                if (canServerMute) {
-                    if (!useServerMuteForSelf) {
-                        VoiceActions.toggleSelfMute();
-                        return;
-                    }
-
+                if (useServerMute) {
                     const voiceState = VoiceStateStore.getVoiceStateForUser(user.id);
                     const channel = voiceState?.channelId ? ChannelStore.getChannel(voiceState.channelId) : null;
                     if (channel?.guild_id) {
@@ -150,18 +145,18 @@ export function UserDeafenButton({ user }: { user: User; }) {
     const { canDeafen: canServerDeafen } = canServerMuteDeafen(user.id);
     const { isServerDeafened } = getServerMuteDeafenState(user.id);
 
-    const useServerDeafenForSelf = isCurrent && settings.store.serverSelf;
+    const useServerDeafen = canServerDeafen && (!isCurrent || settings.store.serverSelf);
 
     const isMuted = MediaEngineStore.isLocalMute(user.id);
     const isSoundboardMuted = SoundboardStore.isLocalSoundboardMuted(user.id);
     const isVideoDisabled = MediaEngineStore.isLocalVideoDisabled(user.id);
     const isLocalDeafened = isCurrent && MediaEngineStore.isSelfDeaf() || isMuted && isSoundboardMuted && isVideoDisabled;
 
-    const isDeafened = canServerDeafen && (useServerDeafenForSelf || !isCurrent) ? isServerDeafened : isLocalDeafened;
+    const isDeafened = useServerDeafen ? isServerDeafened : isLocalDeafened;
     const color = isDeafened ? "var(--status-danger)" : "var(--channels-default)";
 
-    const deafenAction = canServerDeafen && (useServerDeafenForSelf || !isCurrent) ? "Server Deafen" : "Deafen";
-    const tooltipAction = isDeafened ? (canServerDeafen && (useServerDeafenForSelf || !isCurrent) ? "Unserver Deafen" : "Undeafen") : deafenAction;
+    const deafenAction = useServerDeafen ? "Server Deafen" : "Deafen";
+    const tooltipAction = isDeafened ? (useServerDeafen ? "Unserver Deafen" : "Undeafen") : deafenAction;
 
     return (
         <VoiceUserButton
@@ -169,12 +164,7 @@ export function UserDeafenButton({ user }: { user: User; }) {
             tooltip={`${tooltipAction} ${isCurrent ? "yourself" : `${getUserName(user)}`}`}
             icon={isCurrent ? <DeafenIconSelf muted={isDeafened} size="sm" color={color} /> : <DeafenIconOther muted={isDeafened} size="sm" color={color} />}
             onClick={() => {
-                if (canServerDeafen) {
-                    if (!useServerDeafenForSelf) {
-                        VoiceActions.toggleSelfDeaf();
-                        return;
-                    }
-
+                if (useServerDeafen) {
                     const voiceState = VoiceStateStore.getVoiceStateForUser(user.id);
                     const channel = voiceState?.channelId ? ChannelStore.getChannel(voiceState.channelId) : null;
                     if (channel?.guild_id) {

@@ -8,27 +8,22 @@ import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { definePluginSettings } from "@api/Settings";
 import { Devs, EquicordDevs } from "@utils/constants";
 import { insertTextIntoChatInputBox } from "@utils/discord";
+import { sleep } from "@utils/misc";
 import definePlugin, { makeRange, OptionType } from "@utils/types";
 import type { Channel } from "@vencord/discord-types";
 import { GuildChannelStore, Menu, React, RestAPI, UserStore, VoiceStateStore } from "@webpack/common";
 
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-async function runSequential<T>(tasks: Array<() => Promise<T>>): Promise<T[]> {
-    const results: T[] = [];
+async function runSequential(tasks: Array<() => Promise<unknown>>): Promise<void> {
     const waitAfter = Math.max(1, settings.store.waitAfter);
     const waitMs = Math.max(0, settings.store.waitSeconds * 1000);
 
     for (let i = 0; i < tasks.length; i++) {
-        const result = await tasks[i]();
-        results.push(result);
+        await tasks[i]();
 
         if ((i + 1) % waitAfter === 0 && i < tasks.length - 1 && waitMs > 0) {
             await sleep(waitMs);
         }
     }
-
-    return results;
 }
 
 function sendPatch(channel: Channel, body: Record<string, any>, bypass = false) {

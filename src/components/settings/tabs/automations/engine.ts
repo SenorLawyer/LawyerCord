@@ -179,7 +179,6 @@ let systemEnabled = false;
 let engineAvailable = false;
 let engineGeneration = 0;
 let timerId: number | undefined;
-const processing = false;
 let globalLimit = 4;
 const queue = createRunQueue(() => notify());
 const nextDue = new Map<string, number>();
@@ -611,19 +610,9 @@ function stringify(value: unknown): string {
     }
 }
 
-function getPathValue(value: unknown, path: string): unknown {
-    let current = value;
-    for (const part of path.split(".")) {
-        if (Array.isArray(current) && /^\d+$/.test(part)) current = current[Number(part)];
-        else if (isRecord(current) && part in current) current = current[part];
-        else return undefined;
-    }
-    return current;
-}
-
 function resolveTemplate(value: string | undefined, variables: Record<string, unknown>): string {
     if (!value) return "";
-    return value.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_match, path: string) => stringify(getPathValue(variables, path.trim())));
+    return value.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_match, path: string) => stringify(readPath(variables, path.trim())));
 }
 
 function requireSnowflake(value: string | undefined, label: string): string {
@@ -1235,7 +1224,7 @@ async function interactWithModal(block: AutomationBlock, context: ExecutionConte
 /** Returns both sides as well, so the run log can show what was actually compared. */
 
 function variableValue(name: string | undefined, context: ExecutionContext): unknown {
-    return name?.trim() ? getPathValue(context.variables, name.trim()) : undefined;
+    return name?.trim() ? readPath(context.variables, name.trim()) : undefined;
 }
 
 function describeForAI(value: unknown): string {

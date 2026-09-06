@@ -4,10 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { addMessagePreSendListener, removeMessagePreSendListener } from "@api/MessageEvents";
 import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
-import { ChannelStore, GuildMemberStore, SelectedChannelStore, SelectedGuildStore } from "@webpack/common";
+import { ChannelStore, GuildMemberStore } from "@webpack/common";
 
 export default definePlugin({
     name: "AtSomeone",
@@ -32,23 +31,14 @@ export default definePlugin({
             }
         }
     ],
-    start() {
-        this.preSend = addMessagePreSendListener((_, msg) => {
-            msg.content = msg.content.replace(/@someone/g, () => `<@${randomUser()}>`);
-        });
-    },
-
-    stop() {
-        removeMessagePreSendListener(this.preSend);
+    onBeforeMessageSend(channelId, msg) {
+        if (!msg.content.includes("@someone")) return;
+        const channel = ChannelStore.getChannel(channelId);
+        if (!channel) return;
+        const users = channel.guild_id
+            ? GuildMemberStore.getMembers(channel.guild_id).map(member => member.userId)
+            : channel.recipients;
+        if (!users.length) return;
+        msg.content = msg.content.replace(/@someone/g, () => `<@${users[Math.floor(users.length * Math.random())]}>`);
     }
 });
-
-const randomUser = () => {
-    const guildId = SelectedGuildStore.getGuildId();
-    if (guildId === null) {
-        const dmUsers = ChannelStore.getChannel(SelectedChannelStore.getChannelId()).recipients;
-        return dmUsers[~~(dmUsers.length * Math.random())];
-    }
-    const members = GuildMemberStore.getMembers(guildId);
-    return members[~~(members.length * Math.random())].userId;
-};

@@ -5,6 +5,7 @@
  */
 
 import assert from "node:assert/strict";
+import { build } from "esbuild";
 import { readFileSync } from "node:fs";
 import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -13,11 +14,34 @@ import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { createSourceFile, isFunctionDeclaration, isVariableStatement, ScriptTarget } from "typescript";
 
+import { stylePlugin } from "./build/common.mjs";
+
 const source = createSourceFile("buildWeb.mjs", readFileSync("scripts/build/buildWeb.mjs", "utf8"), ScriptTarget.Latest, true);
 const code = source.statements.filter(node =>
     isFunctionDeclaration(node) && node.name?.text === "buildExtension" ||
     isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(source) === "appendCssRuntime")
 ).map(node => node.getText(source)).join("\n");
+
+test("managed style modules preserve replacement syntax and placeholder names in CSS", async () => {
+    const root = await mkdtemp(join(tmpdir(), "lawyercord-managed-style-"));
+    const css = ".fixture::after { content: '$& $$ STYLE_NAME STYLE_SOURCE'; }";
+    try {
+        await writeFile(join(root, "fixture.css"), css);
+        await writeFile(join(root, "index.js"), 'import "./fixture.css?managed";');
+        const result = await build({
+            entryPoints: [join(root, "index.js")],
+            bundle: true, write: false, format: "iife", plugins: [stylePlugin]
+        });
+        const styles = new Map<string, { source: string; name: string; }>();
+        runInNewContext(result.outputFiles[0].text, { window: { VencordStyles: styles } });
+        assert.equal(styles.size, 1);
+        const [name, style] = [...styles][0];
+        assert.equal(style.name, name);
+        assert.equal(style.source, css);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
 
 test("browser packaging replaces stale output without unused editor bundles", async () => {
     const root = await mkdtemp(join(tmpdir(), "lawyercord-browser-build-"));
@@ -26,7 +50,7 @@ test("browser packaging replaces stale output without unused editor bundles", as
         assert.ok(result.startsWith(root + sep), "build writes must stay inside the fixture");
         return result;
     };
-    const css = ".fixture { color: red; }";
+    const css = '.fixture::after { content: "`${missing}\\\\path"; }\n.next { color: red; }';
     const files = {
         "dist/browser/extension.js": "renderer",
         "dist/browser/extension.css": "styles",
@@ -34,14 +58,14 @@ test("browser packaging replaces stale output without unused editor bundles", as
         "dist/LawyerCord.user.css": css,
         "dist/LawyerCord.user.js": "",
         "browser/manifest.json": '{"manifest_version":3}',
-        "browser/icon.png": "icon"
+        "browser/lawyercord-icon.png": "icon"
     };
     try {
         for (const [path, content] of Object.entries(files)) {
             await mkdir(join(at(path), ".."), { recursive: true });
             await writeFile(at(path), content);
         }
-        await runInNewContext(`${code}\nPromise.all([appendCssRuntime, buildExtension("fixture-unpacked", ["manifest.json", "icon.png"])]);`, {
+        await runInNewContext(`${code}\nPromise.all([appendCssRuntime, buildExtension("fixture-unpacked", ["manifest.json", "lawyercord-icon.png"])]);`, {
             VERSION: "1.2.3", Buffer, TextEncoder, join,
             console: { info() { } },
             readFile: (path: string, encoding: BufferEncoding) => readFile(at(path), encoding),
@@ -52,6 +76,7 @@ test("browser packaging replaces stale output without unused editor bundles", as
         });
         await assert.rejects(readFile(at("dist/browser/fixture-unpacked/stale.js")), { code: "ENOENT" });
         assert.equal(await readFile(at("dist/browser/fixture-unpacked/dist/LawyerCord.js"), "utf8"), "renderer");
+        assert.equal(await readFile(at("dist/browser/fixture-unpacked/lawyercord-icon.png"), "utf8"), "icon");
         assert.deepEqual(JSON.parse(await readFile(at("dist/browser/fixture-unpacked/manifest.json"), "utf8")), { manifest_version: 3, version: "1.2.3" });
         const unsafeWindow = { _vcUserScriptRendererCss: "" };
         runInNewContext(await readFile(at("dist/LawyerCord.user.js"), "utf8"), { unsafeWindow });

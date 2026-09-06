@@ -240,8 +240,8 @@ export type Select = ComponentType<PropsWithChildren<{
     /** discord stupid this gets all options instead of one yeah */
     renderOptionValue?(option: SelectOption[]): ReactNode;
 
-    "aria-label"?: boolean;
-    "aria-labelledby"?: boolean;
+    "aria-label"?: string;
+    "aria-labelledby"?: string;
 }>>;
 
 export type SearchableSelect = ComponentType<PropsWithChildren<{
@@ -284,7 +284,7 @@ export type SearchableSelect = ComponentType<PropsWithChildren<{
     maxVisibleItems?: number;
     popoutWidth?: number;
 
-    "aria-labelledby"?: boolean;
+    "aria-labelledby"?: string;
 }>>;
 
 export type Slider = ComponentClass<PropsWithChildren<{

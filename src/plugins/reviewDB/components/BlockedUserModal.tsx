@@ -44,8 +44,7 @@ function BlockedUser({ user, isBusy, setIsBusy }: { user: ReviewDBUser; isBusy: 
                 onClick={isBusy ? undefined : async () => {
                     setIsBusy(true);
                     try {
-                        await unblockUser(user.discordID);
-                        setGone(true);
+                        if (await unblockUser(user.discordID)) setGone(true);
                     } finally {
                         setIsBusy(false);
                     }
@@ -64,8 +63,8 @@ function BlockedUsersList() {
 
     if (pending)
         return null;
-    if (error)
-        return <Paragraph>Failed to fetch blocks: ${String(error)}</Paragraph>;
+    if (error || !blocks)
+        return <Paragraph>Failed to fetch blocked users.</Paragraph>;
     if (!blocks.length)
         return <Paragraph>No blocked users.</Paragraph>;
 

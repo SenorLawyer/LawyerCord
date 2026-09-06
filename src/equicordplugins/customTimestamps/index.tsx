@@ -17,14 +17,7 @@ import { useForceUpdater } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
 import { moment, TextInput, useEffect, useState } from "@webpack/common";
 
-import { DemoMessageContainer, timeFormats } from "./utils";
-
-type TimeFormat = {
-    name: string;
-    description: string;
-    default: string;
-    offset: number;
-};
+import { DemoMessageContainer, type TimeFormat, timeFormats } from "./utils";
 type TimeRowProps = {
     id: string;
     format: TimeFormat;

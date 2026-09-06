@@ -51,7 +51,9 @@ export async function getLyrics(track: Track | null): Promise<LyricsData | null>
         }
     }
 
-    const providersToTry = [settings.store.lyricsProvider, ...providers.filter(p => p !== settings.store.lyricsProvider)];
+    const providersToTry = settings.store.fallbackProvider
+        ? [settings.store.lyricsProvider, ...providers.filter(p => p !== settings.store.lyricsProvider)]
+        : [settings.store.lyricsProvider];
 
     for (const provider of providersToTry) {
         const lyricsInfo = await lyricFetchers[provider](track);

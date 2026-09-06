@@ -24,7 +24,7 @@ import { addMessage } from "./LoggedMessageManager";
 import { settings } from "./settings";
 import { FetchMessagesResponse, LoadMessagePayload, LoggedMessage, LoggedMessageJSON, MessageCreatePayload, MessageDeleteBulkPayload, MessageDeletePayload, MessageUpdatePayload } from "./types";
 import { cleanUpCachedMessage, cleanupUserObject, getNative, isGhostPinged, mapTimestamp, messageJsonToMessageClass, reAddDeletedMessages } from "./utils";
-import { removeContextMenuBindings, setupContextMenuPatches } from "./utils/contextMenu";
+import { contextMenuPath } from "./utils/contextMenu";
 import { hasWhitelistedId, shouldIgnore } from "./utils/index";
 import { LimitedMap } from "./utils/LimitedMap";
 import { doesMatch } from "./utils/parseQuery";
@@ -321,6 +321,14 @@ export default definePlugin({
     ],
     settings,
 
+    contextMenus: {
+        "message": contextMenuPath,
+        "channel-context": contextMenuPath,
+        "user-context": contextMenuPath,
+        "guild-context": contextMenuPath,
+        "gdm-context": contextMenuPath
+    },
+
     toolboxActions: {
         "Message Logger"() {
             openLogModal();
@@ -356,8 +364,6 @@ export default definePlugin({
             return messages;
         }
     },
-
-    isDeletedMessage: (id: string) => cacheSentMessages.get(id)?.deleted ?? false,
 
     getDeleted(m1, m2) {
         const deleted = m2?.deleted;
@@ -416,12 +422,9 @@ export default definePlugin({
         settings.store.imageCacheDir = imageCacheDir;
         settings.store.logsDir = logsDir;
         settings.store.attachmentFileExtensions = attachmentFileExtensions ?? "none";
-
-        setupContextMenuPatches();
     },
 
     stop() {
-        removeContextMenuBindings();
         MessageStore.getMessage = this.oldGetMessage;
         imageUtils.clearAttachmentBlobUrlCache();
     }

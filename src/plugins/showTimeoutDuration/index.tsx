@@ -52,11 +52,6 @@ function renderTimeout(message: Message, inline: boolean) {
         />
     );
 
-    getIntlMessage("GUILD_ENABLE_COMMUNICATION_TIME_REMAINING", {
-        username: message.author.username,
-        countdown
-    });
-
     return inline
         ? countdown()
         : getIntlMessage("GUILD_ENABLE_COMMUNICATION_TIME_REMAINING", {

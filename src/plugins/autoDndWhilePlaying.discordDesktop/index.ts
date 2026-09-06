@@ -9,7 +9,7 @@ import { getUserSettingLazy } from "@api/UserSettings";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 
-let savedStatus: string | null;
+let savedStatus: string | null = null;
 
 const StatusSettings = getUserSettingLazy<string>("status", "status")!;
 
@@ -63,8 +63,10 @@ export default definePlugin({
                     savedStatus = status;
                     StatusSettings.updateSetting(settings.store.statusToSet);
                 }
-            } else if (savedStatus && savedStatus !== settings.store.statusToSet) {
-                StatusSettings.updateSetting(savedStatus);
+            } else if (savedStatus) {
+                const previousStatus = savedStatus;
+                savedStatus = null;
+                if (status !== previousStatus) StatusSettings.updateSetting(previousStatus);
             }
         }
     }

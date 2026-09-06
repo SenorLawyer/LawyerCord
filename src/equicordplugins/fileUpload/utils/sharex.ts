@@ -84,7 +84,7 @@ export function resolveShareXTemplate(
     let output = template.trim();
     if (!output) return undefined;
 
-    output = output.replace(RESPONSE_TEMPLATE_REGEX, responseText);
+    output = output.replace(RESPONSE_TEMPLATE_REGEX, () => responseText);
     output = output.replace(JSON_TEMPLATE_REGEX, (_, pathA: string, pathB: string) => {
         const path = pathA || pathB;
         const value = getNestedValue(responseJson, path);

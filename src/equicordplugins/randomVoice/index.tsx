@@ -16,17 +16,18 @@ import { Devs, EquicordDevs, IS_MAC } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import definePlugin, { makeRange, OptionType } from "@utils/types";
 import type { Channel, VoiceState } from "@vencord/discord-types";
-import { findByCodeLazy, findByPropsLazy } from "@webpack";
+import { findByCodeLazy } from "@webpack";
 import { ChannelActions, ChannelRouter, ChannelStore, ContextMenuApi, FluxDispatcher, GuildStore, MediaEngineStore, Menu, PermissionsBits, PermissionStore, React, RelationshipStore, SelectedChannelStore, Toasts, useEffect, UserStore, useState, VoiceActions, VoiceStateStore } from "@webpack/common";
 
 const startStream = findByCodeLazy('type:"STREAM_START"');
 const getDesktopSources = findByCodeLazy("desktop sources");
-const { isVideoEnabled } = findByPropsLazy("isVideoEnabled");
 const NO_SERVERS = "__NONE__";
 const DEFAULT_KEYBIND = IS_MAC ? ["Meta", "Shift", "R"] : ["Control", "Shift", "R"];
 const MODIFIER_KEYS = new Set(["control", "ctrl", "shift", "alt", "option", "meta", "cmd", "command", "mod"]);
 
 let isRecordingKeybind = false;
+let joinGeneration = 0;
+let pendingJoin: ReturnType<typeof setInterval> | undefined;
 const cl = classNameFactory("vc-random-voice-");
 
 type RandomVoiceOperation = "<" | ">" | "==" | string;
@@ -546,7 +547,7 @@ function pickRandomChannel(store = settings.store) {
 }
 
 async function enableCamera() {
-    if (isVideoEnabled()) return;
+    if (MediaEngineStore.isVideoEnabled()) return;
 
     FluxDispatcher.dispatch({
         type: "MEDIA_ENGINE_SET_VIDEO_ENABLED",
@@ -558,9 +559,12 @@ async function startChannelStream(channel: Channel) {
     if (isStageChannel(channel) || !PermissionStore.can(PermissionsBits.STREAM, channel)) return;
 
     const selectedChannelId = SelectedChannelStore.getVoiceChannelId();
-    if (!selectedChannelId) return;
+    if (selectedChannelId !== channel.id) return;
+    const generation = joinGeneration;
+    const userId = getCurrentUserId();
 
     const sources = await getDesktopSources(MediaEngineStore.getMediaEngine(), ["screen"], null);
+    if (generation !== joinGeneration || userId !== getCurrentUserId() || SelectedChannelStore.getVoiceChannelId() !== channel.id) return;
     const source = sources?.[0];
     if (!source) return;
 
@@ -574,18 +578,32 @@ async function startChannelStream(channel: Channel) {
     });
 }
 
+function cancelPendingJoin() {
+    joinGeneration++;
+    if (pendingJoin !== undefined) clearInterval(pendingJoin);
+    pendingJoin = undefined;
+}
+
 function runAfterVoiceJoin(channelId: string, callbacks: PostJoinAction[]) {
     let attempts = 0;
-    const interval = setInterval(() => {
+    const generation = joinGeneration;
+    const userId = getCurrentUserId();
+    pendingJoin = setInterval(() => {
+        if (generation !== joinGeneration) return;
+        if (userId !== getCurrentUserId()) {
+            cancelPendingJoin();
+            return;
+        }
         attempts++;
 
         if (getCurrentVoiceChannelId() !== channelId) {
             if (attempts < 40) return;
-            clearInterval(interval);
+            cancelPendingJoin();
             return;
         }
 
-        clearInterval(interval);
+        clearInterval(pendingJoin);
+        pendingJoin = undefined;
         for (const callback of callbacks) {
             void callback();
         }
@@ -593,6 +611,7 @@ function runAfterVoiceJoin(channelId: string, callbacks: PostJoinAction[]) {
 }
 
 async function joinRandomVoice() {
+    cancelPendingJoin();
     const channelId = pickRandomChannel();
     if (!channelId) {
         showToast("Failed to find a voice channel.", Toasts.Type.MESSAGE);
@@ -869,6 +888,7 @@ export default definePlugin({
     },
 
     stop() {
+        cancelPendingJoin();
         window.removeEventListener("keydown", this.onKeyDown, true);
     },
 

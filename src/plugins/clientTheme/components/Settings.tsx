@@ -87,7 +87,7 @@ export function ThemeSettingsComponent() {
                     {nitroThemeEnabled && <Paragraph>{">"} Nitro themes aren't supported</Paragraph>}
 
                     <div className={cl("buttons-container")}>
-                        {(contrastWarning && fixableContrast) && <Button onClick={() => setDiscordTheme(oppositeTheme)} color={Button.Colors.RED}>Switch to {oppositeTheme} mode</Button>}
+                        {(contrastWarning && fixableContrast) && <Button onClick={() => setDiscordTheme(isLightTheme ? "dark" : "light")} color={Button.Colors.RED}>Switch to {oppositeTheme} mode</Button>}
                         {(nitroThemeEnabled) && <Button onClick={() => setDiscordTheme(currentTheme)} color={Button.Colors.RED}>Disable Nitro Theme</Button>}
                     </div>
                 </ErrorCard>

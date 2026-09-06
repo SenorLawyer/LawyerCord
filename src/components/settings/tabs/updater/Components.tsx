@@ -112,23 +112,17 @@ export function Updatable(props: CommonProps) {
                             if (await update()) {
                                 setUpdates([]);
 
-                                await new Promise<void>(r => {
-                                    openModal(props => (
-                                        <ConfirmModal
-                                            {...props}
-                                            title="Update Success!"
-                                            subtitle="Successfully updated. Restart now to apply the changes?"
-                                            confirmText="Restart"
-                                            cancelText="Not now!"
-                                            variant="primary"
-                                            onConfirm={() => {
-                                                relaunch();
-                                                r();
-                                            }}
-                                            onCancel={r}
-                                        />
-                                    ));
-                                });
+                                openModal(props => (
+                                    <ConfirmModal
+                                        {...props}
+                                        title="Update Success!"
+                                        subtitle="Successfully updated. Restart now to apply the changes?"
+                                        confirmText="Restart"
+                                        cancelText="Not now!"
+                                        variant="primary"
+                                        onConfirm={relaunch}
+                                    />
+                                ));
                             }
                         })}
                     >

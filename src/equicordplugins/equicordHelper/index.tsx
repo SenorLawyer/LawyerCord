@@ -6,7 +6,6 @@
 
 import { ApplicationCommandInputType, sendBotMessage } from "@api/Commands";
 import { HeaderBarButton } from "@api/HeaderBar";
-import { addMessagePreSendListener, removeMessagePreSendListener } from "@api/MessageEvents";
 import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings, migratePluginSettings, migratePluginToSettings, Settings } from "@api/Settings";
 import { ShieldIcon, WarningIcon } from "@components/Icons";
@@ -63,11 +62,6 @@ function StandingButton() {
     );
 }
 
-const listener = async (channelId, msg) => {
-    if (!settings.store.noBulletPoints) return;
-    msg.content = textProcessing(msg.content);
-};
-
 const settings = definePluginSettings({
     noMirroredCamera: {
         type: OptionType.BOOLEAN,
@@ -113,7 +107,6 @@ const settings = definePluginSettings({
     noBulletPoints: {
         type: OptionType.BOOLEAN,
         description: "Stops you from typing markdown bullet points (stinky)",
-        restartNeeded: true,
         default: false
     },
     noModalAnimation: {
@@ -411,15 +404,8 @@ export default definePlugin({
             }
         }
     ],
-    start() {
-        if (settings.store.noBulletPoints) {
-            addMessagePreSendListener(listener);
-        }
-    },
-    stop() {
-        if (settings.store.noBulletPoints) {
-            removeMessagePreSendListener(listener);
-        }
+    onBeforeMessageSend(_channelId, message) {
+        if (settings.store.noBulletPoints) message.content = textProcessing(message.content);
     },
     isChannelMuted(guildId: string, channelId: string) {
         const currentUserVoiceState = VoiceStateStore.getVoiceStateForUser(UserStore.getCurrentUser()?.id);

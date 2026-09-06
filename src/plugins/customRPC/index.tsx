@@ -395,9 +395,6 @@ export default definePlugin({
                         If you want to use an image link, download your image and reupload the image to <Link href="https://imgur.com">Imgur</Link> and get the image link by right-clicking the image and selecting "Copy image address".
                     </Paragraph>
                     <Paragraph>
-                        You can't see your own buttons on your profile, but everyone else can see it fine.
-                    </Paragraph>
-                    <Paragraph>
                         Some weird unicode text ("fonts" 𝖑𝖎𝖐𝖊 𝖙𝖍𝖎𝖘) may cause the rich presence to not show up, try using normal letters instead.
                     </Paragraph>
                 </Flex>

@@ -47,7 +47,10 @@ export function EditableText({ value, onChange, className }: EditableTextProps) 
     ) : (
         <BaseText
             className={className}
-            onClick={() => setEditing(true)}
+            onClick={() => {
+                setTempValue(value);
+                setEditing(true);
+            }}
             style={{ cursor: "pointer" }}
         >
             {value}

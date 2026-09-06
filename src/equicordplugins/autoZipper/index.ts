@@ -87,41 +87,30 @@ async function readDirectoryEntry(entry: FileSystemDirectoryEntry): Promise<Reco
     async function readEntries(dirEntry: FileSystemDirectoryEntry, path = ""): Promise<void> {
         const reader = dirEntry.createReader();
 
-        const readBatch = async (): Promise<void> => {
-            return new Promise((resolve, reject) => {
-                reader.readEntries(async entries => {
-                    if (entries.length === 0) {
-                        resolve();
-                        return;
+        for (;;) {
+            const entries = await new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
+            if (!entries.length) return;
+
+            for (const childEntry of entries) {
+                const entryPath = path ? `${path}/${childEntry.name}` : childEntry.name;
+
+                if (childEntry.isFile) {
+                    const file = await readFileEntry(childEntry as FileSystemFileEntry);
+                    fileCount++;
+                    if (fileCount > MAX_FOLDER_FILE_COUNT) {
+                        throw new Error(`${entry.name} contains more than ${MAX_FOLDER_FILE_COUNT} files.`);
                     }
 
-                    for (const childEntry of entries) {
-                        const entryPath = path ? `${path}/${childEntry.name}` : childEntry.name;
+                    totalBytes += file.size;
+                    assertZipInputSize(entry.name, totalBytes);
 
-                        if (childEntry.isFile) {
-                            const file = await readFileEntry(childEntry as FileSystemFileEntry);
-                            fileCount++;
-                            if (fileCount > MAX_FOLDER_FILE_COUNT) {
-                                throw new Error(`${entry.name} contains more than ${MAX_FOLDER_FILE_COUNT} files.`);
-                            }
-
-                            totalBytes += file.size;
-                            assertZipInputSize(entry.name, totalBytes);
-
-                            const arrayBuffer = await file.arrayBuffer();
-                            files[entryPath] = new Uint8Array(arrayBuffer);
-                        } else if (childEntry.isDirectory) {
-                            await readEntries(childEntry as FileSystemDirectoryEntry, entryPath);
-                        }
-                    }
-
-                    await readBatch();
-                    resolve();
-                }, reject);
-            });
-        };
-
-        await readBatch();
+                    const arrayBuffer = await file.arrayBuffer();
+                    files[entryPath] = new Uint8Array(arrayBuffer);
+                } else if (childEntry.isDirectory) {
+                    await readEntries(childEntry as FileSystemDirectoryEntry, entryPath);
+                }
+            }
+        }
     }
 
     await readEntries(entry);

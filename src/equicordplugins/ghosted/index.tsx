@@ -147,7 +147,7 @@ export default definePlugin({
     tags: ["Chat", "Utility"],
     authors: [EquicordDevs.vei, Devs.sadan, EquicordDevs.justjxke, EquicordDevs.iamme],
     settings,
-    dependencies: ["AudioPlayerAPI", "ServerListAPI"],
+    dependencies: ["ServerListAPI"],
     contextMenus: {
         "gdm-context": (menuItems, props) => {
             const group = findGroupChildrenByChildId("leave", menuItems, true);

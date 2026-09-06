@@ -4,18 +4,15 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { NativeSettings } from "@main/settings";
 import { exec, spawn } from "child_process";
-import { BrowserWindow, dialog, shell, WebContentsView } from "electron";
-import { existsSync, readdirSync, readFileSync } from "fs";
+import { BrowserWindow, dialog, shell } from "electron";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "fs";
 import { mkdir, readdir, readFile, rm } from "fs/promises";
-import { basename, join } from "path";
+import { basename, dirname, join } from "path";
 import yaml from "yaml-js";
 
 // @ts-ignore fuck off
 import pluginValidateContent from "./misc/pluginValidate.txt"; // i would use HTML but esbuild is being whiny
-// @ts-ignore fuck off
-import setGitPathContent from "./misc/setGitPath.txt";
 // @ts-ignore fuck off
 import updateValidateContent from "./misc/updateValidate.txt"; // see above
 
@@ -25,6 +22,20 @@ const CLONE_LINK_REGEX = /https:\/\/(?:((?:git(?:hub|lab)\.com|git\.(?:[a-zA-Z0-
 
 const vencordPath = ["desktop", "equibop"].includes(basename(__dirname)) ? join(__dirname, "../") : __dirname;
 
+function getPluginDirectory(name: unknown): string {
+    if (typeof name !== "string" || !name || name.length > 255 || name === "." || name === ".." || /[/\\:\0]/.test(name))
+        throw new Error("Invalid plugin directory.");
+
+    try {
+        const root = realpathSync(join(vencordPath, "../src/userplugins"));
+        const directory = realpathSync(join(root, name));
+        if (dirname(directory) === root) return directory;
+    } catch {
+        throw new Error("Invalid plugin directory.");
+    }
+    throw new Error("Invalid plugin directory.");
+}
+
 export async function ensurePluginsDirectory(_: any) {
     if (!IS_DEV) return;
     try {
@@ -33,31 +44,32 @@ export async function ensurePluginsDirectory(_: any) {
 }
 
 export async function rmPlugin(_, name: string): Promise<string> {
-    // eslint-disable-next-line
-    return new Promise(async (resolve, reject) => {
-        const ups = await getUserplugins();
-        const pl = ups.find(p => p.directory! === name);
-        if (!pl) return;
+    getPluginDirectory(name);
+    const plugins = await getUserplugins().catch(() => { throw new Error("Could not read installed plugins."); });
+    const plugin = plugins.find(plugin => plugin.directory === name);
+    if (!plugin) throw new Error("Plugin not found.");
 
-        const deleteReqDialog = await dialog.showMessageBox({
-            title: "Uninstall plugin",
-            message: `Uninstall ${pl.name}`,
-            type: "error",
-            detail: `The uninstall of the userplugin ${pl.name} has been requested. Would you like to do so?\n\nIf you did not initiate this, press No.`,
-            buttons: ["No", "Yes"]
-        });
-
-        if (deleteReqDialog.response !== 1) return reject("User rejected");
-        await rm(join(vencordPath, "../src/userplugins", name), { recursive: true });
-
-        await build();
-        resolve("Done");
+    const confirmation = await dialog.showMessageBox({
+        title: "Uninstall plugin",
+        message: `Uninstall ${plugin.name}`,
+        type: "error",
+        detail: `The uninstall of the userplugin ${plugin.name} has been requested. Would you like to do so?\n\nIf you did not initiate this, press No.`,
+        buttons: ["No", "Yes"]
     });
+
+    if (confirmation.response !== 1) throw new Error("Uninstall cancelled.");
+    try {
+        await rm(getPluginDirectory(name), { recursive: true });
+        await build();
+    } catch {
+        throw new Error("Could not uninstall the plugin.");
+    }
+    return "Done";
 }
 
 export async function isUpdateAvailableForPlugin(_, name: string): Promise<boolean> {
+    const pluginDir = getPluginDirectory(name);
     return new Promise(resolve => {
-        const pluginDir = join(vencordPath, "../src/userplugins", name);
         const otherProc = exec("git fetch", {
             cwd: pluginDir
         });
@@ -128,13 +140,6 @@ export function initPluginInstall(_, link: string, source: string, owner: string
             show: false,
             autoHideMenuBar: true
         });
-        const reView /* haha got it */ = new WebContentsView({
-            webPreferences: {
-                devTools: true,
-                nodeIntegration: true
-            }
-        });
-        win.contentView.addChildView(reView);
         win.loadURL(generateReviewPluginContent(meta));
         win.on("page-title-updated", async e => {
             switch (win.webContents.getTitle() as "abortInstall" | "reviewCode" | "install") {
@@ -165,17 +170,14 @@ export function initPluginInstall(_, link: string, source: string, owner: string
     });
 }
 
-async function build(): Promise<any> {
+function build(): Promise<void> {
     return new Promise((resolve, reject) => {
-        const proc = exec("pnpm build --dev", {
+        exec("pnpm build --dev", {
             cwd: join(vencordPath, ".."),
             shell: process.env.SHELL || process.env.ComSpec || "/bin/sh"
-        });
-        proc.once("close", () => {
-            if (proc.exitCode !== 0) {
-                reject("Failed to build Vencord, try building from console");
-            }
-            resolve("Success");
+        }, error => {
+            if (error) reject(new Error("Could not build LawyerCord. Try building from the terminal."));
+            else resolve();
         });
     });
 }
@@ -261,13 +263,17 @@ async function cloneRepo(link: string, repo: string): Promise<void> {
     });
 }
 
+function escapeHtml(value: string): string {
+    return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
+}
+
 function generateReviewPluginContent(meta: {
     name: string;
     description: string;
     usesPreSend: boolean;
     usesNative: boolean;
 }): string {
-    const template = pluginValidateContent.replace("%PLUGINNAME%", meta.name.replaceAll("<", "&lt;")).replace("%PLUGINDESC%", meta.description.replaceAll("<", "&lt;")).replace("%WARNINGHIDER%", !meta.usesNative && !meta.usesPreSend ? "[data-useless=\"warning\"] { display: none !important; }" : "").replace("%NATIVETSHIDER%", meta.usesNative ? "" : "#native-ts-warning { display: none !important; }").replace("%PRESENDHIDER%", meta.usesPreSend ? "" : "#pre-send-warning { display: none !important; }");
+    const template = pluginValidateContent.replace("%PLUGINNAME%", () => escapeHtml(meta.name)).replace("%PLUGINDESC%", () => escapeHtml(meta.description)).replace("%WARNINGHIDER%", !meta.usesNative && !meta.usesPreSend ? "[data-useless=\"warning\"] { display: none !important; }" : "").replace("%NATIVETSHIDER%", meta.usesNative ? "" : "#native-ts-warning { display: none !important; }").replace("%PRESENDHIDER%", meta.usesPreSend ? "" : "#pre-send-warning { display: none !important; }");
     const buf = Buffer.from(template).toString("base64");
     return `data:text/html;base64,${buf}`;
 }
@@ -278,7 +284,7 @@ function generateUpdatePluginContent(meta: {
     remote: string;
     commit: string;
 }): string {
-    const template = updateValidateContent.replace("%PLUGINNAME%", meta.name.replaceAll("<", "&lt;")).replace("%PLUGINDESC%", meta.description.replaceAll("<", "&lt;")).replace("%REMOTE%", meta.remote).replace("%COMMITMESSAGE%", meta.commit.replaceAll("\n", "<br />"));
+    const template = updateValidateContent.replace("%PLUGINNAME%", () => escapeHtml(meta.name)).replace("%PLUGINDESC%", () => escapeHtml(meta.description)).replace("%REMOTE%", () => escapeHtml(meta.remote)).replace("%COMMITMESSAGE%", () => meta.commit.replaceAll("\n", "<br />"));
     const buf = Buffer.from(template).toString("base64");
     return `data:text/html;base64,${buf}`;
 }
@@ -288,9 +294,10 @@ function formatCommitMessages(rawOutput: string, remote: string): string {
     let output = "";
 
     for (const line of rawOutput.split("\n")) {
-        const [user, shortCommit, longCommit, message] = line.split("////////");
+        if (!line) continue;
+        const [user, shortCommit, longCommit, ...message] = line.split("////////");
         if (output) output += "\n";
-        output += `${user} (<a href="${commitBaseUrl}/commit/${longCommit}" style="font-family: monospace;">${shortCommit}</a>) ~ ${message}`;
+        output += `${escapeHtml(user)} (<a href="${escapeHtml(`${commitBaseUrl}/commit/${longCommit}`)}" style="font-family: monospace;">${escapeHtml(shortCommit)}</a>) ~ ${escapeHtml(message.join("////////"))}`;
     }
 
     return output;
@@ -316,8 +323,8 @@ export async function getUserplugins() {
 }
 
 export async function updatePlugin(_, directory: string) {
+    const pluginDir = getPluginDirectory(directory);
     return new Promise((resolve, reject) => {
-        const pluginDir = join(vencordPath, "../src/userplugins", directory);
 
         async function doStuff() {
             const pluginMeta = await getPluginMeta(pluginDir);
@@ -337,13 +344,6 @@ export async function updatePlugin(_, directory: string) {
                 show: false,
                 autoHideMenuBar: true
             });
-            const reView /* haha got it */ = new WebContentsView({
-                webPreferences: {
-                    devTools: true,
-                    nodeIntegration: true
-                }
-            });
-            win.contentView.addChildView(reView);
 
             const commitProc = exec("git log origin/HEAD...HEAD --oneline --pretty=format:%an////////%h////////%H////////%s", {
                 cwd: pluginDir
@@ -381,7 +381,7 @@ export async function updatePlugin(_, directory: string) {
                                     build().then(() => resolve(JSON.stringify({
                                         name: pluginMeta.name,
                                         native: pluginMeta.usesNative
-                                    })));
+                                    })), reject);
                                 });
                             }
                             catch (e) {
@@ -396,90 +396,4 @@ export async function updatePlugin(_, directory: string) {
         }
         doStuff();
     });
-}
-
-export async function openGitPathModal(_: any) {
-    const gitPathSet: string | undefined = NativeSettings.store.plugins.UserpluginInstaller?.gitPath;
-    const win = new BrowserWindow({
-        maximizable: false,
-        minimizable: false,
-        width: 560,
-        height: 400,
-        resizable: false,
-        webPreferences: {
-            devTools: true
-        },
-        title: "Set Git path",
-        modal: true,
-        parent: BrowserWindow.getAllWindows()[0],
-        show: false,
-        autoHideMenuBar: true
-    });
-    const reView = new WebContentsView({
-        webPreferences: {
-            devTools: true,
-            nodeIntegration: true
-        }
-    });
-    win.contentView.addChildView(reView);
-    win.loadURL(`data:text/html;base64,${Buffer.from(setGitPathContent).toString("base64")}`);
-    win.on("page-title-updated", async _ => {
-        const t = win.webContents.getTitle();
-        if (t === "abort") win.close();
-        if (t.startsWith("ok")) {
-            if (!NativeSettings.store.plugins.UserpluginInstaller) {
-                NativeSettings.store.plugins.UserpluginInstaller = {
-                    gitPath: undefined
-                };
-            }
-            if (t === "ok-") {
-                NativeSettings.store.plugins.UserpluginInstaller.gitPath = undefined;
-            } else {
-                const gitPath2 = t.split("-").toSpliced(0, 1).join("-");
-                NativeSettings.store.plugins.UserpluginInstaller.gitPath = gitPath2;
-            }
-            win.close();
-        }
-        if (t.startsWith("check")) {
-            try {
-                const gitProc = spawn(t === "check-" ? "git" : t.split("-").toSpliced(0, 1).join("-"), ["--version"]);
-                let rawOutput = "";
-                gitProc.stdout?.on("data", d => {
-                    rawOutput += String(d);
-                });
-                gitProc.on("error", e => {
-                    dialog.showMessageBox({
-                        title: "Error",
-                        message: "Git error",
-                        type: "error",
-                        detail: `${e}\n\nDouble-check the path you entered.`,
-                        buttons: ["OK"]
-                    });
-                });
-                gitProc.once("close", () => {
-                    if (gitProc.exitCode === 0) {
-                        dialog.showMessageBox({
-                            title: "Success",
-                            message: "Git works!",
-                            type: "info",
-                            detail: `Successfully called ${rawOutput.trim()}`,
-                            buttons: ["OK"]
-                        });
-                    }
-                });
-            } catch (e) {
-                dialog.showMessageBox({
-                    title: "Error",
-                    message: "Git error",
-                    type: "error",
-                    detail: `${e}\n\nDouble-check the path you entered.`,
-                    buttons: ["OK"]
-                });
-            }
-        }
-    });
-    win.show();
-    if (gitPathSet) {
-        win.webContents.executeJavaScript(`document.querySelector("input").value = ${JSON.stringify(gitPathSet)};`);
-    }
 }

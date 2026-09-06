@@ -105,7 +105,7 @@ export default definePlugin({
         if (!activity) return;
         appIds.forEach(app => {
             if (app.enabled && app.appId === activity.application_id) {
-                const oldActivity = { ...activity };
+                const oldActivity = { ...activity, assets: { ...activity.assets } };
                 activity.type = app.newActivityType;
                 if (app.newName) activity.name = this.parseField(app.newName, oldActivity);
                 if (app.newActivityType === ActivityType.STREAMING && app.newStreamUrl) activity.url = app.newStreamUrl;
@@ -116,7 +116,6 @@ export default definePlugin({
                 if (app.newLargeImageUrl) activity.assets.large_image = this.parseField(app.newLargeImageUrl, oldActivity);
                 if (app.newSmallImageText) activity.assets.small_text = this.parseField(app.newSmallImageText, oldActivity);
                 if (app.newSmallImageUrl) activity.assets.small_image = this.parseField(app.newSmallImageUrl, oldActivity);
-                // @ts-ignore here we are intentionally nulling assets
                 if (app.disableAssets) activity.assets = {};
                 if (app.disableTimestamps) activity.timestamps = {};
             }

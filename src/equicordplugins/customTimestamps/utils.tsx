@@ -13,7 +13,7 @@ import { moment, useRef, UserStore, useState } from "@webpack/common";
 
 import customTimestamps from ".";
 
-type TimeFormat = {
+export type TimeFormat = {
     name: string;
     description: string;
     default: string;

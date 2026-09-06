@@ -24,7 +24,7 @@ import { settings } from "@plugins/reviewDB/settings";
 import { cl, showToast } from "@plugins/reviewDB/utils";
 import { useAwaiter, useForceUpdater } from "@utils/react";
 import { findByCodeLazy, findByPropsLazy, findComponentByCodeLazy } from "@webpack";
-import { React, RelationshipStore, useRef, UserStore } from "@webpack/common";
+import { React, RelationshipStore, useRef, UserStore, useStateFromStores } from "@webpack/common";
 
 import ReviewComponent from "./ReviewComponent";
 
@@ -37,6 +37,10 @@ const createChannelRecordFromServer = findByCodeLazy(".GUILD_TEXT]", "fromServer
 interface UserProps {
     discordId: string;
     name: string;
+}
+
+interface ReviewEditorRef {
+    ref: { current: { getSlateEditor(): unknown; } | null; };
 }
 
 interface Props extends UserProps {
@@ -61,30 +65,36 @@ export default function ReviewsView({
     type,
 }: Props) {
     const [signal, refetch] = useForceUpdater(true);
+    const currentUserId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
 
-    const [reviewData] = useAwaiter(() => getReviews(discordId, { offset: (page - 1) * REVIEWS_PER_PAGE, fetchVotes: true }), {
+    const [result] = useAwaiter(async () => ({
+        discordId,
+        currentUserId,
+        data: await getReviews(discordId, { offset: (page - 1) * REVIEWS_PER_PAGE, fetchVotes: true }),
+    }), {
         fallbackValue: null,
-        deps: [refetchSignal, signal, page],
-        onSuccess: data => {
-            if (settings.store.hideBlockedUsers) data!.reviews = data!.reviews?.filter(r => !RelationshipStore.isBlocked(r.sender.discordID));
-            const systemReviews = data!.reviews.filter(r => r.type === ReviewType.System);
-            const normalReviews = data!.reviews.filter(r => r.type !== ReviewType.System);
+        deps: [discordId, currentUserId, refetchSignal, signal, page],
+        onSuccess: result => {
+            if (!result) return;
+            const { data } = result;
+            if (settings.store.hideBlockedUsers) data.reviews = data.reviews.filter(r => !RelationshipStore.isBlocked(r.sender.discordID));
+            const systemReviews = data.reviews.filter(r => r.type === ReviewType.System);
+            const normalReviews = data.reviews.filter(r => r.type !== ReviewType.System);
 
-            data!.reviews = [...systemReviews, ...normalReviews.reverse()];
+            data.reviews = [...systemReviews, ...normalReviews.reverse()];
             scrollToTop?.();
-            onFetchReviews(data!);
+            onFetchReviews(data);
         }
     });
 
-    if (!reviewData) return null;
-
-    const currentUserId = UserStore.getCurrentUser()?.id;
+    if (!result || result.discordId !== discordId || result.currentUserId !== currentUserId) return null;
+    const reviewData = result.data;
 
     return (
         <>
             <ReviewList
                 refetch={refetch}
-                reviews={reviewData!.reviews}
+                reviews={reviewData.reviews}
                 hideOwnReview={hideOwnReview}
                 profileId={discordId}
                 type={type}
@@ -95,7 +105,7 @@ export default function ReviewsView({
                     name={name}
                     discordId={discordId}
                     refetch={refetch}
-                    isAuthor={Boolean(currentUserId && reviewData!.reviews?.some(r => r.sender.discordID === currentUserId))}
+                    isAuthor={Boolean(currentUserId && reviewData.reviews.some(r => r.sender.discordID === currentUserId))}
                 />
             )}
         </>
@@ -129,10 +139,10 @@ function ReviewList({ refetch, reviews, hideOwnReview, profileId, type }: { refe
 export function ReviewsInputComponent(
     { discordId, isAuthor, refetch, name, modalKey, repliesTo }: { discordId: string, name: string; isAuthor: boolean; refetch(): void; modalKey?: string; repliesTo?: number; }
 ) {
+    const accountId = UserStore.getCurrentUser()?.id;
     const { token } = Auth;
-    const editorRef = useRef<any>(null);
-    const inputType = ChatInputTypes.USER_PROFILE_REPLY;
-    inputType.disableAutoFocus = true;
+    const editorRef = useRef<ReviewEditorRef | null>(null);
+    const inputType = { ...ChatInputTypes.USER_PROFILE_REPLY, disableAutoFocus: true };
 
     const channel = createChannelRecordFromServer({ id: "0", type: 1 });
 
@@ -162,6 +172,9 @@ export function ReviewsInputComponent(
                     textValue=""
                     onSubmit={
                         async res => {
+                            if (UserStore.getCurrentUser()?.id !== accountId)
+                                return { shouldClear: false, shouldRefocus: false };
+                            const editor = editorRef.current?.ref.current;
                             // I know this naming is deranged, but for compatibility it has to stay this way
 
                             const response = await addReview({
@@ -170,10 +183,10 @@ export function ReviewsInputComponent(
                                 repliesto: repliesTo,
                             });
 
-                            if (response) {
+                            if (response && UserStore.getCurrentUser()?.id === accountId && editor && editorRef.current?.ref.current === editor) {
                                 refetch();
 
-                                const slateEditor = editorRef.current.ref.current.getSlateEditor();
+                                const slateEditor = editor.getSlateEditor();
 
                                 // clear editor
                                 Transforms.delete(slateEditor, {
@@ -187,7 +200,7 @@ export function ReviewsInputComponent(
                             // even tho we need to return this, it doesnt do anything
                             return {
                                 shouldClear: false,
-                                shouldRefocus: true,
+                                shouldRefocus: UserStore.getCurrentUser()?.id === accountId && !!editor && editorRef.current?.ref.current === editor,
                             };
                         }
                     }

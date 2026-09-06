@@ -43,9 +43,4 @@ export class KeyReviewGate {
         const scope = scopeKey(localUserId, peerUserId);
         return this.pending.has(scope) || this.failures.has(scope);
     }
-
-    clear(): void {
-        this.pending.clear();
-        this.failures.clear();
-    }
 }

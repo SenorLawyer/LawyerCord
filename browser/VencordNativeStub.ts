@@ -28,7 +28,7 @@ import { getThemeInfo } from "@main/themes";
 import { debounce } from "@shared/debounce";
 import { localStorage } from "@utils/localStorage";
 import { getStylusWebStoreUrl } from "@utils/web";
-import { EXTENSION_BASE_URL, metaReady, RENDERER_CSS_URL } from "@utils/web-metadata";
+import { metaReady, RENDERER_CSS_URL } from "@utils/web-metadata";
 
 // listeners for ipc.on
 const cssListeners = new Set<(css: string) => void>();
@@ -104,7 +104,6 @@ window.VencordNative = {
                 return;
             }
 
-            win.baseUrl = EXTENSION_BASE_URL;
             win.setCss = setCssDebounced;
             win.getCurrentCss = () => VencordNative.quickCss.get();
             win.getTheme = this.getEditorTheme;

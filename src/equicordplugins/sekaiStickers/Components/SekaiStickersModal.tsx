@@ -20,13 +20,11 @@ export default function SekaiStickersModal({ modalProps, settings }: { modalProp
     const [fontSize, setFontSize] = React.useState<number>(characters[character].defaultText.s);
     const [rotate, setRotate] = React.useState<number>(characters[character].defaultText.r);
     const [curve, setCurve] = React.useState<boolean>(false);
-    const [isImgLoaded, setImgLoaded] = React.useState<boolean>(false);
+    const [loadedImage, setLoadedImage] = React.useState<{ character: number; image: HTMLImageElement; } | null>(null);
     const [position, setPosition] = React.useState<{ x: number, y: number; }>({ x: characters[character].defaultText.x, y: characters[character].defaultText.y });
     const [spaceSize, setSpaceSize] = React.useState<number>(36);
-    let canvast!: HTMLCanvasElement;
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.src = "https://st.ayaka.one/img/" + characters[character].img;
+    const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+    const img = loadedImage?.character === character ? loadedImage.image : null;
 
     React.useEffect(() => {
         setPosition({
@@ -35,17 +33,22 @@ export default function SekaiStickersModal({ modalProps, settings }: { modalProp
         });
         setFontSize(characters[character].defaultText.s);
         setRotate(characters[character].defaultText.r);
-        setImgLoaded(false);
+        setLoadedImage(null);
+        const image = new Image();
+        image.crossOrigin = "anonymous";
+        image.onload = () => setLoadedImage({ character, image });
+        image.src = "https://st.ayaka.one/img/" + characters[character].img;
+        return () => { image.onload = null; };
     }, [character]);
 
-    img.onload = () => { setImgLoaded(true); };
     const angle = (Math.PI * text.length) / 7;
 
-    const draw = ctx => {
+    const draw = (ctx: CanvasRenderingContext2D) => {
+        canvasRef.current = null;
         ctx.canvas.width = 296;
         ctx.canvas.height = 256;
 
-        if (isImgLoaded && document.fonts.check("12px YurukaStd")) {
+        if (img && document.fonts.check("12px YurukaStd")) {
             const hRatio = ctx.canvas.width / img.width;
             const vRatio = ctx.canvas.height / img.height;
             const ratio = Math.min(hRatio, vRatio);
@@ -90,9 +93,9 @@ export default function SekaiStickersModal({ modalProps, settings }: { modalProp
                     ctx.fillText(lines[i], 0, k);
                     k += spaceSize;
                 }
-                ctx.restore();
             }
-            canvast = ctx.canvas;
+            ctx.restore();
+            canvasRef.current = ctx.canvas;
         }
     };
     return (
@@ -111,11 +114,16 @@ export default function SekaiStickersModal({ modalProps, settings }: { modalProp
                 {
                     text: "Upload as Attachment",
                     variant: "primary",
+                    disabled: !img,
                     onClick: () => {
-                        if (settings.store.AutoCloseModal) modalProps.onClose();
-                        canvast.toBlob(blob => {
-                            const file = new File([blob as Blob], `${characters[character].character}-sekai_cards.png`, { type: "image/png" });
-                            UploadHandler.promptToUpload([file], ChannelStore.getChannel(SelectedChannelStore.getChannelId()), 0);
+                        const canvas = canvasRef.current;
+                        const channel = ChannelStore.getChannel(SelectedChannelStore.getChannelId());
+                        if (!img || !canvas || !channel) return;
+                        canvas.toBlob(blob => {
+                            if (!blob) return;
+                            const file = new File([blob], `${characters[character].character}-sekai_cards.png`, { type: "image/png" });
+                            UploadHandler.promptToUpload([file], channel, 0);
+                            if (settings.store.AutoCloseModal) modalProps.onClose();
                         });
                     }
                 }

@@ -11,14 +11,16 @@ import { setImmediate } from "node:timers/promises";
 import { runInNewContext } from "node:vm";
 import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
-import type { LoadedZipEntry, ZipEntry, ZipPreviewResult } from "../src/equicordplugins/zipPreview/utils";
+import type { LoadedZipEntry, ZipEntry, ZipPreviewCacheState, ZipPreviewResult } from "../src/equicordplugins/zipPreview/utils";
 
 function fixture() {
+    const downloads: ReturnType<typeof Promise.withResolvers<{ success: boolean; data: ArrayBuffer; }>>[] = [];
     const operations: ReturnType<typeof Promise.withResolvers<Uint8Array>>[] = [];
     const api = {} as {
         parseZipBuffer(buffer: ArrayBuffer): ZipPreviewResult;
         loadZipEntry(entry: ZipEntry): Promise<LoadedZipEntry>;
         clearZipPreviewCache(): void;
+        getCachedZip(url: string): ZipPreviewCacheState;
     };
     const mocks: Record<string, object> = {
         "@utils/web": {},
@@ -34,11 +36,17 @@ function fixture() {
     const source = readFileSync("src/equicordplugins/zipPreview/utils.ts", "utf8");
     const code = transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;
     runInNewContext(code, {
-        exports: api, VencordNative: {},
+        exports: api, URL, VencordNative: { pluginHelpers: { ZipPreview: {
+            fetchDiscordAttachment() {
+                const download = Promise.withResolvers<{ success: boolean; data: ArrayBuffer; }>();
+                downloads.push(download);
+                return download.promise;
+            }
+        } } },
         require(name: string) { assert.ok(name in mocks, name); return mocks[name]; }
     });
     const entries = api.parseZipBuffer(new ArrayBuffer(0)).entries;
-    return { api, entries, operations };
+    return { api, entries, operations, downloads };
 }
 
 test("ZIP entry loads cap active workers at two and waiting requests at four", async () => {
@@ -91,4 +99,24 @@ test("clearing ZIP previews rejects queued work and suppresses active results", 
     const next = api.loadZipEntry(fresh[0]);
     operations[2].resolve(new Uint8Array([9]));
     assert.equal((await next).data[0], 9);
+});
+
+
+test("cleared ZIP downloads cannot replace newer requests", async () => {
+    const { api, downloads } = fixture();
+    const url = "https://cdn.discordapp.com/attachments/1/2/test.zip";
+    const first = api.getCachedZip(url);
+    assert.equal(first.status, "pending");
+    if (first.status !== "pending") return;
+    const rejected = assert.rejects(first.promise, /cancelled/);
+    api.clearZipPreviewCache();
+    const second = api.getCachedZip(url);
+    assert.equal(second.status, "pending");
+    if (second.status !== "pending") return;
+    downloads[0].resolve({ success: true, data: new ArrayBuffer(0) });
+    await rejected;
+    assert.equal(api.getCachedZip(url), second);
+    downloads[1].resolve({ success: true, data: new ArrayBuffer(0) });
+    await second.promise;
+    assert.equal(api.getCachedZip(url).status, "resolved");
 });

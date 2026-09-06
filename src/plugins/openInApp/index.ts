@@ -44,7 +44,7 @@ const UrlReplacementRules: Record<string, URLReplacementRule> = {
         match: /^https:\/\/(steamcommunity\.com|(?:help|store)\.steampowered\.com)\/.+$/,
         replace: match => `steam://openurl/${match}`,
         description: "Open Steam links in the Steam app",
-        shortlinkMatch: /^https:\/\/s.team\/.+$/,
+        shortlinkMatch: /^https:\/\/s\.team\/.+$/,
         accountViewReplace: userId => `steam://openurl/https://steamcommunity.com/profiles/${userId}`,
     },
     epic: {
@@ -64,7 +64,7 @@ const UrlReplacementRules: Record<string, URLReplacementRule> = {
         description: "Open Apple Music links in the iTunes app"
     },
     vrcx: {
-        match: /^https:\/\/vrchat.com\/home\/(user|avatar|world|group)\/(.+)$/,
+        match: /^https:\/\/vrchat\.com\/home\/(user|avatar|world|group)\/(.+)$/,
         replace: (_, type, id) => `vrcx://${type}/${id}`,
         description: "Open VRChat links in the VRCX app"
     },

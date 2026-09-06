@@ -48,18 +48,6 @@ function getEmojiMarkdown(target: Target, copyUnicode: boolean): string {
     return `<${animated ? "a" : ""}:${emojiName.replace(/~\d+$/, "")}:${emojiId}>`;
 }
 
-function getEmojiImageUrl(target: Target): string | null {
-    const src = target.firstChild?.src;
-    if (!src) return null;
-
-    try {
-        const url = new URL(src);
-        return url.toString();
-    } catch {
-        return src;
-    }
-}
-
 const settings = definePluginSettings({
     copyUnicode: {
         type: OptionType.BOOLEAN,
@@ -79,7 +67,7 @@ export default definePlugin({
         "expression-picker"(children, { target }: { target: Target; }) {
             if (target.dataset.type !== "emoji") return;
 
-            const emojiImageUrl = getEmojiImageUrl(target);
+            const emojiImageUrl = target.firstChild?.src;
 
             children.push(
                 <Menu.MenuGroup>

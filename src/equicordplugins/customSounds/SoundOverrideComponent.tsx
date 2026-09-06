@@ -13,24 +13,14 @@ import { classNameFactory } from "@utils/css";
 import { Margins } from "@utils/margins";
 import { useForceUpdater } from "@utils/react";
 import { makeRange } from "@utils/types";
-import { findLazy } from "@webpack";
 import { React, Select, showToast, Slider } from "@webpack/common";
-import { ComponentType, Ref, SyntheticEvent } from "react";
 
 import { deleteAudio, getAllAudio, saveAudio, StoredAudioFile } from "./audioStore";
 import { ensureDataURICached } from "./index";
 import { SoundOverride, SoundType } from "./types";
 
-type FileInput = ComponentType<{
-    ref: Ref<HTMLInputElement>;
-    onChange: (e: SyntheticEvent<HTMLInputElement>) => void;
-    multiple?: boolean;
-    filters?: { name?: string; extensions: string[]; }[];
-}>;
-
 const AUDIO_EXTENSIONS = ["mp3", "wav", "ogg", "m4a", "aac", "flac", "webm", "wma", "mp4"];
 const cl = classNameFactory("vc-custom-sounds-");
-const FileInput: FileInput = findLazy(m => m.prototype?.activateUploadDialogue && m.prototype.setRef);
 
 const capitalizeWords = (str: string) =>
     str.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());

@@ -114,7 +114,7 @@ export default definePlugin({
         const { maxFPS, maxResolution, roundResolution, resolutions, fpss } = settings.store;
         const rounder = roundResolution ? 10 : 1;
         const [p1, p2] = params;
-        const getResolution = () => MediaEngineStore.getState().goLiveSource?.quality.resolution || 720;
+        const getResolution = () => MediaEngineStore.getState().goLiveSource?.quality.resolution ?? 720;
         const getFPS = () => MediaEngineStore.getState().goLiveSource?.quality.frameRate || 30;
 
         return [

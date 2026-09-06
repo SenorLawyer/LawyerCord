@@ -11,7 +11,7 @@ import { Flex } from "@components/Flex";
 import { Heading, HeadingTertiary } from "@components/Heading";
 import { copyToClipboard } from "@utils/clipboard";
 import { findByPropsLazy, findCssClassesLazy } from "@webpack";
-import { Button, Parser, useEffect, useState } from "@webpack/common";
+import { Button, Parser, showToast, Toasts, useEffect, useState } from "@webpack/common";
 
 import { FriendInvite } from "./types";
 
@@ -102,7 +102,7 @@ export default function FriendCodesPanel() {
                             color={Button.Colors.RED}
                             look={Button.Looks.FILLED}
                             disabled={!invites.length}
-                            onClick={() => revokeFriendInvites().then(setInvites([]))}
+                            onClick={() => revokeFriendInvites().then(() => setInvites([])).catch(() => showToast("Could not revoke friend codes. Try again.", Toasts.Type.FAILURE))}
                         >
                             Revoke all Friend Codes
                         </Button>

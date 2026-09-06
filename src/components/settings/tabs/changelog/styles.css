@@ -61,40 +61,11 @@
     font-weight: 600;
 }
 
-.vc-changelog-loading {
-    text-align: center;
-    padding: 2em;
-    color: var(--text-subtle);
-}
-
-.vc-changelog-empty {
-    text-align: center;
-    padding: 2em;
-    background-color: var(--background-base-lower-alt);
-    border-radius: 8px;
-    color: var(--text-subtle);
-}
-
 .vc-changelog-controls {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 0.5em;
-}
-
-.vc-changelog-repo-info {
-    display: flex;
-    align-items: center;
-    gap: 0.5em;
-    margin-bottom: 1em;
-}
-
-.vc-changelog-current-hash {
-    font-family: var(--font-code);
-    background-color: var(--background-base-lowest);
-    padding: 0.125em 0.25em;
-    border-radius: 3px;
-    font-size: 0.875em;
 }
 
 /* New Plugins Section Styles */
@@ -190,10 +161,6 @@
 }
 
 /* Update Logs Styles */
-.vc-changelog-history {
-    margin-top: 1.5em;
-}
-
 .vc-changelog-history-list {
     display: flex;
     flex-direction: column;
@@ -365,10 +332,6 @@
 }
 
 /* Current changes section */
-.vc-changelog-current {
-    margin-bottom: 1.5em;
-}
-
 .vc-changelog-commits-list {
     display: flex;
     flex-direction: column;
@@ -401,16 +364,6 @@
 .visual-refresh .vc-changelog-entry:hover {
     background-color: var(--background-surface-high);
     box-shadow: 0 2px 8px rgb(0 0 0 / 10%);
-}
-
-.visual-refresh .vc-changelog-empty {
-    background-color: var(--background-surface-high);
-    border: 1px solid var(--border-subtle);
-}
-
-.visual-refresh .vc-changelog-current-hash {
-    background-color: var(--input-background);
-    border: 1px solid var(--border-subtle);
 }
 
 .visual-refresh .vc-changelog-new-plugins-section {
@@ -454,12 +407,6 @@
         align-items: stretch;
     }
 
-    .vc-changelog-session-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.5em;
-    }
-
     .vc-changelog-log-toggle {
         align-self: flex-end;
         margin-top: -1.5em;
@@ -489,27 +436,6 @@
     }
 }
 
-/* Badge styles for plugin counts */
-.vc-changelog-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.125em 0.375em;
-    background-color: var(--brand);
-    color: var(--white);
-    border-radius: 12px;
-    font-size: 0.75em;
-    font-weight: 600;
-    margin-left: 0.5em;
-}
-
-.vc-changelog-badge.warning {
-    background-color: var(--status-warning);
-}
-
-.vc-changelog-badge.success {
-    background-color: var(--status-positive);
-}
-
 /* Required plugin styling */
 .vc-changelog-dep-text {
     font-size: 0.875em;
@@ -537,7 +463,6 @@
 }
 
 /* Ensure Forms.FormSection doesn't constrain changelog */
-.vc-settings-tab .vc-changelog-history,
 .vc-settings-tab .vc-changelog-history-list,
 .vc-settings-tab .vc-changelog-log-content {
     min-height: auto !important;

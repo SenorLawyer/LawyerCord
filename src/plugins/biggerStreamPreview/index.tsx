@@ -21,36 +21,18 @@ import { ScreenshareIcon } from "@components/Icons";
 import { Devs } from "@utils/constants";
 import { openImageModal } from "@utils/discord";
 import definePlugin from "@utils/types";
-import { ApplicationStream, Channel, Stream, User } from "@vencord/discord-types";
+import { ApplicationStream, Stream, User } from "@vencord/discord-types";
 import { ApplicationStreamingStore, ApplicationStreamPreviewStore, Menu } from "@webpack/common";
 
-export interface UserContextProps {
-    channel: Channel,
-    channelSelected: boolean,
-    className: string,
-    config: { context: string; };
-    context: string,
-    onHeightUpdate: Function,
-    position: string,
-    target: HTMLElement,
-    theme: string,
-    user: User;
+interface UserContextProps {
+    user?: User;
 }
 
-export interface StreamContextProps {
-    appContext: string,
-    className: string,
-    config: { context: string; };
-    context: string,
-    exitFullscreen: Function,
-    onHeightUpdate: Function,
-    position: string,
-    target: HTMLElement,
-    stream: Stream,
-    theme: string,
+interface StreamContextProps {
+    stream: Stream;
 }
 
-export const handleViewPreview = async ({ guildId, channelId, ownerId }: ApplicationStream | Stream) => {
+const handleViewPreview = async ({ guildId, channelId, ownerId }: ApplicationStream | Stream) => {
     const previewUrl = await ApplicationStreamPreviewStore.getPreviewURL(guildId, channelId, ownerId);
     if (!previewUrl) return;
 
@@ -61,7 +43,7 @@ export const handleViewPreview = async ({ guildId, channelId, ownerId }: Applica
     });
 };
 
-export const addViewStreamContext: NavContextMenuPatchCallback = (children, { userId }: { userId: string | bigint; }) => {
+const addViewStreamContext: NavContextMenuPatchCallback = (children, { userId }: { userId: string | bigint; }) => {
     const stream = ApplicationStreamingStore.getAnyStreamForUser(userId);
     if (!stream) return;
 
@@ -70,19 +52,18 @@ export const addViewStreamContext: NavContextMenuPatchCallback = (children, { us
             label="View Stream Preview"
             id="view-stream-preview"
             icon={ScreenshareIcon}
-            action={() => stream && handleViewPreview(stream)}
-            disabled={!stream}
+            action={() => handleViewPreview(stream)}
         />
     );
 
     children.push(<Menu.MenuSeparator />, streamPreviewItem);
 };
 
-export const streamContextPatch: NavContextMenuPatchCallback = (children, { stream }: StreamContextProps) => {
+const streamContextPatch: NavContextMenuPatchCallback = (children, { stream }: StreamContextProps) => {
     return addViewStreamContext(children, { userId: stream.ownerId });
 };
 
-export const userContextPatch: NavContextMenuPatchCallback = (children, { user }: UserContextProps) => {
+const userContextPatch: NavContextMenuPatchCallback = (children, { user }: UserContextProps) => {
     if (user) return addViewStreamContext(children, { userId: user.id });
 };
 

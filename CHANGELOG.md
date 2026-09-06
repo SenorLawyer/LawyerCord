@@ -2,6 +2,78 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 2.1.2.0 - 2026-09-05
+
+### Fixed
+
+- Remove the unused dynamic sticker pack refresh function and its credential forwarding path.
+- Fetch audio directly for visualizations instead of forwarding audio URLs through a third-party proxy.
+- Stop automatically uploading legacy Streaks records that lack an owning account. Preserve the local records.
+- Remove Navidrome instance artwork sharing to keep server authentication out of Discord asset requests, and migrate existing selections to None.
+
+- Remove SupportHelper execution of JavaScript snippets from messages and embeds while preserving diagnostic actions.
+- Preserve successful webpack patches and their diagnostics when later replacements fail.
+- Resolve bulk webpack lookups when multiple matches share one module.
+
+- Finish removing retired Questify auto-completion code, network handlers, and the related ChannelTabs animation. Preserve quest browsing preferences and genuine progress displays.
+
+- Remove unused message logger native write handlers, cache exposure, and obsolete types.
+
+- Remove unused MarkdownTables parser entry points and a dead helper.
+- Retain outgoing MessageBurst text until the edit resolves, and remove its unused popover dependency.
+- Preserve Source resolution when changing screenshare frame rate.
+- Keep InvisibleChat decryption local by removing automatic URL preview requests to Discord.
+
+- Cancel instant screensharing when its selected source is unavailable instead of sharing a different screen or window.
+- Use the managed message hook for Ingtoninator so its API dependency and cleanup are handled automatically.
+- Remove the empty contact-history startup wrapper and its unnecessary async yield.
+- Preserve saved hidden servers when the plugin stops before loading finishes, and flush only pending edits.
+- Preserve existing Chromium feature flags when applying startup workarounds.
+- Remove an unused native download helper and correct the pull request release instructions.
+- Preserve literal CSS in userscript builds and remove obsolete browser editor metadata and About page scripting.
+- Use native integer decoding for extension headers and reject truncated archives.
+- Resolve cancelled file pickers and release their temporary inputs.
+- Simplify extension extraction, reject paths outside the extension directory, and finish cleanup before reporting installation failures.
+- Await backup file imports, preserve empty QuickCSS backups, and remove backup-content logging and duplicate import handling.
+
+- Honor the default two-way cloud sync direction and remove unreachable startup warnings and unused notification code.
+
+- Keep cloud sync failures retryable and report failed downloads or deletions instead of recording success.
+
+- Preserve zero volume when creating audio players.
+
+- Delete the unused predecessor to the UserSettings API.
+
+- Delete notification log entries by their unique ID without overwriting concurrent updates.
+
+- Enable the badges API for plugins declaring profile badges.
+
+- Propagate nested dependency failures and restart requirements before starting plugins.
+
+- Handle queued task failures without unhandled promise rejections while continuing queued work.
+
+- Require linked-message previews to match the requested message ID.
+
+- Replace the hand-written attachment metadata base64 codec with browser primitives.
+
+- Validate desktop favourite attachment downloads, reject redirects, cap downloads at 500 MiB and return safe errors.
+
+- Apply the existing clip size limit to native file reads and reuse the byte-upload writer for selected clips.
+
+- Remove unused icon viewer modal styles.
+
+- Use the managed message hook for random mentions and choose members from the destination channel.
+
+- Propagate folder-read and size-limit failures when automatically zipping dropped folders.
+
+- Preserve incomplete automation log records until their remaining bytes arrive.
+
+- Validate AI conversation entries before serialization and forward only their role and content.
+
+- Delete unused automation cloning and linear-flow helpers.
+
+- Use the existing validated data-path reader for automation templates and AI inputs.
+
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed

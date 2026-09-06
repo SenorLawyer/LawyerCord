@@ -65,7 +65,7 @@ export default definePlugin({
     },
     renderMessageDecoration({ message }) {
         if (!settings.store.showInMessages) return null;
-        return message?.author == null ? null : <VoiceChannelIndicator userId={message.author.id} isMessageIndicator />;
+        return message?.author == null ? null : <VoiceChannelIndicator userId={message.author.id} />;
     },
     stop() {
         clearVoiceChannelIndicatorTimers();

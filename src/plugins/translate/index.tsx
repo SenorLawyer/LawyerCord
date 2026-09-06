@@ -117,8 +117,12 @@ export default definePlugin({
             setShouldShowTranslateEnabledTooltip?.(false);
         }, 2000);
 
-        const trans = await translate("sent", message.content);
-        message.content = trans.text;
+        try {
+            const trans = await translate("sent", message.content);
+            message.content = trans.text;
+        } catch {
+            return { cancel: true };
+        }
     },
 
     stop() {

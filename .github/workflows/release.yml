@@ -128,6 +128,11 @@ jobs:
                   pnpm audit --audit-level moderate
                   pnpm testTsc
                   pnpm testPerformance
+                  pnpm testStartupFlags
+                  pnpm testCrxToZip
+                  pnpm testFilePicker
+                  pnpm testExtensionInstall
+                  pnpm testSettingsSync
                   pnpm testAutomations
                   pnpm testDiscordMcp
                   pnpm testReleaseArtifactAudit

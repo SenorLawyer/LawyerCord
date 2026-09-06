@@ -278,7 +278,8 @@ export default definePlugin({
 
     stop() {
         // so componenetWillUnMount gets called if Magnifier component is still alive
-        this.root && this.root.unmount();
+        this.unMountMagnifier();
         this.element?.remove();
+        this.element = null;
     }
 });

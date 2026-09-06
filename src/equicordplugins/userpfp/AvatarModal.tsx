@@ -11,7 +11,7 @@ import { classNameFactory } from "@utils/css";
 import { RenderModalProps } from "@vencord/discord-types";
 import { IconUtils, Modal, React, TextInput, Toasts, UserStore, useState } from "@webpack/common";
 
-import { clearAvatarUrlCache, data, KEY_DATASTORE } from ".";
+import { data, KEY_DATASTORE } from ".";
 
 const cl = classNameFactory("vc-userpfp-");
 
@@ -30,17 +30,12 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
     const originalAvatar = IconUtils.getUserAvatarURL(user, true, 128) || "";
 
     const [url, setUrl] = useState(avatars[userId] || "");
-    const [preview, setPreview] = useState<string>(avatars[userId] || "");
+    const preview = url.trim();
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     function handleKey(e: React.KeyboardEvent) {
         if (e.key === "Enter") saveUserAvatar();
-    }
-
-    function handleUrlChange(val: string) {
-        setUrl(val);
-        setPreview(val.trim());
     }
 
     async function handleFile(file: File) {
@@ -57,7 +52,6 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
 
         const dataUrl = await fileToDataUrl(file);
         setUrl(dataUrl);
-        setPreview(dataUrl);
     }
 
     async function saveUserAvatar() {
@@ -66,14 +60,12 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
             return;
         }
         avatars[userId] = url.trim();
-        clearAvatarUrlCache(userId);
         await set(KEY_DATASTORE, avatars);
         modalProps.onClose();
     }
 
     async function deleteUserAvatar() {
         delete avatars[userId];
-        clearAvatarUrlCache(userId);
         await set(KEY_DATASTORE, avatars);
         modalProps.onClose();
     }
@@ -125,7 +117,7 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
                     <TextInput
                         placeholder="https://example.com/image.png"
                         value={url.startsWith("data:") ? "(uploaded file)" : url}
-                        onChange={handleUrlChange}
+                        onChange={setUrl}
                         autoFocus
                     />
                 </section>

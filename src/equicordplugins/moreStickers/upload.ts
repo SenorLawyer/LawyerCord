@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { getMimeFromExtension } from "@equicordplugins/fileUpload/utils/getMediaUrl";
-import { FFmpeg } from "@ffmpeg/ffmpeg";
+import type { FFmpeg } from "@ffmpeg/ffmpeg";
 import { insertTextIntoChatInputBox, MessageOptions } from "@utils/discord";
 import { CloudUploadPlatform } from "@vencord/discord-types/enums";
 import { ChannelStore, CloudUploader, Constants, DraftStore, FluxDispatcher, MessageActions, PendingReplyStore, RestAPI, showToast, SnowflakeUtils, Toasts, UploadHandler } from "@webpack/common";
@@ -21,8 +20,6 @@ type SendStickerOptions = {
     shiftKey: boolean;
     ffmpegState?: FFmpegState;
 };
-
-export const ffmpeg = new FFmpeg();
 
 async function resizeImage(url: string) {
     const originalImage = new Image();
@@ -56,12 +53,6 @@ async function resizeImage(url: string) {
 
     // Draw the resized image onto the canvas
     ctx.drawImage(originalImage, 0, 0, resizedWidth, resizedHeight);
-
-    // Get the canvas image data
-    const imageData = ctx.getImageData(0, 0, targetSize, targetSize);
-    const { data } = imageData;
-
-    // Apply any additional image processing or filters here if desired
 
     // Convert the image data to a Blob
     const blob: Blob | null = await new Promise(resolve => {
@@ -135,10 +126,9 @@ export async function sendSticker({ channelId, sticker, ctrlKey, shiftKey, ffmpe
         const blobUrl = URL.createObjectURL(await res.blob());
         try {
             const processed = await resizeImage(blobUrl);
-            const filename = sticker.filename ?? new URL(sticker.image).pathname.split("/").pop()!;
-            const mimeType = getMimeFromExtension(filename.split(".").pop());
+            const filename = sticker.filename || new URL(sticker.image).pathname.split("/").pop() || "sticker";
 
-            file = new File([processed], filename, { type: mimeType });
+            file = new File([processed], `${filename.replace(/\.[^/.]+$/, "")}.png`, { type: "image/png" });
         } finally {
             URL.revokeObjectURL(blobUrl);
         }

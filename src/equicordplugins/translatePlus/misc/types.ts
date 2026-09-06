@@ -12,8 +12,3 @@ export interface Translation {
     text: string;
     src: string;
 }
-
-export type IconProps = {
-    width?: number;
-    height?: number;
-};

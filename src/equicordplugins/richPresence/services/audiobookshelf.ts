@@ -79,10 +79,7 @@ async function fetchMediaData(): Promise<AbsMediaData | null> {
         });
 
         if (!res.ok) {
-            if (res.status === 401) {
-                authToken = null;
-                if (await authenticate()) return fetchMediaData();
-            }
+            if (res.status === 401) authToken = null;
             throw `${res.status} ${res.statusText}`;
         }
 

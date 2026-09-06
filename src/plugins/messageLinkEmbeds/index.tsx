@@ -170,7 +170,7 @@ async function fetchMessage(channelID: string, messageID: string) {
     }).catch(() => null);
 
     const msg = res?.body?.[0];
-    if (!msg) return;
+    if (msg?.id !== messageID) return;
 
     const message: Message = MessageStore.getMessages(msg.channel_id).receiveMessage(msg).get(msg.id);
     if (!message) return;

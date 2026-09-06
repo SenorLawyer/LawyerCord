@@ -4,14 +4,15 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Button, closeModal, Menu, Modal,openModalLazy, Slider, TextInput, useState } from "@webpack/common";
+import { Button, closeModal, Menu, Modal, openModalLazy, Slider, TextInput, useState } from "@webpack/common";
 
 import { folderIconsData, settings } from "./settings";
 import { folderProp, int2rgba, setFolderData } from "./util";
 
 export function ImageModal(folderProps: folderProp) {
-    const [data, setData] = useState(((settings.store.folderIcons ?? {}) as folderIconsData)[folderProps.folderId]?.url ?? "");
-    const [size, setSize] = useState(100);
+    const saved = (settings.store.folderIcons as folderIconsData | undefined)?.[folderProps.folderId];
+    const [data, setData] = useState(saved?.url ?? "");
+    const [size, setSize] = useState(saved?.size ?? 100);
     return (
         <>
             <TextInput
@@ -29,7 +30,7 @@ export function ImageModal(folderProps: folderProp) {
                     color: "#FFF"
                 }}>Change the size of the folder icon</div>
                 <Slider
-                    initialValue={100}
+                    initialValue={size}
                     onValueChange={(v: number) => {
                         setSize(v);
                     }}
@@ -54,8 +55,8 @@ export function ImageModal(folderProps: folderProp) {
             <hr />
             <Button onClick={() => {
                 // INFO: unset button
-                const folderSettings = settings.store.folderIcons as folderIconsData;
-                if (folderSettings[folderProps.folderId]) {
+                const folderSettings = settings.store.folderIcons as folderIconsData | undefined;
+                if (folderSettings?.[folderProps.folderId]) {
                     folderSettings[folderProps.folderId] = null;
                 }
                 closeModal("custom-folder-icon");

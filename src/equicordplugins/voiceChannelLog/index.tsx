@@ -17,13 +17,12 @@ import { addLogEntry, setCallStartTime } from "./logs";
 import settings from "./settings";
 import { EmbeddedActivityEvent, PreviousVoiceState, SoundEvent, VoiceChannelLogEntry, VoiceState } from "./types";
 
-const { fetchApplication } = findByPropsLazy("fetchApplication");
+const ApplicationActions = findByPropsLazy("fetchApplication");
 
 const loggedActivityUsersByApp = new Map<string, Set<string>>();
 const previousStates = new Map<string, PreviousVoiceState>();
 const existingUsers = new Set<string>();
-const activityNameCache = new Map<string, Promise<string>>();
-const MAX_ACTIVITY_NAME_CACHE_SIZE = 64;
+let sessionGeneration = 0;
 
 let clientOldChannelId: string | undefined;
 let clientJoinedAt = 0;
@@ -53,26 +52,13 @@ function log(entry: Omit<VoiceChannelLogEntry, "timestamp">) {
     addLogEntry({ ...entry, timestamp: new Date() });
 }
 
-function cacheActivityName(appId: string, promise: Promise<string>) {
-    if (activityNameCache.size >= MAX_ACTIVITY_NAME_CACHE_SIZE) {
-        const oldestKey = activityNameCache.keys().next().value;
-        if (oldestKey != null) activityNameCache.delete(oldestKey);
-    }
-
-    activityNameCache.set(appId, promise);
-    return promise;
-}
-
 function getActivityName(appId: string) {
     const app = ApplicationStore.getApplication(appId);
     if (app) return Promise.resolve(app.name);
 
-    return activityNameCache.get(appId) ?? cacheActivityName(
-        appId,
-        fetchApplication(appId)
-            .then(fetched => fetched?.name ?? "Unknown activity")
-            .catch(() => "Unknown activity")
-    );
+    return ApplicationActions.fetchApplication(appId)
+        .then(fetched => fetched?.name ?? "Unknown activity")
+        .catch(() => "Unknown activity");
 }
 
 function rememberPreviousState(userId: string, state: VoiceStateSnapshotInput) {
@@ -86,6 +72,7 @@ function rememberPreviousState(userId: string, state: VoiceStateSnapshotInput) {
 }
 
 function clearSessionState() {
+    sessionGeneration++;
     previousStates.clear();
     loggedActivityUsersByApp.clear();
     existingUsers.clear();
@@ -138,6 +125,7 @@ export default definePlugin({
             const joining = channelId != null && currentVoiceChannelId == null;
             const oldChannel = currentVoiceChannelId ?? clientOldChannelId;
 
+            if (channelId !== oldChannel) sessionGeneration++;
             clientOldChannelId = channelId ?? undefined;
 
             if (leaving && oldChannel) {
@@ -272,7 +260,10 @@ export default definePlugin({
 
             if (!joined.length && !left.length) return;
 
+            const generation = sessionGeneration;
+            const accountId = getCurrentUserId();
             const logWithName = (activityName: string) => {
+                if (generation !== sessionGeneration || accountId !== getCurrentUserId() || !isMyChannel(channelId)) return;
                 for (const userId of joined)
                     log({ type: "activity", userId, channelId, activityName, applicationId: appId });
                 for (const userId of left)
@@ -299,6 +290,7 @@ export default definePlugin({
     },
 
     start() {
+        clearSessionState();
         const userId = getCurrentUserId();
         if (!userId) return;
 
@@ -321,6 +313,5 @@ export default definePlugin({
 
     stop() {
         clearSessionState();
-        activityNameCache.clear();
     }
 });

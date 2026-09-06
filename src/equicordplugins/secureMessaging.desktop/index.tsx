@@ -246,7 +246,7 @@ function useSecureReplyPreview<T extends ReplyPreviewProps>(props: T): T {
 }
 
 const permittedAnnouncements = new Map<string, number>();
-const keyReviewGate = new KeyReviewGate();
+let keyReviewGate = new KeyReviewGate();
 type RestMethod = (request: Record<string, any>, ...args: any[]) => Promise<any>;
 let networkGuardEnabled = false;
 let originalRestPost: RestMethod | null = null;
@@ -294,7 +294,8 @@ function reviewKeyAnnouncementInBackground(message: Message | undefined): void {
     const editedTimestamp = discordEditedTimestamp(message);
     const attemptId = `${message.channel_id}\0${message.id}\0${editedTimestamp ?? ""}\0${message.content}`;
 
-    keyReviewGate.begin(localUserId, peerUserId);
+    const gate = keyReviewGate;
+    gate.begin(localUserId, peerUserId);
     void Native.reviewAnnouncement(
         localUserId,
         peerUserId,
@@ -303,11 +304,11 @@ function reviewKeyAnnouncementInBackground(message: Message | undefined): void {
         editedTimestamp,
     )
         .then(result => {
-            if (isNativeFailure(result)) keyReviewGate.fail(localUserId, peerUserId, attemptId);
-            else keyReviewGate.succeed(localUserId, peerUserId, attemptId);
+            if (isNativeFailure(result)) gate.fail(localUserId, peerUserId, attemptId);
+            else gate.succeed(localUserId, peerUserId, attemptId);
         })
-        .catch(() => keyReviewGate.fail(localUserId, peerUserId, attemptId))
-        .finally(() => keyReviewGate.finish(localUserId, peerUserId));
+        .catch(() => gate.fail(localUserId, peerUserId, attemptId))
+        .finally(() => gate.finish(localUserId, peerUserId));
 }
 
 function messageFromDispatch(event: Record<string, any>): Message | undefined {
@@ -1465,7 +1466,7 @@ export default definePlugin({
         clearWirePayloadAuthorizations();
         clearEncryptedAttachmentCache();
         clearEncryptedEmbedCache();
-        keyReviewGate.clear();
+        keyReviewGate = new KeyReviewGate();
     },
 
     patchEncryptedAttachments(message: Message, owner: { forceUpdate(): void; }) {

@@ -281,7 +281,7 @@ export default definePlugin({
             });
         }
 
-        if (IS_VESKTOP && VesktopNative.clipboard || IS_EQUIBOP && VesktopNative.clipboard) {
+        if ((IS_VESKTOP || IS_EQUIBOP) && VesktopNative.clipboard) {
             VesktopNative.clipboard.copyImage(await imageData.arrayBuffer(), url);
             return;
         } else {

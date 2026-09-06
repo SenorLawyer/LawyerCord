@@ -38,7 +38,6 @@ let compiledPatternsKey = "";
 let compiledPatterns: CompiledPatternEntry[] = [];
 
 function updatePatterns(patterns: PatternEntry[]) {
-    compiledPatternsKey = "";
     settings.store.patterns = patterns;
 }
 

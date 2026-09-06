@@ -272,6 +272,7 @@ export class TranscriptionWorker {
     private onPartial: (output: any) => void;
     private onProgress: (progress: TranscriptionProgress) => void;
     private terminated = false;
+    private downloads = new AbortController();
 
     constructor(
         onStatus: (status: string) => void,
@@ -290,6 +291,11 @@ export class TranscriptionWorker {
         this.workerUrl = URL.createObjectURL(blob);
         this.worker = new Worker(this.workerUrl, { type: "module" });
         this.worker.onmessage = this.handleMessage.bind(this);
+        this.worker.onerror = () => {
+            if (this.terminated) return;
+            this.terminate();
+            this.onError(new Error("The speech recognition worker failed. Try transcribing again."));
+        };
     }
 
     private getMimeType(url: string): string {
@@ -326,10 +332,11 @@ export class TranscriptionWorker {
                             }
                         }, [cachedData]);
                     } else {
-                        const res = await fetch(url);
+                        const res = await fetch(url, { signal: this.downloads.signal });
                         if (!res.ok) throw new Error("Failed to fetch " + url);
 
                         const buffer = await res.arrayBuffer();
+                        if (this.terminated) return;
                         await DataStore.set(`VoiceMessageTranscriber_${url}`, buffer);
                         if (this.terminated) return;
 
@@ -383,6 +390,7 @@ export class TranscriptionWorker {
     public terminate() {
         if (this.terminated) return;
         this.terminated = true;
+        this.downloads.abort();
         this.worker.terminate();
         URL.revokeObjectURL(this.workerUrl);
     }

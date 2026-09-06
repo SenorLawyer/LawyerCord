@@ -5,7 +5,6 @@
  */
 
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
-import { DataStore } from "@api/index";
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
@@ -163,7 +162,6 @@ export default definePlugin({
         "expression-picker": expressionPickerPatch,
     },
     start() {
-        DataStore.createStore("StickerBlocker", "data");
         blockedStickerIds = parseStickerIds(settings.store.blockedStickers);
     },
     isBlocked(stickerId) {

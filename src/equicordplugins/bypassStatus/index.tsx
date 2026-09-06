@@ -13,7 +13,7 @@ import { getCurrentChannel } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 import type { Message } from "@vencord/discord-types";
-import { ChannelActionCreators, ChannelStore, Menu, MessageStore, NavigationRouter, PresenceStore, UserStore, WindowStore } from "@webpack/common";
+import { ChannelStore, Menu, MessageStore, NavigationRouter, PresenceStore, UserStore, WindowStore } from "@webpack/common";
 import { JSX } from "react";
 
 interface IMessageCreate {
@@ -237,8 +237,7 @@ export default definePlugin({
                 if (((guildId != null && bypassGuildIds.has(guildId)) || bypassChannelIds.has(channelId)) && mentioned) {
                     await showNotification(message, guildId);
                 } else if (bypassUserIds.has(message.author.id)) {
-                    const userChannelId = await ChannelActionCreators.getOrEnsurePrivateChannel(message.author.id);
-                    if (channelId === userChannelId || (mentioned && settings.store.allowOutsideOfDms === true)) {
+                    if (ChannelStore.getChannel(channelId)?.isDM() || (mentioned && settings.store.allowOutsideOfDms === true)) {
                         await showNotification(message, guildId);
                     }
                 }

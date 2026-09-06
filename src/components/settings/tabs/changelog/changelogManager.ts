@@ -173,19 +173,11 @@ async function persistKnownSettings(
     await DataStore.set(KNOWN_SETTINGS_KEY, serializeKnownSettings(map));
 }
 
-function isMapLike(value: any): value is Map<string, string[]> {
-    return (
-        value &&
-        typeof value.get === "function" &&
-        typeof value.size === "number"
-    );
-}
-
 export function getNewSettingsSize(
     newSettings: Map<string, string[]> | Record<string, string[]> | undefined,
 ): number {
     if (!newSettings) return 0;
-    if (isMapLike(newSettings)) return newSettings.size;
+    if (newSettings instanceof Map) return newSettings.size;
     return Object.keys(newSettings).length;
 }
 
@@ -193,7 +185,7 @@ export function getNewSettingsEntries(
     newSettings: Map<string, string[]> | Record<string, string[]> | undefined,
 ): [string, string[]][] {
     if (!newSettings) return [];
-    if (isMapLike(newSettings)) return Array.from(newSettings.entries());
+    if (newSettings instanceof Map) return Array.from(newSettings.entries());
     return Object.entries(newSettings);
 }
 
@@ -218,7 +210,6 @@ export async function getChangelogHistory(): Promise<ChangelogHistory> {
 export async function saveUpdateSession(
     commits: ChangelogEntry[],
     newPlugins: string[],
-    updatedPlugins: string[],
     newSettings: Map<string, string[]>,
     forceLog: boolean = false,
 ): Promise<void> {
@@ -243,7 +234,6 @@ export async function saveUpdateSession(
         !forceLog &&
         commits.length === 0 &&
         newPlugins.length === 0 &&
-        updatedPlugins.length === 0 &&
         getNewSettingsSize(newSettings) === 0
     ) {
         return;
@@ -275,7 +265,7 @@ export async function saveUpdateSession(
         toHash: toHash,
         commits,
         newPlugins,
-        updatedPlugins,
+        updatedPlugins: [],
         newSettings:
             getNewSettingsSize(newSettings) > 0
                 ? Object.fromEntries(newSettings)
@@ -432,12 +422,6 @@ export async function getNewPlugins(): Promise<string[]> {
             !plugins[plugin].hidden &&
             !plugins[plugin].required,
     );
-}
-
-export async function getUpdatedPlugins(): Promise<string[]> {
-    // This is a placeholder - in a real implementation, you'd track plugin version changes
-    // For now, we'll return empty array since plugin version tracking would need to be implemented
-    return [];
 }
 
 export async function clearChangelogHistory(): Promise<void> {

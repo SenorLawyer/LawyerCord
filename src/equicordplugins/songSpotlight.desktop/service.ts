@@ -4,25 +4,19 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { RenderSongInfo } from "@song-spotlight/api/handlers";
 import { Song } from "@song-spotlight/api/structs";
 import { sid } from "@song-spotlight/api/util";
+import { useAwaiter } from "@utils/react";
 import { PluginNative } from "@utils/types";
-import { useEffect, useState } from "@webpack/common";
 
 export function useRender(song: Song) {
-    const [failed, setFailed] = useState(false);
-    const [render, setRender] = useState<RenderSongInfo | null>(null);
-
-    useEffect(() => {
-        setFailed(false);
-        setRender(null);
-        Native.renderSong(song)
-            .catch(() => null)
-            .then(info => info ? setRender(info) : setFailed(true));
-    }, [sid(song)]);
-
-    return { failed, render };
+    const id = sid(song);
+    const [result] = useAwaiter(async () => ({ id, render: await Native.renderSong(song).catch(() => null) }), {
+        fallbackValue: null,
+        deps: [id],
+    });
+    const current = result?.id === id ? result : null;
+    return { failed: !!current && !current.render, render: current?.render ?? null };
 }
 
 export const Native = VencordNative.pluginHelpers.SongSpotlight as PluginNative<typeof import("./native")>;

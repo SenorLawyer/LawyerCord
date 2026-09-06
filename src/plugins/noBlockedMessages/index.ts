@@ -167,7 +167,7 @@ export default definePlugin({
         const suppressed = this.isSuppressed(message);
         const replyToSuppressed = this.isReplyToSuppressed(message);
 
-        if (message.type === 24 && settings.store.allowAutoModMessages) return [true, suppressed];
+        if (message.type === 24 && settings.store.allowAutoModMessages) return [true, suppressed.suppressed];
         if (suppressed.suppressed) return [!suppressed.hide, true];
         if (replyToSuppressed.suppressed) return [!replyToSuppressed.hide, true];
 

@@ -5,6 +5,7 @@
  */
 
 import { settings } from "@equicordplugins/translatePlus/settings";
+import { escapeRegExp } from "@utils/text";
 
 type Dictionary = Record<string, string>;
 
@@ -17,10 +18,6 @@ const SHAVIAN_REGEX = /[\u{10450}-\u{1047F}]+/u;
 
 let shavianDictionaryPromise: Promise<Dictionary> | undefined;
 let sitelenDictionaryPromise: Promise<{ dictionary: Dictionary; pattern: RegExp; }> | undefined;
-
-function escapeRegExp(str: string) {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 function fetchDictionary(url: string): Promise<Dictionary> {
     return fetch(url).then(response => {
@@ -42,11 +39,7 @@ function getSitelenDictionary() {
     sitelenDictionaryPromise ??= fetchDictionary(SITELEN_DICTIONARY_URL)
         .then(dictionary => {
             const sorted = Object.keys(dictionary).sort((a, b) => b.length - a.length);
-            let patternSource = "";
-            for (const value of sorted) {
-                if (patternSource) patternSource += "|";
-                patternSource += escapeRegExp(value);
-            }
+            const patternSource = sorted.map(escapeRegExp).join("|");
 
             const pattern = new RegExp(`(${patternSource})`, "g");
 

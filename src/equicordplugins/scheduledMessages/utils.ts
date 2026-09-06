@@ -6,7 +6,6 @@
 
 import * as DataStore from "@api/DataStore";
 import { Logger } from "@utils/Logger";
-import { Message } from "@vencord/discord-types";
 import { CloudUploadPlatform } from "@vencord/discord-types/enums";
 import { ChannelStore, CloudUploader, Constants, FluxDispatcher, GuildStore, IconUtils, MessageActions, MessageStore, RestAPI, showToast, SnowflakeUtils, Toasts, UserStore } from "@webpack/common";
 
@@ -315,8 +314,8 @@ async function uploadAttachment(channelId: string, att: ScheduledAttachment): Pr
     });
 }
 
-async function postMessage(channelId: string, content: string, attachments?: { id: string; filename: string; uploaded_filename: string; }[]): Promise<void> {
-    await RestAPI.post({
+async function postMessage(channelId: string, content: string, attachments?: { id: string; filename: string; uploaded_filename: string; }[]): Promise<string> {
+    const response = await RestAPI.post({
         url: Constants.Endpoints.MESSAGES(channelId),
         body: {
             content,
@@ -324,6 +323,7 @@ async function postMessage(channelId: string, content: string, attachments?: { i
             ...(attachments?.length ? { channel_id: channelId, sticker_ids: [], type: 0, attachments } : {})
         }
     });
+    return response.body.id;
 }
 
 async function addReactionsToMessage(channelId: string, messageId: string, reactions: ScheduledReaction[]): Promise<void> {
@@ -359,29 +359,18 @@ async function sendScheduledMessage(msg: ScheduledMessage): Promise<boolean> {
         removePhantomMessage(msg);
         pendingReactions.delete(msg.id);
 
+        let messageId: string;
         if (msg.attachments?.length) {
             const uploaded = (await Promise.all(msg.attachments.map((att, i) =>
                 uploadAttachment(msg.channelId, att).then(r => r ? { ...r, id: String(i) } : null)
             ))).filter(Boolean) as { id: string; filename: string; uploaded_filename: string; }[];
 
-            await postMessage(msg.channelId, msg.content, uploaded.length ? uploaded : undefined);
+            messageId = await postMessage(msg.channelId, msg.content, uploaded.length ? uploaded : undefined);
         } else {
-            await postMessage(msg.channelId, msg.content);
+            messageId = await postMessage(msg.channelId, msg.content);
         }
 
-        if (reactions.length) {
-            await new Promise(r => setTimeout(r, 1500));
-            const msgArray = (MessageStore.getMessages(msg.channelId) as { _array?: Message[]; })?._array ?? [];
-            const currentUserId = UserStore.getCurrentUser()?.id;
-
-            for (let i = msgArray.length - 1; i >= Math.max(0, msgArray.length - 10); i--) {
-                const m = msgArray[i];
-                if (m?.author?.id === currentUserId && m?.content === msg.content && !m?.id?.startsWith("scheduled-")) {
-                    await addReactionsToMessage(msg.channelId, m.id, reactions);
-                    break;
-                }
-            }
-        }
+        if (reactions.length) await addReactionsToMessage(msg.channelId, messageId, reactions);
 
         if (settings.store.showNotifications) {
             showToast(`Scheduled message sent to ${getChannelDisplayInfo(msg.channelId).name}`, Toasts.Type.SUCCESS);

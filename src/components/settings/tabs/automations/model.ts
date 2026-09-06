@@ -898,19 +898,6 @@ export function findIfBoundary(blocks: AutomationBlock[], start: number): Automa
     return undefined;
 }
 
-export function findEndIf(blocks: AutomationBlock[], start: number): number | undefined {
-    let depth = 0;
-    for (let index = start + 1; index < blocks.length; index++) {
-        const { type } = blocks[index];
-        if (type === "condition" || type === "chance") depth++;
-        else if (type === "end-if") {
-            if (depth === 0) return index;
-            depth--;
-        }
-    }
-    return undefined;
-}
-
 export function findEndRepeat(blocks: AutomationBlock[], start: number): number | undefined {
     let depth = 0;
     for (let index = start + 1; index < blocks.length; index++) {
@@ -1178,14 +1165,6 @@ export function layoutGraph(blocks: AutomationBlock[]): AutomationBlock[] {
     for (const root of roots.length ? roots : blocks.slice(0, 1)) walk(root.id, 0, column++);
     for (const block of blocks) if (!placed.has(block.id)) walk(block.id, 0, column++);
     return blocks;
-}
-
-function cloneComponents(components: AutomationComponent[] | undefined): AutomationComponent[] | undefined {
-    return components?.map(component => ({
-        ...component,
-        options: component.options?.map(option => ({ ...option })),
-        components: cloneComponents(component.components),
-    }));
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {

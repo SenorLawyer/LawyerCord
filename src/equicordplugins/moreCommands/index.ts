@@ -17,7 +17,7 @@
 */
 
 import { ApplicationCommandInputType, ApplicationCommandOptionType, findOption, OptionalMessageOption, RequiredMessageOption, sendBotMessage } from "@api/Commands";
-import { addMessagePreEditListener, addMessagePreSendListener, MessageObject, removeMessagePreEditListener, removeMessagePreSendListener } from "@api/MessageEvents";
+import { MessageObject } from "@api/MessageEvents";
 import { migratePluginSettings } from "@api/Settings";
 import { Devs, EquicordDevs, GUILD_IDS } from "@utils/constants";
 import { sendMessage } from "@utils/discord";
@@ -892,15 +892,11 @@ export default definePlugin({
         }
     },
 
-    start() {
-        this.preSend = addMessagePreSendListener((_, msg) => this.onSend(msg));
-        this.preEdit = addMessagePreEditListener((_cid, _mid, msg) =>
-            this.onSend(msg)
-        );
+    onBeforeMessageSend(_channelId, msg) {
+        this.onSend(msg);
     },
 
-    stop() {
-        removeMessagePreSendListener(this.preSend);
-        removeMessagePreEditListener(this.preEdit);
+    onBeforeMessageEdit(_channelId, _messageId, msg) {
+        this.onSend(msg);
     },
 });

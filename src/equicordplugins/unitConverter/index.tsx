@@ -18,14 +18,16 @@
 
 import "./style.css";
 
-import { addMessageAccessory } from "@api/MessageAccessories";
 import { definePluginSettings } from "@api/Settings";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { ChannelStore } from "@webpack/common";
 
 import { convert } from "./converter";
 import { conversions, ConverterAccessory, ConvertIcon } from "./ConverterAccessory";
+
+const SafeConverterAccessory = ErrorBoundary.wrap(ConverterAccessory, { noop: true });
 
 export const settings = definePluginSettings({
     myUnits: {
@@ -60,7 +62,7 @@ export default definePlugin({
                 icon: ConvertIcon,
                 message,
                 channel: ChannelStore.getChannel(message.channel_id),
-                onClick: async () => {
+                onClick: () => {
                     const setConversion = conversions.get(message.id);
                     if (!setConversion) return;
                     setConversion(convert(message.content));
@@ -68,8 +70,6 @@ export default definePlugin({
             };
         }
     },
-    start() {
-        addMessageAccessory("vc-converter", props => <ConverterAccessory message={props.message} />);
-    },
+    renderMessageAccessory: props => <SafeConverterAccessory message={props.message} />,
     settings,
 });

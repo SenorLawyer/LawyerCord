@@ -20,6 +20,7 @@ interface TestPlugin {
     chatBarButton?: object;
     chatBarButtonWrapper?: object;
     userProfileBadges?: object[];
+    renderMessageAccessory?: () => unknown;
     start?(): void;
     onMessageClick?(this: TestPlugin): void;
     flux?: Record<string, (this: TestPlugin, data: unknown) => void | Promise<void>>;
@@ -29,6 +30,7 @@ function loadManager() {
     const plugins: Record<string, TestPlugin> = {};
     const settings: Record<string, { enabled: boolean; }> = {};
     const errors: unknown[][] = [];
+    const accessories = new Map<string, () => unknown>();
     const handlers = new Map<string, Set<(data: unknown) => void | Promise<void>>>();
     const dispatcher = {
         subscribe(event: string, handler: (data: unknown) => void | Promise<void>) {
@@ -41,6 +43,10 @@ function loadManager() {
     };
     const mocks: Record<string, object> = {
         "~plugins": { __esModule: true, default: plugins },
+        "@api/MessageAccessories": {
+            addMessageAccessory: (name: string, render: () => unknown) => accessories.set(name, render),
+            removeMessageAccessory: (name: string) => accessories.delete(name),
+        },
         "@api/Settings": { Settings: { plugins: settings }, SettingsStore: { addChangeListener() {} } },
         "@webpack/common": { FluxDispatcher: dispatcher },
         "@debug/Tracer": { traceFunction: (_name: string, fn: unknown) => fn },
@@ -70,8 +76,25 @@ function loadManager() {
         settings[plugin.name] = { enabled: false };
         return plugin;
     }
-    return { manager, add, plugins, settings, dispatcher, handlers, errors };
+    return { manager, add, plugins, settings, dispatcher, handlers, errors, accessories };
 }
+
+test("declarative message accessories enable their API and follow plugin lifecycle", () => {
+    const { manager, add, settings, accessories } = loadManager();
+    add({ name: "MessageAccessoriesAPI" });
+    const renderMessageAccessory = () => "conversion";
+    const plugin = add({ name: "Fixture", renderMessageAccessory });
+    settings.Fixture.enabled = true;
+    manager.initPluginManager();
+    assert.equal(settings.MessageAccessoriesAPI.enabled, true);
+    manager.startPlugin(plugin);
+    assert.equal(accessories.get("Fixture")?.(), "conversion");
+    manager.stopPlugin(plugin);
+    assert.equal(accessories.size, 0);
+    manager.startPlugin(plugin);
+    assert.equal(accessories.size, 1);
+    assert.equal(accessories.get("Fixture")?.(), "conversion");
+});
 
 test("declarative profile badges enable their API dependency", () => {
     const { manager, add, settings } = loadManager();

@@ -2295,3 +2295,33 @@ test("sticker pack metadata updates preserve concurrent packs without holding a 
     await module.deleteStickerPack("a");
     assert.deepEqual(Array.from(await module.getStickerPackMetas(), (pack: { id: string; }) => pack.id), ["b"]);
 });
+
+test("theme watcher detects empty-folder changes and notifies once", async () => {
+    let files: { fileName: string; }[] = [];
+    const notices: string[] = [];
+    const store = { includeLocal: true, includeOnline: false, autoRefresh: true, showNotifications: true, sortOrder: "recent" };
+    const watcher = loadSource("src/equicordplugins/quickThemeSwitcher.discordDesktop/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store }), Settings: { enabledThemes: [], enabledThemeLinks: [], themeNames: {} }, SettingsStore: {} },
+        "@components/Heading": {}, "@components/Paragraph": {},
+        "@shared/debounce": { debounce: (callback: () => void) => callback },
+        "@utils/constants": { Devs: {}, IS_MAC: false },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {}, StartAt: {} },
+        "@webpack/common": { showToast: (message: string) => notices.push(message), Toasts: { Type: { SUCCESS: 1 } } }
+    }, { window: { VencordNative: { themes: { getThemesList: async () => files } } } },
+    "(pluginStarted = true, { watch: watchForLocalThemeChanges, themes: () => themeList })");
+    await watcher.watch();
+    assert.equal(notices.length, 0);
+    files = [{ fileName: "first.css" }];
+    await watcher.watch();
+    assert.equal(watcher.themes().length, 1);
+    assert.deepEqual(notices, ["Added 1 local theme"]);
+    files = [];
+    await watcher.watch();
+    assert.equal(watcher.themes().length, 0);
+    assert.deepEqual(notices, ["Added 1 local theme", "Removed 1 local theme"]);
+    store.showNotifications = false;
+    files = [{ fileName: "second.css" }];
+    await watcher.watch();
+    assert.equal(watcher.themes().length, 1);
+    assert.equal(notices.length, 2);
+});

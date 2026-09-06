@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Stop scheduled messages from sending with missing attachments when an upload fails.
+
 - Remove redundant sticker category wrappers that assigned the same React key to every pack.
 
 - Use CSS for sticker settings hover styling and give the icon button an accessible name.

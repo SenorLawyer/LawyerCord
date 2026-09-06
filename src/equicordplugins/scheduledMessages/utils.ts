@@ -302,14 +302,14 @@ function doRecreatePhantomMessage(messageId: string, channelId: string, reaction
     }, 50);
 }
 
-async function uploadAttachment(channelId: string, att: ScheduledAttachment): Promise<{ id: string; filename: string; uploaded_filename: string; } | null> {
-    return new Promise(resolve => {
+async function uploadAttachment(channelId: string, att: ScheduledAttachment): Promise<{ id: string; filename: string; uploaded_filename: string; }> {
+    return new Promise((resolve, reject) => {
         const bytes = Uint8Array.from(atob(att.data), c => c.charCodeAt(0));
         const file = new File([bytes], att.filename, { type: att.type });
         const upload = new CloudUploader({ file, platform: CloudUploadPlatform.WEB }, channelId);
 
         upload.on("complete", () => resolve({ id: "0", filename: upload.filename, uploaded_filename: upload.uploadedFilename }));
-        upload.on("error", () => resolve(null));
+        upload.on("error", () => reject(new Error("Could not upload scheduled attachment.")));
         upload.upload();
     });
 }
@@ -361,11 +361,11 @@ async function sendScheduledMessage(msg: ScheduledMessage): Promise<boolean> {
 
         let messageId: string;
         if (msg.attachments?.length) {
-            const uploaded = (await Promise.all(msg.attachments.map((att, i) =>
-                uploadAttachment(msg.channelId, att).then(r => r ? { ...r, id: String(i) } : null)
-            ))).filter(Boolean) as { id: string; filename: string; uploaded_filename: string; }[];
+            const uploaded = await Promise.all(msg.attachments.map((att, i) =>
+                uploadAttachment(msg.channelId, att).then(result => ({ ...result, id: String(i) }))
+            ));
 
-            messageId = await postMessage(msg.channelId, msg.content, uploaded.length ? uploaded : undefined);
+            messageId = await postMessage(msg.channelId, msg.content, uploaded);
         } else {
             messageId = await postMessage(msg.channelId, msg.content);
         }

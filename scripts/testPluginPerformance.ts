@@ -5421,6 +5421,53 @@ test("screen recorder releases capture and discards work after disable", async (
     assert.equal(uploads, 1);
 });
 
+test("scheduled messages require every attachment upload before posting", async () => {
+    for (const failedIndex of [-1, 0, 1]) {
+        const uploads: Uploader[] = [];
+        const posts: { attachments: { id: string; filename: string; }[]; }[] = [];
+        let errors = 0;
+        class Uploader {
+            filename: string;
+            uploadedFilename: string;
+            callbacks = new Map<string, () => void>();
+            constructor({ file }: { file: File; }) {
+                this.filename = file.name;
+                this.uploadedFilename = `uploaded/${file.name}`;
+                uploads.push(this);
+            }
+            on(event: string, callback: () => void) { this.callbacks.set(event, callback); }
+            upload() { }
+        }
+        const send = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@api/DataStore": {}, "@utils/Logger": { Logger: class {} },
+            "@vencord/discord-types/enums": { CloudUploadPlatform: {} },
+            "@webpack/common": {
+                CloudUploader: Uploader, ChannelStore: { getChannel: () => ({ isDM: () => false, isGroupDM: () => false, isMultiUserDM: () => false }) },
+                GuildStore: { getGuild: () => null }, FluxDispatcher: { dispatch() {} },
+                Constants: { Endpoints: { MESSAGES: (id: string) => id } }, SnowflakeUtils: { fromTimestamp: () => "nonce" },
+                RestAPI: { post: async ({ body }: { body: typeof posts[number]; }) => { posts.push(body); return { body: { id: "sent" } }; } },
+                showToast: (_message: string, type: string) => { if (type === "failure") errors++; },
+                Toasts: { Type: { FAILURE: "failure" } }
+            },
+            ".": { settings: { store: { showNotifications: true } } }
+        }, { File, atob }, "sendScheduledMessage");
+        const pending = send({ id: "scheduled", channelId: "channel", content: "Text", attachments: [
+            { filename: "first.txt", type: "text/plain", data: btoa("one") },
+            { filename: "second.txt", type: "text/plain", data: btoa("two") }
+        ] });
+        assert.equal(uploads.length, 2);
+        assert.equal(posts.length, 0);
+        uploads[1].callbacks.get(failedIndex === 1 ? "error" : "complete")?.();
+        await Promise.resolve();
+        assert.equal(posts.length, 0);
+        uploads[0].callbacks.get(failedIndex === 0 ? "error" : "complete")?.();
+        assert.equal(await pending, failedIndex === -1);
+        assert.equal(posts.length, failedIndex === -1 ? 1 : 0);
+        assert.equal(errors, failedIndex === -1 ? 0 : 1);
+        if (posts.length) assert.deepEqual(Array.from(posts[0].attachments, item => [item.id, item.filename]), [["0", "first.txt"], ["1", "second.txt"]]);
+    }
+});
+
 test("scheduled reactions target the message returned by the send request", async () => {
     const reactions: string[] = [];
     const send = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {

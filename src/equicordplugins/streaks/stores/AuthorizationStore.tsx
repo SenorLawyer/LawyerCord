@@ -79,11 +79,9 @@ export const useAuthorizationStore = proxyLazy(() => zustandCreate(
                                     }
                                     resolve(void 0);
                                 } catch (e) {
-                                    if (e instanceof Error) {
-                                        showToast(`Failed to authorize: ${e.message}`, Toasts.Type.FAILURE);
-                                        new Logger("Streaks").error("Failed to authorize", e);
-                                        reject(e);
-                                    }
+                                    showToast(e instanceof Error ? `Failed to authorize: ${e.message}` : "Failed to authorize with Streaks.", Toasts.Type.FAILURE);
+                                    new Logger("Streaks").error("Failed to authorize", e);
+                                    reject(e);
                                 }
                             }}
                         />, {

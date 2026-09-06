@@ -21,6 +21,25 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("new guild defaults use one notification update and preserve server defaults", () => {
+    const source = readFileSync("src/plugins/newGuildSettings/index.tsx", "utf8");
+    const handler = source.slice(source.indexOf("function applyDefaultSettings("), source.indexOf("export default definePlugin"));
+    const code = transpileModule(handler, { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
+    const calls: Array<Record<string, unknown>> = [];
+    const store = { messages: 1, guild: true, showAllChannels: false, voiceChannels: false };
+    const apply = runInNewContext(code + "\napplyDefaultSettings;", {
+        settings: { store }, updateGuildNotificationSettings: (_id: string, values: Record<string, unknown>) => calls.push(values),
+    });
+    apply("guild");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].muted, true);
+    assert.equal(calls[0].message_notifications, 1);
+    store.messages = 3;
+    apply("guild");
+    assert.equal(calls.length, 2);
+    assert.equal(Object.hasOwn(calls[1], "message_notifications"), false);
+});
+
 test("quick reactions scroll back from the visible offset after the list shrinks", () => {
     const { default: plugin } = loadSource("src/plugins/moreQuickReactions/index.ts", {
         "@api/Settings": { definePluginSettings: () => ({ store: { rows: 2, columns: 4, scroll: true } }), migratePluginSettings() {} },

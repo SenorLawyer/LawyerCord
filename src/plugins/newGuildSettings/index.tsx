@@ -129,15 +129,9 @@ function applyDefaultSettings(guildId: string | null) {
             suppress_everyone: settings.store.everyone,
             suppress_roles: settings.store.role,
             mute_scheduled_events: settings.store.events,
-            notify_highlights: settings.store.highlights ? 1 : 0
+            notify_highlights: settings.store.highlights ? 1 : 0,
+            ...(settings.store.messages !== 3 && { message_notifications: settings.store.messages })
         });
-
-    if (settings.store.messages !== 3) {
-        updateGuildNotificationSettings(guildId,
-            {
-                message_notifications: settings.store.messages,
-            });
-    }
 
     if (settings.store.showAllChannels && isOptInEnabledForGuild(guildId)) {
         toggleShowAllChannels(guildId);

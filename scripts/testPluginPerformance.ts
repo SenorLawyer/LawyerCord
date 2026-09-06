@@ -21,6 +21,35 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("support messages cannot offer executable snippets", () => {
+    let trusted = false;
+    const React = { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props, children }) };
+    const { default: plugin } = loadSource("src/plugins/_core/supportHelper.tsx", {
+        "@api/Commands": {}, "@api/PluginManager": {},
+        "@api/Settings": { definePluginSettings: () => ({ withPrivateSettings: () => ({ store: {} }) }) },
+        "@api/UserSettings": { getUserSettingLazy: () => ({}) },
+        "@components/Button": { Button: "button" }, "@components/Card": {},
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@components/Flex": { Flex: "flex" }, "@components/Paragraph": {}, "@components/settings": {},
+        "@equicordplugins/equicordHelper/utils": {}, "@plugins/customIdle": {}, "@shared/vencordUserAgent": {},
+        "@utils/constants": { Devs: {} }, "@utils/discord": {}, "@utils/Logger": {}, "@utils/margins": {},
+        "@utils/misc": { isEquicordSupport: () => trusted, isSupportChannel: () => true, isKnownIssuesCategory: () => true },
+        "@utils/native": {}, "@utils/onlyOnce": { onlyOnce: () => () => {} }, "@utils/text": {},
+        "@utils/types": { __esModule: true, default: (value: object) => value }, "@utils/updater": {},
+        "@vencord/discord-types/enums": {},
+        "@webpack/common": { React, PermissionsBits: {}, PermissionStore: { can: () => true } },
+        "~plugins": {}, "./settings": {},
+    }, { React, IS_UPDATER_DISABLED: true });
+    const props = { channel: { id: "support", parent_id: "issues" }, message: { author: { id: "author" }, content: "```snippet\nthrow new Error('must not execute')```", embeds: [] } };
+    assert.equal(plugin.renderMessageAccessory(props), null);
+    trusted = true;
+    assert.equal(plugin.renderMessageAccessory(props), null);
+    props.message.content = "/equicord-debug";
+    const diagnostics = plugin.renderMessageAccessory(props);
+    const buttons = diagnostics.children[0];
+    assert.deepEqual(Array.from(buttons, (button: { children: string[]; }) => button.children[0]), ["Run /equicord-debug", "Run /equicord-plugins"]);
+});
+
 test("XSOverlay applies each channel notification setting independently", () => {
     const store = { dmNotifications: false, groupDmNotifications: false, serverNotifications: false };
     const { shouldIgnoreForChannelType } = loadSource("src/plugins/xsOverlay/index.tsx", {

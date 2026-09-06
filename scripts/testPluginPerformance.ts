@@ -21,6 +21,28 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ReviewDB input leaves Discord's shared input configuration unchanged", () => {
+    const inputType = Object.freeze({ id: "reply", disableAutoFocus: false, draftType: 7 });
+    const React = { createElement: (_type: unknown, props: object, ...children: unknown[]) => ({ props, children }) };
+    const { ReviewsInputComponent } = loadSource("src/plugins/reviewDB/components/ReviewsView.tsx", {
+        "@components/Paragraph": {}, "@plugins/reviewDB/auth": { Auth: { token: "token" } },
+        "@plugins/reviewDB/entities": {}, "@plugins/reviewDB/reviewDbApi": {}, "@plugins/reviewDB/settings": {},
+        "@plugins/reviewDB/utils": { cl: (value: string) => value }, "@utils/react": {},
+        "@webpack": {
+            findByPropsLazy: (prop: string) => prop === "FORM" ? { USER_PROFILE_REPLY: inputType } : {},
+            findComponentByCodeLazy: () => "Input", findByCodeLazy: () => () => ({}),
+        },
+        "@webpack/common": { React, useRef: () => ({ current: null }) }, "./ReviewComponent": {},
+    });
+    const tree = ReviewsInputComponent({ discordId: "target", name: "Target", refetch() {} });
+    const type = tree.children[0].children[0].props.type;
+    assert.notEqual(type, inputType);
+    assert.equal(type.disableAutoFocus, true);
+    assert.equal(type.id, "reply");
+    assert.equal(type.draftType, 7);
+    assert.equal(inputType.disableAutoFocus, false);
+});
+
 test("ReviewDB block persistence cannot report success to another account", async () => {
     let userId = "first";
     let toasts = 0;

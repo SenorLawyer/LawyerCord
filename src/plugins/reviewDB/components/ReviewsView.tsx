@@ -131,8 +131,7 @@ export function ReviewsInputComponent(
 ) {
     const { token } = Auth;
     const editorRef = useRef<any>(null);
-    const inputType = ChatInputTypes.USER_PROFILE_REPLY;
-    inputType.disableAutoFocus = true;
+    const inputType = { ...ChatInputTypes.USER_PROFILE_REPLY, disableAutoFocus: true };
 
     const channel = createChannelRecordFromServer({ id: "0", type: 1 });
 

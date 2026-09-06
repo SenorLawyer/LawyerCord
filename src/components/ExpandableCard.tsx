@@ -29,7 +29,7 @@ export function ExpandableSection({ children, renderContent: Content, className,
 
     return (
         <Card data-expanded={expanded} className={classes("vc-expandable-card", className)}>
-            <Clickable className="vc-expandable-card-header" onClick={() => setExpanded(c => !c)} >
+            <Clickable className="vc-expandable-card-header" aria-expanded={expanded} onClick={() => setExpanded(c => !c)} >
                 {children}
                 <Icon className="vc-expandable-card-icon" />
             </Clickable>

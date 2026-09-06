@@ -59,14 +59,12 @@ export function CheckedTextInput({ initialValue, onChange, validate, placeholder
     }
 
     return (
-        <>
-            <TextInput
-                type="text"
-                value={value}
-                onChange={handleChange}
-                error={error}
-                placeholder={placeholder}
-            />
-        </>
+        <TextInput
+            type="text"
+            value={value}
+            onChange={handleChange}
+            error={error}
+            placeholder={placeholder}
+        />
     );
 }

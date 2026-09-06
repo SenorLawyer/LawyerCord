@@ -46,6 +46,25 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("GIF collection extensions handle URL schemes, case and malformed input", () => {
+    const extension = loadSource("src/equicordplugins/gifCollections/utils/getUrlExtension.ts", {
+        "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } }
+    });
+    for (const url of ["https://example.test/file.MP4?x=1", "http://example.test/file.mp4", "//example.test/file.mp4"]) {
+        assert.equal(extension.getUrlExtension(url), "mp4");
+    }
+    for (const url of ["not a URL", "https://example.test/path", "https://example.test/folder.mp4/file"]) {
+        assert.equal(extension.getUrlExtension(url), undefined);
+    }
+    const format = loadSource("src/equicordplugins/gifCollections/utils/getFormat.ts", {
+        "../types": { Format: { IMAGE: 1, VIDEO: 2 } }, "./getUrlExtension": extension
+    });
+    assert.equal(format.getFormat("https://media.tenor.com/file.GIF"), 1);
+    assert.equal(format.getFormat("https://media.tenor.com/file.MP4"), 2);
+    const audio = loadSource("src/equicordplugins/gifCollections/utils/isAudio.ts", { "./getUrlExtension": extension });
+    assert.equal(audio.isAudio("http://example.test/file.MP3"), true);
+});
+
 test("Friendship ranks cover milestone days without gaps or duplicate badges", () => {
     const now = Date.parse("2026-01-01T00:00:00Z");
     let days = 0;

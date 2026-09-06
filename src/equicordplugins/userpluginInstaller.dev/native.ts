@@ -161,9 +161,11 @@ export async function initPluginInstall(_, link: string, source: string, owner: 
                 case "abortInstall": {
                     decided = true;
                     win.close();
-                    await rm(join(vencordPath, "..", "src", "userplugins", repo), {
-                        recursive: true
-                    });
+                    try {
+                        await rm(getPluginDirectory(repo), { recursive: true });
+                    } catch {
+                        return reject(new Error("Could not remove the cancelled plugin installation."));
+                    }
                     return reject("Rejected by user");
                 }
                 case "install": {

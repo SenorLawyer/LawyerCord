@@ -7808,6 +7808,40 @@ test("closed or failed plugin reviews reject and prevent later install actions",
     }
 });
 
+test("cancelled plugin installs validate cleanup paths and settle removal failures", async () => {
+    for (const failure of ["path", "remove", "none"]) {
+        let validations = 0;
+        let removals = 0;
+        class ReviewWindow extends EventEmitter {
+            static getAllWindows() { return []; }
+            webContents = { getTitle: () => "abortInstall" };
+            async loadURL() {}
+            close() { this.emit("closed"); }
+            show() { queueMicrotask(() => this.emit("page-title-updated")); }
+        }
+        const mocks: Record<string, object> = {
+            child_process: {}, electron: { BrowserWindow: ReviewWindow, dialog: { showMessageBox: async () => ({ response: 1 }) } },
+            fs: {}, "fs/promises": { rm: async (directory: string) => {
+                removals++; assert.equal(directory, "validated-fixture");
+                if (failure === "remove") throw new Error("Private filesystem path");
+            } }, path, "yaml-js": {}
+        };
+        for (const name of ["pluginValidate", "updateValidate"])
+            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist"), Buffer },
+            "({ ...exports, setup(validate) { getPluginDirectory = validate; cloneRepo = async () => {}; getPluginMeta = async () => ({ name: 'Fixture', description: '' }); } })");
+        api.setup((name: string) => {
+            validations++; assert.equal(name, "repo");
+            if (failure === "path") throw new Error("Invalid plugin directory.");
+            return "validated-fixture";
+        });
+        await assert.rejects(api.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "owner", "repo"),
+            (error: unknown) => failure === "none" ? error === "Rejected by user" : (error as Error).message === "Could not remove the cancelled plugin installation.");
+        assert.equal(validations, 1);
+        assert.equal(removals, failure === "path" ? 0 : 1);
+    }
+});
+
 test("installer setup failures reject the caller without exposing native errors", async () => {
     for (const stage of ["dialog", "clone", "metadata", "browser"]) {
         const fail = async () => { throw new Error("Private filesystem path"); };

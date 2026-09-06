@@ -21,6 +21,20 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("relationship removal returns notification and storage work to the flux wrapper", async () => {
+    let synced = false;
+    const { default: plugin } = loadSource("src/plugins/relationshipNotifier/index.ts", {
+        "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value },
+        "./settings": {},
+        "./functions": { onRelationshipRemove: async () => {} },
+        "./utils": { syncFriends: async () => { synced = true; throw new Error("storage failed"); } },
+    });
+    const result = plugin.flux.RELATIONSHIP_REMOVE({});
+    assert.equal(synced, true);
+    await assert.rejects(result, /storage failed/);
+});
+
 test("native app links match literal Steam and VRChat hosts", () => {
     const rules = loadSource("src/plugins/openInApp/index.ts", {
         "@api/Settings": { definePluginSettings: () => ({ store: {} }) },

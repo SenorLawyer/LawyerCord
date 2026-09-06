@@ -71,8 +71,7 @@ export default definePlugin({
         RELATIONSHIP_ADD: syncFriends,
         RELATIONSHIP_UPDATE: syncFriends,
         RELATIONSHIP_REMOVE(e) {
-            onRelationshipRemove(e);
-            syncFriends();
+            return Promise.all([onRelationshipRemove(e), syncFriends()]);
         },
         CONNECTION_OPEN: syncAndRunChecks
     },

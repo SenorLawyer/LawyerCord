@@ -101,7 +101,7 @@ export async function getData(): Promise<UserData | undefined> {
     }).then(async res => {
         if (!res) return useSongStore.getState().users[userId]?.data;
 
-        const data = UserDataSchema.max(apiConstants.songLimit).parse(await res.json());
+        const data = UserDataSchema.max(apiConstants.songLimit).nullable().parse(await res.json()) ?? [];
         useSongStore.getState().update({
             userId,
             data,
@@ -119,7 +119,7 @@ export async function listData(userId: string): Promise<UserData | undefined> {
     }).then(async res => {
         if (!res) return useSongStore.getState().users[userId]?.data;
 
-        const data = UserDataSchema.max(apiConstants.songLimit).parse(await res.json());
+        const data = UserDataSchema.max(apiConstants.songLimit).nullable().parse(await res.json()) ?? [];
         useSongStore.getState().update({
             userId,
             data,

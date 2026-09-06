@@ -4928,12 +4928,15 @@ test("SongSpotlight sends conditional headers only for cached timestamps", async
     await api.listData("other");
     assert.equal(headers[2].get("If-Modified-Since"), users.self.at);
     assert.equal(headers[3].get("If-Modified-Since"), users.other.at);
-    for (const invalid of [null, {}, ["invalid"], [{ service: "unknown", type: "track", id: "id" }], Array.from({ length: 7 }, () => ({ service: "spotify", type: "track", id: "id" }))]) {
+    responseData = null;
+    assert.deepEqual(Array.from(await api.getData()), []);
+    assert.deepEqual(Array.from(await api.listData("other")), []);
+    for (const invalid of [{}, ["invalid"], [{ service: "unknown", type: "track", id: "id" }], Array.from({ length: 7 }, () => ({ service: "spotify", type: "track", id: "id" }))]) {
         responseData = invalid;
         await assert.rejects(api.getData());
         await assert.rejects(api.listData("other"));
     }
-    assert.equal(updates, 4, "invalid responses never replace cached data");
+    assert.equal(updates, 6, "invalid responses never replace cached data");
 });
 
 

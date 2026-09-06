@@ -419,6 +419,7 @@ export async function addScheduledMessage(
     if (Number.isNaN(new Date(scheduledTime).getTime()) || scheduledTime <= Date.now()) {
         return { success: false, error: "Please select a valid future date and time." };
     }
+    const generation = schedulerGeneration;
     return runQueueOperation(async () => {
         const minuteStart = Math.floor(scheduledTime / 60000) * 60000;
         const count = scheduledMessages.filter(m =>
@@ -437,7 +438,7 @@ export async function addScheduledMessage(
             attachments
         };
         await saveScheduledMessages([...scheduledMessages, newMessage].sort((a, b) => a.scheduledTime - b.scheduledTime));
-        if (UserStore.getCurrentUser()?.id === userId) createPhantomMessage(newMessage);
+        if (generation === schedulerGeneration && UserStore.getCurrentUser()?.id === userId) createPhantomMessage(newMessage);
         scheduleNextCheck();
         return { success: true };
     });

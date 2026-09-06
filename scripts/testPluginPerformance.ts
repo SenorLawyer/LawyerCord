@@ -6657,7 +6657,7 @@ test("SongSpotlight requires write acknowledgement before changing local state",
 
 
 test("new scheduled entries retain their initiating account across persistence", async () => {
-    for (const scenario of ["signed-out", "same", "switched"]) {
+    for (const scenario of ["signed-out", "same", "switched", "stopped"]) {
         let userId: string | undefined = scenario === "signed-out" ? undefined : "first";
         let saved: { userId: string; }[] = [];
         let previewChecks = 0;
@@ -6675,6 +6675,7 @@ test("new scheduled entries retain their initiating account across persistence",
         const pending = api.addScheduledMessage("channel", "Text", Date.now() + 60_000);
         await setImmediate();
         if (scenario === "switched") userId = "second";
+        if (scenario === "stopped") api.stopScheduler();
         finish();
         const result = await pending;
         assert.equal(result.success, scenario !== "signed-out");

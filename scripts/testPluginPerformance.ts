@@ -2365,6 +2365,19 @@ test("quote preview ignores superseded and unmounted image work", async () => {
     assert.equal(states[4], null);
 });
 
+test("magnet filenames decode once and preserve literal punctuation", () => {
+    const { default: plugin } = loadSource("src/equicordplugins/richMagnetLinks/index.tsx", {
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin }
+    }, { URLSearchParams });
+    const rule = plugin.magnetLink(1);
+    for (const filename of ["a+b", "literal%20name", "100% complete", "what?now", "Café album"]) {
+        const link = `magnet:?xt=urn:btih:abc&dn=${encodeURIComponent(filename)}`;
+        assert.equal(rule.parse(rule.match(link), null, { messageId: "message" }).filename, filename);
+    }
+    assert.equal(rule.parse(rule.match("magnet:?xt=abc"), null, { messageId: "message" }).filename, "unknown filename");
+});
+
 test("remix releases its canvas after React detaches the ref", () => {
     const effects: (() => (() => void) | undefined)[] = [];
     const context = { drawImage() {} };

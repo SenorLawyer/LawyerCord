@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Remove Navidrome instance artwork sharing to keep server authentication out of Discord asset requests, and migrate existing selections to None.
+
 - Remove SupportHelper execution of JavaScript snippets from messages and embeds while preserving diagnostic actions.
 - Preserve successful webpack patches and their diagnostics when later replacements fail.
 - Resolve bulk webpack lookups when multiple matches share one module.

@@ -4614,3 +4614,38 @@ test("SongLink waits for command delivery and reports rejected sends", async () 
     assert.equal(returnedBeforeDelivery, false, "command stays pending until delivery settles");
     assert.equal(replies.at(-1), "Failed to resolve or send the music link.");
 });
+
+test("Navidrome never shares server credentials through artwork", async () => {
+    const assets: string[] = [];
+    const store = { nd_serverUrl: "https://music.example", nd_username: "private-user", nd_password: "private-password", nd_albumArtMode: "instance" };
+    const { getActivity } = loadSource("src/equicordplugins/richPresence/services/navidrome.ts", {
+        "@utils/Logger": { Logger: class { error() {} warn() {} } },
+        "@utils/misc": { parseUrl: (value: string) => new URL(value) },
+        "@vencord/discord-types/enums": { ActivityFlags: { INSTANCE: 1 }, ActivityStatusDisplayType: {} },
+        "@webpack/common": { ApplicationAssetUtils: { fetchAssetIds: async (_app: string, keys: string[]) => { assets.push(...keys); return keys; } } },
+        "md5": { __esModule: true, default: () => "authentication-token" },
+        "../settings": { settings: { store } },
+    }, { fetch: async (url: string) => {
+        assert.equal(new URL(url).origin, "https://music.example");
+        assert.equal(new URL(url).pathname, "/rest/getNowPlaying");
+        return response({ "subsonic-response": { nowPlaying: { entry: [{ id: "track", username: "private-user", coverArt: "cover" }] } } });
+    } }, "({ getActivity })");
+    assert.ok(await getActivity());
+    assert.deepEqual(assets, ["navidrome"]);
+});
+
+test("Navidrome removes retired artwork selection even after earlier migrations", () => {
+    const store = { _migrated: true, nd_albumArtMode: "instance" };
+    const { migrateOldSettings } = loadSource("src/equicordplugins/richPresence/migration.ts", {
+        "@api/Settings": { Settings: { plugins: { RichPresence: store } } },
+        "@utils/Logger": { Logger: class {} },
+        "./settings": { settings: { store } },
+    });
+    migrateOldSettings();
+    assert.equal(store.nd_albumArtMode, "none");
+    for (const mode of ["none", "lastfm"]) {
+        store.nd_albumArtMode = mode;
+        migrateOldSettings();
+        assert.equal(store.nd_albumArtMode, mode);
+    }
+});

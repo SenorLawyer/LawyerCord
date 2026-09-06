@@ -158,7 +158,7 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
         }
     }
 
-    const { nd_clientId, nd_showSmallImage, nd_serverUrl, nd_showAlbum, nd_nameString, nd_detailsString, nd_stateString, nd_largeTextString, nd_activityType, nd_statusDisplayType, nd_lastfmApiKey, nd_hideOnPause } = settings.store;
+    const { nd_clientId, nd_showSmallImage, nd_showAlbum, nd_nameString, nd_detailsString, nd_stateString, nd_largeTextString, nd_activityType, nd_statusDisplayType, nd_lastfmApiKey, nd_hideOnPause } = settings.store;
 
     if (isPaused && nd_hideOnPause) {
         cachedPauseTimestamp = undefined;
@@ -167,10 +167,6 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
 
     const _clientId = nd_clientId?.trim();
     const appId = _clientId === "" ? "1470554657506984069" : (_clientId ?? "1470554657506984069");
-
-    const _serverUrl = nd_serverUrl?.trim();
-    const parsedExternalUrl = parseUrl(_serverUrl ?? "");
-    const externalBaseUrl = parsedExternalUrl ? parsedExternalUrl.href.replace(/\/$/, "") : null;
 
     const durationMs = (track.duration ?? 0) * 1000;
 
@@ -237,12 +233,7 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
     const albumArtMode = settings.store.nd_albumArtMode ?? "none";
     let resolvedCoverArtUrl: string | null = null;
 
-    if (albumArtMode === "instance" && track.coverArt && externalBaseUrl) {
-        const { nd_username, nd_password } = settings.store;
-        const salt = Math.random().toString(36).substring(2, 8);
-        const token = md5Hex((nd_password ?? "") + salt);
-        resolvedCoverArtUrl = `${externalBaseUrl}/rest/getCoverArt?id=${encodeURIComponent(track.coverArt)}&u=${encodeURIComponent(nd_username ?? "")}&t=${token}&s=${salt}&v=1.12.0&c=equicord-rpc`;
-    } else if (albumArtMode === "lastfm" && track.artist) {
+    if (albumArtMode === "lastfm" && track.artist) {
         const trimmedKey = nd_lastfmApiKey?.trim();
         const apiKey = trimmedKey || "feff915bf5987580c9dc354d523dc6b9";
         const cacheKey = `${track.id}:${apiKey}`;

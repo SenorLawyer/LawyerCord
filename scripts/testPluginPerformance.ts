@@ -25,16 +25,23 @@ test("ReviewDB submissions cannot send or clear under a changed account", async 
     const source = readFileSync("src/plugins/reviewDB/components/ReviewsView.tsx", "utf8");
     const match = source.match(/async res => \{([\s\S]*?)\n\s*\}\n\s*\}\n\s*\/>/);
     assert.ok(match);
-    for (const switchAt of ["before", "response", "never"]) {
+    for (const switchAt of ["before", "response", "editor", "unmount", "never"]) {
         let userId = switchAt === "before" ? "second" : "first";
         let sends = 0;
         let clears = 0;
         let reloads = 0;
+        const editorRef: { current: { ref: { current: { getSlateEditor(): object; } | null; }; }; } = { current: { ref: { current: { getSlateEditor: () => ({}) } } } };
         const submit = runInNewContext(`(async res => {${match[1]}})`, {
             accountId: "first", UserStore: { getCurrentUser: () => ({ id: userId }) },
             discordId: "target", repliesTo: undefined,
-            addReview: async () => { sends++; if (switchAt === "response") userId = "second"; return {}; },
-            refetch: () => { reloads++; }, editorRef: { current: { ref: { current: { getSlateEditor: () => ({}) } } } },
+            addReview: async () => {
+                sends++;
+                if (switchAt === "response") userId = "second";
+                if (switchAt === "editor") editorRef.current.ref.current = { getSlateEditor: () => ({}) };
+                if (switchAt === "unmount") editorRef.current.ref.current = null;
+                return {};
+            },
+            refetch: () => { reloads++; }, editorRef,
             Transforms: { delete: () => { clears++; } }, Editor: { start() {}, end() {} },
         });
         const result = await submit({ value: "review" });

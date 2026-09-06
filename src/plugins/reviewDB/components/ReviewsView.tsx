@@ -39,6 +39,10 @@ interface UserProps {
     name: string;
 }
 
+interface ReviewEditorRef {
+    ref: { current: { getSlateEditor(): unknown; } | null; };
+}
+
 interface Props extends UserProps {
     onFetchReviews(data: UserReviewsData): void;
     refetchSignal?: unknown;
@@ -137,7 +141,7 @@ export function ReviewsInputComponent(
 ) {
     const accountId = UserStore.getCurrentUser()?.id;
     const { token } = Auth;
-    const editorRef = useRef<any>(null);
+    const editorRef = useRef<ReviewEditorRef | null>(null);
     const inputType = { ...ChatInputTypes.USER_PROFILE_REPLY, disableAutoFocus: true };
 
     const channel = createChannelRecordFromServer({ id: "0", type: 1 });
@@ -170,6 +174,7 @@ export function ReviewsInputComponent(
                         async res => {
                             if (UserStore.getCurrentUser()?.id !== accountId)
                                 return { shouldClear: false, shouldRefocus: false };
+                            const editor = editorRef.current?.ref.current;
                             // I know this naming is deranged, but for compatibility it has to stay this way
 
                             const response = await addReview({
@@ -178,10 +183,10 @@ export function ReviewsInputComponent(
                                 repliesto: repliesTo,
                             });
 
-                            if (response && UserStore.getCurrentUser()?.id === accountId) {
+                            if (response && UserStore.getCurrentUser()?.id === accountId && editor && editorRef.current?.ref.current === editor) {
                                 refetch();
 
-                                const slateEditor = editorRef.current.ref.current.getSlateEditor();
+                                const slateEditor = editor.getSlateEditor();
 
                                 // clear editor
                                 Transforms.delete(slateEditor, {
@@ -195,7 +200,7 @@ export function ReviewsInputComponent(
                             // even tho we need to return this, it doesnt do anything
                             return {
                                 shouldClear: false,
-                                shouldRefocus: UserStore.getCurrentUser()?.id === accountId,
+                                shouldRefocus: UserStore.getCurrentUser()?.id === accountId && !!editor && editorRef.current?.ref.current === editor,
                             };
                         }
                     }

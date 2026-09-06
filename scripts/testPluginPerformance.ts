@@ -46,6 +46,43 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("Discord MCP attachment downloads reject redirects and untrusted origins", async () => {
+    let redirect = false;
+    let oversized = false;
+    let cancelled = false;
+    let requests = 0;
+    let deadline = 0;
+    const fetchAttachmentData = loadSource("src/equicordplugins/discordMcp.desktop/native.ts", {
+        "@main/utils/constants": { DATA_DIR: "/fixture" },
+        crypto: {}, fs: {}, "fs/promises": {}, os: {}, path,
+        "./policy": { DISCORD_MCP_TOOL_NAMES: [] }
+    }, {
+        __dirname: "/fixture", Buffer, URL,
+        AbortSignal: { timeout: (ms: number) => { deadline = ms; return new AbortController().signal; } },
+        fetch: async (_url: URL, options?: RequestInit) => {
+            requests++;
+            if (redirect && options?.redirect === "error") throw new TypeError("Redirect blocked");
+            if (oversized) return new Response(new ReadableStream({ cancel() { cancelled = true; } }), {
+                headers: { "content-length": String(26 * 1024 * 1024) }
+            });
+            return new Response("attachment", { headers: { "content-type": "image/png" } });
+        }
+    }, "fetchAttachmentData");
+    for (const url of ["https://untrusted.invalid/attachments/a", "http://cdn.discordapp.com/attachments/a", "https://cdn.discordapp.com:8443/attachments/a", "https://cdn.discordapp.com/other/a"]) {
+        await assert.rejects(fetchAttachmentData(url), /untrusted/);
+    }
+    assert.equal(requests, 0);
+    const url = "https://cdn.discordapp.com/attachments/a";
+    assert.equal((await fetchAttachmentData(url)).data.toString(), "attachment");
+    assert.equal(deadline, 120_000);
+    redirect = true;
+    await assert.rejects(fetchAttachmentData(url), /Redirect blocked/);
+    redirect = false;
+    oversized = true;
+    await assert.rejects(fetchAttachmentData(url), /25 MB/);
+    assert.equal(cancelled, true);
+});
+
 test("cursor sprites release listeners, frames and body styles on cleanup", () => {
     for (const name of ["oneko", "fathorse"]) {
         const listeners = new Set<unknown>();

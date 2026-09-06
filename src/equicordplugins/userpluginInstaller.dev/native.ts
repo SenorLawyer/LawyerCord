@@ -195,49 +195,47 @@ async function getPluginMeta(path: string, extra: object = {}): Promise<{
     remote: string;
     supportChannelID?: string;
 }> {
-    return new Promise((resolve, reject) => {
-        const files = readdirSync(path);
-        let fileToRead: "index.ts" | "index.tsx" | "index.js" | "index.jsx" | undefined;
-        files.forEach(f => {
-            if (f === "index.ts") fileToRead = "index.ts";
-            if (f === "index.tsx") fileToRead = "index.tsx";
-            if (f === "index.js") fileToRead = "index.js";
-            if (f === "index.jsx") fileToRead = "index.jsx";
-        });
-        if (!fileToRead) reject("Invalid plugin");
-
-        const file = readFileSync(`${path}/${fileToRead}`, "utf8");
-        let remoteURL;
-        try {
-            const remoteC = readFileSync(join(path, ".git/config"), "utf8");
-            remoteURL = remoteC.match(/\[remote "origin"]\s+url = (https:\/\/(?:(?:git(?:hub|lab)\.com|git\.(?:[a-zA-Z0-9]|\.)+|codeberg\.org)\/(?!user-attachments)(?:[a-zA-Z0-9]|-)+\/(?:[a-zA-Z0-9]|-|\.)+(?:\.git)?|(plugins\.(nin0)\.dev)\/((?:[a-zA-Z0-9]|-|\.)+))(?:\/)?)\n/);
-        } catch {
-            remoteURL = null;
-        }
-
-        let supportChannelID;
-        try {
-            const meta = readFileSync(join(path, "meta.yml"), "utf8");
-            const parsed = yaml.load(meta);
-            if (parsed.thread && typeof parsed.thread === "string" && /^\d+$/.test(parsed.thread)) {
-                supportChannelID = parsed.thread;
-            }
-        } catch {
-            supportChannelID = null;
-        }
-
-        const rawMeta = file.match(PLUGIN_META_REGEX);
-        resolve({
-            name: rawMeta![1],
-            description: rawMeta![2],
-            usesPreSend: file.includes("PreSendListener") || file.includes("onBeforeMessage"),
-            usesNative: files.includes("native.ts") || files.includes("native.js"),
-            remote: remoteURL ? remoteURL[1] : "",
-            supportChannelID,
-            ...extra
-        });
-
+    const files = readdirSync(path);
+    let fileToRead: "index.ts" | "index.tsx" | "index.js" | "index.jsx" | undefined;
+    files.forEach(f => {
+        if (f === "index.ts") fileToRead = "index.ts";
+        if (f === "index.tsx") fileToRead = "index.tsx";
+        if (f === "index.js") fileToRead = "index.js";
+        if (f === "index.jsx") fileToRead = "index.jsx";
     });
+    if (!fileToRead) throw new Error("Plugin entry file is missing.");
+
+    const file = readFileSync(`${path}/${fileToRead}`, "utf8");
+    let remoteURL;
+    try {
+        const remoteC = readFileSync(join(path, ".git/config"), "utf8");
+        remoteURL = remoteC.match(/\[remote "origin"]\s+url = (https:\/\/(?:(?:git(?:hub|lab)\.com|git\.(?:[a-zA-Z0-9]|\.)+|codeberg\.org)\/(?!user-attachments)(?:[a-zA-Z0-9]|-)+\/(?:[a-zA-Z0-9]|-|\.)+(?:\.git)?|(plugins\.(nin0)\.dev)\/((?:[a-zA-Z0-9]|-|\.)+))(?:\/)?)\n/);
+    } catch {
+        remoteURL = null;
+    }
+
+    let supportChannelID;
+    try {
+        const meta = readFileSync(join(path, "meta.yml"), "utf8");
+        const parsed = yaml.load(meta);
+        if (parsed.thread && typeof parsed.thread === "string" && /^\d+$/.test(parsed.thread)) {
+            supportChannelID = parsed.thread;
+        }
+    } catch {
+        supportChannelID = null;
+    }
+
+    const rawMeta = file.match(PLUGIN_META_REGEX);
+    if (!rawMeta) throw new Error("Plugin metadata is invalid.");
+    return {
+        name: rawMeta[1],
+        description: rawMeta[2],
+        usesPreSend: file.includes("PreSendListener") || file.includes("onBeforeMessage"),
+        usesNative: files.includes("native.ts") || files.includes("native.js"),
+        remote: remoteURL ? remoteURL[1] : "",
+        supportChannelID,
+        ...extra
+    };
 }
 
 async function cloneRepo(link: string, repo: string): Promise<void> {

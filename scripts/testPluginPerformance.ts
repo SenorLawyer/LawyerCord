@@ -7675,6 +7675,41 @@ test("plugin cloning settles launch and re-clone failures outside subprocess cal
     }
 });
 
+test("plugin metadata stops at missing entries and rejects malformed declarations", async () => {
+    for (const entry of [null, "index.ts", "index.tsx", "index.js", "index.jsx"]) {
+        for (const valid of [false, true]) {
+            let reads = 0;
+            const mocks: Record<string, object> = {
+                child_process: {}, electron: {}, "fs/promises": {}, path, "yaml-js": {},
+                fs: { readdirSync: () => entry ? [entry, "native.ts"] : ["README.md"],
+                    readFileSync: (filename: string) => {
+                        reads++;
+                        if (filename.endsWith("meta.yml") || filename.endsWith("config")) throw new Error("Optional file missing");
+                        assert.ok(entry && filename.endsWith(entry));
+                        return valid ? 'export default definePlugin({ name: "Fixture", authors: [], description: "A fixture.", onBeforeMessageSend() {} });' : "export default {};";
+                    } }
+            };
+            for (const name of ["pluginValidate", "updateValidate"])
+                mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+            const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") }, "({ getPluginMeta })");
+            const pending = api.getPluginMeta("fixture", { directory: "fixture" });
+            if (!entry) {
+                await assert.rejects(pending, /Plugin entry file is missing/);
+                assert.equal(reads, 0);
+            } else if (!valid) await assert.rejects(pending, /Plugin metadata is invalid/);
+            else {
+                const meta = await pending;
+                assert.equal(meta.name, "Fixture");
+                assert.equal(meta.description, "A fixture.");
+                assert.equal(meta.usesNative, true);
+                assert.equal(meta.usesPreSend, true);
+                assert.equal(meta.directory, "fixture");
+                assert.equal(meta.remote, "");
+            }
+        }
+    }
+});
+
 test("installer setup failures reject the caller without exposing native errors", async () => {
     for (const stage of ["dialog", "clone", "metadata", "browser"]) {
         const fail = async () => { throw new Error("Private filesystem path"); };

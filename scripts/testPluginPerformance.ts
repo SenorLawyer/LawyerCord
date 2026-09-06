@@ -2365,6 +2365,55 @@ test("quote preview ignores superseded and unmounted image work", async () => {
     assert.equal(states[4], null);
 });
 
+test("remix releases its canvas after React detaches the ref", () => {
+    const effects: (() => (() => void) | undefined)[] = [];
+    const context = { drawImage() {} };
+    const firstCanvas = { width: 0, height: 0, getContext: () => context };
+    const secondCanvas = { ...firstCanvas };
+    const ref: { current: typeof firstCanvas | null; } = { current: firstCanvas };
+    const images: { onload: (() => void) | null; }[] = [];
+    const revoked: string[] = [];
+    let cleanups = 0;
+    const module = loadSource("src/equicordplugins/remix/editor/components/Canvas.tsx", {
+        "@equicordplugins/remix/editor/input": { initInput: () => () => cleanups++ },
+        "@equicordplugins/remix/editor/tools/crop": {},
+        "@equicordplugins/remix/editor/utils/canvas": {},
+        "@webpack/common": { useRef: () => ref, useEffect: (effect: () => (() => void) | undefined) => effects.push(effect) }
+    }, {
+        React: { createElement: () => null },
+        document: { createElement: () => ({ getContext: () => ({ canvas: {} }) }) },
+        Image: class {
+            width = 100;
+            height = 100;
+            onload: (() => void) | null = null;
+            constructor() { images.push(this); }
+        },
+        URL: { createObjectURL: () => "blob:remix", revokeObjectURL: (url: string) => revoked.push(url) }
+    });
+    module.Canvas({ file: {} });
+    const cleanup = effects[0]();
+    images[0].onload?.();
+    assert.equal(module.canvas, firstCanvas);
+    ref.current = null;
+    cleanup?.();
+    assert.equal(module.canvas, null);
+    assert.equal(module.ctx, null);
+    assert.equal(cleanups, 1);
+    assert.deepEqual(revoked, ["blob:remix"]);
+
+    ref.current = firstCanvas;
+    const oldCleanup = effects[0]();
+    images[1].onload?.();
+    ref.current = secondCanvas;
+    const newCleanup = effects[0]();
+    images[2].onload?.();
+    oldCleanup?.();
+    assert.equal(module.canvas, secondCanvas);
+    ref.current = null;
+    newCleanup?.();
+    assert.equal(module.canvas, null);
+});
+
 test("recent DM cleanup closes an overlay after its setting changes", () => {
     const closed: string[] = [];
     const plugin = loadSource("src/equicordplugins/recentDMSwitcher/index.tsx", {

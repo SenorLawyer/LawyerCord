@@ -28,7 +28,7 @@ import { useAwaiter } from "@utils/react";
 import definePlugin from "@utils/types";
 import { Guild, User } from "@vencord/discord-types";
 import { findCssClassesLazy } from "@webpack";
-import { Clickable, ConfirmModal, IconUtils, Menu, openModal, Parser } from "@webpack/common";
+import { Clickable, ConfirmModal, IconUtils, Menu, openModal, Parser, UserStore } from "@webpack/common";
 
 import { Auth, initAuth, updateAuth } from "./auth";
 import { openReviewsModal } from "./components/ReviewModal";
@@ -91,19 +91,21 @@ export default definePlugin({
 
     async start() {
         const generation = ++startupGeneration;
+        const userId = UserStore.getCurrentUser()?.id;
         const s = settings.store;
         const { lastReviewId, notifyReviews } = s;
 
         await initAuth();
-        if (generation !== startupGeneration) return;
+        if (generation !== startupGeneration || UserStore.getCurrentUser()?.id !== userId) return;
 
         startupTimer = setTimeout(async () => {
-            if (generation !== startupGeneration) return;
+            if (generation !== startupGeneration || UserStore.getCurrentUser()?.id !== userId) return;
             startupTimer = undefined;
-            if (!Auth.token) return;
+            const { token } = Auth;
+            if (!token) return;
 
             const user = await getCurrentUserInfo();
-            if (generation !== startupGeneration) return;
+            if (generation !== startupGeneration || UserStore.getCurrentUser()?.id !== userId) return;
             if (user) {
                 updateAuth({ user });
 
@@ -120,14 +122,16 @@ export default definePlugin({
                     const props = notification.type === NotificationType.Ban ? {
                         cancelText: "Appeal",
                         confirmText: "Ok",
-                        onCancel: async () =>
-                            VencordNative.native.openExternal(
+                        onCancel: async () => {
+                            if (generation !== startupGeneration || UserStore.getCurrentUser()?.id !== userId) return;
+                            await VencordNative.native.openExternal(
                                 "https://reviewdb.mantikafasi.dev/api/redirect?"
                                 + new URLSearchParams({
-                                    token: Auth.token!,
+                                    token,
                                     page: "dashboard/appeal"
                                 })
-                            )
+                            );
+                        }
                     } : {};
 
                     openModal(modalProps => (

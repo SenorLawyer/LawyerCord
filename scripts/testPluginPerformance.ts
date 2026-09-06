@@ -21,8 +21,12 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
-test("ReviewDB startup work stops with the plugin", async () => {
-    for (const stopAt of ["init", "timer", "request", "never"]) {
+test("ReviewDB startup work stops with the plugin or account", async () => {
+    for (const stopAt of ["init", "timer", "request", "account-init", "account-timer", "account-request", "never"]) {
+        let userId = "first";
+        let appeal: (() => Promise<void>) | undefined;
+        const opened: string[] = [];
+        const auth = { token: "original-token" };
         let resolveInit: () => void = () => {};
         let resolveRequest: (user: object) => void = () => {};
         let timer: (() => Promise<void>) | undefined;
@@ -32,31 +36,52 @@ test("ReviewDB startup work stops with the plugin", async () => {
             "@components/Icons": {}, "@components/Paragraph": {}, "@components/Span": {},
             "@utils/constants": { Devs: {} }, "@utils/misc": {}, "@utils/react": {},
             "@utils/types": { __esModule: true, default: (value: object) => value },
-            "@webpack": { findCssClassesLazy: () => ({}) }, "@webpack/common": {},
-            "./auth": { Auth: { token: "token" }, initAuth: () => new Promise<void>(resolve => { resolveInit = resolve; }), updateAuth: () => { writes++; } },
-            "./components/ReviewModal": {}, "./entities": {},
-            "./reviewDbApi": { getCurrentUserInfo: () => { requests++; return new Promise(resolve => { resolveRequest = resolve; }); } },
+            "@webpack": { findCssClassesLazy: () => ({}) }, "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: userId }) }, Parser: { parse: () => "notification" },
+                openModal: (render: (props: object) => { props: { onCancel: typeof appeal; }; }) => { appeal = render({}).props.onCancel; },
+            },
+            "./auth": { Auth: auth, initAuth: () => new Promise<void>(resolve => { resolveInit = resolve; }), updateAuth: () => { writes++; } },
+            "./components/ReviewModal": {}, "./entities": { NotificationType: { Ban: 1 } },
+            "./reviewDbApi": { readNotification() {}, getCurrentUserInfo: () => { requests++; return new Promise(resolve => { resolveRequest = resolve; }); } },
             "./settings": { settings: { store: {} } }, "./utils": {},
         }, {
+            URLSearchParams, React: { createElement: (_type: unknown, props: object) => ({ props }) },
+            VencordNative: { native: { openExternal: async (url: string) => { opened.push(url); } } },
             setTimeout: (callback: typeof timer) => { timer = callback; return 1; },
             clearTimeout: () => { timer = undefined; },
         });
         const start = plugin.start();
         if (stopAt === "init") plugin.stop();
+        if (stopAt === "account-init") userId = "second";
         resolveInit();
         await start;
         if (stopAt === "timer") plugin.stop();
-        if (stopAt === "init" || stopAt === "timer") {
+        if (stopAt === "init" || stopAt === "timer" || stopAt === "account-init") {
             assert.equal(timer, undefined);
             assert.equal(requests, 0);
             continue;
         }
         assert.ok(timer);
+        if (stopAt === "account-timer") userId = "second";
         const pending = timer();
         if (stopAt === "request") plugin.stop();
-        resolveRequest({ lastReviewID: 0 });
+        if (stopAt === "account-request") userId = "second";
+        resolveRequest({ lastReviewID: 0, notification: { id: 1, type: 1, content: "notification" } });
         await pending;
         assert.equal(writes, stopAt === "never" ? 1 : 0);
+        if (stopAt === "never") {
+            assert.ok(appeal);
+            auth.token = "changed-token";
+            await appeal();
+            assert.equal(new URL(opened[0]).searchParams.get("token"), "original-token");
+            userId = "second";
+            await appeal();
+            assert.equal(opened.length, 1);
+            userId = "first";
+            plugin.stop();
+            await appeal();
+            assert.equal(opened.length, 1);
+        }
     }
 });
 

@@ -46,6 +46,30 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("folder icon editing preserves saved size and resetting an unused folder is safe", () => {
+    const settings: { store: { folderIcons?: Record<string, { url: string; size: number; }> } } = {
+        store: { folderIcons: { folder: { url: "https://fixture.invalid/icon.png", size: 175 } } }
+    };
+    let saved: unknown;
+    let closes = 0;
+    const { ImageModal } = loadComponent("src/equicordplugins/customFolderIcons/components.tsx", {
+        useState: (initial: unknown) => [initial, () => {}],
+        Button: "button", Slider: "slider", closeModal: () => closes++
+    }, {
+        "./settings": { settings },
+        "./util": { setFolderData: (_props: object, data: unknown) => { saved = data; } }
+    });
+    const props = { folderId: "folder", folderColor: 0 };
+    const tree = ImageModal(props);
+    const buttons = tree.props.children.filter((node: { type?: string }) => node?.type === "button");
+    buttons[0].props.onClick();
+    assert.equal((saved as { size: number }).size, 175);
+    settings.store.folderIcons = undefined;
+    const empty = ImageModal(props);
+    empty.props.children.filter((node: { type?: string }) => node?.type === "button")[1].props.onClick();
+    assert.equal(closes, 2);
+});
+
 test("content warnings are blurred before the first hover", () => {
     const TriggerContainer = loadSource("src/equicordplugins/contentWarning/index.tsx", {
         "@api/index": {},

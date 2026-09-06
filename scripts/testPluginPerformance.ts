@@ -46,6 +46,29 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("Tidal clears the previous track and position on an empty playback update", () => {
+    let changes = 0;
+    const { TidalStore: store } = loadSource("src/equicordplugins/musicControls/tidal/TidalStore.ts", {
+        "@utils/Logger": { Logger: class {} },
+        "@webpack": { proxyLazyWebpack: (factory: () => unknown) => factory() },
+        "@webpack/common": { Flux: { Store: class { emitChange() { changes++; } } }, FluxDispatcher: {} },
+        "../settings": { settings: { store: {} } }
+    }, { WebSocket: class { addEventListener() {} } });
+    const fields = { track: { id: 1, title: "Song", artist: { name: "Artist" }, duration: 120 }, currentTime: 15, playing: true };
+    store.socket.onChange({ type: "update", all: true, fields });
+    const track = store.track;
+    assert.equal(track.name, "Song");
+    assert.equal(store.mPosition, 15000);
+    store.socket.onChange({ type: "update", all: true, fields: { ...fields, currentTime: 16 } });
+    assert.equal(store.track, track);
+    assert.equal(store.mPosition, 16000);
+    store.socket.onChange({ type: "update", all: true, fields: { track: null, currentTime: 0, playing: false } });
+    assert.equal(store.track, null);
+    assert.equal(store.mPosition, 0);
+    assert.equal(store.isPlaying, false);
+    assert.equal(changes, 3);
+});
+
 test("MusicControls reconnects cached Tidal stores without initializing unused stores", async () => {
     const cached = Symbol("cached");
     const tidal: Record<symbol, object> = {};

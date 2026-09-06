@@ -208,13 +208,11 @@ export const TidalStore = proxyLazyWebpack(() => {
 
                 const track = mapApiResponseToTrack(apiData);
 
-                if (track) {
-                    if (!isSameTrack(store.track, track)) {
-                        store.track = track;
-                    }
-                    store.position = (apiData.currentTime || 0);
-                    this.applyVibrantColor(track.vibrantColor);
+                if (!track || !isSameTrack(store.track, track)) {
+                    store.track = track;
                 }
+                store.position = (apiData.currentTime || 0);
+                if (track) this.applyVibrantColor(track.vibrantColor);
 
                 if (apiData.playing !== undefined) store.isPlaying = apiData.playing;
                 if (apiData.repeatMode !== undefined) store.repeat = apiData.repeatMode;

@@ -8,13 +8,13 @@ import "./style.css";
 
 import { definePluginSettings } from "@api/Settings";
 import { Devs, EquicordDevs } from "@utils/constants";
+import { useAwaiter } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
 import { Channel } from "@vencord/discord-types";
-import { React } from "@webpack/common";
+import { React, showToast, Toasts } from "@webpack/common";
 
 import { Packs, PickerContent, PickerHeader, PickerSidebar, Wrapper } from "./components";
 import { getStickerPack, getStickerPackMetas } from "./stickers";
-import { StickerPack, StickerPackMeta } from "./types";
 import { cl } from "./utils";
 
 export const settings = definePluginSettings({
@@ -112,27 +112,17 @@ export default definePlugin({
         closePopout: () => void;
     }) {
         const [query, setQuery] = React.useState<string | undefined>();
-        const [stickerPackMetas, setStickerPackMetas] = React.useState<StickerPackMeta[]>([]);
-        const [stickerPacks, setStickerPacks] = React.useState<StickerPack[]>([]);
         const [selectedStickerPackId, setSelectedStickerPackId] = React.useState<string | null>(null);
 
-        React.useEffect(() => {
-            (async () => {
-                const sps = (await Promise.all(
-                    stickerPackMetas.map(meta => getStickerPack(meta.id))
-                ))
-                    .filter((x): x is Exclude<typeof x, null> => x !== null);
-                setStickerPacks(sps);
-            })();
-        }, [stickerPackMetas]);
-
-        React.useEffect(() => {
-            let active = true;
-            getStickerPackMetas().then(metas => {
-                if (active) setStickerPackMetas(metas);
-            });
-            return () => { active = false; };
-        }, []);
+        const [loadedPacks] = useAwaiter(async () => {
+            const metas = await getStickerPackMetas();
+            const packs = await Promise.all(metas.map(meta => getStickerPack(meta.id)));
+            return packs.filter(pack => pack !== null);
+        }, {
+            fallbackValue: [],
+            onError: () => showToast("Could not load sticker packs.", Toasts.Type.FAILURE)
+        });
+        const stickerPacks = loadedPacks ?? [];
 
         return (
             <Wrapper>
@@ -151,7 +141,7 @@ export default definePlugin({
                 />
                 <PickerSidebar
                     packMetas={
-                        stickerPackMetas.map(meta => ({
+                        stickerPacks.map(meta => ({
                             id: meta.id,
                             name: meta.title,
                             iconUrl: meta.logo.image

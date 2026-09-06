@@ -5070,6 +5070,43 @@ test("sticker file imports validate the entire batch before writing packs", asyn
     }
 });
 
+test("sticker picker uses shared async cleanup for pack loading", async () => {
+    for (const failure of ["none", "metadata", "payload"]) {
+        for (const unmounted of [false, true]) {
+            const effects: (() => () => void)[] = [];
+            const updates: { value?: unknown; error?: unknown; }[] = [];
+            let notices = 0;
+            const React = {
+                createElement: () => null,
+                useState: (initial: unknown) => [initial, (value: { value?: unknown; error?: unknown; }) => updates.push(value)],
+                useEffect: (effect: () => () => void) => effects.push(effect)
+            };
+            const shared = loadSource("src/utils/react.tsx", {
+                "@webpack/common": { ...React, React }, "./misc": {}, "./lazyReact": {}
+            });
+            const pack = { id: "loaded", title: "Loaded", logo: { image: "image" }, stickers: [] };
+            const plugin = loadSource("src/equicordplugins/moreStickers/index.tsx", {
+                "@api/Settings": { definePluginSettings: () => ({}) }, "@utils/constants": { Devs: {}, EquicordDevs: {} },
+                "@utils/react": shared, "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+                "@webpack/common": { React, showToast: () => notices++, Toasts: { Type: {} } },
+                "./components": {}, "./utils": { cl: () => "" },
+                "./stickers": {
+                    getStickerPackMetas: async () => { if (failure === "metadata") throw new Error("Load failed"); return [{ id: "loaded" }, { id: "missing" }]; },
+                    getStickerPack: async (id: string) => { if (failure === "payload") throw new Error("Load failed"); return id === "loaded" ? pack : null; }
+                }
+            }).default;
+            plugin.moreStickersComponent({ channel: { id: "channel" }, closePopout() {} });
+            assert.equal(effects.length, 1);
+            const cleanup = effects[0]();
+            if (unmounted) cleanup();
+            await setImmediate();
+            assert.equal(updates.length, unmounted ? 0 : 1);
+            assert.equal(notices, !unmounted && failure !== "none" ? 1 : 0);
+            if (!unmounted && failure === "none") assert.deepEqual(Array.from(updates[0].value as object[]), [pack]);
+        }
+    }
+});
+
 test("sticker settings retain successful loads and discard unmounted completions", async () => {
     const source = readFileSync("src/equicordplugins/moreStickers/components/misc.tsx", "utf8");
     const callback = source.match(/React.useEffect\(\(\) => \{([\s\S]*?)\n    \}, \[\]\)/);

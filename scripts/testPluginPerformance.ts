@@ -4956,3 +4956,26 @@ test("SongSpotlight saves use only server modification timestamps", async () => 
     await api.saveData([]);
     assert.equal(updates[1].at, at);
 });
+
+
+test("SongSpotlight requires write acknowledgement before changing local state", async () => {
+    let result: unknown;
+    const changes: string[] = [];
+    const token = { access: "token" };
+    const api = loadSource("src/equicordplugins/songSpotlight.desktop/lib/api.ts", {
+        "@song-spotlight/api/structs": await import("@song-spotlight/api/structs"),
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "self" }) }, showToast() {}, Toasts: { Type: {} } },
+        "./stores/AuthorizationStore": { useAuthorizationStore: { getState: () => ({ getToken: () => token, deleteTokens: () => changes.push("logout") }) } },
+        "./stores/SongStore": { useSongStore: { getState: () => ({ update: () => changes.push("save"), delete: () => changes.push("delete") }) } },
+    }, { URL, Headers, fetch: async () => response(result) });
+    for (const invalid of [false, null, {}, "true", []]) {
+        result = invalid;
+        await assert.rejects(api.saveData([]), /did not confirm the save/);
+        await assert.rejects(api.deleteData(), /did not confirm the deletion/);
+    }
+    assert.deepEqual(changes, []);
+    result = true;
+    assert.equal(await api.saveData([]), true);
+    assert.equal(await api.deleteData(), true);
+    assert.deepEqual(changes, ["save", "delete", "logout"]);
+});

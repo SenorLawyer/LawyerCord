@@ -139,6 +139,7 @@ export async function saveData(data: UserData): Promise<true> {
     })
         .then(async res => {
             const json = await res?.json();
+            if (json !== true) throw new Error("Song Spotlight did not confirm the save.");
             useSongStore
                 .getState().update({
                     userId,
@@ -156,6 +157,7 @@ export async function deleteData(): Promise<true> {
     })
         .then(res => res?.json())
         .then(json => {
+            if (json !== true) throw new Error("Song Spotlight did not confirm the deletion.");
             useSongStore.getState().delete(userId);
             const current = useAuthorizationStore.getState().getToken(userId);
             if (current === token || (token?.refresh && current?.refresh === token.refresh))

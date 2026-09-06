@@ -1214,38 +1214,16 @@ function canServiceHandleFile(service: ServiceType, fileName: string): boolean {
     return true;
 }
 
-function normalizePrimaryService(primary: ServiceType, fileName: string): ServiceType {
-    if (canServiceHandleFile(primary, fileName)) {
-        return primary;
-    }
-
-    if (isExeFileName(fileName)) {
-        return ServiceType.GOFILE;
-    }
-
-    if (!Native && primary === ServiceType.ZEROX0) {
-        return ServiceType.CATBOX;
-    }
-
-    return primary;
-}
-
 function buildUploadOrder(primary: ServiceType, fileName: string): ServiceType[] {
-    const disableFallbacks = Boolean((settings.store as { disableFallbacks?: boolean; }).disableFallbacks);
-    const effectivePrimary = normalizePrimaryService(primary, fileName);
-
-    const order: ServiceType[] = [effectivePrimary];
-    if (disableFallbacks) {
-        return order;
-    }
-
-    for (const fallback of parseFallbackServiceOrder(settings.store.fallbackOrder)) {
-        if (fallback !== effectivePrimary && canServiceHandleFile(fallback, fileName)) {
-            order.push(fallback);
+    if (settings.store.disableFallbacks) {
+        if (!canServiceHandleFile(primary, fileName)) {
+            throw new Error(`${serviceLabels[primary]} cannot upload this file. Choose another service.`);
         }
+        return [primary];
     }
 
-    return order;
+    return [primary, ...parseFallbackServiceOrder(settings.store.fallbackOrder).filter(service => service !== primary)]
+        .filter(service => canServiceHandleFile(service, fileName));
 }
 
 function finalizeUploadedUrl(url: string): string {

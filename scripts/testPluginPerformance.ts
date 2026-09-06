@@ -46,6 +46,28 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("File upload destination selection respects disabled fallbacks and host order", () => {
+    const types = loadSource("src/equicordplugins/fileUpload/types.ts", {});
+    const store = { disableFallbacks: true, fallbackOrder: "" };
+    const upload = loadSource("src/equicordplugins/fileUpload/utils/upload.ts", {
+        "@equicordplugins/fileUpload/constants": {}, "@equicordplugins/fileUpload/settings": { settings: { store } },
+        "@equicordplugins/fileUpload/types": types, "@utils/clipboard": {}, "@utils/discord": {},
+        "@utils/Logger": { Logger: class {} }, "@utils/web": {}, "@webpack/common": {},
+        "./apngToGif": {}, "./getMediaUrl": {}, "./s3": {}, "./sharex": {}
+    }, { IS_DISCORD_DESKTOP: false }, "({ buildUploadOrder })");
+    assert.throws(() => upload.buildUploadOrder("catbox", "file.exe"), /Choose another service/);
+    assert.throws(() => upload.buildUploadOrder("0x0", "file.png"), /Choose another service/);
+    assert.equal(JSON.stringify(upload.buildUploadOrder("catbox", "file.png")), '["catbox"]');
+    store.disableFallbacks = false;
+    const order: string[] = upload.buildUploadOrder("catbox", "file.exe");
+    assert.equal(order[0], "zipline");
+    assert.equal(order.includes("catbox"), false);
+    assert.equal(order.includes("0x0"), false);
+    const supported: string[] = upload.buildUploadOrder("catbox", "file.png");
+    assert.equal(supported[0], "catbox");
+    assert.equal(supported.filter(service => service === "catbox").length, 1);
+});
+
 test("File uploads report failure, busy state and success", async () => {
     const upload = loadSource("src/equicordplugins/fileUpload/utils/upload.ts", {
         "@equicordplugins/fileUpload/constants": {}, "@equicordplugins/fileUpload/settings": {},

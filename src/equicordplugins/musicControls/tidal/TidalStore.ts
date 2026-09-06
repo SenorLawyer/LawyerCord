@@ -190,6 +190,8 @@ class TidalSocket {
 export const TidalStore = proxyLazyWebpack(() => {
     const { Store } = Flux;
 
+    let appliedVibrantColor: string | null = null;
+
     class TidalStore extends Store {
         public mPosition = 0;
         public start = 0;
@@ -200,7 +202,6 @@ export const TidalStore = proxyLazyWebpack(() => {
         public shuffle = false;
         public volume = 100;
         public playerElement: HTMLElement | null = null;
-        private appliedVibrantColor: string | null = null;
 
         public socket = new TidalSocket((message: Message) => {
             if (message.type === "update" && message.all && message.fields) {
@@ -212,7 +213,7 @@ export const TidalStore = proxyLazyWebpack(() => {
                     store.track = track;
                 }
                 store.position = (apiData.currentTime || 0);
-                if (track) this.applyVibrantColor(track.vibrantColor);
+                if (track) applyVibrantColor(track.vibrantColor);
 
                 if (apiData.playing !== undefined) store.isPlaying = apiData.playing;
                 if (apiData.repeatMode !== undefined) store.repeat = apiData.repeatMode;
@@ -226,18 +227,6 @@ export const TidalStore = proxyLazyWebpack(() => {
         public openExternal(path: string) {
             VencordNative.native.openExternal(path.replace("http://www.tidal.com", "tidal://"));
 
-        }
-
-        private applyVibrantColor(vibrantColor?: string | null) {
-            if (!vibrantColor) return;
-            if (this.playerElement && this.appliedVibrantColor === vibrantColor) return;
-
-            this.playerElement ??= document.querySelector("#eq-tdl-player");
-            if (!this.playerElement) return;
-
-            this.playerElement.style.setProperty("--eq-tdl-slider-gradient", `linear-gradient(to right, ${vibrantColor} 80%, #E5E5E5 100%)`);
-            this.playerElement.style.setProperty("--eq-tdl-slider-grabber", vibrantColor);
-            this.appliedVibrantColor = vibrantColor;
         }
 
         set position(p: number) {
@@ -304,9 +293,21 @@ export const TidalStore = proxyLazyWebpack(() => {
             this.mPosition = 0;
             this.start = 0;
             this.playerElement = null;
-            this.appliedVibrantColor = null;
+            appliedVibrantColor = null;
             this.emitChange();
         }
+    }
+
+    function applyVibrantColor(vibrantColor?: string | null) {
+        if (!vibrantColor) return;
+        if (store.playerElement && appliedVibrantColor === vibrantColor) return;
+
+        store.playerElement ??= document.querySelector("#eq-tdl-player");
+        if (!store.playerElement) return;
+
+        store.playerElement.style.setProperty("--eq-tdl-slider-gradient", `linear-gradient(to right, ${vibrantColor} 80%, #E5E5E5 100%)`);
+        store.playerElement.style.setProperty("--eq-tdl-slider-grabber", vibrantColor);
+        appliedVibrantColor = vibrantColor;
     }
 
     const store = new TidalStore(FluxDispatcher);

@@ -176,8 +176,6 @@ function VoiceMessageModal({ modalProps }: { modalProps: RenderModalProps; }) {
     const [blob, setBlob] = useState<Blob>();
     const [blobUrl, setBlobUrl] = useObjectUrl();
 
-    const VoiceRecorder = IS_DISCORD_DESKTOP ? VoiceRecorderDesktop : VoiceRecorderWeb;
-
     useEffect(() => () => {
         if (blobUrl)
             URL.revokeObjectURL(blobUrl);

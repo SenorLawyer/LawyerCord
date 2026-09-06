@@ -21,6 +21,26 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("BetterSessions returns its settings-close save to the flux error handler", async () => {
+    const savedSessionsCache = new Map();
+    const save = Promise.withResolvers<void>();
+    const { default: plugin } = loadSource("src/plugins/betterSessions/index.tsx", {
+        "@api/Notifications": {}, "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@components/Paragraph": {}, "@utils/constants": { Devs: {} },
+        "@utils/Logger": { Logger: class {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack": { findStoreLazy: () => ({ getSessions: () => [{ id_hash: "session" }] }), findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => () => null },
+        "@webpack/common": {}, "./components/RenameButton": {},
+        "./utils": { savedSessionsCache, saveSessionsToDataStore: () => save.promise },
+    });
+    const result = plugin.flux.USER_SETTINGS_ACCOUNT_RESET_AND_CLOSE_FORM();
+    assert.equal(result, save.promise);
+    const rejected = assert.rejects(result, /storage unavailable/);
+    save.reject(new Error("storage unavailable"));
+    await rejected;
+});
+
 test("AutoDND restores each game's saved status only once", () => {
     let status = "online";
     const updates: string[] = [];

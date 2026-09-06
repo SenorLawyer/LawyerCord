@@ -91,7 +91,7 @@ export default definePlugin({
         const savedSession = savedSessionsCache.get(session.id_hash);
 
         const state = React.useState(savedSession?.name ? `${savedSession.name}*` : getDefaultName(session.client_info));
-        const [title, setTitle] = state;
+        const [title] = state;
         // Show a "NEW" badge if the session is seen for the first time
         return (
             <>
@@ -234,7 +234,7 @@ export default definePlugin({
                 data.isNew = false;
                 changed = true;
             });
-            if (changed) void saveSessionsToDataStore();
+            if (changed) return saveSessionsToDataStore();
         }
     },
 

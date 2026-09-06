@@ -34,7 +34,9 @@ The accumulated changes cover storage consistency, asynchronous lifecycle handli
 
 ThemeLibrary changes remove duplicate filtering state, cancel closed-tab requests, and lock like actions before authorization. Native downloads validate IDs and filenames, bound response size and duration, reject redirects, and replace installed files only after a temporary write succeeds. Live provider testing corrected an inaccurate string-only ID declaration.
 
-The development-only userplugin installer now propagates installation and update preparation failures, stops on missing or malformed metadata, handles Git launch failures, and checks Git results before building updates. Its review-window lifecycle and remaining native-boundary findings are still open. Regression fixtures mock subprocesses and windows; they do not clone, delete, or update real plugins.
+The development-only userplugin installer now propagates installation and update preparation failures, stops on missing or malformed metadata, handles Git launch failures, and checks Git results before building updates. Review closure, page-load failures, cancellation cleanup, and external-link failures now settle the pending operation. Cleanup revalidates directories; clone destinations are explicit; review links are restricted to repository URLs. Concurrent filesystem ownership and live Electron behavior still require review. Regression fixtures mock subprocesses and windows; they do not clone, delete, or update real plugins.
+
+The installer parses metadata using the existing TypeScript dependency without executing plugin code. Its actual handler accepts all 379 checked plugin declarations, including four rejected by the old regex. Development-only native plugins are excluded from ordinary release builds, keeping the parser out of those bundles; development and reporter builds retain it.
 
 The proposed version is `3.0.0.0` because older scheduled data now requires explicit recovery. See [VERSIONING.md](VERSIONING.md) for the compatibility and downgrade implications. No release tag has been created for this audit.
 
@@ -44,11 +46,12 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `1f494c36b` | 335 tests and timezone correctness checks passed. |
+| Broader performance/correctness suite | `15b106af2` | 340 tests and timezone correctness checks passed. |
 | Repository-wide ESLint | `5e869fea9` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
 | CSS and internationalization lint | `5e869fea9` | Passed. CSS excludes userplugins; internationalization checks tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest plugin regressions and TypeScript | `1f494c36b` | 285 plugin tests and full TypeScript passed; focused source lint passed. |
-| Standalone build | `1f494c36b` | Passed. This does not establish installed-client behavior. |
+| Latest plugin regressions and TypeScript | `15b106af2` | 290 plugin tests and full TypeScript passed; focused source lint passed. |
+| Standalone and development builds | `333abeffb` | Passed. Release native source maps exclude the installer and TypeScript parser. This does not establish installed-client behavior. |
+| Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |
 | Web build | `57b19a728` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
 | Release artifact audit | `57b19a728` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
 | Real IndexedDB queue behavior | `ce04cc40a` | Isolated Chrome verified aborted additions, ordered concurrent additions, aborted clearing, and subsequent successful clearing using actual queue and DataStore code. |

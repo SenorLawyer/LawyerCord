@@ -21,6 +21,23 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("reply mention exceptions match whole user and role IDs", () => {
+    const store = { userList: "12345, 67890", roleList: "98765\n43210", shouldPingListed: true, inverseShiftReply: false };
+    let roles = ["876"];
+    const { default: plugin } = loadSource("src/plugins/noReplyMention/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store }) }, "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack/common": { ChannelStore: { getChannel: () => ({ guild_id: "guild" }) }, GuildMemberStore: { getMember: () => ({ roles }) } },
+    });
+    const message = { author: { id: "234" }, channel_id: "channel" };
+    assert.equal(plugin.shouldMention(message, false), false);
+    message.author.id = "67890";
+    assert.equal(plugin.shouldMention(message, false), true);
+    message.author.id = "other";
+    roles = ["43210"];
+    assert.equal(plugin.shouldMention(message, false), true);
+});
+
 test("new guild defaults use one notification update and preserve server defaults", () => {
     const source = readFileSync("src/plugins/newGuildSettings/index.tsx", "utf8");
     const handler = source.slice(source.indexOf("function applyDefaultSettings("), source.indexOf("export default definePlugin"));

@@ -8093,3 +8093,27 @@ test("installer scans only ignore missing children, not root or permission failu
         assert.equal(commands, 0);
     }
 });
+
+test("installer metadata normalizes clone suffixes before building repository links", async () => {
+    for (const suffix of ["", "/", ".git", ".git/"]) {
+        const remote = `https://github.com/owner/repo${suffix}`;
+        const mocks: Record<string, object> = {
+            child_process: {}, electron: {}, "fs/promises": {}, path, "yaml-js": {},
+            fs: {
+                readdirSync: () => ["index.ts"],
+                readFileSync: (file: string) => {
+                    if (file.endsWith("index.ts")) return 'export default definePlugin({name:"Fixture",description:"Fixture"});';
+                    if (file.endsWith("config")) return `[remote "origin"]\n\turl = ${remote}\n`;
+                    throw new Error("Missing metadata");
+                },
+            },
+        };
+        for (const name of ["pluginValidate", "updateValidate"])
+            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") }, "({ getPluginMeta, formatCommitMessages })");
+        const meta = await api.getPluginMeta("fixture");
+        assert.equal(meta.remote, "https://github.com/owner/repo");
+        const sha = "a".repeat(40);
+        assert.ok(api.formatCommitMessages(`Author////////aaaaaaa////////${sha}////////Message`, meta.remote).includes(`href="https://github.com/owner/repo/commit/${sha}"`));
+    }
+});

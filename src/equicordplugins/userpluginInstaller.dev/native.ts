@@ -290,7 +290,7 @@ async function getPluginMeta(path: string, extra: object = {}): Promise<{
         description,
         usesPreSend: file.includes("PreSendListener") || file.includes("onBeforeMessage"),
         usesNative: files.includes("native.ts") || files.includes("native.js") || (files.includes("native") && existsSync(join(path, "native/index.ts"))),
-        remote: remoteURL ? remoteURL[1] : "",
+        remote: remoteURL ? remoteURL[1].replace(/(?:\.git)?\/?$/, "") : "",
         supportChannelID,
         ...extra
     };

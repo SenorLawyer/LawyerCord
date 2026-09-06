@@ -30,8 +30,11 @@ function getWebpackChunkMap() {
         configurable: true
     });
 
-    wreq.u(sym);
-    delete Object.prototype[sym];
+    try {
+        wreq.u(sym);
+    } finally {
+        delete Object.prototype[sym];
+    }
 
     return chunksMap as Record<PropertyKey, string> | null;
 }

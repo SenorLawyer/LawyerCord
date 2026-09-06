@@ -21,6 +21,20 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("chunk-map inspection removes its prototype hook when webpack throws", () => {
+    const source = readFileSync("src/debug/loadLazyChunks.ts", "utf8");
+    const handler = source.slice(source.indexOf("function getWebpackChunkMap()"), source.indexOf("export async function loadLazyChunks"));
+    const code = transpileModule(handler, { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
+    const inspect = runInNewContext(code + `
+        const before = Object.getOwnPropertySymbols(Object.prototype).length;
+        let failed = false;
+        try { getWebpackChunkMap(); } catch { failed = true; }
+        ({ failed, before, after: Object.getOwnPropertySymbols(Object.prototype).length });
+    `, { wreq: { u() { throw new Error("lookup failed"); } } });
+    assert.equal(inspect.failed, true);
+    assert.equal(inspect.after, inspect.before);
+});
+
 test("failed changelog checks cannot report a cached repository as current", async () => {
     const source = readFileSync("src/components/settings/tabs/changelog/index.tsx", "utf8");
     const start = source.indexOf("    const fetchChangelog =");

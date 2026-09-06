@@ -5421,6 +5421,47 @@ test("screen recorder releases capture and discards work after disable", async (
     assert.equal(uploads, 1);
 });
 
+test("scheduled attempts remain saved on failure and do not automatically replay", async () => {
+    for (const outcome of ["success", "request", "channel", "storage"]) {
+        let saved = [{ id: "queued", channelId: "channel", content: "Text", scheduledTime: 0, createdAt: 0, attemptedAt: undefined as number | undefined }];
+        let posts = 0;
+        let release: () => void = () => {};
+        const pendingPost = new Promise<void>(resolve => { release = resolve; });
+        const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@api/DataStore": { get: async () => structuredClone(saved), set: async (_key: string, value: typeof saved) => {
+                if (outcome === "storage") throw new Error("Storage failed");
+                saved = structuredClone(value);
+            } },
+            "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+            "@webpack/common": { ChannelStore: { getChannel: () => outcome === "channel" ? null : {} },
+                FluxDispatcher: { dispatch() {} }, Constants: { Endpoints: { MESSAGES: (id: string) => id } },
+                SnowflakeUtils: { fromTimestamp: () => "nonce" }, RestAPI: { post: async () => {
+                    posts++;
+                    assert.equal(typeof saved[0].attemptedAt, "number");
+                    await pendingPost;
+                    if (outcome === "request") throw new Error("Request failed");
+                    return { body: { id: "sent" } };
+                } } },
+            ".": { settings: { store: { showNotifications: false } } }
+        }, {}, "({ ...exports, checkAndSendMessages })");
+        await module.loadScheduledMessages();
+        const first = module.sendScheduledMessageNow("queued");
+        const overlap = await module.sendScheduledMessageNow("queued");
+        assert.equal(overlap.success, false);
+        await module.checkAndSendMessages();
+        release();
+        assert.equal((await first).success, outcome === "success");
+        assert.equal(saved.length, outcome === "success" ? 0 : 1);
+        await module.checkAndSendMessages();
+        assert.equal(posts, outcome === "success" || outcome === "request" ? 1 : 0);
+        if (outcome !== "storage") {
+            await module.loadScheduledMessages();
+            await module.checkAndSendMessages();
+            assert.equal(posts, outcome === "success" || outcome === "request" ? 1 : 0);
+        }
+    }
+});
+
 test("scheduled messages require every attachment upload before posting", async () => {
     for (const failedIndex of [-1, 0, 1]) {
         const uploads: Uploader[] = [];

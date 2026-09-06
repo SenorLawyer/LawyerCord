@@ -68,9 +68,7 @@ function ViewScheduledModalInner({ rootProps, close }: ViewScheduledModalProps) 
                     {messages.map(msg => {
                         const { name, avatar } = getChannelDisplayInfo(msg.channelId);
                         const channel = ChannelStore.getChannel(msg.channelId);
-                        if (!channel) return null;
-
-                        const isDM = channel.isPrivate();
+                        const isDM = !channel || channel.isPrivate();
                         const displayContent = msg.content.length > 200
                             ? msg.content.slice(0, 200) + "..."
                             : msg.content;
@@ -86,7 +84,7 @@ function ViewScheduledModalInner({ rootProps, close }: ViewScheduledModalProps) 
                                     </div>
                                     <div className={cl("message-time")}>
                                         <TimerIcon width={14} height={14} />
-                                        <span>{new Date(msg.scheduledTime).toLocaleString()}</span>
+                                        <span>{msg.attemptedAt === undefined ? new Date(msg.scheduledTime).toLocaleString() : "Send attempted. Check the channel before retrying."}</span>
                                     </div>
                                     <div className={cl("message-content")}>{displayContent}</div>
                                 </div>

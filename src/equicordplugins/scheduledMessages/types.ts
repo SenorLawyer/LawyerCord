@@ -27,6 +27,7 @@ export interface ScheduledMessage {
     content: string;
     scheduledTime: number;
     createdAt: number;
+    attemptedAt?: number;
     reactions?: ScheduledReaction[];
     attachments?: ScheduledAttachment[];
 }

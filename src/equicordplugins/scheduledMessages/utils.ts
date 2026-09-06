@@ -19,6 +19,7 @@ let scheduledMessages: ScheduledMessage[] = [];
 let checkTimeout: ReturnType<typeof setTimeout> | null = null;
 let schedulerRunning = false;
 let isProcessingMessages = false;
+const sendingMessages = new Set<string>();
 
 export const phantomMessageMap = new Map<string, PhantomMessageData>();
 const pendingReactions = new Map<string, ScheduledReaction[]>();
@@ -437,8 +438,10 @@ export async function updateScheduledMessageTime(id: string, scheduledTime: numb
         return { success: false, error: `Maximum of ${settings.store.maxMessagesPerMinute} messages per channel per minute reached` };
     }
 
+    if (sendingMessages.has(id)) return { success: false, error: "Message is being sent." };
     removePhantomMessage(message);
     message.scheduledTime = scheduledTime;
+    delete message.attemptedAt;
     scheduledMessages.sort((left, right) => left.scheduledTime - right.scheduledTime);
     await saveScheduledMessages();
     await createPhantomMessage(message);
@@ -452,13 +455,22 @@ export async function sendScheduledMessageNow(id: string): Promise<{ success: bo
         return { success: false, error: "Scheduled message not found" };
     }
 
-    await removeScheduledMessage(id);
-    const sent = await sendScheduledMessage(message);
-    if (!sent) {
-        return { success: false, error: "Failed to send scheduled message" };
+    if (sendingMessages.has(id)) return { success: false, error: "Message is being sent." };
+    sendingMessages.add(id);
+    try {
+        message.attemptedAt = Date.now();
+        await saveScheduledMessages();
+        if (!scheduledMessages.includes(message)) return { success: false, error: "Scheduled message was removed." };
+        const sent = await sendScheduledMessage(message);
+        if (!sent) return { success: false, error: "Failed to send scheduled message. It remains saved." };
+        await removeScheduledMessage(id);
+        return { success: true };
+    } catch {
+        return { success: false, error: "Could not update the scheduled message. Check the channel before retrying." };
+    } finally {
+        sendingMessages.delete(id);
+        scheduleNextCheck();
     }
-
-    return { success: true };
 }
 
 export async function removeScheduledMessage(id: string): Promise<void> {
@@ -484,11 +496,10 @@ async function checkAndSendMessages(): Promise<void> {
 
     try {
         const now = Date.now();
-        const dueMessages = scheduledMessages.filter(m => m.scheduledTime <= now);
+        const dueMessages = scheduledMessages.filter(m => m.attemptedAt === undefined && m.scheduledTime <= now);
 
         for (const msg of dueMessages) {
-            await removeScheduledMessage(msg.id);
-            await sendScheduledMessage(msg);
+            if (msg.attemptedAt === undefined) await sendScheduledMessageNow(msg.id);
         }
     } finally {
         isProcessingMessages = false;
@@ -518,7 +529,7 @@ function scheduleNextCheck(): void {
         checkTimeout = null;
     }
 
-    const nextMessage = scheduledMessages[0];
+    const nextMessage = scheduledMessages.find(message => message.attemptedAt === undefined);
     if (!nextMessage) return;
 
     const maxDelay = Math.max(1000, settings.store.checkIntervalSeconds * 1000);

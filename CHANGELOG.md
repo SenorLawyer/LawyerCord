@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Preserve attempted scheduled messages until sending succeeds and prevent automatic retries after failed or interrupted attempts.
+
 - Stop scheduled messages from sending with missing attachments when an upload fails.
 
 - Remove redundant sticker category wrappers that assigned the same React key to every pack.

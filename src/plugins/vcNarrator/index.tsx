@@ -41,7 +41,7 @@ interface VoiceStateChangeEvent {
     sessionId: string;
 }
 
-// Mute/Deaf for other people than you is commented out, because otherwise someone can spam it and it will be annoying
+// Other users' mute and deafen events are not narrated because they can be spammed.
 // Filtering out events is not as simple as just dropping duplicates, as otherwise mute, unmute, mute would
 // not say the second mute, which would lead you to believe they're unmuted
 
@@ -96,37 +96,6 @@ function getTypeAndChannelId({ channelId, oldChannelId }: VoiceStateChangeEvent,
 
     return ["", ""];
 }
-
-/*
-function updateStatuses(type: string, { deaf, mute, selfDeaf, selfMute, userId, channelId }: VoiceState, isMe: boolean) {
-    if (isMe && (type === "join" || type === "move")) {
-        StatusMap = {};
-        const states = VoiceStateStore.getVoiceStatesForChannel(channelId!) as Record<string, VoiceState>;
-        for (const userId in states) {
-            const s = states[userId];
-            StatusMap[userId] = {
-                mute: s.mute || s.selfMute,
-                deaf: s.deaf || s.selfDeaf
-            };
-        }
-        return;
-    }
-
-    if (type === "leave" || (type === "move" && channelId !== SelectedChannelStore.getVoiceChannelId())) {
-        if (isMe)
-            StatusMap = {};
-        else
-            delete StatusMap[userId];
-
-        return;
-    }
-
-    StatusMap[userId] = {
-        deaf: deaf || selfDeaf,
-        mute: mute || selfMute
-    };
-}
-*/
 
 function playSample(type: string) {
     const currentUser = UserStore.getCurrentUser();
@@ -187,8 +156,6 @@ export default definePlugin({
                 const channel = ChannelStore.getChannel(id)?.name ?? "channel";
 
                 speak(formatText(template, user, channel, displayName, nickname));
-
-                // updateStatuses(type, state, isMe);
             }
         },
 

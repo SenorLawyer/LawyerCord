@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Use the configured check interval for overdue scheduled messages that cannot currently send.
+
 - Keep scheduled sends from proceeding under a different account after saving queue state.
 
 - Stop pending scheduled sends and their follow-up notifications when the initiating account changes.

@@ -561,7 +561,8 @@ export function scheduleNextCheck(): void {
     if (!nextMessage) return;
 
     const maxDelay = Math.max(1000, settings.store.checkIntervalSeconds * 1000);
-    const delay = Math.max(0, Math.min(maxDelay, nextMessage.scheduledTime - Date.now()));
+    const remaining = nextMessage.scheduledTime - Date.now();
+    const delay = remaining <= 0 ? maxDelay : Math.min(maxDelay, remaining);
 
     checkTimeout = setTimeout(() => {
         checkTimeout = null;

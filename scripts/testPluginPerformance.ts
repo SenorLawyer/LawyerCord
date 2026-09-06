@@ -5571,6 +5571,21 @@ test("scheduled queue ignores stale reads after reload, edits, or stop", async (
     assert.equal(module.getScheduledMessages().length, 0);
 });
 
+test("signed-out scheduled messages wait between checks without changing the queue", async () => {
+    const delays: number[] = [];
+    const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+        "@api/DataStore": { get: async () => [{ id: "queued", scheduledTime: 0 }], set: () => assert.fail("No signed-out queue write") },
+        "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+        "@webpack/common": { UserStore: { getCurrentUser: () => null } },
+        ".": { settings: { store: { checkIntervalSeconds: 10 } } }
+    }, { setTimeout: (_callback: unknown, delay: number) => { delays.push(delay); return 1; } });
+    await module.loadScheduledMessages();
+    module.startScheduler();
+    await setImmediate();
+    assert.deepEqual(delays, [10000]);
+    assert.equal(module.getScheduledMessages()[0].attemptedAt, undefined);
+});
+
 test("scheduled interval changes only replace an active timer", async () => {
     let delay = 10;
     const timers: number[] = [];

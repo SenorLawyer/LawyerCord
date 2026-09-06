@@ -21,6 +21,35 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("Streaks reads authorization from the current account without initialization", () => {
+    let userId = "first";
+    let state: Record<string, unknown> = {};
+    const api = loadSource("src/equicordplugins/streaks/stores/AuthorizationStore.tsx", {
+        "@api/DataStore": {}, "@utils/lazy": { proxyLazy: (factory: () => unknown) => factory() }, "@utils/Logger": {},
+        "@webpack/common": {
+            UserStore: { getCurrentUser: () => ({ id: userId }) },
+            zustandPersist: (value: unknown) => value,
+            zustandCreate: (init: (set: (value: object) => void, get: () => object) => Record<string, unknown>) => {
+                state = init(value => Object.assign(state, value), () => state);
+                return { getState: () => state };
+            },
+        }, "../constants": {}, "./StreaksStore": {},
+    });
+    const auth = api.useAuthorizationStore.getState();
+    auth.setToken("first-token");
+    assert.equal(auth.getToken(), "first-token");
+    userId = "second";
+    assert.equal(auth.getToken(), null);
+    assert.equal(auth.isAuthorized(), false);
+    auth.setToken("second-token");
+    userId = "first";
+    assert.equal(auth.getToken(), "first-token");
+    auth.remove("second");
+    assert.equal(auth.getToken(), "first-token");
+    auth.remove("first");
+    assert.equal(auth.isAuthorized(), false);
+});
+
 test("ReviewDB OAuth errors tolerate malformed response bodies", async () => {
     let callback: (response: { location: string; }) => Promise<void> = async () => assert.fail("missing callback");
     let payload: unknown;

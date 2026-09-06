@@ -13,9 +13,8 @@ import { AUTHORIZE_URL, CLIENT_ID } from "../constants";
 import { useStreaksStore } from "./StreaksStore";
 
 interface AuthorizationState {
-    token: string | null;
+    getToken: () => string | null;
     tokens: Record<string, string>;
-    init: () => void;
     authorize: () => Promise<void>;
     setToken: (token: string) => void;
     remove: (id: string) => void;
@@ -35,20 +34,18 @@ const indexedDBStorage = {
 export const useAuthorizationStore = proxyLazy(() => zustandCreate(
     zustandPersist(
         (set: any, get: any) => ({
-            token: null,
             tokens: {},
-            init: () => { set({ token: get().tokens[UserStore.getCurrentUser()?.id] ?? null }); },
+            getToken: () => get().tokens[UserStore.getCurrentUser()?.id] ?? null,
             setToken: (token: string) => {
                 const id = UserStore.getCurrentUser()?.id;
                 if (!id) return;
-                set({ token, tokens: { ...get().tokens, [id]: token } });
+                set({ tokens: { ...get().tokens, [id]: token } });
             },
             remove: (id: string) => {
-                const { tokens, init } = get();
+                const { tokens } = get();
                 const newTokens = { ...tokens };
                 delete newTokens[id];
                 set({ tokens: newTokens });
-                init();
             },
             async authorize() {
                 return new Promise((resolve, reject) => {
@@ -93,7 +90,7 @@ export const useAuthorizationStore = proxyLazy(() => zustandCreate(
                     });
                 });
             },
-            isAuthorized: () => !!get().token,
+            isAuthorized: () => !!get().getToken(),
         } as AuthorizationState),
         {
             name: "vc-streaks-auth",
@@ -101,7 +98,6 @@ export const useAuthorizationStore = proxyLazy(() => zustandCreate(
             partialize: state => ({ tokens: state.tokens }),
             onRehydrateStorage: () => async state => {
                 if (!state) return;
-                state.init();
                 if (state.isAuthorized()) {
                     useStreaksStore.getState().clear();
                     await useStreaksStore.getState().migrate();

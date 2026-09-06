@@ -35,7 +35,7 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: any, get: any
     streaks: {},
     clear: () => set({ streaks: {} }),
     async fetch() {
-        const { token } = useAuthorizationStore.getState();
+        const token = useAuthorizationStore.getState().getToken();
         if (!token) return;
 
         try {
@@ -57,7 +57,7 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: any, get: any
         }
     },
     async update(recipientId: string) {
-        const { token } = useAuthorizationStore.getState();
+        const token = useAuthorizationStore.getState().getToken();
         if (!token) return;
 
         try {
@@ -74,7 +74,7 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: any, get: any
         }
     },
     async refresh(recipientId: string) {
-        const { token } = useAuthorizationStore.getState();
+        const token = useAuthorizationStore.getState().getToken();
         if (!token) return;
 
         try {
@@ -90,7 +90,7 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: any, get: any
         }
     },
     async migrate() {
-        const { token } = useAuthorizationStore.getState();
+        const token = useAuthorizationStore.getState().getToken();
         if (!token) return;
 
         const legacyData = await DataStore.get("vc-streaks-data");

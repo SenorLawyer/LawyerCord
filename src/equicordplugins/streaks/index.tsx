@@ -73,7 +73,6 @@ export default definePlugin({
 
     flux: {
         async CONNECTION_OPEN() {
-            useAuthorizationStore.getState().init();
             if (useAuthorizationStore.getState().isAuthorized()) {
                 await useStreaksStore.getState().migrate();
                 await useStreaksStore.getState().fetch();

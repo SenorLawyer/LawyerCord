@@ -2365,6 +2365,22 @@ test("quote preview ignores superseded and unmounted image work", async () => {
     assert.equal(states[4], null);
 });
 
+test("RPC editor asset placeholders read the original values", async () => {
+    const { default: plugin } = loadSource("src/equicordplugins/rpcEditor/index.tsx", {
+        "@api/index": { DataStore: { get: async () => [{ appId: "app", enabled: true, newActivityType: 0, newLargeImageText: "Changed", newSmallImageText: ":large_text:" }] } },
+        "@api/Settings": { definePluginSettings: () => ({}) },
+        "@utils/constants": { Devs: {} }, "@utils/react": {},
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+        "@vencord/discord-types/enums": { ActivityType: { PLAYING: 0, STREAMING: 1 } },
+        "@webpack/common": {}, "./ReplaceSettings": {}
+    });
+    await plugin.start();
+    const activity = { application_id: "app", assets: { large_text: "Original", small_text: "Small" } };
+    plugin.patchActivity(activity);
+    assert.equal(activity.assets.large_text, "Changed");
+    assert.equal(activity.assets.small_text, "Original");
+});
+
 test("Jellyfin privacy mode omits all identifying media fields", async () => {
     const store = { jf_serverUrl: "https://media.example", jf_apiKey: "key", jf_userId: "user", jf_privacyMode: true, jf_showPausedState: true, jf_overrideType: "off", jf_nameDisplay: "default", jf_customName: "{name} {name} {series} {album}" };
     let mediaType = "Episode";

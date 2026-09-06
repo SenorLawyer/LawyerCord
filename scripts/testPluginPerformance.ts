@@ -21,6 +21,23 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("automatic translation cancels failed sends and preserves the original text", async () => {
+    let fail = true;
+    const { default: plugin } = loadSource("src/plugins/translate/index.tsx", {
+        "@api/ContextMenu": {}, "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value }, "@webpack/common": {},
+        "./settings": { settings: { store: { autoTranslate: true } } }, "./TranslateIcon": {}, "./TranslationAccessory": {},
+        "./utils": { translate: async () => { if (fail) throw new Error("service unavailable"); return { text: "Translated" }; } },
+    }, { setTimeout: () => 1, clearTimeout() {} });
+    const message = { content: "Original" };
+    const result = await plugin.onBeforeMessageSend("channel", message);
+    assert.equal(result?.cancel, true);
+    assert.equal(message.content, "Original");
+    fail = false;
+    assert.equal(await plugin.onBeforeMessageSend("channel", message), undefined);
+    assert.equal(message.content, "Translated");
+});
+
 test("silent typing commands apply both indicator options and preserve omitted values", async () => {
     const store = { hideChatBoxTypingIndicators: false, hideMembersListTypingIndicators: false };
     const replies: string[] = [];

@@ -2365,6 +2365,30 @@ test("quote preview ignores superseded and unmounted image work", async () => {
     assert.equal(states[4], null);
 });
 
+test("GIF export reports the save result once", async () => {
+    const notices: { body: string; }[] = [];
+    let fail = true;
+    const save = loadSource("src/equicordplugins/saveFavoriteGIFs/index.tsx", {
+        "@api/Commands": { ApplicationCommandInputType: {} },
+        "@api/Notifications": { showNotification: (notice: { body: string; }) => notices.push(notice) },
+        "@api/PluginManager": {}, "@api/Settings": { definePluginSettings: () => ({}) },
+        "@equicordplugins/equicordToolbox": { __esModule: true, default: {} },
+        "@utils/constants": { Devs: {} }, "@utils/Logger": { Logger: class { error() {} } },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} }, "@utils/web": {},
+        "@webpack/common": { UserSettingsActionCreators: { FrecencyUserSettingsActionCreators: { getCurrentValue: () => ({ favoriteGifs: { gifs: { "https://example.com/gif": {} } } }) } } }
+    }, { IS_DISCORD_DESKTOP: true, TextEncoder, fetch: async () => ({ ok: true }),
+        DiscordNative: { fileManager: { saveWithDialog: async () => { if (fail) throw new Error("Save failed"); } } }
+    }, "saveWorkingGifs");
+    await save();
+    assert.equal(notices.length, 2);
+    assert.equal(notices[1].body, "Failed to save GIFs");
+    notices.length = 0;
+    fail = false;
+    await save();
+    assert.equal(notices.length, 2);
+    assert.match(notices[1].body, /^Saved GIFs successfully/);
+});
+
 test("RPC editor asset placeholders read the original values", async () => {
     const { default: plugin } = loadSource("src/equicordplugins/rpcEditor/index.tsx", {
         "@api/index": { DataStore: { get: async () => [{ appId: "app", enabled: true, newActivityType: 0, newLargeImageText: "Changed", newSmallImageText: ":large_text:" }] } },

@@ -5635,11 +5635,32 @@ test("scheduled interval changes only replace an active timer", async () => {
     assert.deepEqual(cleared, [1, 2]);
 });
 
+test("scheduled composer keeps read failures out of the scheduling dialog", async () => {
+    let notices = 0;
+    class Reader {
+        onerror: () => void = () => {};
+        error = new Error("Read failed");
+        readAsDataURL() { this.onerror(); }
+    }
+    const { default: plugin } = loadSource("src/equicordplugins/scheduledMessages/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({}) }, "@utils/constants": { Devs: {}, EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack/common": { showToast: () => notices++, Toasts: { Type: {} } },
+        "./components/ChatBarButton": { isScheduleModeEnabled: true, setScheduleModeEnabled() {} },
+        "./components/Icons": {}, "./components/MessageAccessory": {}, "./components/ViewScheduledModal": {},
+        "./components/ScheduleTimeModal": { openScheduleTimeModal: () => assert.fail("Do not schedule partial attachments") }, "./utils": {}
+    }, { FileReader: Reader });
+    const result = await plugin.onBeforeMessageSend("channel", { content: "Text" }, { uploads: [{ item: { file: {} }, filename: "file.txt" }] });
+    assert.equal(result.cancel, true);
+    assert.equal(notices, 1);
+});
+
 test("scheduled startup ignores completion after stop or a newer start", async () => {
     const reads: (() => void)[] = [];
     let starts = 0;
     let phantoms = 0;
     const { default: plugin } = loadSource("src/equicordplugins/scheduledMessages/index.tsx", {
+        "@webpack/common": {},
         "@api/Settings": { definePluginSettings: () => ({}) },
         "@utils/constants": { Devs: {}, EquicordDevs: {} },
         "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },

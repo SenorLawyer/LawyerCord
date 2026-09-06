@@ -10,6 +10,7 @@ import { MessageObject, SendMessageOptions } from "@api/MessageEvents";
 import { definePluginSettings } from "@api/Settings";
 import { Devs, EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
+import { showToast, Toasts } from "@webpack/common";
 
 import { isScheduleModeEnabled, ScheduledMessagesButton, setScheduleModeEnabled } from "./components/ChatBarButton";
 import { CalendarIcon } from "./components/Icons";
@@ -150,7 +151,8 @@ export default definePlugin({
                         type: file.type
                     });
                 } catch {
-                    continue;
+                    showToast("Could not read an attachment. The message was not scheduled.", Toasts.Type.FAILURE);
+                    return { cancel: true };
                 }
             }
         }

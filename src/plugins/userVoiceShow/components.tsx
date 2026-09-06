@@ -122,7 +122,6 @@ function VoiceChannelTooltip({ channel, isLocked }: VoiceChannelTooltipProps) {
 
 export type VoiceChannelIndicatorProps = {
     userId: string;
-    isMessageIndicator?: boolean;
     isProfile?: boolean;
     isActionButton?: boolean;
     shouldHighlight?: boolean;

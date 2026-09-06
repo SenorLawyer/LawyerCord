@@ -28,17 +28,6 @@
     gap: 6px;
 }
 
-.vc-uvs-name {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.vc-uvs-guild-icon {
-    border-radius: 100%;
-    align-self: center;
-}
-
 .vc-uvs-vc-members {
     display: flex;
     gap: 6px;

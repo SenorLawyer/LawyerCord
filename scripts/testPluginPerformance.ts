@@ -46,6 +46,18 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("LRCLIB preserves timestamp precision and bracketed lyric text", async () => {
+    const module = loadSource("src/equicordplugins/musicControls/spotify/lyrics/providers/lrclibAPI/index.ts", {
+        "@equicordplugins/musicControls/spotify/lyrics/providers/types": { Provider: { Lrclib: "LRCLIB" } }
+    }, { URLSearchParams, fetch: async () => ({ ok: true, json: async () => ({
+        syncedLyrics: "[ar:Artist]\n[00:24]First [echo]\n[01:02.345]Second\n[02:03.5]♪\ninvalid\n[00:99]invalid seconds"
+    }) }) });
+    const result = await module.getLyricsLrclib({ name: "Song", artists: [{ name: "Artist" }], album: { name: "Album" }, duration: 200000 });
+    assert.equal(JSON.stringify(result.lyricsVersions.LRCLIB), JSON.stringify([
+        { time: 24, text: "First [echo]" }, { time: 62.345, text: "Second" }, { time: 123.5, text: null }
+    ]));
+});
+
 test("music lyrics translation uses the selected target language", async () => {
     const requests: URL[] = [];
     const module = loadSource("src/equicordplugins/musicControls/spotify/lyrics/providers/translator/index.ts", {

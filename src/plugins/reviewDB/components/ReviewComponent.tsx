@@ -24,7 +24,7 @@ import { canBlockReviewAuthor, canDeleteReview, canReportReview, cl, showToast }
 import { openUserProfile } from "@utils/discord";
 import { classes } from "@utils/misc";
 import { findCssClassesLazy } from "@webpack";
-import { ConfirmModal, IconUtils, openModal as openVencordModal, Parser, Timestamp, useEffect, useState } from "@webpack/common";
+import { ConfirmModal, IconUtils, openModal as openVencordModal, Parser, Timestamp, useEffect, UserStore, useState } from "@webpack/common";
 
 import { openBlockModal } from "./BlockedUserModal";
 import { BlockButton, DeleteButton, ReportButton } from "./MessageButton";
@@ -39,6 +39,7 @@ const BotTagClasses = findCssClassesLazy("botTagVerified", "botTagRegular", "bot
 const dateFormat = new Intl.DateTimeFormat();
 
 export default function ReviewComponent({ review, refetch, profileId }: { review: Review; refetch(): void; profileId: string; }) {
+    const accountId = UserStore.getCurrentUser()?.id;
     const [showAll, setShowAll] = useState(false);
     const [localVote, setLocalVote] = useState<boolean | null>(review.userVote ?? null);
     const [score, setScore] = useState(review.score ?? 0);
@@ -62,7 +63,10 @@ export default function ReviewComponent({ review, refetch, profileId }: { review
                 confirmText="Delete"
                 cancelText="Nevermind"
                 onConfirm={async () => {
-                    if (!(await getToken())) {
+                    if (UserStore.getCurrentUser()?.id !== accountId) return;
+                    const token = await getToken();
+                    if (UserStore.getCurrentUser()?.id !== accountId) return;
+                    if (!token) {
                         return showToast("You must be logged in to delete reviews.");
                     }
                     const res = await deleteReview(review.id);
@@ -81,7 +85,10 @@ export default function ReviewComponent({ review, refetch, profileId }: { review
                 confirmText="Report"
                 cancelText="Nevermind"
                 onConfirm={async () => {
-                    if (!(await getToken())) {
+                    if (UserStore.getCurrentUser()?.id !== accountId) return;
+                    const token = await getToken();
+                    if (UserStore.getCurrentUser()?.id !== accountId) return;
+                    if (!token) {
                         return showToast("You must be logged in to report reviews.");
                     }
                     await reportReview(review.id);
@@ -104,7 +111,10 @@ export default function ReviewComponent({ review, refetch, profileId }: { review
                 confirmText="Block"
                 cancelText="Nevermind"
                 onConfirm={async () => {
-                    if (!(await getToken())) {
+                    if (UserStore.getCurrentUser()?.id !== accountId) return;
+                    const token = await getToken();
+                    if (UserStore.getCurrentUser()?.id !== accountId) return;
+                    if (!token) {
                         return showToast("You must be logged in to block users.");
                     }
                     await blockUser(review.sender.discordID);

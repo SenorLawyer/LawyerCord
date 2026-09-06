@@ -21,6 +21,30 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ReviewDB confirmations reject account changes before and during token lookup", async () => {
+    const source = readFileSync("src/plugins/reviewDB/components/ReviewComponent.tsx", "utf8");
+    const callbacks = Array.from(source.matchAll(/onConfirm=\{async \(\) => \{([\s\S]*?)\n\s*\}\}/g));
+    assert.equal(callbacks.length, 3);
+    for (const [, body] of callbacks) {
+        for (const switchAt of ["before", "token", "never"]) {
+            let userId = switchAt === "before" ? "second" : "first";
+            let requests = 0;
+            let lookups = 0;
+            const confirm = runInNewContext(`(async () => {${body}})`, {
+                accountId: "first", UserStore: { getCurrentUser: () => ({ id: userId }) },
+                getToken: async () => { lookups++; if (switchAt === "token") userId = "second"; return "token"; },
+                review: { id: 1, sender: { discordID: "target" } }, refetch() {},
+                showToast: () => assert.fail("unexpected login toast"),
+                deleteReview: async () => { requests++; return {}; },
+                reportReview: async () => { requests++; }, blockUser: async () => { requests++; },
+            });
+            await confirm();
+            assert.equal(lookups, switchAt === "before" ? 0 : 1);
+            assert.equal(requests, switchAt === "never" ? 1 : 0);
+        }
+    }
+});
+
 test("ReviewDB input leaves Discord's shared input configuration unchanged", () => {
     const inputType = Object.freeze({ id: "reply", disableAutoFocus: false, draftType: 7 });
     const React = { createElement: (_type: unknown, props: object, ...children: unknown[]) => ({ props, children }) };

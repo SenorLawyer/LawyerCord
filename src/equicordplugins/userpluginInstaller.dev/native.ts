@@ -82,7 +82,7 @@ export async function isUpdateAvailableForPlugin(_, name: string): Promise<boole
     });
 }
 
-export async function initPluginInstall(_, link: string, source: string, owner: string, repo: string): Promise<string> {
+export async function initPluginInstall(_, link: string, source: string, owner: string, repo: string): Promise<{ name: string; native: boolean; }> {
     if (typeof link !== "string" || link.length > 8192 || typeof source !== "string" || typeof owner !== "string"
         || typeof repo !== "string" || !repo || repo.length > 255 || repo === "." || repo === "..")
         return Promise.reject(new Error("Invalid link."));
@@ -117,7 +117,7 @@ export async function initPluginInstall(_, link: string, source: string, owner: 
     const meta = await getPluginMeta(join(vencordPath, "..", "src", "userplugins", repo))
         .catch(() => { throw new Error("Could not read the plugin metadata."); });
 
-    return new Promise((resolve, reject) => {
+    return new Promise<{ name: string; native: boolean; }>((resolve, reject) => {
         // Review plugin
         const win = new BrowserWindow({
             maximizable: false,
@@ -167,10 +167,10 @@ export async function initPluginInstall(_, link: string, source: string, owner: 
                     catch (e) {
                         reject((e as Error).toString());
                     }
-                    resolve(JSON.stringify({
+                    resolve({
                         name: meta.name,
                         native: meta.usesNative
-                    }));
+                    });
                     break;
                 }
             }

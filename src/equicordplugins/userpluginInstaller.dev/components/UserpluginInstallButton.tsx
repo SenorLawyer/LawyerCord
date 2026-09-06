@@ -37,7 +37,7 @@ export default function UserpluginInstallButton({ props }: any) {
                 onClick={async () => {
                     if (installed) return void OpenSettingsModule.openUserSettings("vencord_userplugins_panel");
                     try {
-                        const { name, native } = JSON.parse(await Native.initPluginInstall(gitLink[0], gitLink[[1, 4][idpl]], gitLink[[2, 5][idpl]], gitLink[[3, 6][idpl]]));
+                        const { name, native } = await Native.initPluginInstall(gitLink[0], gitLink[[1, 4][idpl]], gitLink[[2, 5][idpl]], gitLink[[3, 6][idpl]]);
                         showInstallFinishedAlert(name, native);
                     }
                     catch (e: any) {

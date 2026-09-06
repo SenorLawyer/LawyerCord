@@ -4747,6 +4747,25 @@ test("sticker pack metadata updates preserve concurrent packs without holding a 
     assert.deepEqual(Array.from(await module.getStickerPackMetas(), (pack: { id: string; }) => pack.id), ["a", "b"]);
     await module.deleteStickerPack("a");
     assert.deepEqual(Array.from(await module.getStickerPackMetas(), (pack: { id: string; }) => pack.id), ["b"]);
+    const key = "OtherPlugin_settings";
+    const original = { enabled: true };
+    entries.set(key, original);
+    assert.equal(await module.getStickerPack(key), null);
+    const imported = { id: key, title: "Imported", stickers: [] };
+    await module.saveStickerPack(imported);
+    assert.equal(entries.get(key), original);
+    assert.equal(await module.getStickerPack(key), imported);
+    await module.deleteStickerPack(key);
+    assert.equal(entries.get(key), original);
+    assert.equal(await module.getStickerPack(key), null);
+    const legacy = { id: "custom-legacy", title: "Legacy", stickers: [] };
+    entries.set(legacy.id, legacy);
+    assert.equal(await module.getStickerPack(legacy.id), legacy);
+    await module.deleteStickerPack(legacy.id);
+    assert.equal(await module.getStickerPack(legacy.id), null);
+    assert.equal(entries.get(legacy.id), legacy);
+    await module.saveStickerPack(legacy);
+    assert.equal(await module.getStickerPack(legacy.id), legacy);
 });
 
 test("theme watcher detects empty-folder changes and notifies once", async () => {

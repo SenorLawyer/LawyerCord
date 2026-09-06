@@ -6,6 +6,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Store sticker pack payloads under dedicated keys so imported IDs cannot overwrite unrelated settings. Keep legacy payloads intact while hiding deleted packs.
 - Remove the unused dynamic sticker pack refresh function and its credential forwarding path.
 - Fetch audio directly for visualizations instead of forwarding audio URLs through a third-party proxy.
 - Stop automatically uploading legacy Streaks records that lack an owning account. Preserve the local records.

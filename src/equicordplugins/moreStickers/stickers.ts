@@ -37,7 +37,7 @@ export async function saveStickerPack(sp: StickerPack, packsKey: string = PACKS_
     const meta = stickerPackToMeta(sp);
 
     await Promise.all([
-        DataStore.set(`${sp.id}`, sp),
+        DataStore.set(`MoreStickers:PackData:${sp.id}`, sp),
         DataStore.update<StickerPackMeta[]>(packsKey, packs => packs?.some(p => p.id === sp.id)
             ? packs.map(p => p.id === sp.id ? meta : p)
             : [...packs ?? [], meta])
@@ -50,8 +50,7 @@ export async function saveStickerPack(sp: StickerPack, packsKey: string = PACKS_
   * @return {Promise<StickerPackMeta[]>}
   */
 export async function getStickerPackMetas(packsKey: string | undefined = PACKS_KEY): Promise<StickerPackMeta[]> {
-    const packs = (await DataStore.get(packsKey)) ?? null as (StickerPackMeta[] | null);
-    return packs ?? [];
+    return await DataStore.get<StickerPackMeta[]>(packsKey) ?? [];
 }
 
 /**
@@ -61,7 +60,10 @@ export async function getStickerPackMetas(packsKey: string | undefined = PACKS_K
  * @return {Promise<StickerPack | null>}
  * */
 export async function getStickerPack(id: string): Promise<StickerPack | null> {
-    return (await DataStore.get(id)) ?? null as StickerPack | null;
+    const pack = await DataStore.get<StickerPack | null>(`MoreStickers:PackData:${id}`);
+    if (pack !== undefined) return pack;
+    const legacy = await DataStore.get<StickerPack>(id);
+    return legacy?.id === id && typeof legacy.title === "string" && Array.isArray(legacy.stickers) ? legacy : null;
 }
 
 /**
@@ -72,7 +74,7 @@ export async function getStickerPack(id: string): Promise<StickerPack | null> {
  * */
 export async function deleteStickerPack(id: string, packsKey: string = PACKS_KEY): Promise<void> {
     await Promise.all([
-        DataStore.del(id),
+        DataStore.set(`MoreStickers:PackData:${id}`, null),
         removeRecentStickerByPackId(id),
         DataStore.update<StickerPackMeta[]>(packsKey, packs => packs?.filter(p => p.id !== id) ?? [])
     ]);

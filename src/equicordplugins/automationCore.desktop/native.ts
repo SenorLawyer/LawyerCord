@@ -48,7 +48,7 @@ interface CompletionInput {
     json: boolean;
 }
 
-interface CompletionResult {
+export interface CompletionResult {
     success: boolean;
     content?: string;
     model?: string;

@@ -66,6 +66,8 @@ export const CspPolicies: PolicyMap = {
     "manti.vendicated.dev": ImageSrc, // ReviewDB API
     "decor.fieryflames.dev": ConnectSrc, // Decor API
     "streaks.equicord.org": ConnectSrc,
+    "badges.equicord.org": ConnectSrc,
+    "dc.songspotlight.nexpid.xyz": ConnectSrc,
     "ugc.decor.fieryflames.dev": ImageSrc, // Decor CDN
     "sponsor.ajay.app": ConnectSrc, // Dearrow API
     "dearrow-thumb.ajay.app": ImageSrc, // Dearrow Thumbnail CDN

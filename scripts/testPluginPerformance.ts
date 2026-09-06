@@ -4707,7 +4707,10 @@ test("DevCompanion replacement closes the old socket and ignores its late events
 });
 
 function loadSource(path: string, mocks: Record<string, object>, globals: Record<string, unknown> = {}, result = "exports") {
-    if (path === "src/equicordplugins/userpluginInstaller.dev/native.ts") mocks = { typescript, ...mocks };
+    if (path === "src/equicordplugins/userpluginInstaller.dev/native.ts") {
+        mocks = { typescript, ...mocks };
+        globals = { process: { env: {} }, ...globals };
+    }
     const code = transpileModule(readFileSync(path, "utf8"), {
         fileName: path,
         compilerOptions: { jsx: JsxEmit.React, module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
@@ -7934,15 +7937,20 @@ test("plugin update checks use Git reference resolution and stop after fetch fai
     for (const result of ["fetch-error", "refs-error", "same", "different"]) {
         const commands: string[] = [];
         const mocks: Record<string, object> = {
-            child_process: { exec: (command: string, options: { cwd: string; }, callback: (error: Error | null, stdout: string) => void) => {
+            child_process: { exec: (command: string, options: { cwd: string; env?: Record<string, string>; }, callback: (error: Error | null, stdout: string) => void) => {
                 commands.push(command); assert.equal(options.cwd, "fixture");
+                if (command === "git fetch") {
+                    assert.equal(options.env?.GIT_TERMINAL_PROMPT, "0");
+                    assert.equal(options.env?.GCM_INTERACTIVE, "false");
+                    assert.equal(options.env?.PATH, "fixture-path");
+                }
                 callback(result === "fetch-error" || result === "refs-error" && commands.length === 2 ? new Error("Git failed") : null,
                     result === "different" ? "2\n" : "0\n");
             } }, electron: {}, fs: {}, "fs/promises": {}, path, "yaml-js": {}
         };
         for (const name of ["pluginValidate", "updateValidate"])
             mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
-        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") },
+        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist"), process: { env: { PATH: "fixture-path", GCM_INTERACTIVE: "true" } } },
             "({ ...exports, setup() { getPluginDirectory = () => 'fixture'; } })");
         api.setup();
         assert.equal(await api.isUpdateAvailableForPlugin(null, "fixture"), result === "different");

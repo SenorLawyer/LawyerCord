@@ -101,7 +101,10 @@ export async function isUpdateAvailableForPlugin(_, name: string): Promise<boole
         const pluginDir = getPluginDirectory(name, true);
         if (pluginDir === undefined) return false;
         return new Promise(resolve => {
-            exec("git fetch", { cwd: pluginDir }, error => {
+            exec("git fetch", {
+                cwd: pluginDir,
+                env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "false" }
+            }, error => {
                 if (error) return resolve(false);
                 exec("git rev-list --count HEAD..origin/HEAD", { cwd: pluginDir }, (error, stdout) => {
                     if (error) return resolve(false);

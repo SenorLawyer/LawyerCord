@@ -115,6 +115,7 @@ export async function showNotification(notification: NotificationData) {
  * Called when the plugin is disabled.
  */
 export function teardownNotifications() {
+    for (const notification of NotificationQueue) notification.resolve();
     NotificationQueue = [];
     RootContainer?.unmount();
     RootContainer = undefined;

@@ -20,6 +20,36 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("toast shutdown settles pending notifications and releases its root", async () => {
+    let unmounts = 0;
+    let removals = 0;
+    let roots = 0;
+    const notifications = loadSource("src/equicordplugins/toastNotifications/components/Notifications.tsx", {
+        "@equicordplugins/toastNotifications/index": { settings: { store: { maxNotifications: 3 } } },
+        "@webpack/common": { createRoot: () => {
+            roots++;
+            return { render() {}, unmount() { unmounts++; } };
+        } },
+        "./NotificationComponent": { __esModule: true, default: "notification" },
+    }, {
+        React: { createElement: () => ({}), Fragment: "fragment" },
+        document: { createElement: () => ({ remove() { removals++; } }), body: { append() {} } },
+    });
+    let settled = 0;
+    const pending = [1, 2].map(id => notifications.showNotification({ title: String(id), body: "", permanent: true }).then(() => { settled++; }));
+    notifications.teardownNotifications();
+    await setImmediate();
+    assert.equal(settled, 2);
+    await Promise.all(pending);
+    assert.equal(unmounts, 1);
+    assert.equal(removals, 1);
+    const next = notifications.showNotification({ title: "Next", body: "" });
+    assert.equal(roots, 2);
+    notifications.teardownNotifications();
+    await next;
+    assert.equal(unmounts, 2);
+});
+
 test("URL highlighting clears compiled matches when the last pattern is removed", () => {
     const store = { patterns: [{ pattern: "example.com", color: "#123456" }], boldUrls: false, highlightEmbeds: true };
     const { plugin, updatePatterns } = loadSource("src/equicordplugins/urlHighlighter/index.tsx", {

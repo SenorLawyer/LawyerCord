@@ -46,6 +46,18 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("Dragify validates JSON fields before resolving a drop", () => {
+    const drag = loadSource("src/equicordplugins/dragify/utils.ts", {});
+    const stores = { ChannelStore: { getChannel: () => null }, GuildStore: { getGuild: () => null }, UserStore: { getUser: () => null } };
+    const id = "123456789012345678";
+    for (const payload of [{ kind: "user", id: 123 }, { kind: "user", id: "bad> @everyone" }, { kind: 42, id }, { type: {}, id }, { kind: "channel", id, guildId: [] }]) {
+        assert.equal(drag.parseDragifyPayload(JSON.stringify(payload)), null);
+        assert.equal(drag.parseFromStrings([JSON.stringify(payload)], stores), null);
+    }
+    assert.equal(drag.parseDragifyPayload(JSON.stringify({ kind: "user", id })).id, id);
+    assert.equal(drag.parseFromStrings([JSON.stringify({ type: "channel", channelId: id, guildId: "@me" })], stores).guildId, "@me");
+});
+
 test("Dragify derives active drag state from the current entity", () => {
     const drag = loadSource("src/equicordplugins/dragify/dragState.ts", {}, { clearInterval, clearTimeout });
     for (const kind of ["user", "guild", "channel"]) {

@@ -36,11 +36,20 @@ type StoreSet = {
     UserStore: { getUser(id: string): User | null | undefined; };
 };
 
-export function tryParseJson<T = Record<string, unknown>>(value: string): T | null {
+function tryParseJson(value: string): DragifyPayload | null {
     if (!value || value.length < 2 || (value[0] !== "{" && value[0] !== "[")) return null;
     try {
-        const parsed = JSON.parse(value);
-        return typeof parsed === "object" && parsed ? parsed as T : null;
+        const parsed: unknown = JSON.parse(value);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+        const payload: DragifyPayload = {};
+        for (const key of ["id", "userId", "channelId", "guildId", "type", "kind", "itemType"] as const) {
+            if (!(key in parsed)) continue;
+            const field: unknown = Reflect.get(parsed, key);
+            if (typeof field !== "string") return null;
+            if ((key === "id" || key.endsWith("Id")) && !/^\d{17,20}$/.test(field) && !(key === "guildId" && field === "@me")) return null;
+            payload[key] = field;
+        }
+        return payload;
     } catch {
         return null;
     }
@@ -134,7 +143,7 @@ export function serializeDragEntity(entity: DropEntity) {
 }
 
 export function parseDragifyPayload(value: string): DropEntity | null {
-    const parsed = tryParseJson<DragifyPayload>(value);
+    const parsed = tryParseJson(value);
     if (!parsed?.kind || !parsed.id) return null;
 
     switch (parsed.kind) {
@@ -198,7 +207,7 @@ export function parseFromStrings(payloads: string[], stores: StoreSet): DropEnti
         .filter(Boolean);
 
     for (const value of values) {
-        const parsed = tryParseJson<DragifyPayload>(value);
+        const parsed = tryParseJson(value);
         if (!parsed) continue;
 
         const jsonEntity = parseJsonPayload(parsed);

@@ -3848,10 +3848,13 @@ test("audio downloads finishing after unmount do not allocate object URLs", asyn
         "@webpack/common": { React }
     }, {
         URL: class extends URL { static createObjectURL() { allocated++; return "blob:fixture"; } },
-        fetch: () => new Promise<Response>(resolve => { finishDownload = resolve; }),
+        fetch: (url: string) => {
+            assert.equal(url, "https://fixture.invalid/audio?signature=original");
+            return new Promise<Response>(resolve => { finishDownload = resolve; });
+        },
         cancelAnimationFrame() {}
     }, "Visualizer");
-    Visualizer({ playerRef: { current: { addEventListener() {}, removeEventListener() {} } }, src: "https://fixture.invalid/audio" });
+    Visualizer({ playerRef: { current: { addEventListener() {}, removeEventListener() {} } }, src: "https://fixture.invalid/audio?signature=original" });
     const cleanup = effects[0]();
     cleanup();
     finishDownload(new Response("audio"));

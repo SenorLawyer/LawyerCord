@@ -21,6 +21,37 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("Decor authorization rejects tokens received after switching accounts", async () => {
+    let userId = "first";
+    let callback: (response: object) => Promise<void> = async () => {};
+    const token = Promise.withResolvers<string>();
+    const { useAuthorizationStore } = loadSource("src/plugins/decor/lib/stores/AuthorizationStore.tsx", {
+        "@api/DataStore": {}, "@plugins/decor/lib/constants": { AUTHORIZE_URL: "https://example.com/authorize", CLIENT_ID: "client" },
+        "@utils/lazy": { proxyLazy: (fn: () => unknown) => fn() }, "@utils/Logger": { Logger: class { error() {} } },
+        "@webpack/common": {
+            React: { createElement: (_type: unknown, props: { callback: typeof callback; }) => { callback = props.callback; return {}; } },
+            UserStore: { getCurrentUser: () => ({ id: userId }) }, showToast() {}, Toasts: { Type: {} },
+            openModal: (render: (props: object) => unknown) => render({}), zustandPersist: (fn: unknown) => fn,
+            zustandCreate: (fn: (set: (value: object) => void, get: () => object) => object) => {
+                let state: object;
+                state = fn(value => { Object.assign(state, value); }, () => state);
+                return { getState: () => state };
+            },
+        },
+    }, { React: { createElement: (_type: unknown, props: { callback: typeof callback; }) => { callback = props.callback; return {}; } }, URL, fetch: async () => ({ ok: true, text: () => token.promise }) });
+    const state = useAuthorizationStore.getState();
+    const authorization = state.authorize();
+    const rejected = assert.rejects(authorization, /Account changed/);
+    const response = callback({ location: "https://example.com/authorize?code=test" });
+    await setImmediate();
+    userId = "second";
+    token.resolve("first-account-token");
+    await response;
+    await rejected;
+    assert.equal(state.token, null);
+    assert.deepEqual(Object.keys(state.tokens), []);
+});
+
 test("IRC colors preserve existing DM colors when replacement is disabled", () => {
     const store = { lightness: 70, applyColorOnlyToUsersWithoutColor: true, applyColorOnlyInDms: false };
     const { default: plugin } = loadSource("src/plugins/ircColors/index.ts", {

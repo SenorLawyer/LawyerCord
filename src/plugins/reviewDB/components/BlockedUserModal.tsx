@@ -44,8 +44,7 @@ function BlockedUser({ user, isBusy, setIsBusy }: { user: ReviewDBUser; isBusy: 
                 onClick={isBusy ? undefined : async () => {
                     setIsBusy(true);
                     try {
-                        await unblockUser(user.discordID);
-                        setGone(true);
+                        if (await unblockUser(user.discordID)) setGone(true);
                     } finally {
                         setIsBusy(false);
                     }

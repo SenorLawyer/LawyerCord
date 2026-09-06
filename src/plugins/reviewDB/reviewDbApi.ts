@@ -233,16 +233,16 @@ async function patchBlock(action: "block" | "unblock", userId: string) {
         })
     });
 
-    if (!data) return;
-
-    showToast(`Successfully ${action}ed user`, Toasts.Type.SUCCESS);
+    if (!data) return false;
 
     if (Auth?.user?.blockedUsers) {
         const newBlockedUsers = action === "block"
             ? [...Auth.user.blockedUsers, userId]
             : Auth.user.blockedUsers.filter(id => id !== userId);
-        updateAuth({ user: { ...Auth.user, blockedUsers: newBlockedUsers } });
+        await updateAuth({ user: { ...Auth.user, blockedUsers: newBlockedUsers } });
     }
+    showToast(`Successfully ${action}ed user`, Toasts.Type.SUCCESS);
+    return true;
 }
 
 export const blockUser = (userId: string) => patchBlock("block", userId);

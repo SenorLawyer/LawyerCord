@@ -21,6 +21,37 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ReviewDB only removes blocked rows after successful unblocking", async () => {
+    for (const success of [false, true]) {
+        const gone: boolean[] = [];
+        const busy: boolean[] = [];
+        const { BlockedUser } = loadSource("src/plugins/reviewDB/components/BlockedUserModal.tsx", {
+            "@components/Paragraph": {}, "@plugins/reviewDB/auth": {},
+            "@plugins/reviewDB/reviewDbApi": { unblockUser: async () => success },
+            "@plugins/reviewDB/utils": { cl: (value: string) => value },
+            "@utils/Logger": {}, "@utils/react": {},
+            "@webpack/common": { useState: () => [false, (value: boolean) => gone.push(value)] },
+        }, { React: { createElement: (_type: unknown, props: object, ...children: unknown[]) => ({ props, children }) } }, "({ BlockedUser })");
+        const row = BlockedUser({ user: { discordID: "target" }, isBusy: false, setIsBusy: (value: boolean) => busy.push(value) });
+        await row.children[2].props.onClick();
+        assert.deepEqual(gone, success ? [true] : []);
+        assert.deepEqual(busy, [true, false]);
+    }
+});
+
+test("ReviewDB block operations return failure and await successful persistence", async () => {
+    for (const success of [false, true]) {
+        const events: string[] = [];
+        const api = loadSource("src/plugins/reviewDB/reviewDbApi.ts", {
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) }, Toasts: { Type: {} } },
+            "./auth": { getToken: async () => "token", Auth: { user: { blockedUsers: ["target"] } }, updateAuth: async () => { await setImmediate(); events.push("stored"); } },
+            "./entities": {}, "./settings": {}, "./utils": { showToast: () => events.push("toast") },
+        }, { fetch: async () => ({ ok: success, status: 500, json: async () => ({}) }) });
+        assert.equal(await api.unblockUser("target"), success);
+        assert.deepEqual(events, success ? ["stored", "toast"] : ["toast"]);
+    }
+});
+
 test("ReviewDB startup work stops with the plugin or account", async () => {
     for (const stopAt of ["init", "timer", "request", "account-init", "account-timer", "account-request", "never"]) {
         let userId = "first";

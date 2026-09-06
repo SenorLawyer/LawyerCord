@@ -46,12 +46,17 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
-test("Discord MCP logs response write failures without an unhandled rejection", async () => {
+test("Discord MCP handles response failures and cancels pending startup", async () => {
     const errors: string[] = [];
     let first = true;
     let stop = () => {};
+    let polls = 0;
+    let initialized = () => {};
+    const initialization = new Promise<void>(resolve => { initialized = resolve; });
     const Native = {
+        initializeBridge: () => initialization,
         async takeRequests() {
+            polls++;
             if (first) { first = false; return [{ id: "fixture", tool: "unknown" }]; }
             stop(); return [];
         },
@@ -72,6 +77,13 @@ test("Discord MCP logs response write failures without an unhandled rejection", 
     await loaded.bridgeLoop(0);
     await setImmediate();
     assert.deepEqual(errors, ["Bridge response failed"]);
+    const previousPolls = polls;
+    const starting = loaded.default.start();
+    loaded.default.stop();
+    initialized();
+    await starting;
+    await setImmediate();
+    assert.equal(polls, previousPolls);
 });
 
 test("Discord MCP attachment downloads reject redirects and untrusted origins", async () => {

@@ -831,8 +831,9 @@ export default definePlugin({
     },
 
     async start() {
-        await Native.initializeBridge();
         const generation = ++bridgeGeneration;
+        await Native.initializeBridge();
+        if (generation !== bridgeGeneration) return;
         void bridgeLoop(generation);
     },
 

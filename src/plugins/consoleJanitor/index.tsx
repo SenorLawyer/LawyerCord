@@ -37,7 +37,6 @@ interface AllowLevels {
 
 const ALLOW_LEVEL_KEYS: Array<keyof AllowLevels> = ["error", "warn", "trace", "log", "info", "debug"];
 const logAllow = new Set<string>();
-let allowedLevels = new Set<keyof AllowLevels>();
 
 function rebuildLogAllow(value = settings.store.whitelistedLoggers ?? "") {
     logAllow.clear();
@@ -46,16 +45,6 @@ function rebuildLogAllow(value = settings.store.whitelistedLoggers ?? "") {
         const trimmed = logger.trim();
         if (trimmed) logAllow.add(trimmed);
     }
-}
-
-function rebuildAllowedLevels() {
-    const nextAllowedLevels = new Set<keyof AllowLevels>();
-
-    for (const level of ALLOW_LEVEL_KEYS) {
-        if (settings.store.allowLevel[level]) nextAllowedLevels.add(level);
-    }
-
-    allowedLevels = nextAllowedLevels;
 }
 
 interface AllowLevelSettingProps {
@@ -71,7 +60,6 @@ function AllowLevelSetting({ settingKey }: AllowLevelSettingProps) {
             value={value}
             onChange={(_, newValue) => {
                 settings.store.allowLevel[settingKey] = newValue;
-                rebuildAllowedLevels();
             }}
             size={20}
         >
@@ -136,14 +124,13 @@ export default definePlugin({
     startAt: StartAt.Init,
     start() {
         rebuildLogAllow(this.settings.store.whitelistedLoggers);
-        rebuildAllowedLevels();
     },
 
     Noop,
     NoopLogger: () => NoopLogger,
 
     shouldLog(logger: string, level: keyof AllowLevels) {
-        return logAllow.has(logger) || allowedLevels.has(level);
+        return logAllow.has(logger) || settings.store.allowLevel[level];
     },
 
     patches: [

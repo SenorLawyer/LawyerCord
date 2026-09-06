@@ -21,6 +21,24 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ConsoleJanitor reads replaced log-level settings without rebuilding a cache", () => {
+    const store = { whitelistedLoggers: "GatewaySocket", allowLevel: { error: true, warn: false } };
+    const { default: plugin } = loadSource("src/plugins/consoleJanitor/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store }) },
+        "@components/BaseText": {}, "@components/settings/tabs/plugins/components/Common": {},
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value, defineDefault: (value: object) => value, OptionType: {}, StartAt: {} },
+        "@webpack/common": {},
+    });
+    plugin.start();
+    assert.equal(plugin.shouldLog("other", "error"), true);
+    store.allowLevel = { error: false, warn: true };
+    assert.equal(plugin.shouldLog("other", "error"), false);
+    assert.equal(plugin.shouldLog("other", "warn"), true);
+    assert.equal(plugin.shouldLog("GatewaySocket", "error"), true);
+});
+
 test("BetterSessions returns its settings-close save to the flux error handler", async () => {
     const savedSessionsCache = new Map();
     const save = Promise.withResolvers<void>();

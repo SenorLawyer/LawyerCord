@@ -8125,3 +8125,30 @@ test("installer metadata normalizes clone suffixes before building repository li
         assert.ok(api.formatCommitMessages(`Author////////aaaaaaa////////${sha}////////Message`, meta.remote).includes(`href="https://github.com/owner/repo/commit/${sha}"`));
     }
 });
+
+test("installer holds ownership until failed-install cleanup settles", async () => {
+    for (const failCleanup of [false, true]) {
+        let finishCleanup: () => void = () => {};
+        let cleanupStarted: () => void = () => {};
+        const started = new Promise<void>(resolve => { cleanupStarted = resolve; });
+        const mocks: Record<string, object> = {
+            child_process: {}, electron: { dialog: { showMessageBox: async () => ({ response: 1 }) } },
+            fs: {}, "fs/promises": { rm: () => new Promise<void>((resolve, reject) => {
+                finishCleanup = () => failCleanup ? reject(new Error("Private cleanup error")) : resolve();
+                cleanupStarted();
+            }) }, path, "yaml-js": {},
+        };
+        for (const name of ["pluginValidate", "updateValidate"])
+            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") },
+            "({ ...exports, setup() { cloneRepo = async () => {}; getPluginDirectory = () => 'fixture'; getPluginMeta = async () => { throw new Error('Invalid metadata'); }; } })");
+        api.setup();
+        const installation = api.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "owner", "repo");
+        const rejection = assert.rejects(installation, failCleanup ? /Could not remove the cancelled plugin installation/ : /Could not read the plugin metadata/);
+        await started;
+        await assert.rejects(api.rmPlugin(null, "fixture"), /Another plugin operation/);
+        finishCleanup();
+        await rejection;
+        await assert.rejects(api.initPluginInstall(null, "invalid", "", "", ""), /Invalid link/);
+    }
+});

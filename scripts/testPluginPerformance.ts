@@ -46,6 +46,35 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("favorite emote drags preserve favorites when an endpoint disappears", () => {
+    let update: (state: { emojis: string[] }) => unknown = () => assert.fail("No update scheduled");
+    const { default: plugin } = loadSource("src/equicordplugins/dragFavoriteEmotes/index.tsx", {
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/css": { classNameFactory: () => () => "" }, "@utils/misc": {},
+        "@utils/types": { __esModule: true, default: (value: object) => value },
+        "@webpack": { findByPropsLazy: () => ({}), findCssClassesLazy: () => ({}) },
+        "@webpack/common": {
+            useDrop: (factory: () => object) => factory(),
+            UserSettingsActionCreators: { FrecencyUserSettingsActionCreators: {
+                updateAsync: (_key: string, callback: typeof update) => { update = callback; }
+            } }
+        }
+    });
+    const drop = plugin.drop({ emoji: { id: "target" }, category: "FAVORITES" });
+    drop.drop({ id: "source" });
+    for (const emojis of [["target", "other"], ["source", "other"], ["other"]]) {
+        const before = [...emojis];
+        assert.equal(update({ emojis }), false);
+        assert.deepEqual(emojis, before);
+    }
+    const forward = { emojis: ["source", "other", "target"] };
+    update(forward);
+    assert.deepEqual(forward.emojis, ["other", "source", "target"]);
+    const backward = { emojis: ["target", "other", "source"] };
+    update(backward);
+    assert.deepEqual(backward.emojis, ["source", "target", "other"]);
+});
+
 test("custom user colors preserve black when reopening the picker", () => {
     let initialColor: unknown;
     const colors: Record<string, string> = { user: "000000" };

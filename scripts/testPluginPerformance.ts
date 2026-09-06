@@ -21,6 +21,19 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ReviewDB request errors display only nonempty string messages", async () => {
+    for (const payload of [null, {}, { message: {} }, { message: 42 }, { message: "" }, { message: "  " }, { message: "Please retry later." }]) {
+        const messages: string[] = [];
+        const api = loadSource("src/plugins/reviewDB/reviewDbApi.ts", {
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) }, Toasts: { Type: {} } },
+            "./auth": { getToken: async () => "token" }, "./entities": {}, "./settings": {},
+            "./utils": { showToast: (message: string) => messages.push(message) },
+        }, { fetch: async () => ({ ok: false, status: 503, json: async () => payload }) });
+        assert.equal(await api.getCurrentUserInfo(), null);
+        assert.deepEqual(messages, [payload?.message === "Please retry later." ? "Please retry later." : "ReviewDB: Request failed with status 503"]);
+    }
+});
+
 test("ReviewDB submissions cannot send or clear under a changed account", async () => {
     const source = readFileSync("src/plugins/reviewDB/components/ReviewsView.tsx", "utf8");
     const match = source.match(/async res => \{([\s\S]*?)\n\s*\}\n\s*\}\n\s*\/>/);

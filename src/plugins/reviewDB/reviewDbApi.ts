@@ -61,11 +61,13 @@ async function rdbRequest<T = unknown>(path: string, options: RequestInit = {}):
 
     if (!res) return null;
 
-    const data = await res.json().catch(() => null);
+    const data: unknown = await res.json().catch(() => null);
     if (UserStore.getCurrentUser()?.id !== userId) return null;
 
     if (!res.ok) {
-        const message = data?.message ?? `ReviewDB: Request failed with status ${res.status}`;
+        const message = typeof data === "object" && data !== null && "message" in data && typeof data.message === "string" && data.message.trim()
+            ? data.message
+            : `ReviewDB: Request failed with status ${res.status}`;
         showToast(message, Toasts.Type.FAILURE);
         return null;
     }

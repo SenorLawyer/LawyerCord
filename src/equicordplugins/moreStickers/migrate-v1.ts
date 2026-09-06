@@ -23,7 +23,7 @@ function migrateStickerPackId(oldStickerPackId: string): string {
         return "MoreStickers:Line:Pack:" + id;
     } else if (oldStickerPackId.startsWith("Vencord-MoreStickers-Line-Emoji-Pack")) {
         const id = oldStickerPackId.replace("Vencord-MoreStickers-Line-Emoji-Pack-", "");
-        return "MoreStickers:Line:Emoji:Pack:" + id;
+        return "MoreStickers:Line:Emoji-Pack:" + id;
     } else {
         return oldStickerPackId;
     }
@@ -35,7 +35,7 @@ function migrateStickerId(oldStickerId: string): string {
         return "MoreStickers:Line:Sticker:" + stickerPackId + ":" + stickerId;
     } else if (oldStickerId.startsWith("Vencord-MoreStickers-Line-Emoji")) {
         const [stickerPackId, stickerId] = oldStickerId.replace("Vencord-MoreStickers-Line-Emoji", "").split("-", 2);
-        return "MoreStickers:Line:Emoji:" + stickerPackId + ":" + stickerId;
+        return "MoreStickers:Line-Emoji:" + stickerPackId + ":" + stickerId;
     } else {
         return oldStickerId;
     }
@@ -45,6 +45,7 @@ function migrateSticker(oldSticker: Sticker): Sticker {
     return {
         ...oldSticker,
         id: migrateStickerId(oldSticker.id),
+        stickerPackId: migrateStickerPackId(oldSticker.stickerPackId),
     };
 }
 

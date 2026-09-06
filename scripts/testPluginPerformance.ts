@@ -4774,7 +4774,7 @@ test("v1 sticker migration preserves unchanged IDs and saved packs after cleanup
         ["Vencord-MoreStickers-Line-Pack-123", "MoreStickers:Line:Pack:123", false],
         ["custom-pack", "custom-pack", true]
     ] as const) {
-        const pack = { id: oldId, title: "Legacy", logo: { id: "logo" }, stickers: [{ id: "sticker" }] };
+        const pack = { id: oldId, title: "Legacy", logo: { id: "logo", stickerPackId: oldId }, stickers: [{ id: "sticker", stickerPackId: oldId }] };
         const entries = new Map<string, unknown>([[oldId, pack], ["Vencord-MoreStickers-Packs", [{ id: oldId, title: pack.title }]]]);
         const DataStore = {
             async set(key: string, value: unknown) { entries.set(key, value); },
@@ -4801,6 +4801,24 @@ test("v1 sticker migration preserves unchanged IDs and saved packs after cleanup
         assert.equal(entries.has("Vencord-MoreStickers-Packs"), failCleanup);
         assert.equal(notices.some(message => message.startsWith("Migration failed:")), failCleanup);
         if (oldId !== newId) assert.equal(await stickers.getStickerPack(oldId), null);
+    }
+});
+
+test("legacy LINE stickers and recent entries migrate to current importer identities", () => {
+    const migration = loadSource("src/equicordplugins/moreStickers/migrate-v1.ts", {
+        "@api/index": {}, "@webpack/common": {}, "./components/misc": {}, "./stickers": {}
+    }, {}, "({ migrateStickerPack, migrateSticker })");
+    for (const [file, oldPackId, oldStickerId] of [
+        ["lineStickers", "Vencord-MoreStickers-Line-Pack-123", "Vencord-MoreStickers-Line-Sticker123-456"],
+        ["lineEmojis", "Vencord-MoreStickers-Line-Emoji-Pack-123", "Vencord-MoreStickers-Line-Emoji123-456"]
+    ]) {
+        const importer = loadSource(`src/equicordplugins/moreStickers/${file}.ts`, { "./utils": {} });
+        const source = { id: "456", stickerPackId: "123", staticUrl: "image" };
+        const expected = importer.convert({ id: "123", title: "Pack", mainImage: source, stickers: [source] });
+        const legacySticker = { ...expected.stickers[0], id: oldStickerId, stickerPackId: oldPackId };
+        const migrated = migration.migrateStickerPack({ ...expected, id: oldPackId, logo: legacySticker, stickers: [legacySticker] });
+        assert.deepEqual(JSON.parse(JSON.stringify(migrated)), JSON.parse(JSON.stringify(expected)));
+        assert.deepEqual(JSON.parse(JSON.stringify(migration.migrateSticker(legacySticker))), JSON.parse(JSON.stringify(expected.stickers[0])));
     }
 });
 

@@ -6,6 +6,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Match migrated LINE emoji IDs and sticker pack references to the current importers.
 - Preserve custom sticker packs during legacy migration and stop deleting saved packs when migration cleanup fails.
 - Store sticker pack payloads under dedicated keys so imported IDs cannot overwrite unrelated settings. Keep legacy payloads intact while hiding deleted packs.
 - Remove the unused dynamic sticker pack refresh function and its credential forwarding path.

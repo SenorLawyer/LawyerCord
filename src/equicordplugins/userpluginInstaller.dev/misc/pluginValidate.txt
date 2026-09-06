@@ -28,15 +28,10 @@
                             );
                         document.title = "install";
                     });
-
-                document.querySelector("style").innerHTML +=
-                    document.querySelector("addAtRuntimeStyle").innerHTML;
             });
         </script>
         <style>
-            addAtRuntimeStyle {
-                display: none !important;
-            }
+            %WARNINGHIDER% %NATIVETSHIDER% %PRESENDHIDER%
             * {
                 font-family: sans-serif;
                 color: #cdd6f4;
@@ -105,9 +100,6 @@
                 font-weight: bold;
             }
         </style>
-        <addAtRuntimeStyle>
-            %WARNINGHIDER% %NATIVETSHIDER% %PRESENDHIDER%
-        </addAtRuntimeStyle>
     </head>
     <body>
         <h2>Plugin info</h2>

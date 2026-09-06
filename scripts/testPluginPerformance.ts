@@ -20,6 +20,34 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("Song Spotlight validation does not trust a failed render cached as valid", async () => {
+    const handlers = await import("@song-spotlight/api/handlers");
+    const util = await import("@song-spotlight/api/util");
+    let requests = 0;
+    let exists = false;
+    const native = loadSource("src/equicordplugins/songSpotlight.desktop/native.ts", {
+        "@song-spotlight/api/handlers": handlers,
+        "@song-spotlight/api/util": util,
+        electron: { net: { fetch: async () => {
+            requests++;
+            return new Response(JSON.stringify(exists ? { id: 123 } : {}));
+        } } },
+    });
+    try {
+        handlers.clearCache();
+        const song = { service: "soundcloud", type: "track", id: "123" };
+        assert.equal(await native.renderSong(null, song), null);
+        assert.equal(await native.validateSong(null, song), false);
+        assert.equal(requests, 2, "validation checks the service after a failed render");
+        exists = true;
+        assert.equal(await native.validateSong(null, song), true);
+        assert.equal(requests, 3, "an earlier missing result does not permanently reject the song");
+    } finally {
+        handlers.clearCache();
+        util.setFetchHandler(fetch);
+    }
+});
+
 test("Song Spotlight album playback advances in numeric track order", () => {
     let next: number | undefined;
     const { default: AudioPlayer } = loadSource("src/equicordplugins/songSpotlight.desktop/ui/components/AudioPlayer.tsx", {

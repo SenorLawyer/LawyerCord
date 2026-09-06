@@ -370,21 +370,20 @@ export async function updatePlugin(_, directory: string) {
                 case "install": {
                     win.close();
                     try {
-                        const otherProc = exec("git rebase origin/HEAD", {
+                        await new Promise<void>((resolve, reject) => exec("git rebase origin/HEAD", {
                             cwd: pluginDir
-                        });
-                        let errored = "";
-                        otherProc.stderr?.on("data", d => { if (String(d).includes("Success")) return; errored += String(d); });
-                        otherProc.once("close", () => {
-                            if (errored) if (!errored.includes("Success")) return reject(`Failed to apply the update, chances are you have local changes that conflict with your remote. Git errors:\n\n${errored}`);
-                            build().then(() => resolve(JSON.stringify({
-                                name: pluginMeta.name,
-                                native: pluginMeta.usesNative
-                            })), reject);
-                        });
+                        }, error => {
+                            if (error) reject(new Error("Could not apply the plugin update. Check for conflicting local changes."));
+                            else resolve();
+                        }));
+                        await build();
+                        resolve(JSON.stringify({
+                            name: pluginMeta.name,
+                            native: pluginMeta.usesNative
+                        }));
                     }
-                    catch (e) {
-                        reject((e as Error).toString());
+                    catch {
+                        reject(new Error("Could not update the plugin. Check the repository and try building from the terminal."));
                     }
                     break;
                 }

@@ -7746,6 +7746,39 @@ test("plugin updates reject preparation failures before opening a review window"
     }
 });
 
+test("plugin updates build only after Git succeeds and report build failures", async () => {
+    for (const failure of ["git", "build", "none"]) {
+        const commands: string[] = [];
+        class ReviewWindow extends EventEmitter {
+            static getAllWindows() { return []; }
+            webContents = { getTitle: () => "install" };
+            loadURL() {}
+            close() {}
+            show() { queueMicrotask(() => this.emit("page-title-updated")); }
+        }
+        const mocks: Record<string, object> = {
+            child_process: { exec: (command: string, _options: object, callback: (error: Error | null, stdout: string, stderr: string) => void) => {
+                commands.push(command);
+                const fails = failure === "git" && command.startsWith("git rebase") || failure === "build" && command.startsWith("pnpm");
+                callback(fails ? new Error("Private path") : null, "", "Success is not an exit status");
+            } },
+            electron: { BrowserWindow: ReviewWindow }, fs: {}, "fs/promises": {}, path, "yaml-js": {}
+        };
+        for (const name of ["pluginValidate", "updateValidate"])
+            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks,
+            { __dirname: path.resolve("fixture/dist"), Buffer, process: { env: {} } },
+            "({ ...exports, setup() { getPluginDirectory = () => 'fixture'; getPluginMeta = async () => ({ name: 'Fixture', description: '', remote: '', usesNative: false }); } })");
+        api.setup();
+        const pending = api.updatePlugin(null, "fixture");
+        if (failure === "none") assert.deepEqual(JSON.parse(await pending), { name: "Fixture", native: false });
+        else await assert.rejects(pending, /Could not update the plugin/);
+        assert.equal(commands.length, failure === "git" ? 2 : 3);
+        assert.equal(commands[1], "git rebase origin/HEAD");
+        if (failure !== "git") assert.equal(commands[2], "pnpm build --dev");
+    }
+});
+
 test("installer setup failures reject the caller without exposing native errors", async () => {
     for (const stage of ["dialog", "clone", "metadata", "browser"]) {
         const fail = async () => { throw new Error("Private filesystem path"); };

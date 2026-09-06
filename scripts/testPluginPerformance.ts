@@ -46,6 +46,21 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("GitHub profile tab renders loading and failure messages", () => {
+    for (const [loading, error, expected] of [[true, null, "Loading repositories..."], [false, "Request failed", "Request failed"]] as const) {
+        let index = 0;
+        const values = [[], loading, error, null];
+        const tab = loadComponent("src/equicordplugins/githubRepos/components/ProfileTabComponent.tsx", {
+            useState: () => [values[index++], () => {}], useEffect: () => {}
+        }, {
+            "@equicordplugins/githubRepos/githubApi": {},
+            "..": { cl: (name: string) => name, settings: { store: {} } }, "./RepoCard": {}
+        });
+        const result = tab.ProfileTabComponent({ id: "fixture" });
+        assert.ok(JSON.stringify(result).includes(expected));
+    }
+});
+
 test("GIF collection extensions handle URL schemes, case and malformed input", () => {
     const extension = loadSource("src/equicordplugins/gifCollections/utils/getUrlExtension.ts", {
         "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } }

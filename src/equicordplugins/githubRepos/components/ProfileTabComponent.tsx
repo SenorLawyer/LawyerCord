@@ -68,13 +68,11 @@ export function ProfileTabComponent({ id }: { id: string; }) {
         fetchData();
     }, [id]);
 
-    if (loading) return;
-    <BaseText size="xs" weight="semibold" className={cl("loading")} >
+    if (loading) return <BaseText size="xs" weight="semibold" className={cl("loading")} >
         Loading repositories...
     </BaseText>;
 
-    if (error) return;
-    <BaseText size="xs" weight="semibold" className={cl("error")}>
+    if (error) return <BaseText size="xs" weight="semibold" className={cl("error")}>
         Error: {error}
     </BaseText>;
 

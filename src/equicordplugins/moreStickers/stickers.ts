@@ -7,7 +7,7 @@
 import * as DataStore from "@api/DataStore";
 
 import { removeRecentStickerByPackId } from "./components";
-import { DynamicStickerPackMeta, StickerPack, StickerPackMeta } from "./types";
+import { StickerPack, StickerPackMeta } from "./types";
 
 const PACKS_KEY = "MoreStickers:Packs";
 
@@ -76,15 +76,4 @@ export async function deleteStickerPack(id: string, packsKey: string = PACKS_KEY
         removeRecentStickerByPackId(id),
         DataStore.update<StickerPackMeta[]>(packsKey, packs => packs?.filter(p => p.id !== id) ?? [])
     ]);
-}
-
-// ---------------------------- Dynamic Packs ----------------------------
-
-export async function getDynamicStickerPack(dspm: DynamicStickerPackMeta): Promise<StickerPack | null> {
-    const dsp = await fetch(dspm.dynamic.refreshUrl, {
-        headers: dspm.dynamic.authHeaders,
-        redirect: "error",
-    });
-    if (!dsp.ok) return null;
-    return await dsp.json();
 }

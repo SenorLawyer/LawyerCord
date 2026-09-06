@@ -8095,7 +8095,7 @@ test("installer scans only ignore missing children, not root or permission failu
 });
 
 test("installer metadata normalizes clone suffixes before building repository links", async () => {
-    for (const suffix of ["", "/", ".git", ".git/"]) {
+    for (const suffix of ["", "/", ".git", ".git/"]) for (const ending of ["\n", "\r\n", ""]) {
         const remote = `https://github.com/owner/repo${suffix}`;
         const mocks: Record<string, object> = {
             child_process: {}, electron: {}, "fs/promises": {}, path, "yaml-js": {},
@@ -8103,7 +8103,7 @@ test("installer metadata normalizes clone suffixes before building repository li
                 readdirSync: () => ["index.ts"],
                 readFileSync: (file: string) => {
                     if (file.endsWith("index.ts")) return 'export default definePlugin({name:"Fixture",description:"Fixture"});';
-                    if (file.endsWith("config")) return `[remote "origin"]\n\turl = ${remote}\n`;
+                    if (file.endsWith("config")) return `[remote "origin"]${ending || "\n"}\turl = ${remote}${ending}`;
                     throw new Error("Missing metadata");
                 },
             },

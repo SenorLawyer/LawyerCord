@@ -474,6 +474,8 @@ export async function sendScheduledMessageNow(id: string): Promise<{ success: bo
         return { success: false, error: "Scheduled message not found" };
     }
 
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return { success: false, error: "Sign in before sending a scheduled message." };
     if (sendingMessages.has(id)) return { success: false, error: "Message is being sent." };
     sendingMessages.add(id);
     const generation = schedulerGeneration;
@@ -481,6 +483,7 @@ export async function sendScheduledMessageNow(id: string): Promise<{ success: bo
         message.attemptedAt = Date.now();
         await saveScheduledMessages();
         if (generation !== schedulerGeneration) return { success: false, error: "Scheduled sending was stopped. The message remains saved." };
+        if (UserStore.getCurrentUser()?.id !== userId) return { success: false, error: "Account changed. The scheduled message remains saved." };
         if (!scheduledMessages.includes(message)) return { success: false, error: "Scheduled message was removed." };
         const sent = await sendScheduledMessage(message);
         if (!sent) return { success: false, error: "Failed to send scheduled message. It remains saved." };

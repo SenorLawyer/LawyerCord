@@ -5438,21 +5438,25 @@ test("scheduled sends accepted after shutdown skip reactions but finish successf
 });
 
 test("scheduled sends stopped during persistence remain saved without posting", async () => {
-    let finish: () => void = () => {};
-    const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
-        "@api/DataStore": { get: async () => [{ id: "queued", scheduledTime: 0 }],
-            set: () => new Promise<void>(resolve => { finish = resolve; }) },
-        "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
-        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, ChannelStore: { getChannel: () => assert.fail("Must stop before sending") } },
-        ".": { settings: { store: {} } }
-    });
-    await module.loadScheduledMessages();
-    const pending = module.sendScheduledMessageNow("queued");
-    module.stopScheduler();
-    finish();
-    assert.equal((await pending).success, false);
-    assert.equal(module.getScheduledMessages().length, 1);
-    assert.equal(typeof module.getScheduledMessages()[0].attemptedAt, "number");
+    for (const changed of [false, true]) {
+        let userId = "account";
+        let finish: () => void = () => {};
+        const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@api/DataStore": { get: async () => [{ id: "queued", scheduledTime: 0 }],
+                set: () => new Promise<void>(resolve => { finish = resolve; }) },
+            "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) }, ChannelStore: { getChannel: () => assert.fail("Must stop before sending") } },
+            ".": { settings: { store: {} } }
+        });
+        await module.loadScheduledMessages();
+        const pending = module.sendScheduledMessageNow("queued");
+        if (changed) userId = "other";
+        else module.stopScheduler();
+        finish();
+        assert.equal((await pending).success, false);
+        assert.equal(module.getScheduledMessages().length, 1);
+        assert.equal(typeof module.getScheduledMessages()[0].attemptedAt, "number");
+    }
 });
 
 test("scheduled send batches stop before starting the next message", async () => {

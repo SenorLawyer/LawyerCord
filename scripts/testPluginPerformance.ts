@@ -5070,6 +5070,29 @@ test("sticker file imports validate the entire batch before writing packs", asyn
     }
 });
 
+test("sticker settings retain successful loads and discard unmounted completions", async () => {
+    const source = readFileSync("src/equicordplugins/moreStickers/components/misc.tsx", "utf8");
+    const callback = source.match(/React.useEffect\(\(\) => \{([\s\S]*?)\n    \}, \[\]\)/);
+    assert.ok(callback);
+    for (const failure of ["none", "packs", "legacy", "both"]) {
+        for (const unmounted of [false, true]) {
+            const updates: string[] = [];
+            let notices = 0;
+            const effect = runInNewContext(`(() => {${callback[1]}})`, {
+                getStickerPackMetas: async () => { if (failure === "packs" || failure === "both") throw new Error("Invalid packs"); return []; },
+                isV1: async () => { if (failure === "legacy" || failure === "both") throw new Error("Invalid legacy packs"); return true; },
+                setstickerPackMetas: () => updates.push("packs"), setV1: () => updates.push("legacy"),
+                Toasts: { show: () => notices++, genId: () => "toast", Type: {} }
+            });
+            const cleanup = effect();
+            if (unmounted) cleanup();
+            await setImmediate();
+            assert.deepEqual(updates, unmounted ? [] : ["packs", "legacy"].filter(key => failure !== key && failure !== "both"));
+            assert.equal(notices, !unmounted && failure !== "none" ? 1 : 0);
+        }
+    }
+});
+
 test("sticker migration button refreshes results and handles rejected storage work", async () => {
     const source = readFileSync("src/equicordplugins/moreStickers/components/misc.tsx", "utf8");
     const callback = source.match(/onClick=\{async \(\) => \{(\s*try \{\s*await migrate\(\);[\s\S]*?)\n\s*\}\}/);

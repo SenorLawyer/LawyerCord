@@ -6,6 +6,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Handle partial sticker settings load failures and ignore completions after the settings close.
 - Preserve pending replies during sticker conversion and upload failures, and clear only the matching reply after a successful upload message post.
 - Insert sticker links without duplicating existing draft text or clearing a pending reply.
 - Handle sticker conversion, upload, and message-post failures without unhandled rejections or stale-account notices.

@@ -100,10 +100,21 @@ export const Packs = () => {
         setstickerPackMetas(await getStickerPackMetas());
     }
     React.useEffect(() => {
-        refreshStickerPackMetas();
-    }, []);
-    React.useEffect(() => {
-        isV1().then(setV1);
+        let active = true;
+        Promise.allSettled([getStickerPackMetas(), isV1()]).then(([packs, legacy]) => {
+            if (!active) return;
+            if (packs.status === "fulfilled") setstickerPackMetas(packs.value);
+            if (legacy.status === "fulfilled") setV1(legacy.value);
+            if (packs.status === "rejected" || legacy.status === "rejected") {
+                Toasts.show({
+                    message: "Some sticker settings could not be loaded.",
+                    type: Toasts.Type.FAILURE,
+                    id: Toasts.genId(),
+                    options: { duration: 1000 }
+                });
+            }
+        });
+        return () => { active = false; };
     }, []);
 
     return (

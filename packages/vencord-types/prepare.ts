@@ -47,6 +47,7 @@ function copyDtsFiles(from: string, to: string) {
 copyDtsFiles(VencordSrc, __dirname);
 
 const discordTypes = join(__dirname, "discord-types");
+rmSync(discordTypes, { recursive: true, force: true });
 for (const entry of ["src", "enums", "webpack", "package.json", "LICENSE"]) {
     cpSync(join(__dirname, "..", "discord-types", entry), join(discordTypes, entry), { recursive: true });
 }

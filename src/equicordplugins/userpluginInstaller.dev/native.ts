@@ -324,76 +324,72 @@ export async function getUserplugins() {
 
 export async function updatePlugin(_, directory: string) {
     const pluginDir = getPluginDirectory(directory);
+    const pluginMeta = await getPluginMeta(pluginDir)
+        .catch(() => { throw new Error("Could not read the plugin metadata."); });
+    const rawOutput = await new Promise<string>((resolve, reject) => {
+        exec("git log origin/HEAD...HEAD --oneline --pretty=format:%an////////%h////////%H////////%s", {
+            cwd: pluginDir
+        }, (error, stdout) => {
+            if (error) reject(new Error("Could not read the plugin update history."));
+            else resolve(stdout);
+        });
+    });
     return new Promise((resolve, reject) => {
 
-        async function doStuff() {
-            const pluginMeta = await getPluginMeta(pluginDir);
+        const win = new BrowserWindow({
+            maximizable: false,
+            minimizable: false,
+            width: 560,
+            height: 600,
+            resizable: false,
+            webPreferences: {
+                devTools: true
+            },
+            title: "Review userplugin",
+            modal: true,
+            parent: BrowserWindow.getAllWindows()[0],
+            show: false,
+            autoHideMenuBar: true
+        });
 
-            const win = new BrowserWindow({
-                maximizable: false,
-                minimizable: false,
-                width: 560,
-                height: 600,
-                resizable: false,
-                webPreferences: {
-                    devTools: true
-                },
-                title: "Review userplugin",
-                modal: true,
-                parent: BrowserWindow.getAllWindows()[0],
-                show: false,
-                autoHideMenuBar: true
-            });
-
-            const commitProc = exec("git log origin/HEAD...HEAD --oneline --pretty=format:%an////////%h////////%H////////%s", {
-                cwd: pluginDir
-            });
-            let rawOutput = "";
-            commitProc.stdout?.on("data", d => {
-                rawOutput += String(d);
-            });
-            commitProc.once("close", () => {
-                win.loadURL(generateUpdatePluginContent({
-                    name: pluginMeta.name,
-                    description: pluginMeta.description,
-                    remote: pluginMeta.remote,
-                    commit: formatCommitMessages(rawOutput, pluginMeta.remote)
-                }));
-                win.on("page-title-updated", async e => {
-                    if (win.webContents.getTitle().startsWith("openLink:")) {
-                        await shell.openExternal(win.webContents.getTitle().replace("openLink:", ""));
+        win.loadURL(generateUpdatePluginContent({
+            name: pluginMeta.name,
+            description: pluginMeta.description,
+            remote: pluginMeta.remote,
+            commit: formatCommitMessages(rawOutput, pluginMeta.remote)
+        }));
+        win.on("page-title-updated", async e => {
+            if (win.webContents.getTitle().startsWith("openLink:")) {
+                await shell.openExternal(win.webContents.getTitle().replace("openLink:", ""));
+            }
+            switch (win.webContents.getTitle() as "abortInstall" | "install") {
+                case "abortInstall": {
+                    win.close();
+                    return reject("Rejected by user");
+                }
+                case "install": {
+                    win.close();
+                    try {
+                        const otherProc = exec("git rebase origin/HEAD", {
+                            cwd: pluginDir
+                        });
+                        let errored = "";
+                        otherProc.stderr?.on("data", d => { if (String(d).includes("Success")) return; errored += String(d); });
+                        otherProc.once("close", () => {
+                            if (errored) if (!errored.includes("Success")) return reject(`Failed to apply the update, chances are you have local changes that conflict with your remote. Git errors:\n\n${errored}`);
+                            build().then(() => resolve(JSON.stringify({
+                                name: pluginMeta.name,
+                                native: pluginMeta.usesNative
+                            })), reject);
+                        });
                     }
-                    switch (win.webContents.getTitle() as "abortInstall" | "install") {
-                        case "abortInstall": {
-                            win.close();
-                            return reject("Rejected by user");
-                        }
-                        case "install": {
-                            win.close();
-                            try {
-                                const otherProc = exec("git rebase origin/HEAD", {
-                                    cwd: pluginDir
-                                });
-                                let errored = "";
-                                otherProc.stderr?.on("data", d => { if (String(d).includes("Success")) return; errored += String(d); });
-                                otherProc.once("close", () => {
-                                    if (errored) if (!errored.includes("Success")) return reject(`Failed to apply the update, chances are you have local changes that conflict with your remote. Git errors:\n\n${errored}`);
-                                    build().then(() => resolve(JSON.stringify({
-                                        name: pluginMeta.name,
-                                        native: pluginMeta.usesNative
-                                    })), reject);
-                                });
-                            }
-                            catch (e) {
-                                reject((e as Error).toString());
-                            }
-                            break;
-                        }
+                    catch (e) {
+                        reject((e as Error).toString());
                     }
-                });
-            });
-            win.show();
-        }
-        doStuff();
+                    break;
+                }
+            }
+        });
+        win.show();
     });
 }

@@ -7710,6 +7710,42 @@ test("plugin metadata stops at missing entries and rejects malformed declaration
     }
 });
 
+test("plugin updates reject preparation failures before opening a review window", async () => {
+    for (const stage of ["metadata", "history", "success"]) {
+        let commands = 0;
+        let windows = 0;
+        class ReviewWindow extends EventEmitter {
+            static getAllWindows() { return []; }
+            webContents = { getTitle: () => "abortInstall" };
+            constructor() { super(); windows++; }
+            loadURL(url: string) { assert.ok(url.startsWith("data:text/html;base64,")); }
+            close() {}
+            show() { queueMicrotask(() => this.emit("page-title-updated")); }
+        }
+        const mocks: Record<string, object> = {
+            child_process: { exec: (command: string, options: { cwd: string; }, callback: (error: Error | null, stdout: string) => void) => {
+                commands++;
+                assert.ok(command.startsWith("git log "));
+                assert.equal(options.cwd, "fixture");
+                callback(stage === "history" ? new Error("Private Git path") : null, "");
+            } },
+            electron: { BrowserWindow: ReviewWindow }, fs: {}, "fs/promises": {}, path, "yaml-js": {}
+        };
+        for (const name of ["pluginValidate", "updateValidate"])
+            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "%PLUGINNAME%" };
+        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist"), Buffer },
+            "({ ...exports, setup(metadata) { getPluginDirectory = () => 'fixture'; getPluginMeta = metadata; } })");
+        api.setup(async () => {
+            if (stage === "metadata") throw new Error("Private metadata path");
+            return { name: "Fixture", description: "A fixture.", remote: "https://github.com/owner/repo" };
+        });
+        await assert.rejects(api.updatePlugin(null, "fixture"), (error: unknown) => stage === "success" ? error === "Rejected by user"
+            : (error as Error).message === (stage === "metadata" ? "Could not read the plugin metadata." : "Could not read the plugin update history."));
+        assert.equal(commands, stage === "metadata" ? 0 : 1);
+        assert.equal(windows, stage === "success" ? 1 : 0);
+    }
+});
+
 test("installer setup failures reject the caller without exposing native errors", async () => {
     for (const stage of ["dialog", "clone", "metadata", "browser"]) {
         const fail = async () => { throw new Error("Private filesystem path"); };

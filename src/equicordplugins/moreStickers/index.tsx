@@ -111,7 +111,7 @@ export default definePlugin({
         channel: Channel,
         closePopout: () => void;
     }) {
-        const [query, setQuery] = React.useState<string | undefined>();
+        const [query, setQuery] = React.useState("");
         const [selectedStickerPackId, setSelectedStickerPackId] = React.useState<string | null>(null);
 
         const [loadedPacks] = useAwaiter(async () => {
@@ -130,7 +130,7 @@ export default definePlugin({
                     <path d="M0 0.26087C0 0.137894 0 0.0764069 0.0382035 0.0382035C0.0764069 0 0.137894 0 0.26087 0H0.73913C0.862106 0 0.923593 0 0.961797 0.0382035C1 0.0764069 1 0.137894 1 0.26087V0.73913C1 0.862106 1 0.923593 0.961797 0.961797C0.923593 1 0.862106 1 0.73913 1H0.26087C0.137894 1 0.0764069 1 0.0382035 0.961797C0 0.923593 0 0.862106 0 0.73913V0.26087Z" fill="white" />
                 </svg>
 
-                <PickerHeader onQueryChange={setQuery} />
+                <PickerHeader query={query} onQueryChange={setQuery} />
                 <PickerContent
                     stickerPacks={stickerPacks}
                     selectedStickerPackId={selectedStickerPackId}

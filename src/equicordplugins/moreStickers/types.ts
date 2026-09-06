@@ -55,6 +55,7 @@ export interface LineEmojiPack {
 }
 
 export interface PickerHeaderProps {
+    query: string;
     onQueryChange: (query: string) => void;
 }
 

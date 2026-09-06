@@ -5096,6 +5096,33 @@ test("sticker inspector derives its pack from the current hover", () => {
     assert.deepEqual(titles, ["Second", "Updated", ""]);
 });
 
+test("sticker search uses the parent query and clears without delayed writes", () => {
+    const inputs: { value: string; onChange: (value: string) => void; }[] = [];
+    const clearButtons: { onClick: () => void; }[] = [];
+    const changes: string[] = [];
+    const TextInput = Symbol("TextInput");
+    const CancelIcon = Symbol("CancelIcon");
+    const picker = loadSource("src/equicordplugins/moreStickers/components/picker.tsx", {
+        "@equicordplugins/moreStickers/types": {}, "@equicordplugins/moreStickers/upload": {},
+        "@equicordplugins/moreStickers/utils": { clPicker: () => "" }, "@utils/react": {},
+        "@webpack/common": { TextInput, React: { createElement: (type: unknown, props: never) => {
+            if (type === TextInput) inputs.push(props);
+            if (type === CancelIcon) clearButtons.push(props);
+            return null;
+        } } },
+        "./categories": {}, "./icons": { CancelIcon }, "./misc": {}
+    });
+    const onQueryChange = (value: string) => changes.push(value);
+    picker.PickerHeader({ query: "cat", onQueryChange });
+    assert.equal(inputs[0].value, "cat");
+    inputs[0].onChange("dog");
+    clearButtons[0].onClick();
+    picker.PickerHeader({ query: "", onQueryChange });
+    assert.equal(inputs[1].value, "");
+    assert.equal(clearButtons.length, 1);
+    assert.deepEqual(changes, ["dog", ""]);
+});
+
 test("recent sticker loads handle errors and ignore unmounted results", async () => {
     for (const failed of [false, true]) {
         for (const unmounted of [false, true]) {

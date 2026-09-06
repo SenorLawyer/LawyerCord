@@ -7,7 +7,6 @@
 import { PickerContent, PickerContentHeader, PickerContentRow, PickerContentRowGrid, PickerHeaderProps, SidebarProps, Sticker, StickerCategoryType } from "@equicordplugins/moreStickers/types";
 import { sendSticker } from "@equicordplugins/moreStickers/upload";
 import { clPicker } from "@equicordplugins/moreStickers/utils";
-import { debounce } from "@shared/debounce";
 import { useAwaiter } from "@utils/react";
 import { Modal,openModal, React, showToast, TextInput, Toasts } from "@webpack/common";
 import { JSX } from "react";
@@ -15,8 +14,6 @@ import { JSX } from "react";
 import { CategoryImage, CategoryScroller, CategoryWrapper, StickerCategory } from "./categories";
 import { CancelIcon, CogIcon, IconContainer, RecentlyUsedIcon, SearchIcon } from "./icons";
 import { addRecentSticker, getRecentStickers, Header, Packs, RECENT_STICKERS_ID, RECENT_STICKERS_TITLE } from "./misc";
-
-const debounceQueryChange = debounce((cb: Function, ...args: any) => cb(...args), 150);
 
 export const RecentPack = {
     id: RECENT_STICKERS_ID,
@@ -410,14 +407,7 @@ export function PickerContent({ stickerPacks, selectedStickerPackId, setSelected
     );
 }
 
-export const PickerHeader = ({ onQueryChange }: PickerHeaderProps) => {
-    const [query, setQuery] = React.useState<string | undefined>();
-
-    const setQueryDebounced = (value: string, immediate = false) => {
-        setQuery(value);
-        if (immediate) onQueryChange(value);
-        else debounceQueryChange(onQueryChange, value);
-    };
+export const PickerHeader = ({ query, onQueryChange }: PickerHeaderProps) => {
 
     return (
         <Header>
@@ -431,14 +421,14 @@ export const PickerHeader = ({ onQueryChange }: PickerHeaderProps) => {
                             autoFocus={true}
                             value={query}
 
-                            onChange={(value: string) => setQueryDebounced(value)}
+                            onChange={onQueryChange}
                         />
                     </div>
                     <div className={clPicker("search-icon")}>
                         <IconContainer>
                             {
                                 (query && query.length > 0) ?
-                                    <CancelIcon className={clPicker("clear-icon")} width={20} height={20} onClick={() => setQueryDebounced("", true)} /> :
+                                    <CancelIcon className={clPicker("clear-icon")} width={20} height={20} onClick={() => onQueryChange("")} /> :
                                     <SearchIcon width={20} height={20} color="var(--text-muted)" />
                             }
                         </IconContainer>

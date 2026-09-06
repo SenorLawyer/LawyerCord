@@ -6,7 +6,7 @@
 
 import { normalizeCorsProxyUrl, toProxiedUrl } from "@equicordplugins/fileUpload/constants";
 import { settings } from "@equicordplugins/fileUpload/settings";
-import { fallbackServiceOrder, serviceLabels, ServiceType, ShareXUploaderConfig, UploadResponse } from "@equicordplugins/fileUpload/types";
+import { parseFallbackServiceOrder, serviceLabels, ServiceType, ShareXUploaderConfig, UploadResponse } from "@equicordplugins/fileUpload/types";
 import { copyToClipboard } from "@utils/clipboard";
 import { insertTextIntoChatInputBox } from "@utils/discord";
 import { Logger } from "@utils/Logger";
@@ -80,18 +80,6 @@ function isUploadCancelledError(error: unknown): boolean {
 
     const message = error.message.toLowerCase();
     return message.includes("cancelled") || message.includes("canceled") || message.includes("aborted") || message.includes("aborterror");
-}
-
-function getFallbackServices(): ServiceType[] {
-    const configuredOrder = (settings.store as { fallbackOrder?: string; }).fallbackOrder || fallbackServiceOrder.join(",");
-    const services = configuredOrder
-        .split(/[\n,]/)
-        .map(service => service.trim())
-        .filter((service): service is ServiceType => Object.values(ServiceType).includes(service as ServiceType));
-
-    return services.length === fallbackServiceOrder.length && new Set(services).size === fallbackServiceOrder.length
-        ? services
-        : fallbackServiceOrder;
 }
 
 function emitUploadState() {
@@ -1251,7 +1239,7 @@ function buildUploadOrder(primary: ServiceType, fileName: string): ServiceType[]
         return order;
     }
 
-    for (const fallback of getFallbackServices()) {
+    for (const fallback of parseFallbackServiceOrder(settings.store.fallbackOrder)) {
         if (fallback !== effectivePrimary && canServiceHandleFile(fallback, fileName)) {
             order.push(fallback);
         }

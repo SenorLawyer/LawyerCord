@@ -46,6 +46,23 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("lyrics fetching respects disabled fallback for either selected provider", async () => {
+    for (const lyricsProvider of ["Spotify", "LRCLIB"]) {
+        for (const fallbackProvider of [false, true]) {
+            const calls: string[] = [];
+            const module = loadSource("src/equicordplugins/musicControls/spotify/lyrics/api.tsx", {
+                "@api/index": { DataStore: { get: async () => ({}), set: async () => {} } },
+                "@equicordplugins/musicControls/settings": { settings: { store: { lyricsProvider, fallbackProvider } } },
+                "./providers/types": { Provider: { Spotify: "Spotify", Lrclib: "LRCLIB" } },
+                "./providers/SpotifyAPI": { getLyricsSpotify: async () => { calls.push("Spotify"); return null; } },
+                "./providers/lrclibAPI": { getLyricsLrclib: async () => { calls.push("LRCLIB"); return null; } }
+            });
+            assert.equal(await module.getLyrics({ id: "track" }), null);
+            assert.deepEqual(calls, fallbackProvider ? [lyricsProvider, lyricsProvider === "Spotify" ? "LRCLIB" : "Spotify"] : [lyricsProvider]);
+        }
+    }
+});
+
 test("LRCLIB preserves timestamp precision and bracketed lyric text", async () => {
     const module = loadSource("src/equicordplugins/musicControls/spotify/lyrics/providers/lrclibAPI/index.ts", {
         "@equicordplugins/musicControls/spotify/lyrics/providers/types": { Provider: { Lrclib: "LRCLIB" } }

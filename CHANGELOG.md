@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Stop pending scheduled sends and their follow-up notifications when the initiating account changes.
+
 - Suppress scheduled reactions and notifications after shutdown while preserving successful-send cleanup.
 
 - Prevent scheduled message requests from starting after shutdown during storage or attachment loading.

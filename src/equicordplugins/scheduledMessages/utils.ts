@@ -367,6 +367,9 @@ async function addReactionsToMessage(channelId: string, messageId: string, react
 
 async function sendScheduledMessage(msg: ScheduledMessage): Promise<boolean> {
     const generation = schedulerGeneration;
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return false;
+    const isCurrent = () => generation === schedulerGeneration && UserStore.getCurrentUser()?.id === userId;
     try {
         if (!ChannelStore.getChannel(msg.channelId)) return false;
 
@@ -380,21 +383,21 @@ async function sendScheduledMessage(msg: ScheduledMessage): Promise<boolean> {
                 uploadAttachment(msg.channelId, att).then(result => ({ ...result, id: String(i) }))
             ));
 
-            if (generation !== schedulerGeneration) return false;
+            if (!isCurrent()) return false;
             messageId = await postMessage(msg.channelId, msg.content, uploaded);
         } else {
             messageId = await postMessage(msg.channelId, msg.content);
         }
 
-        if (generation !== schedulerGeneration) return true;
+        if (!isCurrent()) return true;
         if (reactions.length) await addReactionsToMessage(msg.channelId, messageId, reactions);
 
-        if (generation === schedulerGeneration && settings.store.showNotifications) {
+        if (isCurrent() && settings.store.showNotifications) {
             showToast(`Scheduled message sent to ${getChannelDisplayInfo(msg.channelId).name}`, Toasts.Type.SUCCESS);
         }
         return true;
     } catch {
-        if (generation === schedulerGeneration && settings.store.showNotifications) showToast("Failed to send scheduled message", Toasts.Type.FAILURE);
+        if (isCurrent() && settings.store.showNotifications) showToast("Failed to send scheduled message", Toasts.Type.FAILURE);
         return false;
     }
 }

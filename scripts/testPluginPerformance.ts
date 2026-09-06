@@ -5425,7 +5425,7 @@ test("scheduled sends accepted after shutdown skip reactions but finish successf
     let finish: () => void = () => {};
     const send = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
         "@api/DataStore": {}, "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
-        "@webpack/common": { ChannelStore: { getChannel: () => ({}) }, FluxDispatcher: { dispatch() {} },
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, ChannelStore: { getChannel: () => ({}) }, FluxDispatcher: { dispatch() {} },
             Constants: { Endpoints: { MESSAGES: (id: string) => id } }, SnowflakeUtils: { fromTimestamp: () => "nonce" },
             RestAPI: { post: async () => { await new Promise<void>(resolve => { finish = resolve; }); return { body: { id: "sent" } }; },
                 put: () => assert.fail("No reactions after stop") }, showToast: () => assert.fail("No toast after stop") },
@@ -5443,7 +5443,7 @@ test("scheduled sends stopped during persistence remain saved without posting", 
         "@api/DataStore": { get: async () => [{ id: "queued", scheduledTime: 0 }],
             set: () => new Promise<void>(resolve => { finish = resolve; }) },
         "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
-        "@webpack/common": { ChannelStore: { getChannel: () => assert.fail("Must stop before sending") } },
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, ChannelStore: { getChannel: () => assert.fail("Must stop before sending") } },
         ".": { settings: { store: {} } }
     });
     await module.loadScheduledMessages();
@@ -5461,7 +5461,7 @@ test("scheduled send batches stop before starting the next message", async () =>
     const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
         "@api/DataStore": { get: async () => [1, 2].map(id => ({ id: String(id), channelId: "channel", scheduledTime: 0 })), set: async () => {} },
         "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
-        "@webpack/common": { ChannelStore: { getChannel: () => ({}) }, FluxDispatcher: { dispatch() {} },
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, ChannelStore: { getChannel: () => ({}) }, FluxDispatcher: { dispatch() {} },
             Constants: { Endpoints: { MESSAGES: (id: string) => id } }, SnowflakeUtils: { fromTimestamp: () => "nonce" },
             RestAPI: { post: async () => { posts++; await new Promise<void>(resolve => { finish = resolve; }); return { body: { id: "sent" } }; } } },
         ".": { settings: { store: { showNotifications: false } } }
@@ -5546,7 +5546,7 @@ test("scheduled queue ignores stale reads after reload, edits, or stop", async (
     const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
         "@api/DataStore": { get: () => new Promise(resolve => reads.push(resolve)), set: async () => {} },
         "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
-        "@webpack/common": { FluxDispatcher: { dispatch() {} } }, ".": { settings: { store: {} } }
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, FluxDispatcher: { dispatch() {} } }, ".": { settings: { store: {} } }
     });
     const older = module.loadScheduledMessages();
     const newer = module.loadScheduledMessages();
@@ -5574,7 +5574,7 @@ test("scheduled interval changes only replace an active timer", async () => {
     const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
         "@api/DataStore": { get: async () => [{ id: "future", scheduledTime: Date.now() + 100000 }] },
         "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
-        "@webpack/common": {}, ".": { settings: { store: { get checkIntervalSeconds() { return delay; } } } }
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) },}, ".": { settings: { store: { get checkIntervalSeconds() { return delay; } } } }
     }, { setTimeout: (_callback: unknown, ms: number) => { timers.push(ms); return timers.length; },
         clearTimeout: (id: number) => cleared.push(id) });
     await module.loadScheduledMessages();
@@ -5635,7 +5635,7 @@ test("scheduled attempts remain saved on failure and do not automatically replay
                 saved = structuredClone(value);
             } },
             "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
-            "@webpack/common": { ChannelStore: { getChannel: () => outcome === "channel" ? null : {} },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, ChannelStore: { getChannel: () => outcome === "channel" ? null : {} },
                 FluxDispatcher: { dispatch() {} }, Constants: { Endpoints: { MESSAGES: (id: string) => id } },
                 SnowflakeUtils: { fromTimestamp: () => "nonce" }, RestAPI: { post: async () => {
                     posts++;
@@ -5665,7 +5665,8 @@ test("scheduled attempts remain saved on failure and do not automatically replay
 });
 
 test("scheduled messages require every attachment upload before posting", async () => {
-    for (const failedIndex of [-2, -1, 0, 1]) {
+    for (const failedIndex of [-3, -2, -1, 0, 1]) {
+        let userId = "account";
         const uploads: Uploader[] = [];
         const posts: { attachments: { id: string; filename: string; }[]; }[] = [];
         let errors = 0;
@@ -5684,7 +5685,7 @@ test("scheduled messages require every attachment upload before posting", async 
         const send = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
             "@api/DataStore": {}, "@utils/Logger": { Logger: class {} },
             "@vencord/discord-types/enums": { CloudUploadPlatform: {} },
-            "@webpack/common": {
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) },
                 CloudUploader: Uploader, ChannelStore: { getChannel: () => ({ isDM: () => false, isGroupDM: () => false, isMultiUserDM: () => false }) },
                 GuildStore: { getGuild: () => null }, FluxDispatcher: { dispatch() {} },
                 Constants: { Endpoints: { MESSAGES: (id: string) => id } }, SnowflakeUtils: { fromTimestamp: () => "nonce" },
@@ -5700,6 +5701,7 @@ test("scheduled messages require every attachment upload before posting", async 
         ] });
         assert.equal(uploads.length, 2);
         if (failedIndex === -2) send.stop();
+        if (failedIndex === -3) userId = "other";
         assert.equal(posts.length, 0);
         uploads[1].callbacks.get(failedIndex === 1 ? "error" : "complete")?.();
         await Promise.resolve();
@@ -5717,7 +5719,7 @@ test("scheduled reactions target the message returned by the send request", asyn
     const send = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
         "@api/DataStore": {}, "@utils/Logger": { Logger: class {} },
         "@vencord/discord-types/enums": {},
-        "@webpack/common": { ChannelStore: { getChannel: () => ({}) }, FluxDispatcher: { dispatch() {} },
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, ChannelStore: { getChannel: () => ({}) }, FluxDispatcher: { dispatch() {} },
             Constants: { Endpoints: { MESSAGES: (id: string) => id } }, SnowflakeUtils: { fromTimestamp: () => "nonce" },
             MessageStore: { getMessages: () => assert.fail("Must not guess from message history") },
             RestAPI: { post: async () => ({ body: { id: "sent-id" } }), put: async ({ url }: { url: string; }) => reactions.push(url) } },

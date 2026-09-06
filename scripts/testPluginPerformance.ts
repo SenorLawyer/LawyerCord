@@ -21,6 +21,39 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("theme validation belongs to the current URL and cancels obsolete requests", async () => {
+    let state: unknown = null;
+    let effect: () => (() => void) | undefined;
+    const pending: Array<{ signal: AbortSignal; resolve: (response: object) => void; }> = [];
+    const { OnlineThemesSection } = loadSource("src/components/settings/tabs/themes/OnlineThemes.tsx", {
+        "@components/Button": { Button: "button" }, "@components/FormSwitch": {}, "@components/Heading": {},
+        "@components/Link": {}, "@components/Notice": { Notice: {} }, "@components/Paragraph": {},
+        "@utils/css": { classNameFactory: () => () => "" }, "@utils/margins": { Margins: {} },
+        "@utils/misc": { parseUrl: (value: string) => new URL(value) },
+        "@webpack/common": {
+            React: { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props, children }) },
+            useState: () => [state, (value: unknown) => { state = value; }],
+            useEffect: (callback: typeof effect) => { effect = callback; },
+        },
+    }, { AbortController, fetch: (_url: string, options: { signal: AbortSignal; }) => new Promise(resolve => pending.push({ signal: options.signal, resolve })) });
+    const render = (link: string) => OnlineThemesSection({ currentThemeLink: link, enableOnlineThemes: true });
+    const addButton = (tree: { children: Array<{ children?: Array<{ type: string; props: { disabled: boolean; }; }>; }>; }) => tree.children.flatMap(child => child?.children ?? []).find(child => child.type === "button");
+    const valid = { ok: true, headers: { get: () => "text/css" }, body: { cancel: async () => {} } };
+    render("https://example.com/first.css");
+    const cleanup = effect();
+    cleanup?.();
+    assert.equal(pending[0].signal.aborted, true);
+    assert.equal(addButton(render("https://example.com/second.css"))?.props.disabled, true);
+    effect();
+    pending[0].resolve(valid);
+    await setImmediate();
+    assert.equal(addButton(render("https://example.com/second.css"))?.props.disabled, true);
+    pending[1].resolve(valid);
+    await setImmediate();
+    assert.equal(addButton(render("https://example.com/second.css"))?.props.disabled, false);
+    assert.equal(addButton(render("https://example.com/third.css"))?.props.disabled, true);
+});
+
 test("number settings accept decimals without changing the displayed value", () => {
     const states: unknown[] = [];
     const saved: unknown[] = [];

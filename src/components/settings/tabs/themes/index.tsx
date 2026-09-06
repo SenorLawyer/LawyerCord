@@ -82,7 +82,6 @@ function ThemesTab() {
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [currentThemeLink, setCurrentThemeLink] = useState("");
-    const [themeLinkValid, setThemeLinkValid] = useState(false);
     const [userThemes, setUserThemes] = useState<UserThemeHeader[] | null>(null);
     const [onlineThemes, setOnlineThemes] = useState<(UserThemeHeader & { link: string; })[] | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
@@ -136,7 +135,6 @@ function ThemesTab() {
     }
 
     function addThemeLink(link: string) {
-        if (!themeLinkValid) return;
         if (settings.themeLinks.includes(link)) return;
 
         settings.themeLinks = [...settings.themeLinks, link];
@@ -346,8 +344,6 @@ function ThemesTab() {
                 }}
                 currentThemeLink={currentThemeLink}
                 setCurrentThemeLink={setCurrentThemeLink}
-                themeLinkValid={themeLinkValid}
-                setThemeLinkValid={setThemeLinkValid}
                 addThemeLink={addThemeLink}
             />
 

@@ -67,39 +67,39 @@ export async function authorizeUser(triggerModal: boolean = true) {
 }
 
 export async function deauthorizeUser() {
-    const uniqueToken = await getThemeLibraryToken();
-
-    if (!uniqueToken) return Toasts.show({
-        message: "No uniqueToken present, try authorizing first!",
-        id: Toasts.genId(),
-        type: Toasts.Type.FAILURE,
-        options: {
-            duration: 2e3,
-            position: Toasts.Position.BOTTOM
-        }
-    });
-
-    const currentUser = UserStore.getCurrentUser();
-    if (!currentUser) return Toasts.show({
-        message: "Unable to deauthorize while logged out.",
-        id: Toasts.genId(),
-        type: Toasts.Type.FAILURE,
-        options: {
-            duration: 2e3,
-            position: Toasts.Position.BOTTOM
-        }
-    });
-
-    const res = await themeRequest("/user/revoke", {
-        method: "DELETE",
-        headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${uniqueToken}`
-        },
-        body: JSON.stringify({ userId: currentUser.id })
-    });
-
     try {
+        const uniqueToken = await getThemeLibraryToken();
+
+        if (!uniqueToken) return Toasts.show({
+            message: "No uniqueToken present, try authorizing first!",
+            id: Toasts.genId(),
+            type: Toasts.Type.FAILURE,
+            options: {
+                duration: 2e3,
+                position: Toasts.Position.BOTTOM
+            }
+        });
+
+        const currentUser = UserStore.getCurrentUser();
+        if (!currentUser) return Toasts.show({
+            message: "Unable to deauthorize while logged out.",
+            id: Toasts.genId(),
+            type: Toasts.Type.FAILURE,
+            options: {
+                duration: 2e3,
+                position: Toasts.Position.BOTTOM
+            }
+        });
+
+        const res = await themeRequest("/user/revoke", {
+            method: "DELETE",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${uniqueToken}`
+            },
+            body: JSON.stringify({ userId: currentUser.id })
+        });
+
         let cleared = false;
         // try to delete anyway
         await DataStore.update<string | undefined>(TOKEN_KEY, token => {
@@ -112,7 +112,7 @@ export async function deauthorizeUser() {
             body: "Successfully deauthorized from ThemeLibrary!"
         });
     } catch (e) {
-        logger.error("Failed to delete token", e);
+        logger.error("Failed to deauthorize", e);
         showNotification({
             title: "ThemeLibrary",
             body: "Failed to deauthorize, check console"

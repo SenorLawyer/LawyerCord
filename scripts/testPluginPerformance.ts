@@ -7595,3 +7595,22 @@ test("theme OAuth callbacks only fetch the declared authorization endpoint", asy
         assert.equal(writes, requests);
     }
 });
+
+test("theme revocation reports storage and network failures without clearing authorization", async () => {
+    for (const failure of ["storage", "network"]) {
+        let notices = 0;
+        let errors = 0;
+        const api = loadSource("src/equicordplugins/themeLibrary/utils/auth.tsx", {
+            "@utils/misc": {},
+            "@api/DataStore": { get: async () => { if (failure === "storage") throw new Error("Read failed"); return "fixture-token"; },
+                update: () => assert.fail("Do not clear the token when no revoke response was received") },
+            "@api/Notifications": { showNotification: (notice: { body: string; }) => { notices++; assert.ok(notice.body.startsWith("Failed")); } },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) } },
+            "@equicordplugins/themeLibrary/components/ThemeTab": { logger: { error: () => { errors++; } },
+                themeRequest: async () => { throw new Error("Network failed"); } }
+        });
+        await api.deauthorizeUser();
+        assert.equal(notices, 1);
+        assert.equal(errors, 1);
+    }
+});

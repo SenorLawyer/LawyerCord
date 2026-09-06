@@ -32,6 +32,8 @@ The accumulated changes cover storage consistency, asynchronous lifecycle handli
 - Preserving queue entries and previews after failed deletion, with failure feedback in the UI.
 - Removing unused rescheduling and channel-filter helpers.
 
+ThemeLibrary changes remove duplicate filtering state, cancel closed-tab requests, and lock like actions before authorization. Native downloads validate IDs and filenames, bound response size and duration, reject redirects, and replace installed files only after a temporary write succeeds. Live provider testing corrected an inaccurate string-only ID declaration.
+
 The proposed version is `3.0.0.0` because older scheduled data now requires explicit recovery. See [VERSIONING.md](VERSIONING.md) for the compatibility and downgrade implications. No release tag has been created for this audit.
 
 ## Verification record
@@ -40,14 +42,15 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `68e9debcf` | 313 tests and timezone correctness checks passed. |
+| Broader performance/correctness suite | `57b19a728` | 322 tests and timezone correctness checks passed. |
 | Repository-wide ESLint | `d93c2e1ac` | Passed under the repository's configured file scopes and exclusions. |
-| Latest plugin regressions and TypeScript | `68e9debcf` | 263 plugin tests and full TypeScript passed; focused source lint passed. |
-| Latest standalone build | `68e9debcf` | Passed after the queue and preview changes. |
-| Standalone and web builds | `f77ae311a` | Passed. Packed Chromium/Firefox manifest versions and generated client versions match `3.0.0.0`. |
-| Release artifact audit | `f77ae311a` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
+| Latest plugin regressions and TypeScript | `57b19a728` | 272 plugin tests and full TypeScript passed; focused source lint passed. |
+| Standalone and web builds | `57b19a728` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
+| Release artifact audit | `57b19a728` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
 | Real IndexedDB queue behavior | `ce04cc40a` | Isolated Chrome verified aborted additions, ordered concurrent additions, aborted clearing, and subsequent successful clearing using actual queue and DataStore code. |
 | Video preview decoding | `fd216ca34` | Actual preview code in isolated Chrome produced a PNG from an FFmpeg-generated WebM and returned null for invalid video. |
+| Theme replacement on the filesystem | `07903f31c` | Actual native code preserves installed files after injected partial writes and rename failures, and cleans temporary files. This is not crash-durability testing. |
+| Theme provider download | `9b03d446d` | The actual native handler downloaded catalog entry 91 with HTTP 200 and no redirect into an isolated directory. All 136 catalog entries were separately checked against ID, filename, and catalog-content size rules. |
 | Other isolated browser checks | Earlier audit commits | Specific sticker-storage transactions, codec conversion, and CSS behavior were exercised. These are not general live-client acceptance. |
 
 Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. Current-head CI success has not been established.

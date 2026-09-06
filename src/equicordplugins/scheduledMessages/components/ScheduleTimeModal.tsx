@@ -9,7 +9,7 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { Heading } from "@components/Heading";
 import { classNameFactory } from "@utils/css";
 import { RenderModalProps } from "@vencord/discord-types";
-import { ChannelStore, closeModal, DraftActions, DraftStore, DraftType, Modal, openModal, showToast, TextInput, Toasts, UploadAttachmentStore, UploadManager, UserStore,useState } from "@webpack/common";
+import { ChannelStore, closeModal, DraftActions, DraftStore, DraftType, Modal, openModal, showToast, TextInput, Toasts, UploadAttachmentStore, UploadManager, useRef,UserStore, useState } from "@webpack/common";
 
 import { ScheduledAttachment } from "../types";
 import { addScheduledMessage, getChannelDisplayInfo } from "../utils";
@@ -30,6 +30,7 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
     const [delayMinutes, setDelayMinutes] = useState("5");
     const [scheduledDateTime, setScheduledDateTime] = useState("");
     const [error, setError] = useState("");
+    const submitting = useRef(false);
 
     const { name, avatar } = getChannelDisplayInfo(channelId);
     const channel = ChannelStore.getChannel(channelId);
@@ -38,6 +39,7 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
     const isDM = channel.isPrivate();
 
     const handleSchedule = async () => {
+        if (submitting.current) return;
         if (UserStore.getCurrentUser()?.id !== userId) {
             setError("Account changed. Reopen the scheduling dialog.");
             return;
@@ -60,8 +62,10 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
             scheduledTime = dateTime;
         }
 
+        submitting.current = true;
         const result = await addScheduledMessage(channelId, content, scheduledTime, attachments)
             .catch(() => ({ success: false, error: "Could not save the scheduled message. Try again." }));
+        submitting.current = false;
 
         if (UserStore.getCurrentUser()?.id !== userId) return;
         if (result.success) {

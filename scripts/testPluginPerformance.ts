@@ -5658,7 +5658,7 @@ test("scheduling dialogs ignore account changes before and during saves", async 
         const component = loadSource("src/equicordplugins/scheduledMessages/components/ScheduleTimeModal.tsx", {
             "@components/Button": {}, "@components/Heading": {}, "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
             "@utils/css": { classNameFactory: () => () => "" }, "@webpack": { findByPropsLazy: () => ({ dispatchToLastSubscribed: () => assert.fail("No stale clear") }) },
-            "@webpack/common": { Modal, DraftType: { ChannelMessage: 0 },
+            "@webpack/common": { Modal, useRef: (value: unknown) => ({ current: value }), DraftType: { ChannelMessage: 0 },
                 DraftStore: { getDraft: () => scenario === "edited" ? "New text" : "Text" },
                 DraftActions: { clearDraft: (channelId: string) => cleared.push(channelId) }, Toasts: { Type: {} }, UserStore: { getCurrentUser: () => ({ id: userId }) },
                 ChannelStore: { getChannel: () => ({ isPrivate: () => true }) }, useState: (value: unknown) => [value, (next: unknown) => errors.push(next)],
@@ -5673,12 +5673,20 @@ test("scheduling dialogs ignore account changes before and during saves", async 
         component({ userId: "first", uploadIds: ["original"], channelId: "channel", content: "Text", close: () => { assert.equal(stale || failed, false); } });
         if (before) userId = "second";
         const pending = schedule();
+        await schedule();
+        assert.equal(writes, before ? 0 : 1);
         if (!before) { if (scenario === "during" || scenario === "failed-after-account") userId = "second"; finish(); }
         await pending;
         assert.equal(writes, before ? 0 : 1);
         assert.deepEqual(cleared, !stale && !failed && scenario !== "edited" ? ["channel"] : []);
         if (failed) assert.deepEqual(errors, stale ? [] : ["Could not save the scheduled message. Try again."]);
         assert.deepEqual(clearedUploads, scenario === "unchanged" || scenario === "edited" ? ["channel"] : []);
+        if (scenario === "failed") {
+            const retry = schedule();
+            finish();
+            await retry;
+            assert.equal(writes, 2);
+        }
     }
 });
 

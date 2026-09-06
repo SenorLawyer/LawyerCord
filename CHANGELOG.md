@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Ignore repeated scheduling submissions while saving and allow retry after a failed save.
+
 - Report failed scheduled-message deletions without clearing the list or showing feedback after an account switch.
 
 - Show failed scheduling saves in the dialog while preserving its draft and attachments.

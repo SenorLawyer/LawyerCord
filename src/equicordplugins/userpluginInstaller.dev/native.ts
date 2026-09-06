@@ -44,26 +44,27 @@ export async function ensurePluginsDirectory(_: any) {
 }
 
 export async function rmPlugin(_, name: string): Promise<string> {
-    // eslint-disable-next-line
-    return new Promise(async (resolve, reject) => {
-        const ups = await getUserplugins();
-        const pl = ups.find(p => p.directory! === name);
-        if (!pl) return;
+    getPluginDirectory(name);
+    const plugins = await getUserplugins().catch(() => { throw new Error("Could not read installed plugins."); });
+    const plugin = plugins.find(plugin => plugin.directory === name);
+    if (!plugin) throw new Error("Plugin not found.");
 
-        const deleteReqDialog = await dialog.showMessageBox({
-            title: "Uninstall plugin",
-            message: `Uninstall ${pl.name}`,
-            type: "error",
-            detail: `The uninstall of the userplugin ${pl.name} has been requested. Would you like to do so?\n\nIf you did not initiate this, press No.`,
-            buttons: ["No", "Yes"]
-        });
-
-        if (deleteReqDialog.response !== 1) return reject("User rejected");
-        await rm(join(vencordPath, "../src/userplugins", name), { recursive: true });
-
-        await build();
-        resolve("Done");
+    const confirmation = await dialog.showMessageBox({
+        title: "Uninstall plugin",
+        message: `Uninstall ${plugin.name}`,
+        type: "error",
+        detail: `The uninstall of the userplugin ${plugin.name} has been requested. Would you like to do so?\n\nIf you did not initiate this, press No.`,
+        buttons: ["No", "Yes"]
     });
+
+    if (confirmation.response !== 1) throw new Error("Uninstall cancelled.");
+    try {
+        await rm(getPluginDirectory(name), { recursive: true });
+        await build();
+    } catch {
+        throw new Error("Could not uninstall the plugin.");
+    }
+    return "Done";
 }
 
 export async function isUpdateAvailableForPlugin(_, name: string): Promise<boolean> {

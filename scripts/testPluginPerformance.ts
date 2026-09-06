@@ -21,6 +21,43 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("installer uninstall settles missing, cancelled, failed and successful requests", async () => {
+    let confirmation = 0;
+    let removals = 0;
+    let failRemoval = false;
+    let builds = 0;
+    const root = path.resolve("fixture/src/userplugins");
+    const mocks: Record<string, object> = {
+        "child_process": {},
+        "electron": { dialog: { showMessageBox: async () => ({ response: confirmation }) } },
+        "fs": { realpathSync: (value: string) => path.resolve(value) },
+        "fs/promises": { rm: async (directory: string) => {
+            assert.equal(directory, path.join(root, "plugin"));
+            if (failRemoval) throw new Error("Removal failed");
+            removals++;
+        } },
+        path, "yaml-js": {},
+    };
+    for (const name of ["pluginValidate", "updateValidate"])
+        mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+    const native = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, {
+        __dirname: path.resolve("fixture/dist"), onBuild: async () => { builds++; },
+    }, "({ ...exports, configure: plugins => { getUserplugins = async () => plugins; build = onBuild; } })");
+    native.configure([]);
+    await assert.rejects(native.rmPlugin(null, "plugin"), { message: "Plugin not found." });
+    native.configure([{ name: "Example", directory: "plugin" }]);
+    await assert.rejects(native.rmPlugin(null, "plugin"), { message: "Uninstall cancelled." });
+    assert.equal(removals, 0);
+    confirmation = 1;
+    failRemoval = true;
+    await assert.rejects(native.rmPlugin(null, "plugin"), { message: "Could not uninstall the plugin." });
+    assert.equal(builds, 0);
+    failRemoval = false;
+    assert.equal(await native.rmPlugin(null, "plugin"), "Done");
+    assert.equal(removals, 1);
+    assert.equal(builds, 1);
+});
+
 test("installer update commands reject traversal and directories linked outside the plugin root", async t => {
     const prefix = path.join(tmpdir(), "lawyercord-installer-");
     const temporary = mkdtempSync(prefix);

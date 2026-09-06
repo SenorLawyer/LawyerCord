@@ -46,6 +46,29 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("primary stream audio reads stores initialized after module evaluation", () => {
+    const common: Record<string, unknown> = {};
+    const logic = loadSource("src/equicordplugins/primaryStreamAudio/logic.ts", {});
+    const { default: plugin } = loadSource("src/equicordplugins/primaryStreamAudio/index.ts", {
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+        "@webpack/common": common,
+        "./logic": logic
+    }, { document: { querySelectorAll: () => [] } });
+    const first = { id: "owner-a", _speakingFlags: 2 };
+    const second = { id: "owner-b", _speakingFlags: 2 };
+    plugin.getAudioElementVolume(first);
+    assert.equal(plugin.getAudioElementVolume(second), 1);
+    let selected = "owner-a";
+    common.SelectedChannelStore = { getVoiceChannelId: () => "channel" };
+    common.ChannelRTCStore = { getSelectedParticipant: () => ({ stream: { channelId: "channel", ownerId: selected } }) };
+    assert.equal(plugin.getAudioElementVolume(second), 0);
+    assert.equal(plugin.getAudioElementVolume(first), 1);
+    selected = "owner-b";
+    assert.equal(plugin.getAudioElementVolume(first), 0);
+    assert.equal(plugin.getAudioElementVolume(second), 1);
+});
+
 test("background audio position effects settle after clamping", () => {
     type Position = { left: number; top: number; } | null;
     let position: Position = null;

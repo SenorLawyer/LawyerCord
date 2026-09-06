@@ -46,6 +46,19 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("Desktop CSP preserves explicit hosts without allowing every origin", () => {
+    const csp = loadSource("src/main/csp/index.ts", {
+        "@main/settings": { NativeSettings: { store: { customCspRules: { "example.test": ["connect-src"] } } } },
+        "electron": {}
+    }, {}, "({ patchCsp })");
+    const headers = { "content-security-policy": ["default-src 'self'; connect-src 'self'"] };
+    csp.patchCsp(headers);
+    const policy = headers["content-security-policy"][0];
+    assert.equal(policy.split(/\s+/).includes("*"), false);
+    assert.ok(policy.includes("api.github.com"));
+    assert.ok(policy.includes("example.test"));
+});
+
 test("Dragify validates JSON fields before resolving a drop", () => {
     const drag = loadSource("src/equicordplugins/dragify/utils.ts", {});
     const stores = { ChannelStore: { getChannel: () => null }, GuildStore: { getGuild: () => null }, UserStore: { getUser: () => null } };

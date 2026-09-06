@@ -1841,7 +1841,7 @@ test("installer builds settle subprocess failures without exposing process detai
         "electron": {}, "fs": {}, "fs/promises": {}, path, "yaml-js": {},
     };
     for (const name of ["pluginValidate", "updateValidate"])
-        mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+        mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
     const { build } = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist"), process: { env: {} } }, "({ build })");
     for (const error of [new Error("Missing shell at private path"), new Error("Build exited with private output")]) {
         const pending = build();
@@ -1871,7 +1871,7 @@ test("installer uninstall settles missing, cancelled, failed and successful requ
         path, "yaml-js": {},
     };
     for (const name of ["pluginValidate", "updateValidate"])
-        mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+        mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
     const native = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, {
         __dirname: path.resolve("fixture/dist"), onBuild: async () => { builds++; },
     }, "({ ...exports, configure: plugins => { getUserplugins = async () => plugins; build = onBuild; } })");
@@ -1908,7 +1908,7 @@ test("installer update commands reject traversal and directories linked outside 
         "electron": {}, "fs": { realpathSync }, "fs/promises": {}, path, "yaml-js": {},
     };
     for (const name of ["pluginValidate", "updateValidate"])
-        mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+        mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
     const native = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.join(temporary, "dist") }, "({ ...exports, getPluginDirectory })");
     assert.equal(native.getPluginDirectory("valid"), realpathSync(path.join(root, "valid")));
     for (const name of ["../outside", "..", ".", outside, "linked", "missing", "", null, 1]) {
@@ -1926,7 +1926,7 @@ test("installer update reviews render repository metadata as text", () => {
         "yaml-js": {},
     };
     for (const name of ["pluginValidate", "updateValidate"])
-        mocks[`./misc/${name}.txt`] = { __esModule: true, default: readFileSync(`src/equicordplugins/userpluginInstaller.dev/misc/${name}.txt`, "utf8") };
+        mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: readFileSync(`src/equicordplugins/userpluginInstaller.dev/misc/${name}.txt`, "utf8") };
     const { formatCommitMessages, generateUpdatePluginContent } = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: "/fixture/dist", Buffer }, "({ formatCommitMessages, generateUpdatePluginContent })");
     const commit = formatCommitMessages('<script>document.title="install"</script>////////1234567////////123456789////////<img src=x onerror=alert(1)> & text', "https://github.com/example/plugin");
     const url = generateUpdatePluginContent({ name: "Example", description: "Description", remote: "https://github.com/example/plugin", commit });
@@ -7630,7 +7630,7 @@ test("installer rejects unsafe clone names and malformed links before any side e
         fs: {}, "fs/promises": { rm: () => assert.fail("No cleanup") }, path, "yaml-js": {}
     };
     for (const name of ["pluginValidate", "updateValidate"])
-        mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+        mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
     const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") });
     for (const repo of [".", "..", "", "x".repeat(256)]) {
         await assert.rejects(api.initPluginInstall(null, `https://github.com/owner/${repo}`, "github.com", "owner", repo), /Invalid link/);
@@ -7658,7 +7658,7 @@ test("plugin cloning settles launch failures and unsuccessful exits without dele
             } }, electron: {}, fs: {}, "fs/promises": {}, path, "yaml-js": {}
         };
         for (const name of ["pluginValidate", "updateValidate"])
-            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+            mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
         const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") }, "({ cloneRepo })");
         const pending = api.cloneRepo("https://github.com/owner/repo", ".install-fixture");
         if (stage === "success") await pending;
@@ -7682,7 +7682,7 @@ test("plugin metadata stops at missing entries and rejects malformed declaration
                     } }
             };
             for (const name of ["pluginValidate", "updateValidate"])
-                mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+                mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
             const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") }, "({ getPluginMeta })");
             const pending = api.getPluginMeta("fixture", { directory: "fixture" });
             if (!entry) {
@@ -7725,7 +7725,7 @@ test("plugin updates reject preparation failures before opening a review window"
             electron: { BrowserWindow: ReviewWindow }, fs: {}, "fs/promises": {}, path, "yaml-js": {}
         };
         for (const name of ["pluginValidate", "updateValidate"])
-            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "%PLUGINNAME%" };
+            mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "%PLUGINNAME%" };
         const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist"), Buffer },
             "({ ...exports, setup(metadata) { getPluginDirectory = () => 'fixture'; getPluginMeta = metadata; } })");
         api.setup(async () => {
@@ -7759,7 +7759,7 @@ test("plugin updates build only after Git succeeds and report build failures", a
             electron: { BrowserWindow: ReviewWindow }, fs: {}, "fs/promises": {}, path, "yaml-js": {}
         };
         for (const name of ["pluginValidate", "updateValidate"])
-            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+            mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
         const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks,
             { __dirname: path.resolve("fixture/dist"), Buffer, process: { env: {} } },
             "({ ...exports, setup() { let reads = 0; getPluginDirectory = () => 'fixture'; getPluginMeta = async () => ({ name: 'Fixture', description: '', remote: '', usesNative: ++reads > 1 }); } })");
@@ -7791,7 +7791,7 @@ test("closed or failed plugin reviews reject and prevent later install actions",
             fs: {}, "fs/promises": { mkdtemp: async (prefix: string) => prefix + "fixture", rename: async () => {}, rm: async (directory: string) => { assert.equal(directory, "fixture"); removals++; } }, path, "yaml-js": {}
         };
         for (const name of ["pluginValidate", "updateValidate"])
-            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+            mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
         const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist"), Buffer },
             "({ ...exports, setup() { cloneRepo = async () => {}; getPluginDirectory = () => 'fixture'; getPluginMeta = async () => ({ name: 'Fixture', description: '', remote: '' }); } })");
         api.setup();
@@ -7823,7 +7823,7 @@ test("cancelled plugin installs validate cleanup paths and settle removal failur
             } }, path, "yaml-js": {}
         };
         for (const name of ["pluginValidate", "updateValidate"])
-            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+            mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
         const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist"), Buffer },
             "({ ...exports, setup(validate) { getPluginDirectory = validate; cloneRepo = async () => {}; getPluginMeta = async () => ({ name: 'Fixture', description: '' }); } })");
         api.setup((name: string) => {
@@ -7852,7 +7852,7 @@ test("plugin clones use the exact metadata directory including Git suffixes", as
             } }, electron: {}, fs: {}, "fs/promises": {}, path, "yaml-js": {}
         };
         for (const name of ["pluginValidate", "updateValidate"])
-            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+            mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
         const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") }, "({ cloneRepo })");
         await api.cloneRepo(link, repo);
     }
@@ -7881,7 +7881,7 @@ test("update link completion cannot become an install action or read a closed wi
             } } }, fs: {}, "fs/promises": {}, path, "yaml-js": {}
         };
         for (const name of ["pluginValidate", "updateValidate"])
-            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+            mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
         let window: ReviewWindow | undefined;
         mocks.electron = { ...mocks.electron, BrowserWindow: class extends ReviewWindow { constructor() { super(); window = this; } } };
         const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist"), Buffer, URL },
@@ -7908,7 +7908,7 @@ test("plugin metadata does not trust literals overwritten by dynamic properties"
             } }
         };
         for (const name of ["pluginValidate", "updateValidate"])
-            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+            mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
         const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") }, "({ getPluginMeta })");
         await assert.rejects(api.getPluginMeta("fixture"), /Plugin metadata is invalid/);
     }
@@ -7930,7 +7930,7 @@ test("plugin update checks use Git reference resolution and stop after fetch fai
             } }, electron: {}, fs: {}, "fs/promises": {}, path, "yaml-js": {}
         };
         for (const name of ["pluginValidate", "updateValidate"])
-            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+            mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
         const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist"), process: { env: { PATH: "fixture-path", GCM_INTERACTIVE: "true" } } },
             "({ ...exports, setup() { getPluginDirectory = () => 'fixture'; } })");
         api.setup();
@@ -7947,7 +7947,7 @@ test("plugin directory setup reports filesystem failure without leaking its path
             "fs/promises": { mkdir: async () => { calls++; throw new Error("Private directory path"); } }
         };
         for (const name of ["pluginValidate", "updateValidate"])
-            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+            mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
         const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist"), IS_DEV: enabled });
         if (enabled) await assert.rejects(api.ensurePluginsDirectory(), /Could not create the userplugins directory/);
         else await api.ensurePluginsDirectory();
@@ -7965,7 +7965,7 @@ test("installer setup failures reject the caller without exposing native errors"
             fs: {}, "fs/promises": { mkdtemp: async (prefix: string) => prefix + "fixture", rename: async () => {}, rm: async (directory: string) => { assert.equal(directory, "fixture"); removals++; } }, path, "yaml-js": {}
         };
         for (const name of ["pluginValidate", "updateValidate"])
-            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+            mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
         const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") },
             "({ ...exports, setup(clone, metadata) { cloneRepo = clone; getPluginMeta = metadata; getPluginDirectory = () => 'fixture'; } })");
         api.setup(stage === "clone" ? fail : async () => {}, fail);
@@ -7999,7 +7999,7 @@ test("installer mutation guard remains held through review closure and build set
             "fs": { existsSync: (file: string) => previousNative && (path.basename(file) === "repo" || file.endsWith("native.ts")) }, "fs/promises": { mkdtemp: async (prefix: string) => prefix + "fixture", rename: async () => {}, rm: async () => {},}, path, "yaml-js": {},
         };
         for (const name of ["pluginValidate", "updateValidate"])
-            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+            mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
         const native = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, {
             __dirname: path.resolve("fixture/dist"), Buffer,
             onClone: async () => { clones++; },
@@ -8038,7 +8038,7 @@ test("installer background fetches wait for mutations and prevent deletion until
         } }, electron: {}, fs: {}, "fs/promises": {}, path, "yaml-js": {},
     };
     for (const name of ["pluginValidate", "updateValidate"])
-        mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+        mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
     const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") },
         "({ ...exports, hold: runPluginMutation, setup() { getPluginDirectory = () => 'fixture'; } })");
     api.setup();
@@ -8069,7 +8069,7 @@ test("installer scans only ignore missing children, not root or permission failu
             } }, "fs/promises": {}, path, "yaml-js": {},
         };
         for (const name of ["pluginValidate", "updateValidate"])
-            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+            mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
         const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") });
         const scan = api.isUpdateAvailableForPlugin(null, "example");
         if (stage === "child" && code === "ENOENT") assert.equal(await scan, false);
@@ -8097,7 +8097,7 @@ test("installer metadata normalizes clone suffixes before building repository li
             },
         };
         for (const name of ["pluginValidate", "updateValidate"])
-            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+            mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
         const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") }, "({ getPluginMeta, formatCommitMessages })");
         const meta = await api.getPluginMeta("fixture");
         assert.equal(meta.remote, "https://github.com/owner/repo");
@@ -8119,7 +8119,7 @@ test("installer holds ownership until failed-install cleanup settles", async () 
             }) }, path, "yaml-js": {},
         };
         for (const name of ["pluginValidate", "updateValidate"])
-            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+            mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
         const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") },
             "({ ...exports, setup() { cloneRepo = async () => {}; getPluginDirectory = () => 'fixture'; getPluginMeta = async () => { throw new Error('Invalid metadata'); }; } })");
         api.setup();
@@ -8140,7 +8140,7 @@ test("installer inventory excludes hidden folders and files before reading metad
         "fs/promises": { readdir: async () => ["visible", ".staged", "_disabled", "file", "invalid"].map(name => ({ name, parentPath: "fixture", isDirectory: () => name !== "file" })) },
     };
     for (const name of ["pluginValidate", "updateValidate"])
-        mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+        mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
     const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, {
         __dirname: path.resolve("fixture/dist"),
         metadata: async (directory: string, extra: { directory: string; }) => {

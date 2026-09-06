@@ -6,16 +6,13 @@
 
 import { exec, execFile, spawn } from "child_process";
 import { BrowserWindow, dialog, shell } from "electron";
+import pluginValidateContent from "file://misc/pluginValidate.txt?trim=false";
+import updateValidateContent from "file://misc/updateValidate.txt?trim=false";
 import { existsSync, readdirSync, readFileSync, realpathSync } from "fs";
 import { mkdir, mkdtemp, readdir, rename, rm } from "fs/promises";
 import { basename, dirname, join } from "path";
 import { createSourceFile, isCallExpression, isExportAssignment, isIdentifier, isObjectLiteralExpression, isPropertyAssignment, isStringLiteralLike, ScriptTarget } from "typescript";
 import yaml from "yaml-js";
-
-// @ts-ignore fuck off
-import pluginValidateContent from "./misc/pluginValidate.txt"; // i would use HTML but esbuild is being whiny
-// @ts-ignore fuck off
-import updateValidateContent from "./misc/updateValidate.txt"; // see above
 
 // if edited, also edit in misc/constants.ts!!!
 const CLONE_LINK_REGEX = /https:\/\/(?:((?:git(?:hub|lab)\.com|git\.(?:[a-zA-Z0-9]|\.)+|codeberg\.org))\/(?!user-attachments)((?:[a-zA-Z0-9]|-)+)\/((?:[a-zA-Z0-9]|-|\.)+)(?:\.git)?|(plugins\.(nin0)\.dev)\/((?:[a-zA-Z0-9]|-|\.)+))(?:\/)?/;

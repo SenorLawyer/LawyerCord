@@ -130,6 +130,7 @@ export default definePlugin({
         const isCurrent = () => generation === lifecycleGeneration && UserStore.getCurrentUser()?.id === userId;
         setScheduleModeEnabled(false);
 
+        const uploadIds = options.uploads?.map(upload => upload.id) ?? [];
         let attachments: ScheduledAttachment[] | undefined;
 
         if (options.uploads?.length) {
@@ -162,7 +163,7 @@ export default definePlugin({
             }
         }
 
-        openScheduleTimeModal(channelId, messageObj.content, attachments);
+        openScheduleTimeModal(channelId, messageObj.content, attachments, uploadIds);
         return { cancel: true };
     },
 

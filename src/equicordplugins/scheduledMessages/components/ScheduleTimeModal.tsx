@@ -9,7 +9,7 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { Heading } from "@components/Heading";
 import { classNameFactory } from "@utils/css";
 import { RenderModalProps } from "@vencord/discord-types";
-import { ChannelStore, closeModal, DraftActions, DraftStore, DraftType, Modal, openModal, showToast, TextInput, Toasts, UploadManager, UserStore,useState } from "@webpack/common";
+import { ChannelStore, closeModal, DraftActions, DraftStore, DraftType, Modal, openModal, showToast, TextInput, Toasts, UploadAttachmentStore, UploadManager, UserStore,useState } from "@webpack/common";
 
 import { ScheduledAttachment } from "../types";
 import { addScheduledMessage, getChannelDisplayInfo } from "../utils";
@@ -17,7 +17,8 @@ import { ErrorIcon } from "./Icons";
 
 const cl = classNameFactory("vc-scheduled-msg-");
 
-function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, close, userId }: {
+function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, close, userId, uploadIds }: {
+    uploadIds: string[];
     userId: string;
     channelId: string;
     content: string;
@@ -66,7 +67,10 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
             if (DraftStore.getDraft(channelId, DraftType.ChannelMessage) === content) {
                 DraftActions.clearDraft(channelId, DraftType.ChannelMessage);
             }
-            UploadManager.clearAll(channelId, DraftType.ChannelMessage);
+            const uploads = UploadAttachmentStore.getUploads(channelId, DraftType.ChannelMessage);
+            if (uploads.length === uploadIds.length && uploads.every(upload => uploadIds.includes(upload.id))) {
+                UploadManager.clearAll(channelId, DraftType.ChannelMessage);
+            }
             showToast("Message scheduled!", Toasts.Type.SUCCESS);
             close();
         } else {
@@ -151,11 +155,12 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
 
 export const ScheduleTimeModal = ErrorBoundary.wrap(ScheduleTimeModalInner, { noop: true });
 
-export function openScheduleTimeModal(channelId: string, content: string, attachments?: ScheduledAttachment[]): void {
+export function openScheduleTimeModal(channelId: string, content: string, attachments?: ScheduledAttachment[], uploadIds: string[] = []): void {
     const userId = UserStore.getCurrentUser()?.id;
     if (!userId) return;
     const key = openModal(props => (
         <ScheduleTimeModal
+            uploadIds={uploadIds}
             userId={userId}
             channelId={channelId}
             content={content}

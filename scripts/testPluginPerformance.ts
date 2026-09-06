@@ -5636,10 +5636,11 @@ test("scheduled interval changes only replace an active timer", async () => {
 });
 
 test("scheduling dialogs ignore account changes before and during saves", async () => {
-    for (const scenario of ["before", "during", "unchanged", "edited"]) {
+    for (const scenario of ["before", "during", "unchanged", "edited", "new-upload", "replaced-upload", "removed-upload"]) {
         const before = scenario === "before";
         const stale = before || scenario === "during";
         const cleared: string[] = [];
+        const clearedUploads: string[] = [];
         let userId = "first";
         let writes = 0;
         let finish: () => void = () => {};
@@ -5656,18 +5657,20 @@ test("scheduling dialogs ignore account changes before and during saves", async 
                 DraftStore: { getDraft: () => scenario === "edited" ? "New text" : "Text" },
                 DraftActions: { clearDraft: (channelId: string) => cleared.push(channelId) }, Toasts: { Type: {} }, UserStore: { getCurrentUser: () => ({ id: userId }) },
                 ChannelStore: { getChannel: () => ({ isPrivate: () => true }) }, useState: (value: unknown) => [value, () => {}],
-                showToast: () => { assert.equal(stale, false); }, UploadManager: { clearAll: () => { assert.equal(stale, false); } } },
+                showToast: () => { assert.equal(stale, false); }, UploadAttachmentStore: { getUploads: () => (scenario === "new-upload" ? ["original", "new"] : scenario === "replaced-upload" ? ["new"] : scenario === "removed-upload" ? [] : ["original"]).map(id => ({ id })) },
+                UploadManager: { clearAll: (channelId: string) => { assert.equal(stale, false); clearedUploads.push(channelId); } } },
             "../utils": { getChannelDisplayInfo: () => ({ name: "DM" }), addScheduledMessage: async () => {
                 writes++; await new Promise<void>(resolve => { finish = resolve; }); return { success: true };
             } }, "./Icons": {}
         }, { React }, "ScheduleTimeModalInner");
-        component({ userId: "first", channelId: "channel", content: "Text", close: () => { assert.equal(stale, false); } });
+        component({ userId: "first", uploadIds: ["original"], channelId: "channel", content: "Text", close: () => { assert.equal(stale, false); } });
         if (before) userId = "second";
         const pending = schedule();
         if (!before) { if (scenario === "during") userId = "second"; finish(); }
         await pending;
         assert.equal(writes, before ? 0 : 1);
-        assert.deepEqual(cleared, scenario === "unchanged" ? ["channel"] : []);
+        assert.deepEqual(cleared, !stale && scenario !== "edited" ? ["channel"] : []);
+        assert.deepEqual(clearedUploads, scenario === "unchanged" || scenario === "edited" ? ["channel"] : []);
     }
 });
 

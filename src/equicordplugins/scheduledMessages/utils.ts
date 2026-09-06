@@ -16,6 +16,7 @@ const logger = new Logger("ScheduledMessages");
 const STORAGE_KEY = "ScheduledMessages_queue";
 
 let scheduledMessages: ScheduledMessage[] = [];
+let queueRevision = 0;
 let checkTimeout: ReturnType<typeof setTimeout> | null = null;
 let schedulerRunning = false;
 let isProcessingMessages = false;
@@ -32,12 +33,15 @@ const RECREATE_DEBOUNCE_MS = 300;
 let phantomGeneration = 0;
 
 export async function loadScheduledMessages(): Promise<void> {
+    const revision = ++queueRevision;
     const saved = await DataStore.get<ScheduledMessage[]>(STORAGE_KEY);
+    if (revision !== queueRevision) return;
     scheduledMessages = Array.isArray(saved) ? saved : [];
     scheduledMessages.sort((a, b) => a.scheduledTime - b.scheduledTime);
 }
 
 async function saveScheduledMessages(): Promise<void> {
+    queueRevision++;
     await DataStore.set(STORAGE_KEY, scheduledMessages);
 }
 
@@ -514,6 +518,7 @@ export function startScheduler(): void {
 }
 
 export function stopScheduler(): void {
+    queueRevision++;
     schedulerRunning = false;
     if (checkTimeout) {
         clearTimeout(checkTimeout);

@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Ignore stale scheduled-message storage reads after newer loads, queue edits, or shutdown.
+
 - Reschedule interval changes without starting the scheduled-message plugin while it is disabled.
 
 - Prevent a pending scheduled-message startup from restarting the scheduler after the plugin is disabled.

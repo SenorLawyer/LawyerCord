@@ -5421,6 +5421,32 @@ test("screen recorder releases capture and discards work after disable", async (
     assert.equal(uploads, 1);
 });
 
+test("scheduled queue ignores stale reads after reload, edits, or stop", async () => {
+    const reads: ((value: { id: string; scheduledTime: number; }[]) => void)[] = [];
+    const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+        "@api/DataStore": { get: () => new Promise(resolve => reads.push(resolve)), set: async () => {} },
+        "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+        "@webpack/common": { FluxDispatcher: { dispatch() {} } }, ".": { settings: { store: {} } }
+    });
+    const older = module.loadScheduledMessages();
+    const newer = module.loadScheduledMessages();
+    reads[1]([{ id: "new", scheduledTime: 2 }]);
+    await newer;
+    reads[0]([{ id: "old", scheduledTime: 1 }]);
+    await older;
+    assert.equal(module.getScheduledMessages()[0].id, "new");
+    const beforeClear = module.loadScheduledMessages();
+    await module.clearAllScheduledMessages();
+    reads[2]([{ id: "deleted", scheduledTime: 0 }]);
+    await beforeClear;
+    assert.equal(module.getScheduledMessages().length, 0);
+    const beforeStop = module.loadScheduledMessages();
+    module.stopScheduler();
+    reads[3]([{ id: "stopped", scheduledTime: 0 }]);
+    await beforeStop;
+    assert.equal(module.getScheduledMessages().length, 0);
+});
+
 test("scheduled interval changes only replace an active timer", async () => {
     let delay = 10;
     const timers: number[] = [];

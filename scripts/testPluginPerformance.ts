@@ -46,6 +46,21 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("music lyrics translation uses the selected target language", async () => {
+    const requests: URL[] = [];
+    const module = loadSource("src/equicordplugins/musicControls/spotify/lyrics/providers/translator/index.ts", {
+        "@equicordplugins/musicControls/settings": { settings: { store: { translateTo: "nl" } } },
+        "@equicordplugins/musicControls/spotify/lyrics/providers/types": { Provider: { Translated: "Translated", Romanized: "Romanized" } }
+    }, { URLSearchParams, fetch: async (url: string) => {
+        requests.push(new URL(url));
+        return { ok: true, json: async () => ({ sentences: [{ trans: "Hallo" }] }) };
+    } });
+    const lyrics = await module.lyricsAlternativeFetchers.Translated([{ time: 1, text: "Hello" }]);
+    assert.equal(requests[0].searchParams.get("tl"), "nl");
+    assert.equal(lyrics[0].text, "Hallo");
+    assert.equal(lyrics[0].time, 1);
+});
+
 test("static sticker conversion labels PNG output and releases its temporary URL", async () => {
     const files: File[] = [];
     let revoked = 0;

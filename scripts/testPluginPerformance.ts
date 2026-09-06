@@ -7934,7 +7934,7 @@ test("plugin update checks use Git reference resolution and stop after fetch fai
             child_process: { exec: (command: string, options: { cwd: string; }, callback: (error: Error | null, stdout: string) => void) => {
                 commands.push(command); assert.equal(options.cwd, "fixture");
                 callback(result === "fetch-error" || result === "refs-error" && commands.length === 2 ? new Error("Git failed") : null,
-                    "a".repeat(40) + "\n" + (result === "different" ? "b" : "a").repeat(40) + "\n");
+                    result === "different" ? "2\n" : "0\n");
             } }, electron: {}, fs: {}, "fs/promises": {}, path, "yaml-js": {}
         };
         for (const name of ["pluginValidate", "updateValidate"])
@@ -7943,7 +7943,7 @@ test("plugin update checks use Git reference resolution and stop after fetch fai
             "({ ...exports, setup() { getPluginDirectory = () => 'fixture'; } })");
         api.setup();
         assert.equal(await api.isUpdateAvailableForPlugin(null, "fixture"), result === "different");
-        assert.deepEqual(commands, result === "fetch-error" ? ["git fetch"] : ["git fetch", "git rev-parse HEAD origin/HEAD"]);
+        assert.deepEqual(commands, result === "fetch-error" ? ["git fetch"] : ["git fetch", "git rev-list --count HEAD..origin/HEAD"]);
     }
 });
 

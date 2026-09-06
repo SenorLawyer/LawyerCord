@@ -72,10 +72,9 @@ export async function isUpdateAvailableForPlugin(_, name: string): Promise<boole
     return new Promise(resolve => {
         exec("git fetch", { cwd: pluginDir }, error => {
             if (error) return resolve(false);
-            exec("git rev-parse HEAD origin/HEAD", { cwd: pluginDir }, (error, stdout) => {
+            exec("git rev-list --count HEAD..origin/HEAD", { cwd: pluginDir }, (error, stdout) => {
                 if (error) return resolve(false);
-                const [localCommit, remoteCommit] = stdout.trim().split("\n");
-                resolve(localCommit !== remoteCommit);
+                resolve(Number(stdout.trim()) > 0);
             });
         });
     });

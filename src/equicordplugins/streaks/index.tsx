@@ -19,6 +19,8 @@ import { useAuthorizationStore } from "./stores/AuthorizationStore";
 import { useStreaksStore } from "./stores/StreaksStore";
 
 const cl = classNameFactory("vc-streaks-");
+const pendingRefreshes = new Set<ReturnType<typeof setTimeout>>();
+let generation = 0;
 
 const STREAK_THRESHOLDS = {
     ELITE: 100,
@@ -71,6 +73,13 @@ export default definePlugin({
     dependencies: ["MessageDecorationsAPI", "MemberListDecoratorsAPI", "ConcatenatedModules"],
     settings,
 
+    stop() {
+        generation++;
+        for (const timer of pendingRefreshes) clearTimeout(timer);
+        pendingRefreshes.clear();
+        useStreaksStore.getState().clear();
+    },
+
     flux: {
         async CONNECTION_OPEN() {
             useStreaksStore.getState().clear();
@@ -102,17 +111,20 @@ export default definePlugin({
                 }
             } else if (message.author.id === recipientId) {
                 if (!theirFlag) {
-                    setTimeout(async () => {
-                        if (UserStore.getCurrentUser()?.id !== me) return;
+                    const requestGeneration = generation;
+                    const timer = setTimeout(async () => {
+                        pendingRefreshes.delete(timer);
+                        if (requestGeneration !== generation || UserStore.getCurrentUser()?.id !== me) return;
                         const before = useStreaksStore.getState().streaks[recipientId]?.count;
                         await useStreaksStore.getState().refresh(recipientId);
-                        if (UserStore.getCurrentUser()?.id !== me) return;
+                        if (requestGeneration !== generation || UserStore.getCurrentUser()?.id !== me) return;
                         const after = useStreaksStore.getState().streaks[recipientId]?.count;
 
                         if (before === after) {
                             useStreaksStore.getState().update(recipientId);
                         }
                     }, 1000);
+                    pendingRefreshes.add(timer);
                 }
             }
         },

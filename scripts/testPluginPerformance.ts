@@ -21,24 +21,46 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
-test("Streaks delayed message refresh stays on its initiating account", async () => {
-    const source = readFileSync("src/equicordplugins/streaks/index.tsx", "utf8");
-    const match = source.match(/setTimeout\(async \(\) => \{([\s\S]*?)\}, 1000\)/);
-    assert.ok(match);
-    for (const change of ["before", "response", "none"]) {
-        let userId = change === "before" ? "second" : "first";
+test("Streaks delayed message refresh stops with its account or plugin", async () => {
+    for (const change of ["before", "response", "stop-before", "stop-response", "none"]) {
+        let userId = "first";
         let refreshes = 0;
         let updates = 0;
-        const callback = runInNewContext(`(async () => {${match[1]}})`, {
-            me: "first", recipientId: "target", UserStore: { getCurrentUser: () => ({ id: userId }) },
-            useStreaksStore: { getState: () => ({ streaks: {},
-                refresh: async () => { refreshes++; if (change === "response") userId = "second"; },
-                update: () => { updates++; },
-            }) },
+        let clears = 0;
+        const timers = new Map<number, () => Promise<void>>();
+        const { default: plugin } = loadSource("src/equicordplugins/streaks/index.tsx", {
+            "@equicordplugins/_core/concatenatedModules": {},
+            "@utils/constants": { Devs: {}, EquicordDevs: {} },
+            "@utils/css": { classNameFactory: () => () => "fixture" },
+            "@utils/types": { __esModule: true, default: (value: unknown) => value },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: userId }) },
+                ChannelStore: { getChannel: () => ({ isDM: () => true, recipients: ["target"] }) },
+                moment: () => ({ format: () => "2026-09-06" }),
+            },
+            "./settings": { settings: { store: {} } },
+            "./stores/AuthorizationStore": { useAuthorizationStore: { getState: () => ({ isAuthorized: () => true }) } },
+            "./stores/StreaksStore": { useStreaksStore: { getState: () => ({ streaks: {},
+                refresh: async () => {
+                    refreshes++;
+                    if (change === "response") userId = "second";
+                    if (change === "stop-response") plugin.stop();
+                },
+                update: () => { updates++; }, clear: () => { clears++; },
+            }) } },
+        }, {
+            setTimeout: (callback: () => Promise<void>) => { timers.set(1, callback); return 1; },
+            clearTimeout: (id: number) => timers.delete(id),
         });
-        await callback();
-        assert.equal(refreshes, change === "before" ? 0 : 1);
+        await plugin.flux.MESSAGE_CREATE({ type: "MESSAGE_CREATE", message: { author: { id: "target" } }, channelId: "dm" });
+        assert.equal(timers.size, 1);
+        if (change === "before") userId = "second";
+        if (change === "stop-before") plugin.stop();
+        for (const callback of timers.values()) await callback();
+        assert.equal(refreshes, change === "before" || change === "stop-before" ? 0 : 1);
         assert.equal(updates, change === "none" ? 1 : 0);
+        assert.equal(clears, change.startsWith("stop-") ? 1 : 0);
+        if (change === "stop-before") assert.equal(timers.size, 0);
     }
 });
 

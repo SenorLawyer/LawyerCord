@@ -42,6 +42,8 @@ export default ErrorBoundary.wrap(function NotificationComponent({
     const { timeout, position } = useSettings(["notifications.timeout", "notifications.position"]).notifications;
 
     const [isHover, setIsHover] = useState(false);
+    const [isFocused, setIsFocused] = useState(false);
+    const isPaused = isHover || isFocused;
 
     const start = useRef(Date.now());
     const pause = useRef<number | null>(null);
@@ -50,7 +52,7 @@ export default ErrorBoundary.wrap(function NotificationComponent({
     useEffect(() => {
         if (timeout === 0 || permanent) return;
 
-        if (isHover) {
+        if (isPaused) {
             if (pause.current === null) pause.current = Date.now();
         } else if (pause.current !== null) {
             const pausedFor = Date.now() - pause.current;
@@ -65,15 +67,15 @@ export default ErrorBoundary.wrap(function NotificationComponent({
         );
         if (animation) {
             animation.currentTime = elapsed;
-            if (isHover) animation.pause();
+            if (isPaused) animation.pause();
         }
-        const timeoutId = isHover ? undefined : setTimeout(() => onClose?.(), Math.max(0, timeout - elapsed));
+        const timeoutId = isPaused ? undefined : setTimeout(() => onClose?.(), Math.max(0, timeout - elapsed));
 
         return () => {
             clearTimeout(timeoutId);
             animation?.cancel();
         };
-    }, [timeout, isHover, permanent, onClose]);
+    }, [timeout, isPaused, permanent, onClose]);
 
     return (
         <div
@@ -90,6 +92,10 @@ export default ErrorBoundary.wrap(function NotificationComponent({
                 e.preventDefault();
                 e.stopPropagation();
                 onClose!();
+            }}
+            onFocus={() => setIsFocused(true)}
+            onBlur={event => {
+                if (!event.currentTarget.contains(event.relatedTarget)) setIsFocused(false);
             }}
             onMouseEnter={() => setIsHover(true)}
             onMouseLeave={() => setIsHover(false)}

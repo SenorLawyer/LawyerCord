@@ -223,8 +223,15 @@ function fixture(source: string, timeout = 5000, permanent = false) {
         if (dirty) render();
     }
 
+    function focus(value: boolean, within = false) {
+        const handler = element.props[value ? "onFocus" : "onBlur"];
+        assert.equal(typeof handler, "function");
+        (handler as (event: object) => void)({ currentTarget: { contains: () => within }, relatedTarget: {} });
+        if (dirty) render();
+    }
+
     render();
-    return { settings, props, metrics, animations, timers, advance, hover, render, unmount };
+    return { settings, props, metrics, animations, timers, advance, hover, focus, render, unmount };
 }
 
 function workloads(source: string) {
@@ -324,3 +331,24 @@ if (baseline) {
 } else {
     console.log("Notification performance checks passed: one dismissal callback, zero periodic state updates, hover/timeout/cleanup preserved.");
 }
+
+
+test("keyboard focus pauses notification expiry until focus and hover both leave", () => {
+    const notification = fixture(source);
+    notification.advance(1200);
+    notification.focus(true);
+    notification.advance(7000);
+    assert.equal(notification.metrics.closedAt, null);
+    notification.focus(false, true);
+    notification.advance(1000);
+    assert.equal(notification.metrics.closedAt, null);
+    notification.hover(true);
+    notification.focus(false);
+    notification.advance(1000);
+    assert.equal(notification.metrics.closedAt, null);
+    notification.hover(false);
+    notification.advance(3799);
+    assert.equal(notification.metrics.closedAt, null);
+    notification.advance(1);
+    assert.equal(notification.metrics.closedAt, 14000);
+});

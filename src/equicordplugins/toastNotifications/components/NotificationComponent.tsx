@@ -72,17 +72,19 @@ type NotificationProps = NotificationData & { onClose(): void; };
 
 export default ErrorBoundary.wrap(function NotificationComponent(props: NotificationProps) {
     const [isHover, setIsHover] = useState(false);
+    const [isFocused, setIsFocused] = useState(false);
+    const isPaused = isHover || isFocused;
 
     const { timeout: duration, opacity: opacityPercent } = PluginSettings.use(NOTIFICATION_SETTINGS);
     const timeout = (duration ?? 5) * 1000;
     const opacity = opacityPercent / 100;
 
     useEffect(() => {
-        if (isHover || props.permanent) return;
+        if (isPaused || props.permanent) return;
 
         const closeTimeout = setTimeout(() => props.onClose(), timeout);
         return () => clearTimeout(closeTimeout);
-    }, [isHover, props.permanent, timeout]);
+    }, [isPaused, props.permanent, timeout]);
 
     const handleClick = () => {
         props.onClick?.();
@@ -166,6 +168,10 @@ export default ErrorBoundary.wrap(function NotificationComponent(props: Notifica
             className={cl("notification-root")}
             onClick={handleClick}
             onContextMenu={handleContextMenu}
+            onFocus={() => setIsFocused(true)}
+            onBlur={event => {
+                if (!event.currentTarget.contains(event.relatedTarget)) setIsFocused(false);
+            }}
             onMouseEnter={() => setIsHover(true)}
             onMouseLeave={() => setIsHover(false)}
         >
@@ -180,7 +186,7 @@ export default ErrorBoundary.wrap(function NotificationComponent(props: Notifica
             {timeout !== 0 && !props.permanent && (
                 <div
                     className={cl("notification-progressbar")}
-                    style={isHover
+                    style={isPaused
                         ? { animationName: "none", transform: "scaleX(1)" }
                         : { animationDuration: `${timeout}ms` }}
                 />

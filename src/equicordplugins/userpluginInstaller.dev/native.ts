@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { NativeSettings } from "@main/settings";
 import { exec, spawn } from "child_process";
 import { BrowserWindow, dialog, shell } from "electron";
 import { existsSync, readdirSync, readFileSync } from "fs";
@@ -14,8 +13,6 @@ import yaml from "yaml-js";
 
 // @ts-ignore fuck off
 import pluginValidateContent from "./misc/pluginValidate.txt"; // i would use HTML but esbuild is being whiny
-// @ts-ignore fuck off
-import setGitPathContent from "./misc/setGitPath.txt";
 // @ts-ignore fuck off
 import updateValidateContent from "./misc/updateValidate.txt"; // see above
 
@@ -387,83 +384,4 @@ export async function updatePlugin(_, directory: string) {
         }
         doStuff();
     });
-}
-
-export async function openGitPathModal(_: any) {
-    const gitPathSet: string | undefined = NativeSettings.store.plugins.UserpluginInstaller?.gitPath;
-    const win = new BrowserWindow({
-        maximizable: false,
-        minimizable: false,
-        width: 560,
-        height: 400,
-        resizable: false,
-        webPreferences: {
-            devTools: true
-        },
-        title: "Set Git path",
-        modal: true,
-        parent: BrowserWindow.getAllWindows()[0],
-        show: false,
-        autoHideMenuBar: true
-    });
-    win.loadURL(`data:text/html;base64,${Buffer.from(setGitPathContent).toString("base64")}`);
-    win.on("page-title-updated", async _ => {
-        const t = win.webContents.getTitle();
-        if (t === "abort") win.close();
-        if (t.startsWith("ok")) {
-            if (!NativeSettings.store.plugins.UserpluginInstaller) {
-                NativeSettings.store.plugins.UserpluginInstaller = {
-                    gitPath: undefined
-                };
-            }
-            if (t === "ok-") {
-                NativeSettings.store.plugins.UserpluginInstaller.gitPath = undefined;
-            } else {
-                const gitPath2 = t.split("-").toSpliced(0, 1).join("-");
-                NativeSettings.store.plugins.UserpluginInstaller.gitPath = gitPath2;
-            }
-            win.close();
-        }
-        if (t.startsWith("check")) {
-            try {
-                const gitProc = spawn(t === "check-" ? "git" : t.split("-").toSpliced(0, 1).join("-"), ["--version"]);
-                let rawOutput = "";
-                gitProc.stdout?.on("data", d => {
-                    rawOutput += String(d);
-                });
-                gitProc.on("error", e => {
-                    dialog.showMessageBox({
-                        title: "Error",
-                        message: "Git error",
-                        type: "error",
-                        detail: `${e}\n\nDouble-check the path you entered.`,
-                        buttons: ["OK"]
-                    });
-                });
-                gitProc.once("close", () => {
-                    if (gitProc.exitCode === 0) {
-                        dialog.showMessageBox({
-                            title: "Success",
-                            message: "Git works!",
-                            type: "info",
-                            detail: `Successfully called ${rawOutput.trim()}`,
-                            buttons: ["OK"]
-                        });
-                    }
-                });
-            } catch (e) {
-                dialog.showMessageBox({
-                    title: "Error",
-                    message: "Git error",
-                    type: "error",
-                    detail: `${e}\n\nDouble-check the path you entered.`,
-                    buttons: ["OK"]
-                });
-            }
-        }
-    });
-    win.show();
-    if (gitPathSet) {
-        win.webContents.executeJavaScript(`document.querySelector("input").value = ${JSON.stringify(gitPathSet)};`);
-    }
 }

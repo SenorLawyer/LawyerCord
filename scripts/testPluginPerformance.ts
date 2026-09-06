@@ -26,7 +26,7 @@ test("installer update reviews render repository metadata as text", () => {
         path,
         "yaml-js": {},
     };
-    for (const name of ["pluginValidate", "setGitPath", "updateValidate"])
+    for (const name of ["pluginValidate", "updateValidate"])
         mocks[`./misc/${name}.txt`] = { __esModule: true, default: readFileSync(`src/equicordplugins/userpluginInstaller.dev/misc/${name}.txt`, "utf8") };
     const { formatCommitMessages, generateUpdatePluginContent } = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: "/fixture/dist", Buffer }, "({ formatCommitMessages, generateUpdatePluginContent })");
     const commit = formatCommitMessages('<script>document.title="install"</script>////////1234567////////123456789////////<img src=x onerror=alert(1)> & text', "https://github.com/example/plugin");

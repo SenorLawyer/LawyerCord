@@ -8,7 +8,6 @@ import "./misc/style.css";
 
 import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
-import { Button } from "@components/Button";
 import { Notice } from "@components/Notice";
 import plSettings from "@plugins/_core/settings";
 import { Devs } from "@utils/constants";
@@ -50,14 +49,7 @@ export const settings = definePluginSettings({
         description: "Never show update notifications for these plugins (you can still update them from the UserPlugins tab)",
         default: ""
     },
-    setGitPath: {
-        type: OptionType.COMPONENT,
-        component: () => <Button onClick={() => {
-            Native.openGitPathModal();
-        }} variant="secondary">
-            Set Git path
-        </Button>
-    }
+
 });
 
 export default definePlugin({

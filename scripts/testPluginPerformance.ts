@@ -21,6 +21,25 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("custom commands normalize argument names for deduplication and substitution", async () => {
+    let command: { execute(args: object, context: object): Promise<void>; } | undefined;
+    let content = "";
+    const { parseTagArguments, registerTagCommand } = loadSource("src/plugins/customCommands/index.ts", {
+        "@api/Commands": { ApplicationCommandInputType: {}, ApplicationCommandOptionType: {}, registerCommand: (value: typeof command) => { command = value; }, findOption: (args: Record<string, unknown>, name: string, fallback: unknown) => args[name] ?? fallback },
+        "@api/Settings": { migratePluginSettings() {} }, "@utils/constants": { Devs: {} },
+        "@utils/discord": { sendMessage: (_id: string, message: { content: string; }) => { content = message.content; } },
+        "@utils/types": { __esModule: true, default: (value: object) => value },
+        "@webpack/common": { FluxDispatcher: { dispatch() {} }, MessageActions: { getSendMessageOptionsForReply() {} }, PendingReplyStore: { getPendingReply() {} } },
+        "./CreateTagModal": {}, "./settings": {},
+    });
+    const message = "Hello {{User}} / {{USER}} / {{user}}";
+    assert.deepEqual(Array.from(parseTagArguments(message), (arg: { name: string; }) => arg.name), ["user"]);
+    registerTagCommand({ name: "greet", message });
+    assert.ok(command);
+    await command.execute({ user: "friend" }, { channel: { id: "channel" } });
+    assert.equal(content, "Hello friend / friend / friend");
+});
+
 test("ConsoleJanitor reads replaced log-level settings without rebuilding a cache", () => {
     const store = { whitelistedLoggers: "GatewaySocket", allowLevel: { error: true, warn: false } };
     const { default: plugin } = loadSource("src/plugins/consoleJanitor/index.tsx", {

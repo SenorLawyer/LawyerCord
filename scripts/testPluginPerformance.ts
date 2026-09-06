@@ -7233,3 +7233,25 @@ test("removed scheduled previews do not decode remaining attachments", async () 
         assert.equal(images.length, 1);
     }
 });
+
+test("theme downloads validate required IPC fields and scrub native failures", async () => {
+    let failWrite = false;
+    let requests = 0;
+    let writes = 0;
+    const api = loadSource("src/equicordplugins/themeLibrary/native.ts", {
+        "@main/ipcMain": { ensureSafePath: (_root: string, file: string) => file.includes("../") ? null : file },
+        "@main/utils/constants": { THEMES_DIR: "themes" },
+        fs: { writeFileSync() { if (failWrite) throw new Error("EACCES private/home/themes"); writes++; }, existsSync: () => true }
+    }, { fetch: async () => { requests++; return new Response(".theme {}"); } });
+    for (const theme of [null, {}, { id: "1" }, { id: "1", name: 7 }, { id: 7, name: "Theme" }, { id: "", name: "Theme" }, { id: "1", name: "../outside" }]) {
+        await assert.rejects(api.downloadTheme(null, theme), /Invalid theme details/);
+    }
+    assert.equal(requests, 0);
+    assert.equal(writes, 0);
+    assert.equal(await api.themeExists(null, { name: 7 }), false);
+    await api.downloadTheme(null, { id: "1", name: "Theme" });
+    assert.equal(writes, 1);
+    failWrite = true;
+    await assert.rejects(api.downloadTheme(null, { id: "1", name: "Theme" }), (error: Error) => error.message === "Theme download failed.");
+    assert.equal(writes, 1);
+});

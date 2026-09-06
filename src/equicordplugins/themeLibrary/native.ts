@@ -11,24 +11,26 @@ import { existsSync, writeFileSync } from "fs";
 
 import type { Theme } from "./types";
 
-function getThemePath(theme: Theme): string | null {
-    if (!theme?.name) return null;
+function getThemePath(theme: Pick<Theme, "name">): string | null {
+    if (typeof theme?.name !== "string" || !theme.name) return null;
     return ensureSafePath(THEMES_DIR, `${theme.name}.theme.css`);
 }
 
-export async function themeExists(_: IpcMainInvokeEvent, theme: Theme) {
+export async function themeExists(_: IpcMainInvokeEvent, theme: Pick<Theme, "name">) {
     const path = getThemePath(theme);
     return path ? existsSync(path) : false;
 }
 
-export async function downloadTheme(_: IpcMainInvokeEvent, theme: Theme) {
-    if (!theme?.content || !theme?.name || !theme?.id) return;
-
+export async function downloadTheme(_: IpcMainInvokeEvent, theme: Pick<Theme, "id" | "name">) {
     const path = getThemePath(theme);
-    if (!path) throw new Error("Invalid theme name");
+    if (!path || typeof theme?.id !== "string" || !theme.id) throw new Error("Invalid theme details.");
 
-    const download = await fetch(`https://themes.equicord.org/api/download/${encodeURIComponent(theme.id)}`);
-    if (!download.ok) throw new Error("Theme download failed.");
-    const content = await download.text();
-    writeFileSync(path, content);
+    try {
+        const download = await fetch(`https://themes.equicord.org/api/download/${encodeURIComponent(theme.id)}`);
+        if (!download.ok) throw new Error("Theme download failed.");
+        const content = await download.text();
+        writeFileSync(path, content);
+    } catch {
+        throw new Error("Theme download failed.");
+    }
 }

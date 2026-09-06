@@ -6,7 +6,7 @@
 
 import { NativeSettings } from "@main/settings";
 import { exec, spawn } from "child_process";
-import { BrowserWindow, dialog, shell, WebContentsView } from "electron";
+import { BrowserWindow, dialog, shell } from "electron";
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { mkdir, readdir, readFile, rm } from "fs/promises";
 import { basename, join } from "path";
@@ -128,13 +128,6 @@ export function initPluginInstall(_, link: string, source: string, owner: string
             show: false,
             autoHideMenuBar: true
         });
-        const reView /* haha got it */ = new WebContentsView({
-            webPreferences: {
-                devTools: true,
-                nodeIntegration: true
-            }
-        });
-        win.contentView.addChildView(reView);
         win.loadURL(generateReviewPluginContent(meta));
         win.on("page-title-updated", async e => {
             switch (win.webContents.getTitle() as "abortInstall" | "reviewCode" | "install") {
@@ -261,13 +254,17 @@ async function cloneRepo(link: string, repo: string): Promise<void> {
     });
 }
 
+function escapeHtml(value: string): string {
+    return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
+}
+
 function generateReviewPluginContent(meta: {
     name: string;
     description: string;
     usesPreSend: boolean;
     usesNative: boolean;
 }): string {
-    const template = pluginValidateContent.replace("%PLUGINNAME%", meta.name.replaceAll("<", "&lt;")).replace("%PLUGINDESC%", meta.description.replaceAll("<", "&lt;")).replace("%WARNINGHIDER%", !meta.usesNative && !meta.usesPreSend ? "[data-useless=\"warning\"] { display: none !important; }" : "").replace("%NATIVETSHIDER%", meta.usesNative ? "" : "#native-ts-warning { display: none !important; }").replace("%PRESENDHIDER%", meta.usesPreSend ? "" : "#pre-send-warning { display: none !important; }");
+    const template = pluginValidateContent.replace("%PLUGINNAME%", () => escapeHtml(meta.name)).replace("%PLUGINDESC%", () => escapeHtml(meta.description)).replace("%WARNINGHIDER%", !meta.usesNative && !meta.usesPreSend ? "[data-useless=\"warning\"] { display: none !important; }" : "").replace("%NATIVETSHIDER%", meta.usesNative ? "" : "#native-ts-warning { display: none !important; }").replace("%PRESENDHIDER%", meta.usesPreSend ? "" : "#pre-send-warning { display: none !important; }");
     const buf = Buffer.from(template).toString("base64");
     return `data:text/html;base64,${buf}`;
 }
@@ -278,7 +275,7 @@ function generateUpdatePluginContent(meta: {
     remote: string;
     commit: string;
 }): string {
-    const template = updateValidateContent.replace("%PLUGINNAME%", meta.name.replaceAll("<", "&lt;")).replace("%PLUGINDESC%", meta.description.replaceAll("<", "&lt;")).replace("%REMOTE%", meta.remote).replace("%COMMITMESSAGE%", meta.commit.replaceAll("\n", "<br />"));
+    const template = updateValidateContent.replace("%PLUGINNAME%", () => escapeHtml(meta.name)).replace("%PLUGINDESC%", () => escapeHtml(meta.description)).replace("%REMOTE%", () => escapeHtml(meta.remote)).replace("%COMMITMESSAGE%", () => meta.commit.replaceAll("\n", "<br />"));
     const buf = Buffer.from(template).toString("base64");
     return `data:text/html;base64,${buf}`;
 }
@@ -288,9 +285,10 @@ function formatCommitMessages(rawOutput: string, remote: string): string {
     let output = "";
 
     for (const line of rawOutput.split("\n")) {
-        const [user, shortCommit, longCommit, message] = line.split("////////");
+        if (!line) continue;
+        const [user, shortCommit, longCommit, ...message] = line.split("////////");
         if (output) output += "\n";
-        output += `${user} (<a href="${commitBaseUrl}/commit/${longCommit}" style="font-family: monospace;">${shortCommit}</a>) ~ ${message}`;
+        output += `${escapeHtml(user)} (<a href="${escapeHtml(`${commitBaseUrl}/commit/${longCommit}`)}" style="font-family: monospace;">${escapeHtml(shortCommit)}</a>) ~ ${escapeHtml(message.join("////////"))}`;
     }
 
     return output;
@@ -337,13 +335,6 @@ export async function updatePlugin(_, directory: string) {
                 show: false,
                 autoHideMenuBar: true
             });
-            const reView /* haha got it */ = new WebContentsView({
-                webPreferences: {
-                    devTools: true,
-                    nodeIntegration: true
-                }
-            });
-            win.contentView.addChildView(reView);
 
             const commitProc = exec("git log origin/HEAD...HEAD --oneline --pretty=format:%an////////%h////////%H////////%s", {
                 cwd: pluginDir
@@ -415,13 +406,6 @@ export async function openGitPathModal(_: any) {
         show: false,
         autoHideMenuBar: true
     });
-    const reView = new WebContentsView({
-        webPreferences: {
-            devTools: true,
-            nodeIntegration: true
-        }
-    });
-    win.contentView.addChildView(reView);
     win.loadURL(`data:text/html;base64,${Buffer.from(setGitPathContent).toString("base64")}`);
     win.on("page-title-updated", async _ => {
         const t = win.webContents.getTitle();

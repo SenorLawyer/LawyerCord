@@ -20,6 +20,25 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("installer update reviews render repository metadata as text", () => {
+    const mocks: Record<string, object> = {
+        "@main/settings": {}, "child_process": {}, "electron": {}, "fs": {}, "fs/promises": {},
+        path,
+        "yaml-js": {},
+    };
+    for (const name of ["pluginValidate", "setGitPath", "updateValidate"])
+        mocks[`./misc/${name}.txt`] = { __esModule: true, default: readFileSync(`src/equicordplugins/userpluginInstaller.dev/misc/${name}.txt`, "utf8") };
+    const { formatCommitMessages, generateUpdatePluginContent } = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: "/fixture/dist", Buffer }, "({ formatCommitMessages, generateUpdatePluginContent })");
+    const commit = formatCommitMessages('<script>document.title="install"</script>////////1234567////////123456789////////<img src=x onerror=alert(1)> & text', "https://github.com/example/plugin");
+    const url = generateUpdatePluginContent({ name: "Example", description: "Description", remote: "https://github.com/example/plugin", commit });
+    const html = Buffer.from(url.split(",")[1], "base64").toString("utf8");
+    assert.equal(html.includes('<script>document.title="install"</script>'), false);
+    assert.equal(html.includes("<img src=x"), false);
+    assert.ok(html.includes("&lt;img src=x"));
+    assert.ok(html.includes("&amp; text"));
+    assert.ok(html.includes('href="https://github.com/example/plugin/commit/123456789"'));
+});
+
 test("installer subscriptions keep unique identities and allow self-removal", () => {
     const { VariableWithCallbacks } = loadSource("src/equicordplugins/userpluginInstaller.dev/VariableWithCallbacks.ts", {}, { Date: { now: () => 1 } });
     const value = new VariableWithCallbacks(0);

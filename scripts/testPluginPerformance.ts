@@ -7536,3 +7536,31 @@ test("theme authorization checks the provider once before offering a dialog", as
         assert.equal(dialogs, !valid && triggerModal ? 1 : 0);
     }
 });
+
+test("theme authorization only saves string tokens from successful responses", async () => {
+    for (const value of [undefined, null, {}, [], 7, "", "valid-token"]) {
+        const api = loadSource("src/equicordplugins/themeLibrary/utils/auth.tsx", {
+            "@api/DataStore": { get: async () => value }, "@api/Notifications": {}, "@webpack/common": {},
+            "@equicordplugins/themeLibrary/components/ThemeTab": {}
+        });
+        assert.equal(await api.getThemeLibraryToken(), value === "valid-token" ? value : null);
+    }
+    for (const body of [null, { token: {} }, { token: 7 }, { token: "" }, { token: "valid-token" }]) for (const status of [200, 503]) {
+        const saved: unknown[] = [];
+        const notices: string[] = [];
+        let callback: (result: { location: string; }) => Promise<void> = async () => {};
+        const api = loadSource("src/equicordplugins/themeLibrary/utils/auth.tsx", {
+            "@api/DataStore": { get: async () => undefined, set: async (_key: string, value: unknown) => { saved.push(value); } },
+            "@api/Notifications": { showNotification: (notice: { body: string; }) => notices.push(notice.body) },
+            "@webpack/common": { openModal: (render: (props: object) => unknown) => render({}) },
+            "@equicordplugins/themeLibrary/components/ThemeTab": { logger: { error() {} } }
+        }, { React: { createElement: (_type: unknown, props: { callback: typeof callback; }) => { callback = props.callback; return null; } },
+            fetch: async () => new Response(JSON.stringify(body), { status }) });
+        await api.authorizeUser();
+        await callback({ location: "https://themes.equicord.org/api/user/auth?code=fixture" });
+        const valid = status === 200 && body?.token === "valid-token";
+        assert.deepEqual(saved, valid ? ["valid-token"] : []);
+        assert.equal(notices.length, 1);
+        assert.equal(notices[0].startsWith("Successfully"), valid);
+    }
+});

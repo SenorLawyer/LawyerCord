@@ -12,7 +12,8 @@ import { OAuth2AuthorizeModal, openModal,Toasts, UserStore } from "@webpack/comm
 const TOKEN_KEY = "ThemeLibrary_uniqueToken";
 
 export async function getThemeLibraryToken(): Promise<string | null> {
-    return await DataStore.get<string>(TOKEN_KEY) ?? null;
+    const token = await DataStore.get<unknown>(TOKEN_KEY);
+    return typeof token === "string" && token.length > 0 ? token : null;
 }
 
 export async function authorizeUser(triggerModal: boolean = true) {
@@ -36,21 +37,16 @@ export async function authorizeUser(triggerModal: boolean = true) {
                         headers: { Accept: "application/json" }
                     });
 
-                    const { token } = await response.json();
+                    if (!response.ok) throw new Error("Authorization failed.");
+                    const { token }: { token?: unknown; } = await response.json();
+                    if (typeof token !== "string" || !token) throw new Error("Invalid authorization response.");
 
-                    if (token) {
-                        await DataStore.set(TOKEN_KEY, token);
-                        showNotification({
-                            title: "ThemeLibrary",
-                            body: "Successfully authorized with ThemeLibrary!"
-                        });
-                    } else {
-                        showNotification({
-                            title: "ThemeLibrary",
-                            body: "Failed to authorize, check console"
-                        });
-                    }
-                } catch (e: any) {
+                    await DataStore.set(TOKEN_KEY, token);
+                    showNotification({
+                        title: "ThemeLibrary",
+                        body: "Successfully authorized with ThemeLibrary!"
+                    });
+                } catch (e: unknown) {
                     logger.error("Failed to authorize", e);
                     showNotification({
                         title: "ThemeLibrary",

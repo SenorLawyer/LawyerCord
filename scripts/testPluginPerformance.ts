@@ -7690,7 +7690,7 @@ test("plugin metadata stops at missing entries and rejects malformed declaration
             let reads = 0;
             const mocks: Record<string, object> = {
                 child_process: {}, electron: {}, "fs/promises": {}, path, "yaml-js": {},
-                fs: { readdirSync: () => entry ? [entry, "native.ts"] : ["README.md"],
+                fs: { existsSync: (file: string) => file === path.join("fixture", "native/index.ts"), readdirSync: () => entry ? [entry, "native"] : ["README.md"],
                     readFileSync: (filename: string) => {
                         reads++;
                         if (filename.endsWith("meta.yml") || filename.endsWith("config")) throw new Error("Optional file missing");

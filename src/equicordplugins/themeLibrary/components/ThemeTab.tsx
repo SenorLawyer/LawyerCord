@@ -53,7 +53,6 @@ const SearchTags = {
 
 function ThemeTab() {
     const [themes, setThemes] = useState<Theme[]>([]);
-    const [filteredThemes, setFilteredThemes] = useState<Theme[]>([]);
     const [themeLinks, setThemeLinks] = useState(Settings.themeLinks);
     const [likedThemes, setLikedThemes] = useState<ThemeLikeProps>();
     const [searchValue, setSearchValue] = useState({ value: "", status: SearchStatus.ALL });
@@ -68,8 +67,6 @@ function ThemeTab() {
         const enabled = themeLinks.includes(`${apiUrl}/${theme.id}`);
 
         const tags = new Set(theme.tags.map(tag => tag?.toLowerCase()));
-
-        if (!enabled && searchValue.status === SearchStatus.ENABLED) return false;
 
         const anyTags = SearchTags[searchValue.status];
         if (anyTags && !tags.has(anyTags?.toLowerCase())) return false;
@@ -108,7 +105,6 @@ function ThemeTab() {
                 const [themes, likes] = await Promise.all([fetchAllThemes(), fetchLikes()]);
                 setThemes(themes);
                 setLikedThemes(likes);
-                setFilteredThemes(themes);
             } catch (err) {
                 logger.error(err);
                 setError(true);
@@ -119,23 +115,14 @@ function ThemeTab() {
         fetchData();
     }, []);
 
-    useEffect(() => {
-        setThemeLinks(Settings.themeLinks);
-    }, []);
-
-    useEffect(() => {
-        // likes only update after 12_000 due to cache
-        if (searchValue.status === SearchStatus.LIKED) {
-            const likedThemes = themes.sort((a, b) => b.likes - a.likes);
-            // replacement of themeFilter which wont work with SearchStatus.LIKED
-            const filteredLikedThemes = likedThemes.filter(x => x.name.includes(searchValue.value));
-            setFilteredThemes(filteredLikedThemes);
-        } else {
-            const sortedThemes = themes.sort((a, b) => new Date(b.release_date).getTime() - new Date(a.release_date).getTime());
-            const filteredThemes = sortedThemes.filter(themeFilter);
-            setFilteredThemes(filteredThemes);
-        }
-    }, [searchValue, themes]);
+    const sortedThemes = [...themes].sort(searchValue.status === SearchStatus.LIKED
+        ? (a, b) => b.likes - a.likes
+        : (a, b) => new Date(b.release_date).getTime() - new Date(a.release_date).getTime());
+    // likes only update after 12_000 due to cache
+    // replacement of themeFilter which wont work with SearchStatus.LIKED
+    const filteredThemes = searchValue.status === SearchStatus.LIKED
+        ? sortedThemes.filter(theme => theme.name.includes(searchValue.value))
+        : sortedThemes.filter(themeFilter);
 
     return (
         <div>
@@ -192,7 +179,7 @@ function ThemeTab() {
                                 {searchValue.status === SearchStatus.LIKED ? "Most Liked" : "Newest Additions"}
                             </HeadingPrimary>
 
-                            {themes.slice(0, 2).map((theme: Theme) => (
+                            {sortedThemes.slice(0, 2).map((theme: Theme) => (
                                 <ThemeCard
                                     key={theme.id}
                                     theme={theme}

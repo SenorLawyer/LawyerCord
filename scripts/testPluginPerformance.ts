@@ -7340,3 +7340,43 @@ test("theme names cannot traverse directories or address file streams", async ()
     }
     assert.equal(pathChecks, 3);
 });
+
+test("theme filters follow enabled links immediately without sorting source state", () => {
+    const statuses = { ALL: 0, ENABLED: 1, DISABLED: 2, LIKED: 3 };
+    const themes = Object.freeze([
+        { id: 1, name: "Older", description: "", author: { discord_name: "Author" }, tags: [], likes: 10, release_date: "2024-01-01" },
+        { id: 2, name: "Newer", description: "", author: { discord_name: "Author" }, tags: [], likes: 1, release_date: "2025-01-01" }
+    ]);
+    let links: string[] = [];
+    let status = statuses.ALL;
+    let cursor = 0;
+    let cards: { theme: { id: number; }; removePreview?: boolean; }[] = [];
+    const Card = {};
+    const React = { createElement(type: unknown, props: { theme: { id: number; }; removePreview?: boolean; } | null) {
+        if (type === Card && props) cards.push(props);
+        return null;
+    } };
+    const component = loadSource("src/equicordplugins/themeLibrary/components/ThemeTab.tsx", {
+        "@api/DataStore": {}, "@api/Settings": { Settings: { themeLinks: links, plugins: { ThemeLibrary: { hideWarningCard: true } } } },
+        "@components/ErrorCard": {}, "@components/Heading": {}, "@components/Icons": {}, "@components/Paragraph": {},
+        "@components/settings": { wrapTab: (value: unknown) => value },
+        "@equicordplugins/themeLibrary/types": { SearchStatus: statuses },
+        "@utils/Logger": { Logger: class {} }, "@utils/margins": { Margins: {} }, "@utils/misc": { classes: () => "" },
+        "@webpack": { findCssClassesLazy: () => ({}) }, "./ThemeCard": { ThemeCard: Card },
+        "@webpack/common": { React, useEffect() {}, useState: () => [
+            [themes, links, undefined, { value: "", status }, true, false, false][cursor++], () => {}
+        ] }
+    }, {}, "ThemeTab");
+    const render = () => { cursor = 0; cards = []; component(); return cards.filter(card => !card.removePreview).map(card => card.theme.id); };
+    assert.deepEqual(render(), [2, 1]);
+    status = statuses.ENABLED;
+    assert.deepEqual(render(), []);
+    links = ["https://themes.equicord.org/api/1"];
+    assert.deepEqual(render(), [1]);
+    status = statuses.DISABLED;
+    assert.deepEqual(render(), [2]);
+    status = statuses.LIKED;
+    assert.deepEqual(render(), [1, 2]);
+    assert.deepEqual(cards.filter(card => card.removePreview).map(card => card.theme.id), [1, 2]);
+    assert.deepEqual(themes.map(theme => theme.id), [1, 2]);
+});

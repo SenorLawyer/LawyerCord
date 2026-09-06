@@ -211,7 +211,6 @@ function load() {
                 speed: settings.store.speed,
                 fps: settings.store.fps,
                 image: ONEKO_IMAGE,
-                persistPosition: false,
                 furColor: settings.store.furColor,
                 outlineColor: settings.store.outlineColor
             });

@@ -7,30 +7,16 @@
 import { BaseText } from "@components/BaseText";
 import { fetchReposByUserId, fetchReposByUsername, fetchUserInfo, GitHubUserInfo } from "@equicordplugins/githubRepos/githubApi";
 import { GitHubRepo } from "@equicordplugins/githubRepos/types";
-import { openModal,React, useEffect, UserProfileStore, useState } from "@webpack/common";
+import { React, useEffect, UserProfileStore, useState } from "@webpack/common";
 
 import { cl, settings } from "..";
 import { RepoCard } from "./RepoCard";
-import { ReposModal } from "./ReposModal";
 
-export function ProfileTabComponent({ id }: { id: string, theme: string; }) {
+export function ProfileTabComponent({ id }: { id: string; }) {
     const [repos, setRepos] = useState<GitHubRepo[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [userInfo, setUserInfo] = useState<GitHubUserInfo | null>(null);
-
-    const openReposModal = () => {
-        if (!userInfo) return;
-
-        const sortedRepos = [...repos].sort((a, b) => b.stargazers_count - a.stargazers_count);
-        openModal(props => (
-            <ReposModal
-                repos={sortedRepos}
-                username={userInfo.username}
-                rootProps={props}
-            />
-        ));
-    };
 
     useEffect(() => {
         const fetchData = async () => {

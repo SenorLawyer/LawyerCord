@@ -33,10 +33,6 @@ export const requireSettingsModal = extractAndLoadChunksLazy(['type:"USER_SETTIN
 export const KEY_DATASTORE = "vencord-custom-avatars";
 export const data = { avatars: {} as Record<string, string> };
 
-export function clearAvatarUrlCache(_userId?: string) {
-    // This merged UserPFP variant resolves avatars directly, so there is no cache to clear.
-}
-
 const settings = definePluginSettings({
     overrideServerAvatars: {
         type: OptionType.BOOLEAN,

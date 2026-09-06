@@ -34,7 +34,9 @@ The accumulated changes cover storage consistency, asynchronous lifecycle handli
 
 ThemeLibrary changes remove duplicate filtering state, cancel closed-tab requests, and lock like actions before authorization. Native downloads validate IDs and filenames, bound response size and duration, reject redirects, and replace installed files only after a temporary write succeeds. Live provider testing corrected an inaccurate string-only ID declaration.
 
-The development-only userplugin installer now propagates installation and update preparation failures, stops on missing or malformed metadata, handles Git launch failures, and checks Git results before building updates. Review closure, page-load failures, cancellation cleanup, and external-link failures now settle the pending operation. Cleanup revalidates directories; clone destinations are explicit; review links are restricted to repository URLs. Concurrent filesystem ownership and live Electron behavior still require review. Regression fixtures mock subprocesses and windows; they do not clone, delete, or update real plugins.
+The development-only userplugin installer now propagates installation and update preparation failures, stops on missing or malformed metadata, handles Git launch failures, and checks Git results before building updates. Review closure, page-load failures, cancellation cleanup, and external-link failures now settle the pending operation. Cleanup revalidates directories; clone destinations are explicit; review links are restricted to repository URLs. Install, update, and uninstall now reject overlapping mutations within the same native instance, holding ownership through review and build settlement. External filesystem changes, separate native instances, and live Electron behavior still require review. Regression fixtures mock subprocesses and windows; they do not clone, delete, or update real plugins.
+
+Installer UI changes preserve existing settings when enabling unloaded plugins, render installed plugins absent from the running bundle, honor direct custom channel allowlists, and handle cancellation without treating it as an error. Duplicate update-name state and sorting work were removed. The uninstall control uses the shared button with an accessible name and consistent sizing.
 
 The installer parses metadata using the existing TypeScript dependency without executing plugin code. Its actual handler accepts all 379 checked plugin declarations, including four rejected by the old regex. Development-only native plugins are excluded from ordinary release builds, keeping the parser out of those bundles; development and reporter builds retain it.
 
@@ -46,11 +48,11 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `ccc765596` | 342 tests and timezone correctness checks passed. |
+| Broader performance/correctness suite | `ca4a1e605` | 342 tests and timezone correctness checks passed. |
 | Repository-wide ESLint | `ccc765596` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
 | CSS and internationalization lint | `5e869fea9` | Passed. CSS excludes userplugins; internationalization checks tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest plugin regressions and TypeScript | `ccc765596` | 292 plugin tests and full TypeScript passed; focused source lint passed. |
-| Standalone and development builds | `333abeffb` | Passed. Release native source maps exclude the installer and TypeScript parser. This does not establish installed-client behavior. |
+| Latest plugin regressions and TypeScript | `447d1afd8` | 293 plugin tests and full TypeScript passed; focused source lint passed. |
+| Standalone and development builds | `e39e09f57` | Passed. Release native source maps exclude the installer and TypeScript parser. This does not establish installed-client behavior. |
 | Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |
 | Web build | `57b19a728` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
 | Release artifact audit | `57b19a728` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
@@ -58,9 +60,10 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Video preview decoding | `fd216ca34` | Actual preview code in isolated Chrome produced a PNG from an FFmpeg-generated WebM and returned null for invalid video. |
 | Theme replacement on the filesystem | `07903f31c` | Actual native code preserves installed files after injected partial writes and rename failures, and cleans temporary files. This is not crash-durability testing. |
 | Theme provider download | `9b03d446d` | The actual native handler downloaded catalog entry 91 with HTTP 200 and no redirect into an isolated directory. All 136 catalog entries were separately checked against ID, filename, and catalog-content size rules. |
+| Uninstall button browser checks | `d4efc449d` | Actual shared component props and styles in isolated Chrome verified the accessible name, keyboard focus indicator, and consistent 32px sizing in both stylesheet orders. Full Discord layout was not exercised. |
 | Other isolated browser checks | Earlier audit commits | Specific sticker-storage transactions, codec conversion, and CSS behavior were exercised. These are not general live-client acceptance. |
 
-Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `ccc765596`, GitHub reported an empty check rollup for the draft PR. Current-head CI success has not been established.
+Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `ca4a1e605`, GitHub reported an empty check rollup for the draft PR. Current-head CI success has not been established.
 
 ## Remaining work
 

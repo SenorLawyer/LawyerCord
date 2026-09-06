@@ -58,14 +58,14 @@ test("browser packaging replaces stale output without unused editor bundles", as
         "dist/LawyerCord.user.css": css,
         "dist/LawyerCord.user.js": "",
         "browser/manifest.json": '{"manifest_version":3}',
-        "browser/icon.png": "icon"
+        "browser/lawyercord-icon.png": "icon"
     };
     try {
         for (const [path, content] of Object.entries(files)) {
             await mkdir(join(at(path), ".."), { recursive: true });
             await writeFile(at(path), content);
         }
-        await runInNewContext(`${code}\nPromise.all([appendCssRuntime, buildExtension("fixture-unpacked", ["manifest.json", "icon.png"])]);`, {
+        await runInNewContext(`${code}\nPromise.all([appendCssRuntime, buildExtension("fixture-unpacked", ["manifest.json", "lawyercord-icon.png"])]);`, {
             VERSION: "1.2.3", Buffer, TextEncoder, join,
             console: { info() { } },
             readFile: (path: string, encoding: BufferEncoding) => readFile(at(path), encoding),
@@ -76,6 +76,7 @@ test("browser packaging replaces stale output without unused editor bundles", as
         });
         await assert.rejects(readFile(at("dist/browser/fixture-unpacked/stale.js")), { code: "ENOENT" });
         assert.equal(await readFile(at("dist/browser/fixture-unpacked/dist/LawyerCord.js"), "utf8"), "renderer");
+        assert.equal(await readFile(at("dist/browser/fixture-unpacked/lawyercord-icon.png"), "utf8"), "icon");
         assert.deepEqual(JSON.parse(await readFile(at("dist/browser/fixture-unpacked/manifest.json"), "utf8")), { manifest_version: 3, version: "1.2.3" });
         const unsafeWindow = { _vcUserScriptRendererCss: "" };
         runInNewContext(await readFile(at("dist/LawyerCord.user.js"), "utf8"), { unsafeWindow });

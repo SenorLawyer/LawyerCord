@@ -65,9 +65,10 @@ test("Streaks delayed message refresh stops with its account or plugin", async (
 });
 
 test("Streaks authorization cannot attach a token to another account", async () => {
-    for (const change of ["before", "response", "non-error", "missing-token", "invalid-token", "empty-token", "none"]) {
+    for (const change of ["before", "response", "non-error", "missing-token", "invalid-token", "empty-token", "cancelled", "duplicate", "none"]) {
         let userId = "first";
         let callback: (response: { location: string; }) => Promise<void> = async () => assert.fail("missing callback");
+        let close: () => void = () => assert.fail("missing close callback");
         let state: Record<string, unknown> = {};
         let requests = 0;
         const api = loadSource("src/equicordplugins/streaks/stores/AuthorizationStore.tsx", {
@@ -77,7 +78,9 @@ test("Streaks authorization cannot attach a token to another account", async () 
                 zustandCreate: (init: (set: (value: object) => void, get: () => object) => Record<string, unknown>) => {
                     state = init(value => Object.assign(state, value), () => state); return { getState: () => state };
                 },
-                openModal: (render: (props: object) => { props: { callback: typeof callback; }; }) => { callback = render({}).props.callback; },
+                openModal: (render: (props: object) => { props: { callback: typeof callback; }; }, options: { onCloseCallback: () => void; }) => {
+                    callback = render({}).props.callback; close = options.onCloseCallback;
+                },
                 showToast() {}, Toasts: { Type: {} },
             }, "../constants": { AUTHORIZE_URL: "https://example.com/auth" }, "./StreaksStore": {},
         }, { URL, React: { createElement: (_type: unknown, props: object) => ({ props }) },
@@ -90,15 +93,16 @@ test("Streaks authorization cannot attach a token to another account", async () 
             } }; } });
         const auth = api.useAuthorizationStore.getState();
         const pending = auth.authorize();
-        const result = change === "none" ? pending : change === "non-error"
+        const result = change === "none" || change === "duplicate" ? pending : change === "non-error"
             ? assert.rejects(pending, reason => reason === "request failed")
-            : assert.rejects(pending, change.endsWith("-token") ? /invalid token/ : /account changed/);
+            : assert.rejects(pending, change.endsWith("-token") ? /invalid token/ : change === "cancelled" ? /cancelled/ : /account changed/);
         if (change === "before") userId = "second";
-        await callback({ location: "https://example.com/auth?code=test" });
+        if (change === "cancelled") close();
+        await Promise.all(Array.from({ length: change === "duplicate" ? 2 : 1 }, () => callback({ location: "https://example.com/auth?code=test" })));
         await result;
-        assert.equal(requests, change === "before" ? 0 : 1);
+        assert.equal(requests, change === "before" || change === "cancelled" ? 0 : 1);
         assert.equal(auth.tokens.second, undefined);
-        assert.equal(auth.tokens.first, change === "none" ? "first-token" : undefined);
+        assert.equal(auth.tokens.first, change === "none" || change === "duplicate" ? "first-token" : undefined);
     }
 });
 

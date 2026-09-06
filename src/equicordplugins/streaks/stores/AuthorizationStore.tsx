@@ -63,6 +63,7 @@ export const useAuthorizationStore = proxyLazy(() => zustandCreate(
                             clientId={CLIENT_ID}
                             cancelCompletesFlow={false}
                             callback={async (response: { location: string; }) => {
+                                if (hasCallbackStarted) return;
                                 hasCallbackStarted = true;
                                 try {
                                     if (UserStore.getCurrentUser()?.id !== userId) throw new Error("Discord account changed during authorization.");
@@ -89,6 +90,7 @@ export const useAuthorizationStore = proxyLazy(() => zustandCreate(
                         />, {
                         onCloseCallback() {
                             if (!hasCallbackStarted) {
+                                hasCallbackStarted = true;
                                 reject(new Error("Authorization cancelled"));
                             }
                         },

@@ -25,11 +25,6 @@
     transition: opacity 100ms ease-in;
 }
 
-.vc-msg-logger-enhanced-modal-content {
-    padding-bottom: 20px;
-    height: 100%;
-}
-
 .vc-msg-logger-enhanced-modal-content-inner {
     padding-top: 1rem;
     padding-bottom: 1rem;
@@ -86,10 +81,6 @@
 .vc-msg-logger-enhanced-folder-upload-button {
     margin: 6px;
     padding: 4px 8px;
-}
-
-.vc-updater-modal-content {
-    padding: 1rem 2rem;
 }
 
 .vc-msg-logger-enhanced-modal {

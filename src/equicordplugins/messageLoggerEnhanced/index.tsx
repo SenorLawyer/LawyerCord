@@ -365,8 +365,6 @@ export default definePlugin({
         }
     },
 
-    isDeletedMessage: (id: string) => cacheSentMessages.get(id)?.deleted ?? false,
-
     getDeleted(m1, m2) {
         const deleted = m2?.deleted;
         if (deleted == null && m1?.deleted != null) return m1.deleted;

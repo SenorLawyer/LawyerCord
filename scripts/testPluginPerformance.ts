@@ -46,6 +46,32 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("Friend codes clear only after successful revocation", async () => {
+    for (const success of [false, true]) {
+        let finish: () => void = () => {};
+        const request = new Promise<void>((resolve, reject) => { finish = () => success ? resolve() : reject(new Error("Failed")); });
+        let cleared = false;
+        let failed = false;
+        let hook = 0;
+        const panel = loadComponent("src/equicordplugins/friendCodes/FriendCodesPanel.tsx", {
+            useState: () => hook++ === 0 ? [[{ code: "fixture" }], () => { cleared = true; }] : [false, () => {}],
+            useEffect: () => {}, Button: { Colors: {}, Looks: {} },
+            showToast: () => { failed = true; }, Toasts: { Type: {} }
+        }, {
+            "@components/Flex": { Flex: "flex" }, "@components/Heading": { Heading: "heading" },
+            "@utils/clipboard": {}, "@webpack": { findCssClassesLazy: () => ({}), findByPropsLazy: () => ({ revokeFriendInvites: () => request }) }
+        });
+        const tree = panel.default();
+        const button = tree.props.children[0].props.children[1].props.children[1].props.children[1];
+        const pending = button.props.onClick();
+        assert.equal(cleared, false);
+        finish();
+        await pending;
+        assert.equal(cleared, success);
+        assert.equal(failed, !success);
+    }
+});
+
 test("FontLoader uses the escaped selected family for body and code fonts", async () => {
     const store = { selectedFont: 'Font";{}', applyOnCodeBlocks: true };
     const elements: { textContent: string; remove(): void; }[] = [];

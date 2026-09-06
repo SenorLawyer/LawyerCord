@@ -10,7 +10,7 @@ import { Heading } from "@components/Heading";
 import { classNameFactory } from "@utils/css";
 import { RenderModalProps } from "@vencord/discord-types";
 import { findByPropsLazy } from "@webpack";
-import { ChannelStore, closeModal, DraftType, Modal, openModal, showToast, TextInput, Toasts, UploadManager, useState } from "@webpack/common";
+import { ChannelStore, closeModal, DraftType, Modal, openModal, showToast, TextInput, Toasts, UploadManager, UserStore,useState } from "@webpack/common";
 
 import { ScheduledAttachment } from "../types";
 import { addScheduledMessage, getChannelDisplayInfo } from "../utils";
@@ -19,7 +19,8 @@ import { ErrorIcon } from "./Icons";
 const cl = classNameFactory("vc-scheduled-msg-");
 const ComponentDispatch = findByPropsLazy("dispatchToLastSubscribed");
 
-function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, close }: {
+function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, close, userId }: {
+    userId: string;
     channelId: string;
     content: string;
     attachments?: ScheduledAttachment[];
@@ -38,6 +39,10 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
     const isDM = channel.isPrivate();
 
     const handleSchedule = async () => {
+        if (UserStore.getCurrentUser()?.id !== userId) {
+            setError("Account changed. Reopen the scheduling dialog.");
+            return;
+        }
         let scheduledTime: number;
 
         if (scheduleType === "delay") {
@@ -58,6 +63,7 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
 
         const result = await addScheduledMessage(channelId, content, scheduledTime, attachments);
 
+        if (UserStore.getCurrentUser()?.id !== userId) return;
         if (result.success) {
             ComponentDispatch.dispatchToLastSubscribed("CLEAR_TEXT");
             UploadManager.clearAll(channelId, DraftType.ChannelMessage);
@@ -146,8 +152,11 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
 export const ScheduleTimeModal = ErrorBoundary.wrap(ScheduleTimeModalInner, { noop: true });
 
 export function openScheduleTimeModal(channelId: string, content: string, attachments?: ScheduledAttachment[]): void {
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return;
     const key = openModal(props => (
         <ScheduleTimeModal
+            userId={userId}
             channelId={channelId}
             content={content}
             attachments={attachments}

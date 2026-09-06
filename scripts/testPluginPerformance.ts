@@ -5635,6 +5635,36 @@ test("scheduled interval changes only replace an active timer", async () => {
     assert.deepEqual(cleared, [1, 2]);
 });
 
+test("scheduling dialogs ignore account changes before and during saves", async () => {
+    for (const before of [true, false]) {
+        let userId = "first";
+        let writes = 0;
+        let finish: () => void = () => {};
+        let schedule: () => Promise<void> = async () => assert.fail("Missing schedule action");
+        const Modal = Symbol("Modal");
+        const React = { createElement: (type: unknown, props: { actions: { onClick: () => Promise<void>; }[]; }) => {
+            if (type === Modal) schedule = props.actions[0].onClick;
+            return null;
+        } };
+        const component = loadSource("src/equicordplugins/scheduledMessages/components/ScheduleTimeModal.tsx", {
+            "@components/Button": {}, "@components/Heading": {}, "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+            "@utils/css": { classNameFactory: () => () => "" }, "@webpack": { findByPropsLazy: () => ({ dispatchToLastSubscribed: () => assert.fail("No stale clear") }) },
+            "@webpack/common": { Modal, UserStore: { getCurrentUser: () => ({ id: userId }) },
+                ChannelStore: { getChannel: () => ({ isPrivate: () => true }) }, useState: (value: unknown) => [value, () => {}],
+                showToast: () => assert.fail("No stale toast"), UploadManager: { clearAll: () => assert.fail("No stale upload clear") } },
+            "../utils": { getChannelDisplayInfo: () => ({ name: "DM" }), addScheduledMessage: async () => {
+                writes++; await new Promise<void>(resolve => { finish = resolve; }); return { success: true };
+            } }, "./Icons": {}
+        }, { React }, "ScheduleTimeModalInner");
+        component({ userId: "first", channelId: "channel", content: "Text", close: () => assert.fail("No stale close") });
+        if (before) userId = "second";
+        const pending = schedule();
+        if (!before) { userId = "second"; finish(); }
+        await pending;
+        assert.equal(writes, before ? 0 : 1);
+    }
+});
+
 test("scheduled composer discards attachment reads after account change or stop", async () => {
     for (const change of ["account", "stop"]) {
         let userId = "first";

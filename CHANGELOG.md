@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep an open scheduling dialog from acting on a different account or clearing its composer.
+
 - Discard pending scheduling attachment reads after an account change or plugin shutdown.
 
 - Check patch definitions with quoted keys or whitespace instead of skipping them before parsing.

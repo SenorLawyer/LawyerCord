@@ -21,6 +21,27 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("AutoDND restores each game's saved status only once", () => {
+    let status = "online";
+    const updates: string[] = [];
+    const { default: plugin } = loadSource("src/plugins/autoDndWhilePlaying.discordDesktop/index.ts", {
+        "@api/Settings": { definePluginSettings: () => ({ store: { statusToSet: "dnd", excludeInvisible: false } }), migratePluginSettings() {} },
+        "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => status, updateSetting: (value: string) => { status = value; updates.push(value); } }) },
+        "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+    });
+    const change = plugin.flux.RUNNING_GAMES_CHANGE;
+    change({ games: [{}] });
+    change({ games: [] });
+    assert.deepEqual(updates, ["dnd", "online"]);
+    status = "idle";
+    change({ games: [] });
+    assert.equal(status, "idle");
+    change({ games: [{}] });
+    change({ games: [] });
+    assert.deepEqual(updates, ["dnd", "online", "dnd", "idle"]);
+});
+
 test("Apple Music format substitutions preserve literal metadata", () => {
     const source = readFileSync("src/plugins/appleMusic.desktop/index.tsx", "utf8");
     const handler = source.slice(source.indexOf("function customFormat("), source.indexOf("function getLink("));

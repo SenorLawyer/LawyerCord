@@ -3381,8 +3381,11 @@ test("Desktop CSP preserves explicit hosts without allowing every origin", () =>
     assert.ok(policy.includes("api.github.com"));
     assert.ok(policy.includes("example.test"));
     const connect = policy.split("; ").find(directive => directive.startsWith("connect-src "));
-    for (const host of ["streaks.equicord.org", "badges.equicord.org", "dc.songspotlight.nexpid.xyz", "fonts.google.com"])
+    for (const host of ["streaks.equicord.org", "badges.equicord.org", "dc.songspotlight.nexpid.xyz", "fonts.google.com",
+        "fonts.googleapis.com", "fonts.gstatic.com", "translate.googleapis.com", "timezone.creations.works", "themes.equicord.org"])
         assert.ok(connect?.split(" ").includes(host), host);
+    const fonts = policy.split("; ").find(directive => directive.startsWith("font-src "));
+    assert.ok(fonts?.split(" ").includes("fonts.gstatic.com"));
 });
 
 test("Dragify validates JSON fields before resolving a drop", () => {

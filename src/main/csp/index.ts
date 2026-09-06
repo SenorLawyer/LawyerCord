@@ -38,8 +38,9 @@ export const CspPolicies: PolicyMap = {
 
     "api.spotify.com": ConnectSrc, // Spotify playback control for automation blocks, using Discord's own connection token
 
-    "fonts.googleapis.com": CssSrc, // Google Fonts, used by many themes
+    "fonts.googleapis.com": [...ConnectSrc, ...CssSrc], // Google Fonts, used by many themes
     "fonts.google.com": ConnectSrc,
+    "fonts.gstatic.com": [...ConnectSrc, "font-src"],
 
     "i.imgur.com": ImageSrc, // Imgur, used by some themes
     "i.ibb.co": ImageSrc, // ImgBB, used by some themes
@@ -69,6 +70,9 @@ export const CspPolicies: PolicyMap = {
     "streaks.equicord.org": ConnectSrc,
     "badges.equicord.org": ConnectSrc,
     "dc.songspotlight.nexpid.xyz": ConnectSrc,
+    "translate.googleapis.com": ConnectSrc,
+    "timezone.creations.works": ConnectSrc,
+    "themes.equicord.org": ConnectSrc,
     "ugc.decor.fieryflames.dev": ImageSrc, // Decor CDN
     "sponsor.ajay.app": ConnectSrc, // Dearrow API
     "dearrow-thumb.ajay.app": ImageSrc, // Dearrow Thumbnail CDN

@@ -46,6 +46,28 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("LimitlessScreenshare preserves source resolution when changing frame rate", () => {
+    let resolution: number | undefined = 0;
+    const plugin = loadSource("src/equicordplugins/limitlessScreenshare/index.tsx", {
+        "@utils/constants": { EquicordDevs: {} }, "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+        "@webpack/common": {
+            MediaEngineStore: { getState: () => ({ goLiveSource: { quality: { resolution, frameRate: 30 } } }) },
+            Menu: { MenuRadioItem: "radio" }
+        },
+        "./CustomRange": { CustomRange: (props: object) => ({ props }) },
+        "./settings": { MIN_FPS: 1, MIN_RESOLUTION: 3, settings: { store: { maxFPS: 120, maxResolution: 1080, roundResolution: false, resolutions: [], fpss: [{ label: "60fps", value: 60 }] } } }
+    }, { React: { createElement: (type: unknown, props: object) => ({ type, props }) } }).default;
+    const updates: number[] = [];
+    const controls = plugin.SettingsRange((_enabled: boolean, value: number) => updates.push(value), [true, "fixture"], false);
+    controls[0].props.onChange(60);
+    controls[1].props.action();
+    assert.deepEqual(updates, [0, 0]);
+    resolution = undefined;
+    controls[0].props.onChange(60);
+    assert.equal(updates[2], 720);
+});
+
 test("InvisibleChat displays decrypted URLs without requesting a preview", async () => {
     let updated = false;
     const module = loadSource("src/equicordplugins/invisibleChat.desktop/index.tsx", {

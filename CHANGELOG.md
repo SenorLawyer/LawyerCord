@@ -6,6 +6,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Preserve Source resolution when changing screenshare frame rate.
 - Keep InvisibleChat decryption local by removing automatic URL preview requests to Discord.
 
 - Cancel instant screensharing when its selected source is unavailable instead of sharing a different screen or window.

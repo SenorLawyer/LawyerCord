@@ -89,7 +89,6 @@ function ContributorModal({ user, modalProps }: { user: User; modalProps: Render
                 hasLinks && (
                     <div
                         className={cl("links")}
-                        style={{ width: "100%", justifyContent: "flex-end" }}
                     >
                         {website && (
                             <WebsiteButton

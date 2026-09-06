@@ -8098,12 +8098,16 @@ test("installer metadata normalizes clone suffixes before building repository li
     for (const suffix of ["", "/", ".git", ".git/"]) for (const ending of ["\n", "\r\n", ""]) {
         const remote = `https://github.com/owner/repo${suffix}`;
         const mocks: Record<string, object> = {
-            child_process: {}, electron: {}, "fs/promises": {}, path, "yaml-js": {},
+            child_process: { execFile: (command: string, args: string[], options: { cwd: string; }, callback: (error: Error | null, stdout: string) => void) => {
+                assert.equal(command, "git");
+                assert.deepEqual([...args], ["config", "--local", "--get", "remote.origin.url"]);
+                assert.equal(options.cwd, "fixture");
+                callback(null, remote + ending);
+            } }, electron: {}, "fs/promises": {}, path, "yaml-js": {},
             fs: {
-                readdirSync: () => ["index.ts"],
+                readdirSync: () => ["index.ts", ".git"],
                 readFileSync: (file: string) => {
                     if (file.endsWith("index.ts")) return 'export default definePlugin({name:"Fixture",description:"Fixture"});';
-                    if (file.endsWith("config")) return `[remote "origin"]${ending || "\n"}\turl = ${remote}${ending}`;
                     throw new Error("Missing metadata");
                 },
             },

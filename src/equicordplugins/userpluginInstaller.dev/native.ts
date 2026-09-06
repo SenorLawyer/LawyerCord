@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { exec, spawn } from "child_process";
+import { exec, execFile, spawn } from "child_process";
 import { BrowserWindow, dialog, shell } from "electron";
 import { existsSync, readdirSync, readFileSync, realpathSync } from "fs";
 import { mkdir, readdir, rm } from "fs/promises";
@@ -246,13 +246,12 @@ async function getPluginMeta(path: string, extra: object = {}): Promise<{
     if (!fileToRead) throw new Error("Plugin entry file is missing.");
 
     const file = readFileSync(`${path}/${fileToRead}`, "utf8");
-    let remoteURL;
-    try {
-        const remoteC = readFileSync(join(path, ".git/config"), "utf8");
-        remoteURL = remoteC.match(/\[remote "origin"]\s+url = (https:\/\/(?:(?:git(?:hub|lab)\.com|git\.(?:[a-zA-Z0-9]|\.)+|codeberg\.org)\/(?!user-attachments)(?:[a-zA-Z0-9]|-)+\/(?:[a-zA-Z0-9]|-|\.)+(?:\.git)?|(plugins\.(nin0)\.dev)\/((?:[a-zA-Z0-9]|-|\.)+))(?:\/)?)(?:\r?\n|$)/);
-    } catch {
-        remoteURL = null;
-    }
+    const remote = files.includes(".git")
+        ? await new Promise<string>(resolve => {
+            execFile("git", ["config", "--local", "--get", "remote.origin.url"], { cwd: path }, (error, stdout) => resolve(error ? "" : stdout.trim()));
+        }).catch(() => "")
+        : "";
+    const remoteURL = remote.match(CLONE_LINK_REGEX);
 
     let supportChannelID;
     try {
@@ -290,7 +289,7 @@ async function getPluginMeta(path: string, extra: object = {}): Promise<{
         description,
         usesPreSend: file.includes("PreSendListener") || file.includes("onBeforeMessage"),
         usesNative: files.includes("native.ts") || files.includes("native.js") || (files.includes("native") && existsSync(join(path, "native/index.ts"))),
-        remote: remoteURL ? remoteURL[1].replace(/(?:\.git)?\/?$/, "") : "",
+        remote: remoteURL?.[0] === remote ? remote.replace(/(?:\.git)?\/?$/, "") : "",
         supportChannelID,
         ...extra
     };

@@ -20,6 +20,29 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("timezone dialog stays open when the database rejects a save", async () => {
+    let succeeds = false;
+    let closed = 0;
+    const saved: string[] = [];
+    const { SetTimezoneModal } = loadSource("src/equicordplugins/timezones/TimezoneModal.tsx", {
+        "@api/DataStore": {}, "@components/Heading": {}, "@utils/margins": { Margins: {} },
+        "@webpack/common": { Modal: "modal", useState: () => ["UTC", () => {}], useEffect() {}, useMemo: () => [] },
+        ".": { settings: { store: {} } },
+        "./database": {
+            setTimezone: async () => succeeds,
+            setUserDatabaseTimezone: async (_userId: string, value: string) => saved.push(value),
+        },
+    }, { React: { createElement: (type: unknown, props: object) => ({ type, props }) } });
+    const modal = SetTimezoneModal({ userId: "user", database: true, modalProps: { onClose: () => closed++ } });
+    await modal.props.actions[0].onClick();
+    assert.equal(closed, 0);
+    assert.equal(saved.length, 0);
+    succeeds = true;
+    await modal.props.actions[0].onClick();
+    assert.equal(closed, 1);
+    assert.deepEqual(saved, ["UTC"]);
+});
+
 test("video shortcut reads live settings and waits until invocation to access the media store", () => {
     let ready = false;
     let enabled = false;

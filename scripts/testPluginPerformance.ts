@@ -46,6 +46,36 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("HideServers shutdown only persists pending edits", async () => {
+    let finishLoad: (value: string[]) => void = () => {};
+    const writes: string[][] = [];
+    const timers = new Map<number, () => void>();
+    let nextTimer = 0;
+    const { HiddenServersStore: store } = loadSource("src/equicordplugins/hideServers/HiddenServersStore.ts", {
+        "@api/DataStore": {
+            get: () => new Promise<string[]>(resolve => { finishLoad = resolve; }),
+            set: (_key: string, value: string[]) => { writes.push(Array.from(value)); }
+        },
+        "@webpack": { proxyLazyWebpack: (factory: () => object) => factory(), findStoreLazy: () => ({}) },
+        "@webpack/common": { Flux: { Store: class { emitChange() {} } }, FluxDispatcher: {}, GuildStore: {} }
+    }, {
+        setTimeout: (callback: () => void) => { timers.set(++nextTimer, callback); return nextTimer; },
+        clearTimeout: (id: number) => timers.delete(id)
+    });
+    const loading = store.load();
+    store.unload();
+    finishLoad(["saved"]);
+    await loading;
+    assert.deepEqual(writes, []);
+    assert.equal(store.hiddenGuilds.size, 0);
+    store.addHiddenGuild("edited");
+    store.unload();
+    assert.deepEqual(writes, [["edited"]]);
+    assert.equal(timers.size, 0);
+    store.unload();
+    assert.equal(writes.length, 1);
+});
+
 test("GitHub profile tab renders loading and failure messages", () => {
     for (const [loading, error, expected] of [[true, null, "Loading repositories..."], [false, "Request failed", "Request failed"]] as const) {
         let index = 0;

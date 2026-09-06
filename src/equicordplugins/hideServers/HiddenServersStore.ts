@@ -51,10 +51,9 @@ export const HiddenServersStore = proxyLazyWebpack(() => {
         }
 
         private flushSave() {
-            if (this.saveTimeout) {
-                clearTimeout(this.saveTimeout);
-                this.saveTimeout = undefined;
-            }
+            if (this.saveTimeout === undefined) return;
+            clearTimeout(this.saveTimeout);
+            this.saveTimeout = undefined;
 
             void DataStore.set(DB_KEY, Array.from(this._hiddenGuilds));
         }

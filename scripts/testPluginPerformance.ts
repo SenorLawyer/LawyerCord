@@ -6750,3 +6750,40 @@ test("scheduled account events defer cleanup and cannot restart after stop", asy
                 : scenario === "stop-wait" ? ["stop", "stop", "cleanup"] : ["stop", "cleanup", "load", "stop", "cleanup"]);
     }
 });
+
+
+test("a newer account connection supersedes pending logout and connection work", async () => {
+    for (const delayedLoad of [false, true]) {
+        const waits: (() => void)[] = [];
+        const loads: (() => void)[] = [];
+        let starts = 0;
+        let previews = 0;
+        const { default: plugin } = loadSource("src/equicordplugins/scheduledMessages/index.tsx", {
+            "@api/Settings": { definePluginSettings: () => ({}) }, "@utils/constants": { Devs: {}, EquicordDevs: {} },
+            "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+            "@webpack/common": { FluxDispatcher: { wait: (callback: () => void) => waits.push(callback) } },
+            "./components/ChatBarButton": { setScheduleModeEnabled() {} }, "./components/Icons": {},
+            "./components/MessageAccessory": {}, "./components/ViewScheduledModal": {}, "./components/ScheduleTimeModal": {},
+            "./utils": { stopScheduler() {}, cleanupAllPhantomMessages() { assert.equal(starts, 0, "Stale cleanup must not remove current previews"); },
+                loadScheduledMessages: () => new Promise<void>(resolve => loads.push(resolve)),
+                startScheduler: () => starts++, recreatePhantomMessages: async () => { previews++; } }
+        });
+        const old = plugin.flux.CONNECTION_OPEN();
+        if (delayedLoad) { waits[0](); await setImmediate(); }
+        const logout = plugin.flux.LOGOUT();
+        const current = plugin.flux.CONNECTION_OPEN();
+        waits[2]();
+        await setImmediate();
+        assert.equal(loads.length, delayedLoad ? 2 : 1);
+        loads[loads.length - 1]();
+        await current;
+        assert.equal(starts, 1);
+        assert.equal(previews, 1);
+        waits[1]();
+        if (delayedLoad) loads[0]();
+        else waits[0]();
+        await Promise.all([old, logout]);
+        assert.equal(starts, 1);
+        assert.equal(previews, 1);
+    }
+});

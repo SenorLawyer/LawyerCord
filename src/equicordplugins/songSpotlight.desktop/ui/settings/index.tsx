@@ -242,5 +242,6 @@ export function SettingsModal({ modalProps, ...props }: SettingsProps & { modalP
 }
 
 export function openSettingsModal(templateData?: UserData) {
-    openModal(modalProps => <SettingsModal modalProps={modalProps} templateData={templateData} />);
+    const userId = UserStore.getCurrentUser()?.id;
+    openModal(modalProps => <SettingsModal modalProps={modalProps} templateData={UserStore.getCurrentUser()?.id === userId ? templateData : undefined} />);
 }

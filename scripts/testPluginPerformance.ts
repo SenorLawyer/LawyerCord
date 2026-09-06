@@ -4839,3 +4839,29 @@ test("SongSpotlight settings reject stale account actions", async () => {
     await confirm();
     assert.deepEqual(calls, [], "unmounted editor cannot act after switching back");
 });
+
+test("SongSpotlight parsed songs preserve account and concurrent list updates", async () => {
+    const source = readFileSync("src/equicordplugins/songSpotlight.desktop/ui/songs/index.tsx", "utf8");
+    const start = source.indexOf("action={async () => {") + "action={async () => {".length;
+    const end = source.indexOf("\n                            }}", start);
+    assert.ok(start > 0 && end > start);
+    for (const switched of [true, false]) {
+        let userId = "first";
+        const parsed = Promise.withResolvers<object>();
+        const users = { first: { data: [{ id: "existing" }] }, second: { data: [] } };
+        const opened: unknown[] = [];
+        const action = runInNewContext(`(async () => {${source.slice(start, end)}})`, {
+            UserStore: { getCurrentUser: () => ({ id: userId }) },
+            useSongStore: { getState: () => ({ users, self: { data: [{ id: "stale-mirror" }] } }) },
+            Native: { parseLink: () => parsed.promise }, entry: { link: "https://example.com/song" },
+            apiConstants: { songLimit: 6 }, sid: (song: { id: string }) => song.id,
+            showToast() {}, Toasts: { Type: {} }, openSettingsModal: (songs: unknown[]) => opened.push(Array.from(songs)),
+        });
+        const pending = action();
+        users.first.data.push({ id: "concurrent" });
+        if (switched) userId = "second";
+        parsed.resolve({ id: "parsed" });
+        await pending;
+        assert.deepEqual(opened, switched ? [] : [[{ id: "existing" }, { id: "concurrent" }, { id: "parsed" }]]);
+    }
+});

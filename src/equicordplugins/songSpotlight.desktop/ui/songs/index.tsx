@@ -43,7 +43,8 @@ import {
     useCallback,
     useMemo,
     useRef,
-    useState
+    UserStore,
+    useState,
 } from "@webpack/common";
 
 interface SongEntryProps {
@@ -79,12 +80,14 @@ function SongEntry({ entry, number, isLoaded, isPlaying, big, onClick }: SongEnt
                             label="Steal song"
                             icon={PuzzlePieceIcon}
                             action={async () => {
-                                const self = useSongStore.getState().self?.data ?? [];
+                                const userId = UserStore.getCurrentUser()?.id;
+                                if (!userId) return;
+                                const song = await Native.parseLink(entry.link);
+                                if (UserStore.getCurrentUser()?.id !== userId) return;
+                                const self = useSongStore.getState().users[userId]?.data ?? [];
                                 if (self.length >= apiConstants.songLimit) {
                                     return showToast("You don't have enough space!");
                                 }
-
-                                const song = await Native.parseLink(entry.link);
                                 if (!song) {
                                     return showToast("Uh oh, this song doesn't exist!", Toasts.Type.FAILURE);
                                 }
@@ -195,7 +198,7 @@ function SongInfo({ owned, song, render, big }: SongInfoProps) {
                                                         label="Steal song"
                                                         icon={PuzzlePieceIcon}
                                                         action={() => {
-                                                            const self = useSongStore.getState().self?.data ?? [];
+                                                            const self = useSongStore.getState().users[UserStore.getCurrentUser()?.id]?.data ?? [];
                                                             if (self.length >= apiConstants.songLimit) {
                                                                 return showToast("You don't have enough space!");
                                                             }
@@ -214,7 +217,7 @@ function SongInfo({ owned, song, render, big }: SongInfoProps) {
                                                         label="Remove song"
                                                         icon={TrashIcon}
                                                         action={() => {
-                                                            const self = useSongStore.getState().self?.data ?? [];
+                                                            const self = useSongStore.getState().users[UserStore.getCurrentUser()?.id]?.data ?? [];
 
                                                             const i = self.findIndex(x => sid(x) === sid(song));
                                                             if (i === -1) {

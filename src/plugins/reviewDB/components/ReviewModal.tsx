@@ -24,7 +24,7 @@ import { cl } from "@plugins/reviewDB/utils";
 import { useForceUpdater } from "@utils/react";
 import * as t from "@vencord/discord-types";
 import { DefaultExtractAndLoadChunksRegex, extractAndLoadChunksLazy, findComponentByCodeLazy } from "@webpack";
-import { Modal, openModalLazy, useRef, useState } from "@webpack/common";
+import { Modal, openModalLazy, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
 import { ComponentProps } from "react";
 
 import ReviewComponent from "./ReviewComponent";
@@ -107,14 +107,18 @@ export function openReviewsModal(discordId: string, name: string, type: ReviewTy
 
     openModalLazy(async () => {
         await requirePaginator();
-        return props => (
-            <ReviewsModal
-                modalKey={modalKey}
-                modalProps={props}
-                discordId={discordId}
-                name={name}
-                type={type}
-            />
-        );
+        return function AccountReviewsModal(props: t.RenderModalProps) {
+            const userId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
+            return (
+                <ReviewsModal
+                    key={userId}
+                    modalKey={modalKey}
+                    modalProps={props}
+                    discordId={discordId}
+                    name={name}
+                    type={type}
+                />
+            );
+        };
     }, { modalKey });
 }

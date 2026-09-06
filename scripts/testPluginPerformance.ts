@@ -21,6 +21,29 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ReviewDB modal state is keyed to the current account", async () => {
+    let userId = "first";
+    let factory: (() => Promise<(props: object) => { props: { key: string; discordId: string; }; }>) | undefined;
+    const store = { getCurrentUser: () => ({ id: userId }) };
+    const api = loadSource("src/plugins/reviewDB/components/ReviewModal.tsx", {
+        "@components/BaseText": {}, "@plugins/reviewDB/auth": {}, "@plugins/reviewDB/reviewDbApi": {},
+        "@plugins/reviewDB/utils": {}, "@utils/react": {},
+        "@webpack": { DefaultExtractAndLoadChunksRegex: /chunk/, extractAndLoadChunksLazy: () => async () => {}, findComponentByCodeLazy: () => ({}) },
+        "@webpack/common": { UserStore: store, openModalLazy: (value: typeof factory) => { factory = value; },
+            useStateFromStores: (stores: unknown[], select: () => unknown) => { assert.equal(stores[0], store); return select(); } },
+        "./ReviewComponent": {}, "./ReviewsView": {},
+    }, { React: { createElement: (_type: unknown, props: object) => ({ props }) } });
+    api.openReviewsModal("target", "Target", 0);
+    assert.ok(factory);
+    const render = await factory();
+    const first = render({});
+    userId = "second";
+    const second = render({});
+    assert.equal(first.props.key, "first");
+    assert.equal(second.props.key, "second");
+    assert.equal(second.props.discordId, "target");
+});
+
 test("ReviewDB reload dependencies include the profile and current account", () => {
     let userId = "first";
     let retained: { discordId: string; currentUserId: string; data: { reviews: unknown[]; }; } | null = null;

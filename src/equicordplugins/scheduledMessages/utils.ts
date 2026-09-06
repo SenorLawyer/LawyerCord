@@ -193,10 +193,11 @@ function getVideoPreview(dataUrl: string): Promise<{ width: number; height: numb
     });
 }
 
-async function buildPhantomAttachments(attachments: ScheduledAttachment[]) {
+async function buildPhantomAttachments(attachments: ScheduledAttachment[], isCurrent: () => boolean) {
     const result: { id: string; filename: string; size: number; content_type: string; url?: string; proxy_url?: string; width?: number; height?: number; }[] = [];
 
     for (let idx = 0; idx < attachments.length; idx++) {
+        if (!isCurrent()) break;
         const att = attachments[idx];
         const dataUrl = `data:${att.type};base64,${att.data}`;
         const attachment: typeof result[0] = {
@@ -241,7 +242,7 @@ export async function createPhantomMessage(msg: ScheduledMessage): Promise<void>
     phantomMessageMap.set(messageId, phantom);
     const isCurrent = () => phantomMessageMap.get(messageId) === phantom && UserStore.getCurrentUser()?.id === currentUser.id;
 
-    const attachments = msg.attachments?.length ? await buildPhantomAttachments(msg.attachments) : [];
+    const attachments = msg.attachments?.length ? await buildPhantomAttachments(msg.attachments, isCurrent) : [];
     if (!isCurrent()) return;
 
     const initialReactions = (msg.reactions ?? []).map(r => ({

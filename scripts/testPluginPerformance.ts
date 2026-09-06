@@ -7205,3 +7205,31 @@ test("scheduled image dimensions fall back on timeout and release their source",
         assert.equal(img.onerror, null);
     }
 });
+
+test("removed scheduled previews do not decode remaining attachments", async () => {
+    for (const change of ["account", "removed", "replaced"] as const) {
+        let userId = "account";
+        const images: { onload: (() => void) | null; }[] = [];
+        const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@utils/misc": {}, "@api/DataStore": {}, "@utils/Logger": { Logger: class {} },
+            "@vencord/discord-types/enums": {},
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
+            ".": { settings: { store: { showPhantomMessages: true } } }
+        }, { Image: class {
+            onload: (() => void) | null = null;
+            constructor() { images.push(this); }
+            removeAttribute() {}
+        }, setTimeout: () => 1, clearTimeout() {} });
+        const pending = api.createPhantomMessage(scheduledEntry({ userId: "account", attachments: [
+            { filename: "first.png", type: "image/png", data: "first" },
+            { filename: "second.png", type: "image/png", data: "second" }
+        ] }));
+        assert.equal(images.length, 1);
+        if (change === "account") userId = "other";
+        else if (change === "removed") api.phantomMessageMap.clear();
+        else api.phantomMessageMap.set("scheduled-queued", { messageId: "queued" });
+        images[0].onload?.();
+        await pending;
+        assert.equal(images.length, 1);
+    }
+});

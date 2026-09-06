@@ -52,6 +52,7 @@ test("Streaks ignores responses for changed accounts or tokens", async () => {
 
 test("Streaks reads authorization from the current account without initialization", () => {
     let userId = "first";
+    let clears = 0;
     let state: Record<string, unknown> = {};
     const api = loadSource("src/equicordplugins/streaks/stores/AuthorizationStore.tsx", {
         "@api/DataStore": {}, "@utils/lazy": { proxyLazy: (factory: () => unknown) => factory() }, "@utils/Logger": {},
@@ -62,7 +63,7 @@ test("Streaks reads authorization from the current account without initializatio
                 state = init(value => Object.assign(state, value), () => state);
                 return { getState: () => state };
             },
-        }, "../constants": {}, "./StreaksStore": {},
+        }, "../constants": {}, "./StreaksStore": { useStreaksStore: { getState: () => ({ clear: () => { clears++; } }) } },
     });
     const auth = api.useAuthorizationStore.getState();
     auth.setToken("first-token");
@@ -75,8 +76,10 @@ test("Streaks reads authorization from the current account without initializatio
     assert.equal(auth.getToken(), "first-token");
     auth.remove("second");
     assert.equal(auth.getToken(), "first-token");
+    assert.equal(clears, 0);
     auth.remove("first");
     assert.equal(auth.isAuthorized(), false);
+    assert.equal(clears, 1);
 });
 
 test("ReviewDB OAuth errors tolerate malformed response bodies", async () => {

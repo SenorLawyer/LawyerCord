@@ -46,6 +46,7 @@ export const useAuthorizationStore = proxyLazy(() => zustandCreate(
                 const newTokens = { ...tokens };
                 delete newTokens[id];
                 set({ tokens: newTokens });
+                if (id === UserStore.getCurrentUser()?.id) useStreaksStore.getState().clear();
             },
             async authorize() {
                 return new Promise((resolve, reject) => {
@@ -98,8 +99,8 @@ export const useAuthorizationStore = proxyLazy(() => zustandCreate(
             partialize: state => ({ tokens: state.tokens }),
             onRehydrateStorage: () => async state => {
                 if (!state) return;
+                useStreaksStore.getState().clear();
                 if (state.isAuthorized()) {
-                    useStreaksStore.getState().clear();
                     await useStreaksStore.getState().migrate();
                     await useStreaksStore.getState().fetch();
                 }

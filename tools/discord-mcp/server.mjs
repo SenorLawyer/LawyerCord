@@ -209,8 +209,8 @@ export const TOOLS = [
 
 const toolMap = new Map(TOOLS.map(tool => [tool.name, tool]));
 function candidateBridgeDirectories() {
+    if (process.env.LAWYERCORD_DISCORD_MCP_DIR) return [process.env.LAWYERCORD_DISCORD_MCP_DIR];
     const candidates = [];
-    if (process.env.LAWYERCORD_DISCORD_MCP_DIR) candidates.push(process.env.LAWYERCORD_DISCORD_MCP_DIR);
     const appData = process.env.APPDATA;
     if (appData) {
         candidates.push(join(appData, "LawyerCord", "discord-mcp"));

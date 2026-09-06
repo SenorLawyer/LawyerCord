@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { ChildProcessWithoutNullStreams, spawn, spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -122,6 +122,21 @@ const fakeWorker = (async () => {
 })();
 
 try {
+    const fallbackDirectory = join(bridgeDirectory, "LawyerCord", "discord-mcp");
+    await mkdir(fallbackDirectory, { recursive: true });
+    await writeFile(join(fallbackDirectory, "config.json"), JSON.stringify({ schemaVersion: 1, secret }));
+    const isolated = spawnSync(process.execPath, ["--input-type=module", "-e", `
+        import assert from "node:assert/strict";
+        import { callBridge } from "./tools/discord-mcp/server.mjs";
+        await assert.rejects(callBridge("connection_status", {}, 1), /bridge is not ready/);
+    `], {
+        env: { ...process.env, APPDATA: bridgeDirectory, LAWYERCORD_DISCORD_MCP_DIR: join(bridgeDirectory, "missing") },
+        encoding: "utf8",
+        timeout: 5_000,
+    });
+    assert.equal(isolated.status, 0, isolated.stderr || isolated.error?.message);
+    assert.deepEqual(await readdir(fallbackDirectory), ["config.json"], "an explicit bridge never falls back to another installation");
+
     const initialized = await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "1" } });
     assert.equal(initialized.serverInfo.name, "discord-mcp");
 

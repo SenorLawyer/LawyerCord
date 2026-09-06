@@ -3380,6 +3380,8 @@ test("Desktop CSP preserves explicit hosts without allowing every origin", () =>
     assert.equal(policy.split(/\s+/).includes("*"), false);
     assert.ok(policy.includes("api.github.com"));
     assert.ok(policy.includes("example.test"));
+    const connect = policy.split("; ").find(directive => directive.startsWith("connect-src "));
+    assert.ok(connect?.split(" ").includes("streaks.equicord.org"));
 });
 
 test("Dragify validates JSON fields before resolving a drop", () => {

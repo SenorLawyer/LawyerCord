@@ -65,6 +65,7 @@ export const CspPolicies: PolicyMap = {
     "*.vencord.dev": ImageSrc, // VenCloud (api.vencord.dev) and Badges (badges.vencord.dev)
     "manti.vendicated.dev": ImageSrc, // ReviewDB API
     "decor.fieryflames.dev": ConnectSrc, // Decor API
+    "streaks.equicord.org": ConnectSrc,
     "ugc.decor.fieryflames.dev": ImageSrc, // Decor CDN
     "sponsor.ajay.app": ConnectSrc, // Dearrow API
     "dearrow-thumb.ajay.app": ImageSrc, // Dearrow Thumbnail CDN

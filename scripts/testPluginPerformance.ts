@@ -46,6 +46,31 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("MessageBurst retains outgoing text until its edit resolves", async () => {
+    for (const success of [false, true]) {
+        let finish: () => void = () => {};
+        const edit = new Promise<void>((resolve, reject) => { finish = () => success ? resolve() : reject(new Error("Edit failed")); });
+        const plugin = loadSource("src/equicordplugins/messageBurst/index.ts", {
+            "@api/Settings": { definePluginSettings: () => ({ store: { timePeriod: 3 } }) },
+            "@utils/constants": { EquicordDevs: {} },
+            "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+            "@webpack/common": {
+                ChannelStore: { getChannel: () => ({ isGroupDM: () => false }) },
+                MessageStore: { getMessages: () => ({ last: () => ({ id: "previous", author: { id: "self" }, content: "First", timestamp: new Date() }) }) },
+                UserStore: { getCurrentUser: () => ({ id: "self" }) },
+                MessageActions: { editMessage: () => edit }
+            }
+        }, { document: { querySelector: () => null } }).default;
+        const outgoing = { content: "Second" };
+        const pending = plugin.onBeforeMessageSend("channel", outgoing);
+        assert.equal(outgoing.content, "Second");
+        finish();
+        if (success) await pending;
+        else await assert.rejects(pending, /Edit failed/);
+        assert.equal(outgoing.content, success ? "" : "Second");
+    }
+});
+
 test("LimitlessScreenshare preserves source resolution when changing frame rate", () => {
     let resolution: number | undefined = 0;
     const plugin = loadSource("src/equicordplugins/limitlessScreenshare/index.tsx", {

@@ -70,11 +70,10 @@ const settings = definePluginSettings({
 export default definePlugin({
     name: "MessageBurst",
     description: "Merges messages sent within a time period with your previous sent message if no one else sends a message before you.",
-    dependencies: ["MessagePopoverAPI"],
     tags: ["Chat"],
     authors: [EquicordDevs.port22exposed],
     settings,
-    onBeforeMessageSend(channelId, message) {
+    async onBeforeMessageSend(channelId, message) {
         if (!message.content) return;
         const lastMessage = MessageStore.getMessages(channelId)?.last?.() as Message | undefined;
         const channel = ChannelStore.getChannel(channelId);
@@ -85,7 +84,7 @@ export default definePlugin({
             const separator = settings.store.useSpace ? " " : "\n";
             const newContent = content + separator + message.content;
 
-            MessageActions.editMessage(channelId, lastMessage.id, {
+            await MessageActions.editMessage(channelId, lastMessage.id, {
                 content: newContent,
             });
 

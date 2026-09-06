@@ -21,6 +21,24 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ReviewDB distinguishes failed block loads from empty lists", async () => {
+    for (const success of [false, true]) {
+        const api = loadSource("src/plugins/reviewDB/reviewDbApi.ts", {
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) }, Toasts: { Type: {} } },
+            "./auth": { getToken: async () => "token" }, "./entities": {}, "./settings": {}, "./utils": { showToast() {} },
+        }, { fetch: async () => ({ ok: success, status: 500, json: async () => [] }) });
+        const blocks = await api.fetchBlocks();
+        if (success) assert.deepEqual(Array.from(blocks), []);
+        else assert.equal(blocks, null);
+        const { BlockedUsersList } = loadSource("src/plugins/reviewDB/components/BlockedUserModal.tsx", {
+            "@components/Paragraph": {}, "@plugins/reviewDB/auth": {}, "@plugins/reviewDB/reviewDbApi": {},
+            "@plugins/reviewDB/utils": {}, "@utils/Logger": {}, "@utils/react": { useAwaiter: () => [blocks, undefined, false] },
+            "@webpack/common": { useState: () => [false, () => {}] },
+        }, { React: { createElement: (_type: unknown, _props: object, ...children: unknown[]) => ({ children }) } }, "({ BlockedUsersList })");
+        assert.equal(BlockedUsersList().children[0], success ? "No blocked users." : "Failed to fetch blocked users.");
+    }
+});
+
 test("ReviewDB only removes blocked rows after successful unblocking", async () => {
     for (const success of [false, true]) {
         const gone: boolean[] = [];

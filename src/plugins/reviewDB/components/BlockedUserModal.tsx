@@ -63,8 +63,8 @@ function BlockedUsersList() {
 
     if (pending)
         return null;
-    if (error)
-        return <Paragraph>Failed to fetch blocks: ${String(error)}</Paragraph>;
+    if (error || !blocks)
+        return <Paragraph>Failed to fetch blocked users.</Paragraph>;
     if (!blocks.length)
         return <Paragraph>No blocked users.</Paragraph>;
 

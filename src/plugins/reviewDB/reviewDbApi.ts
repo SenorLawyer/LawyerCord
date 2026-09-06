@@ -248,8 +248,8 @@ async function patchBlock(action: "block" | "unblock", userId: string) {
 export const blockUser = (userId: string) => patchBlock("block", userId);
 export const unblockUser = (userId: string) => patchBlock("unblock", userId);
 
-export async function fetchBlocks(): Promise<ReviewDBUser[]> {
-    return await rdbRequest<ReviewDBUser[]>("/blocks") ?? [];
+export function fetchBlocks(): Promise<ReviewDBUser[] | null> {
+    return rdbRequest<ReviewDBUser[]>("/blocks");
 }
 
 export function getCurrentUserInfo(): Promise<ReviewDBCurrentUser | null> {

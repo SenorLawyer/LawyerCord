@@ -5427,6 +5427,7 @@ test("scheduled reaction retries stop after account changes or shutdown", async 
         let requests = 0;
         const timers: (() => void)[] = [];
         const add = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
             "@api/DataStore": {}, "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) },
                 RestAPI: { put: async () => { requests++; throw { status: 429, body: { retry_after: 1 } }; } } },
@@ -5448,6 +5449,7 @@ test("scheduled reaction retries stop after account changes or shutdown", async 
 test("scheduled sends accepted after shutdown skip reactions but finish successfully", async () => {
     let finish: () => void = () => {};
     const send = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
         "@api/DataStore": {}, "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
         "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, ChannelStore: { getChannel: () => ({}) }, FluxDispatcher: { dispatch() {} },
             Constants: { Endpoints: { MESSAGES: (id: string) => id } }, SnowflakeUtils: { fromTimestamp: () => "nonce" },
@@ -5466,7 +5468,8 @@ test("scheduled sends stopped during persistence remain saved without posting", 
         let userId = "account";
         let finish: () => void = () => {};
         const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
-            "@api/DataStore": { get: async () => [{ id: "queued", userId: "account", scheduledTime: 0 }],
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+            "@api/DataStore": { get: async () => [scheduledEntry({ id: "queued", userId: "account", scheduledTime: 0 })],
                 set: () => new Promise<void>(resolve => { finish = resolve; }) },
             "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) }, ChannelStore: { getChannel: () => assert.fail("Must stop before sending") } },
@@ -5488,7 +5491,8 @@ test("scheduled send batches stop before starting the next message", async () =>
     let posts = 0;
     let finish: () => void = () => {};
     const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
-        "@api/DataStore": { get: async () => [1, 2].map(id => ({ id: String(id), userId: "account", channelId: "channel", scheduledTime: 0 })), set: async () => {} },
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+        "@api/DataStore": { get: async () => [1, 2].map(id => (scheduledEntry({ id: String(id), userId: "account", channelId: "channel", scheduledTime: 0 }))), set: async () => {} },
         "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
         "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, ChannelStore: { getChannel: () => ({}) }, FluxDispatcher: { dispatch() {} },
             Constants: { Endpoints: { MESSAGES: (id: string) => id } }, SnowflakeUtils: { fromTimestamp: () => "nonce" },
@@ -5513,7 +5517,8 @@ test("scheduled preview restoration stops between messages after invalidation", 
         const reads: (() => void)[] = [];
         let userId = "first";
         const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
-            "@api/DataStore": { get: async () => [1, 2].map(id => ({ id: String(id), userId: "first", channelId: "channel", scheduledTime: id })), set: async () => {} },
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+            "@api/DataStore": { get: async () => [1, 2].map(id => (scheduledEntry({ id: String(id), userId: "first", channelId: "channel", scheduledTime: id }))), set: async () => {} },
             "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) },
                 MessageStore: { hasPresent: () => false }, FluxDispatcher: { dispatch() {} },
@@ -5540,6 +5545,7 @@ test("scheduled phantom history loads cannot revive stale previews", async () =>
         const created: string[] = [];
         let userId = "first";
         const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
             "@api/DataStore": {}, "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) },
                 MessageStore: { hasPresent: () => false },
@@ -5573,6 +5579,7 @@ test("scheduled phantom history loads cannot revive stale previews", async () =>
 test("scheduled queue ignores stale reads after reload, edits, or stop", async () => {
     const reads: ((value: { id: string; scheduledTime: number; }[]) => void)[] = [];
     const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
         "@api/DataStore": { get: () => new Promise(resolve => reads.push(resolve)), set: async () => {} },
         "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
         "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, FluxDispatcher: { dispatch() {} } }, ".": { settings: { store: {} } }
@@ -5580,20 +5587,20 @@ test("scheduled queue ignores stale reads after reload, edits, or stop", async (
     const older = module.loadScheduledMessages();
     const newer = module.loadScheduledMessages();
     await setImmediate();
-    reads[1]([{ id: "new", scheduledTime: 2 }]);
+    reads[1]([scheduledEntry({ id: "new", scheduledTime: 2 })]);
     await newer;
-    reads[0]([{ id: "old", scheduledTime: 1 }]);
+    reads[0]([scheduledEntry({ id: "old", scheduledTime: 1 })]);
     await older;
     assert.equal(module.getScheduledMessages()[0].id, "new");
     const beforeClear = module.loadScheduledMessages();
     await module.clearAllScheduledMessages();
-    reads[2]([{ id: "deleted", scheduledTime: 0 }]);
+    reads[2]([scheduledEntry({ id: "deleted", scheduledTime: 0 })]);
     await beforeClear;
     assert.equal(module.getScheduledMessages().length, 0);
     const beforeStop = module.loadScheduledMessages();
     module.stopScheduler();
     await setImmediate();
-    reads[3]([{ id: "stopped", scheduledTime: 0 }]);
+    reads[3]([scheduledEntry({ id: "stopped", scheduledTime: 0 })]);
     await beforeStop;
     assert.equal(module.getScheduledMessages().length, 0);
 });
@@ -5601,7 +5608,8 @@ test("scheduled queue ignores stale reads after reload, edits, or stop", async (
 test("signed-out scheduled messages wait between checks without changing the queue", async () => {
     const delays: number[] = [];
     const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
-        "@api/DataStore": { get: async () => [{ id: "queued", scheduledTime: 0 }], set: () => assert.fail("No signed-out queue write") },
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+        "@api/DataStore": { get: async () => [scheduledEntry({ id: "queued", scheduledTime: 0 })], set: () => assert.fail("No signed-out queue write") },
         "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
         "@webpack/common": { UserStore: { getCurrentUser: () => null } },
         ".": { settings: { store: { checkIntervalSeconds: 10 } } }
@@ -5618,7 +5626,8 @@ test("scheduled interval changes only replace an active timer", async () => {
     const timers: number[] = [];
     const cleared: number[] = [];
     const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
-        "@api/DataStore": { get: async () => [{ id: "future", scheduledTime: Date.now() + 100000 }] },
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+        "@api/DataStore": { get: async () => [scheduledEntry({ id: "future", scheduledTime: Date.now() + 100000 })] },
         "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
         "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) },}, ".": { settings: { store: { get checkIntervalSeconds() { return delay; } } } }
     }, { setTimeout: (_callback: unknown, ms: number) => { timers.push(ms); return timers.length; },
@@ -5777,6 +5786,7 @@ test("scheduled attempts remain saved on failure and do not automatically replay
         let release: () => void = () => {};
         const pendingPost = new Promise<void>(resolve => { release = resolve; });
         const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
             "@api/DataStore": { get: async () => structuredClone(saved), set: async (_key: string, value: typeof saved) => {
                 if (outcome === "storage") throw new Error("Storage failed");
                 saved = structuredClone(value);
@@ -5830,6 +5840,7 @@ test("scheduled messages require every attachment upload before posting", async 
             upload() { }
         }
         const send = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
             "@api/DataStore": {}, "@utils/Logger": { Logger: class {} },
             "@vencord/discord-types/enums": { CloudUploadPlatform: {} },
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) },
@@ -5864,6 +5875,7 @@ test("scheduled messages require every attachment upload before posting", async 
 test("scheduled reactions target the message returned by the send request", async () => {
     const reactions: string[] = [];
     const send = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
         "@api/DataStore": {}, "@utils/Logger": { Logger: class {} },
         "@vencord/discord-types/enums": {},
         "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, ChannelStore: { getChannel: () => ({}) }, FluxDispatcher: { dispatch() {} },
@@ -6663,6 +6675,7 @@ test("new scheduled entries retain their initiating account across persistence",
         let previewChecks = 0;
         let finish: () => void = () => {};
         const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
             "@api/DataStore": { set: async (_key: string, entries: { userId: string; }[]) => {
                 saved = structuredClone(entries);
                 await new Promise<void>(resolve => { finish = resolve; });
@@ -6687,8 +6700,9 @@ test("new scheduled entries retain their initiating account across persistence",
 
 test("scheduled sends reject unowned and foreign entries without marking them attempted", async () => {
     for (const owner of [undefined, "other"]) {
-        const entry = { id: "queued", userId: owner, scheduledTime: 0 };
+        const entry = scheduledEntry({ id: "queued", userId: owner, scheduledTime: 0 });
         const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
             "@api/DataStore": { get: async () => [structuredClone(entry)], set: () => assert.fail("Rejected sends must not change storage") },
             "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) },
@@ -6707,6 +6721,7 @@ test("scheduled sends reject unowned and foreign entries without marking them at
 
 test("scheduled previews reject missing and foreign owners before loading history", async () => {
     const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
         "@api/DataStore": {}, "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
         "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) },
             MessageStore: { hasPresent: () => assert.fail("Do not load history for another account") },
@@ -6723,7 +6738,8 @@ test("scheduled previews reject missing and foreign owners before loading histor
 test("scheduling rejects invalid dates without mutating saved messages", async () => {
     const originalTime = Date.now() + 60_000;
     const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
-        "@api/DataStore": { get: async () => [{ id: "queued", userId: "account", scheduledTime: originalTime }],
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+        "@api/DataStore": { get: async () => [scheduledEntry({ id: "queued", userId: "account", scheduledTime: originalTime })],
             set: () => assert.fail("Invalid dates must not be persisted") },
         "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
         "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) },
@@ -6812,7 +6828,8 @@ test("scheduled minute limits count only the initiating account", async () => {
         const scheduledTime = Date.now() + 120_000;
         let writes = 0;
         const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
-            "@api/DataStore": { get: async () => [{ id: "saved", userId: owner, channelId: "channel", scheduledTime }],
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+            "@api/DataStore": { get: async () => [scheduledEntry({ id: "saved", userId: owner, channelId: "channel", scheduledTime })],
                 set: async () => { writes++; } },
             "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) } },
@@ -6831,8 +6848,9 @@ test("clearing scheduled messages preserves other accounts and does nothing sign
     for (const userId of ["account", undefined]) {
         const removed: string[] = [];
         let writes = 0;
-        const entries = [{ id: "mine", userId: "account" }, { id: "theirs", userId: "other" }, { id: "legacy" }];
+        const entries = [{ id: "mine", userId: "account" }, { id: "theirs", userId: "other" }, { id: "legacy" }].map(scheduledEntry);
         const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
             "@api/DataStore": { get: async () => structuredClone(entries), set: async () => { writes++; } },
             "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
             "@webpack/common": { UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined },
@@ -6868,6 +6886,7 @@ test("scheduled additions commit in order and failed additions never enter later
     for (const failFirst of [false, true]) {
         const writes: { entries: { content: string; }[]; resolve: () => void; reject: (error: Error) => void; }[] = [];
         const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
             "@api/DataStore": { set: (_key: string, entries: { content: string; }[]) => new Promise<void>((resolve, reject) => writes.push({ entries: structuredClone(entries), resolve, reject })) },
             "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) } },
@@ -6899,7 +6918,8 @@ test("scheduled additions commit in order and failed additions never enter later
 test("failed scheduled deletion preserves the queue and previews", async () => {
     for (const clear of [false, true]) {
         const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
-            "@api/DataStore": { get: async () => [{ id: "saved", userId: "account" }], set: async () => { throw new Error("Storage failed"); } },
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+            "@api/DataStore": { get: async () => [scheduledEntry({ id: "saved", userId: "account" })], set: async () => { throw new Error("Storage failed"); } },
             "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) },
                 FluxDispatcher: { dispatch: () => assert.fail("Do not remove previews before committing") } },
@@ -6917,7 +6937,8 @@ test("scheduled reaction writes preserve committed counts on failure and ignore 
         let writes = 0;
         let warnings = 0;
         const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
-            "@api/DataStore": { get: async () => [{ id: "saved", reactions: [{ emoji: { id: null, name: "hello" }, count: 1 }] }],
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+            "@api/DataStore": { get: async () => [scheduledEntry({ id: "saved", reactions: [{ emoji: { id: null, name: "hello" }, count: 1 }] })],
                 set: async () => { writes++; if (scenario === "failure") throw new Error("Storage failed"); } },
             "@utils/Logger": { Logger: class { warn() { warnings++; } } }, "@vencord/discord-types/enums": {}, "@webpack/common": {},
             ".": { settings: { store: {} } }
@@ -6993,5 +7014,43 @@ test("scheduled delays use the complete numeric input without truncating it", as
         component({ userId: "account", uploadIds: [], channelId: "channel", content: "Text", close() {} });
         await schedule();
         assert.deepEqual(times, minutes === null ? [] : [100_000 + minutes * 60_000]);
+    }
+});
+
+
+function scheduledEntry(overrides: Partial<import("../src/equicordplugins/scheduledMessages/types").ScheduledMessage>) {
+    return { id: "queued", channelId: "channel", content: "Text", scheduledTime: 0, createdAt: 0, ...overrides };
+}
+
+
+test("invalid scheduled storage is preserved and blocks mutations until a valid reload", async () => {
+    const row = scheduledEntry({ userId: "account" });
+    const invalid: unknown[] = [null, {}, [null], new Array(1), [{ ...row, attachments: new Array(1) }], [{ ...row, reactions: new Array(1) }], [row, row], [{ ...row, content: 7 }], [{ ...row, scheduledTime: NaN }],
+        [{ ...row, scheduledTime: Infinity }], [{ ...row, createdAt: Number.MAX_VALUE }], [{ ...row, attemptedAt: NaN }],
+        [{ ...row, userId: "" }], [{ ...row, attachments: [{ filename: "file", data: 1, type: "text/plain" }] }],
+        [{ ...row, reactions: [{ emoji: { id: null, name: "hello" }, count: -1 }] }], [{ ...row, reactions: [null] }]];
+    for (let stored of invalid) {
+        let writes = 0;
+        const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+            "@api/DataStore": { get: async () => structuredClone(stored), set: async () => { writes++; } },
+            "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, FluxDispatcher: { dispatch() {} } },
+            ".": { settings: { store: { maxMessagesPerMinute: 3, showPhantomMessages: false } } }
+        }, { setTimeout: () => assert.fail("Invalid entries must not reach a timer") });
+        await assert.rejects(api.loadScheduledMessages(), /stored data has been preserved/);
+        assert.equal(api.getScheduledMessages().length, 0);
+        await assert.rejects(api.addScheduledMessage("channel", "Text", Date.now() + 60_000), /recovered/);
+        await assert.rejects(api.clearAllScheduledMessages(), /recovered/);
+        await assert.rejects(api.removeScheduledMessage("queued"), /recovered/);
+        api.startScheduler();
+        await setImmediate();
+        api.stopScheduler();
+        assert.equal(writes, 0);
+        stored = [scheduledEntry({})];
+        await api.loadScheduledMessages();
+        assert.equal(api.getScheduledMessages().length, 1);
+        assert.equal((await api.addScheduledMessage("channel", "Text", Date.now() + 60_000)).success, true);
+        assert.equal(writes, 1);
     }
 });

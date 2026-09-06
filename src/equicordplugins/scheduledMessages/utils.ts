@@ -6,6 +6,7 @@
 
 import * as DataStore from "@api/DataStore";
 import { Logger } from "@utils/Logger";
+import { isObject } from "@utils/misc";
 import { CloudUploadPlatform } from "@vencord/discord-types/enums";
 import { ChannelStore, CloudUploader, Constants, FluxDispatcher, GuildStore, IconUtils, MessageActions, MessageStore, RestAPI, showToast, SnowflakeUtils, Toasts, UserStore } from "@webpack/common";
 
@@ -17,6 +18,7 @@ const STORAGE_KEY = "ScheduledMessages_queue";
 
 let scheduledMessages: ScheduledMessage[] = [];
 let queueRevision = 0;
+let invalidStoredQueue = false;
 let queueOperation: Promise<void> = Promise.resolve();
 let checkTimeout: ReturnType<typeof setTimeout> | null = null;
 let schedulerRunning = false;
@@ -34,18 +36,57 @@ const pendingRecreations = new Map<string, ReturnType<typeof setTimeout>>();
 const RECREATE_DEBOUNCE_MS = 300;
 let phantomGeneration = 0;
 
+function isStoredTimestamp(value: unknown): value is number {
+    return typeof value === "number" && Number.isFinite(value) && !Number.isNaN(new Date(value).getTime());
+}
+
+function isScheduledMessage(value: unknown): value is ScheduledMessage {
+    if (!isObject(value)) return false;
+    const entry = value as Partial<ScheduledMessage>;
+    return typeof entry.id === "string" && entry.id.length > 0
+        && typeof entry.channelId === "string" && entry.channelId.length > 0
+        && typeof entry.content === "string"
+        && isStoredTimestamp(entry.scheduledTime) && isStoredTimestamp(entry.createdAt)
+        && (entry.userId === undefined || typeof entry.userId === "string" && entry.userId.length > 0)
+        && (entry.attemptedAt === undefined || isStoredTimestamp(entry.attemptedAt))
+        && (entry.attachments === undefined || Array.isArray(entry.attachments) && [...entry.attachments].every((attachment: unknown) => {
+            if (!isObject(attachment)) return false;
+            const item = attachment as Partial<ScheduledAttachment>;
+            return typeof item.filename === "string" && typeof item.data === "string" && typeof item.type === "string";
+        }))
+        && (entry.reactions === undefined || Array.isArray(entry.reactions) && [...entry.reactions].every((reaction: unknown) => {
+            if (!isObject(reaction)) return false;
+            const item = reaction as Partial<ScheduledReaction>;
+            return isObject(item.emoji) && (item.emoji.id === null || typeof item.emoji.id === "string")
+                && typeof item.emoji.name === "string"
+                && (item.emoji.animated === undefined || typeof item.emoji.animated === "boolean")
+                && typeof item.count === "number" && Number.isSafeInteger(item.count) && item.count >= 0;
+        }));
+}
+
 export async function loadScheduledMessages(): Promise<void> {
     const revision = ++queueRevision;
     await queueOperation;
-    const saved = await DataStore.get<ScheduledMessage[]>(STORAGE_KEY);
+    const saved = await DataStore.get<unknown>(STORAGE_KEY);
     if (revision !== queueRevision) return;
-    scheduledMessages = Array.isArray(saved) ? saved : [];
+    if (saved !== undefined && (!Array.isArray(saved) || ![...saved].every(isScheduledMessage) || new Set(saved.map(entry => entry.id)).size !== saved.length)) {
+        invalidStoredQueue = true;
+        stopScheduler();
+        cleanupAllPhantomMessages();
+        scheduledMessages = [];
+        throw new Error("Saved scheduled messages are invalid. The stored data has been preserved.");
+    }
+    invalidStoredQueue = false;
+    scheduledMessages = saved ?? [];
     scheduledMessages.sort((a, b) => a.scheduledTime - b.scheduledTime);
 }
 
 function runQueueOperation<T>(operation: () => Promise<T>): Promise<T> {
     queueRevision++;
-    const result = queueOperation.then(operation);
+    const result = queueOperation.then(() => {
+        if (invalidStoredQueue) throw new Error("Saved scheduled messages must be recovered before changing the queue.");
+        return operation();
+    });
     queueOperation = result.then(() => undefined, () => undefined);
     return result;
 }

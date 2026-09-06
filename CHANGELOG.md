@@ -11,6 +11,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Validate stored scheduled-message records before loading them, preserving invalid data and blocking queue changes until it is recovered.
+
 - Keep a pending scheduling save from restoring previews after shutdown.
 
 - Parse the full scheduling delay, preserving fractional minutes and rejecting invalid numeric values.

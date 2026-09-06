@@ -211,10 +211,10 @@ function UserPluginsTab() {
                                     plugin.name
                                 ];
                                 return <AddonCard
-                                    key={pl.name}
-                                    name={pl.name}
-                                    description={pl.description}
-                                    enabled={rs.plugins[pl.name].enabled}
+                                    key={plugin.directory}
+                                    name={plugin.name}
+                                    description={plugin.description}
+                                    enabled={rs.plugins[plugin.name]?.enabled ?? false}
                                     infoButton={<button
                                         role="switch"
                                         onClick={async () => {
@@ -241,8 +241,9 @@ function UserPluginsTab() {
                                         <DeleteIcon />
                                     </button>}
                                     setEnabled={t => {
-                                        Vencord.Settings.plugins[pl.name].enabled = t;
-                                        if (pluginRequiresRestart(pl)) {
+                                        Vencord.Settings.plugins[plugin.name] ??= { enabled: t };
+                                        Vencord.Settings.plugins[plugin.name].enabled = t;
+                                        if (!pl || pluginRequiresRestart(pl)) {
                                             Toasts.show({
                                                 id: Toasts.genId(),
                                                 message: "Restart to apply changes!",

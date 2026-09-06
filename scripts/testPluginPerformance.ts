@@ -2365,6 +2365,26 @@ test("quote preview ignores superseded and unmounted image work", async () => {
     assert.equal(states[4], null);
 });
 
+test("audiobook authorization failures end the current update", async () => {
+    const requests: string[] = [];
+    const fetchMediaData = loadSource("src/equicordplugins/richPresence/services/audiobookshelf.ts", {
+        "@utils/Logger": { Logger: class { error() {} warn() {} } },
+        "@webpack/common": {},
+        "../settings": { settings: { store: { abs_serverUrl: "https://books.example", abs_username: "reader", abs_password: "password" } } },
+        "./assetCache": {}
+    }, { fetch: async (url: string) => {
+        requests.push(url);
+        assert.ok(requests.length <= 4, "Unexpected recursive retry");
+        return url.endsWith("/login")
+            ? { ok: true, json: async () => ({ user: { token: "token" } }) }
+            : { ok: false, status: 401, statusText: "Unauthorized" };
+    } }, "fetchMediaData");
+    assert.equal(await fetchMediaData(), null);
+    assert.equal(requests.length, 2);
+    assert.equal(await fetchMediaData(), null);
+    assert.equal(requests.length, 4);
+});
+
 test("an evicted asset rejection preserves its replacement request", async () => {
     let rejectOld: (reason: Error) => void = () => {};
     let requests = 0;

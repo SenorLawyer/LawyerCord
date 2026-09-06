@@ -2325,3 +2325,42 @@ test("theme watcher detects empty-folder changes and notifies once", async () =>
     assert.equal(watcher.themes().length, 1);
     assert.equal(notices.length, 2);
 });
+
+test("quote preview ignores superseded and unmounted image work", async () => {
+    const effects: (() => (() => void) | void)[] = [];
+    const states: unknown[] = [];
+    let stateIndex = 0;
+    const pending: ((image: Blob) => void)[] = [];
+    const created: Blob[] = [];
+    const revoked: string[] = [];
+    const React = { createElement: (type: unknown, props: unknown, ...children: unknown[]) => ({ type, props, children }) };
+    const modal = loadSource("src/equicordplugins/quoter/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: { grayscale: false, showWatermark: false, saveAsGif: false, watermark: "", quoteFont: "font" } }) },
+        "@components/FormSwitch": {}, "@utils/constants": { Devs: {}, EquicordDevs: {} }, "@utils/discord": {},
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+        "@webpack/common": { React, IconUtils: { getUserAvatarURL: () => "avatar" },
+            useState: (initial: unknown) => { const index = stateIndex++; states[index] = initial; return [initial, (value: unknown) => { states[index] = value; }]; },
+            useEffect: (effect: () => (() => void) | void) => effects.push(effect) },
+        "./components/QuoteIcon": {}, "./types": { QuoteFont: {} },
+        "./utils": { createQuoteImage: () => new Promise<Blob>(resolve => pending.push(resolve)) }
+    }, { React, URL: { createObjectURL: (image: Blob) => { created.push(image); return "blob:preview"; }, revokeObjectURL: (url: string) => revoked.push(url) } }, "QuoteModal");
+    modal({ message: { author: {}, content: "Quote" } });
+    const firstCleanup = effects[1]();
+    firstCleanup?.();
+    const secondCleanup = effects[1]();
+    const latest = new Blob(["latest"]);
+    pending[1](latest);
+    await Promise.resolve();
+    pending[0](new Blob(["stale"]));
+    await Promise.resolve();
+    assert.equal(states[4], latest);
+    assert.equal(created.length, 1);
+    secondCleanup?.();
+    assert.deepEqual(revoked, ["blob:preview"]);
+    const closedCleanup = effects[1]();
+    closedCleanup?.();
+    pending[2](new Blob(["closed"]));
+    await Promise.resolve();
+    assert.equal(created.length, 1);
+    assert.equal(states[4], null);
+});

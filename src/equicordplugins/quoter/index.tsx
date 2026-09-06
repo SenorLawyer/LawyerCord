@@ -10,7 +10,7 @@ import { Devs, EquicordDevs } from "@utils/constants";
 import { getCurrentChannel } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
 import { Message, RenderModalProps } from "@vencord/discord-types";
-import { IconUtils, Menu, Modal, openModal, TextInput, UploadHandler, useEffect, useState } from "@webpack/common";
+import { IconUtils, Menu, Modal, openModal, showToast, TextInput, Toasts, UploadHandler, useEffect, useState } from "@webpack/common";
 
 import { QuoteIcon } from "./components/QuoteIcon";
 import { QuoteFont } from "./types";
@@ -102,8 +102,13 @@ function QuoteModal({ message, ...props }: RenderModalProps & { message: Message
         settings.store.saveAsGif = saveAsGif;
     }, [gray, showWatermark, saveAsGif]);
 
-    const generateImage = async () => {
-        const image = await createQuoteImage({
+    useEffect(() => {
+        let cancelled = false;
+        let url: string | undefined;
+        setQuoteImage(null);
+        setPreviewUrl(null);
+
+        createQuoteImage({
             avatarUrl: IconUtils.getUserAvatarURL(message.author, true, 512),
             quote: message.content,
             grayScale: gray,
@@ -112,22 +117,20 @@ function QuoteModal({ message, ...props }: RenderModalProps & { message: Message
             showWatermark,
             saveAsGif,
             quoteFont
+        }).then(image => {
+            if (cancelled) return;
+            url = URL.createObjectURL(image);
+            setQuoteImage(image);
+            setPreviewUrl(url);
+        }).catch(() => {
+            if (!cancelled) showToast("Could not create the quote image.", Toasts.Type.FAILURE);
         });
-        setQuoteImage(image);
 
-        const newUrl = URL.createObjectURL(image);
-        setPreviewUrl(newUrl);
-    };
-
-    useEffect(() => { generateImage(); }, [gray, showWatermark, saveAsGif, watermarkText, quoteFont]);
-
-    useEffect(() => {
         return () => {
-            if (previewUrl) {
-                URL.revokeObjectURL(previewUrl);
-            }
+            cancelled = true;
+            if (url) URL.revokeObjectURL(url);
         };
-    }, [previewUrl]);
+    }, [message.author, message.content, gray, showWatermark, saveAsGif, watermarkText, quoteFont]);
 
     const handleExport = () => {
         if (!quoteImage) return;
@@ -168,11 +171,13 @@ function QuoteModal({ message, ...props }: RenderModalProps & { message: Message
             actions={[
                 {
                     text: "Export",
+                    disabled: !quoteImage,
                     variant: "primary",
                     onClick: handleExport
                 },
                 {
                     text: "Send",
+                    disabled: !quoteImage,
                     variant: "primary",
                     onClick: handleSendInChat
                 }

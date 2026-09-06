@@ -131,13 +131,17 @@ function getSettingsJSON() {
     });
 }
 
-async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
-    const track = await fetchNowPlaying(signal);
+function throwIfAborted(signal?: AbortSignal) {
     if (signal?.aborted) {
         const e = new Error("Aborted");
         e.name = "AbortError";
         throw e;
     }
+}
+
+async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
+    const track = await fetchNowPlaying(signal);
+    throwIfAborted(signal);
     if (!track) return null;
 
     const currentSettingsJSON = getSettingsJSON();
@@ -238,6 +242,7 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
                     const res = await fetch(`https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=${apiKey}&artist=${artist}&album=${album}&format=json`, { signal });
                     if (!res.ok) throw new Error(`Last.fm request failed: ${res.status}`);
                     const json = await res.json();
+                    throwIfAborted(signal);
                     image = json?.album?.image?.at(-1)?.["#text"];
                 }
 
@@ -246,6 +251,7 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
                     const res = await fetch(`https://ws.audioscrobbler.com/2.0/?method=track.getinfo&api_key=${apiKey}&artist=${artist}&track=${title}&format=json`, { signal });
                     if (!res.ok) throw new Error(`Last.fm request failed: ${res.status}`);
                     const json = await res.json();
+                    throwIfAborted(signal);
                     image = json?.track?.album?.image?.at(-1)?.["#text"];
                 }
 
@@ -260,6 +266,8 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
             }
         }
     }
+
+    throwIfAborted(signal);
 
     let largeImagePromise: Promise<string>;
     if (resolvedCoverArtUrl) {
@@ -284,11 +292,7 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
         assets.small_image = smallImage;
     }
 
-    if (signal?.aborted) {
-        const e = new Error("Aborted");
-        e.name = "AbortError";
-        throw e;
-    }
+    throwIfAborted(signal);
 
     const activity: Activity = {
         application_id: appId,

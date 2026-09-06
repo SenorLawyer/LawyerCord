@@ -4762,3 +4762,28 @@ test("Navidrome ignores invalid artwork URLs without caching them", async () => 
         assert.equal(requests, 2);
     }
 });
+
+test("cancelled Navidrome artwork cannot refill caches or resolve assets", async () => {
+    const artwork = Promise.withResolvers<Response>();
+    const controller = new AbortController();
+    let assetRequests = 0;
+    const module = loadSource("src/equicordplugins/richPresence/services/navidrome.ts", {
+        "@utils/Logger": { Logger: class { error() {} warn() {} } },
+        "@utils/misc": { parseUrl: (value: string) => new URL(value) },
+        "@vencord/discord-types/enums": { ActivityFlags: { INSTANCE: 1 }, ActivityStatusDisplayType: {} },
+        "@webpack/common": {}, "md5": { __esModule: true, default: () => "token" },
+        "./assetCache": { getCachedApplicationAsset: async () => { assetRequests++; return "logo"; } },
+        "../settings": { settings: { store: { nd_serverUrl: "https://music.example", nd_username: "listener", nd_password: "password", nd_albumArtMode: "lastfm" } } },
+    }, { fetch: async (url: string) => new URL(url).origin === "https://music.example"
+        ? response({ "subsonic-response": { nowPlaying: { entry: [{ id: "track", username: "listener", artist: "Artist", album: "Album" }] } } })
+        : artwork.promise,
+    }, "({ getActivity, cacheSize: () => lastFmCache.size })");
+    const pending = module.getActivity(controller.signal);
+    const rejected = assert.rejects(pending, { name: "AbortError" });
+    await setImmediate();
+    controller.abort();
+    artwork.resolve(response({ album: { image: [{ "#text": "https://images.example/cover.png" }] } }));
+    await rejected;
+    assert.equal(module.cacheSize(), 0);
+    assert.equal(assetRequests, 0);
+});

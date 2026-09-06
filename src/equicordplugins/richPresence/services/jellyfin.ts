@@ -97,7 +97,7 @@ async function fetchMediaData(): Promise<JfMediaData | null> {
             url: `${baseUrl}/web/#!/details?id=${item.Id}`,
             imageUrl,
             duration: item.RunTimeTicks ? Math.floor(item.RunTimeTicks / 10000000) : undefined,
-            position: playState?.PositionTicks ? Math.floor(playState.PositionTicks / 10000000) : undefined,
+            position: playState?.PositionTicks != null ? Math.floor(playState.PositionTicks / 10000000) : undefined,
             isPaused: !!playState?.IsPaused,
         };
     } catch (e) {

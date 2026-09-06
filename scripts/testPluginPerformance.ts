@@ -2365,6 +2365,23 @@ test("quote preview ignores superseded and unmounted image work", async () => {
     assert.equal(states[4], null);
 });
 
+test("Jellyfin preserves zero playback position and omits missing position", async () => {
+    let position: number | undefined = 0;
+    const fetchMediaData = loadSource("src/equicordplugins/richPresence/services/jellyfin.ts", {
+        "@utils/Logger": { Logger: class { error() {} warn() {} } },
+        "@utils/text": {}, "@webpack/common": {},
+        "../settings": { settings: { store: { jf_serverUrl: "https://media.example", jf_apiKey: "key", jf_userId: "user" } } },
+        "./assetCache": {}
+    }, { fetch: async () => ({ ok: true, headers: { get: () => "application/json" }, json: async () => [
+        { UserId: "user", NowPlayingItem: { Name: "Track", Type: "Audio" }, PlayState: { PositionTicks: position } }
+    ] }) }, "fetchMediaData");
+    assert.equal((await fetchMediaData()).position, 0);
+    position = undefined;
+    assert.equal((await fetchMediaData()).position, undefined);
+    position = 25_000_000;
+    assert.equal((await fetchMediaData()).position, 2);
+});
+
 test("audiobook authorization failures end the current update", async () => {
     const requests: string[] = [];
     const fetchMediaData = loadSource("src/equicordplugins/richPresence/services/audiobookshelf.ts", {

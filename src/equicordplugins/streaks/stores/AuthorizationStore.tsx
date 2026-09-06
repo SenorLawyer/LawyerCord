@@ -70,10 +70,12 @@ export const useAuthorizationStore = proxyLazy(() => zustandCreate(
                                     const code = url.searchParams.get("code");
                                     if (!code) throw new Error("No code in redirect");
                                     const req = await fetch(`${AUTHORIZE_URL}?code=${encodeURIComponent(code)}`);
-                                    if (req?.ok) {
-                                        const { access_token: token } = await req.json();
+                                    if (req.ok) {
+                                        const data: unknown = await req.json();
                                         if (UserStore.getCurrentUser()?.id !== userId) throw new Error("Discord account changed during authorization.");
-                                        if (token) get().setToken(token);
+                                        if (typeof data !== "object" || data === null || !("access_token" in data) || typeof data.access_token !== "string" || !data.access_token.trim())
+                                            throw new Error("Streaks returned an invalid token.");
+                                        get().setToken(data.access_token);
                                     } else {
                                         throw new Error(`Request not OK: ${req.status}`);
                                     }

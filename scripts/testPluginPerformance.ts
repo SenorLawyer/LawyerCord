@@ -22,7 +22,7 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
 test("Streaks authorization cannot attach a token to another account", async () => {
-    for (const change of ["before", "response", "non-error", "none"]) {
+    for (const change of ["before", "response", "non-error", "missing-token", "invalid-token", "empty-token", "none"]) {
         let userId = "first";
         let callback: (response: { location: string; }) => Promise<void> = async () => assert.fail("missing callback");
         let state: Record<string, unknown> = {};
@@ -39,13 +39,17 @@ test("Streaks authorization cannot attach a token to another account", async () 
             }, "../constants": { AUTHORIZE_URL: "https://example.com/auth" }, "./StreaksStore": {},
         }, { URL, React: { createElement: (_type: unknown, props: object) => ({ props }) },
             fetch: async () => { requests++; if (change === "non-error") throw "request failed"; return { ok: true, json: async () => {
-                if (change === "response") userId = "second"; return { access_token: "first-token" };
+                if (change === "response") userId = "second";
+                if (change === "missing-token") return {};
+                if (change === "invalid-token") return { access_token: {} };
+                if (change === "empty-token") return { access_token: " " };
+                return { access_token: "first-token" };
             } }; } });
         const auth = api.useAuthorizationStore.getState();
         const pending = auth.authorize();
         const result = change === "none" ? pending : change === "non-error"
             ? assert.rejects(pending, reason => reason === "request failed")
-            : assert.rejects(pending, /account changed/);
+            : assert.rejects(pending, change.endsWith("-token") ? /invalid token/ : /account changed/);
         if (change === "before") userId = "second";
         await callback({ location: "https://example.com/auth?code=test" });
         await result;

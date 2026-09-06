@@ -21,6 +21,22 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("NoBlockedMessages preserves notifications for unsuppressed AutoMod messages", () => {
+    let suppressed = false;
+    const { default: plugin } = loadSource("src/plugins/noBlockedMessages/index.ts", {
+        "@api/Settings": { definePluginSettings: () => ({ store: { allowAutoModMessages: true, disableNotifications: true } }), migratePluginSetting() {} },
+        "@equicordplugins/blockKeywords": {}, "@utils/constants": { Devs: {}, EquicordDevs: {} }, "@utils/Logger": {},
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack": { findStoreLazy: () => ({}) }, "@webpack/common": {},
+    });
+    plugin.isSuppressed = () => ({ suppressed, hide: true });
+    plugin.isReplyToSuppressed = () => ({ suppressed: false, hide: false });
+    assert.equal(plugin.disableNotification({ type: 24 }), false);
+    suppressed = true;
+    assert.equal(plugin.disableNotification({ type: 24 }), true);
+    assert.equal(plugin.shouldKeepMessage({ type: 24 })[0], true);
+});
+
 test("message history diffs keep custom emoji markup atomic", () => {
     const { createWordDiff } = loadSource("src/plugins/messageLogger/diffUtils.ts", {});
     for (const prefix of ["", "a"]) {

@@ -2181,7 +2181,7 @@ test("failed theme downloads preserve the installed stylesheet", async () => {
         "@main/ipcMain": { ensureSafePath: (_root: string, file: string) => file },
         "@main/utils/constants": { THEMES_DIR: "themes" },
         fs: { writeFileSync: (_file: string, content: string) => { contents = content; } },
-    }, { fetch: async () => new Response(status === 200 ? ".new { color: blue; }" : "Service unavailable", { status }) });
+    }, { Buffer, AbortSignal, fetch: async () => new Response(status === 200 ? ".new { color: blue; }" : "Service unavailable", { status }) });
     const theme = { name: "existing", id: "123", content: "metadata" };
     await assert.rejects(downloadTheme(null, theme), /download/i);
     assert.equal(contents, ".existing { color: red; }");
@@ -7242,7 +7242,7 @@ test("theme downloads validate required IPC fields and scrub native failures", a
         "@main/ipcMain": { ensureSafePath: (_root: string, file: string) => file.includes("../") ? null : file },
         "@main/utils/constants": { THEMES_DIR: "themes" },
         fs: { writeFileSync() { if (failWrite) throw new Error("EACCES private/home/themes"); writes++; }, existsSync: () => true }
-    }, { fetch: async () => { requests++; return new Response(".theme {}"); } });
+    }, { Buffer, AbortSignal, fetch: async () => { requests++; return new Response(".theme {}"); } });
     for (const theme of [null, {}, { id: "1" }, { id: "1", name: 7 }, { id: 7, name: "Theme" }, { id: "", name: "Theme" }, { id: "1", name: "../outside" }]) {
         await assert.rejects(api.downloadTheme(null, theme), /Invalid theme details/);
     }
@@ -7254,4 +7254,36 @@ test("theme downloads validate required IPC fields and scrub native failures", a
     failWrite = true;
     await assert.rejects(api.downloadTheme(null, { id: "1", name: "Theme" }), (error: Error) => error.message === "Theme download failed.");
     assert.equal(writes, 1);
+});
+
+test("theme downloads bound streamed responses before replacing the installed file", async () => {
+    for (const mode of ["valid", "declared", "streamed", "broken", "timeout"] as const) {
+        let writes = 0;
+        let cancelled = 0;
+        let deadline = 0;
+        const body = new ReadableStream<Uint8Array>({
+            start(controller) {
+                if (mode === "broken") { controller.error(new Error("Disconnected")); return; }
+                controller.enqueue(new Uint8Array(mode === "streamed" ? 10 * 1024 * 1024 + 1 : 4));
+                if (mode === "valid") controller.close();
+            }, cancel() { cancelled++; }
+        });
+        const api = loadSource("src/equicordplugins/themeLibrary/native.ts", {
+            "@main/ipcMain": { ensureSafePath: (_root: string, file: string) => file },
+            "@main/utils/constants": { THEMES_DIR: "themes" }, fs: { writeFileSync() { writes++; } }
+        }, { Buffer, AbortSignal: { timeout(ms: number) { deadline = ms; return new AbortController().signal; } },
+            fetch: async (_url: string, options: RequestInit) => {
+                assert.equal(options.redirect, "error");
+                assert.ok(options.signal);
+                if (mode === "timeout") throw new Error("Timed out");
+                return new Response(body, { headers: mode === "declared" ? { "content-length": String(10 * 1024 * 1024 + 1) } : {} });
+            }
+        });
+        const pending = api.downloadTheme(null, { name: "Theme", id: "1" });
+        if (mode === "valid") await pending;
+        else await assert.rejects(pending, /Theme download failed/);
+        assert.equal(writes, mode === "valid" ? 1 : 0);
+        assert.equal(cancelled, mode === "declared" || mode === "streamed" ? 1 : 0);
+        assert.equal(deadline, 30_000);
+    }
 });

@@ -26,10 +26,32 @@ export async function downloadTheme(_: IpcMainInvokeEvent, theme: Pick<Theme, "i
     if (!path || typeof theme?.id !== "string" || !theme.id) throw new Error("Invalid theme details.");
 
     try {
-        const download = await fetch(`https://themes.equicord.org/api/download/${encodeURIComponent(theme.id)}`);
-        if (!download.ok) throw new Error("Theme download failed.");
-        const content = await download.text();
-        writeFileSync(path, content);
+        const maxBytes = 10 * 1024 * 1024;
+        const download = await fetch(`https://themes.equicord.org/api/download/${encodeURIComponent(theme.id)}`, {
+            redirect: "error", signal: AbortSignal.timeout(30_000)
+        });
+        if (!download.ok || !download.body || Number(download.headers.get("content-length")) > maxBytes) {
+            await download.body?.cancel();
+            throw new Error("Theme download failed.");
+        }
+        const reader = download.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let size = 0;
+        try {
+            for (;;) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                size += value.byteLength;
+                if (size > maxBytes) {
+                    await reader.cancel();
+                    throw new Error("Theme download failed.");
+                }
+                chunks.push(value);
+            }
+        } finally {
+            reader.releaseLock();
+        }
+        writeFileSync(path, Buffer.concat(chunks, size).toString("utf8"));
     } catch {
         throw new Error("Theme download failed.");
     }

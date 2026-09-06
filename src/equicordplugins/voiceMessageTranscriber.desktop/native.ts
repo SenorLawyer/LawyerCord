@@ -9,23 +9,43 @@ import { IpcMainInvokeEvent } from "electron";
 import { isRecognizedAudioContainer } from "./audioValidation";
 
 // we love CORS
-export async function fetchAudio(_: IpcMainInvokeEvent, url: string): Promise<Uint8Array> {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:" || (parsed.hostname !== "cdn.discordapp.com" && parsed.hostname !== "media.discordapp.net"))
+export async function fetchAudio(_: IpcMainInvokeEvent, url: unknown): Promise<Uint8Array> {
+    const parsed = typeof url === "string" && url.length <= 8192 ? URL.parse(url) : null;
+    if (!parsed || parsed.protocol !== "https:" || parsed.port || parsed.username || parsed.password
+        || (parsed.hostname !== "cdn.discordapp.com" && parsed.hostname !== "media.discordapp.net"))
         throw new Error("Blocked an untrusted voice-message URL");
 
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.statusText}`);
+    const maxBytes = 25 * 1024 * 1024;
+    try {
+        const res = await fetch(parsed, { redirect: "error", signal: AbortSignal.timeout(120_000) });
+        if (!res.ok || !res.body || Number(res.headers.get("Content-Length")) > maxBytes) {
+            await res.body?.cancel();
+            throw new Error("Invalid voice-message response");
+        }
 
-    const contentLength = Number(res.headers.get("Content-Length"));
-    if (Number.isFinite(contentLength) && contentLength > 25 * 1024 * 1024)
-        throw new Error("Voice message exceeds the 25 MB transcription limit");
+        const reader = res.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let size = 0;
+        try {
+            for (;;) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                size += value.byteLength;
+                if (size > maxBytes) {
+                    await reader.cancel();
+                    throw new Error("Voice message exceeds the transcription limit");
+                }
+                chunks.push(value);
+            }
+        } finally {
+            reader.releaseLock();
+        }
 
-    const audio = new Uint8Array(await res.arrayBuffer());
-    if (audio.byteLength > 25 * 1024 * 1024)
-        throw new Error("Voice message exceeds the 25 MB transcription limit");
-    if (!isRecognizedAudioContainer(audio))
-        throw new Error("Discord returned an unsupported or invalid audio file");
-
-    return audio;
+        const audio = Buffer.concat(chunks, size);
+        if (!isRecognizedAudioContainer(audio))
+            throw new Error("Invalid audio file");
+        return audio;
+    } catch {
+        throw new Error("Could not download this voice message. Use a valid audio file under 25 MB.");
+    }
 }

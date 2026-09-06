@@ -21,6 +21,65 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("voice transcription downloads reject untrusted URLs and bound streamed audio", async () => {
+    const validation = loadSource("src/equicordplugins/voiceMessageTranscriber.desktop/audioValidation.ts", {});
+    const audio = Uint8Array.from([0x4f, 0x67, 0x67, 0x53, 0, 0, 0, 0, 0, 0, 0, 0]);
+    let calls = 0;
+    let cancelled = 0;
+    let released = 0;
+    let chunks = [audio];
+    let length: string | null = null;
+    let ok = true;
+    let failure = false;
+    const { fetchAudio } = loadSource("src/equicordplugins/voiceMessageTranscriber.desktop/native.ts", {
+        "./audioValidation": validation,
+    }, {
+        URL, Buffer, AbortSignal,
+        fetch: async (_url: URL, options: RequestInit) => {
+            calls++;
+            assert.equal(options.redirect, "error");
+            assert.ok(options.signal);
+            if (failure) throw new Error("secret signed URL or local path");
+            return {
+                ok, headers: { get: () => length },
+                body: {
+                    cancel: async () => { cancelled++; },
+                    getReader: () => ({
+                        read: async () => chunks.length ? { done: false, value: chunks.shift() } : { done: true },
+                        cancel: async () => { cancelled++; },
+                        releaseLock: () => { released++; },
+                    }),
+                },
+            };
+        },
+    });
+    for (const url of [null, 123, "bad", "https://evil.test/a", "http://cdn.discordapp.com/a", "https://user@cdn.discordapp.com/a", "https://cdn.discordapp.com:444/a", "https://cdn.discordapp.com/" + "x".repeat(8192)])
+        await assert.rejects(fetchAudio({}, url), /Blocked an untrusted/);
+    assert.equal(calls, 0);
+    const url = "https://cdn.discordapp.com/attachments/a.ogg";
+    assert.deepEqual(Buffer.from(await fetchAudio({}, url)), Buffer.from(audio));
+    assert.equal(released, 1);
+    chunks = [new Uint8Array(25 * 1024 * 1024), audio];
+    await assert.rejects(fetchAudio({}, url), /under 25 MB/);
+    assert.equal(cancelled, 1);
+    assert.equal(released, 2);
+    length = String(25 * 1024 * 1024 + 1);
+    await assert.rejects(fetchAudio({}, url), /under 25 MB/);
+    assert.equal(cancelled, 2);
+    length = null;
+    ok = false;
+    await assert.rejects(fetchAudio({}, url), /Could not download/);
+    assert.equal(cancelled, 3);
+    ok = true;
+    chunks = [new TextEncoder().encode("<html>no audio</html>")];
+    await assert.rejects(fetchAudio({}, url), /Could not download/);
+    failure = true;
+    await assert.rejects(fetchAudio({}, url), (error: Error) => {
+        assert.equal(error.message.includes("secret"), false);
+        return true;
+    });
+});
+
 test("voice activity lookups cannot log into a stopped or different session", async () => {
     for (const change of ["none", "stop", "account", "channel"]) {
         let account = "first";

@@ -21,6 +21,27 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("failed changelog checks cannot report a cached repository as current", async () => {
+    const source = readFileSync("src/components/settings/tabs/changelog/index.tsx", "utf8");
+    const start = source.indexOf("    const fetchChangelog =");
+    const handler = source.slice(start, source.indexOf("    React.useEffect(", start));
+    const code = transpileModule(handler, { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
+    const errors: unknown[] = [];
+    const toasts: Array<{ type: string; }> = [];
+    const check = runInNewContext(code + "\nfetchChangelog;", {
+        React: { useCallback: (callback: unknown) => callback }, repoPending: false, repoErr: null,
+        loadNewPlugins() {}, loadChangelogHistory() {}, setIsLoading() {}, setError: (value: unknown) => errors.push(value),
+        VencordNative: { updater: { getUpdates: async () => ({ ok: false, error: { message: "offline" } }) } },
+        Vencord: { Settings: { updateChannel: "nightly" } }, gitHash: "current",
+        getLastRepositoryCheckHash: async () => "current",
+        setRecentlyChecked: () => assert.fail("failed request is not current"),
+        UpdateLogger: { error() {} }, Toasts: { show: (toast: { type: string; }) => toasts.push(toast), genId: () => "id", Type: { FAILURE: "failure" }, Position: {} },
+    });
+    await check();
+    assert.equal(errors.at(-1), "offline");
+    assert.deepEqual(toasts.map(toast => toast.type), ["failure"]);
+});
+
 test("completed updates do not wait for the restart prompt to close", async () => {
     let opened = 0;
     const { Updatable } = loadSource("src/components/settings/tabs/updater/Components.tsx", {

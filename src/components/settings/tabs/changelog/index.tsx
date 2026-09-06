@@ -333,9 +333,11 @@ function ChangelogContent() {
         try {
             // check if the repository was recently refreshed and that nothing has changed
             const updates = await VencordNative.updater.getUpdates(Vencord.Settings.updateChannel);
+            if (!updates.ok)
+                throw new Error(updates.error?.message || "Failed to fetch from repository");
             const lastRepoCheck = await getLastRepositoryCheckHash();
             const currentRepoHash =
-                updates.ok && updates.value.length > 0
+                updates.value.length > 0
                     ? updates.value[0].hash
                     : gitHash;
 
@@ -358,52 +360,46 @@ function ChangelogContent() {
                 return;
             }
 
-            if (updates.ok && updates.value) {
-                if (updates.value.length > 0) {
-                    setChangelog(updates.value);
+            if (updates.value.length > 0) {
+                setChangelog(updates.value);
 
-                    const newPlgs = await getNewPlugins();
-                    const newSettings = await getNewSettings();
-                    setNewPlugins(newPlgs);
+                const newPlgs = await getNewPlugins();
+                const newSettings = await getNewSettings();
+                setNewPlugins(newPlgs);
 
-                    await saveUpdateSession(
-                        updates.value,
-                        newPlgs,
-                        newSettings,
-                        true,
-                    );
-                    await loadChangelogHistory();
-                    setRecentlyChecked(true);
-
-                    Toasts.show({
-                        message: `Found ${updates.value.length} commit${updates.value.length === 1 ? "" : "s"} from repository`,
-                        id: Toasts.genId(),
-                        type: Toasts.Type.SUCCESS,
-                        options: {
-                            position: Toasts.Position.BOTTOM,
-                        },
-                    });
-                } else {
-                    const logged = await ensureLocalUpdateLogged();
-                    setRecentlyChecked(true);
-                    Toasts.show({
-                        message: logged
-                            ? "Logged commits from your latest update"
-                            : "Repository is up to date with your local copy",
-                        id: Toasts.genId(),
-                        type: logged ? Toasts.Type.SUCCESS : Toasts.Type.MESSAGE,
-                        options: {
-                            position: Toasts.Position.BOTTOM,
-                        },
-                    });
-                    if (!logged) {
-                        setChangelog([]);
-                    }
-                }
-            } else if (!updates.ok) {
-                throw new Error(
-                    updates.error?.message || "Failed to fetch from repository",
+                await saveUpdateSession(
+                    updates.value,
+                    newPlgs,
+                    newSettings,
+                    true,
                 );
+                await loadChangelogHistory();
+                setRecentlyChecked(true);
+
+                Toasts.show({
+                    message: `Found ${updates.value.length} commit${updates.value.length === 1 ? "" : "s"} from repository`,
+                    id: Toasts.genId(),
+                    type: Toasts.Type.SUCCESS,
+                    options: {
+                        position: Toasts.Position.BOTTOM,
+                    },
+                });
+            } else {
+                const logged = await ensureLocalUpdateLogged();
+                setRecentlyChecked(true);
+                Toasts.show({
+                    message: logged
+                        ? "Logged commits from your latest update"
+                        : "Repository is up to date with your local copy",
+                    id: Toasts.genId(),
+                    type: logged ? Toasts.Type.SUCCESS : Toasts.Type.MESSAGE,
+                    options: {
+                        position: Toasts.Position.BOTTOM,
+                    },
+                });
+                if (!logged) {
+                    setChangelog([]);
+                }
             }
         } catch (err: any) {
             UpdateLogger.error("Failed to fetch commits from repository", err);

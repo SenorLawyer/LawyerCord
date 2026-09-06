@@ -346,7 +346,7 @@ export async function updatePlugin(_, directory: string) {
     const pluginMeta = await getPluginMeta(pluginDir)
         .catch(() => { throw new Error("Could not read the plugin metadata."); });
     const rawOutput = await new Promise<string>((resolve, reject) => {
-        exec("git log origin/HEAD...HEAD --oneline --pretty=format:%an////////%h////////%H////////%s", {
+        exec("git log HEAD..origin/HEAD --oneline --pretty=format:%an////////%h////////%H////////%s", {
             cwd: pluginDir
         }, (error, stdout) => {
             if (error) reject(new Error("Could not read the plugin update history."));

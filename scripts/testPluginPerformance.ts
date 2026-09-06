@@ -7734,7 +7734,7 @@ test("plugin updates reject preparation failures before opening a review window"
         const mocks: Record<string, object> = {
             child_process: { exec: (command: string, options: { cwd: string; }, callback: (error: Error | null, stdout: string) => void) => {
                 commands++;
-                assert.ok(command.startsWith("git log "));
+                assert.ok(command.startsWith("git log HEAD..origin/HEAD "));
                 assert.equal(options.cwd, "fixture");
                 callback(stage === "history" ? new Error("Private Git path") : null, "");
             } },

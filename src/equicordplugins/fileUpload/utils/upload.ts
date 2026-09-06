@@ -1353,6 +1353,7 @@ async function uploadWithFallbacks(fileBlob: Blob, filename: string, primary: Se
 
         try {
             const uploadedUrl = await uploadToService(service, fileBlob, filename);
+            if (cancelRequested) throw new Error("Upload cancelled by user");
             if (attempted.length) {
                 showToast(`Upload succeeded with ${serviceLabels[service]} after fallback`, Toasts.Type.SUCCESS);
             }
@@ -1542,21 +1543,21 @@ export async function uploadPickedFile(): Promise<void> {
     await uploadProvidedFiles([file]);
 }
 
-export async function uploadProvidedFiles(files: readonly File[], forceSend?: boolean): Promise<void> {
+export async function uploadProvidedFiles(files: readonly File[], forceSend?: boolean): Promise<boolean> {
     if (isUploading) {
         showToast("Upload already in progress", Toasts.Type.MESSAGE);
-        return;
+        return false;
     }
 
     if (!isConfigured()) {
         showToast("Please configure FileUpload settings first", Toasts.Type.FAILURE);
-        return;
+        return false;
     }
 
-    if (!files.length) return;
+    if (!files.length) return false;
 
     const uploadFiles = files.filter(file => Boolean(file) && isFileTypeAllowed(file));
-    if (!uploadFiles.length) return;
+    if (!uploadFiles.length) return false;
 
     isUploading = true;
     cancelRequested = false;
@@ -1581,6 +1582,7 @@ export async function uploadProvidedFiles(files: readonly File[], forceSend?: bo
 
             await uploadPreparedBlob(file, undefined, forceSend);
         }
+        return true;
     } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error";
         if (isUploadCancelledError(error)) {
@@ -1591,6 +1593,7 @@ export async function uploadProvidedFiles(files: readonly File[], forceSend?: bo
             logger.error("Manual upload error", error);
             setUploadState({ phase: "failed", status: `Upload failed: ${message}`, canCancel: false, percent: 0 });
         }
+        return false;
     } finally {
         isUploading = false;
         activeAbortController = null;

@@ -46,6 +46,58 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("File uploads report failure, busy state and success", async () => {
+    const upload = loadSource("src/equicordplugins/fileUpload/utils/upload.ts", {
+        "@equicordplugins/fileUpload/constants": {}, "@equicordplugins/fileUpload/settings": {},
+        "@equicordplugins/fileUpload/types": { ServiceType: {}, serviceLabels: {} }, "@utils/clipboard": {}, "@utils/discord": {},
+        "@utils/Logger": { Logger: class { error() {} } }, "@utils/web": {},
+        "@webpack/common": { showToast: () => {}, Toasts: { Type: {} } },
+        "./apngToGif": {}, "./getMediaUrl": {}, "./s3": {}, "./sharex": {}
+    }, { IS_DISCORD_DESKTOP: false, setTimeout: () => 0 }, `
+        isConfigured = () => true;
+        isFileTypeAllowed = () => true;
+        uploadPreparedBlob = async () => { throw new Error("Failed"); };
+        ({ uploadProvidedFiles, succeed() { uploadPreparedBlob = async () => "url"; }, busy() { isUploading = true; },
+            cancelLate() {
+                cancelRequested = false;
+                buildUploadOrder = () => ["fixture"];
+                uploadToService = async () => { cancelRequested = true; return "url"; };
+                return uploadWithFallbacks({ size: 1 }, "fixture.txt", "fixture");
+            }
+        });
+    `);
+    const files = [{ name: "fixture.txt" }];
+    assert.equal(await upload.uploadProvidedFiles(files), false);
+    assert.equal(await upload.uploadProvidedFiles([]), false);
+    upload.succeed();
+    assert.equal(await upload.uploadProvidedFiles(files), true);
+    upload.busy();
+    assert.equal(await upload.uploadProvidedFiles(files), false);
+    await assert.rejects(upload.cancelLate(), /Upload cancelled by user/);
+});
+
+test("Draft attachments remain until their upload succeeds", async () => {
+    let succeeded = false;
+    let removed = 0;
+    const draft = loadSource("src/equicordplugins/fileUpload/index.tsx", {
+        "@api/ContextMenu": {},
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@components/Icons": {}, "@utils/constants": { Devs: {}, EquicordDevs: {} },
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+        "@webpack": { findByPropsLazy: () => ({}) }, "@webpack/common": {},
+        "./settings": { settings: {} }, "./types": {}, "./utils/getMediaUrl": {},
+        "./utils/upload": { isConfigured: () => true, isFileTypeAllowed: () => true,
+            uploadProvidedFiles: async () => succeeded, logger: { warn: () => {} } }
+    }, {}, "({ handleUploadFileFromDraft })");
+    const upload = { item: { file: {} }, removeFromMsgDraft: () => removed++ };
+    await draft.handleUploadFileFromDraft(upload);
+    assert.equal(removed, 0);
+    succeeded = true;
+    await draft.handleUploadFileFromDraft(upload);
+    assert.equal(removed, 1);
+});
+
 test("ShareX response substitutions preserve literal dollar sequences", () => {
     const sharex = loadSource("src/equicordplugins/fileUpload/utils/sharex.ts", {});
     const response = "https://example.test/$&/$$/$`/$'";

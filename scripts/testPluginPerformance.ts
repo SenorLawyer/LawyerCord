@@ -2365,6 +2365,34 @@ test("quote preview ignores superseded and unmounted image work", async () => {
     assert.equal(states[4], null);
 });
 
+test("Jellyfin privacy mode omits all identifying media fields", async () => {
+    const store = { jf_serverUrl: "https://media.example", jf_apiKey: "key", jf_userId: "user", jf_privacyMode: true, jf_showPausedState: true, jf_overrideType: "off", jf_nameDisplay: "default", jf_customName: "{name} {name} {series} {album}" };
+    let mediaType = "Episode";
+    let paused = false;
+    const getActivity = loadSource("src/equicordplugins/richPresence/services/jellyfin.ts", {
+        "@utils/Logger": { Logger: class { error() {} warn() {} } },
+        "@utils/text": {}, "@webpack/common": {}, "../settings": { settings: { store } },
+        "./assetCache": { getCachedApplicationAsset: () => assert.fail("Private presence requested artwork") }
+    }, { fetch: async () => ({ ok: true, headers: { get: () => "application/json" }, json: async () => [
+        { UserId: "user", NowPlayingItem: { Name: "Private title", SeriesName: "Private series", Album: "Private album", Artists: ["Private artist"], Type: mediaType, ImageTags: { Primary: "image" }, RunTimeTicks: 900000000, IndexNumber: 3, ParentIndexNumber: 2 }, PlayState: { PositionTicks: 50000000, IsPaused: paused } }
+    ] }) }, "getActivity");
+    for (const mode of ["default", "full", "custom"]) {
+        store.jf_nameDisplay = mode;
+        for (const type of ["Episode", "Audio", "Movie"]) {
+            mediaType = type;
+            for (const isPaused of [false, true]) {
+                paused = isPaused;
+                const activity = await getActivity();
+                assert.deepEqual(JSON.parse(JSON.stringify(activity)), {
+                    application_id: "1381368130164625469", name: "Jellyfin",
+                    details: type === "Audio" ? "Listening to music" : "Watching media",
+                    ...(paused ? { state: "Paused" } : {}), type: type === "Audio" ? 2 : 3, flags: 1
+                });
+            }
+        }
+    }
+});
+
 test("Jellyfin preserves zero playback position and omits missing position", async () => {
     let position: number | undefined = 0;
     const fetchMediaData = loadSource("src/equicordplugins/richPresence/services/jellyfin.ts", {

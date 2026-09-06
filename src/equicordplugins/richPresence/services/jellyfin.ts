@@ -118,6 +118,15 @@ async function getActivity(): Promise<Activity | null> {
         richPresenceType = mediaData.type === "Audio" ? 2 : 3;
     }
 
+    if (store.jf_privacyMode) return {
+        application_id: APPLICATION_ID,
+        name: "Jellyfin",
+        details: mediaData.type === "Audio" ? "Listening to music" : "Watching media",
+        state: mediaData.isPaused ? "Paused" : undefined,
+        type: richPresenceType,
+        flags: 1,
+    };
+
     const templateReplace = (template: string) =>
         template
             .replace(/\{name\}/g, mediaData.name || "")
@@ -134,38 +143,27 @@ async function getActivity(): Promise<Activity | null> {
     switch (nameSetting) {
         case "full":
             if (mediaData.type === "Episode" && mediaData.seriesName) {
-                appName = store.jf_privacyMode
-                    ? `${mediaData.seriesName} - [Episode Hidden]`
-                    : `${mediaData.seriesName} - ${mediaData.name}`;
+                appName = `${mediaData.seriesName} - ${mediaData.name}`;
             } else if (mediaData.type === "Audio") {
-                appName = store.jf_privacyMode
-                    ? "[Track Hidden]"
-                    : `${mediaData.artist || "Unknown Artist"} - ${mediaData.name}`;
+                appName = `${mediaData.artist || "Unknown Artist"} - ${mediaData.name}`;
             } else {
-                appName = store.jf_privacyMode ? "[Movie Hidden]" : mediaData.name || "Jellyfin";
+                appName = mediaData.name || "Jellyfin";
             }
             break;
         case "custom":
             appName = templateReplace(store.jf_customName || "{name} on Jellyfin");
-            if (store.jf_privacyMode) {
-                appName = appName
-                    .replace(mediaData.name || "", "[Title Hidden]")
-                    .replace(mediaData.seriesName || "", "[Series Hidden]")
-                    .replace(mediaData.artist || "", "[Artist Hidden]")
-                    .replace(mediaData.album || "", "[Album Hidden]");
-            }
             break;
         default:
             if (mediaData.type === "Episode" && mediaData.seriesName) {
                 appName = mediaData.seriesName;
             } else {
-                appName = store.jf_privacyMode ? "[Media Hidden]" : mediaData.name || "Jellyfin";
+                appName = mediaData.name || "Jellyfin";
             }
             break;
     }
 
     const assets = {
-        large_image: !store.jf_privacyMode && mediaData.imageUrl
+        large_image: mediaData.imageUrl
             ? await getAsset(mediaData.imageUrl) : undefined,
         large_text: mediaData.seriesName || mediaData.album || undefined,
     };
@@ -173,9 +171,9 @@ async function getActivity(): Promise<Activity | null> {
     const getDetails = () => {
         let details: string;
         if (mediaData.type === "Episode" && mediaData.seriesName)
-            details = store.jf_privacyMode ? "Watching a TV Show" : mediaData.seriesName;
+            details = mediaData.seriesName;
         else
-            details = store.jf_privacyMode ? "Watching Something" : mediaData.name;
+            details = mediaData.name;
         if (mediaData.isPaused) details += " - Paused";
         return details;
     };
@@ -207,11 +205,9 @@ async function getActivity(): Promise<Activity | null> {
                 episodeFormat = format === "fulltext" ? `Episode ${episode}` : `E${episode.toString().padStart(2, "0")}`;
             }
 
-            state = (store.jf_showEpisodeName && mediaData.name && !store.jf_privacyMode)
+            state = (store.jf_showEpisodeName && mediaData.name)
                 ? `${episodeFormat} - ${mediaData.name}`
                 : episodeFormat;
-        } else if (store.jf_privacyMode) {
-            state = mediaData.type === "Audio" ? "Listening to music" : (mediaData.year ? "(????)" : undefined);
         } else {
             state = mediaData.artist || (mediaData.year ? `(${mediaData.year})` : undefined);
         }

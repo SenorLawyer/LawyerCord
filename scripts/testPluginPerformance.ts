@@ -49,7 +49,7 @@ test("Streaks badges only display the current account's conversation", () => {
 });
 
 test("Streaks delayed message refresh stops with its account or plugin", async () => {
-    for (const change of ["before", "response", "stop-before", "stop-response", "none"]) {
+    for (const change of ["before", "response", "stop-before", "stop-response", "current-cache", "foreign-cache", "none"]) {
         let userId = "first";
         let refreshes = 0;
         let updates = 0;
@@ -67,7 +67,10 @@ test("Streaks delayed message refresh stops with its account or plugin", async (
             },
             "./settings": { settings: { store: {} } },
             "./stores/AuthorizationStore": { useAuthorizationStore: { getState: () => ({ isAuthorized: () => true }) } },
-            "./stores/StreaksStore": { useStreaksStore: { getState: () => ({ streaks: {},
+            "./stores/StreaksStore": { useStreaksStore: { getState: () => ({ streaks: change.endsWith("-cache") ? {
+                target: { user_a_id: change === "current-cache" ? "first" : "second", user_b_id: "target",
+                    today_date: "2026-09-06", user_a_today: true, user_b_today: true, count: 2 },
+            } : {},
                 refresh: async () => {
                     refreshes++;
                     if (change === "response") userId = "second";
@@ -80,14 +83,18 @@ test("Streaks delayed message refresh stops with its account or plugin", async (
             clearTimeout: (id: number) => timers.delete(id),
         });
         await plugin.flux.MESSAGE_CREATE({ type: "MESSAGE_CREATE", message: { author: { id: "target" } }, channelId: "dm" });
-        assert.equal(timers.size, 1);
+        assert.equal(timers.size, change === "current-cache" ? 0 : 1);
         if (change === "before") userId = "second";
         if (change === "stop-before") plugin.stop();
         for (const callback of timers.values()) await callback();
-        assert.equal(refreshes, change === "before" || change === "stop-before" ? 0 : 1);
-        assert.equal(updates, change === "none" ? 1 : 0);
+        assert.equal(refreshes, change === "before" || change === "stop-before" || change === "current-cache" ? 0 : 1);
+        assert.equal(updates, change === "none" || change === "foreign-cache" ? 1 : 0);
         assert.equal(clears, change.startsWith("stop-") ? 1 : 0);
         if (change === "stop-before") assert.equal(timers.size, 0);
+        if (change.endsWith("-cache")) {
+            await plugin.flux.MESSAGE_CREATE({ type: "MESSAGE_CREATE", message: { author: { id: "first" } }, channelId: "dm" });
+            assert.equal(updates, change === "current-cache" ? 0 : 2);
+        }
     }
 });
 

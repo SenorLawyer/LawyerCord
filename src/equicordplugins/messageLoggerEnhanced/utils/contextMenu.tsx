@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { addContextMenuPatch, NavContextMenuPatchCallback, removeContextMenuPatch } from "@api/ContextMenu";
+import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { findStoreLazy } from "@webpack";
 import { FluxDispatcher, Menu, MessageActions, React, Toasts, UserStore } from "@webpack/common";
 
@@ -160,20 +160,4 @@ export const contextMenuPath: NavContextMenuPatchCallback = (children, props) =>
             </Menu.MenuItem>
         );
     }
-};
-
-export const setupContextMenuPatches = () => {
-    addContextMenuPatch("message", contextMenuPath);
-    addContextMenuPatch("channel-context", contextMenuPath);
-    addContextMenuPatch("user-context", contextMenuPath);
-    addContextMenuPatch("guild-context", contextMenuPath);
-    addContextMenuPatch("gdm-context", contextMenuPath);
-};
-
-export const removeContextMenuBindings = () => {
-    removeContextMenuPatch("message", contextMenuPath);
-    removeContextMenuPatch("channel-context", contextMenuPath);
-    removeContextMenuPatch("user-context", contextMenuPath);
-    removeContextMenuPatch("guild-context", contextMenuPath);
-    removeContextMenuPatch("gdm-context", contextMenuPath);
 };

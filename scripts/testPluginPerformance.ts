@@ -21,6 +21,29 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("number settings accept decimals without changing the displayed value", () => {
+    const states: unknown[] = [];
+    const saved: unknown[] = [];
+    const { NumberSetting } = loadSource("src/components/settings/tabs/plugins/components/NumberSetting.tsx", {
+        "@api/PluginManager": { isSettingDisabled: () => false },
+        "@utils/types": { OptionType: { NUMBER: 1, BIGINT: 2 } },
+        "@webpack/common": {
+            React: { createElement: (_type: unknown, props: object, ...children: unknown[]) => ({ ...props, children }) },
+            useState(initial: unknown) {
+                const index = states.push(initial) - 1;
+                return [initial, (value: unknown) => { states[index] = value; }];
+            },
+        },
+        "./Common": { resolveError: () => null },
+    });
+    const tree = NumberSetting({ setting: { type: 1, default: 0 }, pluginSettings: {}, definedSettings: {}, id: "number", onChange: (value: unknown) => saved.push(value) });
+    for (const value of ["1.5", "-0.25", "1e3", "9007199254740992"]) {
+        tree.children[0].onChange(value);
+        assert.equal(saved.at(-1), Number(value));
+        assert.equal(states[0], value);
+    }
+});
+
 test("plugin reset restores selected defaults without changing definitions", () => {
     const source = readFileSync("src/components/settings/tabs/plugins/PluginModal.tsx", "utf8");
     const resetSource = source.slice(source.indexOf("function resetSettings("), source.indexOf("export function openWarningModal("));

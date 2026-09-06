@@ -5,11 +5,43 @@
  */
 
 import * as DataStore from "@api/DataStore";
+import { isObject } from "@utils/misc";
 
 import { removeRecentStickerByPackId } from "./components";
-import { StickerPack, StickerPackMeta } from "./types";
+import { Sticker, StickerPack, StickerPackMeta } from "./types";
 
 const PACKS_KEY = "MoreStickers:Packs";
+
+function isSticker(value: unknown): value is Sticker {
+    if (!isObject(value)) return false;
+    const sticker = value as Record<string, unknown>;
+    return typeof sticker.id === "string" && sticker.id.length > 0
+        && typeof sticker.image === "string"
+        && typeof sticker.title === "string"
+        && typeof sticker.stickerPackId === "string" && sticker.stickerPackId.length > 0
+        && (sticker.filename === undefined || typeof sticker.filename === "string")
+        && (sticker.isAnimated === undefined || typeof sticker.isAnimated === "boolean");
+}
+
+export function isStickerPack(value: unknown): value is StickerPack {
+    if (!isObject(value)) return false;
+    const pack = value as Record<string, unknown>;
+    if (pack.author !== undefined) {
+        if (!isObject(pack.author)) return false;
+        const author = pack.author as Record<string, unknown>;
+        if (typeof author.name !== "string" || typeof author.url !== "string") return false;
+    }
+    if (pack.dynamic !== undefined) {
+        if (!isObject(pack.dynamic)) return false;
+        const dynamic = pack.dynamic as Record<string, unknown>;
+        if (typeof dynamic.refreshUrl !== "string"
+            || (dynamic.version !== undefined && typeof dynamic.version !== "string")
+            || (dynamic.authHeaders !== undefined && (!isObject(dynamic.authHeaders) || !Object.values(dynamic.authHeaders).every(header => typeof header === "string")))) return false;
+    }
+    return typeof pack.id === "string" && pack.id.length > 0
+        && typeof pack.title === "string" && isSticker(pack.logo)
+        && Array.isArray(pack.stickers) && pack.stickers.every(isSticker);
+}
 
 /**
   * Convert StickerPack to StickerPackMeta

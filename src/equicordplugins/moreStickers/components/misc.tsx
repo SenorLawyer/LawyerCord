@@ -14,7 +14,7 @@ import { Paragraph } from "@components/Paragraph";
 import { convert as convertLineEP, getIdFromUrl as getLineEmojiPackIdFromUrl, getStickerPackById as getLineEmojiPackById, isLineEmojiPackHtml, parseHtml as getLineEPFromHtml } from "@equicordplugins/moreStickers/lineEmojis";
 import { convert as convertLineSP, getIdFromUrl as getLineStickerPackIdFromUrl, getStickerPackById as getLineStickerPackById, isLineStickerPackHtml, parseHtml as getLineSPFromHtml } from "@equicordplugins/moreStickers/lineStickers";
 import { isV1, migrate } from "@equicordplugins/moreStickers/migrate-v1";
-import { deleteStickerPack, getStickerPack, getStickerPackMetas, saveStickerPack } from "@equicordplugins/moreStickers/stickers";
+import { deleteStickerPack, getStickerPack, getStickerPackMetas, isStickerPack, saveStickerPack } from "@equicordplugins/moreStickers/stickers";
 import { SettingsTabsKey, Sticker, StickerPack, StickerPackMeta } from "@equicordplugins/moreStickers/types";
 import { cl, clPicker } from "@equicordplugins/moreStickers/utils";
 import { Button, React, TabBar, TextArea, Toasts } from "@webpack/common";
@@ -326,13 +326,9 @@ export const Packs = () => {
                                     if (!file) return;
 
                                     const fileText = await file.text();
-                                    const fileJson = JSON.parse(fileText);
-                                    let stickerPacks: StickerPack[] = [];
-                                    if (Array.isArray(fileJson)) {
-                                        stickerPacks = fileJson;
-                                    } else {
-                                        stickerPacks = [fileJson];
-                                    }
+                                    const fileJson: unknown = JSON.parse(fileText);
+                                    const stickerPacks: unknown[] = Array.isArray(fileJson) ? fileJson : [fileJson];
+                                    if (!stickerPacks.every(isStickerPack)) throw new Error("This file contains an invalid sticker pack.");
 
                                     for (const stickerPack of stickerPacks) {
                                         await saveStickerPack(stickerPack);

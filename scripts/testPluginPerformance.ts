@@ -4734,6 +4734,7 @@ test("sticker pack metadata updates preserve concurrent packs without holding a 
     const entries = new Map<string, unknown>();
     let updates = 0;
     const module = loadComponent("src/equicordplugins/moreStickers/stickers.ts", {}, {
+        "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
         "@api/DataStore": {
             async set(key: string, value: unknown) { entries.set(key, value); },
             async get(key: string) { return entries.get(key); },
@@ -4790,6 +4791,7 @@ test("v1 sticker migration preserves unchanged IDs and saved packs after cleanup
             }
         };
         const stickers = loadSource("src/equicordplugins/moreStickers/stickers.ts", {
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
             "@api/DataStore": DataStore, "./components": { async removeRecentStickerByPackId() {} }
         });
         const notices: string[] = [];
@@ -4847,6 +4849,37 @@ test("recent sticker migration resumes without old packs and preserves current e
     assert.equal(new Set(recents.map(sticker => sticker.id)).size, 16);
     assert.equal(entries.has(oldKey), false);
     assert.equal(await migration.isV1(), false);
+});
+
+test("sticker file imports validate the entire batch before writing packs", async () => {
+    const stickers = loadSource("src/equicordplugins/moreStickers/stickers.ts", {
+        "@api/DataStore": {}, "./components": {},
+        "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) }
+    });
+    const sticker = { id: "sticker", stickerPackId: "pack", title: "Sticker", image: "https://example.com/image.png" };
+    const pack = { id: "pack", title: "Pack", logo: sticker, stickers: [sticker] };
+    for (const invalid of [null, { ...pack, id: 1 }, { ...pack, logo: null }, { ...pack, stickers: [null] },
+        { ...pack, stickers: [{ ...sticker, filename: 1 }] }, { ...pack, author: null },
+        { ...pack, dynamic: { refreshUrl: "url", authHeaders: { key: 1 } } }]) {
+        assert.equal(stickers.isStickerPack(invalid), false);
+    }
+    assert.equal(stickers.isStickerPack({ ...pack, author: { name: "Author", url: "url" }, dynamic: { refreshUrl: "url", authHeaders: { key: "value" } } }), true);
+    const source = readFileSync("src/equicordplugins/moreStickers/components/misc.tsx", "utf8");
+    const callback = source.match(/input.onchange = async e => \{([\s\S]*?)\n\s*\};\n\s*input.click/);
+    assert.ok(callback);
+    for (const valid of [true, false]) {
+        const saved: unknown[] = [];
+        const notices: string[] = [];
+        const change = runInNewContext(transpileModule(`(async () => {${callback[1]}})`, { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText, {
+            input: { files: [{ text: async () => JSON.stringify(valid ? [pack, pack] : [pack, { ...pack, logo: null }]) }] },
+            isStickerPack: stickers.isStickerPack, saveStickerPack: async (value: unknown) => saved.push(value),
+            Toasts: { show: ({ type }: { type: string; }) => notices.push(type), genId: () => "toast", Type: { SUCCESS: "success", FAILURE: "failure" } },
+            console: { error() {} }
+        });
+        await change();
+        assert.equal(saved.length, valid ? 2 : 0);
+        assert.deepEqual(notices, [valid ? "success" : "failure"]);
+    }
 });
 
 test("sticker migration button refreshes results and handles rejected storage work", async () => {

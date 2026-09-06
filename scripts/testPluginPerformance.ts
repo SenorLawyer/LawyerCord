@@ -8063,3 +8063,25 @@ test("installer background fetches wait for mutations and prevent deletion until
     assert.equal(commands, 2);
     assert.equal(await api.hold(async () => "released"), "released");
 });
+
+test("installer scans only ignore missing children, not root or permission failures", async () => {
+    for (const stage of ["root", "child"]) for (const code of ["ENOENT", "EACCES"]) {
+        let calls = 0;
+        let commands = 0;
+        const mocks: Record<string, object> = {
+            child_process: { exec: () => { commands++; } }, electron: {},
+            fs: { realpathSync: (value: string) => {
+                calls++;
+                if (calls === (stage === "root" ? 1 : 2)) throw Object.assign(new Error("Private filesystem path"), { code });
+                return path.resolve(value);
+            } }, "fs/promises": {}, path, "yaml-js": {},
+        };
+        for (const name of ["pluginValidate", "updateValidate"])
+            mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
+        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, { __dirname: path.resolve("fixture/dist") });
+        const scan = api.isUpdateAvailableForPlugin(null, "example");
+        if (stage === "child" && code === "ENOENT") assert.equal(await scan, false);
+        else await assert.rejects(scan, { message: "Invalid plugin directory." });
+        assert.equal(commands, 0);
+    }
+});

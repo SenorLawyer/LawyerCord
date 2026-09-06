@@ -5576,7 +5576,7 @@ test("scheduled phantom history loads cannot revive stale previews", async () =>
     }
 });
 
-test("scheduled queue ignores stale reads after reload, edits, or stop", async () => {
+test("scheduled queue serializes reloads and edits across scheduler stops", async () => {
     const reads: ((value: { id: string; scheduledTime: number; }[]) => void)[] = [];
     const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
             "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
@@ -5587,22 +5587,26 @@ test("scheduled queue ignores stale reads after reload, edits, or stop", async (
     const older = module.loadScheduledMessages();
     const newer = module.loadScheduledMessages();
     await setImmediate();
-    reads[1]([scheduledEntry({ id: "new", scheduledTime: 2 })]);
-    await newer;
+    assert.equal(reads.length, 1);
     reads[0]([scheduledEntry({ id: "old", scheduledTime: 1 })]);
     await older;
+    await setImmediate();
+    reads[1]([scheduledEntry({ id: "new", scheduledTime: 2 })]);
+    await newer;
     assert.equal(module.getScheduledMessages()[0].id, "new");
     const beforeClear = module.loadScheduledMessages();
-    await module.clearAllScheduledMessages();
+    const clearing = module.clearAllScheduledMessages();
+    await setImmediate();
     reads[2]([scheduledEntry({ id: "deleted", scheduledTime: 0 })]);
     await beforeClear;
+    await clearing;
     assert.equal(module.getScheduledMessages().length, 0);
     const beforeStop = module.loadScheduledMessages();
     module.stopScheduler();
     await setImmediate();
     reads[3]([scheduledEntry({ id: "stopped", scheduledTime: 0 })]);
     await beforeStop;
-    assert.equal(module.getScheduledMessages().length, 0);
+    assert.equal(module.getScheduledMessages()[0].id, "stopped");
 });
 
 test("signed-out scheduled messages wait between checks without changing the queue", async () => {
@@ -6676,7 +6680,7 @@ test("new scheduled entries retain their initiating account across persistence",
         let finish: () => void = () => {};
         const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
             "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
-            "@api/DataStore": { set: async (_key: string, entries: { userId: string; }[]) => {
+            "@api/DataStore": { get: async () => undefined, set: async (_key: string, entries: { userId: string; }[]) => {
                 saved = structuredClone(entries);
                 await new Promise<void>(resolve => { finish = resolve; });
             } },
@@ -6887,7 +6891,7 @@ test("scheduled additions commit in order and failed additions never enter later
         const writes: { entries: { content: string; }[]; resolve: () => void; reject: (error: Error) => void; }[] = [];
         const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
             "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
-            "@api/DataStore": { set: (_key: string, entries: { content: string; }[]) => new Promise<void>((resolve, reject) => writes.push({ entries: structuredClone(entries), resolve, reject })) },
+            "@api/DataStore": { get: async () => undefined, set: (_key: string, entries: { content: string; }[]) => new Promise<void>((resolve, reject) => writes.push({ entries: structuredClone(entries), resolve, reject })) },
             "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) } },
             ".": { settings: { store: { maxMessagesPerMinute: 1, showPhantomMessages: false } } }
@@ -7052,5 +7056,52 @@ test("invalid scheduled storage is preserved and blocks mutations until a valid 
         assert.equal(api.getScheduledMessages().length, 1);
         assert.equal((await api.addScheduledMessage("channel", "Text", Date.now() + 60_000)).success, true);
         assert.equal(writes, 1);
+    }
+});
+
+test("scheduled writes await initial storage validation and preserve existing entries", async () => {
+    for (const mode of ["valid", "invalid", "failed", "implicit"] as const) {
+        const original = mode === "invalid" ? { unexpected: true } : [scheduledEntry({})];
+        let stored: unknown = original;
+        let finish: (value: unknown) => void = () => assert.fail("Read not started");
+        let fail: (error: Error) => void = () => assert.fail("Read not started");
+        let writes = 0;
+        let reads = 0;
+        const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+            "@api/DataStore": { get: () => {
+                reads++;
+                return new Promise((resolve, reject) => { finish = resolve; fail = reject; });
+            }, set: async (_key: string, value: unknown) => { writes++; stored = value; } },
+            "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, FluxDispatcher: { dispatch() {} } },
+            ".": { settings: { store: { maxMessagesPerMinute: 3, showPhantomMessages: false } } }
+        });
+        const loading = mode === "implicit" ? Promise.resolve() : api.loadScheduledMessages();
+        const adding = api.addScheduledMessage("channel", "New", Date.now() + 60_000);
+        const settled = Promise.allSettled([loading, adding]);
+        await setImmediate();
+        assert.equal(reads, 1);
+        assert.equal(writes, 0);
+        if (mode === "failed") fail(new Error("Read failed"));
+        else finish(stored);
+        const results = await settled;
+        if (mode === "valid" || mode === "implicit") {
+            assert.equal(results[1].status, "fulfilled");
+            assert.equal(writes, 1);
+            assert.deepEqual(Array.from(api.getScheduledMessages(), (entry: { content: string; }) => entry.content), ["Text", "New"]);
+        } else {
+            assert.equal(results[0].status, "rejected");
+            assert.equal(results[1].status, "rejected");
+            assert.equal(writes, 0);
+            assert.equal(stored, original);
+            await assert.rejects(api.clearAllScheduledMessages(), /recovered/);
+            const recovery = api.loadScheduledMessages();
+            await setImmediate();
+            finish([]);
+            await recovery;
+            assert.equal((await api.addScheduledMessage("channel", "Recovered", Date.now() + 60_000)).success, true);
+            assert.equal(writes, 1);
+        }
     }
 });

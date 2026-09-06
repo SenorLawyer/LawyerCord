@@ -17,7 +17,7 @@ const logger = new Logger("ScheduledMessages");
 const STORAGE_KEY = "ScheduledMessages_queue";
 
 let scheduledMessages: ScheduledMessage[] = [];
-let queueRevision = 0;
+let queueLoaded = false;
 let invalidStoredQueue = false;
 let queueOperation: Promise<void> = Promise.resolve();
 let checkTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -64,27 +64,31 @@ function isScheduledMessage(value: unknown): value is ScheduledMessage {
         }));
 }
 
-export async function loadScheduledMessages(): Promise<void> {
-    const revision = ++queueRevision;
-    await queueOperation;
+export function loadScheduledMessages(): Promise<void> {
+    return runQueueOperation(readStoredQueue, true);
+}
+
+async function readStoredQueue(): Promise<void> {
+    invalidStoredQueue = true;
     const saved = await DataStore.get<unknown>(STORAGE_KEY);
-    if (revision !== queueRevision) return;
     if (saved !== undefined && (!Array.isArray(saved) || ![...saved].every(isScheduledMessage) || new Set(saved.map(entry => entry.id)).size !== saved.length)) {
-        invalidStoredQueue = true;
         stopScheduler();
         cleanupAllPhantomMessages();
         scheduledMessages = [];
         throw new Error("Saved scheduled messages are invalid. The stored data has been preserved.");
     }
+    queueLoaded = true;
     invalidStoredQueue = false;
     scheduledMessages = saved ?? [];
     scheduledMessages.sort((a, b) => a.scheduledTime - b.scheduledTime);
 }
 
-function runQueueOperation<T>(operation: () => Promise<T>): Promise<T> {
-    queueRevision++;
-    const result = queueOperation.then(() => {
-        if (invalidStoredQueue) throw new Error("Saved scheduled messages must be recovered before changing the queue.");
+function runQueueOperation<T>(operation: () => Promise<T>, loading = false): Promise<T> {
+    const result = queueOperation.then(async () => {
+        if (!loading) {
+            if (invalidStoredQueue) throw new Error("Saved scheduled messages must be recovered before changing the queue.");
+            if (!queueLoaded) await readStoredQueue();
+        }
         return operation();
     });
     queueOperation = result.then(() => undefined, () => undefined);
@@ -94,7 +98,6 @@ function runQueueOperation<T>(operation: () => Promise<T>): Promise<T> {
 async function saveScheduledMessages(messages: ScheduledMessage[]): Promise<void> {
     await DataStore.set(STORAGE_KEY, messages);
     scheduledMessages = messages;
-    queueRevision++;
 }
 
 export function getScheduledMessages(): ScheduledMessage[] {
@@ -563,7 +566,6 @@ export function startScheduler(): void {
 
 export function stopScheduler(): void {
     schedulerGeneration++;
-    queueRevision++;
     schedulerRunning = false;
     if (checkTimeout) {
         clearTimeout(checkTimeout);

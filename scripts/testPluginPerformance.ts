@@ -46,6 +46,20 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("Dragify derives active drag state from the current entity", () => {
+    const drag = loadSource("src/equicordplugins/dragify/dragState.ts", {}, { clearInterval, clearTimeout });
+    for (const kind of ["user", "guild", "channel"]) {
+        drag.beginDrag({ kind, id: "fixture" });
+        assert.equal(drag.hasActiveDrag(), true);
+        assert.equal(drag.isUserDragActive(), kind === "user");
+        assert.equal(drag.isGuildDragActive(), kind === "guild");
+        drag.clearDragState();
+        assert.equal(drag.hasActiveDrag(), false);
+        assert.equal(drag.isUserDragActive(), false);
+        assert.equal(drag.isGuildDragActive(), false);
+    }
+});
+
 test("Discord MCP handles response failures and cancels pending startup", async () => {
     const errors: string[] = [];
     let first = true;

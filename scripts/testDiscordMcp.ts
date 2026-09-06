@@ -134,7 +134,7 @@ try {
         encoding: "utf8",
         timeout: 5_000,
     });
-    assert.equal(isolated.status, 0, isolated.stderr || isolated.error?.message);
+    assert.equal(isolated.status, 0, isolated.stderr || isolated.error?.message || "Bridge isolation check failed");
     assert.deepEqual(await readdir(fallbackDirectory), ["config.json"], "an explicit bridge never falls back to another installation");
 
     const initialized = await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "1" } });

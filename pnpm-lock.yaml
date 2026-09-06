@@ -204,9 +204,6 @@ importers:
       '@types/react-dom':
         specifier: 19.0.4
         version: 19.0.4(@types/react@19.0.12)
-      '@vencord/discord-types':
-        specifier: ^1.0.1
-        version: 1.0.1(@types/react@19.0.12)
       highlight.js:
         specifier: 11.11.1
         version: 11.11.1
@@ -729,11 +726,6 @@ packages:
 
   '@vap/shiki@0.10.5':
     resolution: {integrity: sha512-5BHVGvQT8qonbLSASon5aQFQ18OZU4FxSl9tLSj6oJ0sap3KdMbYcfGq25M9zFZR1g1dJN7fgjmZXBIS5omIdw==}
-
-  '@vencord/discord-types@1.0.1':
-    resolution: {integrity: sha512-uSQMDUTo9hMFgOMykNtTMTxScSKVVUHHFCevktO3bMyaLh1s3iDMfIvUvqU1fBkmFwvMbmEYsUrztsVKKHvang==}
-    peerDependencies:
-      '@types/react': ^19.0.10
 
   acorn-jsx@5.3.2:
     resolution: {integrity: sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ==}
@@ -2278,10 +2270,6 @@ packages:
     resolution: {integrity: sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew==}
     engines: {node: '>= 0.8.0'}
 
-  type-fest@4.41.0:
-    resolution: {integrity: sha512-TeTSQ6H5YHvpqVwBRcnLDCBnDOHWYu7IvGbHT6N8AOymcr9PJGjc1GTtiWZTYg0NCgYwvnYWEkVChQAr9bjfwA==}
-    engines: {node: '>=16'}
-
   type-fest@5.7.0:
     resolution: {integrity: sha512-1URUxUqfHFM1c+zfSPsa3gnkO7Aq21qyH75SIduNYz4SzY964rn1X2vCMQaHSHhktiw+0kPa2iyb6PUpXqB6Vg==}
     engines: {node: '>=20'}
@@ -2886,12 +2874,6 @@ snapshots:
       jsonc-parser: 3.2.0
       vscode-oniguruma: 1.7.0
       vscode-textmate: 5.2.0
-
-  '@vencord/discord-types@1.0.1(@types/react@19.0.12)':
-    dependencies:
-      '@types/react': 19.0.12
-      moment: 2.30.1
-      type-fest: 4.41.0
 
   acorn-jsx@5.3.2(acorn@8.15.0):
     dependencies:
@@ -4840,8 +4822,6 @@ snapshots:
   type-check@0.4.0:
     dependencies:
       prelude-ls: 1.2.1
-
-  type-fest@4.41.0: {}
 
   type-fest@5.7.0:
     dependencies:

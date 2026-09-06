@@ -236,6 +236,7 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
                 if (track.album) {
                     const album = encodeURIComponent(track.album);
                     const res = await fetch(`https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=${apiKey}&artist=${artist}&album=${album}&format=json`, { signal });
+                    if (!res.ok) throw new Error(`Last.fm request failed: ${res.status}`);
                     const json = await res.json();
                     image = json?.album?.image?.at(-1)?.["#text"];
                 }
@@ -243,6 +244,7 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
                 if (!image && track.title) {
                     const title = encodeURIComponent(track.title);
                     const res = await fetch(`https://ws.audioscrobbler.com/2.0/?method=track.getinfo&api_key=${apiKey}&artist=${artist}&track=${title}&format=json`, { signal });
+                    if (!res.ok) throw new Error(`Last.fm request failed: ${res.status}`);
                     const json = await res.json();
                     image = json?.track?.album?.image?.at(-1)?.["#text"];
                 }
@@ -252,7 +254,6 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
             } catch (e: unknown) {
                 if (e instanceof Error && e.name === "AbortError") throw e;
                 resolvedCoverArtUrl = null;
-                lastFmCache.set(cacheKey, null);
             }
         }
     }

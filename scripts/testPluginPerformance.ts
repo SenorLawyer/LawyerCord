@@ -4696,3 +4696,31 @@ test("Navidrome format substitutions preserve literal metadata", () => {
     assert.equal(format("{song}{artist}{album}{year}{quality}", {}), "");
     assert.equal(format(undefined, {}), "");
 });
+
+
+test("Navidrome retries failed Last.fm artwork requests", async () => {
+    for (const failure of ["network", "http"]) {
+        let requests = 0;
+        const getActivity = loadSource("src/equicordplugins/richPresence/services/navidrome.ts", {
+            "@utils/Logger": { Logger: class { error() {} warn() {} } },
+            "@utils/misc": { parseUrl: (value: string) => new URL(value) },
+            "@vencord/discord-types/enums": { ActivityFlags: { INSTANCE: 1 }, ActivityStatusDisplayType: {} },
+            "@webpack/common": {}, "md5": { __esModule: true, default: () => "token" },
+            "./assetCache": { getCachedApplicationAsset: async (_app: string, key: string) => key },
+            "../settings": { settings: { store: { nd_serverUrl: "https://music.example", nd_username: "listener", nd_password: "password", nd_albumArtMode: "lastfm" } } },
+        }, { fetch: async (url: string) => {
+            if (new URL(url).origin === "https://music.example")
+                return response({ "subsonic-response": { nowPlaying: { entry: [{ id: "track", username: "listener", artist: "Artist", album: "Album" }] } } });
+            requests++;
+            if (requests === 1) {
+                if (failure === "network") throw new Error("offline");
+                return response({}, 503);
+            }
+            return response({ album: { image: [{ "#text": "https://images.example/cover.png" }] } });
+        } }, "getActivity");
+        assert.equal((await getActivity()).assets.large_image, "navidrome");
+        assert.equal((await getActivity()).assets.large_image, "https://images.example/cover.png");
+        await getActivity();
+        assert.equal(requests, 2, "successful artwork stays cached");
+    }
+});

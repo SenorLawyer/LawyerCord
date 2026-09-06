@@ -23,7 +23,7 @@ function isSticker(value: unknown): value is Sticker {
         && (sticker.isAnimated === undefined || typeof sticker.isAnimated === "boolean");
 }
 
-export function isStickerPack(value: unknown): value is StickerPack {
+function isStickerPackMeta(value: unknown): value is StickerPackMeta {
     if (!isObject(value)) return false;
     const pack = value as Record<string, unknown>;
     if (pack.author !== undefined) {
@@ -39,8 +39,12 @@ export function isStickerPack(value: unknown): value is StickerPack {
             || (dynamic.authHeaders !== undefined && (!isObject(dynamic.authHeaders) || !Object.values(dynamic.authHeaders).every(header => typeof header === "string")))) return false;
     }
     return typeof pack.id === "string" && pack.id.length > 0
-        && typeof pack.title === "string" && isSticker(pack.logo)
-        && Array.isArray(pack.stickers) && pack.stickers.every(isSticker);
+        && typeof pack.title === "string" && isSticker(pack.logo);
+}
+
+export function isStickerPack(value: unknown): value is StickerPack {
+    return isStickerPackMeta(value) && "stickers" in value
+        && Array.isArray(value.stickers) && value.stickers.every(isSticker);
 }
 
 /**
@@ -68,7 +72,9 @@ export async function saveStickerPack(sp: StickerPack, packsKey: string = PACKS_
   * @return {Promise<StickerPackMeta[]>}
   */
 export async function getStickerPackMetas(packsKey: string | undefined = PACKS_KEY): Promise<StickerPackMeta[]> {
-    return await DataStore.get<StickerPackMeta[]>(packsKey) ?? [];
+    const packs = await DataStore.get<unknown>(packsKey) ?? [];
+    if (!Array.isArray(packs) || !packs.every(isStickerPackMeta)) throw new Error("Saved sticker pack metadata is invalid.");
+    return packs;
 }
 
 /**

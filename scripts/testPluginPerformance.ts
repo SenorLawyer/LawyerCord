@@ -4743,7 +4743,7 @@ test("sticker pack metadata updates preserve concurrent packs without holding a 
         },
         "./components": { async removeRecentStickerByPackId() {} }, "./utils": {}
     });
-    await Promise.all([module.saveStickerPack({ id: "a", title: "A" }), module.saveStickerPack({ id: "b", title: "B" })]);
+    await Promise.all(["a", "b"].map(id => module.saveStickerPack({ id, title: id.toUpperCase(), logo: { id: "logo", title: "Logo", image: "image", stickerPackId: id }, stickers: [] })));
     assert.equal(updates, 2);
     assert.deepEqual(Array.from(await module.getStickerPackMetas(), (pack: { id: string; }) => pack.id), ["a", "b"]);
     await module.deleteStickerPack("a");
@@ -4783,6 +4783,13 @@ test("sticker pack metadata updates preserve concurrent packs without holding a 
         assert.equal(await module.getStickerPack(legacy.id), null);
         assert.equal(entries.get(legacy.id), malformed);
     }
+    for (const key of ["MoreStickers:Packs", "Vencord-MoreStickers-Packs"]) {
+        for (const malformed of [{}, [legacy, null], [{ ...legacy, logo: null }]]) {
+            entries.set(key, malformed);
+            await assert.rejects(module.getStickerPackMetas(key), /Saved sticker pack metadata is invalid/);
+            assert.equal(entries.get(key), malformed);
+        }
+    }
 });
 
 test("v1 sticker migration preserves unchanged IDs and saved packs after cleanup failures", async () => {
@@ -4794,7 +4801,7 @@ test("v1 sticker migration preserves unchanged IDs and saved packs after cleanup
         ["missing-pack", "missing-pack", false, true]
     ] as const) {
         const pack = { id: oldId, title: "Legacy", logo: { id: "logo", title: "Logo", image: "image", stickerPackId: oldId }, stickers: [{ id: "sticker", title: "Sticker", image: "image", stickerPackId: oldId }] };
-        const entries = new Map<string, unknown>([[oldId, pack], ["Vencord-MoreStickers-Packs", [{ id: oldId, title: pack.title }]]]);
+        const entries = new Map<string, unknown>([[oldId, pack], ["Vencord-MoreStickers-Packs", [{ id: oldId, title: pack.title, logo: pack.logo }]]]);
         if (missing) entries.delete(oldId);
         let cleanupBlocked = failCleanup;
         const DataStore = {

@@ -5639,9 +5639,11 @@ test("scheduled interval changes only replace an active timer", async () => {
 });
 
 test("scheduling dialogs ignore account changes before and during saves", async () => {
-    for (const scenario of ["before", "during", "unchanged", "edited", "new-upload", "replaced-upload", "removed-upload"]) {
+    for (const scenario of ["before", "during", "unchanged", "edited", "new-upload", "replaced-upload", "removed-upload", "failed", "failed-after-account"]) {
         const before = scenario === "before";
-        const stale = before || scenario === "during";
+        const stale = before || scenario === "during" || scenario === "failed-after-account";
+        const failed = scenario.startsWith("failed");
+        const errors: unknown[] = [];
         const cleared: string[] = [];
         const clearedUploads: string[] = [];
         let userId = "first";
@@ -5659,20 +5661,23 @@ test("scheduling dialogs ignore account changes before and during saves", async 
             "@webpack/common": { Modal, DraftType: { ChannelMessage: 0 },
                 DraftStore: { getDraft: () => scenario === "edited" ? "New text" : "Text" },
                 DraftActions: { clearDraft: (channelId: string) => cleared.push(channelId) }, Toasts: { Type: {} }, UserStore: { getCurrentUser: () => ({ id: userId }) },
-                ChannelStore: { getChannel: () => ({ isPrivate: () => true }) }, useState: (value: unknown) => [value, () => {}],
-                showToast: () => { assert.equal(stale, false); }, UploadAttachmentStore: { getUploads: () => (scenario === "new-upload" ? ["original", "new"] : scenario === "replaced-upload" ? ["new"] : scenario === "removed-upload" ? [] : ["original"]).map(id => ({ id })) },
-                UploadManager: { clearAll: (channelId: string) => { assert.equal(stale, false); clearedUploads.push(channelId); } } },
+                ChannelStore: { getChannel: () => ({ isPrivate: () => true }) }, useState: (value: unknown) => [value, (next: unknown) => errors.push(next)],
+                showToast: () => { assert.equal(stale || failed, false); }, UploadAttachmentStore: { getUploads: () => (scenario === "new-upload" ? ["original", "new"] : scenario === "replaced-upload" ? ["new"] : scenario === "removed-upload" ? [] : ["original"]).map(id => ({ id })) },
+                UploadManager: { clearAll: (channelId: string) => { assert.equal(stale || failed, false); clearedUploads.push(channelId); } } },
             "../utils": { getChannelDisplayInfo: () => ({ name: "DM" }), addScheduledMessage: async () => {
-                writes++; await new Promise<void>(resolve => { finish = resolve; }); return { success: true };
+                writes++; await new Promise<void>(resolve => { finish = resolve; });
+                if (failed) throw new Error("Private storage failure details");
+                return { success: true };
             } }, "./Icons": {}
         }, { React }, "ScheduleTimeModalInner");
-        component({ userId: "first", uploadIds: ["original"], channelId: "channel", content: "Text", close: () => { assert.equal(stale, false); } });
+        component({ userId: "first", uploadIds: ["original"], channelId: "channel", content: "Text", close: () => { assert.equal(stale || failed, false); } });
         if (before) userId = "second";
         const pending = schedule();
-        if (!before) { if (scenario === "during") userId = "second"; finish(); }
+        if (!before) { if (scenario === "during" || scenario === "failed-after-account") userId = "second"; finish(); }
         await pending;
         assert.equal(writes, before ? 0 : 1);
-        assert.deepEqual(cleared, !stale && scenario !== "edited" ? ["channel"] : []);
+        assert.deepEqual(cleared, !stale && !failed && scenario !== "edited" ? ["channel"] : []);
+        if (failed) assert.deepEqual(errors, stale ? [] : ["Could not save the scheduled message. Try again."]);
         assert.deepEqual(clearedUploads, scenario === "unchanged" || scenario === "edited" ? ["channel"] : []);
     }
 });

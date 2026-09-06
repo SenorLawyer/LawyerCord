@@ -60,7 +60,8 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
             scheduledTime = dateTime;
         }
 
-        const result = await addScheduledMessage(channelId, content, scheduledTime, attachments);
+        const result = await addScheduledMessage(channelId, content, scheduledTime, attachments)
+            .catch(() => ({ success: false, error: "Could not save the scheduled message. Try again." }));
 
         if (UserStore.getCurrentUser()?.id !== userId) return;
         if (result.success) {

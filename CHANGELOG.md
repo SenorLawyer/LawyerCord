@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Parse the full scheduling delay, preserving fractional minutes and rejecting invalid numeric values.
+
 - Ignore repeated scheduling submissions while saving and allow retry after a failed save.
 
 - Report failed scheduled-message deletions without clearing the list or showing feedback after an account switch.

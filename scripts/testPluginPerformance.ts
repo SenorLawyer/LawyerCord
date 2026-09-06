@@ -6970,3 +6970,27 @@ test("scheduled queue controls report failures without stale account feedback", 
         assert.deepEqual(notices, timing === "current" ? [action === "delete" ? "Could not remove the scheduled message. Try again." : "Could not clear scheduled messages. Try again."] : []);
     }
 });
+
+
+test("scheduled delays use the complete numeric input without truncating it", async () => {
+    for (const [input, minutes] of [["1.5", 1.5], ["1e2", 100], ["5", 5], ["2oops", null], ["Infinity", null], ["0", null], ["", null]] as const) {
+        const times: number[] = [];
+        const Modal = Symbol("Modal");
+        let schedule: () => Promise<void> = async () => assert.fail("Missing schedule action");
+        const component = loadSource("src/equicordplugins/scheduledMessages/components/ScheduleTimeModal.tsx", {
+            "@components/Button": {}, "@components/Heading": {}, "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+            "@utils/css": { classNameFactory: () => () => "" },
+            "@webpack/common": { Modal, useRef: (value: unknown) => ({ current: value }),
+                useState: (value: unknown) => [value === "5" ? input : value, () => {}], UserStore: { getCurrentUser: () => ({ id: "account" }) },
+                ChannelStore: { getChannel: () => ({ isPrivate: () => true }) }, DraftType: { ChannelMessage: 0 }, DraftStore: { getDraft: () => "" },
+                UploadAttachmentStore: { getUploads: () => [] }, UploadManager: { clearAll() {} }, showToast() {}, Toasts: { Type: {} } },
+            "../utils": { getChannelDisplayInfo: () => ({ name: "Channel" }), addScheduledMessage: async (_channel: string, _content: string, time: number) => { times.push(time); return { success: true }; } }, "./Icons": {}
+        }, { Date: class extends Date { static now() { return 100_000; } }, React: { createElement: (type: unknown, props: { actions: { onClick: () => Promise<void>; }[]; }) => {
+            if (type === Modal) schedule = props.actions[0].onClick;
+            return null;
+        } } }, "ScheduleTimeModalInner");
+        component({ userId: "account", uploadIds: [], channelId: "channel", content: "Text", close() {} });
+        await schedule();
+        assert.deepEqual(times, minutes === null ? [] : [100_000 + minutes * 60_000]);
+    }
+});

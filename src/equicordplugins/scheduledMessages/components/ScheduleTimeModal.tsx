@@ -47,8 +47,8 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
         let scheduledTime: number;
 
         if (scheduleType === "delay") {
-            const minutes = parseInt(delayMinutes, 10);
-            if (isNaN(minutes) || minutes < 1) {
+            const minutes = Number(delayMinutes);
+            if (!Number.isFinite(minutes) || minutes < 1) {
                 setError("Please enter a valid delay (minimum 1 minute)");
                 return;
             }

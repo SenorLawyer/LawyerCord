@@ -43,12 +43,6 @@ import {
     requireSnowflake,
 } from "./policy";
 
-interface BridgeRequest {
-    id: string;
-    tool: DiscordMcpToolName;
-    arguments?: unknown;
-}
-
 interface ToolArguments {
     channel_id?: unknown;
     channel_ids?: unknown;
@@ -131,7 +125,6 @@ const MAX_SUBSCRIPTIONS = 100;
 const MAX_SUBSCRIPTION_MESSAGES = 100;
 const waveformCache = new Map<string, Promise<string>>();
 const subscriptions = new Map<string, MessageSubscription>();
-const inFlightRequests = new Set<Promise<void>>();
 
 let bridgeGeneration = 0;
 
@@ -822,9 +815,7 @@ async function bridgeLoop(generation: number): Promise<void> {
         if (generation !== bridgeGeneration) return;
 
         for (const request of requests) {
-            const task = handleBridgeRequest(request);
-            inFlightRequests.add(task);
-            void task.finally(() => inFlightRequests.delete(task));
+            void handleBridgeRequest(request).catch(error => logger.error("Bridge response failed", error));
         }
     }
 }

@@ -46,6 +46,34 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("Discord MCP logs response write failures without an unhandled rejection", async () => {
+    const errors: string[] = [];
+    let first = true;
+    let stop = () => {};
+    const Native = {
+        async takeRequests() {
+            if (first) { first = false; return [{ id: "fixture", tool: "unknown" }]; }
+            stop(); return [];
+        },
+        async writeResponse() { throw new Error("Disk write failed"); }
+    };
+    const loaded = loadSource("src/equicordplugins/discordMcp.desktop/index.ts", {
+        "@api/Settings": { definePluginSettings: () => ({}) },
+        "@components/BaseText": {},
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@components/settings/tabs/plugins/components/Common": {},
+        "@plugins/voiceMessages/waveform": {}, "@utils/constants": { EquicordDevs: {} },
+        "@utils/Logger": { Logger: class { error(message: string) { errors.push(message); } } },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, defineDefault: (value: unknown) => value, OptionType: {} },
+        "@vencord/discord-types/enums": {}, "@webpack/common": {},
+        "../voiceMessageTranscriber.desktop/utils": {}, "./policy": { DISCORD_MCP_TOOL_NAMES: [] }
+    }, { VencordNative: { pluginHelpers: { DiscordMCP: Native } } }, "({ ...exports, bridgeLoop })");
+    stop = loaded.default.stop;
+    await loaded.bridgeLoop(0);
+    await setImmediate();
+    assert.deepEqual(errors, ["Bridge response failed"]);
+});
+
 test("Discord MCP attachment downloads reject redirects and untrusted origins", async () => {
     let redirect = false;
     let oversized = false;

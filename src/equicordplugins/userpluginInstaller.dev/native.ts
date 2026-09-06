@@ -362,7 +362,7 @@ export async function updatePlugin(_, directory: string) {
             else resolve(stdout);
         });
     });
-    return new Promise((resolve, reject) => {
+    return new Promise<string>((resolve, reject) => {
 
         const win = new BrowserWindow({
             maximizable: false,
@@ -434,9 +434,10 @@ export async function updatePlugin(_, directory: string) {
                             else resolve();
                         }));
                         await build();
+                        const updatedMeta = await getPluginMeta(pluginDir);
                         resolve(JSON.stringify({
-                            name: pluginMeta.name,
-                            native: pluginMeta.usesNative
+                            name: updatedMeta.name,
+                            native: pluginMeta.usesNative || updatedMeta.usesNative
                         }));
                     }
                     catch {

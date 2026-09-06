@@ -263,9 +263,9 @@ function UserPluginsTab() {
                                                         size="small"
                                                         onClick={async () => {
                                                             try {
-                                                                await Native.updatePlugin(
+                                                                const { native } = JSON.parse(await Native.updatePlugin(
                                                                     plugin.directory!,
-                                                                );
+                                                                ));
                                                                 const updates = userpluginInstaller.pluginsWithUpdates.value();
                                                                 userpluginInstaller.pluginsWithUpdates.value({
                                                                     ...updates,
@@ -273,14 +273,14 @@ function UserPluginsTab() {
                                                                 });
                                                                 Alerts.show({
                                                                     title: "Done!",
-                                                                    body: `${plugin.name} has been updated. A ${plugin.usesNative ? "restart" : "refresh"} is needed to apply the update.`,
+                                                                    body: `${plugin.name} has been updated. A ${native ? "restart" : "refresh"} is needed to apply the update.`,
                                                                     confirmText:
-                                                                        plugin.usesNative
+                                                                        native
                                                                             ? "Restart"
                                                                             : "Refresh",
                                                                     cancelText: "Later",
                                                                     onConfirm() {
-                                                                        plugin.usesNative
+                                                                        native
                                                                             ? relaunch()
                                                                             : window.location.reload();
                                                                     },

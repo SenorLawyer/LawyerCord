@@ -7779,10 +7779,10 @@ test("plugin updates build only after Git succeeds and report build failures", a
             mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
         const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks,
             { __dirname: path.resolve("fixture/dist"), Buffer, process: { env: {} } },
-            "({ ...exports, setup() { getPluginDirectory = () => 'fixture'; getPluginMeta = async () => ({ name: 'Fixture', description: '', remote: '', usesNative: false }); } })");
+            "({ ...exports, setup() { let reads = 0; getPluginDirectory = () => 'fixture'; getPluginMeta = async () => ({ name: 'Fixture', description: '', remote: '', usesNative: ++reads > 1 }); } })");
         api.setup();
         const pending = api.updatePlugin(null, "fixture");
-        if (failure === "none") assert.deepEqual(JSON.parse(await pending), { name: "Fixture", native: false });
+        if (failure === "none") assert.deepEqual(JSON.parse(await pending), { name: "Fixture", native: true });
         else await assert.rejects(pending, /Could not update the plugin/);
         assert.equal(commands.length, failure === "git" ? 2 : 3);
         assert.equal(commands[1], "git rebase " + "a".repeat(40));

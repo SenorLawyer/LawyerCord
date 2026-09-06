@@ -24,6 +24,8 @@ import { copyFile, readdir, writeFile } from "fs/promises";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
+import { getPluginTarget } from "../utils.mjs";
+
 import { BUILD_TIMESTAMP, commonOpts, exists, globPlugins, IS_DEV, IS_REPORTER, IS_COMPANION_TEST, IS_STANDALONE, IS_UPDATER_DISABLED, resolvePluginName, VERSION, commonRendererPlugins, watch, buildOrWatchAll, stringifyValues, IS_ANTI_CRASH_TEST } from "./common.mjs";
 
 const defines = stringifyValues({
@@ -63,9 +65,9 @@ const sourceMapFooter = s => watch ? "" : `//# sourceMappingURL=vencord://${s}.j
 const sourcemap = watch ? "inline" : "external";
 
 /**
- * @type {import("esbuild").Plugin}
+ * @type {(kind: "discordDesktop" | "equibop") => import("esbuild").Plugin}
  */
-const globNativesPlugin = {
+const globNativesPlugin = kind => ({
     name: "glob-natives-plugin",
     setup: build => {
         const filter = /^~pluginNatives$/;
@@ -92,7 +94,12 @@ const globNativesPlugin = {
                 for (const file of plugins) {
                     const fileName = file.name;
                     if (fileName.startsWith("_") || fileName.startsWith(".")) continue;
-                    if (fileName.endsWith(".dev") && !IS_DEV && !IS_REPORTER) continue;
+                    const target = getPluginTarget(fileName);
+                    if (!IS_REPORTER && (
+                        (target === "dev" && !IS_DEV) ||
+                        (kind === "discordDesktop" && (target === "web" || target === "vesktop" || target === "equibop")) ||
+                        (target === "discordDesktop" && kind !== "discordDesktop")
+                    )) continue;
                     const nativePath = join(dirPath, fileName, "native.ts");
                     const indexNativePath = join(dirPath, fileName, "native/index.ts");
 
@@ -118,7 +125,7 @@ const globNativesPlugin = {
             };
         });
     }
-};
+});
 
 /** @type {import("esbuild").BuildOptions[]} */
 const buildConfigs = ([
@@ -132,7 +139,7 @@ const buildConfigs = ([
         plugins: [
             // @ts-ignore this is never undefined
             ...nodeCommonOpts.plugins,
-            globNativesPlugin
+            globNativesPlugin("discordDesktop")
         ],
         define: {
             ...defines,
@@ -184,7 +191,7 @@ const buildConfigs = ([
         sourcemap,
         plugins: [
             ...nodeCommonOpts.plugins,
-            globNativesPlugin
+            globNativesPlugin("equibop")
         ],
         define: {
             ...defines,

@@ -85,3 +85,27 @@ test("browser packaging replaces stale output without unused editor bundles", as
         await rm(root, { recursive: true, force: true });
     }
 });
+
+
+test("native plugin discovery respects renderer target and development restrictions", async () => {
+    const source = createSourceFile("build.mjs", readFileSync("scripts/build/build.mjs", "utf8"), ScriptTarget.Latest, true);
+    const code = source.statements.filter(node => isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(source) === "globNativesPlugin")).map(node => node.getText(source)).join("\n");
+    const { getPluginTarget } = await import("./utils.mjs");
+    const names = ["ordinary", ".staged", "_disabled", "fixture.dev", "fixture.web", "fixture.desktop", "fixture.discordDesktop", "fixture.vesktop", "fixture.equibop"];
+    for (const kind of ["discordDesktop", "equibop"]) for (const IS_DEV of [false, true]) for (const IS_REPORTER of [false, true]) {
+        let load: () => Promise<{ contents: string; }> = async () => assert.fail("Missing native loader");
+        const plugin = runInNewContext(`${code}\nglobNativesPlugin(kind)`, {
+            kind, IS_DEV, IS_REPORTER, getPluginTarget, join, resolve,
+            exists: async () => true,
+            readdir: async () => names.map(name => ({ name })),
+            resolvePluginName: async (_dir: string, file: { name: string; }) => file.name
+        });
+        plugin.setup({ onResolve() {}, onLoad(_options: object, callback: typeof load) { load = callback; } });
+        const { contents } = await load();
+        for (const name of names) {
+            const excluded = kind === "discordDesktop" ? ["fixture.web", "fixture.vesktop", "fixture.equibop"] : ["fixture.discordDesktop"];
+            const expected = !name.startsWith(".") && !name.startsWith("_") && (IS_REPORTER || (!excluded.includes(name) && (name !== "fixture.dev" || IS_DEV)));
+            assert.equal(contents.includes(`${name}/native`), expected, `${kind} dev=${IS_DEV} reporter=${IS_REPORTER}: ${name}`);
+        }
+    }
+});

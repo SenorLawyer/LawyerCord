@@ -4699,7 +4699,7 @@ test("Navidrome format substitutions preserve literal metadata", () => {
 
 
 test("Navidrome retries failed Last.fm artwork requests", async () => {
-    for (const failure of ["network", "http"]) {
+    for (const failure of ["network", "http", "api", "missing"]) {
         let requests = 0;
         const track = { id: "track", username: "listener", artist: "Artist", album: "Album", title: "Song" };
         const getActivity = loadSource("src/equicordplugins/richPresence/services/navidrome.ts", {
@@ -4713,6 +4713,8 @@ test("Navidrome retries failed Last.fm artwork requests", async () => {
             if (new URL(url).origin === "https://music.example")
                 return response({ "subsonic-response": { nowPlaying: { entry: [track] } } });
             requests++;
+            if ((failure === "api" || failure === "missing") && requests <= 2)
+                return response(failure === "api" ? { error: 11, message: "Service offline" } : {});
             if (requests === 1) {
                 if (failure === "network") throw new Error("offline");
                 return response({}, 503);
@@ -4722,7 +4724,7 @@ test("Navidrome retries failed Last.fm artwork requests", async () => {
         assert.equal((await getActivity()).assets.large_image, "navidrome");
         assert.equal((await getActivity()).assets.large_image, "https://images.example/cover.png");
         await getActivity();
-        assert.equal(requests, 2, "successful artwork stays cached");
+        assert.equal(requests, failure === "api" || failure === "missing" ? 3 : 2, "successful artwork stays cached after fallback and retry");
         for (const key of ["artist", "album", "title"] as const) {
             track[key] += " changed";
             const previous = requests;

@@ -28,7 +28,7 @@ let cachedStartTimestamp: number | undefined;
 let cachedPauseTimestamp: number | undefined;
 let lastMinutesAgo: number | undefined;
 let cachedSettingsJSON: string | undefined;
-const lastFmCache = new Map<string, string | null>();
+const lastFmCache = new Map<string, string>();
 
 interface NdTrack {
     id: string;
@@ -250,7 +250,7 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
                 }
 
                 resolvedCoverArtUrl = image ?? null;
-                lastFmCache.set(cacheKey, resolvedCoverArtUrl);
+                if (resolvedCoverArtUrl) lastFmCache.set(cacheKey, resolvedCoverArtUrl);
             } catch (e: unknown) {
                 if (e instanceof Error && e.name === "AbortError") throw e;
                 resolvedCoverArtUrl = null;

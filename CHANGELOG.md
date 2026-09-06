@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Record the initiating account on new scheduled messages and avoid restoring previews after an account switch during saving.
+
 - Preserve composer uploads changed while a scheduled message is being saved.
 
 - Clear only the scheduled channel draft when its text still matches, instead of clearing the last active editor.

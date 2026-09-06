@@ -22,6 +22,7 @@ export interface ScheduledAttachment {
 }
 
 export interface ScheduledMessage {
+    userId?: string;
     id: string;
     channelId: string;
     content: string;

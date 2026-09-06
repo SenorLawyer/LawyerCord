@@ -6638,3 +6638,30 @@ test("SongSpotlight requires write acknowledgement before changing local state",
     assert.equal(await api.deleteData(), true);
     assert.deepEqual(changes, ["save", "delete", "logout"]);
 });
+
+
+test("new scheduled entries retain their initiating account across persistence", async () => {
+    for (const scenario of ["signed-out", "same", "switched"]) {
+        let userId: string | undefined = scenario === "signed-out" ? undefined : "first";
+        let saved: { userId: string; }[] = [];
+        let previewChecks = 0;
+        let finish: () => void = () => {};
+        const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@api/DataStore": { set: async (_key: string, entries: { userId: string; }[]) => {
+                saved = structuredClone(entries);
+                await new Promise<void>(resolve => { finish = resolve; });
+            } },
+            "@utils/Logger": { Logger: class {} },
+            "@vencord/discord-types/enums": {},
+            "@webpack/common": { UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined } },
+            ".": { settings: { store: { maxMessagesPerMinute: 5, get showPhantomMessages() { previewChecks++; return false; } } } }
+        });
+        const pending = api.addScheduledMessage("channel", "Text", Date.now() + 60_000);
+        if (scenario === "switched") userId = "second";
+        finish();
+        const result = await pending;
+        assert.equal(result.success, scenario !== "signed-out");
+        assert.deepEqual(saved.map(entry => entry.userId), scenario === "signed-out" ? [] : ["first"]);
+        assert.equal(previewChecks, scenario === "same" ? 1 : 0);
+    }
+});

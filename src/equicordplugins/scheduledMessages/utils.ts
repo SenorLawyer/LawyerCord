@@ -410,6 +410,8 @@ export async function addScheduledMessage(
     scheduledTime: number,
     attachments?: ScheduledAttachment[]
 ): Promise<{ success: boolean; error?: string; }> {
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return { success: false, error: "Sign in before scheduling a message." };
     const minuteStart = Math.floor(scheduledTime / 60000) * 60000;
     const count = scheduledMessages.filter(m =>
         m.channelId === channelId && m.scheduledTime >= minuteStart && m.scheduledTime < minuteStart + 60000
@@ -420,6 +422,7 @@ export async function addScheduledMessage(
     }
 
     const newMessage: ScheduledMessage = {
+        userId,
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         channelId,
         content,
@@ -431,7 +434,7 @@ export async function addScheduledMessage(
     scheduledMessages.push(newMessage);
     scheduledMessages.sort((a, b) => a.scheduledTime - b.scheduledTime);
     await saveScheduledMessages();
-    createPhantomMessage(newMessage);
+    if (UserStore.getCurrentUser()?.id === userId) createPhantomMessage(newMessage);
     scheduleNextCheck();
 
     return { success: true };

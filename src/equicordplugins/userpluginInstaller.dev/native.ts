@@ -362,7 +362,7 @@ export async function updatePlugin(_, directory: string) {
             else resolve(stdout);
         });
     });
-    return new Promise<string>((resolve, reject) => {
+    return new Promise<{ name: string; native: boolean; }>((resolve, reject) => {
 
         const win = new BrowserWindow({
             maximizable: false,
@@ -435,10 +435,10 @@ export async function updatePlugin(_, directory: string) {
                         }));
                         await build();
                         const updatedMeta = await getPluginMeta(pluginDir);
-                        resolve(JSON.stringify({
+                        resolve({
                             name: updatedMeta.name,
                             native: pluginMeta.usesNative || updatedMeta.usesNative
-                        }));
+                        });
                     }
                     catch {
                         reject(new Error("Could not update the plugin. Check the repository and try building from the terminal."));

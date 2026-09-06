@@ -263,9 +263,9 @@ function UserPluginsTab() {
                                                         size="small"
                                                         onClick={async () => {
                                                             try {
-                                                                const { native } = JSON.parse(await Native.updatePlugin(
+                                                                const { native } = await Native.updatePlugin(
                                                                     plugin.directory!,
-                                                                ));
+                                                                );
                                                                 const updates = userpluginInstaller.pluginsWithUpdates.value();
                                                                 userpluginInstaller.pluginsWithUpdates.value({
                                                                     ...updates,

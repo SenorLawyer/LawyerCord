@@ -192,8 +192,11 @@ function UserPluginsTab() {
                                     name={plugin.name}
                                     description={plugin.description}
                                     enabled={rs.plugins[plugin.name]?.enabled ?? false}
-                                    infoButton={<button
-                                        role="switch"
+                                    infoButton={<Button
+                                        variant="none"
+                                        size="iconOnly"
+                                        type="button"
+                                        aria-label={`Uninstall ${plugin.name}`}
                                         onClick={async () => {
                                             try {
                                                 if (!await Native.rmPlugin(plugin.directory)) return;
@@ -222,7 +225,7 @@ function UserPluginsTab() {
                                         className={cl("delete-button")}
                                     >
                                         <DeleteIcon />
-                                    </button>}
+                                    </Button>}
                                     setEnabled={t => {
                                         Vencord.Settings.plugins[plugin.name] ??= { enabled: t };
                                         Vencord.Settings.plugins[plugin.name].enabled = t;

@@ -20,6 +20,31 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("UniversalMention reads current users and DM membership on each lookup", () => {
+    const settings = { onlyDMUsers: false };
+    let users: Record<string, { id: string; }> = { first: { id: "first" } };
+    const dms = new Set<string>();
+    const { default: plugin } = loadSource("src/equicordplugins/universalMention/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: settings }) },
+        "@components/Notice": { Notice: {} },
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+        "@webpack/common": {
+            UserStore: { getUsers: () => users },
+            ChannelStore: { getDMFromUserId: (id: string) => dms.has(id) },
+        },
+    });
+    assert.deepEqual(Array.from(plugin.useFilter(), (user: { id: string; }) => user.id), ["first"]);
+    users = { second: { id: "second" } };
+    assert.deepEqual(Array.from(plugin.useFilter(), (user: { id: string; }) => user.id), ["second"]);
+    settings.onlyDMUsers = true;
+    assert.equal(plugin.useFilter().length, 0);
+    dms.add("second");
+    assert.equal(plugin.useFilter(true)[0].userId, "second");
+    users = {};
+    assert.equal(plugin.useFilter().length, 0);
+});
+
 test("tone indicators preserve empty descriptions and resolve aliases without prototype properties", () => {
     const settings = { prefix: "/", customIndicators: "empty=; _constructor=Constructor alias" };
     const { default: plugin } = loadSource("src/equicordplugins/toneIndicators/index.tsx", {

@@ -12,7 +12,6 @@ import { BanchoStatusEnum, GameState, Modes, TosuApi } from "../types/tosu";
 import { getCachedApplicationAsset } from "./assetCache";
 
 const OSU_APP_ID = "367827983903490050";
-const OSU_LARGE_IMAGE = "373344233077211136";
 const OSU_STARDARD_SMALL_IMAGE = "373370493127884800";
 const OSU_MANIA_SMALL_IMAGE = "373370588703621136";
 const OSU_TAIKO_SMALL_IMAGE = "373370519891738624";
@@ -208,7 +207,6 @@ async function onMessage(data: string, generation: number) {
             h100 = resultsScreen.hits[100] > 0 ? `${resultsScreen.hits[100]}x100` : "";
             h50 = resultsScreen.hits[50] > 0 ? `${resultsScreen.hits[50]}x50` : "";
             h0 = resultsScreen.hits[0] > 0 ? `${resultsScreen.hits[0]}xMiss` : "";
-            sb = play.hits.sliderBreaks > 0 ? `${play.hits.sliderBreaks}xSB` : "";
             activity.state = joinStateParts(h100, h50, h0);
 
             const resultRank = await getAsset(`https://raw.githubusercontent.com/AutumnVN/gosu-rich-presence/main/grade/${resultsScreen.rank.toLowerCase().replace("x", "ss")}.png`);

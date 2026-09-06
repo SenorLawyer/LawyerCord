@@ -364,6 +364,7 @@ async function addReactionsToMessage(channelId: string, messageId: string, react
 }
 
 async function sendScheduledMessage(msg: ScheduledMessage): Promise<boolean> {
+    const generation = schedulerGeneration;
     try {
         if (!ChannelStore.getChannel(msg.channelId)) return false;
 
@@ -377,6 +378,7 @@ async function sendScheduledMessage(msg: ScheduledMessage): Promise<boolean> {
                 uploadAttachment(msg.channelId, att).then(result => ({ ...result, id: String(i) }))
             ));
 
+            if (generation !== schedulerGeneration) return false;
             messageId = await postMessage(msg.channelId, msg.content, uploaded);
         } else {
             messageId = await postMessage(msg.channelId, msg.content);
@@ -468,9 +470,11 @@ export async function sendScheduledMessageNow(id: string): Promise<{ success: bo
 
     if (sendingMessages.has(id)) return { success: false, error: "Message is being sent." };
     sendingMessages.add(id);
+    const generation = schedulerGeneration;
     try {
         message.attemptedAt = Date.now();
         await saveScheduledMessages();
+        if (generation !== schedulerGeneration) return { success: false, error: "Scheduled sending was stopped. The message remains saved." };
         if (!scheduledMessages.includes(message)) return { success: false, error: "Scheduled message was removed." };
         const sent = await sendScheduledMessage(message);
         if (!sent) return { success: false, error: "Failed to send scheduled message. It remains saved." };

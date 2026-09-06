@@ -5421,6 +5421,24 @@ test("screen recorder releases capture and discards work after disable", async (
     assert.equal(uploads, 1);
 });
 
+test("scheduled sends stopped during persistence remain saved without posting", async () => {
+    let finish: () => void = () => {};
+    const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+        "@api/DataStore": { get: async () => [{ id: "queued", scheduledTime: 0 }],
+            set: () => new Promise<void>(resolve => { finish = resolve; }) },
+        "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+        "@webpack/common": { ChannelStore: { getChannel: () => assert.fail("Must stop before sending") } },
+        ".": { settings: { store: {} } }
+    });
+    await module.loadScheduledMessages();
+    const pending = module.sendScheduledMessageNow("queued");
+    module.stopScheduler();
+    finish();
+    assert.equal((await pending).success, false);
+    assert.equal(module.getScheduledMessages().length, 1);
+    assert.equal(typeof module.getScheduledMessages()[0].attemptedAt, "number");
+});
+
 test("scheduled send batches stop before starting the next message", async () => {
     let posts = 0;
     let finish: () => void = () => {};
@@ -5631,7 +5649,7 @@ test("scheduled attempts remain saved on failure and do not automatically replay
 });
 
 test("scheduled messages require every attachment upload before posting", async () => {
-    for (const failedIndex of [-1, 0, 1]) {
+    for (const failedIndex of [-2, -1, 0, 1]) {
         const uploads: Uploader[] = [];
         const posts: { attachments: { id: string; filename: string; }[]; }[] = [];
         let errors = 0;
@@ -5659,12 +5677,13 @@ test("scheduled messages require every attachment upload before posting", async 
                 Toasts: { Type: { FAILURE: "failure" } }
             },
             ".": { settings: { store: { showNotifications: true } } }
-        }, { File, atob }, "sendScheduledMessage");
+        }, { File, atob }, "Object.assign(sendScheduledMessage, { stop: exports.stopScheduler })");
         const pending = send({ id: "scheduled", channelId: "channel", content: "Text", attachments: [
             { filename: "first.txt", type: "text/plain", data: btoa("one") },
             { filename: "second.txt", type: "text/plain", data: btoa("two") }
         ] });
         assert.equal(uploads.length, 2);
+        if (failedIndex === -2) send.stop();
         assert.equal(posts.length, 0);
         uploads[1].callbacks.get(failedIndex === 1 ? "error" : "complete")?.();
         await Promise.resolve();
@@ -5672,7 +5691,7 @@ test("scheduled messages require every attachment upload before posting", async 
         uploads[0].callbacks.get(failedIndex === 0 ? "error" : "complete")?.();
         assert.equal(await pending, failedIndex === -1);
         assert.equal(posts.length, failedIndex === -1 ? 1 : 0);
-        assert.equal(errors, failedIndex === -1 ? 0 : 1);
+        assert.equal(errors, failedIndex < 0 ? 0 : 1);
         if (posts.length) assert.deepEqual(Array.from(posts[0].attachments, item => [item.id, item.filename]), [["0", "first.txt"], ["1", "second.txt"]]);
     }
 });

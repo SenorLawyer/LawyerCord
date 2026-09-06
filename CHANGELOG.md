@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Prevent scheduled message requests from starting after shutdown during storage or attachment loading.
+
 - Stop automatic scheduled-send batches from starting another message after shutdown.
 
 - Stop restoring scheduled previews after cleanup or an account change, and skip messages removed during restoration.

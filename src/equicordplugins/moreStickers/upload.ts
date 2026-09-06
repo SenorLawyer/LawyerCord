@@ -105,68 +105,75 @@ async function toGIF(url: string): Promise<File> {
 export async function sendSticker({ channelId, sticker, ctrlKey, shiftKey }: SendStickerOptions) {
     const userId = UserStore.getCurrentUser()?.id;
     if (!userId) return;
-    const reply = PendingReplyStore.getPendingReply(channelId);
-    let content = DraftStore.getDraft(channelId, 0);
-    let options: Partial<MessageOptions> = {};
-    let file: File;
+    const onError = () => {
+        if (UserStore.getCurrentUser()?.id === userId) showToast("Could not send sticker.", Toasts.Type.FAILURE);
+    };
+    try {
+        const reply = PendingReplyStore.getPendingReply(channelId);
+        let content = DraftStore.getDraft(channelId, 0);
+        let options: Partial<MessageOptions> = {};
+        let file: File;
 
-    if (reply) {
-        FluxDispatcher.dispatch({ type: "DELETE_PENDING_REPLY", channelId });
-        options = MessageActions.getSendMessageOptionsForReply(reply);
-    }
-
-    if (shiftKey) {
-        if (!content.endsWith(" ") && !content.endsWith("\n")) content = " ";
-        content += sticker.image;
-
-        return ctrlKey
-            ? insertTextIntoChatInputBox(content)
-            : MessageActions._sendMessage(channelId, { content: sticker.image }, options);
-    }
-
-    if (sticker?.isAnimated) {
-        file = await toGIF(sticker.image);
-    } else {
-        const res = await corsFetch(sticker.image);
-        if (!res.ok) throw new Error("Failed to fetch sticker image");
-        const blobUrl = URL.createObjectURL(await res.blob());
-        try {
-            const processed = await resizeImage(blobUrl);
-            const filename = sticker.filename || new URL(sticker.image).pathname.split("/").pop() || "sticker";
-
-            file = new File([processed], `${filename.replace(/\.[^/.]+$/, "")}.png`, { type: "image/png" });
-        } finally {
-            URL.revokeObjectURL(blobUrl);
+        if (reply) {
+            FluxDispatcher.dispatch({ type: "DELETE_PENDING_REPLY", channelId });
+            options = MessageActions.getSendMessageOptionsForReply(reply);
         }
-    }
 
-    if (UserStore.getCurrentUser()?.id !== userId) return;
-    if (settings.store.promptToUpload || content) return UploadHandler.promptToUpload([file], ChannelStore.getChannel(channelId), 0);
+        if (shiftKey) {
+            if (!content.endsWith(" ") && !content.endsWith("\n")) content = " ";
+            content += sticker.image;
 
-    const upload = new CloudUploader({ file, platform: CloudUploadPlatform.WEB }, channelId);
+            return await (ctrlKey
+                ? insertTextIntoChatInputBox(content)
+                : MessageActions._sendMessage(channelId, { content: sticker.image }, options));
+        }
 
-    upload.on("complete", () => {
-        if (UserStore.getCurrentUser()?.id !== userId) return;
-        RestAPI.post({
-            url: Constants.Endpoints.MESSAGES(channelId),
-            body: {
-                flags: 0,
-                channel_id: channelId,
-                content: "",
-                nonce: SnowflakeUtils.fromTimestamp(Date.now()),
-                sticker_ids: [],
-                type: 0,
-                attachments: [{
-                    id: "0",
-                    filename: upload.filename,
-                    uploaded_filename: upload.uploadedFilename,
-                }],
-                message_reference: reply ? options?.messageReference : null,
+        if (sticker?.isAnimated) {
+            file = await toGIF(sticker.image);
+        } else {
+            const res = await corsFetch(sticker.image);
+            if (!res.ok) throw new Error("Failed to fetch sticker image");
+            const blobUrl = URL.createObjectURL(await res.blob());
+            try {
+                const processed = await resizeImage(blobUrl);
+                const filename = sticker.filename || new URL(sticker.image).pathname.split("/").pop() || "sticker";
+
+                file = new File([processed], `${filename.replace(/\.[^/.]+$/, "")}.png`, { type: "image/png" });
+            } finally {
+                URL.revokeObjectURL(blobUrl);
             }
+        }
+
+        if (UserStore.getCurrentUser()?.id !== userId) return;
+        if (settings.store.promptToUpload || content) return await UploadHandler.promptToUpload([file], ChannelStore.getChannel(channelId), 0);
+
+        const upload = new CloudUploader({ file, platform: CloudUploadPlatform.WEB }, channelId);
+
+        upload.on("complete", () => {
+            if (UserStore.getCurrentUser()?.id !== userId) return;
+            RestAPI.post({
+                url: Constants.Endpoints.MESSAGES(channelId),
+                body: {
+                    flags: 0,
+                    channel_id: channelId,
+                    content: "",
+                    nonce: SnowflakeUtils.fromTimestamp(Date.now()),
+                    sticker_ids: [],
+                    type: 0,
+                    attachments: [{
+                        id: "0",
+                        filename: upload.filename,
+                        uploaded_filename: upload.uploadedFilename,
+                    }],
+                    message_reference: reply ? options?.messageReference : null,
+                }
+            }).catch(onError);
         });
-    });
 
-    upload.on("error", () => showToast("Failed to upload sticker", Toasts.Type.FAILURE));
+        upload.on("error", onError);
 
-    upload.upload();
+        upload.upload();
+    } catch {
+        onError();
+    }
 }

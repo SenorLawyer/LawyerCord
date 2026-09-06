@@ -2890,7 +2890,7 @@ test("sticker sends retain their account through conversion and upload", async (
                     UploadHandler: { promptToUpload: () => prompts++ },
                     CloudUploader: class { on(event: string, callback: () => void) { handlers[event] = callback; } upload() { uploads++; } },
                     Constants: { Endpoints: { MESSAGES: () => "/messages" } }, SnowflakeUtils: { fromTimestamp: () => "nonce" },
-                    RestAPI: { post: () => { sends++; } }
+                    RestAPI: { post: async () => { sends++; } }
                 }, ".": { settings: { store: { promptToUpload: prompt } } }, "./utils": {}
             }, { convert: async () => { conversions++; if (switchAt === "conversion") userId = "second"; return new File(["gif"], "sticker.gif"); } }, "(toGIF = convert, exports)");
             await module.sendSticker({ channelId: "channel", sticker: { isAnimated: true, image: "image" }, ctrlKey: false, shiftKey: false });
@@ -2901,6 +2901,37 @@ test("sticker sends retain their account through conversion and upload", async (
             assert.equal(prompts, active && prompt ? 1 : 0);
             assert.equal(uploads, active && !prompt ? 1 : 0);
             assert.equal(sends, active && !prompt && switchAt !== "upload" ? 1 : 0);
+        }
+    }
+});
+
+test("sticker send failures settle and notify only the initiating account", async () => {
+    for (const failure of ["conversion", "prompt", "upload", "post", "link"]) {
+        for (const stale of [false, true]) {
+            let userId = "first";
+            const notices: string[] = [];
+            const handlers: Record<string, () => void> = {};
+            const reject = async () => { if (stale) userId = "second"; throw new Error("Request failed"); };
+            const module = loadSource("src/equicordplugins/moreStickers/upload.ts", {
+                "@ffmpeg/ffmpeg": {}, "@utils/discord": {}, "@utils/ffmpeg": {},
+                "@vencord/discord-types/enums": { CloudUploadPlatform: { WEB: "web" } },
+                "@webpack/common": {
+                    UserStore: { getCurrentUser: () => ({ id: userId }) },
+                    PendingReplyStore: { getPendingReply: () => null }, DraftStore: { getDraft: () => "" },
+                    ChannelStore: { getChannel: () => ({ id: "channel" }) },
+                    UploadHandler: { promptToUpload: reject }, MessageActions: { _sendMessage: reject },
+                    CloudUploader: class {
+                        on(event: string, callback: () => void) { handlers[event] = callback; }
+                        upload() { if (failure === "upload") { if (stale) userId = "second"; handlers.error(); } else handlers.complete(); }
+                    },
+                    Constants: { Endpoints: { MESSAGES: () => "/messages" } }, SnowflakeUtils: { fromTimestamp: () => "nonce" },
+                    RestAPI: { post: reject }, Toasts: { Type: { FAILURE: "failure" } },
+                    showToast: (message: string) => notices.push(message)
+                }, ".": { settings: { store: { promptToUpload: failure === "prompt" } } }, "./utils": {}
+            }, { convert: async () => failure === "conversion" ? reject() : new File(["gif"], "sticker.gif") }, "(toGIF = convert, exports)");
+            await module.sendSticker({ channelId: "channel", sticker: { isAnimated: true, image: "image" }, ctrlKey: false, shiftKey: failure === "link" });
+            await setImmediate();
+            assert.deepEqual(notices, stale ? [] : ["Could not send sticker."]);
         }
     }
 });

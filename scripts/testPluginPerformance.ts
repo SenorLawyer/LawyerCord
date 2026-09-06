@@ -45,7 +45,7 @@ test("theme uploads finish after read failures and refresh successful files", as
 
 test("theme validation belongs to the current URL and cancels obsolete requests", async () => {
     let state: unknown = null;
-    let effect: () => (() => void) | undefined;
+    let effect: () => (() => void) | undefined = () => assert.fail("effect was not registered");
     const pending: Array<{ signal: AbortSignal; resolve: (response: object) => void; }> = [];
     const { OnlineThemesSection } = loadSource("src/components/settings/tabs/themes/OnlineThemes.tsx", {
         "@components/Button": { Button: "button" }, "@components/FormSwitch": {}, "@components/Heading": {},

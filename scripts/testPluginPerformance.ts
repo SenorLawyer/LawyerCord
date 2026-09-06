@@ -46,6 +46,31 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("middle click settings preserve paste protection and stopped listeners stay removed", () => {
+    const listeners = new Map<string, (event: object) => void>();
+    const store = { openScope: "links", pasteScope: "always", pasteThreshold: 100 };
+    const plugin = loadSource("src/equicordplugins/middleClickTweaks/index.ts", {
+        "@api/Settings": { definePluginSettings: (def: object) => ({ def, store }) },
+        "@utils/index": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} }
+    }, { document: {
+        addEventListener: (name: string, callback: (event: object) => void) => listeners.set(name, callback),
+        removeEventListener: (name: string, callback: (event: object) => void) => {
+            assert.equal(listeners.get(name), callback);
+            listeners.delete(name);
+        }
+    } }).default;
+    plugin.start();
+    store.openScope = "none";
+    plugin.settings.def.openScope.onChange?.("none");
+    listeners.get("mouseup")?.({ button: 1 });
+    assert.equal(plugin.isPastingDisabled(true), true);
+    plugin.stop();
+    store.openScope = "links";
+    plugin.settings.def.openScope.onChange?.("links");
+    assert.equal(listeners.size, 0);
+});
+
 test("logger export iteration preserves stored attachment URLs without populating display caches", async () => {
     const record = { message_id: "1", message: { attachments: [{ url: "https://example.com/image.png", proxy_url: "https://example.com/proxy.png" }] } };
     const module = loadSource("src/equicordplugins/messageLoggerEnhanced/db.ts", {

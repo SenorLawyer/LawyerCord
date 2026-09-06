@@ -21,6 +21,26 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("silent typing commands apply both indicator options and preserve omitted values", async () => {
+    const store = { hideChatBoxTypingIndicators: false, hideMembersListTypingIndicators: false };
+    const replies: string[] = [];
+    const { default: plugin } = loadSource("src/plugins/silentTyping/index.tsx", {
+        "@api/ChatButtons": {}, "@api/ContextMenu": {}, "@api/PluginManager": {},
+        "@api/Commands": { ApplicationCommandInputType: {}, ApplicationCommandOptionType: {}, findOption: (args: Record<string, unknown>, key: string) => args[key], sendBotMessage: (_id: string, message: { content: string; }) => replies.push(message.content) },
+        "@api/Settings": { definePluginSettings: () => ({ store }) }, "@components/settings": {},
+        "@utils/constants": { Devs: {}, EquicordDevs: {} }, "@utils/react": {},
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} }, "@webpack/common": {},
+    });
+    const execute = (args: object) => plugin.commands[0].execute(args, { channel: { id: "channel" } });
+    await execute({ "chat-bar-indicators": true, "members-list-indicators": true });
+    assert.deepEqual(store, { hideChatBoxTypingIndicators: true, hideMembersListTypingIndicators: true });
+    assert.equal(replies.at(-1), "Silent typing settings updated.");
+    await execute({ "chat-bar-indicators": false });
+    assert.deepEqual(store, { hideChatBoxTypingIndicators: false, hideMembersListTypingIndicators: true });
+    await execute({ "members-list-indicators": false });
+    assert.deepEqual(store, { hideChatBoxTypingIndicators: false, hideMembersListTypingIndicators: false });
+});
+
 test("typing summaries name two people and count only the remaining people", () => {
     const React = { Fragment: "fragment", createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props, children }) };
     const { buildSeveralUsers } = loadSource("src/plugins/typingTweaks/index.tsx", {

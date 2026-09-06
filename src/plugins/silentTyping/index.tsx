@@ -513,6 +513,20 @@ export default definePlugin({
                     }
                 }
 
+                const updateChatBarIndicators = findOption(args, "chat-bar-indicators");
+
+                if (typeof updateChatBarIndicators === "boolean") {
+                    updated = true;
+                    settings.store.hideChatBoxTypingIndicators = updateChatBarIndicators;
+                }
+
+                const updateMembersListIndicators = findOption(args, "members-list-indicators");
+
+                if (typeof updateMembersListIndicators === "boolean") {
+                    updated = true;
+                    settings.store.hideMembersListTypingIndicators = updateMembersListIndicators;
+                }
+
                 const updateChatIcon = findOption(args, "chat-icon");
 
                 if (typeof updateChatIcon === "boolean") {

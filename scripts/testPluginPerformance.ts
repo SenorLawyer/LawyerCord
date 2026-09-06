@@ -21,6 +21,20 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("IRC colors preserve existing DM colors when replacement is disabled", () => {
+    const store = { lightness: 70, applyColorOnlyToUsersWithoutColor: true, applyColorOnlyInDms: false };
+    const { default: plugin } = loadSource("src/plugins/ircColors/index.ts", {
+        "@api/Settings": { Settings: { plugins: { CustomUserColors: { enabled: false } } }, definePluginSettings: () => ({ store, use: () => store }) },
+        "@equicordplugins/customUserColors": {}, "@intrnl/xxhash64": { hash: () => 10n },
+        "@utils/constants": { Devs: {} }, "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack/common": { useMemo: (fn: () => unknown) => fn(), UserStore: { getCurrentUser: () => ({ id: "self" }) } },
+    });
+    const context = { message: { author: { id: "other" } }, author: { colorString: "#123456" }, channel: { isPrivate: () => true } };
+    assert.equal(plugin.calculateNameColorForMessageContext(context), "#123456");
+    store.applyColorOnlyToUsersWithoutColor = false;
+    assert.equal(plugin.calculateNameColorForMessageContext(context), "hsl(190, 100%, 70%)");
+});
+
 test("automatic translation cancels failed sends and preserves the original text", async () => {
     let fail = true;
     const { default: plugin } = loadSource("src/plugins/translate/index.tsx", {

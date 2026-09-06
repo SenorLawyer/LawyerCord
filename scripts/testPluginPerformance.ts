@@ -21,6 +21,18 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("message history diffs keep custom emoji markup atomic", () => {
+    const { createWordDiff } = loadSource("src/plugins/messageLogger/diffUtils.ts", {});
+    for (const prefix of ["", "a"]) {
+        const before = `<${prefix}:old:123>`;
+        const after = `<${prefix}:new:456>`;
+        const parts = Array.from(createWordDiff(before, after)) as Array<{ type: string; text: string; }>;
+        assert.equal(parts.length, 2);
+        assert.equal(parts.find(part => part.type === "removed")?.text, before);
+        assert.equal(parts.find(part => part.type === "added")?.text, after);
+    }
+});
+
 test("Unindent preserves code fence placement while removing indentation", () => {
     const { default: plugin } = loadSource("src/plugins/unindent/index.ts", {
         "@utils/constants": { Devs: {} }, "@utils/types": { __esModule: true, default: (value: object) => value },

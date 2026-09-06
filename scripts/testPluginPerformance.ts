@@ -20,6 +20,22 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("failed theme downloads preserve the installed stylesheet", async () => {
+    let contents = ".existing { color: red; }";
+    let status = 503;
+    const { downloadTheme } = loadSource("src/equicordplugins/themeLibrary/native.ts", {
+        "@main/ipcMain": { ensureSafePath: (_root: string, file: string) => file },
+        "@main/utils/constants": { THEMES_DIR: "themes" },
+        fs: { writeFileSync: (_file: string, content: string) => { contents = content; } },
+    }, { fetch: async () => new Response(status === 200 ? ".new { color: blue; }" : "Service unavailable", { status }) });
+    const theme = { name: "existing", id: "123", content: "metadata" };
+    await assert.rejects(downloadTheme(null, theme), /download/i);
+    assert.equal(contents, ".existing { color: red; }");
+    status = 200;
+    await downloadTheme(null, theme);
+    assert.equal(contents, ".new { color: blue; }");
+});
+
 test("theme library requests preserve authentication in Headers objects", async () => {
     const { themeRequest } = loadSource("src/equicordplugins/themeLibrary/components/ThemeTab.tsx", {
         "@api/DataStore": {}, "@api/Settings": {}, "@components/ErrorCard": {},

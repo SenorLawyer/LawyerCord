@@ -28,6 +28,7 @@ export async function downloadTheme(_: IpcMainInvokeEvent, theme: Theme) {
     if (!path) throw new Error("Invalid theme name");
 
     const download = await fetch(`https://themes.equicord.org/api/download/${encodeURIComponent(theme.id)}`);
+    if (!download.ok) throw new Error("Theme download failed.");
     const content = await download.text();
     writeFileSync(path, content);
 }

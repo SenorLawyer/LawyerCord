@@ -4901,3 +4901,27 @@ test("SongSpotlight failed loads can retry without creating an empty draft", asy
     assert.equal(data, songs);
     assert.match(source, /<Button onClick=\{loadData\}>Retry loading songs<\/Button>/);
 });
+
+
+test("SongSpotlight sends conditional headers only for cached timestamps", async () => {
+    const users: Record<string, { at?: string; }> = {};
+    const headers: Headers[] = [];
+    const token = { access: "token" };
+    const api = loadSource("src/equicordplugins/songSpotlight.desktop/lib/api.ts", {
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "self" }) }, showToast() {}, Toasts: { Type: {} } },
+        "./stores/AuthorizationStore": { useAuthorizationStore: { getState: () => ({ getToken: () => token }) } },
+        "./stores/SongStore": { useSongStore: { getState: () => ({ users, update() {} }) } },
+    }, { URL, Headers, fetch: async (_url: URL, options: RequestInit) => {
+        headers.push(new Headers(options.headers)); return response([]);
+    } });
+    await api.getData();
+    await api.listData("other");
+    assert.equal(headers[0].has("If-Modified-Since"), false);
+    assert.equal(headers[1].has("If-Modified-Since"), false);
+    users.self = { at: "Mon, 01 Jan 2024 00:00:00 GMT" };
+    users.other = { at: "Tue, 02 Jan 2024 00:00:00 GMT" };
+    await api.getData();
+    await api.listData("other");
+    assert.equal(headers[2].get("If-Modified-Since"), users.self.at);
+    assert.equal(headers[3].get("If-Modified-Since"), users.other.at);
+});

@@ -95,10 +95,9 @@ export async function authFetch(url: string | URL, options?: RequestInit, userId
 
 export async function getData(): Promise<UserData | undefined> {
     const userId = UserStore.getCurrentUser()?.id;
+    const at = useSongStore.getState().users[userId]?.at;
     return await authFetch(new URL("api/data", apiConstants.api), {
-        headers: {
-            "If-Modified-Since": useSongStore.getState().users[userId]?.at,
-        } as HeadersInit,
+        headers: at ? { "If-Modified-Since": at } : {},
     }).then(async res => {
         if (!res) return useSongStore.getState().users[userId]?.data;
 
@@ -114,10 +113,9 @@ export async function getData(): Promise<UserData | undefined> {
 export async function listData(userId: string): Promise<UserData | undefined> {
     if (userId === UserStore.getCurrentUser()?.id) return await getData();
 
+    const at = useSongStore.getState().users[userId]?.at;
     return await authFetch(new URL(`api/data/${userId}`, apiConstants.api), {
-        headers: {
-            "If-Modified-Since": useSongStore.getState().users[userId]?.at,
-        } as HeadersInit,
+        headers: at ? { "If-Modified-Since": at } : {},
     }).then(async res => {
         if (!res) return useSongStore.getState().users[userId]?.data;
 

@@ -209,7 +209,9 @@ export async function initPluginInstall(_, link: string, source: string, owner: 
                                         });
                                         if (confirmation.response !== 1) return reject(new Error("Installation cancelled."));
                                         if (existsSync(backup)) throw new Error("Plugin backup already exists.");
-                                        await rename(getPluginDirectory(repo), backup);
+                                        const previous = getPluginDirectory(repo);
+                                        meta.usesNative ||= existsSync(join(previous, "native.ts")) || existsSync(join(previous, "native.js")) || existsSync(join(previous, "native/index.ts"));
+                                        await rename(previous, backup);
                                     }
                                     try {
                                         await rename(getPluginDirectory(stagingName), destination);

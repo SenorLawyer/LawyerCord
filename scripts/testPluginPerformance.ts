@@ -7977,7 +7977,7 @@ test("installer setup failures reject the caller without exposing native errors"
 });
 
 test("installer mutation guard remains held through review closure and build settlement", async () => {
-    for (const failBuild of [false, true]) {
+    for (const failBuild of [false, true]) for (const previousNative of [false, true]) {
         let openReview: (window: ReviewWindow) => void = () => {};
         const reviewOpened = new Promise<ReviewWindow>(resolve => { openReview = resolve; });
         let finishBuild: () => void = () => {};
@@ -7996,7 +7996,7 @@ test("installer mutation guard remains held through review closure and build set
         const mocks: Record<string, object> = {
             "child_process": {},
             "electron": { BrowserWindow: ReviewWindow, dialog: { showMessageBox: async () => ({ response: 1 }) } },
-            "fs": { existsSync: () => false }, "fs/promises": { mkdtemp: async (prefix: string) => prefix + "fixture", rename: async () => {},}, path, "yaml-js": {},
+            "fs": { existsSync: (file: string) => previousNative && (path.basename(file) === "repo" || file.endsWith("native.ts")) }, "fs/promises": { mkdtemp: async (prefix: string) => prefix + "fixture", rename: async () => {}, rm: async () => {},}, path, "yaml-js": {},
         };
         for (const name of ["pluginValidate", "updateValidate"])
             mocks[`./misc/${name}.txt`] = { __esModule: true, default: "" };
@@ -8022,7 +8022,7 @@ test("installer mutation guard remains held through review closure and build set
         finishBuild();
         const result = await settled;
         if (failBuild) assert.match(String(result.error), /Build failed/);
-        else assert.deepEqual({ ...result.value }, { name: "Fixture", native: false });
+        else assert.deepEqual({ ...result.value }, { name: "Fixture", native: previousNative });
         await assert.rejects(native.initPluginInstall(null, "invalid", "", "", ""), /Invalid link/);
     }
 });

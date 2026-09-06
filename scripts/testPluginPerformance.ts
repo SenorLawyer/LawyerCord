@@ -21,6 +21,35 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("voice metadata closes its audio context after success and decoding failures", async () => {
+    let decode: () => Promise<unknown> = async () => ({ getChannelData: () => new Float32Array([0]), sampleRate: 48000, duration: 1 });
+    let closes = 0;
+    let readMetadata: () => Promise<unknown> = async () => undefined;
+    let stateIndex = 0;
+    const blob = new Blob(["audio"], { type: "audio/ogg" });
+    const { VoiceMessageModal } = loadSource("src/plugins/voiceMessages/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@components/Card": {}, "@components/Icons": {}, "@components/Link": {}, "@components/Paragraph": {},
+        "@plugins/silentMessageToggle": {}, "@utils/constants": { Devs: {} },
+        "@utils/css": { classNameFactory: () => () => "" }, "@utils/margins": {},
+        "@utils/react": { useAwaiter: (callback: typeof readMetadata) => { readMetadata = callback; return [{ waveform: "" }, undefined]; } },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} }, "@utils/web": {},
+        "@vencord/discord-types/enums": {},
+        "@webpack/common": { useState: () => [stateIndex++ === 1 ? blob : undefined, () => {}], useEffect() {}, Forms: {} },
+        "./components/DesktopRecorder": {}, "./components/WebRecorder": {}, "./components/VoicePreview": {},
+        "./waveform": { DEFAULT_WAVEFORM: "", generateWaveform: () => "waveform" },
+    }, { IS_DISCORD_DESKTOP: false, React: { createElement: () => ({}) }, AudioContext: class {
+        decodeAudioData() { return decode(); }
+        async close() { closes++; }
+    } }, "({ VoiceMessageModal })");
+    VoiceMessageModal({ modalProps: {} });
+    await readMetadata();
+    assert.equal(closes, 1);
+    decode = async () => { throw new Error("invalid audio"); };
+    await assert.rejects(readMetadata(), /invalid audio/);
+    assert.equal(closes, 2);
+});
+
 test("MusicRichPresence discards stopped, superseded and foreign account updates", async () => {
     const activities: unknown[] = [];
     const requests: Array<ReturnType<typeof Promise.withResolvers<unknown>>> = [];

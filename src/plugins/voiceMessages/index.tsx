@@ -185,12 +185,15 @@ function VoiceMessageModal({ modalProps }: { modalProps: RenderModalProps; }) {
         if (!blob) return EMPTY_META;
 
         const audioContext = new AudioContext();
-        const audioBuffer = await audioContext.decodeAudioData(await blob.arrayBuffer());
-
-        return {
-            waveform: generateWaveform(audioBuffer.getChannelData(0), audioBuffer.sampleRate),
-            duration: audioBuffer.duration,
-        };
+        try {
+            const audioBuffer = await audioContext.decodeAudioData(await blob.arrayBuffer());
+            return {
+                waveform: generateWaveform(audioBuffer.getChannelData(0), audioBuffer.sampleRate),
+                duration: audioBuffer.duration,
+            };
+        } finally {
+            await audioContext.close();
+        }
     }, {
         deps: [blob],
         fallbackValue: EMPTY_META,

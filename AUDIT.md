@@ -25,7 +25,10 @@ The accumulated changes cover storage consistency, asynchronous lifecycle handli
 - Pausing older entries without a trustworthy account rather than assigning the active account.
 - Stopping stale work across shutdown, logout, and reconnection.
 - Preserving newer composer drafts and uploads after scheduling.
-- Serializing queue mutations and exposing them in memory only after storage commits.
+- Serializing queue reads and mutations, validating storage before the first write, and exposing changes in memory only after storage commits.
+- Preserving invalid stored queues and blocking writes until a valid reload.
+- Removing duplicate reaction state and preventing delayed previews from restoring removed or outdated entries.
+- Rendering video previews without an extra seek, with cleanup on success, failure, and timeout.
 - Preserving queue entries and previews after failed deletion, with failure feedback in the UI.
 - Removing unused rescheduling and channel-filter helpers.
 
@@ -37,12 +40,14 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `d93c2e1ac` | 308 tests and timezone correctness checks passed. |
+| Broader performance/correctness suite | `68e9debcf` | 313 tests and timezone correctness checks passed. |
 | Repository-wide ESLint | `d93c2e1ac` | Passed under the repository's configured file scopes and exclusions. |
-| Latest plugin regressions and TypeScript | `a6f4ad64a` | 259 plugin tests and full TypeScript passed; focused source lint passed. |
+| Latest plugin regressions and TypeScript | `68e9debcf` | 263 plugin tests and full TypeScript passed; focused source lint passed. |
+| Latest standalone build | `68e9debcf` | Passed after the queue and preview changes. |
 | Standalone and web builds | `f77ae311a` | Passed. Packed Chromium/Firefox manifest versions and generated client versions match `3.0.0.0`. |
 | Release artifact audit | `f77ae311a` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
-| Real IndexedDB queue behavior | `0f8af3577` | Isolated Chrome verified aborted additions, ordered concurrent additions, aborted clearing, and subsequent successful clearing using actual queue and DataStore code. |
+| Real IndexedDB queue behavior | `ce04cc40a` | Isolated Chrome verified aborted additions, ordered concurrent additions, aborted clearing, and subsequent successful clearing using actual queue and DataStore code. |
+| Video preview decoding | `fd216ca34` | Actual preview code in isolated Chrome produced a PNG from an FFmpeg-generated WebM and returned null for invalid video. |
 | Other isolated browser checks | Earlier audit commits | Specific sticker-storage transactions, codec conversion, and CSS behavior were exercised. These are not general live-client acceptance. |
 
 Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. Current-head CI success has not been established.
@@ -51,7 +56,7 @@ Mocked Discord requests do not establish live account-switch, message-send, or p
 
 The full finding ledger is still being worked through. This list identifies major open areas and is not an assertion that other findings are closed:
 
-- Scheduled-message recovery controls, persisted-data validation, modal lifetime handling, and coordination between separate client contexts.
+- Scheduled-message recovery controls, remaining persisted-data constraints, modal lifetime handling, media cancellation, and coordination between separate client contexts.
 - Remaining plugin account, cancellation, network-response, storage, and resource-lifecycle findings across the broader codebase.
 - Runtime validation of patch anchors. The current patch validator reports 192 warnings; those warnings have not all been resolved or justified against current Discord modules.
 - Native and provider behavior that mocked tests cannot establish, including target-platform installer and live-client acceptance.

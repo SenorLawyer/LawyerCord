@@ -27,23 +27,6 @@
     align-items: start;
 }
 
-.vc-userplugininstaller-info-button {
-    height: 24px;
-    width: 24px;
-    padding: 0;
-    background: transparent;
-    color: var(--icon-secondary);
-    transition: background-color 0.2s ease;
-
-    &:hover {
-        color: var(--interactive-hover);
-    }
-}
-
-.vc-userplugininstaller-settings-button:hover {
-    color: var(--interactive-hover);
-}
-
 .vc-userplugininstaller-plugin-footer {
     margin-top: 10px;
     display: flex;

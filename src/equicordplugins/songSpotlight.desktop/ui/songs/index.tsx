@@ -294,7 +294,7 @@ function SongInfo({ owned, song, render, big }: SongInfoProps) {
                             onClick={() => {
                                 if (playing !== undefined) return setPlaying(undefined);
 
-                                const loadedIndex = loaded.values().toArray().sort()[0];
+                                const loadedIndex = Array.from(loaded).sort((a, b) => a - b)[0];
                                 if (loadedIndex !== undefined) setPlaying(loadedIndex);
                             }}
                         />

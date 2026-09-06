@@ -20,6 +20,35 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("Song Spotlight album playback advances in numeric track order", () => {
+    let next: number | undefined;
+    const { default: AudioPlayer } = loadSource("src/equicordplugins/songSpotlight.desktop/ui/components/AudioPlayer.tsx", {
+        "@equicordplugins/songSpotlight.desktop/lib/utils": {},
+        "@equicordplugins/songSpotlight.desktop/settings": {},
+        "@webpack/common": {
+            useMemo: (factory: () => unknown) => factory(),
+            useRef: (current: unknown) => ({ current }),
+            useCallback: (callback: unknown) => callback,
+            useEffect() {},
+        },
+    }, { React: { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props, children }) } });
+    const tree = AudioPlayer({
+        audioRef: { current: undefined }, playing: 1,
+        list: Array.from({ length: 12 }, (_, index) => ({ audio: { previewUrl: String(index) } })),
+        setPlaying: (index: number | undefined) => { next = index; }, setLoadedAudio() {},
+    });
+    const item = tree.children[0][0].props;
+    for (const index of [11, 10, 2, 1]) item.handleLoaded(index, true);
+    item.handleStopped(1, true);
+    assert.equal(next, 2);
+    item.handleStopped(2, true);
+    assert.equal(next, 10);
+    item.handleStopped(10, true);
+    assert.equal(next, 11);
+    item.handleStopped(11, true);
+    assert.equal(next, undefined);
+});
+
 test("Song Spotlight metadata ignores replaced songs and unmounted requests", async () => {
     let state: unknown;
     let deps: unknown[] = [];

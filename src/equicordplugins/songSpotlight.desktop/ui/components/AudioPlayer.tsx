@@ -87,8 +87,7 @@ export default function AudioPlayer({ audioRef, list, playing, setPlaying, setLo
 
     const handleStopped = useCallback((index: number, ended?: boolean) => {
         if (ended) {
-            const nextIndex = loaded.current.values().toArray().sort().find(x => x > index);
-            setPlaying(nextIndex !== -1 ? nextIndex : undefined);
+            setPlaying(Array.from(loaded.current).sort((a, b) => a - b).find(x => x > index));
         } else if (playing === index) {
             setPlaying(undefined);
         }

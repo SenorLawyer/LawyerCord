@@ -27,8 +27,9 @@ const InputStyles = findCssClassesLazy("inputWrapper", "inputError", "error");
 export const apiUrl = "https://themes.equicord.org/api";
 export const logger = new Logger("ThemeLibrary", "#e5c890");
 
-export async function fetchAllThemes(): Promise<Theme[]> {
-    const response = await themeRequest("/themes");
+export async function fetchAllThemes(signal?: AbortSignal): Promise<Theme[]> {
+    const response = await themeRequest("/themes", { signal });
+    if (!response.ok) throw new Error("Could not fetch the theme list.");
     const data = await response.json();
     const themes: Theme[] = Object.values(data);
     themes.forEach(theme => {
@@ -84,35 +85,42 @@ function ThemeTab() {
         );
     };
 
-    const fetchLikes = async () => {
+    const fetchLikes = async (signal: AbortSignal) => {
         try {
             const token = await DataStore.get("ThemeLibrary_uniqueToken");
+            if (!token || signal.aborted) return;
             const response = await themeRequest("/likes/get", {
+                signal,
                 headers: {
                     "Authorization": `Bearer ${token}`,
                 },
             });
-            const data = await response.json();
-            return data;
+            if (!response.ok) throw new Error("Could not fetch theme likes.");
+            return await response.json();
         } catch (err) {
-            logger.error(err);
+            if (!signal.aborted) logger.error(err);
         }
     };
 
     useEffect(() => {
+        const controller = new AbortController();
+        const { signal } = controller;
         const fetchData = async () => {
             try {
-                const [themes, likes] = await Promise.all([fetchAllThemes(), fetchLikes()]);
+                const [themes, likes] = await Promise.all([fetchAllThemes(signal), fetchLikes(signal)]);
+                if (signal.aborted) return;
                 setThemes(themes);
                 setLikedThemes(likes);
             } catch (err) {
+                if (signal.aborted) return;
                 logger.error(err);
                 setError(true);
             } finally {
-                setLoading(false);
+                if (!signal.aborted) setLoading(false);
             }
         };
         fetchData();
+        return () => controller.abort();
     }, []);
 
     const sortedThemes = [...themes].sort(searchValue.status === SearchStatus.LIKED

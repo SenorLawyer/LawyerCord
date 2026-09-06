@@ -7380,3 +7380,41 @@ test("theme filters follow enabled links immediately without sorting source stat
     assert.deepEqual(cards.filter(card => card.removePreview).map(card => card.theme.id), [1, 2]);
     assert.deepEqual(themes.map(theme => theme.id), [1, 2]);
 });
+
+test("theme tab cleanup aborts catalog work and suppresses late token requests", async () => {
+    let effect: () => (() => void) = () => { throw new Error("Missing effect"); };
+    let token: (value: string) => void = () => {};
+    let finish: (value: Response) => void = () => {};
+    let updates = 0;
+    let errors = 0;
+    const requests: { url: string; signal?: AbortSignal | null; }[] = [];
+    const api = loadSource("src/equicordplugins/themeLibrary/components/ThemeTab.tsx", {
+        "@api/DataStore": { get: () => new Promise<string>(resolve => { token = resolve; }) },
+        "@api/Settings": { Settings: { themeLinks: [], plugins: { ThemeLibrary: { hideWarningCard: true } } } },
+        "@components/ErrorCard": {}, "@components/Heading": {}, "@components/Icons": {}, "@components/Paragraph": {},
+        "@components/settings": { wrapTab: (value: unknown) => value },
+        "@equicordplugins/themeLibrary/types": { SearchStatus: { ALL: 0, LIKED: 1 } },
+        "@utils/Logger": { Logger: class { error() { errors++; } } }, "@utils/margins": { Margins: {} },
+        "@utils/misc": { classes: () => "" }, "@webpack": { findCssClassesLazy: () => ({}) }, "./ThemeCard": {},
+        "@webpack/common": { React: { createElement: () => null },
+            useState: (initial: unknown) => [initial, () => { updates++; }],
+            useEffect: (callback: () => (() => void)) => { effect = callback; } }
+    }, { AbortController, fetch: (url: string, options: RequestInit) => {
+        requests.push({ url, signal: options.signal });
+        return new Promise<Response>(resolve => { finish = resolve; });
+    } }, "({ ThemeTab, fetchAllThemes })");
+    api.ThemeTab();
+    const cleanup = effect();
+    assert.equal(requests.length, 1);
+    cleanup();
+    assert.equal(requests[0].signal?.aborted, true);
+    token("late-token");
+    finish(new Response("[]"));
+    await setImmediate();
+    assert.equal(requests.length, 1);
+    assert.equal(updates, 0);
+    assert.equal(errors, 0);
+    const failed = api.fetchAllThemes();
+    finish(new Response("[]", { status: 503 }));
+    await assert.rejects(failed, /Could not fetch the theme list/);
+});

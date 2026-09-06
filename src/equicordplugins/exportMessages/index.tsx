@@ -14,10 +14,13 @@ import { EquicordDevs } from "@utils/constants";
 import { showItemInFolder } from "@utils/native";
 import definePlugin, { OptionType } from "@utils/types";
 import { saveFile } from "@utils/web";
-import { Message } from "@vencord/discord-types";
+import { Message, User } from "@vencord/discord-types";
 import { Menu, Toasts } from "@webpack/common";
 
-import { ContactsList } from "./types";
+interface ContactsList {
+    type: number;
+    user: Pick<User, "username" | "discriminator">;
+}
 
 const settings = definePluginSettings({
     openFileAfterExport: {

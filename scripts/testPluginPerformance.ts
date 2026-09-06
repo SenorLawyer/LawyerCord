@@ -21,6 +21,35 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("Streaks ignores responses for changed accounts or tokens", async () => {
+    for (const operation of ["fetch", "update", "refresh"]) {
+        for (const change of ["account", "logout", "token", "none"]) {
+            let userId = "first";
+            let token: string | null = "token";
+            let writes = 0;
+            let state: Record<string, unknown> = {};
+            const api = loadSource("src/equicordplugins/streaks/stores/StreaksStore.ts", {
+                "@api/DataStore": {}, "@utils/lazy": { proxyLazy: (factory: () => unknown) => factory() },
+                "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) },
+                    zustandCreate: (init: (set: (value: object) => void, get: () => object) => Record<string, unknown>) => {
+                        state = init(value => { writes++; Object.assign(state, value); }, () => state);
+                        return { getState: () => state };
+                    } },
+                "../constants": { API_URL: "https://example.com" },
+                "./AuthorizationStore": { useAuthorizationStore: { getState: () => ({ getToken: () => token }) } },
+            }, { fetch: async () => ({ ok: true, json: async () => {
+                if (change === "account") userId = "second";
+                if (change === "logout") token = null;
+                if (change === "token") token = "replacement";
+                const streak = { user_a_id: "first", user_b_id: "target", count: 2 };
+                return operation === "fetch" ? [streak] : streak;
+            } }) });
+            await api.useStreaksStore.getState()[operation]("target");
+            assert.equal(writes, change === "none" ? 1 : 0, `${operation}: ${change}`);
+        }
+    }
+});
+
 test("Streaks reads authorization from the current account without initialization", () => {
     let userId = "first";
     let state: Record<string, unknown> = {};

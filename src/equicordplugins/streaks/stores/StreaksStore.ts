@@ -35,6 +35,7 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: any, get: any
     streaks: {},
     clear: () => set({ streaks: {} }),
     async fetch() {
+        const myId = UserStore.getCurrentUser()?.id;
         const token = useAuthorizationStore.getState().getToken();
         if (!token) return;
 
@@ -44,7 +45,7 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: any, get: any
             });
             if (res.ok) {
                 const data: RemoteStreak[] = await res.json();
-                const myId = UserStore.getCurrentUser()?.id;
+                if (UserStore.getCurrentUser()?.id !== myId || useAuthorizationStore.getState().getToken() !== token) return;
                 const streaksMap: Record<string, RemoteStreak> = {};
                 for (const s of data) {
                     const otherId = s.user_a_id === myId ? s.user_b_id : s.user_a_id;
@@ -57,6 +58,7 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: any, get: any
         }
     },
     async update(recipientId: string) {
+        const myId = UserStore.getCurrentUser()?.id;
         const token = useAuthorizationStore.getState().getToken();
         if (!token) return;
 
@@ -67,6 +69,7 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: any, get: any
             });
             if (res.ok) {
                 const streak: RemoteStreak = await res.json();
+                if (UserStore.getCurrentUser()?.id !== myId || useAuthorizationStore.getState().getToken() !== token) return;
                 set({ streaks: { ...get().streaks, [recipientId]: streak } });
             }
         } catch (e) {
@@ -74,6 +77,7 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: any, get: any
         }
     },
     async refresh(recipientId: string) {
+        const myId = UserStore.getCurrentUser()?.id;
         const token = useAuthorizationStore.getState().getToken();
         if (!token) return;
 
@@ -83,6 +87,7 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: any, get: any
             });
             if (res.ok) {
                 const streak: RemoteStreak = await res.json();
+                if (UserStore.getCurrentUser()?.id !== myId || useAuthorizationStore.getState().getToken() !== token) return;
                 set({ streaks: { ...get().streaks, [recipientId]: streak } });
             }
         } catch (e) {

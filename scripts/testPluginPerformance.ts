@@ -46,6 +46,37 @@ function loadComponent(path: string, hooks: Record<string, unknown> = {}, additi
     });
 }
 
+test("sound imports validate all overrides before replacing settings", () => {
+    const soundTypes = [{ id: "message1", name: "Message" }, { id: "mute", name: "Mute" }];
+    const makeEmptyOverride = () => ({ enabled: false, selectedSound: "default", volume: 100, useFile: false });
+    const store: Record<string, string> = { message1: "original message", mute: "original mute" };
+    const { importOverrides } = loadSource("src/equicordplugins/customSounds/index.tsx", {
+        "@api/DataStore": {},
+        "@api/Settings": { definePluginSettings: () => ({ store }) },
+        "@components/Button": {}, "@components/Heading": {},
+        "@utils/constants": { Devs: {} },
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {}, StartAt: {} },
+        "@webpack/common": {}, "./audioStore": {}, "./SoundOverrideComponent": {},
+        "./types": { soundTypes, makeEmptyOverride, seasonalSounds: {} }
+    }, {}, "({ importOverrides })");
+    const original = { ...store };
+    for (const text of ["{", "null", "{}", '{"overrides":[null]}', ...[
+        { id: "unknown" }, { id: "__proto__" }, { id: "mute", volume: -1 },
+        { id: "mute", volume: 101 }, { id: "mute", enabled: "yes" },
+        { id: "mute", selectedSound: "constructor" }, { id: "mute", selectedFileId: {} }
+    ].map(invalid => JSON.stringify({ overrides: [{ id: "message1", enabled: true }, invalid] }))]) {
+        assert.throws(() => importOverrides(text));
+        assert.deepEqual(store, original);
+    }
+    importOverrides(JSON.stringify({ overrides: [{ id: "message1", enabled: true, volume: 0 }] }));
+    assert.deepEqual(JSON.parse(store.message1), { enabled: true, selectedSound: "default", volume: 0, useFile: false });
+    assert.deepEqual(JSON.parse(store.mute), makeEmptyOverride());
+    importOverrides('{"overrides":[]}');
+    assert.deepEqual(JSON.parse(store.message1), makeEmptyOverride());
+});
+
 test("folder icon editing preserves saved size and resetting an unused folder is safe", () => {
     const settings: { store: { folderIcons?: Record<string, { url: string; size: number; }> } } = {
         store: { folderIcons: { folder: { url: "https://fixture.invalid/icon.png", size: 175 } } }

@@ -240,7 +240,15 @@
     background-color: var(--background-base-low);
 }
 
-.vc-toast-notifications-notification-root:focus-visible,
+.vc-toast-notifications-notification-root > .vc-toast-notifications-notification-action {
+    all: unset;
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+}
+
+.vc-toast-notifications-notification-root > .vc-toast-notifications-notification-action:focus-visible,
 .vc-toast-notifications-notification-close-btn:focus-visible {
     outline: 2px solid var(--border-focus, #00b0f4);
     outline-offset: -2px;

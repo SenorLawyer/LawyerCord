@@ -6,6 +6,7 @@
 
 import "./styles.css";
 
+import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { settings as PluginSettings } from "@equicordplugins/toastNotifications/index";
 import { classNameFactory } from "@utils/css";
@@ -158,7 +159,9 @@ export default ErrorBoundary.wrap(function NotificationComponent(props: Notifica
     }
 
     return (
-        <button
+        <div
+            role="group"
+            aria-label="Notification"
             style={{ opacity }}
             className={cl("notification-root")}
             onClick={handleClick}
@@ -166,6 +169,12 @@ export default ErrorBoundary.wrap(function NotificationComponent(props: Notifica
             onMouseEnter={() => setIsHover(true)}
             onMouseLeave={() => setIsHover(false)}
         >
+            <Button
+                variant="none"
+                type="button"
+                className={cl("notification-action")}
+                aria-label={props.onClick ? "Open notification" : "Dismiss notification"}
+            />
             {closeButton}
             {content}
             {timeout !== 0 && !props.permanent && (
@@ -176,7 +185,7 @@ export default ErrorBoundary.wrap(function NotificationComponent(props: Notifica
                         : { animationDuration: `${timeout}ms` }}
                 />
             )}
-        </button>
+        </div>
     );
 }, {
     onError: ({ props }) => props.onClose()

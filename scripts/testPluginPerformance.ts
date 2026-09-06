@@ -20,6 +20,27 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("URL highlighting clears compiled matches when the last pattern is removed", () => {
+    const store = { patterns: [{ pattern: "example.com", color: "#123456" }], boldUrls: false, highlightEmbeds: true };
+    const { plugin, updatePatterns } = loadSource("src/equicordplugins/urlHighlighter/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store }) },
+        "@components/Button": {},
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@components/Heading": {},
+        "@utils/constants": { Devs: {} },
+        "@utils/css": { classNameFactory: () => (name: string) => name },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+        "@webpack": { findComponentByCodeLazy: () => null },
+        "@webpack/common": {},
+    }, {}, "({ plugin: exports.default, updatePatterns })");
+    const props = { href: "https://example.com" };
+    assert.equal(plugin.getProps(props).style["--vc-url-hl-color"], "#123456");
+    updatePatterns([]);
+    assert.equal(Object.keys(plugin.getProps(props)).length, 0);
+    updatePatterns([{ pattern: "example.com", color: "#654321" }]);
+    assert.equal(plugin.getProps(props).style["--vc-url-hl-color"], "#654321");
+});
+
 test("UniversalMention reads current users and DM membership on each lookup", () => {
     const settings = { onlyDMUsers: false };
     let users: Record<string, { id: string; }> = { first: { id: "first" } };

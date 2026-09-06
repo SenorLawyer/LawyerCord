@@ -12,7 +12,6 @@ export const characters = [
         "img": "airi/Airi_01.png",
         "color": "#FB8AAC",
         "defaultText": {
-            "text": "keep up",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -26,7 +25,6 @@ export const characters = [
         "img": "airi/Airi_02.png",
         "color": "#FB8AAC",
         "defaultText": {
-            "text": "nice to meet ya",
             "x": 148,
             "y": 58,
             "r": 0,
@@ -40,7 +38,6 @@ export const characters = [
         "img": "airi/Airi_03.png",
         "color": "#FB8AAC",
         "defaultText": {
-            "text": "keep at it!",
             "x": 140,
             "y": 79,
             "r": 2,
@@ -54,7 +51,6 @@ export const characters = [
         "img": "airi/Airi_04.png",
         "color": "#FB8AAC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -68,7 +64,6 @@ export const characters = [
         "img": "airi/Airi_06.png",
         "color": "#FB8AAC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -82,7 +77,6 @@ export const characters = [
         "img": "airi/Airi_07.png",
         "color": "#FB8AAC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -96,7 +90,6 @@ export const characters = [
         "img": "airi/Airi_08.png",
         "color": "#FB8AAC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -110,7 +103,6 @@ export const characters = [
         "img": "airi/Airi_09.png",
         "color": "#FB8AAC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -124,7 +116,6 @@ export const characters = [
         "img": "airi/Airi_11.png",
         "color": "#FB8AAC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -138,7 +129,6 @@ export const characters = [
         "img": "airi/Airi_12.png",
         "color": "#FB8AAC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -152,7 +142,6 @@ export const characters = [
         "img": "airi/Airi_13.png",
         "color": "#FB8AAC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -166,7 +155,6 @@ export const characters = [
         "img": "airi/Airi_14.png",
         "color": "#FB8AAC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -180,7 +168,6 @@ export const characters = [
         "img": "airi/Airi_16.png",
         "color": "#FB8AAC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -194,7 +181,6 @@ export const characters = [
         "img": "akito/Akito_01.png",
         "color": "#FF7722",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -208,7 +194,6 @@ export const characters = [
         "img": "akito/Akito_02.png",
         "color": "#FF7722",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -222,7 +207,6 @@ export const characters = [
         "img": "akito/Akito_03.png",
         "color": "#FF7722",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -236,7 +220,6 @@ export const characters = [
         "img": "akito/Akito_04.png",
         "color": "#FF7722",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -250,7 +233,6 @@ export const characters = [
         "img": "akito/Akito_06.png",
         "color": "#FF7722",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -264,7 +246,6 @@ export const characters = [
         "img": "akito/Akito_07.png",
         "color": "#FF7722",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -278,7 +259,6 @@ export const characters = [
         "img": "akito/Akito_08.png",
         "color": "#FF7722",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -292,7 +272,6 @@ export const characters = [
         "img": "akito/Akito_09.png",
         "color": "#FF7722",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -306,7 +285,6 @@ export const characters = [
         "img": "akito/Akito_11.png",
         "color": "#FF7722",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -320,7 +298,6 @@ export const characters = [
         "img": "akito/Akito_12.png",
         "color": "#FF7722",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -334,7 +311,6 @@ export const characters = [
         "img": "akito/Akito_13.png",
         "color": "#FF7722",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -348,7 +324,6 @@ export const characters = [
         "img": "akito/Akito_14.png",
         "color": "#FF7722",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -362,7 +337,6 @@ export const characters = [
         "img": "akito/Akito_16.png",
         "color": "#FF7722",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -376,7 +350,6 @@ export const characters = [
         "img": "an/An_01.png",
         "color": "#00BADC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -390,7 +363,6 @@ export const characters = [
         "img": "an/An_02.png",
         "color": "#00BADC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -404,7 +376,6 @@ export const characters = [
         "img": "an/An_03.png",
         "color": "#00BADC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -418,7 +389,6 @@ export const characters = [
         "img": "an/An_04.png",
         "color": "#00BADC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -432,7 +402,6 @@ export const characters = [
         "img": "an/An_06.png",
         "color": "#00BADC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -446,7 +415,6 @@ export const characters = [
         "img": "an/An_07.png",
         "color": "#00BADC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -460,7 +428,6 @@ export const characters = [
         "img": "an/An_08.png",
         "color": "#00BADC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -474,7 +441,6 @@ export const characters = [
         "img": "an/An_09.png",
         "color": "#00BADC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -488,7 +454,6 @@ export const characters = [
         "img": "an/An_11.png",
         "color": "#00BADC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -502,7 +467,6 @@ export const characters = [
         "img": "an/An_12.png",
         "color": "#00BADC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -516,7 +480,6 @@ export const characters = [
         "img": "an/An_13.png",
         "color": "#00BADC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -530,7 +493,6 @@ export const characters = [
         "img": "an/An_14.png",
         "color": "#00BADC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -544,7 +506,6 @@ export const characters = [
         "img": "an/An_16.png",
         "color": "#00BADC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -558,7 +519,6 @@ export const characters = [
         "img": "emu/Emu_01.png",
         "color": "#FF66BB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -572,7 +532,6 @@ export const characters = [
         "img": "emu/Emu_02.png",
         "color": "#FF66BB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -586,7 +545,6 @@ export const characters = [
         "img": "emu/Emu_03.png",
         "color": "#FF66BB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -600,7 +558,6 @@ export const characters = [
         "img": "emu/Emu_04.png",
         "color": "#FF66BB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -614,7 +571,6 @@ export const characters = [
         "img": "emu/Emu_06.png",
         "color": "#FF66BB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -628,7 +584,6 @@ export const characters = [
         "img": "emu/Emu_07.png",
         "color": "#FF66BB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -642,7 +597,6 @@ export const characters = [
         "img": "emu/Emu_08.png",
         "color": "#FF66BB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -656,7 +610,6 @@ export const characters = [
         "img": "emu/Emu_09.png",
         "color": "#FF66BB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -670,7 +623,6 @@ export const characters = [
         "img": "emu/Emu_11.png",
         "color": "#FF66BB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -684,7 +636,6 @@ export const characters = [
         "img": "emu/Emu_12.png",
         "color": "#FF66BB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -698,7 +649,6 @@ export const characters = [
         "img": "emu/Emu_13.png",
         "color": "#FF66BB",
         "defaultText": {
-            "text": "Wonderhoy!",
             "x": 148,
             "y": 70,
             "r": -2,
@@ -712,7 +662,6 @@ export const characters = [
         "img": "emu/Emu_14.png",
         "color": "#FF66BB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -726,7 +675,6 @@ export const characters = [
         "img": "emu/Emu_16.png",
         "color": "#FF66BB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -740,7 +688,6 @@ export const characters = [
         "img": "ena/Ena_01.png",
         "color": "#B18F6C",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -754,7 +701,6 @@ export const characters = [
         "img": "ena/Ena_02.png",
         "color": "#B18F6C",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -768,7 +714,6 @@ export const characters = [
         "img": "ena/Ena_03.png",
         "color": "#B18F6C",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -782,7 +727,6 @@ export const characters = [
         "img": "ena/Ena_04.png",
         "color": "#B18F6C",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -796,7 +740,6 @@ export const characters = [
         "img": "ena/Ena_06.png",
         "color": "#B18F6C",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -810,7 +753,6 @@ export const characters = [
         "img": "ena/Ena_07.png",
         "color": "#B18F6C",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -824,7 +766,6 @@ export const characters = [
         "img": "ena/Ena_08.png",
         "color": "#B18F6C",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -838,7 +779,6 @@ export const characters = [
         "img": "ena/Ena_09.png",
         "color": "#B18F6C",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -852,7 +792,6 @@ export const characters = [
         "img": "ena/Ena_11.png",
         "color": "#B18F6C",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -866,7 +805,6 @@ export const characters = [
         "img": "ena/Ena_12.png",
         "color": "#B18F6C",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -880,7 +818,6 @@ export const characters = [
         "img": "ena/Ena_13.png",
         "color": "#B18F6C",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -894,7 +831,6 @@ export const characters = [
         "img": "ena/Ena_14.png",
         "color": "#B18F6C",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -908,7 +844,6 @@ export const characters = [
         "img": "ena/Ena_16.png",
         "color": "#B18F6C",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -922,7 +857,6 @@ export const characters = [
         "img": "Haruka/Haruka_01.png",
         "color": "#6495F0",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -936,7 +870,6 @@ export const characters = [
         "img": "Haruka/Haruka_02.png",
         "color": "#6495F0",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -950,7 +883,6 @@ export const characters = [
         "img": "Haruka/Haruka_03.png",
         "color": "#6495F0",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -964,7 +896,6 @@ export const characters = [
         "img": "Haruka/Haruka_04.png",
         "color": "#6495F0",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -978,7 +909,6 @@ export const characters = [
         "img": "Haruka/Haruka_06.png",
         "color": "#6495F0",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -992,7 +922,6 @@ export const characters = [
         "img": "Haruka/Haruka_07.png",
         "color": "#6495F0",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1006,7 +935,6 @@ export const characters = [
         "img": "Haruka/Haruka_08.png",
         "color": "#6495F0",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1020,7 +948,6 @@ export const characters = [
         "img": "Haruka/Haruka_09.png",
         "color": "#6495F0",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1034,7 +961,6 @@ export const characters = [
         "img": "Haruka/Haruka_11.png",
         "color": "#6495F0",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1048,7 +974,6 @@ export const characters = [
         "img": "Haruka/Haruka_12.png",
         "color": "#6495F0",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1062,7 +987,6 @@ export const characters = [
         "img": "Haruka/Haruka_13.png",
         "color": "#6495F0",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1076,7 +1000,6 @@ export const characters = [
         "img": "Haruka/Haruka_14.png",
         "color": "#6495F0",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1090,7 +1013,6 @@ export const characters = [
         "img": "Haruka/Haruka_16.png",
         "color": "#6495F0",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1104,7 +1026,6 @@ export const characters = [
         "img": "Honami/Honami_01.png",
         "color": "#F86666",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1118,7 +1039,6 @@ export const characters = [
         "img": "Honami/Honami_02.png",
         "color": "#F86666",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1132,7 +1052,6 @@ export const characters = [
         "img": "Honami/Honami_03.png",
         "color": "#F86666",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1146,7 +1065,6 @@ export const characters = [
         "img": "Honami/Honami_04.png",
         "color": "#F86666",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1160,7 +1078,6 @@ export const characters = [
         "img": "Honami/Honami_06.png",
         "color": "#F86666",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1174,7 +1091,6 @@ export const characters = [
         "img": "Honami/Honami_07.png",
         "color": "#F86666",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1188,7 +1104,6 @@ export const characters = [
         "img": "Honami/Honami_08.png",
         "color": "#F86666",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1202,7 +1117,6 @@ export const characters = [
         "img": "Honami/Honami_09.png",
         "color": "#F86666",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1216,7 +1130,6 @@ export const characters = [
         "img": "Honami/Honami_11.png",
         "color": "#F86666",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1230,7 +1143,6 @@ export const characters = [
         "img": "Honami/Honami_12.png",
         "color": "#F86666",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1244,7 +1156,6 @@ export const characters = [
         "img": "Honami/Honami_13.png",
         "color": "#F86666",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1258,7 +1169,6 @@ export const characters = [
         "img": "Honami/Honami_14.png",
         "color": "#F86666",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1272,7 +1182,6 @@ export const characters = [
         "img": "Honami/Honami_16.png",
         "color": "#F86666",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1286,7 +1195,6 @@ export const characters = [
         "img": "Honami/Honami_17.png",
         "color": "#F86666",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1300,7 +1208,6 @@ export const characters = [
         "img": "Honami/Honami_18.png",
         "color": "#F86666",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1314,7 +1221,6 @@ export const characters = [
         "img": "Ichika/Ichika_01.png",
         "color": "#33AAEE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1328,7 +1234,6 @@ export const characters = [
         "img": "Ichika/Ichika_02.png",
         "color": "#33AAEE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1342,7 +1247,6 @@ export const characters = [
         "img": "Ichika/Ichika_03.png",
         "color": "#33AAEE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1356,7 +1260,6 @@ export const characters = [
         "img": "Ichika/Ichika_04.png",
         "color": "#33AAEE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1370,7 +1273,6 @@ export const characters = [
         "img": "Ichika/Ichika_06.png",
         "color": "#33AAEE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1384,7 +1286,6 @@ export const characters = [
         "img": "Ichika/Ichika_07.png",
         "color": "#33AAEE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1398,7 +1299,6 @@ export const characters = [
         "img": "Ichika/Ichika_08.png",
         "color": "#33AAEE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1412,7 +1312,6 @@ export const characters = [
         "img": "Ichika/Ichika_09.png",
         "color": "#33AAEE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1426,7 +1325,6 @@ export const characters = [
         "img": "Ichika/Ichika_11.png",
         "color": "#33AAEE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1440,7 +1338,6 @@ export const characters = [
         "img": "Ichika/Ichika_12.png",
         "color": "#33AAEE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1454,7 +1351,6 @@ export const characters = [
         "img": "Ichika/Ichika_13.png",
         "color": "#33AAEE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1468,7 +1364,6 @@ export const characters = [
         "img": "Ichika/Ichika_14.png",
         "color": "#33AAEE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1482,7 +1377,6 @@ export const characters = [
         "img": "Ichika/Ichika_16.png",
         "color": "#33AAEE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1496,7 +1390,6 @@ export const characters = [
         "img": "Ichika/Ichika_17.png",
         "color": "#33AAEE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1510,7 +1403,6 @@ export const characters = [
         "img": "Ichika/Ichika_18.png",
         "color": "#33AAEE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1524,7 +1416,6 @@ export const characters = [
         "img": "KAITO/KAITO_01.png",
         "color": "#3366CC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1538,7 +1429,6 @@ export const characters = [
         "img": "KAITO/KAITO_02.png",
         "color": "#3366CC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1552,7 +1442,6 @@ export const characters = [
         "img": "KAITO/KAITO_03.png",
         "color": "#3366CC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1566,7 +1455,6 @@ export const characters = [
         "img": "KAITO/KAITO_04.png",
         "color": "#3366CC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1580,7 +1468,6 @@ export const characters = [
         "img": "KAITO/KAITO_06.png",
         "color": "#3366CC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1594,7 +1481,6 @@ export const characters = [
         "img": "KAITO/KAITO_07.png",
         "color": "#3366CC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1608,7 +1494,6 @@ export const characters = [
         "img": "KAITO/KAITO_08.png",
         "color": "#3366CC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1622,7 +1507,6 @@ export const characters = [
         "img": "KAITO/KAITO_09.png",
         "color": "#3366CC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1636,7 +1520,6 @@ export const characters = [
         "img": "KAITO/KAITO_11.png",
         "color": "#3366CC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1650,7 +1533,6 @@ export const characters = [
         "img": "KAITO/KAITO_12.png",
         "color": "#3366CC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1664,7 +1546,6 @@ export const characters = [
         "img": "KAITO/KAITO_13.png",
         "color": "#3366CC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1678,7 +1559,6 @@ export const characters = [
         "img": "KAITO/KAITO_14.png",
         "color": "#3366CC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1692,7 +1572,6 @@ export const characters = [
         "img": "KAITO/KAITO_16.png",
         "color": "#3366CC",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1706,7 +1585,6 @@ export const characters = [
         "img": "Kanade/Kanade_01.png",
         "color": "#BB6688",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1720,7 +1598,6 @@ export const characters = [
         "img": "Kanade/Kanade_02.png",
         "color": "#BB6688",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1734,7 +1611,6 @@ export const characters = [
         "img": "Kanade/Kanade_03.png",
         "color": "#BB6688",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1748,7 +1624,6 @@ export const characters = [
         "img": "Kanade/Kanade_04.png",
         "color": "#BB6688",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1762,7 +1637,6 @@ export const characters = [
         "img": "Kanade/Kanade_06.png",
         "color": "#BB6688",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1776,7 +1650,6 @@ export const characters = [
         "img": "Kanade/Kanade_07.png",
         "color": "#BB6688",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1790,7 +1663,6 @@ export const characters = [
         "img": "Kanade/Kanade_08.png",
         "color": "#BB6688",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1804,7 +1676,6 @@ export const characters = [
         "img": "Kanade/Kanade_09.png",
         "color": "#BB6688",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1818,7 +1689,6 @@ export const characters = [
         "img": "Kanade/Kanade_11.png",
         "color": "#BB6688",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1832,7 +1702,6 @@ export const characters = [
         "img": "Kanade/Kanade_12.png",
         "color": "#BB6688",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1846,7 +1715,6 @@ export const characters = [
         "img": "Kanade/Kanade_13.png",
         "color": "#BB6688",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1860,7 +1728,6 @@ export const characters = [
         "img": "Kanade/Kanade_14.png",
         "color": "#BB6688",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1874,7 +1741,6 @@ export const characters = [
         "img": "Kanade/Kanade_16.png",
         "color": "#BB6688",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1888,7 +1754,6 @@ export const characters = [
         "img": "Kanade/Kanade_17.png",
         "color": "#BB6688",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1902,7 +1767,6 @@ export const characters = [
         "img": "Kohane/Kohane_01.png",
         "color": "#FF6699",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1916,7 +1780,6 @@ export const characters = [
         "img": "Kohane/Kohane_02.png",
         "color": "#FF6699",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1930,7 +1793,6 @@ export const characters = [
         "img": "Kohane/Kohane_03.png",
         "color": "#FF6699",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1944,7 +1806,6 @@ export const characters = [
         "img": "Kohane/Kohane_04.png",
         "color": "#FF6699",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1958,7 +1819,6 @@ export const characters = [
         "img": "Kohane/Kohane_06.png",
         "color": "#FF6699",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1972,7 +1832,6 @@ export const characters = [
         "img": "Kohane/Kohane_07.png",
         "color": "#FF6699",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -1986,7 +1845,6 @@ export const characters = [
         "img": "Kohane/Kohane_08.png",
         "color": "#FF6699",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2000,7 +1858,6 @@ export const characters = [
         "img": "Kohane/Kohane_09.png",
         "color": "#FF6699",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2014,7 +1871,6 @@ export const characters = [
         "img": "Kohane/Kohane_11.png",
         "color": "#FF6699",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2028,7 +1884,6 @@ export const characters = [
         "img": "Kohane/Kohane_12.png",
         "color": "#FF6699",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2042,7 +1897,6 @@ export const characters = [
         "img": "Kohane/Kohane_13.png",
         "color": "#FF6699",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2056,7 +1910,6 @@ export const characters = [
         "img": "Kohane/Kohane_14.png",
         "color": "#FF6699",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2070,7 +1923,6 @@ export const characters = [
         "img": "Kohane/Kohane_16.png",
         "color": "#FF6699",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2084,7 +1936,6 @@ export const characters = [
         "img": "Kohane/Kohane_17.png",
         "color": "#FF6699",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2098,7 +1949,6 @@ export const characters = [
         "img": "Len/Len_01.png",
         "color": "#D3BD00",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2112,7 +1962,6 @@ export const characters = [
         "img": "Len/Len_02.png",
         "color": "#D3BD00",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2126,7 +1975,6 @@ export const characters = [
         "img": "Len/Len_03.png",
         "color": "#D3BD00",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2140,7 +1988,6 @@ export const characters = [
         "img": "Len/Len_04.png",
         "color": "#D3BD00",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2154,7 +2001,6 @@ export const characters = [
         "img": "Len/Len_06.png",
         "color": "#D3BD00",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2168,7 +2014,6 @@ export const characters = [
         "img": "Len/Len_07.png",
         "color": "#D3BD00",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2182,7 +2027,6 @@ export const characters = [
         "img": "Len/Len_08.png",
         "color": "#D3BD00",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2196,7 +2040,6 @@ export const characters = [
         "img": "Len/Len_09.png",
         "color": "#D3BD00",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2210,7 +2053,6 @@ export const characters = [
         "img": "Len/Len_11.png",
         "color": "#D3BD00",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2224,7 +2066,6 @@ export const characters = [
         "img": "Len/Len_12.png",
         "color": "#D3BD00",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2238,7 +2079,6 @@ export const characters = [
         "img": "Len/Len_13.png",
         "color": "#D3BD00",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2252,7 +2092,6 @@ export const characters = [
         "img": "Len/Len_14.png",
         "color": "#D3BD00",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2266,7 +2105,6 @@ export const characters = [
         "img": "Len/Len_16.png",
         "color": "#D3BD00",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2280,7 +2118,6 @@ export const characters = [
         "img": "Len/Len_17.png",
         "color": "#D3BD00",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2294,7 +2131,6 @@ export const characters = [
         "img": "Luka/Luka_01.png",
         "color": "#F88CA7",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2308,7 +2144,6 @@ export const characters = [
         "img": "Luka/Luka_02.png",
         "color": "#F88CA7",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2322,7 +2157,6 @@ export const characters = [
         "img": "Luka/Luka_03.png",
         "color": "#F88CA7",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2336,7 +2170,6 @@ export const characters = [
         "img": "Luka/Luka_04.png",
         "color": "#F88CA7",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2350,7 +2183,6 @@ export const characters = [
         "img": "Luka/Luka_06.png",
         "color": "#F88CA7",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2364,7 +2196,6 @@ export const characters = [
         "img": "Luka/Luka_07.png",
         "color": "#F88CA7",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2378,7 +2209,6 @@ export const characters = [
         "img": "Luka/Luka_08.png",
         "color": "#F88CA7",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2392,7 +2222,6 @@ export const characters = [
         "img": "Luka/Luka_09.png",
         "color": "#F88CA7",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2406,7 +2235,6 @@ export const characters = [
         "img": "Luka/Luka_11.png",
         "color": "#F88CA7",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2420,7 +2248,6 @@ export const characters = [
         "img": "Luka/Luka_12.png",
         "color": "#F88CA7",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2434,7 +2261,6 @@ export const characters = [
         "img": "Luka/Luka_13.png",
         "color": "#F88CA7",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2448,7 +2274,6 @@ export const characters = [
         "img": "Luka/Luka_14.png",
         "color": "#F88CA7",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2462,7 +2287,6 @@ export const characters = [
         "img": "Luka/Luka_16.png",
         "color": "#F88CA7",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2476,7 +2300,6 @@ export const characters = [
         "img": "Mafuyu/Mafuyu_01.png",
         "color": "#7171AF",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2490,7 +2313,6 @@ export const characters = [
         "img": "Mafuyu/Mafuyu_02.png",
         "color": "#7171AF",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2504,7 +2326,6 @@ export const characters = [
         "img": "Mafuyu/Mafuyu_03.png",
         "color": "#7171AF",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2518,7 +2339,6 @@ export const characters = [
         "img": "Mafuyu/Mafuyu_04.png",
         "color": "#7171AF",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2532,7 +2352,6 @@ export const characters = [
         "img": "Mafuyu/Mafuyu_06.png",
         "color": "#7171AF",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2546,7 +2365,6 @@ export const characters = [
         "img": "Mafuyu/Mafuyu_07.png",
         "color": "#7171AF",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2560,7 +2378,6 @@ export const characters = [
         "img": "Mafuyu/Mafuyu_08.png",
         "color": "#7171AF",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2574,7 +2391,6 @@ export const characters = [
         "img": "Mafuyu/Mafuyu_09.png",
         "color": "#7171AF",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2588,7 +2404,6 @@ export const characters = [
         "img": "Mafuyu/Mafuyu_11.png",
         "color": "#7171AF",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2602,7 +2417,6 @@ export const characters = [
         "img": "Mafuyu/Mafuyu_12.png",
         "color": "#7171AF",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2616,7 +2430,6 @@ export const characters = [
         "img": "Mafuyu/Mafuyu_13.png",
         "color": "#7171AF",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2630,7 +2443,6 @@ export const characters = [
         "img": "Mafuyu/Mafuyu_14.png",
         "color": "#7171AF",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2644,7 +2456,6 @@ export const characters = [
         "img": "Mafuyu/Mafuyu_16.png",
         "color": "#7171AF",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2658,7 +2469,6 @@ export const characters = [
         "img": "Mafuyu/Mafuyu_17.png",
         "color": "#7171AF",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2672,7 +2482,6 @@ export const characters = [
         "img": "Meiko/Meiko_01.png",
         "color": "#E4485F",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2686,7 +2495,6 @@ export const characters = [
         "img": "Meiko/Meiko_02.png",
         "color": "#E4485F",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2700,7 +2508,6 @@ export const characters = [
         "img": "Meiko/Meiko_03.png",
         "color": "#E4485F",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2714,7 +2521,6 @@ export const characters = [
         "img": "Meiko/Meiko_04.png",
         "color": "#E4485F",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2728,7 +2534,6 @@ export const characters = [
         "img": "Meiko/Meiko_06.png",
         "color": "#E4485F",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2742,7 +2547,6 @@ export const characters = [
         "img": "Meiko/Meiko_07.png",
         "color": "#E4485F",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2756,7 +2560,6 @@ export const characters = [
         "img": "Meiko/Meiko_08.png",
         "color": "#E4485F",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2770,7 +2573,6 @@ export const characters = [
         "img": "Meiko/Meiko_09.png",
         "color": "#E4485F",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2784,7 +2586,6 @@ export const characters = [
         "img": "Meiko/Meiko_11.png",
         "color": "#E4485F",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2798,7 +2599,6 @@ export const characters = [
         "img": "Meiko/Meiko_12.png",
         "color": "#E4485F",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2812,7 +2612,6 @@ export const characters = [
         "img": "Meiko/Meiko_13.png",
         "color": "#E4485F",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2826,7 +2625,6 @@ export const characters = [
         "img": "Meiko/Meiko_14.png",
         "color": "#E4485F",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2840,7 +2638,6 @@ export const characters = [
         "img": "Meiko/Meiko_16.png",
         "color": "#E4485F",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2854,7 +2651,6 @@ export const characters = [
         "img": "Miku/Miku_01.png",
         "color": "#33CCBB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2868,7 +2664,6 @@ export const characters = [
         "img": "Miku/Miku_02.png",
         "color": "#33CCBB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2882,7 +2677,6 @@ export const characters = [
         "img": "Miku/Miku_03.png",
         "color": "#33CCBB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2896,7 +2690,6 @@ export const characters = [
         "img": "Miku/Miku_04.png",
         "color": "#33CCBB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2910,7 +2703,6 @@ export const characters = [
         "img": "Miku/Miku_06.png",
         "color": "#33CCBB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2924,7 +2716,6 @@ export const characters = [
         "img": "Miku/Miku_07.png",
         "color": "#33CCBB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2938,7 +2729,6 @@ export const characters = [
         "img": "Miku/Miku_08.png",
         "color": "#33CCBB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2952,7 +2742,6 @@ export const characters = [
         "img": "Miku/Miku_09.png",
         "color": "#33CCBB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2966,7 +2755,6 @@ export const characters = [
         "img": "Miku/Miku_11.png",
         "color": "#33CCBB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2980,7 +2768,6 @@ export const characters = [
         "img": "Miku/Miku_12.png",
         "color": "#33CCBB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -2994,7 +2781,6 @@ export const characters = [
         "img": "Miku/Miku_13.png",
         "color": "#33CCBB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3008,7 +2794,6 @@ export const characters = [
         "img": "Miku/Miku_14.png",
         "color": "#33CCBB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3022,7 +2807,6 @@ export const characters = [
         "img": "Miku/Miku_16.png",
         "color": "#33CCBB",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3036,7 +2820,6 @@ export const characters = [
         "img": "Minori/Minori_01.png",
         "color": "#F39E7D",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3050,7 +2833,6 @@ export const characters = [
         "img": "Minori/Minori_02.png",
         "color": "#F39E7D",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3064,7 +2846,6 @@ export const characters = [
         "img": "Minori/Minori_03.png",
         "color": "#F39E7D",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3078,7 +2859,6 @@ export const characters = [
         "img": "Minori/Minori_04.png",
         "color": "#F39E7D",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3092,7 +2872,6 @@ export const characters = [
         "img": "Minori/Minori_06.png",
         "color": "#F39E7D",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3106,7 +2885,6 @@ export const characters = [
         "img": "Minori/Minori_07.png",
         "color": "#F39E7D",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3120,7 +2898,6 @@ export const characters = [
         "img": "Minori/Minori_08.png",
         "color": "#F39E7D",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3134,7 +2911,6 @@ export const characters = [
         "img": "Minori/Minori_09.png",
         "color": "#F39E7D",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3148,7 +2924,6 @@ export const characters = [
         "img": "Minori/Minori_11.png",
         "color": "#F39E7D",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3162,7 +2937,6 @@ export const characters = [
         "img": "Minori/Minori_12.png",
         "color": "#F39E7D",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3176,7 +2950,6 @@ export const characters = [
         "img": "Minori/Minori_13.png",
         "color": "#F39E7D",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3190,7 +2963,6 @@ export const characters = [
         "img": "Minori/Minori_14.png",
         "color": "#F39E7D",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3204,7 +2976,6 @@ export const characters = [
         "img": "Minori/Minori_16.png",
         "color": "#F39E7D",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3218,7 +2989,6 @@ export const characters = [
         "img": "Minori/Minori_17.png",
         "color": "#F39E7D",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3232,7 +3002,6 @@ export const characters = [
         "img": "Mizuki/Mizuki_01.png",
         "color": "#CA8DB6",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3246,7 +3015,6 @@ export const characters = [
         "img": "Mizuki/Mizuki_02.png",
         "color": "#CA8DB6",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3260,7 +3028,6 @@ export const characters = [
         "img": "Mizuki/Mizuki_03.png",
         "color": "#CA8DB6",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3274,7 +3041,6 @@ export const characters = [
         "img": "Mizuki/Mizuki_04.png",
         "color": "#CA8DB6",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3288,7 +3054,6 @@ export const characters = [
         "img": "Mizuki/Mizuki_06.png",
         "color": "#CA8DB6",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3302,7 +3067,6 @@ export const characters = [
         "img": "Mizuki/Mizuki_07.png",
         "color": "#CA8DB6",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3316,7 +3080,6 @@ export const characters = [
         "img": "Mizuki/Mizuki_08.png",
         "color": "#CA8DB6",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3330,7 +3093,6 @@ export const characters = [
         "img": "Mizuki/Mizuki_09.png",
         "color": "#CA8DB6",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3344,7 +3106,6 @@ export const characters = [
         "img": "Mizuki/Mizuki_11.png",
         "color": "#CA8DB6",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3358,7 +3119,6 @@ export const characters = [
         "img": "Mizuki/Mizuki_12.png",
         "color": "#CA8DB6",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3372,7 +3132,6 @@ export const characters = [
         "img": "Mizuki/Mizuki_13.png",
         "color": "#CA8DB6",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3386,7 +3145,6 @@ export const characters = [
         "img": "Mizuki/Mizuki_14.png",
         "color": "#CA8DB6",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3400,7 +3158,6 @@ export const characters = [
         "img": "Mizuki/Mizuki_16.png",
         "color": "#CA8DB6",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3414,7 +3171,6 @@ export const characters = [
         "img": "Mizuki/Mizuki_17.png",
         "color": "#CA8DB6",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3428,7 +3184,6 @@ export const characters = [
         "img": "Nene/Nene_01.png",
         "color": "#19CD94",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3442,7 +3197,6 @@ export const characters = [
         "img": "Nene/Nene_02.png",
         "color": "#19CD94",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3456,7 +3210,6 @@ export const characters = [
         "img": "Nene/Nene_03.png",
         "color": "#19CD94",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3470,7 +3223,6 @@ export const characters = [
         "img": "Nene/Nene_04.png",
         "color": "#19CD94",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3484,7 +3236,6 @@ export const characters = [
         "img": "Nene/Nene_06.png",
         "color": "#19CD94",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3498,7 +3249,6 @@ export const characters = [
         "img": "Nene/Nene_07.png",
         "color": "#19CD94",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3512,7 +3262,6 @@ export const characters = [
         "img": "Nene/Nene_08.png",
         "color": "#19CD94",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3526,7 +3275,6 @@ export const characters = [
         "img": "Nene/Nene_09.png",
         "color": "#19CD94",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3540,7 +3288,6 @@ export const characters = [
         "img": "Nene/Nene_11.png",
         "color": "#19CD94",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3554,7 +3301,6 @@ export const characters = [
         "img": "Nene/Nene_12.png",
         "color": "#19CD94",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3568,7 +3314,6 @@ export const characters = [
         "img": "Nene/Nene_13.png",
         "color": "#19CD94",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3582,7 +3327,6 @@ export const characters = [
         "img": "Nene/Nene_14.png",
         "color": "#19CD94",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3596,7 +3340,6 @@ export const characters = [
         "img": "Nene/Nene_16.png",
         "color": "#19CD94",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3610,7 +3353,6 @@ export const characters = [
         "img": "Rin/Rin_01.png",
         "color": "#E8A505",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3624,7 +3366,6 @@ export const characters = [
         "img": "Rin/Rin_02.png",
         "color": "#E8A505",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3638,7 +3379,6 @@ export const characters = [
         "img": "Rin/Rin_03.png",
         "color": "#E8A505",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3652,7 +3392,6 @@ export const characters = [
         "img": "Rin/Rin_04.png",
         "color": "#E8A505",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3666,7 +3405,6 @@ export const characters = [
         "img": "Rin/Rin_06.png",
         "color": "#E8A505",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3680,7 +3418,6 @@ export const characters = [
         "img": "Rin/Rin_07.png",
         "color": "#E8A505",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3694,7 +3431,6 @@ export const characters = [
         "img": "Rin/Rin_08.png",
         "color": "#E8A505",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3708,7 +3444,6 @@ export const characters = [
         "img": "Rin/Rin_09.png",
         "color": "#E8A505",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3722,7 +3457,6 @@ export const characters = [
         "img": "Rin/Rin_11.png",
         "color": "#E8A505",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3736,7 +3470,6 @@ export const characters = [
         "img": "Rin/Rin_12.png",
         "color": "#E8A505",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3750,7 +3483,6 @@ export const characters = [
         "img": "Rin/Rin_13.png",
         "color": "#E8A505",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3764,7 +3496,6 @@ export const characters = [
         "img": "Rin/Rin_14.png",
         "color": "#E8A505",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3778,7 +3509,6 @@ export const characters = [
         "img": "Rin/Rin_16.png",
         "color": "#E8A505",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3792,7 +3522,6 @@ export const characters = [
         "img": "Rui/Rui_01.png",
         "color": "#BB88EE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3806,7 +3535,6 @@ export const characters = [
         "img": "Rui/Rui_02.png",
         "color": "#BB88EE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3820,7 +3548,6 @@ export const characters = [
         "img": "Rui/Rui_03.png",
         "color": "#BB88EE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3834,7 +3561,6 @@ export const characters = [
         "img": "Rui/Rui_04.png",
         "color": "#BB88EE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3848,7 +3574,6 @@ export const characters = [
         "img": "Rui/Rui_06.png",
         "color": "#BB88EE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3862,7 +3587,6 @@ export const characters = [
         "img": "Rui/Rui_07.png",
         "color": "#BB88EE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3876,7 +3600,6 @@ export const characters = [
         "img": "Rui/Rui_08.png",
         "color": "#BB88EE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3890,7 +3613,6 @@ export const characters = [
         "img": "Rui/Rui_09.png",
         "color": "#BB88EE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3904,7 +3626,6 @@ export const characters = [
         "img": "Rui/Rui_11.png",
         "color": "#BB88EE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3918,7 +3639,6 @@ export const characters = [
         "img": "Rui/Rui_12.png",
         "color": "#BB88EE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3932,7 +3652,6 @@ export const characters = [
         "img": "Rui/Rui_13.png",
         "color": "#BB88EE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3946,7 +3665,6 @@ export const characters = [
         "img": "Rui/Rui_14.png",
         "color": "#BB88EE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3960,7 +3678,6 @@ export const characters = [
         "img": "Rui/Rui_16.png",
         "color": "#BB88EE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3974,7 +3691,6 @@ export const characters = [
         "img": "Rui/Rui_17.png",
         "color": "#BB88EE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -3988,7 +3704,6 @@ export const characters = [
         "img": "Rui/Rui_18.png",
         "color": "#BB88EE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4002,7 +3717,6 @@ export const characters = [
         "img": "Rui/Rui_19.png",
         "color": "#BB88EE",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4016,7 +3730,6 @@ export const characters = [
         "img": "Saki/Saki_01.png",
         "color": "#F5B303",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4030,7 +3743,6 @@ export const characters = [
         "img": "Saki/Saki_02.png",
         "color": "#F5B303",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4044,7 +3756,6 @@ export const characters = [
         "img": "Saki/Saki_03.png",
         "color": "#F5B303",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4058,7 +3769,6 @@ export const characters = [
         "img": "Saki/Saki_04.png",
         "color": "#F5B303",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4072,7 +3782,6 @@ export const characters = [
         "img": "Saki/Saki_06.png",
         "color": "#F5B303",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4086,7 +3795,6 @@ export const characters = [
         "img": "Saki/Saki_07.png",
         "color": "#F5B303",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4100,7 +3808,6 @@ export const characters = [
         "img": "Saki/Saki_08.png",
         "color": "#F5B303",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4114,7 +3821,6 @@ export const characters = [
         "img": "Saki/Saki_09.png",
         "color": "#F5B303",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4128,7 +3834,6 @@ export const characters = [
         "img": "Saki/Saki_11.png",
         "color": "#F5B303",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4142,7 +3847,6 @@ export const characters = [
         "img": "Saki/Saki_12.png",
         "color": "#F5B303",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4156,7 +3860,6 @@ export const characters = [
         "img": "Saki/Saki_13.png",
         "color": "#F5B303",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4170,7 +3873,6 @@ export const characters = [
         "img": "Saki/Saki_14.png",
         "color": "#F5B303",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4184,7 +3886,6 @@ export const characters = [
         "img": "Saki/Saki_16.png",
         "color": "#F5B303",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4198,7 +3899,6 @@ export const characters = [
         "img": "Saki/Saki_17.png",
         "color": "#F5B303",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4212,7 +3912,6 @@ export const characters = [
         "img": "Saki/Saki_18.png",
         "color": "#F5B303",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4226,7 +3925,6 @@ export const characters = [
         "img": "Shiho/Shiho_01.png",
         "color": "#A0C10B",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4240,7 +3938,6 @@ export const characters = [
         "img": "Shiho/Shiho_02.png",
         "color": "#A0C10B",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4254,7 +3951,6 @@ export const characters = [
         "img": "Shiho/Shiho_03.png",
         "color": "#A0C10B",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4268,7 +3964,6 @@ export const characters = [
         "img": "Shiho/Shiho_04.png",
         "color": "#A0C10B",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4282,7 +3977,6 @@ export const characters = [
         "img": "Shiho/Shiho_06.png",
         "color": "#A0C10B",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4296,7 +3990,6 @@ export const characters = [
         "img": "Shiho/Shiho_07.png",
         "color": "#A0C10B",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4310,7 +4003,6 @@ export const characters = [
         "img": "Shiho/Shiho_08.png",
         "color": "#A0C10B",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4324,7 +4016,6 @@ export const characters = [
         "img": "Shiho/Shiho_09.png",
         "color": "#A0C10B",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4338,7 +4029,6 @@ export const characters = [
         "img": "Shiho/Shiho_11.png",
         "color": "#A0C10B",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4352,7 +4042,6 @@ export const characters = [
         "img": "Shiho/Shiho_12.png",
         "color": "#A0C10B",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4366,7 +4055,6 @@ export const characters = [
         "img": "Shiho/Shiho_13.png",
         "color": "#A0C10B",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4380,7 +4068,6 @@ export const characters = [
         "img": "Shiho/Shiho_14.png",
         "color": "#A0C10B",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4394,7 +4081,6 @@ export const characters = [
         "img": "Shiho/Shiho_16.png",
         "color": "#A0C10B",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4408,7 +4094,6 @@ export const characters = [
         "img": "Shiho/Shiho_17.png",
         "color": "#A0C10B",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4422,7 +4107,6 @@ export const characters = [
         "img": "Shiho/Shiho_18.png",
         "color": "#A0C10B",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4436,7 +4120,6 @@ export const characters = [
         "img": "Shizuku/Shizuku_01.png",
         "color": "#5CD0B9",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4450,7 +4133,6 @@ export const characters = [
         "img": "Shizuku/Shizuku_02.png",
         "color": "#5CD0B9",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4464,7 +4146,6 @@ export const characters = [
         "img": "Shizuku/Shizuku_03.png",
         "color": "#5CD0B9",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4478,7 +4159,6 @@ export const characters = [
         "img": "Shizuku/Shizuku_04.png",
         "color": "#5CD0B9",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4492,7 +4172,6 @@ export const characters = [
         "img": "Shizuku/Shizuku_06.png",
         "color": "#5CD0B9",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4506,7 +4185,6 @@ export const characters = [
         "img": "Shizuku/Shizuku_07.png",
         "color": "#5CD0B9",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4520,7 +4198,6 @@ export const characters = [
         "img": "Shizuku/Shizuku_08.png",
         "color": "#5CD0B9",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4534,7 +4211,6 @@ export const characters = [
         "img": "Shizuku/Shizuku_09.png",
         "color": "#5CD0B9",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4548,7 +4224,6 @@ export const characters = [
         "img": "Shizuku/Shizuku_11.png",
         "color": "#5CD0B9",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4562,7 +4237,6 @@ export const characters = [
         "img": "Shizuku/Shizuku_12.png",
         "color": "#5CD0B9",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4576,7 +4250,6 @@ export const characters = [
         "img": "Shizuku/Shizuku_13.png",
         "color": "#5CD0B9",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4590,7 +4263,6 @@ export const characters = [
         "img": "Shizuku/Shizuku_14.png",
         "color": "#5CD0B9",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4604,7 +4276,6 @@ export const characters = [
         "img": "Shizuku/Shizuku_16.png",
         "color": "#5CD0B9",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4618,7 +4289,6 @@ export const characters = [
         "img": "Touya/Touya_01.png",
         "color": "#0077DD",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4632,7 +4302,6 @@ export const characters = [
         "img": "Touya/Touya_02.png",
         "color": "#0077DD",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4646,7 +4315,6 @@ export const characters = [
         "img": "Touya/Touya_03.png",
         "color": "#0077DD",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4660,7 +4328,6 @@ export const characters = [
         "img": "Touya/Touya_04.png",
         "color": "#0077DD",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4674,7 +4341,6 @@ export const characters = [
         "img": "Touya/Touya_06.png",
         "color": "#0077DD",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4688,7 +4354,6 @@ export const characters = [
         "img": "Touya/Touya_07.png",
         "color": "#0077DD",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4702,7 +4367,6 @@ export const characters = [
         "img": "Touya/Touya_08.png",
         "color": "#0077DD",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4716,7 +4380,6 @@ export const characters = [
         "img": "Touya/Touya_09.png",
         "color": "#0077DD",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4730,7 +4393,6 @@ export const characters = [
         "img": "Touya/Touya_11.png",
         "color": "#0077DD",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4744,7 +4406,6 @@ export const characters = [
         "img": "Touya/Touya_12.png",
         "color": "#0077DD",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4758,7 +4419,6 @@ export const characters = [
         "img": "Touya/Touya_13.png",
         "color": "#0077DD",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4772,7 +4432,6 @@ export const characters = [
         "img": "Touya/Touya_14.png",
         "color": "#0077DD",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4786,7 +4445,6 @@ export const characters = [
         "img": "Touya/Touya_16.png",
         "color": "#0077DD",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4800,7 +4458,6 @@ export const characters = [
         "img": "Touya/Touya_17.png",
         "color": "#0077DD",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4814,7 +4471,6 @@ export const characters = [
         "img": "Touya/Touya_18.png",
         "color": "#0077DD",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4828,7 +4484,6 @@ export const characters = [
         "img": "Tsukasa/Tsukasa_01.png",
         "color": "#F09A04",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4842,7 +4497,6 @@ export const characters = [
         "img": "Tsukasa/Tsukasa_02.png",
         "color": "#F09A04",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4856,7 +4510,6 @@ export const characters = [
         "img": "Tsukasa/Tsukasa_03.png",
         "color": "#F09A04",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4870,7 +4523,6 @@ export const characters = [
         "img": "Tsukasa/Tsukasa_04.png",
         "color": "#F09A04",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4884,7 +4536,6 @@ export const characters = [
         "img": "Tsukasa/Tsukasa_06.png",
         "color": "#F09A04",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4898,7 +4549,6 @@ export const characters = [
         "img": "Tsukasa/Tsukasa_07.png",
         "color": "#F09A04",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4912,7 +4562,6 @@ export const characters = [
         "img": "Tsukasa/Tsukasa_08.png",
         "color": "#F09A04",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4926,7 +4575,6 @@ export const characters = [
         "img": "Tsukasa/Tsukasa_09.png",
         "color": "#F09A04",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4940,7 +4588,6 @@ export const characters = [
         "img": "Tsukasa/Tsukasa_11.png",
         "color": "#F09A04",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4954,7 +4601,6 @@ export const characters = [
         "img": "Tsukasa/Tsukasa_12.png",
         "color": "#F09A04",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4968,7 +4614,6 @@ export const characters = [
         "img": "Tsukasa/Tsukasa_13.png",
         "color": "#F09A04",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4982,7 +4627,6 @@ export const characters = [
         "img": "Tsukasa/Tsukasa_14.png",
         "color": "#F09A04",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -4996,7 +4640,6 @@ export const characters = [
         "img": "Tsukasa/Tsukasa_16.png",
         "color": "#F09A04",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -5010,7 +4653,6 @@ export const characters = [
         "img": "Tsukasa/Tsukasa_17.png",
         "color": "#F09A04",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,
@@ -5024,7 +4666,6 @@ export const characters = [
         "img": "Tsukasa/Tsukasa_18.png",
         "color": "#F09A04",
         "defaultText": {
-            "text": "something",
             "x": 148,
             "y": 58,
             "r": -2,

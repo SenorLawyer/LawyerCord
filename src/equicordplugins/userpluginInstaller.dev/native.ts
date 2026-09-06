@@ -147,67 +147,69 @@ export async function initPluginInstall(_, link: string, source: string, owner: 
             }
         }
 
-        // Get plugin meta
-        const meta = await getPluginMeta(join(vencordPath, "..", "src", "userplugins", repo))
-            .catch(() => { throw new Error("Could not read the plugin metadata."); });
-
         let approved = false;
-        return new Promise<{ name: string; native: boolean; }>((resolve, reject) => {
-            // Review plugin
-            const win = new BrowserWindow({
-                maximizable: false,
-                minimizable: false,
-                width: 560,
-                height: meta.usesNative || meta.usesPreSend ? 650 : 360,
-                resizable: false,
-                webPreferences: {
-                    devTools: true
-                },
-                title: "Review userplugin",
-                modal: true,
-                parent: BrowserWindow.getAllWindows()[0],
-                show: false,
-                autoHideMenuBar: true
-            });
-            let decided = false;
-            win.once("closed", () => {
-                if (!decided) reject(new Error("Review window closed."));
-                decided = true;
-            });
-            win.loadURL(generateReviewPluginContent(meta)).catch(() => {
-                if (decided) return;
-                decided = true;
-                reject(new Error("Could not load the plugin review."));
-                win.close();
-            });
-            win.on("page-title-updated", async e => {
-                if (decided) return;
-                switch (win.webContents.getTitle() as "abortInstall" | "reviewCode" | "install") {
-                    case "abortInstall": {
-                        decided = true;
-                        win.close();
-                        return reject("Rejected by user");
-                    }
-                    case "install": {
-                        approved = true;
-                        decided = true;
-                        win.close();
-                        try {
-                            await build();
+        try {
+            // Get plugin meta
+            const meta = await getPluginMeta(join(vencordPath, "..", "src", "userplugins", repo))
+                .catch(() => { throw new Error("Could not read the plugin metadata."); });
+
+            return await new Promise<{ name: string; native: boolean; }>((resolve, reject) => {
+                // Review plugin
+                const win = new BrowserWindow({
+                    maximizable: false,
+                    minimizable: false,
+                    width: 560,
+                    height: meta.usesNative || meta.usesPreSend ? 650 : 360,
+                    resizable: false,
+                    webPreferences: {
+                        devTools: true
+                    },
+                    title: "Review userplugin",
+                    modal: true,
+                    parent: BrowserWindow.getAllWindows()[0],
+                    show: false,
+                    autoHideMenuBar: true
+                });
+                let decided = false;
+                win.once("closed", () => {
+                    if (!decided) reject(new Error("Review window closed."));
+                    decided = true;
+                });
+                win.loadURL(generateReviewPluginContent(meta)).catch(() => {
+                    if (decided) return;
+                    decided = true;
+                    reject(new Error("Could not load the plugin review."));
+                    win.close();
+                });
+                win.on("page-title-updated", async e => {
+                    if (decided) return;
+                    switch (win.webContents.getTitle() as "abortInstall" | "reviewCode" | "install") {
+                        case "abortInstall": {
+                            decided = true;
+                            win.close();
+                            return reject("Rejected by user");
                         }
-                        catch (e) {
-                            return reject(e);
+                        case "install": {
+                            approved = true;
+                            decided = true;
+                            win.close();
+                            try {
+                                await build();
+                            }
+                            catch (e) {
+                                return reject(e);
+                            }
+                            resolve({
+                                name: meta.name,
+                                native: meta.usesNative
+                            });
+                            break;
                         }
-                        resolve({
-                            name: meta.name,
-                            native: meta.usesNative
-                        });
-                        break;
                     }
-                }
+                });
+                win.show();
             });
-            win.show();
-        }).catch(async error => {
+        } catch (error) {
             if (!approved) {
                 try {
                     await rm(getPluginDirectory(repo), { recursive: true });
@@ -216,7 +218,7 @@ export async function initPluginInstall(_, link: string, source: string, owner: 
                 }
             }
             throw error;
-        });
+        }
     });
 }
 

@@ -5421,6 +5421,37 @@ test("screen recorder releases capture and discards work after disable", async (
     assert.equal(uploads, 1);
 });
 
+test("scheduled startup ignores completion after stop or a newer start", async () => {
+    const reads: (() => void)[] = [];
+    let starts = 0;
+    let phantoms = 0;
+    const { default: plugin } = loadSource("src/equicordplugins/scheduledMessages/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({}) },
+        "@utils/constants": { Devs: {}, EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "./components/ChatBarButton": {}, "./components/Icons": {}, "./components/MessageAccessory": {},
+        "./components/ScheduleTimeModal": {}, "./components/ViewScheduledModal": {},
+        "./utils": { loadScheduledMessages: () => new Promise<void>(resolve => reads.push(resolve)),
+            startScheduler: () => starts++, recreatePhantomMessages: () => phantoms++,
+            stopScheduler() {}, cleanupAllPhantomMessages() {} }
+    });
+    const old = plugin.start();
+    plugin.stop();
+    reads[0]();
+    await old;
+    assert.equal(starts, 0);
+    assert.equal(phantoms, 0);
+    const previous = plugin.start();
+    plugin.stop();
+    const current = plugin.start();
+    reads[2]();
+    await current;
+    reads[1]();
+    await previous;
+    assert.equal(starts, 1);
+    assert.equal(phantoms, 1);
+});
+
 test("scheduled attempts remain saved on failure and do not automatically replay", async () => {
     for (const outcome of ["success", "request", "channel", "storage"]) {
         let saved = [{ id: "queued", channelId: "channel", content: "Text", scheduledTime: 0, createdAt: 0, attemptedAt: undefined as number | undefined }];

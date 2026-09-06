@@ -29,6 +29,8 @@ import {
     stopScheduler
 } from "./utils";
 
+let lifecycleGeneration = 0;
+
 export const settings = definePluginSettings({
     maxMessagesPerMinute: {
         type: OptionType.SLIDER,
@@ -160,12 +162,15 @@ export default definePlugin({
     },
 
     async start() {
+        const generation = ++lifecycleGeneration;
         await loadScheduledMessages();
+        if (generation !== lifecycleGeneration) return;
         startScheduler();
         recreatePhantomMessages();
     },
 
     stop() {
+        lifecycleGeneration++;
         stopScheduler();
         cleanupAllPhantomMessages();
     }

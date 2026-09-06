@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Prevent a pending scheduled-message startup from restarting the scheduler after the plugin is disabled.
+
 - Preserve attempted scheduled messages until sending succeeds and prevent automatic retries after failed or interrupted attempts.
 
 - Stop scheduled messages from sending with missing attachments when an upload fails.

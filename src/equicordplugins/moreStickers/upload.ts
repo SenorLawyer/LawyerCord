@@ -8,7 +8,7 @@ import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { insertTextIntoChatInputBox, MessageOptions } from "@utils/discord";
 import { loadFFmpeg } from "@utils/ffmpeg";
 import { CloudUploadPlatform } from "@vencord/discord-types/enums";
-import { ChannelStore, CloudUploader, Constants, DraftStore, FluxDispatcher, MessageActions, PendingReplyStore, RestAPI, showToast, SnowflakeUtils, Toasts, UploadHandler } from "@webpack/common";
+import { ChannelStore, CloudUploader, Constants, DraftStore, FluxDispatcher, MessageActions, PendingReplyStore, RestAPI, showToast, SnowflakeUtils, Toasts, UploadHandler, UserStore } from "@webpack/common";
 
 import { settings } from ".";
 import { Sticker } from "./types";
@@ -103,6 +103,8 @@ async function toGIF(url: string): Promise<File> {
 }
 
 export async function sendSticker({ channelId, sticker, ctrlKey, shiftKey }: SendStickerOptions) {
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return;
     const reply = PendingReplyStore.getPendingReply(channelId);
     let content = DraftStore.getDraft(channelId, 0);
     let options: Partial<MessageOptions> = {};
@@ -138,11 +140,13 @@ export async function sendSticker({ channelId, sticker, ctrlKey, shiftKey }: Sen
         }
     }
 
+    if (UserStore.getCurrentUser()?.id !== userId) return;
     if (settings.store.promptToUpload || content) return UploadHandler.promptToUpload([file], ChannelStore.getChannel(channelId), 0);
 
     const upload = new CloudUploader({ file, platform: CloudUploadPlatform.WEB }, channelId);
 
     upload.on("complete", () => {
+        if (UserStore.getCurrentUser()?.id !== userId) return;
         RestAPI.post({
             url: Constants.Endpoints.MESSAGES(channelId),
             body: {

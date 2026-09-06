@@ -2846,6 +2846,7 @@ test("static sticker conversion labels PNG output and releases its temporary URL
         "@vencord/discord-types/enums": {},
         "@webpack/common": {
             PendingReplyStore: { getPendingReply: () => null }, DraftStore: { getDraft: () => "" },
+            UserStore: { getCurrentUser: () => ({ id: "self" }) },
             ChannelStore: { getChannel: () => ({ id: "channel" }) },
             UploadHandler: { promptToUpload: (uploads: File[]) => files.push(...uploads) }
         },
@@ -2868,6 +2869,40 @@ test("static sticker conversion labels PNG output and releases its temporary URL
     assert.deepEqual(files.map(file => file.name), ["cat.png", "cat.png", "sticker.png"]);
     assert.equal(files.every(file => file.type === "image/png"), true);
     assert.equal(revoked, 3);
+});
+
+test("sticker sends retain their account through conversion and upload", async () => {
+    for (const prompt of [false, true]) {
+        for (const switchAt of ["missing", "conversion", "upload", "none"]) {
+            let userId: string | undefined = switchAt === "missing" ? undefined : "first";
+            let conversions = 0;
+            let prompts = 0;
+            let uploads = 0;
+            let sends = 0;
+            const handlers: Record<string, () => void> = {};
+            const module = loadSource("src/equicordplugins/moreStickers/upload.ts", {
+                "@ffmpeg/ffmpeg": {}, "@utils/discord": {}, "@utils/ffmpeg": {},
+                "@vencord/discord-types/enums": { CloudUploadPlatform: { WEB: "web" } },
+                "@webpack/common": {
+                    UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined },
+                    PendingReplyStore: { getPendingReply: () => null }, DraftStore: { getDraft: () => "" },
+                    ChannelStore: { getChannel: () => ({ id: "channel" }) },
+                    UploadHandler: { promptToUpload: () => prompts++ },
+                    CloudUploader: class { on(event: string, callback: () => void) { handlers[event] = callback; } upload() { uploads++; } },
+                    Constants: { Endpoints: { MESSAGES: () => "/messages" } }, SnowflakeUtils: { fromTimestamp: () => "nonce" },
+                    RestAPI: { post: () => { sends++; } }
+                }, ".": { settings: { store: { promptToUpload: prompt } } }, "./utils": {}
+            }, { convert: async () => { conversions++; if (switchAt === "conversion") userId = "second"; return new File(["gif"], "sticker.gif"); } }, "(toGIF = convert, exports)");
+            await module.sendSticker({ channelId: "channel", sticker: { isAnimated: true, image: "image" }, ctrlKey: false, shiftKey: false });
+            if (switchAt === "upload") userId = "second";
+            handlers.complete?.();
+            const active = switchAt !== "missing" && switchAt !== "conversion";
+            assert.equal(conversions, switchAt === "missing" ? 0 : 1);
+            assert.equal(prompts, active && prompt ? 1 : 0);
+            assert.equal(uploads, active && !prompt ? 1 : 0);
+            assert.equal(sends, active && !prompt && switchAt !== "upload" ? 1 : 0);
+        }
+    }
 });
 
 test("animated sticker conversions own and terminate their workers", async () => {

@@ -10894,3 +10894,29 @@ test("pinned DM category creation ignores repeat saves of the same category", ()
     assert.equal(data.categoryLen(), 1);
     assert.equal(settings.plain.userBasedCategoryList.first.length, 2);
 });
+
+
+test("pinned DM navigation retains the visible selected channel in collapsed categories", () => {
+    for (const pinOrder of [0, 1]) {
+        let selected: string | undefined = "selected";
+        const store = { pinOrder, userBasedCategoryList: { owner: [
+            { id: "open", channels: ["first", "second"] },
+            { id: "closed", collapsed: true, channels: ["hidden", "selected"] }
+        ] } };
+        const data = loadSource("src/plugins/pinDms/data.ts", {
+            "@plugins/pinDms": { settings: { store }, PinOrder: { LastMessage: 0 }, PrivateChannelSortStore: { getPrivateChannelIds: () => ["second", "first", "selected", "hidden"] } },
+            "@utils/react": {}, "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: "owner" }) },
+                SelectedChannelStore: { getChannelId: () => selected }
+            }
+        });
+        const open = pinOrder === 0 ? ["second", "first"] : ["first", "second"];
+        assert.deepEqual([...data.getAllUncollapsedChannels()], [...open, "selected"]);
+        selected = "hidden";
+        assert.deepEqual([...data.getAllUncollapsedChannels()], [...open, "hidden"]);
+        selected = "first";
+        assert.deepEqual([...data.getAllUncollapsedChannels()], open);
+        selected = undefined;
+        assert.deepEqual([...data.getAllUncollapsedChannels()], open);
+    }
+});

@@ -6,7 +6,7 @@
 
 import { PinOrder, PrivateChannelSortStore, settings } from "@plugins/pinDms";
 import { useForceUpdater } from "@utils/react";
-import { useEffect, UserStore } from "@webpack/common";
+import { SelectedChannelStore, useEffect, UserStore } from "@webpack/common";
 
 export interface Category {
     id: string;
@@ -128,9 +128,10 @@ export function getCategoryChannels(category: Category): string[] {
 }
 
 export function getAllUncollapsedChannels() {
-    return getCurrentUserCategories()
-        .filter(c => !c.collapsed)
-        .flatMap(getCategoryChannels);
+    const selectedChannelId = SelectedChannelStore.getChannelId();
+    return getCurrentUserCategories().flatMap(category => category.collapsed
+        ? category.channels.filter(id => id === selectedChannelId)
+        : getCategoryChannels(category));
 }
 
 // Move categories

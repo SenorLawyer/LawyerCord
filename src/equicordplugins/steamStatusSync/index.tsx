@@ -102,7 +102,7 @@ export default definePlugin({
 
                     return;
                 }
-                if (steamStatus === SteamStatus.None) { return; }
+                if (!steamStatus || steamStatus === SteamStatus.None) { return; }
 
                 // Open steam protocol URI for status change
                 open(`steam://friends/status/${steamStatus}`);

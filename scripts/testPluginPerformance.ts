@@ -1306,6 +1306,18 @@ test("BetterSessions returns its settings-close save to the flux error handler",
     await rejected;
 });
 
+test("Steam status sync ignores unmapped and disabled statuses", () => {
+    const opened: string[] = [];
+    const { default: plugin } = loadSource("src/equicordplugins/steamStatusSync/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: { onlineStatus: "online", dndStatus: "none" } }) },
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+    }, { open: (url: string) => opened.push(url) });
+    for (const value of ["offline", "unknown", "dnd", "online"])
+        plugin.flux.USER_SETTINGS_PROTO_UPDATE({ settings: { proto: { status: { status: { value }, showCurrentGame: { value: true } } } } });
+    assert.deepEqual(opened, ["steam://friends/status/online"]);
+});
+
 test("GIF alt text excludes URL metadata and handles missing sources", () => {
     const { default: plugin } = loadSource("src/plugins/betterGifAltText/index.ts", {
         "@utils/constants": { Devs: {} },

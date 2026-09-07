@@ -9959,6 +9959,7 @@ test("status URL copying waits for clipboard completion and catches rejection", 
         let logged = 0;
         const { default: plugin } = loadSource("src/equicordplugins/copyStatusUrls/index.ts", {
             "@utils/constants": { Devs: {} },
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
             "@utils/discord": { copyWithToast: (url: string, message: string) => {
                 assert.equal(url, "https://fixture.invalid/status");
                 assert.equal(message, "Copied URL");
@@ -9979,5 +9980,25 @@ test("status URL copying waits for clipboard completion and catches rejection", 
         await pending;
         assert.equal(logged, fail ? 1 : 0);
         assert.deepEqual(feedback, fail ? ["Could not copy the status URL."] : []);
+    }
+});
+
+test("status URL copying rejects malformed metadata without changing the clipboard", async () => {
+    for (const metadata of [null, undefined, {}, { button_urls: "https://fixture.invalid" }, { button_urls: [] }, { button_urls: [42] }, { button_urls: [{}] }, { button_urls: [""] }, { button_urls: ["https://fixture.invalid"] }]) {
+        const copied: string[] = [];
+        let failures = 0;
+        const { default: plugin } = loadSource("src/equicordplugins/copyStatusUrls/index.ts", {
+            "@utils/constants": { Devs: {} },
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+            "@utils/discord": { copyWithToast: async (url: string) => { copied.push(url); } },
+            "@utils/Logger": { Logger: class { error() {} } },
+            "@utils/types": { __esModule: true, default: (value: object) => value },
+            "@webpack": { findByCodeLazy: () => async () => metadata },
+            "@webpack/common": { Toasts: { Type: { FAILURE: "failure" }, Position: { TOP: "top" }, genId: () => "id", show: () => failures++ } }
+        });
+        await plugin.makeContextMenu({ user: { id: "user" }, activity: {} }, 0)();
+        const valid = Array.isArray(metadata?.button_urls) && metadata.button_urls[0] === "https://fixture.invalid";
+        assert.deepEqual(copied, valid ? ["https://fixture.invalid"] : []);
+        assert.equal(failures, valid ? 0 : 1);
     }
 });

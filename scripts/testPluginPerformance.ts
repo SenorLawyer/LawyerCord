@@ -8236,3 +8236,22 @@ test("installer inventory excludes hidden folders and files before reading metad
     assert.deepEqual(reads, [path.join("fixture", "visible"), path.join("fixture", "invalid")]);
     assert.deepEqual(Array.from(plugins, (plugin: { name: string; directory: string; }) => ({ ...plugin })), [{ name: "Visible", directory: "visible" }]);
 });
+
+
+test("narrator voice lookup preserves the selected voice while voices load", () => {
+    const store = { voice: "preferred" };
+    const api = loadSource("src/plugins/vcNarrator/settings.ts", {
+        "@api/Settings": { definePluginSettings: () => ({ store }) },
+        "@utils/Logger": { Logger: class { error() {} } },
+        "@utils/types": { OptionType: {} }, "./VoiceSetting": {}
+    }, { window: {} });
+    const fallback = { voiceURI: "fallback", default: true };
+    const preferred = { voiceURI: "preferred", default: false };
+    assert.equal(api.getCurrentVoice([]), undefined);
+    assert.equal(store.voice, "preferred");
+    assert.equal(api.getCurrentVoice([fallback]), fallback);
+    assert.equal(store.voice, "preferred");
+    assert.equal(api.getCurrentVoice([fallback, preferred]), preferred);
+    assert.equal(api.getCurrentVoice(), undefined);
+    assert.equal(store.voice, "preferred");
+});

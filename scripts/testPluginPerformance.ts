@@ -11351,3 +11351,32 @@ test("transcription model cache controls report storage failures", async () => {
         assert.equal(updates.length, phase === "success" ? 2 : 0);
     }
 });
+
+test("transcription model responses describe the transferred bytes", async () => {
+    for (const cached of [false, true]) {
+        let instance: { onmessage?: (event: object) => Promise<void>; } = {};
+        let writes = 0;
+        let requests = 0;
+        const buffer = new ArrayBuffer(8);
+        const responses: Array<{ response: ArrayBuffer; headers: Record<string, string>; }> = [];
+        const { TranscriptionWorker } = loadSource("src/equicordplugins/voiceMessageTranscriber.desktop/utils.ts", {
+            "@api/index": { DataStore: { get: async () => cached ? buffer : undefined, set: async (_key: string, value: ArrayBuffer) => { assert.equal(value, buffer); writes++; } } },
+            "@utils/css": { classNameFactory: () => () => "" },
+            "@webpack/common": { lodash: { isArrayBuffer: (value: unknown) => value === buffer } }
+        }, {
+            Blob, AbortController,
+            URL: class extends URL { static createObjectURL() { return "blob:worker"; } static revokeObjectURL() {} },
+            Worker: class { constructor() { instance = this; } onmessage?: (event: object) => Promise<void>; terminate() {} postMessage(value: typeof responses[number], transfer: ArrayBuffer[]) { assert.equal(transfer[0], buffer); responses.push(value); } },
+            fetch: async () => { requests++; return { ok: true, headers: { get: () => "3" }, arrayBuffer: async () => buffer }; }
+        });
+        const worker = new TranscriptionWorker(() => {}, () => {}, () => {}, () => {});
+        await instance.onmessage?.({ data: { type: "fetch_request", id: "model", url: "https://huggingface.co/model.json" } });
+        assert.equal(responses.length, 1);
+        assert.equal(responses[0].response, buffer);
+        assert.equal(responses[0].headers["Content-Length"], "8");
+        assert.equal(responses[0].headers["Content-Type"], "application/json");
+        assert.equal(writes, cached ? 0 : 1);
+        assert.equal(requests, writes);
+        worker.terminate();
+    }
+});

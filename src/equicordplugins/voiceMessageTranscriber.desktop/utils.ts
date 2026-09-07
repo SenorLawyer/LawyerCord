@@ -315,35 +315,28 @@ export class TranscriptionWorker {
                     const cachedData = await DataStore.get(`VoiceMessageTranscriber_${url}`);
                     if (this.terminated) return;
 
-                    if (cachedData && lodash.isArrayBuffer(cachedData)) {
-                        this.worker.postMessage({
-                            type: "fetch_response",
-                            id,
-                            response: cachedData,
-                            headers: {
-                                "Content-Length": cachedData.byteLength.toString(),
-                                "Content-Type": this.getMimeType(url)
-                            }
-                        }, [cachedData]);
+                    let buffer: ArrayBuffer;
+                    if (lodash.isArrayBuffer(cachedData)) {
+                        buffer = cachedData;
                     } else {
                         const res = await fetch(url, { signal: this.downloads.signal });
                         if (!res.ok) throw new Error("Failed to fetch " + url);
 
-                        const buffer = await res.arrayBuffer();
+                        buffer = await res.arrayBuffer();
                         if (this.terminated) return;
                         await DataStore.set(`VoiceMessageTranscriber_${url}`, buffer);
                         if (this.terminated) return;
-
-                        this.worker.postMessage({
-                            type: "fetch_response",
-                            id,
-                            response: buffer,
-                            headers: {
-                                "Content-Length": res.headers.get("Content-Length") || buffer.byteLength.toString(),
-                                "Content-Type": this.getMimeType(url)
-                            }
-                        }, [buffer]);
                     }
+
+                    this.worker.postMessage({
+                        type: "fetch_response",
+                        id,
+                        response: buffer,
+                        headers: {
+                            "Content-Length": buffer.byteLength.toString(),
+                            "Content-Type": this.getMimeType(url)
+                        }
+                    }, [buffer]);
                 } catch (err) {
                     if (this.terminated) return;
                     this.worker.postMessage({

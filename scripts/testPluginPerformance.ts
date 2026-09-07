@@ -11858,3 +11858,27 @@ test("translation language labels ignore inherited dictionary properties", async
         assert.equal(result.sourceLanguage, expected);
     }
 });
+
+
+test("Kagi translation requires a session before sending text", async () => {
+    let requests = 0;
+    const store = { service: "kagi", kagiSession: "" };
+    const { translateText } = loadSource("src/plugins/translate/utils.ts", {
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
+        "@webpack/common": { showToast() {}, Toasts: { Type: { FAILURE: "failure" } } },
+        "./languages": {}, "./settings": { settings: { store } }
+    }, {
+        IS_WEB: false,
+        VencordNative: { pluginHelpers: { Translate: { makeKagiTranslateRequest: async () => {
+            requests++;
+            return { status: 200, data: { translation: "bonjour", detected_language: { label: "English" } } };
+        } } } }
+    });
+    await assert.rejects(translateText("fixture", "en", "fr"), /Kagi session token is not set/);
+    assert.equal(requests, 0);
+    assert.equal(store.service, "kagi");
+    store.kagiSession = "fixture-session";
+    assert.equal((await translateText("fixture", "en", "fr")).text, "bonjour");
+    assert.equal(requests, 1);
+});

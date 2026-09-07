@@ -149,6 +149,9 @@ async function deeplTranslate(text: string, sourceLang: string, targetLang: stri
 }
 
 async function kagiTranslate(text: string, sourceLang: string, targetLang: string): Promise<TranslationValue> {
+    if (!settings.store.kagiSession)
+        throw "Kagi session token is not set.";
+
     const { status, data } = await Native.makeKagiTranslateRequest(
         settings.store.kagiSession, text, sourceLang, targetLang
     );

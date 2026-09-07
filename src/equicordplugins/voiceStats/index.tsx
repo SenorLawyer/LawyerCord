@@ -10,6 +10,7 @@ import { get, set } from "@api/DataStore";
 import { BaseText } from "@components/BaseText";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { EquicordDevs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import { useTimer } from "@utils/react";
 import definePlugin from "@utils/types";
 import { VoiceState } from "@vencord/discord-types";
@@ -22,6 +23,7 @@ const Section = findComponentByCodeLazy("headingVariant:", '"section"', "heading
 
 const storageKey = "VoiceStats_totals";
 const saveIntervalMs = 30_000;
+const logger = new Logger("VoiceStats");
 
 const sessionStarts = new Map<string, number>();
 const totalsByUser = new Map<string, number>();
@@ -35,7 +37,12 @@ async function persistTotals() {
     if (!totalsDirty) return;
 
     totalsDirty = false;
-    await set(storageKey, Object.fromEntries(totalsByUser));
+    try {
+        await set(storageKey, Object.fromEntries(totalsByUser));
+    } catch (error) {
+        totalsDirty = true;
+        logger.error("Could not save voice statistics.", error);
+    }
 }
 
 function flushActiveSessions() {

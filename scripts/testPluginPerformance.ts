@@ -1608,10 +1608,32 @@ test("webpack tar archives contain only the supplied byte view", () => {
     assert.equal(archive.length, 2048);
 });
 
+test("voice statistics retain failed saves for the next persistence attempt", async () => {
+    let attempts = 0;
+    let errors = 0;
+    const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {
+        "@utils/Logger": { Logger: class { error() { errors++; } } },
+        "@api/DataStore": { set: async () => { if (++attempts === 1) throw new Error("Write failed"); } }, "@components/BaseText": {},
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+        "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
+        "@webpack/common": {}
+    }, { Date: { now: () => 2000 } }, "({ sessionStarts, flushActiveSessions, persistTotals })");
+    api.sessionStarts.set("friend", 1000);
+    api.flushActiveSessions();
+    await assert.doesNotReject(api.persistTotals());
+    assert.equal(errors, 1);
+    await api.persistTotals();
+    await api.persistTotals();
+    assert.equal(attempts, 2);
+});
+
 test("voice statistics wait for stored totals before starting tracking", async () => {
     let finish: (value: object) => void = () => assert.fail("Missing read");
     let channelId = "first";
     const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {
+        "@utils/Logger": { Logger: class { error() {} } },
         "@api/DataStore": { get: () => new Promise(resolve => { finish = resolve; }) }, "@components/BaseText": {},
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
@@ -1637,6 +1659,7 @@ test("voice statistics wait for stored totals before starting tracking", async (
 test("voice statistics discard stored totals from a stopped generation", async () => {
     const reads: ((value: object) => void)[] = [];
     const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {
+        "@utils/Logger": { Logger: class { error() {} } },
         "@api/DataStore": { get: () => new Promise(resolve => reads.push(resolve)) }, "@components/BaseText": {},
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
@@ -1659,6 +1682,7 @@ test("voice statistics discard stored totals from a stopped generation", async (
 test("voice statistics retain fractional seconds across periodic saves", () => {
     let now = 1000;
     const { sessionStarts, totalsByUser, flushActiveSessions, getLiveSeconds } = loadSource("src/equicordplugins/voiceStats/index.tsx", {
+        "@utils/Logger": { Logger: class { error() {} } },
         "@api/DataStore": {}, "@components/BaseText": {},
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},

@@ -6,10 +6,10 @@ This audit is still in progress. File coverage records review work; it does not 
 
 - Baseline: `6e664e03ba3d0b7746ce34740ca444f5112b04bc`, published as `nightly-20260905-1918-6e664e03`.
 - The baseline inventory contains 1,661 tracked files, including source, tests, configuration, documentation, and assets. The review ledger records all baseline entries as reviewed.
-- At `2353c8ec0`, the branch contains 1,656 tracked files: this report and five added test files, with eleven removals relative to the baseline.
-- The five added tests cover startup flags, CRX conversion, extension installation, file selection, and settings synchronization. Their file hashes were rechecked against the reviewed versions at `2353c8ec0`.
+- At `480d81f23`, the branch contains 1,656 tracked files: this report and five added test files, with eleven removals relative to the baseline.
+- The five added tests cover startup flags, CRX conversion, extension installation, file selection, and settings synchronization. Their file hashes were rechecked against the reviewed versions at `480d81f23`.
 - The generated internationalization mapping was checked semantically against the runtime hash function across 19,440 pairs. That is generated-data validation, not manual review of each pair.
-- Main at `8fc182ba7` was reviewed separately. A fresh fetch at `2353c8ec0` confirmed that main and the published nightly remain unchanged. Main changes have not been integrated into this branch.
+- Main at `8fc182ba7` was reviewed separately. A fresh fetch at `480d81f23` confirmed that main and the published nightly remain unchanged. Main changes have not been integrated into this branch.
 
 Changes are accumulated in [PR #47](https://github.com/SenorLawyer/LawyerCord/pull/47). The PR remains a draft with `release:nightly`; merge and auto-merge are paused. It still conflicts with main.
 

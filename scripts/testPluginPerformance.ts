@@ -1535,6 +1535,42 @@ test("blocked sticker placeholders subscribe to display preferences", () => {
     assert.equal(subscriptions[0], subscriptions[2]);
 });
 
+test("voice playback keeps a speed selected before first play", () => {
+    for (const selected of [false, true]) {
+        let play: (() => void) | undefined;
+        let cleanup: (() => void) | undefined;
+        let menu: { children: { children: { props: { label: string; action(): void; }; }[][]; }[]; } | undefined;
+        const media = { tagName: "AUDIO", className: "audioElement", playbackRate: 1,
+            addEventListener: (_event: string, handler: () => void) => { play = handler; },
+            removeEventListener: (_event: string, handler: () => void) => { assert.equal(handler, play); play = undefined; },
+        };
+        const { default: plugin } = loadSource("src/equicordplugins/mediaPlaybackSpeed/index.tsx", {
+            "@api/Settings": { definePluginSettings: () => ({ store: { defaultVoiceMessageSpeed: 2 } }) },
+            "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+            "@utils/constants": { Devs: {} }, "@utils/css": { classNameFactory: () => () => "" },
+            "@utils/types": { __esModule: true, default: (value: object) => value, makeRange: () => [1, 2, 3], OptionType: {} },
+            "./components/SpeedIcon": {},
+            "@webpack/common": {
+                React: { createElement: (type: unknown, props: unknown, ...children: unknown[]) => ({ type, props, children }) }, Menu: {},
+                useRef: (current: unknown) => ({ current }), useEffect: (effect: () => () => void) => { cleanup = effect(); },
+                ContextMenuApi: { openContextMenu: (_event: unknown, render: () => typeof menu) => { menu = render(); } },
+            },
+        });
+        const view = plugin.renderPlaybackSpeedComponent({ mediaRef: { current: media } });
+        if (selected) {
+            view.children[0]({}).props.onClick({});
+            assert.ok(menu);
+            menu.children[0].children[0].find(item => item.props.label === "3x")?.props.action();
+            assert.equal(media.playbackRate, 3);
+        }
+        media.playbackRate = 1;
+        play?.();
+        assert.equal(media.playbackRate, selected ? 3 : 2);
+        cleanup?.();
+        assert.equal(play, undefined);
+    }
+});
+
 test("avatar file reads stop on replacement, typed URLs, and unmount", () => {
     const readers: { result: string; onload?: () => void; onerror?: () => void; aborted: boolean; }[] = [];
     const urls: string[] = [];

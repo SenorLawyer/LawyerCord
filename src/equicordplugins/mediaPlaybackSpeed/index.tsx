@@ -11,7 +11,7 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import definePlugin, { makeRange, OptionType } from "@utils/types";
-import { ContextMenuApi, FluxDispatcher, Menu, React, Tooltip, useEffect } from "@webpack/common";
+import { ContextMenuApi, FluxDispatcher, Menu, React, Tooltip, useEffect, useRef } from "@webpack/common";
 import { RefObject } from "react";
 
 import SpeedIcon from "./components/SpeedIcon";
@@ -78,9 +78,11 @@ export default definePlugin({
         }
     ],
     renderPlaybackSpeedComponent: ErrorBoundary.wrap(({ mediaRef }: { mediaRef: MediaRef; }) => {
+        const selectedSpeed = useRef<{ media: HTMLMediaElement; speed: number; } | null>(null);
         const changeSpeed = (speed: number) => {
             const media = mediaRef?.current;
             if (media) {
+                selectedSpeed.current = { media, speed };
                 media.playbackRate = speed;
             }
         };
@@ -92,7 +94,10 @@ export default definePlugin({
                 const isVoiceMessage = media.className.includes("audioElement");
                 if (isVoiceMessage) {
                     // Workaround because Discord seems to override it somewhere
-                    const setVoiceSpeed = () => changeSpeed(settings.store.defaultVoiceMessageSpeed);
+                    const setVoiceSpeed = () => {
+                        const selected = selectedSpeed.current;
+                        media.playbackRate = selected?.media === media ? selected.speed : settings.store.defaultVoiceMessageSpeed;
+                    };
                     media.addEventListener("play", setVoiceSpeed, { once: true });
                     return () => media.removeEventListener("play", setVoiceSpeed);
                 } else {

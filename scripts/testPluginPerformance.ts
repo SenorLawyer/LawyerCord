@@ -11253,3 +11253,30 @@ test("stale transcription audio failures preserve a newer cached request", async
     requests.slice(1).forEach(request => request.resolve(new Uint8Array([1])));
     await current;
 });
+
+test("transcription clipboard feedback waits for success and handles rejection", async () => {
+    const source = readFileSync("src/equicordplugins/voiceMessageTranscriber.desktop/index.tsx", "utf8");
+    const start = source.indexOf("async function copy(");
+    const end = source.indexOf("interface VoiceMessageTranscriptionAccessoryProps", start);
+    assert.ok(start >= 0 && end > start);
+    const helper = readFileSync("src/utils/discord.tsx", "utf8");
+    const helperStart = helper.indexOf("export async function copyWithToast(");
+    const helperEnd = helper.indexOf("export interface MessageOptions", helperStart);
+    const code = transpileModule(helper.slice(helperStart, helperEnd).replace("export ", "") + source.slice(start, end), { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
+    for (const failure of [false, true]) {
+        let resolve: () => void = () => {};
+        let reject: (error: Error) => void = () => {};
+        const pending = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
+        const feedback: string[] = [];
+        const copy = runInNewContext(code + ";copy", {
+            copyToClipboard: (text: string) => { assert.equal(text, "transcript"); return pending; },
+            Toasts: { Type: { SUCCESS: "success", FAILURE: "failure" }, genId: () => "copy", show: (toast: { type: string; }) => feedback.push(toast.type) },
+            showToast: (_message: string, type: string) => feedback.push(type)
+        });
+        const result = copy("transcript");
+        assert.deepEqual(feedback, []);
+        if (failure) reject(new Error("Permission denied")); else resolve();
+        await result;
+        assert.deepEqual(feedback, [failure ? "failure" : "success"]);
+    }
+});

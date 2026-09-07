@@ -16,11 +16,11 @@ import { Span } from "@components/Span";
 import { getLanguages, translateText, TranslationValue } from "@plugins/translate/utils";
 import { DEFAULT_WAVEFORM, VoiceMessage } from "@plugins/voiceMessages";
 import { generateWaveform } from "@plugins/voiceMessages/waveform";
-import { copyToClipboard } from "@utils/clipboard";
 import { Devs } from "@utils/constants";
+import { copyWithToast } from "@utils/discord";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
 import { Message, RenderModalProps } from "@vencord/discord-types";
-import { lodash, Modal, openModal, ScrollerAuto, SearchableSelect, useCallback, useEffect, useRef, useState } from "@webpack/common";
+import { lodash, Modal, openModal, ScrollerAuto, SearchableSelect, showToast, Toasts, useCallback, useEffect, useRef, useState } from "@webpack/common";
 
 import { detectAudioMimeType } from "./audioValidation";
 import { buildTargetLanguageOptions, getVoiceMessageMedia, LanguageOption, resolveTargetLanguage } from "./options";
@@ -32,7 +32,6 @@ const MAX_RESULT_CACHE_ENTRIES = 100;
 const MAX_PREPARED_AUDIO_CACHE_ENTRIES = 3;
 
 type ProcessingStatus = "idle" | "downloading_audio" | "processing_audio" | "loading" | "transcribing" | "translating" | "complete";
-type CopyTarget = "transcript" | "translation" | null;
 
 interface CachedResult {
     targetLanguage?: string;
@@ -229,6 +228,14 @@ function progressPercent(progress: TranscriptionProgress | null): number | null 
     return null;
 }
 
+async function copy(text: string) {
+    try {
+        await copyWithToast(text);
+    } catch {
+        showToast("Failed to copy to clipboard.", Toasts.Type.FAILURE);
+    }
+}
+
 interface VoiceMessageTranscriptionAccessoryProps {
     duration?: number;
     messageId: string;
@@ -247,12 +254,10 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
     const [showTimestamps, setShowTimestamps] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [progress, setProgress] = useState<TranscriptionProgress | null>(null);
-    const [copied, setCopied] = useState<CopyTarget>(null);
     const [playbackSrc, setPlaybackSrc] = useState(src);
     const [resolvedWaveform, setResolvedWaveform] = useState(waveform || DEFAULT_WAVEFORM);
     const workerRef = useRef<TranscriptionWorker | null>(null);
     const jobIdRef = useRef(0);
-    const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const autoStartedRef = useRef(false);
 
     const stopWorker = useCallback(() => {
@@ -374,20 +379,9 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
         setStatus(transcript ? "complete" : "idle");
     }, [stopWorker, transcript]);
 
-    const copy = useCallback((target: Exclude<CopyTarget, null>, text: string) => {
-        copyToClipboard(text);
-        setCopied(target);
-        if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-        copyTimerRef.current = setTimeout(() => {
-            copyTimerRef.current = null;
-            setCopied(null);
-        }, 2000);
-    }, []);
-
     useEffect(() => () => {
         ++jobIdRef.current;
         stopWorker();
-        if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
     }, [stopWorker]);
 
     useEffect(() => {
@@ -462,8 +456,8 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
                     <section>
                         <Flex alignItems="center" justifyContent="space-between" gap={8}>
                             <Heading tag="h5">Transcript</Heading>
-                            <TextButton variant="secondary" onClick={() => copy("transcript", transcriptText)}>
-                                {copied === "transcript" ? "Copied" : "Copy"}
+                            <TextButton variant="secondary" onClick={() => copy(transcriptText)}>
+                                Copy
                             </TextButton>
                         </Flex>
                         <ScrollerAuto className={cl("result")}>
@@ -480,8 +474,8 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
                         <section className={cl("translation")}>
                             <Flex alignItems="center" justifyContent="space-between" gap={8}>
                                 <Heading tag="h5">{targetLanguageLabel ?? targetLanguage ?? "Translation"}</Heading>
-                                <TextButton variant="secondary" onClick={() => copy("translation", translation.text)}>
-                                    {copied === "translation" ? "Copied" : "Copy"}
+                                <TextButton variant="secondary" onClick={() => copy(translation.text)}>
+                                    Copy
                                 </TextButton>
                             </Flex>
                             <ScrollerAuto className={cl("result")}>

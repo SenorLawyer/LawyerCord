@@ -221,6 +221,7 @@ async function doClone(guildId: string, data: Sticker | Emoji, controller = new 
             id: Toasts.genId()
         });
     } catch (error) {
+        if (controller.signal.aborted) return;
         let message = "Something went wrong.";
         if (isObject(error) && "text" in error && typeof error.text === "string") {
             const { text } = error;

@@ -9776,8 +9776,8 @@ test("expression cloning preserves valid server errors and falls back for malfor
         plugin.stop();
         await doClone("guild", { t: "Emoji", id: "emoji", name: "name", isAnimated: false });
         assert.equal(requests, 1);
-        assert.equal(messages.length, 2);
-        assert.equal(messages[1], "Failed to clone: Something went wrong.");
+        assert.equal(messages.length, 1);
+        assert.equal(logs.length, 1);
     }
 });
 

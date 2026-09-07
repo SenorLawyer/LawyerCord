@@ -11704,3 +11704,37 @@ test("translation language options follow provider changes and exclude automatic
     assert.deepEqual(Array.from(render(), (option: { value: string; }) => option.value), ["en-us", "de"]);
     assert.ok(subscribed.includes("service"));
 });
+
+
+test("translation tooltip belongs to the current main composer", () => {
+    const cleanups: (() => void)[] = [];
+    const deliveries: unknown[][] = [];
+    const icon = loadSource("src/plugins/translate/TranslateIcon.tsx", {
+        "@api/ChatButtons": {}, "@components/TooltipContainer": {},
+        "@utils/misc": { classes: () => "" },
+        "@webpack/common": {
+            useState: () => {
+                const values: unknown[] = [];
+                deliveries.push(values);
+                return [false, (value: unknown) => values.push(value)];
+            },
+            useEffect: (effect: () => (() => void) | undefined) => {
+                const cleanup = effect();
+                if (cleanup) cleanups.push(cleanup);
+            }
+        },
+        "./settings": { settings: { use: () => ({ autoTranslate: false }) } },
+        "./TranslateModal": {}, "./utils": { cl: () => "" }
+    }, { React: { createElement: () => null } });
+    icon.TranslateChatBarIcon({ isMainChat: true });
+    icon.TranslateChatBarIcon({ isMainChat: false });
+    icon.setShouldShowTranslateEnabledTooltip(true);
+    assert.deepEqual(deliveries[0], [true]);
+    assert.deepEqual(deliveries[1], []);
+    icon.TranslateChatBarIcon({ isMainChat: true });
+    cleanups[0]();
+    icon.setShouldShowTranslateEnabledTooltip(false);
+    assert.deepEqual(deliveries[2], [false]);
+    cleanups[cleanups.length - 1]();
+    assert.equal(icon.setShouldShowTranslateEnabledTooltip, undefined);
+});

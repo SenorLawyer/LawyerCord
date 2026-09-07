@@ -17,12 +17,12 @@
 */
 
 import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
-import { addMessagePreSendListener, MessageSendListener, removeMessagePreSendListener } from "@api/MessageEvents";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
-import { React, useEffect, useState } from "@webpack/common";
+import { React, useState } from "@webpack/common";
 
 let lastState = false;
+const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 const ReverseMessageToggle: ChatBarButtonFactory = ({ isMainChat }) => {
     const [enabled, setEnabled] = useState(lastState);
@@ -32,15 +32,6 @@ const ReverseMessageToggle: ChatBarButtonFactory = ({ isMainChat }) => {
 
         setEnabled(value);
     }
-
-    useEffect(() => {
-        const listener: MessageSendListener = async (_, message) => {
-            if (enabled && message.content) message.content = message.content.split("").reverse().join("");
-        };
-
-        addMessagePreSendListener(listener);
-        return () => void removeMessagePreSendListener(listener);
-    }, [enabled]);
 
     if (!isMainChat) return null;
 
@@ -68,6 +59,10 @@ export default definePlugin({
     description: "Reverses the message content before sending it.",
     tags: ["Chat", "Fun"],
     dependencies: ["MessageEventsAPI", "ChatInputButtonAPI"],
+    onBeforeMessageSend(_channelId, message) {
+        if (lastState && message.content)
+            message.content = Array.from(segmenter.segment(message.content), part => part.segment).reverse().join("");
+    },
     chatBarButton: {
         icon: ReverseMessageIcon,
         render: ReverseMessageToggle

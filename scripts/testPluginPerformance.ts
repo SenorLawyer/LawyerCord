@@ -1306,6 +1306,27 @@ test("BetterSessions returns its settings-close save to the flux error handler",
     await rejected;
 });
 
+test("TalkInReverse uses one send hook and preserves grapheme clusters", () => {
+    const { default: plugin } = loadSource("src/equicordplugins/talkInReverse/index.tsx", {
+        "@api/ChatButtons": {},
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value },
+        "@webpack/common": { React: { createElement: (type: unknown, props: unknown) => ({ type, props }) }, useState: (value: boolean) => [value, () => {}] },
+    });
+    const unchanged = { content: "hello" };
+    plugin.onBeforeMessageSend("channel", unchanged);
+    assert.equal(unchanged.content, "hello");
+    const button = plugin.chatBarButton.render({ isMainChat: true });
+    button.props.onClick();
+    plugin.chatBarButton.render({ isMainChat: true });
+    assert.equal(plugin.chatBarButton.render({ isMainChat: false }), null);
+    for (const [content, expected] of [["abc", "cba"], ["a😀b", "b😀a"], ["e\u0301x", "xe\u0301"], ["a👨‍👩‍👧‍👦🇳🇱", "🇳🇱👨‍👩‍👧‍👦a"], ["", ""]]) {
+        const message = { content };
+        plugin.onBeforeMessageSend("channel", message);
+        assert.equal(message.content, expected);
+    }
+});
+
 test("blocked sticker placeholders subscribe to display preferences", () => {
     let visible = "showGif";
     const subscriptions: unknown[] = [];

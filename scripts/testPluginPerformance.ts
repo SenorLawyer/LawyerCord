@@ -1535,16 +1535,21 @@ test("blocked sticker placeholders subscribe to display preferences", () => {
     assert.equal(subscriptions[0], subscriptions[2]);
 });
 
-test("Steam status sync ignores unmapped and disabled statuses", () => {
+test("Steam status sync opens only supported saved status mappings", () => {
     const opened: string[] = [];
+    const preferences = { onlineStatus: "online", dndStatus: "none" };
     const { default: plugin } = loadSource("src/equicordplugins/steamStatusSync/index.tsx", {
-        "@api/Settings": { definePluginSettings: () => ({ store: { onlineStatus: "online", dndStatus: "none" } }) },
+        "@api/Settings": { definePluginSettings: () => ({ store: preferences }) },
         "@utils/constants": { EquicordDevs: {} },
         "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
     }, { open: (url: string) => opened.push(url) });
     for (const value of ["offline", "unknown", "dnd", "online"])
         plugin.flux.USER_SETTINGS_PROTO_UPDATE({ settings: { proto: { status: { status: { value }, showCurrentGame: { value: true } } } } });
-    assert.deepEqual(opened, ["steam://friends/status/online"]);
+    for (const status of ["online", "away", "invisible", "offline", "none", "", "unexpected", "online?extra=value", "../other"]) {
+        preferences.onlineStatus = status;
+        plugin.flux.USER_SETTINGS_PROTO_UPDATE({ settings: { proto: { status: { status: { value: "online" }, showCurrentGame: { value: true } } } } });
+    }
+    assert.deepEqual(opened, ["online", "online", "away", "invisible", "offline"].map(status => `steam://friends/status/${status}`));
 });
 
 test("GIF alt text excludes URL metadata and handles missing sources", () => {

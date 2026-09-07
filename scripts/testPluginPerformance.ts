@@ -8238,6 +8238,37 @@ test("installer inventory excludes hidden folders and files before reading metad
 });
 
 
+test("narrator speech tolerates an unavailable API and uses the browser default voice", () => {
+    const window: { speechSynthesis?: { speak: (speech: unknown) => void; }; __OVERLAY__?: boolean; } = {};
+    const spoken: unknown[] = [];
+    let selectedVoice: object | undefined;
+    class Utterance {
+        voice: object | null = null;
+        constructor(public text: string) {}
+    }
+    const api = loadSource("src/plugins/vcNarrator/index.tsx", {
+        "@api/Settings": { migrateSettingsFromPlugin() {} },
+        "@components/ErrorCard": {}, "@components/Heading": {}, "@components/Paragraph": {},
+        "@utils/constants": { Devs: {} }, "@utils/Logger": {}, "@utils/margins": {}, "@utils/text": {},
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, ReporterTestable: {} },
+        "@webpack/common": {}, "./settings": { settings: { store: { volume: 0.5, rate: 1.5 } }, getCurrentVoice: () => selectedVoice }
+    }, { window, SpeechSynthesisUtterance: Utterance }, "({ speak })");
+    api.speak("Unavailable");
+    window.speechSynthesis = { speak: speech => spoken.push(speech) };
+    api.speak("Default");
+    assert.equal((spoken[0] as Utterance).voice, null);
+    selectedVoice = { voiceURI: "chosen" };
+    api.speak("Selected");
+    assert.equal((spoken[1] as Utterance).voice, selectedVoice);
+    assert.equal((spoken[1] as Utterance).text, "Selected");
+    assert.equal(Reflect.get(spoken[1] as object, "volume"), 0.5);
+    assert.equal(Reflect.get(spoken[1] as object, "rate"), 1.5);
+    api.speak("");
+    window.__OVERLAY__ = true;
+    api.speak("Overlay");
+    assert.equal(spoken.length, 2);
+});
+
 test("narrator formatting preserves placeholder text inside names", () => {
     const api = loadSource("src/plugins/vcNarrator/index.tsx", {
         "@api/Settings": { migrateSettingsFromPlugin() {} },

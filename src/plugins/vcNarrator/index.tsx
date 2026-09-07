@@ -47,16 +47,17 @@ interface VoiceStateChangeEvent {
 
 function speak(text: string) {
     // Don't narrate in the overlay window, otherwise everything is said twice
-    if (!text || window.__OVERLAY__) return;
+    const synthesis = window.speechSynthesis;
+    if (!text || window.__OVERLAY__ || !synthesis) return;
 
     const { volume, rate } = settings.store;
 
     const speech = new SpeechSynthesisUtterance(text);
     const voice = getCurrentVoice();
-    speech.voice = voice!;
+    if (voice) speech.voice = voice;
     speech.volume = volume;
     speech.rate = rate;
-    speechSynthesis.speak(speech);
+    synthesis.speak(speech);
 }
 
 function clean(str: string) {

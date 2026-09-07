@@ -100,7 +100,7 @@ async function googleTranslate(text: string, sourceLang: string, targetLang: str
     const { sourceLanguage, translation } = response;
 
     return {
-        sourceLanguage: GoogleLanguages[sourceLanguage] ?? sourceLanguage,
+        sourceLanguage: Object.hasOwn(GoogleLanguages, sourceLanguage) ? GoogleLanguages[sourceLanguage] : sourceLanguage,
         text: translation
     };
 }
@@ -141,7 +141,8 @@ async function deeplTranslate(text: string, sourceLang: string, targetLang: stri
         throw new Error("DeepL returned an invalid response.");
 
     return {
-        sourceLanguage: DeeplLanguages[translation.detected_source_language] ?? translation.detected_source_language,
+        sourceLanguage: Object.hasOwn(DeeplLanguages, translation.detected_source_language)
+            ? DeeplLanguages[translation.detected_source_language] : translation.detected_source_language,
         text: translation.text
     };
 }

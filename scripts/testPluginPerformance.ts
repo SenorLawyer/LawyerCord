@@ -11832,3 +11832,26 @@ test("received translation actions discard results from previous sessions", asyn
         assert.equal(requests, phase === "absent" ? 0 : 1);
     }
 });
+
+test("translation language labels ignore inherited dictionary properties", async () => {
+    for (const service of ["google", "deepl"]) for (const language of ["en", "unknown", "constructor", "__proto__", "toString"]) {
+        const payload = service === "google" ? { translation: "bonjour", sourceLanguage: language }
+            : { translations: [{ text: "bonjour", detected_source_language: language }] };
+        const { translateText } = loadSource("src/plugins/translate/utils.ts", {
+            "@utils/css": { classNameFactory: () => () => "" },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object", tryOrElse: (fn: () => unknown, fallback: unknown) => { try { return fn(); } catch { return fallback; } } },
+            "@webpack/common": { showToast() {}, Toasts: { Type: { FAILURE: "failure" } } },
+            "./languages": { GoogleLanguages: { en: "English" }, DeeplLanguages: { en: "English" } },
+            "./settings": { settings: { store: { service, deeplApiKey: "fixture" } } }
+        }, {
+            IS_WEB: false, URLSearchParams, fetch: async () => ({ ok: true, json: async () => payload }),
+            VencordNative: { pluginHelpers: { Translate: {
+                makeDeeplTranslateRequest: async () => ({ status: 200, data: JSON.stringify(payload) })
+            } } }
+        });
+
+        const result = await translateText("hello", "en", "fr");
+        assert.equal(result.text, "bonjour");
+        assert.equal(result.sourceLanguage, language === "en" ? "English" : language);
+    }
+});

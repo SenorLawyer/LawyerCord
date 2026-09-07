@@ -288,7 +288,12 @@ export class TranscriptionWorker {
 
         const blob = new Blob([workerCode], { type: "text/javascript" });
         this.workerUrl = URL.createObjectURL(blob);
-        this.worker = new Worker(this.workerUrl, { type: "module" });
+        try {
+            this.worker = new Worker(this.workerUrl, { type: "module" });
+        } catch (error) {
+            URL.revokeObjectURL(this.workerUrl);
+            throw error;
+        }
         this.worker.onmessage = this.handleMessage.bind(this);
         this.worker.onerror = () => {
             if (this.terminated) return;

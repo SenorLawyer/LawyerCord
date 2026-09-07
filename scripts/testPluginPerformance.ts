@@ -2751,6 +2751,7 @@ test("transcription worker cancellation aborts model downloads and startup failu
     let writes = 0;
     let terminations = 0;
     let revocations = 0;
+    let constructorFails = false;
     const errors: Error[] = [];
     const { TranscriptionWorker } = loadSource("src/equicordplugins/voiceMessageTranscriber.desktop/utils.ts", {
         "@api/index": { DataStore: { get: async () => undefined, set: async () => { writes++; } } },
@@ -2763,7 +2764,7 @@ test("transcription worker cancellation aborts model downloads and startup failu
             static revokeObjectURL() { revocations++; }
         },
         Worker: class {
-            constructor() { instance = this; }
+            constructor() { if (constructorFails) throw new Error("Worker construction failed"); instance = this; }
             onmessage?: (event: object) => Promise<void>;
             onerror?: () => void;
             terminate() { terminations++; }
@@ -2793,6 +2794,10 @@ test("transcription worker cancellation aborts model downloads and startup failu
     assert.match(errors[0].message, /worker failed/);
     assert.equal(terminations, 2);
     assert.equal(revocations, 2);
+    constructorFails = true;
+    assert.throws(() => new TranscriptionWorker(() => {}, () => {}, () => {}, () => {}), /Worker construction failed/);
+    assert.equal(revocations, 3);
+    assert.equal(terminations, 2);
 });
 
 test("voice transcription downloads reject untrusted URLs and bound streamed audio", async () => {

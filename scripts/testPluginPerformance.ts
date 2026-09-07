@@ -9703,3 +9703,42 @@ test("expression cloning filters picker stickers by format", () => {
         }
     }
 });
+
+test("emoji cloning settles failed file reads without uploading", async () => {
+    for (const mode of ["success", "error", "throw"]) {
+        const uploads: unknown[] = [];
+        const failure = new Error("Fixture read failed");
+        const { cloneEmoji } = loadSource("src/plugins/expressionCloner/index.tsx", {
+            "@api/ContextMenu": {}, "@api/Settings": { migratePluginSettings() {} },
+            "@components/BaseText": {}, "@components/CheckedTextInput": {}, "@components/Flex": {},
+            "@components/Heading": {}, "@components/Paragraph": {},
+            "@utils/constants": { Devs: {} }, "@utils/discord": {}, "@utils/Logger": {},
+            "@utils/types": { __esModule: true, default: (value: object) => value },
+            "@vencord/discord-types/enums": { StickerFormatType: { PNG: 1, APNG: 2, LOTTIE: 3, GIF: 4 } },
+            "@webpack": { findByCodeLazy: () => (value: unknown) => uploads.push(value) },
+            "@webpack/common": {}
+        }, {
+            location: { protocol: "https:" }, window: { GLOBAL_ENV: { CDN_HOST: "fixture.invalid" } },
+            fetch: async () => ({ ok: true, blob: async () => ({ size: 1 }) }),
+            FileReader: class {
+                result = "data:image/png;base64,fixture";
+                error = failure;
+                onload = () => {};
+                onerror = () => {};
+                readAsDataURL() {
+                    if (mode === "throw") throw failure;
+                    if (mode === "error") this.onerror();
+                    else this.onload();
+                }
+            }
+        }, "({ cloneEmoji })");
+        const pending = cloneEmoji("guild", { t: "Emoji", id: "emoji", name: "name~2", isAnimated: false });
+        if (mode === "success") {
+            await pending;
+            assert.deepEqual({ ...uploads[0] as object }, { guildId: "guild", name: "name", image: "data:image/png;base64,fixture" });
+        } else {
+            await assert.rejects(pending, error => error === failure);
+            assert.equal(uploads.length, 0);
+        }
+    }
+});

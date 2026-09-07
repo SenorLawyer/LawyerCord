@@ -122,9 +122,10 @@ async function cloneSticker(guildId: string, sticker: Sticker) {
 async function cloneEmoji(guildId: string, emoji: Emoji) {
     const data = await fetchBlob(emoji);
 
-    const dataUrl = await new Promise<string>(resolve => {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
         reader.readAsDataURL(data);
     });
 

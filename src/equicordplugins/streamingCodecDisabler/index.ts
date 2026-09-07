@@ -31,11 +31,13 @@ const settings = definePluginSettings({
         default: false
     },
     disableVP8Codec: {
+        hidden: true,
         description: "Make Discord not consider using VP8 for streaming.",
         type: OptionType.BOOLEAN,
         default: false
     },
     disableVP9Codec: {
+        hidden: true,
         description: "Make Discord not consider using VP9 for streaming.",
         type: OptionType.BOOLEAN,
         default: false

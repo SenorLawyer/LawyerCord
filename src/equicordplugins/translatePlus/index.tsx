@@ -21,7 +21,7 @@ import "./style.css";
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { Devs, EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
-import { ChannelStore, Menu } from "@webpack/common";
+import { ChannelStore, Menu, UserStore, useStateFromStores } from "@webpack/common";
 
 import { settings } from "./settings";
 import { Accessory, handleTranslate } from "./utils/accessory";
@@ -53,7 +53,10 @@ export default definePlugin({
     contextMenus: {
         "message": messageCtxPatch
     },
-    renderMessageAccessory: props => <Accessory message={props.message} />,
+    renderMessageAccessory: props => {
+        const userId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
+        return userId ? <Accessory key={`${userId}:${props.message.id}`} message={props.message} /> : null;
+    },
     messagePopoverButton: {
         icon: Icon,
         render(message) {

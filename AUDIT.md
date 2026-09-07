@@ -44,6 +44,10 @@ Installer UI changes preserve existing settings when enabling unloaded plugins, 
 
 The installer parses metadata using the existing TypeScript dependency without executing plugin code. Its actual handler accepts all 379 checked plugin declarations, including four rejected by the old regex. Development-only native plugins are excluded from ordinary release builds, keeping the parser out of those bundles; development and reporter builds retain it.
 
+Native plugin discovery now applies the renderer target restrictions in desktop builds. Actual temporary plugins with `.web`, `.discordDesktop`, `.vesktop`, and `.equibop` suffixes verified matching renderer and native inclusion in both desktop targets. Those fixtures were removed and the output rebuilt without them.
+
+Notification changes remove unused toast close callbacks, clear toasts on session changes, subscribe visible toasts to display settings, and enforce reduced queue limits on arrival. Shared notifications and toasts use separate action and dismiss controls alongside message content, with accessible labels and keyboard focus outlines. Their timers pause while keyboard focus remains inside the card. Guild toasts use Discord's resolved notification level and the raw message mention list rather than reconstructing settings and searching message text. Isolated fixtures cover these behaviors; live Discord, screen-reader acceptance, role/everyone mentions, and remaining mute-policy questions are still open.
+
 The proposed version is `3.0.0.0` because older scheduled data now requires explicit recovery. See [VERSIONING.md](VERSIONING.md) for the compatibility and downgrade implications. No release tag has been created for this audit.
 
 ## Verification record
@@ -52,16 +56,17 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `d7b99b737` | 349 tests and timezone correctness checks passed. |
-| Repository-wide ESLint | `ccc765596` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
-| CSS and internationalization lint | `5e869fea9` | Passed. CSS excludes userplugins; internationalization checks tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest plugin regressions and TypeScript | `8b3c0dc94` | 299 plugin tests and full TypeScript passed; focused source lint passed. |
-| Standalone build | `1f7dab047` | Passed. Release native source maps exclude the installer and TypeScript parser. This does not establish installed-client behavior. |
-| Development build | `d7b99b737` | Passed after template and staging changes. |
+| Broader performance/correctness suite | `c50d116a4` | 350 tests and timezone correctness checks passed. Later focused regressions are recorded separately. |
+| Repository-wide ESLint | `c50d116a4` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
+| CSS lint | `c50d116a4` | Passed; excludes userplugins. |
+| Internationalization lint | `5e869fea9` | Passed for tracked source markers and patch strings, not live Discord module compatibility. |
+| Latest plugin regressions and TypeScript | `c285cf179` | 301 plugin tests and full TypeScript passed; focused source lint passed. |
+| Standalone build | `c50d116a4` | Passed after shared-notification changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
+| Development build | `b04066579` | Passed after notification and build-filter changes. |
 | Installer review browser checks | `d7b99b737` | Actual templates and generator functions in isolated Chrome preserved literal metadata, all four native/pre-send warning combinations, the native acknowledgement gate, and cancellation. Electron IPC and real installation were not exercised. |
 | Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |
-| Web build | `57b19a728` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
-| Release artifact audit | `57b19a728` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
+| Web build | `b87aa473b` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
+| Release artifact audit | `b87aa473b` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
 | Real IndexedDB queue behavior | `ce04cc40a` | Isolated Chrome verified aborted additions, ordered concurrent additions, aborted clearing, and subsequent successful clearing using actual queue and DataStore code. |
 | Video preview decoding | `fd216ca34` | Actual preview code in isolated Chrome produced a PNG from an FFmpeg-generated WebM and returned null for invalid video. |
 | Theme replacement on the filesystem | `07903f31c` | Actual native code preserves installed files after injected partial writes and rename failures, and cleans temporary files. This is not crash-durability testing. |
@@ -69,7 +74,7 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Uninstall button browser checks | `d4efc449d` | Actual shared component props and styles in isolated Chrome verified the accessible name, keyboard focus indicator, and consistent 32px sizing in both stylesheet orders. Full Discord layout was not exercised. |
 | Other isolated browser checks | Earlier audit commits | Specific sticker-storage transactions, codec conversion, and CSS behavior were exercised. These are not general live-client acceptance. |
 
-Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `d7b99b737`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
+Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `b87aa473b`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
 
 ## Remaining work
 

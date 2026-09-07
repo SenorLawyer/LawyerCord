@@ -12260,3 +12260,14 @@ test("UnitConverter handles metric speeds before distance units", () => {
     assert.equal(convert("100 km and 100 km/h"), "62.15mi and 62.15mph");
     assert.equal(convert("100 kilometers"), "62.15mi");
 });
+
+test("UnitConverter converts compound measurements before their components", () => {
+    const { convert } = loadSource("src/equicordplugins/unitConverter/converter.ts", {
+        ".": { settings: { store: { myUnits: "metric" } } }
+    });
+    for (const input of ["5 feet 11 inches", "5ft 11in", "5 foot 11 inches", "5'11\""])
+        assert.equal(convert(input), "1.80m", input);
+    for (const input of ["10 pounds 8 ounces", "10 lbs 8 oz", "10lb 8oz"])
+        assert.equal(convert(input), "4.76kg", input);
+    assert.equal(convert("10 lbs and 8 oz"), "4.54kg and 226.80g");
+});

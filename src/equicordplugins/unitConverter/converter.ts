@@ -38,6 +38,14 @@ const regexes: regexes = {
                 return `${ftin.toFixed(2)}m`;
             },
         },
+        feetInchesWord: {
+            regex: /(\d+) *(f(?:ee|oo)?t) *(\d+(?:\.\d+)?) *(in(?:ches?)?)/ig,
+            convert(...groups) {
+                let ftin = parseFloat(groups[1]) / 3.281;
+                ftin += parseFloat(groups[3]) / 39.37;
+                return `${ftin.toFixed(2)}m`;
+            },
+        },
         feetWord: {
             regex: /(\d+(?:\.\d+)?) *(f(ee)?t)(?! *\d)/ig,
             convert(...groups) {
@@ -52,21 +60,6 @@ const regexes: regexes = {
                 return `${inches}cm`;
             },
         },
-        feetInchesWord: {
-            regex: /(\d+) *(f(?:ee|oo)?t) *(\d+(?:\.\d+)?) *(in(?:ches?)?)/ig,
-            convert(...groups) {
-                let ftin = parseFloat(groups[1]) / 3.281;
-                ftin += parseFloat(groups[3]) / 39.37;
-                return `${ftin.toFixed(2)}m`;
-            },
-        },
-        poundWord: {
-            regex: /(\d+(?:\.\d+)?) *(lbs?|pounds?)(?! ?\d)/ig,
-            convert(...groups: string[]) {
-                const lbs = (parseFloat(groups[1]) / 2.205).toFixed(2);
-                return `${lbs}kg`;
-            },
-        },
         poundOunceWord: {
             regex: /(\d+(?:\.\d+)?) *(lbs?|pounds?) *(\d+(?:\.\d+)?) *(ozs?|ounces?)/ig,
             convert(...groups) {
@@ -74,6 +67,13 @@ const regexes: regexes = {
                 lbs += parseFloat(groups[3]) / 35.274;
                 return `${lbs.toFixed(2)}kg`;
             }
+        },
+        poundWord: {
+            regex: /(\d+(?:\.\d+)?) *(lbs?|pounds?)(?! ?\d)/ig,
+            convert(...groups: string[]) {
+                const lbs = (parseFloat(groups[1]) / 2.205).toFixed(2);
+                return `${lbs}kg`;
+            },
         },
         ounceWord: {
             regex: /(\d+(?:\.\d+)?) ?(ounces?|oz)(?!\w)/gi,

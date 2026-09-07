@@ -70,23 +70,27 @@ StreamingCodecDisabler no longer assumes all codecs are supported or carries cap
 
 StatusPresets saves special object-property names as ordinary entries, deletes by the stored key, and subscribes its submenu to preset and premium-state changes. Actual SettingsStore tests cover change notifications and serialization/reloading. Failed applications produce one failure toast; invalid expiration values are rejected before updating Discord. Valid expiration tests cover no expiration, timed expiration, and next local midnight across daylight saving. The internal saved-record field is hidden from plugin settings. Live custom-status payloads and remaining saved-data validation still need work.
 
+WebContextMenus shares image downloads, reports copy/save failures, releases decoded bitmaps, and preserves URLs outside Discord media. Real browser conversion checks cover bitmap cleanup and PNG pixels; OS clipboard permissions and live menus remain unverified.
+
+UserPFP separates remote avatars from saved local overrides, gives local choices priority, rejects malformed remote maps, and cancels stale database loads. Avatar edits use transactions before updating memory. File reads cancel on replacement, typed URLs, or unmount, and guild avatar URLs are no longer rewritten. Legacy saved entries are preserved because their provenance is unknown. Local-data validation, file constraints, and live-client behavior remain under review.
+
 ## Verification record
 
 Evidence applies to the recorded commit and scope, not to a future merge with main.
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `0fc6ab63b` | 395 tests and timezone correctness checks passed. |
-| Repository-wide ESLint | `c8e1a691a` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
+| Broader performance/correctness suite | `0b4f3f978` | 401 tests and timezone correctness checks passed. |
+| Repository-wide ESLint | `0b4f3f978` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
 | CSS lint | `c50d116a4` | Passed; excludes userplugins. |
 | Internationalization lint | `5e869fea9` | Passed for tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest plugin regressions and TypeScript | `0fc6ab63b` | 343 plugin tests, full TypeScript, and focused AutoDND lint passed. |
-| Standalone build | `c8e1a691a` | Passed after status, GIF, Steam, and sticker changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
+| Latest plugin regressions and TypeScript | `0b4f3f978` | 349 plugin tests, full TypeScript, and focused UserPFP lint passed. Source fixtures reject TypeScript syntax diagnostics before execution. |
+| Standalone build | `0b4f3f978` | Passed after the image-menu and avatar changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
 | Development build | `0fc6ab63b` | Passed after composer, codec, preset, and game-status startup changes. |
 | Installer review browser checks | `d7b99b737` | Actual templates and generator functions in isolated Chrome preserved literal metadata, all four native/pre-send warning combinations, the native acknowledgement gate, and cancellation. Electron IPC and real installation were not exercised. |
 | Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |
-| Web build | `b87aa473b` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
-| Release artifact audit | `b87aa473b` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
+| Web build | `0b4f3f978` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
+| Release artifact audit | `0b4f3f978` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
 | Avatar startup and edit ordering | `296e36989` | Actual loader, editor actions, and DataStore in isolated Chrome preserved edits in 20 overlapping runs, ten with startup first and ten with saving first. This checks one client context, not synchronization between clients. No extra production guard was added. |
 | Avatar edit transactions | `3bf4098d6` | Actual AvatarModal actions and DataStore code in isolated Chrome preserved storage and memory after an aborted write, kept both concurrent user edits, and deleted only the selected override. React rendering and Discord dependencies were mocked. |
 | Real IndexedDB queue behavior | `ce04cc40a` | Isolated Chrome verified aborted additions, ordered concurrent additions, aborted clearing, and subsequent successful clearing using actual queue and DataStore code. |
@@ -97,7 +101,7 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Uninstall button browser checks | `d4efc449d` | Actual shared component props and styles in isolated Chrome verified the accessible name, keyboard focus indicator, and consistent 32px sizing in both stylesheet orders. Full Discord layout was not exercised. |
 | Other isolated browser checks | Earlier audit commits | Specific sticker-storage transactions, codec conversion, and CSS behavior were exercised. These are not general live-client acceptance. |
 
-Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `0fc6ab63b`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
+Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `0b4f3f978`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
 
 ## Remaining work
 

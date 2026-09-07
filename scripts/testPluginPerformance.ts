@@ -10570,3 +10570,43 @@ test("relationship notifier invalidates pending work across stop, logout, and re
         }
     }
 });
+
+
+test("relationship notifier tracks overlapping manual removals independently", async () => {
+    for (const kind of ["Friend", "Guild", "Group"]) {
+        for (const order of [["first", "second"], ["second", "first"]]) {
+            let notifications = 0;
+            let saves = 0;
+            const handlers = loadSource("src/plugins/relationshipNotifier/functions.ts", {
+                "@utils/discord": { getUniqueUsername: () => "Friend" },
+                "@vencord/discord-types/enums": { ChannelType: { GROUP_DM: 3 }, RelationshipType: { FRIEND: 1 } },
+                "@webpack/common": {
+                    UserStore: { getCurrentUser: () => ({ id: "owner" }) },
+                    UserUtils: { getUser: async () => ({ id: "friend", getAvatarURL() {} }) }
+                },
+                "./settings": { __esModule: true, default: { store: { friends: true, servers: true, groups: true } } },
+                "./utils": {
+                    getGuild: () => ({ name: "Guild" }), getGroup: () => ({ name: "Group" }),
+                    GuildAvailabilityStore: { isUnavailable: () => false },
+                    syncGuilds: async () => { saves++; }, syncGroups: async () => { saves++; },
+                    notify: () => notifications++, resetState() {}
+                }
+            });
+            const remove = (id: string) => kind === "Friend"
+                ? handlers.onRelationshipRemove({ relationship: { id, type: 1 } })
+                : kind === "Guild" ? handlers.onGuildDelete({ guild: { id } })
+                    : handlers.onChannelDelete({ channel: { id, type: 3 } });
+            handlers["remove" + kind]("first");
+            handlers["remove" + kind]("second");
+            for (const id of order) await remove(id);
+            assert.equal(notifications, 0, kind);
+            assert.equal(saves, kind === "Friend" ? 0 : 2);
+            await remove("first");
+            assert.equal(notifications, 1);
+            handlers["remove" + kind]("first");
+            handlers.reset();
+            await remove("first");
+            assert.equal(notifications, 2);
+        }
+    }
+});

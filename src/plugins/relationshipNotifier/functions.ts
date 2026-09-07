@@ -24,24 +24,23 @@ import settings from "./settings";
 import { ChannelDelete, GuildDelete, RelationshipRemove } from "./types";
 import { getGroup, getGuild, GuildAvailabilityStore, notify, resetState, session, syncGroups, syncGuilds } from "./utils";
 
-let manuallyRemovedFriend: string | undefined;
-let manuallyRemovedGuild: string | undefined;
-let manuallyRemovedGroup: string | undefined;
+const manuallyRemovedFriends = new Set<string>();
+const manuallyRemovedGuilds = new Set<string>();
+const manuallyRemovedGroups = new Set<string>();
 
 export function reset() {
-    manuallyRemovedFriend = manuallyRemovedGuild = manuallyRemovedGroup = undefined;
+    manuallyRemovedFriends.clear();
+    manuallyRemovedGuilds.clear();
+    manuallyRemovedGroups.clear();
     resetState();
 }
 
-export const removeFriend = (id: string) => manuallyRemovedFriend = id;
-export const removeGuild = (id: string) => manuallyRemovedGuild = id;
-export const removeGroup = (id: string) => manuallyRemovedGroup = id;
+export const removeFriend = (id: string) => manuallyRemovedFriends.add(id);
+export const removeGuild = (id: string) => manuallyRemovedGuilds.add(id);
+export const removeGroup = (id: string) => manuallyRemovedGroups.add(id);
 
 export async function onRelationshipRemove({ relationship: { type, id } }: RelationshipRemove) {
-    if (manuallyRemovedFriend === id) {
-        manuallyRemovedFriend = undefined;
-        return;
-    }
+    if (manuallyRemovedFriends.delete(id)) return;
 
     if (!(type === RelationshipType.FRIEND && settings.store.friends
         || type === RelationshipType.INCOMING_REQUEST && settings.store.friendRequestCancels)) return;
@@ -78,8 +77,7 @@ export function onGuildDelete({ guild: { id, unavailable } }: GuildDelete) {
     if (unavailable || GuildAvailabilityStore.isUnavailable(id)) return;
 
     const guild = getGuild(id);
-    const manual = manuallyRemovedGuild === id;
-    if (manual) manuallyRemovedGuild = undefined;
+    const manual = manuallyRemovedGuilds.delete(id);
 
     const synced = syncGuilds();
     if (guild && !manual && settings.store.servers)
@@ -91,8 +89,7 @@ export function onChannelDelete({ channel: { id, type } }: ChannelDelete) {
     if (type !== ChannelType.GROUP_DM) return;
 
     const group = getGroup(id);
-    const manual = manuallyRemovedGroup === id;
-    if (manual) manuallyRemovedGroup = undefined;
+    const manual = manuallyRemovedGroups.delete(id);
 
     const synced = syncGroups();
     if (group && !manual && settings.store.groups)

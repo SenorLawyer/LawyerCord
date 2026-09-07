@@ -1365,6 +1365,7 @@ test("StatusWhileActive never restores another account's status", () => {
 });
 
 test("AutoDND restores each game's saved status only once", () => {
+    let userId = "first";
     let status = "online";
     const updates: string[] = [];
     const { default: plugin } = loadSource("src/plugins/autoDndWhilePlaying.discordDesktop/index.ts", {
@@ -1372,6 +1373,7 @@ test("AutoDND restores each game's saved status only once", () => {
         "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => status, updateSetting: (value: string) => { status = value; updates.push(value); } }) },
         "@utils/constants": { Devs: {} },
         "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
     });
     const change = plugin.flux.RUNNING_GAMES_CHANGE;
     change({ games: [{}] });
@@ -1383,6 +1385,16 @@ test("AutoDND restores each game's saved status only once", () => {
     change({ games: [{}] });
     change({ games: [] });
     assert.deepEqual(updates, ["dnd", "online", "dnd", "idle"]);
+    change({ games: [{}] });
+    userId = "second";
+    status = "invisible";
+    change({ games: [] });
+    assert.equal(status, "invisible");
+    change({ games: [{}] });
+    plugin.flux.LOGOUT();
+    status = "online";
+    change({ games: [] });
+    assert.equal(status, "online");
 });
 
 test("Apple Music format substitutions preserve literal metadata", () => {

@@ -8,8 +8,9 @@ import { definePluginSettings, migratePluginSettings } from "@api/Settings";
 import { getUserSettingLazy } from "@api/UserSettings";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
+import { UserStore } from "@webpack/common";
 
-let savedStatus: string | null = null;
+let savedStatus: { userId: string; value: string; } | null = null;
 
 const StatusSettings = getUserSettingLazy<string>("status", "status")!;
 
@@ -54,18 +55,24 @@ export default definePlugin({
     dependencies: ["UserSettingsAPI"],
     settings,
     flux: {
+        LOGOUT() {
+            savedStatus = null;
+        },
         RUNNING_GAMES_CHANGE({ games }) {
+            const userId = UserStore.getCurrentUser()?.id;
+            if (savedStatus?.userId !== userId) savedStatus = null;
+            if (!userId) return;
             const status = StatusSettings.getSetting();
 
-            if (settings.store.excludeInvisible && (savedStatus ?? status) === "invisible") return;
+            if (settings.store.excludeInvisible && (savedStatus?.value ?? status) === "invisible") return;
 
             if (games.length > 0) {
                 if (status !== settings.store.statusToSet) {
-                    savedStatus = status;
+                    savedStatus = { userId, value: status };
                     StatusSettings.updateSetting(settings.store.statusToSet);
                 }
             } else if (savedStatus) {
-                const previousStatus = savedStatus;
+                const previousStatus = savedStatus.value;
                 savedStatus = null;
                 if (status !== previousStatus) StatusSettings.updateSetting(previousStatus);
             }

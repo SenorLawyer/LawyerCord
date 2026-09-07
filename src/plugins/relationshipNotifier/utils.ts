@@ -105,7 +105,8 @@ export async function syncAndRunChecks() {
 
                 const user = await UserUtils.getUser(id).catch(() => void 0);
                 if (currentSession !== session || UserStore.getCurrentUser()?.id !== currentUserId) return;
-                if (user)
+                if (user && settings.store.offlineRemovals && settings.store.friends
+                    && RelationshipStore.getRelationshipType(id) !== RelationshipType.FRIEND)
                     notify(
                         `You are no longer friends with ${getUniqueUsername(user)}.`,
                         user.getAvatarURL(undefined, undefined, false),
@@ -123,7 +124,8 @@ export async function syncAndRunChecks() {
 
                 const user = await UserUtils.getUser(id).catch(() => void 0);
                 if (currentSession !== session || UserStore.getCurrentUser()?.id !== currentUserId) return;
-                if (user)
+                if (user && settings.store.offlineRemovals && settings.store.friendRequestCancels
+                    && ![RelationshipType.FRIEND, RelationshipType.BLOCKED, RelationshipType.INCOMING_REQUEST, RelationshipType.OUTGOING_REQUEST].includes(RelationshipStore.getRelationshipType(id)))
                     notify(
                         `Friend request from ${getUniqueUsername(user)} has been revoked.`,
                         user.getAvatarURL(undefined, undefined, false),

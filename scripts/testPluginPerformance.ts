@@ -10639,3 +10639,42 @@ test("relationship notifications recheck restored relationships after user looku
         }
     }
 });
+
+
+test("offline relationship alerts use current stores and settings after lookup", async () => {
+    for (const kind of ["friends", "requests"]) {
+        for (const currentType of [0, 1, 2, 3, 4]) {
+            for (const disabled of ["none", "offlineRemovals", kind === "friends" ? "friends" : "friendRequestCancels"]) {
+                let relation = 0;
+                let release = () => {};
+                const pending = new Promise<void>(resolve => { release = resolve; });
+                let lookups = 0;
+                let notifications = 0;
+                const store: Record<string, boolean> = { offlineRemovals: true, friends: true, friendRequestCancels: true };
+                const utils = loadSource("src/plugins/relationshipNotifier/utils.ts", {
+                    "@api/DataStore": { delMany: async () => {}, set: async () => {}, getMany: async () => [undefined, undefined, { friends: [], requests: [], [kind]: ["user"] }] },
+                    "@api/Notices": {}, "@api/Notifications": { showNotification: () => notifications++ },
+                    "@utils/discord": { getUniqueUsername: () => "User" },
+                    "@vencord/discord-types/enums": { ChannelType: {}, RelationshipType: { FRIEND: 1, BLOCKED: 2, INCOMING_REQUEST: 3, OUTGOING_REQUEST: 4 } },
+                    "@webpack": { findStoreLazy: () => ({}) },
+                    "@webpack/common": {
+                        UserStore: { getCurrentUser: () => ({ id: "owner" }) },
+                        GuildStore: { getGuilds: () => ({}) }, ChannelStore: { getSortedPrivateChannels: () => [] },
+                        RelationshipStore: { getMutableRelationships: () => new Map(), getRelationshipType: () => relation },
+                        UserUtils: { getUser: async () => { lookups++; await pending; return { id: "user", getAvatarURL() {} }; } }
+                    },
+                    "./settings": { __esModule: true, default: { store } }
+                });
+                const work = utils.syncAndRunChecks();
+                await setImmediate();
+                assert.equal(lookups, 1);
+                relation = currentType;
+                if (disabled !== "none") store[disabled] = false;
+                release();
+                await work;
+                const expected = disabled === "none" && (kind === "friends" ? currentType !== 1 : currentType === 0);
+                assert.equal(notifications, Number(expected), `${kind}: ${currentType}, ${disabled}`);
+            }
+        }
+    }
+});

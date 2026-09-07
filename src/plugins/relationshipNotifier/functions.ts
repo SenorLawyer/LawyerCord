@@ -38,6 +38,9 @@ export async function onRelationshipRemove({ relationship: { type, id } }: Relat
         return;
     }
 
+    if (!(type === RelationshipType.FRIEND && settings.store.friends
+        || type === RelationshipType.INCOMING_REQUEST && settings.store.friendRequestCancels)) return;
+
     const user = await UserUtils.getUser(id)
         .catch(() => null);
     if (!user) return;

@@ -10324,3 +10324,24 @@ test("updater error dialog preserves ordinary error messages and command diagnos
     assert.match(getErrorMessage({ code: 1, cmd: "git pull", stderr: "Local changes would be overwritten", message: "generic" }), /Local changes would be overwritten/);
     assert.match(getErrorMessage({ code: 1, cmd: "git pull" }), /Code `1`/);
 });
+
+
+test("relationship notifier skips user lookups for irrelevant or disabled removals", async () => {
+    for (const type of [1, 2, 3, 4]) {
+        for (const [friends, friendRequestCancels] of [[false, false], [true, false], [false, true], [true, true]]) {
+            let lookups = 0;
+            let notifications = 0;
+            const { onRelationshipRemove } = loadSource("src/plugins/relationshipNotifier/functions.ts", {
+                "@utils/discord": { getUniqueUsername: () => "User" },
+                "@vencord/discord-types/enums": { RelationshipType: { FRIEND: 1, BLOCKED: 2, INCOMING_REQUEST: 3, OUTGOING_REQUEST: 4 } },
+                "@webpack/common": { UserUtils: { getUser: async () => { lookups++; return { id: "user", getAvatarURL() {} }; } } },
+                "./settings": { __esModule: true, default: { store: { friends, friendRequestCancels } } },
+                "./utils": { notify: () => notifications++ }
+            });
+            await onRelationshipRemove({ relationship: { type, id: "user" } });
+            const expected = (type === 1 && friends || type === 3 && friendRequestCancels) ? 1 : 0;
+            assert.equal(lookups, expected);
+            assert.equal(notifications, expected);
+        }
+    }
+});

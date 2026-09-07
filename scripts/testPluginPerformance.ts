@@ -1307,6 +1307,28 @@ test("BetterSessions returns its settings-close save to the flux error handler",
     await rejected;
 });
 
+test("status preset application reports rejected updates once", async () => {
+    const pending = Promise.withResolvers<void>();
+    const toasts: { message: string; type: string; }[] = [];
+    const { setStatus } = loadSource("src/equicordplugins/statusPresets/index.tsx", {
+        "./style.css": {},
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@api/UserSettings": { getUserSettingLazy: () => ({ updateSetting: () => pending.promise }) },
+        "@components/ErrorBoundary": {}, "@utils/constants": { EquicordDevs: {} },
+        "@utils/lazy": { proxyLazy: () => ({}) },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {}, StartAt: {} },
+        "@webpack": { findComponentByCodeLazy: () => () => null, extractAndLoadChunksLazy: () => () => {} },
+        "@webpack/common": { Toasts: { show: (toast: { message: string; type: string; }) => toasts.push(toast), Type: { FAILURE: "failure" }, genId: () => "toast" } },
+    }, {}, "({ setStatus })");
+    const applying = setStatus({ text: "Preset", clearAfter: null, emojiInfo: null });
+    assert.equal(toasts.length, 0);
+    pending.reject(new Error("update failed"));
+    await assert.doesNotReject(applying);
+    assert.equal(toasts.length, 1);
+    assert.equal(toasts[0].type, "failure");
+    assert.equal(toasts[0].message, "Could not apply the status preset.");
+});
+
 test("status preset menus subscribe and delete the actual saved key", () => {
     const store = new SettingsStore({ StatusPresets: { savedKey: { text: "display text", emojiInfo: { id: "emoji" } } } }).store;
     let premiumTypeActual = 0;

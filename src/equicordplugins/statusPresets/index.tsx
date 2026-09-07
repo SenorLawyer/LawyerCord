@@ -64,14 +64,18 @@ function getExpirationMs(expiration: "TODAY" | number) {
     return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
 }
 
-function setStatus(status: DiscordStatus) {
-    CustomStatusSettings.updateSetting({
-        text: status.text.trim(),
-        expiresAtMs: status.clearAfter != null ? String(getExpirationMs(status.clearAfter)) : "0",
-        emojiId: status.emojiInfo?.id ?? "0",
-        emojiName: status.emojiInfo?.name ?? "",
-        createdAtMs: String(Date.now())
-    });
+async function setStatus(status: DiscordStatus) {
+    try {
+        await CustomStatusSettings.updateSetting({
+            text: status.text.trim(),
+            expiresAtMs: status.clearAfter != null ? String(getExpirationMs(status.clearAfter)) : "0",
+            emojiId: status.emojiInfo?.id ?? "0",
+            emojiName: status.emojiInfo?.name ?? "",
+            createdAtMs: String(Date.now())
+        });
+    } catch {
+        Toasts.show({ message: "Could not apply the status preset.", type: Toasts.Type.FAILURE, id: Toasts.genId() });
+    }
 }
 
 const StatusSubMenuComponent = () => {

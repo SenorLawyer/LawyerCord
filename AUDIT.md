@@ -87,6 +87,7 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |
 | Web build | `b87aa473b` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
 | Release artifact audit | `b87aa473b` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
+| Avatar edit transactions | `3bf4098d6` | Actual AvatarModal actions and DataStore code in isolated Chrome preserved storage and memory after an aborted write, kept both concurrent user edits, and deleted only the selected override. React rendering and Discord dependencies were mocked. |
 | Real IndexedDB queue behavior | `ce04cc40a` | Isolated Chrome verified aborted additions, ordered concurrent additions, aborted clearing, and subsequent successful clearing using actual queue and DataStore code. |
 | Image copy conversion | `41343b959` | Actual WebContextMenus code in isolated Chrome converted a JPEG to a 3 by 2 PNG, preserved red pixels, and closed the source bitmap exactly once. Clipboard delivery was intercepted; OS clipboard permission and live Discord menus were not tested. |
 | Video preview decoding | `fd216ca34` | Actual preview code in isolated Chrome produced a PNG from an FFmpeg-generated WebM and returned null for invalid video. |

@@ -17,7 +17,7 @@
 */
 
 import { classNameFactory } from "@utils/css";
-import { isObject } from "@utils/misc";
+import { isObject, tryOrElse } from "@utils/misc";
 import { onlyOnce } from "@utils/onlyOnce";
 import { PluginNative } from "@utils/types";
 import { showToast, Toasts } from "@webpack/common";
@@ -94,7 +94,7 @@ async function googleTranslate(text: string, sourceLang: string, targetLang: str
         throw new Error(`Google Translate request failed (${res.status}).`);
     }
 
-    const response: unknown = await res.json();
+    const response: unknown = await res.json().catch(() => null);
     if (!isObject(response) || !("sourceLanguage" in response) || typeof response.sourceLanguage !== "string"
         || !("translation" in response) || typeof response.translation !== "string")
         throw new Error("Google Translate returned an invalid response.");
@@ -153,7 +153,7 @@ async function deeplTranslate(text: string, sourceLang: string, targetLang: stri
             throw new Error(`DeepL translation request failed (${status}).`);
     }
 
-    const response: unknown = JSON.parse(data);
+    const response: unknown = tryOrElse(() => JSON.parse(data), null);
     const translation: unknown = isObject(response) && "translations" in response && Array.isArray(response.translations)
         ? response.translations[0] : null;
     if (!isObject(translation) || !("detected_source_language" in translation) || typeof translation.detected_source_language !== "string"

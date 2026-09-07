@@ -11500,7 +11500,7 @@ test("translation provider errors omit source text and response bodies", async (
     for (const service of ["google", "deepl", "kagi"]) {
         const { translateText } = loadSource("src/plugins/translate/utils.ts", {
             "@utils/css": { classNameFactory: () => () => "" }, "@utils/onlyOnce": { onlyOnce: (fn: unknown) => fn },
-        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
+        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object", tryOrElse: (fn: () => unknown, fallback: unknown) => { try { return fn(); } catch { return fallback; } } },
             "@webpack/common": { showToast() {}, Toasts: { Type: { FAILURE: "failure" } } },
             "./languages": {}, "./settings": { settings: { store: { service, deeplApiKey: "fixture", kagiSession: "fixture" } } }
         }, {
@@ -11564,7 +11564,7 @@ test("Google translation cancels an unused error response", async () => {
     let cancelled = 0;
     const { translateText } = loadSource("src/plugins/translate/utils.ts", {
         "@utils/css": { classNameFactory: () => () => "" }, "@utils/onlyOnce": { onlyOnce: (fn: unknown) => fn },
-        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
+        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object", tryOrElse: (fn: () => unknown, fallback: unknown) => { try { return fn(); } catch { return fallback; } } },
         "@webpack/common": { showToast() {}, Toasts: { Type: { FAILURE: "failure" } } },
         "./languages": {}, "./settings": { settings: { store: { service: "google" } } }
     }, {
@@ -11586,7 +11586,7 @@ test("translation validates successful provider payloads before returning text",
         for (const payload of [null, {}, [], "invalid", { translation: 1 }, { translations: [] }, valid]) {
             const { translateText } = loadSource("src/plugins/translate/utils.ts", {
                 "@utils/css": { classNameFactory: () => () => "" }, "@utils/onlyOnce": { onlyOnce: (fn: unknown) => fn },
-                "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
+                "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object", tryOrElse: (fn: () => unknown, fallback: unknown) => { try { return fn(); } catch { return fallback; } } },
                 "@webpack/common": { showToast() {}, Toasts: { Type: { FAILURE: "failure" } } },
                 "./languages": { GoogleLanguages: { en: "English" }, DeeplLanguages: { en: "English" } },
                 "./settings": { settings: { store: { service, deeplApiKey: "fixture", kagiSession: "fixture" } } }
@@ -11604,5 +11604,24 @@ test("translation validates successful provider payloads before returning text",
                 assert.equal(result.sourceLanguage, "English");
             }
         }
+    }
+});
+
+test("translation parse errors do not expose malformed response snippets", async () => {
+    for (const service of ["google", "deepl"]) {
+        const { translateText } = loadSource("src/plugins/translate/utils.ts", {
+            "@utils/css": { classNameFactory: () => () => "" }, "@utils/onlyOnce": { onlyOnce: (fn: unknown) => fn },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object", tryOrElse: (fn: () => unknown, fallback: unknown) => { try { return fn(); } catch { return fallback; } } },
+            "@webpack/common": { showToast() {}, Toasts: { Type: { FAILURE: "failure" } } },
+            "./languages": {}, "./settings": { settings: { store: { service, deeplApiKey: "fixture" } } }
+        }, {
+            IS_WEB: false, URLSearchParams, fetch: async () => new Response("private-response-invalid-json"),
+            VencordNative: { pluginHelpers: { Translate: { makeDeeplTranslateRequest: async () => ({ status: 200, data: "private-response-invalid-json" }) } } }
+        });
+        await assert.rejects(translateText("fixture", "en", "fr"), (error: Error) => {
+            assert.match(error.message, /invalid response/);
+            assert.equal(error.message.includes("private-response"), false);
+            return true;
+        });
     }
 });

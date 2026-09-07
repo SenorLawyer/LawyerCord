@@ -60,7 +60,7 @@ function speak(text: string) {
 function clean(str: string) {
     const replacer = settings.store.latinOnly
         ? /[^\p{Script=Latin}\p{Number}\p{Punctuation}\s]/gu
-        : /[^\p{Letter}\p{Number}\p{Punctuation}\s]/gu;
+        : /[^\p{Letter}\p{Mark}\p{Number}\p{Punctuation}\s]/gu;
 
     return str.normalize("NFKC")
         .replace(replacer, "")

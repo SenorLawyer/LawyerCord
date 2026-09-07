@@ -8238,6 +8238,22 @@ test("installer inventory excludes hidden folders and files before reading metad
 });
 
 
+test("narrator preserves combining marks in multilingual names", () => {
+    const store = { latinOnly: false };
+    const api = loadSource("src/plugins/vcNarrator/index.tsx", {
+        "@api/Settings": { migrateSettingsFromPlugin() {} },
+        "@components/Heading": {}, "@components/Paragraph": {},
+        "@utils/constants": { Devs: {} }, "@utils/margins": {}, "@utils/text": {},
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, ReporterTestable: {} },
+        "@webpack/common": {}, "./settings": { settings: { store } }
+    }, {}, "({ clean })");
+    for (const name of ["अमित", "مُحَمَّد", "José", "李明"])
+        assert.equal(api.clean(name), name.normalize("NFKC"));
+    assert.equal(api.clean("  Alice___💡  "), "Alice_");
+    store.latinOnly = true;
+    assert.equal(api.clean("Alice 李明"), "Alice");
+});
+
 test("narrator starts from the existing voice channel and resets across restarts", () => {
     let channelId: string | undefined = "existing";
     const api = loadSource("src/plugins/vcNarrator/index.tsx", {

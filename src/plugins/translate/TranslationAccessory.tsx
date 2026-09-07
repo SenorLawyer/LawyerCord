@@ -22,10 +22,11 @@ import { Parser, useEffect, useState } from "@webpack/common";
 import { TranslateIcon } from "./TranslateIcon";
 import { cl, TranslationValue } from "./utils";
 
-const TranslationSetters = new Map<string,(v: TranslationValue) => void>();
+const TranslationSetters = new Map<string, Set<(v: TranslationValue) => void>>();
 
 export function handleTranslate(messageId: string, data: TranslationValue) {
-    TranslationSetters.get(messageId)?.(data);
+    for (const setter of TranslationSetters.get(messageId) ?? [])
+        setter(data);
 }
 
 function Dismiss({ onDismiss }: { onDismiss: () => void; }) {
@@ -46,10 +47,13 @@ export function TranslationAccessory({ message }: { message: Message & { vencord
         // Ignore MessageLinkEmbeds messages
         if (message.vencordEmbeddedBy) return;
 
-        TranslationSetters.set(message.id, setTranslation);
+        const setters = TranslationSetters.get(message.id) ?? new Set<(value: TranslationValue) => void>();
+        setters.add(setTranslation);
+        TranslationSetters.set(message.id, setters);
 
         return () => {
-            if (TranslationSetters.get(message.id) === setTranslation)
+            setters.delete(setTranslation);
+            if (!setters.size)
                 TranslationSetters.delete(message.id);
         };
     }, []);

@@ -11066,3 +11066,23 @@ test("web voice controls consult the recorder state before stop and pause", () =
         assert.equal(recorder.state, "inactive");
     }
 });
+
+
+test("voice preview only mounts its timer while recording", () => {
+    let timers = 0;
+    const { VoicePreview } = loadComponent("src/plugins/voiceMessages/components/VoicePreview.tsx", {}, {
+        "@utils/react": { useTimer: () => { timers++; return 65000; } },
+        "..": { cl: () => "preview", VoiceMessage: "playback" }
+    });
+    const idle = VoicePreview({ waveform: "", recording: false });
+    assert.equal(timers, 0);
+    assert.equal(idle.props.children[1].props.children[0], "0:00");
+    const playback = VoicePreview({ waveform: "", recording: false, src: "blob:audio" });
+    assert.equal(playback.type, "playback");
+    assert.equal(timers, 0);
+    const recording = VoicePreview({ waveform: "", recording: true });
+    const timer = recording.props.children[1].props.children[0];
+    assert.equal(typeof timer.type, "function");
+    assert.equal(timer.type(), "1:05");
+    assert.equal(timers, 1);
+});

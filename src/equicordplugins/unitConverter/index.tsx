@@ -32,7 +32,7 @@ const SafeConverterAccessory = ErrorBoundary.wrap(ConverterAccessory, { noop: tr
 export const settings = definePluginSettings({
     myUnits: {
         type: OptionType.SELECT,
-        description: "the units you use and want things converted to. defaults to imperial",
+        description: "Units to convert measurements into.",
         options: [
             {
                 default: true,
@@ -49,7 +49,7 @@ export const settings = definePluginSettings({
 
 export default definePlugin({
     name: "UnitConverter",
-    description: "Converts metric units to Imperial units and vice versa",
+    description: "Converts between metric and imperial units.",
     dependencies: ["MessagePopoverAPI"],
     tags: ["Utility"],
     authors: [Devs.sadan],

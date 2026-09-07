@@ -73,4 +73,16 @@ assert.equal(generateWaveform(new Float32Array(), 16_000), DEFAULT_WAVEFORM);
 for (const rate of [0, -1, NaN, Infinity])
     assert.equal(generateWaveform(new Float32Array([1]), rate), DEFAULT_WAVEFORM);
 
+const timestampCases = [
+    [NaN, 1], [Infinity, null], [-1, 1], [1, NaN], [1, Infinity], [2, 1],
+    [0, 0], [1, null], [1, 2]
+];
+const timestampResult = normalizeTranscriptionResult({
+    text: "Preserve the transcript.",
+    chunks: timestampCases.map(timestamp => ({ text: "word", timestamp }))
+});
+assert.equal(timestampResult.text, "Preserve the transcript.");
+assert.deepEqual(timestampResult.chunks.map(chunk => chunk.timestamp), [[0, 0], [1, null], [1, 2]]);
+assert.equal(formatTimestampedTranscript(timestampResult), "[00:00 - 00:00] word\n[00:01 - end] word\n[00:01 - 00:02] word");
+
 console.log("voice-message transcription checks passed");

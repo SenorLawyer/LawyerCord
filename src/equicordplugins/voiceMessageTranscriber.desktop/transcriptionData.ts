@@ -31,8 +31,8 @@ export function normalizeTranscriptionResult(value: unknown): TranscriptionResul
         ? candidate.chunks.filter((chunk): chunk is TranscriptionChunk => (
             typeof chunk?.text === "string"
             && Array.isArray(chunk.timestamp)
-            && typeof chunk.timestamp[0] === "number"
-            && (typeof chunk.timestamp[1] === "number" || chunk.timestamp[1] === null)
+            && Number.isFinite(chunk.timestamp[0]) && chunk.timestamp[0] >= 0
+            && (chunk.timestamp[1] === null || Number.isFinite(chunk.timestamp[1]) && chunk.timestamp[1] >= chunk.timestamp[0])
         ))
         : [];
 

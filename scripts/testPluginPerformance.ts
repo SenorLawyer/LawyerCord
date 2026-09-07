@@ -11518,3 +11518,21 @@ test("translation provider errors omit source text and response bodies", async (
         });
     }
 });
+
+test("native translation preserves HTTP failures without parsing error bodies", async () => {
+    for (const provider of ["makeDeeplTranslateRequest", "makeKagiTranslateRequest"]) {
+        for (const status of [401, 403, 456, 500]) {
+            let cancelled = 0;
+            const native = loadSource("src/plugins/translate/native.ts", {}, {
+                fetch: async () => new Response(new ReadableStream({
+                    start(controller) { controller.enqueue(new TextEncoder().encode("<html>private response</html>")); controller.close(); },
+                    cancel() { cancelled++; }
+                }), { status })
+            });
+            const result = await native[provider]({}, false, "fixture", "fixture", "fixture");
+            assert.equal(result.status, status, provider);
+            assert.equal(cancelled, 1, provider);
+            assert.ok(result.data === "" || result.data === null);
+        }
+    }
+});

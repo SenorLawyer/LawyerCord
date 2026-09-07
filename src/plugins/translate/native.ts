@@ -21,6 +21,11 @@ export async function makeDeeplTranslateRequest(_: IpcMainInvokeEvent, pro: bool
             body: payload
         });
 
+        if (res.status !== 200) {
+            await res.body?.cancel();
+            return { status: res.status, data: "" };
+        }
+
         const data = await res.text();
         return { status: res.status, data };
     } catch (e) {
@@ -45,6 +50,11 @@ export async function makeKagiTranslateRequest(_: IpcMainInvokeEvent, token: str
                 model: "standard"
             }),
         });
+
+        if (res.status !== 200) {
+            await res.body?.cancel();
+            return { status: res.status, data: null };
+        }
 
         const data = await res.json();
         return { status: res.status, data };

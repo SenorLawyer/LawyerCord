@@ -84,8 +84,6 @@ export default definePlugin({
     contextMenus: {
         "message": messageCtxPatch
     },
-    // not used, just here in case some other plugin wants it or w/e
-    translate,
 
     renderMessageAccessory: props => <TranslationAccessory message={props.message} />,
 

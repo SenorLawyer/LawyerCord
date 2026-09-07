@@ -1535,6 +1535,33 @@ test("blocked sticker placeholders subscribe to display preferences", () => {
     assert.equal(subscriptions[0], subscriptions[2]);
 });
 
+test("web image copying releases decoded bitmaps after drawing or failure", async () => {
+    for (const fail of [false, true]) {
+        let closed = 0;
+        let copied = 0;
+        const bitmap = { width: 4, height: 3, close() { closed++; } };
+        const canvas = { width: 0, height: 0,
+            getContext: () => ({ drawImage: (image: unknown) => { assert.equal(image, bitmap); if (fail) throw new Error("draw failed"); } }),
+            toBlob: (callback: (data: object) => void) => { assert.equal(closed, 1); callback({ type: "image/png" }); },
+        };
+        const { default: plugin } = loadSource("src/plugins/webContextMenus.web/index.ts", {
+            "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+            "@utils/clipboard": {}, "@utils/constants": { Devs: {} }, "@utils/web": {},
+            "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+            "@webpack": { filters: { byCode() {} }, mapMangledModuleLazy: () => ({}) }, "@webpack/common": {},
+        }, {
+            IS_VESKTOP: false, IS_EQUIBOP: false, window: {}, URL,
+            fetch: async () => ({ blob: async () => ({ type: "image/jpeg" }) }),
+            createImageBitmap: async () => bitmap, document: { createElement: () => canvas },
+            navigator: { clipboard: { write: () => { copied++; } } }, ClipboardItem: class {},
+        });
+        if (fail) await assert.rejects(plugin.copyImage("https://cdn.discordapp.com/image.jpg"), /draw failed/);
+        else await plugin.copyImage("https://cdn.discordapp.com/image.jpg");
+        assert.equal(closed, 1);
+        assert.equal(copied, fail ? 0 : 1);
+    }
+});
+
 test("Steam status sync opens only supported saved status mappings", () => {
     const opened: string[] = [];
     const preferences = { onlineStatus: "online", dndStatus: "none" };

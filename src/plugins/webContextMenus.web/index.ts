@@ -266,12 +266,15 @@ export default definePlugin({
 
         let imageData = await fetch(url).then(r => r.blob());
         if (imageData.type !== "image/png") {
-            const bitmap = await createImageBitmap(imageData);
-
             const canvas = document.createElement("canvas");
-            canvas.width = bitmap.width;
-            canvas.height = bitmap.height;
-            canvas.getContext("2d")!.drawImage(bitmap, 0, 0);
+            const bitmap = await createImageBitmap(imageData);
+            try {
+                canvas.width = bitmap.width;
+                canvas.height = bitmap.height;
+                canvas.getContext("2d")!.drawImage(bitmap, 0, 0);
+            } finally {
+                bitmap.close();
+            }
 
             await new Promise<void>(done => {
                 canvas.toBlob(data => {

@@ -18,27 +18,30 @@
 
 import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
 import { EquicordDevs } from "@utils/constants";
+import { proxyLazy } from "@utils/lazy";
 import definePlugin, { IconProps } from "@utils/types";
-import { React, useState } from "@webpack/common";
+import { React, zustandCreate } from "@webpack/common";
 
-let lastState = false;
+interface ReverseState {
+    enabled: boolean;
+}
+
+const useReverseState: {
+    (): ReverseState;
+    getState(): ReverseState;
+    setState(state: ReverseState): void;
+} = proxyLazy(() => zustandCreate(() => ({ enabled: false })));
 const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 const ReverseMessageToggle: ChatBarButtonFactory = ({ isMainChat }) => {
-    const [enabled, setEnabled] = useState(lastState);
-
-    function setEnabledValue(value: boolean) {
-        lastState = value;
-
-        setEnabled(value);
-    }
+    const { enabled } = useReverseState();
 
     if (!isMainChat) return null;
 
     return (
         <ChatBarButton
             tooltip={enabled ? "Disable Reverse Message" : "Enable Reverse Message"}
-            onClick={() => setEnabledValue(!enabled)}
+            onClick={() => useReverseState.setState({ enabled: !useReverseState.getState().enabled })}
         >
             <ReverseMessageIcon enabled={enabled} />
         </ChatBarButton>
@@ -64,7 +67,7 @@ export default definePlugin({
     tags: ["Chat", "Fun"],
     dependencies: ["MessageEventsAPI", "ChatInputButtonAPI"],
     onBeforeMessageSend(_channelId, message) {
-        if (lastState && message.content)
+        if (useReverseState.getState().enabled && message.content)
             message.content = Array.from(segmenter.segment(message.content), part => part.segment).reverse().join("");
     },
     chatBarButton: {

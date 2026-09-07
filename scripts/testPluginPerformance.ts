@@ -1310,15 +1310,23 @@ test("TalkInReverse uses one send hook and preserves grapheme clusters", () => {
     const { default: plugin } = loadSource("src/equicordplugins/talkInReverse/index.tsx", {
         "@api/ChatButtons": {},
         "@utils/constants": { EquicordDevs: {} },
+        "@utils/lazy": { proxyLazy: (factory: () => unknown) => factory() },
         "@utils/types": { __esModule: true, default: (value: object) => value },
-        "@webpack/common": { React: { createElement: (type: unknown, props: unknown) => ({ type, props }) }, useState: (value: boolean) => [value, () => {}] },
+        "@webpack/common": { React: { createElement: (type: unknown, props: unknown) => ({ type, props }) }, zustandCreate: (init: () => { enabled: boolean; }) => {
+            let state = init();
+            return Object.assign(() => state, { getState: () => state, setState: (next: { enabled: boolean; }) => { state = next; } });
+        } },
     });
     const unchanged = { content: "hello" };
     plugin.onBeforeMessageSend("channel", unchanged);
     assert.equal(unchanged.content, "hello");
     const button = plugin.chatBarButton.render({ isMainChat: true });
+    const secondButton = plugin.chatBarButton.render({ isMainChat: true });
     button.props.onClick();
-    plugin.chatBarButton.render({ isMainChat: true });
+    assert.equal(plugin.chatBarButton.render({ isMainChat: true }).props.tooltip, "Disable Reverse Message");
+    secondButton.props.onClick();
+    assert.equal(plugin.chatBarButton.render({ isMainChat: true }).props.tooltip, "Enable Reverse Message");
+    button.props.onClick();
     assert.equal(plugin.chatBarButton.render({ isMainChat: false }), null);
     for (const [content, expected] of [["abc", "cba"], ["a😀b", "b😀a"], ["e\u0301x", "xe\u0301"], ["a👨‍👩‍👧‍👦🇳🇱", "🇳🇱👨‍👩‍👧‍👦a"], ["", ""]]) {
         const message = { content };

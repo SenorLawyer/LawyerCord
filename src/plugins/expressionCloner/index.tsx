@@ -26,12 +26,15 @@ import { Paragraph } from "@components/Paragraph";
 import { Devs } from "@utils/constants";
 import { getGuildAcronym } from "@utils/discord";
 import { Logger } from "@utils/Logger";
+import { isObject, tryOrElse } from "@utils/misc";
 import definePlugin from "@utils/types";
 import { Guild, GuildSticker } from "@vencord/discord-types";
 import { StickerFormatType } from "@vencord/discord-types/enums";
 import { findByCodeLazy } from "@webpack";
 import { Constants, EmojiStore, FluxDispatcher, GuildStore, IconUtils, Menu, Modal, openModalLazy, PermissionsBits, PermissionStore, React, RestAPI, StickersStore, Toasts, Tooltip, UserStore } from "@webpack/common";
 import { Promisable } from "type-fest";
+
+const logger = new Logger("ExpressionCloner");
 
 const uploadEmoji = findByCodeLazy(".GUILD_EMOJIS(", "EMOJI_UPLOAD_START");
 
@@ -199,13 +202,16 @@ async function doClone(guildId: string, data: Sticker | Emoji) {
             type: Toasts.Type.SUCCESS,
             id: Toasts.genId()
         });
-    } catch (e: any) {
-        let message = "Something went wrong (check console!)";
-        try {
-            message = JSON.parse(e.text).message;
-        } catch { }
+    } catch (error) {
+        let message = "Something went wrong.";
+        if (isObject(error) && "text" in error && typeof error.text === "string") {
+            const { text } = error;
+            const body: unknown = tryOrElse(() => JSON.parse(text), null);
+            if (isObject(body) && "message" in body && typeof body.message === "string" && body.message.trim())
+                message = body.message;
+        }
 
-        new Logger("ExpressionCloner").error("Failed to clone", data.name, "to", guildId, e);
+        logger.error("Failed to clone expression.", error);
         Toasts.show({
             message: "Failed to clone: " + message,
             type: Toasts.Type.FAILURE,

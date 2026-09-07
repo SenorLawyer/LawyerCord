@@ -9690,7 +9690,8 @@ test("expression cloning filters picker stickers by format", () => {
         "@api/ContextMenu": {}, "@api/Settings": { migratePluginSettings() {} },
         "@components/CheckedTextInput": {}, "@components/Flex": {},
         "@components/Heading": {}, "@components/Paragraph": {},
-        "@utils/constants": { Devs: {} }, "@utils/discord": {}, "@utils/Logger": {},
+        "@utils/constants": { Devs: {} }, "@utils/discord": {}, "@utils/Logger": { Logger: class { error() {} } },
+        "@utils/misc": {},
         "@utils/types": { __esModule: true, default: (value: object) => value },
         "@vencord/discord-types/enums": { StickerFormatType: { PNG: 1, APNG: 2, LOTTIE: 3, GIF: 4 } },
         "@webpack": { findByCodeLazy: () => () => {} }
@@ -9712,7 +9713,8 @@ test("emoji cloning settles failed file reads without uploading", async () => {
             "@api/ContextMenu": {}, "@api/Settings": { migratePluginSettings() {} },
             "@components/BaseText": {}, "@components/CheckedTextInput": {}, "@components/Flex": {},
             "@components/Heading": {}, "@components/Paragraph": {},
-            "@utils/constants": { Devs: {} }, "@utils/discord": {}, "@utils/Logger": {},
+            "@utils/constants": { Devs: {} }, "@utils/discord": {}, "@utils/Logger": { Logger: class { error() {} } },
+            "@utils/misc": {},
             "@utils/types": { __esModule: true, default: (value: object) => value },
             "@vencord/discord-types/enums": { StickerFormatType: { PNG: 1, APNG: 2, LOTTIE: 3, GIF: 4 } },
             "@webpack": { findByCodeLazy: () => (value: unknown) => uploads.push(value) },
@@ -9740,5 +9742,35 @@ test("emoji cloning settles failed file reads without uploading", async () => {
             await assert.rejects(pending, error => error === failure);
             assert.equal(uploads.length, 0);
         }
+    }
+});
+
+test("expression cloning preserves valid server errors and falls back for malformed responses", async () => {
+    for (const text of ["not json", "null", "{}", '{"message":42}', '{"message":"   "}', '{"message":"No slots available."}']) {
+        const messages: string[] = [];
+        const logs: unknown[][] = [];
+        const failure = { text };
+        const { doClone } = loadSource("src/plugins/expressionCloner/index.tsx", {
+            "@api/ContextMenu": {}, "@api/Settings": { migratePluginSettings() {} },
+            "@components/BaseText": {}, "@components/CheckedTextInput": {}, "@components/Flex": {},
+            "@components/Heading": {}, "@components/Paragraph": {},
+            "@utils/constants": { Devs: {} }, "@utils/discord": {},
+            "@utils/Logger": { Logger: class { error(...args: unknown[]) { logs.push(args); } } },
+            "@utils/misc": {
+                isObject: (value: unknown) => value !== null && typeof value === "object",
+                tryOrElse: (fn: () => unknown, fallback: unknown) => { try { return fn(); } catch { return fallback; } }
+            },
+            "@utils/types": { __esModule: true, default: (value: object) => value },
+            "@vencord/discord-types/enums": { StickerFormatType: { PNG: 1, APNG: 2, LOTTIE: 3, GIF: 4 } },
+            "@webpack": { findByCodeLazy: () => () => assert.fail("Unexpected upload") },
+            "@webpack/common": { Toasts: { Type: { FAILURE: "failure" }, genId: () => "id", show: ({ message }: { message: string; }) => messages.push(message) } }
+        }, {
+            location: { protocol: "https:" }, window: { GLOBAL_ENV: { CDN_HOST: "fixture.invalid" } },
+            fetch: async () => { throw failure; }
+        }, "({ doClone })");
+        await doClone("guild", { t: "Emoji", id: "emoji", name: "private-name", isAnimated: false });
+        assert.deepEqual(messages, ["Failed to clone: " + (text.includes("No slots") ? "No slots available." : "Something went wrong.")]);
+        assert.equal(logs.length, 1);
+        assert.deepEqual(logs[0], ["Failed to clone expression.", failure]);
     }
 });

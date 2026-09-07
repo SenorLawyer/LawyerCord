@@ -202,19 +202,19 @@ export default definePlugin({
                     const channel = await waitForChannel(saved.channelId, scheduledGeneration);
                     if (scheduledGeneration !== reconnectGeneration) return;
 
+                    const currentUser = UserStore.getCurrentUser();
+                    if (!currentUser) return;
+
+                    const myUserId = currentUser.id;
+                    const myVoiceState = VoiceStateStore.getVoiceStateForUser(myUserId);
+                    if (myVoiceState?.channelId) return;
+
                     if (!channel) {
                         await persistInactiveState();
                         return;
                     }
 
-                    const currentUser = UserStore.getCurrentUser();
-                    if (!currentUser) return;
-
                     const isDM = channel.isDM() || channel.isGroupDM() || channel.isMultiUserDM();
-                    const myUserId = currentUser.id;
-                    const myVoiceState = VoiceStateStore.getVoiceStateForUser(myUserId);
-                    if (myVoiceState?.channelId) return;
-
                     const preventionMode = settings.store.preventReconnectIfCallEnded;
                     const timeoutMs = settings.store.rejoinTimeout * 1000;
 

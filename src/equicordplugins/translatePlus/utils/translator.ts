@@ -154,7 +154,7 @@ async function google(target: string, text: string) {
 export async function translate(text: string) {
     const { target, toki, sitelen, shavian } = settings.store;
 
-    if ((isTokiPona(text) || isSitelen(text)) && (toki || sitelen)) {
+    if ((toki && isTokiPona(text)) || (sitelen && isSitelen(text))) {
         if (isSitelen(text) && sitelen) text = await translateSitelen(text);
 
         const response = await fetch("https://aiapi.serversmp.xyz/toki", {

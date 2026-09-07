@@ -12032,6 +12032,31 @@ test("TranslatePlus checks Toki provider status and payload before using text", 
 });
 
 
+test("TranslatePlus respects independent Toki and Sitelen settings", async () => {
+    for (const text of ["toki pona", "󱤀"]) {
+        for (const toki of [false, true]) {
+            for (const sitelen of [false, true]) {
+                const requests: string[] = [];
+                const { translate } = loadSource("src/equicordplugins/translatePlus/utils/translator.ts", {
+                    "@equicordplugins/translatePlus/settings": { settings: { store: { target: "en", shavian: false, toki, sitelen } } },
+                    "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
+                    "@utils/text": { escapeRegExp: (value: string) => value }
+                }, { URLSearchParams, fetch: async (url: string) => {
+                    requests.push(url);
+                    return { ok: true, json: async () => url.includes("raw.githubusercontent.com")
+                        ? { "󱤀": "word" }
+                        : url.includes("aiapi.serversmp.xyz") ? { translation: ["Custom"] } : { src: "en", sentences: [{ trans: "Google" }] } };
+                } });
+                const custom = text === "toki pona" ? toki : sitelen;
+                assert.equal((await translate(text)).text, custom ? "Custom" : "Google", `${text}: toki=${toki}, sitelen=${sitelen}`);
+                assert.equal(requests.filter(url => url.includes("aiapi.serversmp.xyz")).length, Number(custom));
+                assert.equal(requests.filter(url => url.includes("translate.googleapis.com")).length, Number(!custom));
+                assert.equal(requests.filter(url => url.includes("raw.githubusercontent.com")).length, Number(text === "󱤀" && sitelen));
+            }
+        }
+    }
+});
+
 test("TranslatePlus malformed JSON errors omit response snippets", async () => {
     for (const route of ["google", "shavian", "toki"]) {
         const { translate } = loadSource("src/equicordplugins/translatePlus/utils/translator.ts", {

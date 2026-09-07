@@ -96,23 +96,25 @@ Translate retains the selected provider when DeepL credentials are missing or it
 
 Translation responses validate required fields and report provider failures without source text or response bodies. Native provider POSTs reject redirects, and unused error bodies are cancelled. Missing message views discard late results; an older view cannot remove a newer view's handler. The unused fallback language converter was deleted. Account ownership, overlapping requests, native response limits, and live provider compatibility remain open.
 
+Translate language options follow provider changes, and only the main composer owns the enabled tooltip. Native handlers reject invalid argument types and omit raw exceptions from IPC failures. Auto-translation cancels before changing text after account changes, logout, plugin stop, disabled settings, or intervening text edits. Context-menu and popover translations share one delivery function that rejects results from previous sessions. Deferred fixtures cover these cases; already-issued requests, overlapping same-message requests, mounted accessory state, response limits, and live account-event ordering remain open.
+
 ## Verification record
 
 Evidence applies to the recorded commit and scope, not to a future merge with main.
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `1b51e2a0e` | 466 tests and timezone correctness checks passed, including 413 plugin regressions. |
-| Repository-wide ESLint | `1b51e2a0e` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
+| Broader performance/correctness suite | `5c103909a` | 472 tests and timezone correctness checks passed, including 419 plugin regressions. |
+| Repository-wide ESLint | `5c103909a` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
 | CSS lint | `c50d116a4` | Passed; excludes userplugins. |
 | Internationalization lint | `5e869fea9` | Passed for tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest focused regressions and TypeScript | `1b51e2a0e` | Translation provider and accessory lifecycle regressions, full TypeScript, and focused lint passed. Earlier voice lifecycle, preview, and metadata regressions also pass in the broader suite. Source fixtures reject TypeScript syntax diagnostics before execution. |
-| Standalone build | `1b51e2a0e` | Passed after the translation changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
+| Latest focused regressions and TypeScript | `5c103909a` | Translation provider and accessory lifecycle regressions, full TypeScript, and focused lint passed. Earlier voice lifecycle, preview, and metadata regressions also pass in the broader suite. Source fixtures reject TypeScript syntax diagnostics before execution. |
+| Standalone build | `5c103909a` | Passed after the translation changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
 | Development build | `0fc6ab63b` | Passed after composer, codec, preset, and game-status startup changes. |
 | Installer review browser checks | `d7b99b737` | Actual templates and generator functions in isolated Chrome preserved literal metadata, all four native/pre-send warning combinations, the native acknowledgement gate, and cancellation. Electron IPC and real installation were not exercised. |
 | Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |
-| Web build | `1b51e2a0e` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
-| Release artifact audit | `1b51e2a0e` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
+| Web build | `5c103909a` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
+| Release artifact audit | `5c103909a` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
 | Avatar startup and edit ordering | `296e36989` | Actual loader, editor actions, and DataStore in isolated Chrome preserved edits in 20 overlapping runs, ten with startup first and ten with saving first. This checks one client context, not synchronization between clients. No extra production guard was added. |
 | Avatar edit transactions | `3bf4098d6` | Actual AvatarModal actions and DataStore code in isolated Chrome preserved storage and memory after an aborted write, kept both concurrent user edits, and deleted only the selected override. React rendering and Discord dependencies were mocked. |
 | Real IndexedDB queue behavior | `ce04cc40a` | Isolated Chrome verified aborted additions, ordered concurrent additions, aborted clearing, and subsequent successful clearing using actual queue and DataStore code. |
@@ -132,7 +134,7 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Uninstall button browser checks | `d4efc449d` | Actual shared component props and styles in isolated Chrome verified the accessible name, keyboard focus indicator, and consistent 32px sizing in both stylesheet orders. Full Discord layout was not exercised. |
 | Other isolated browser checks | Earlier audit commits | Specific sticker-storage transactions, codec conversion, and CSS behavior were exercised. These are not general live-client acceptance. |
 
-Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `1b51e2a0e`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
+Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `5c103909a`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
 
 ## Remaining work
 

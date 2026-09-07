@@ -10454,3 +10454,53 @@ test("relationship persistence keeps each account snapshot while storage opens",
         assert.deepEqual(saved.get(`relationship-notifier-friends-${owner}`), { friends: [owner + "-friend"], requests: [owner + "-request"] });
     }
 });
+
+
+test("relationship offline checks stop when the account changes during awaited work", async () => {
+    for (const stage of ["read", "write", "friend", "request"]) {
+        for (const nextUser of ["second", undefined]) {
+            let userId: string | undefined = "first";
+            let release = () => {};
+            const pending = new Promise<void>(resolve => { release = resolve; });
+            let reached = false;
+            let writes = 0;
+            let notifications = 0;
+            const wait = async () => { reached = true; await pending; };
+            const utils = loadSource("src/plugins/relationshipNotifier/utils.ts", {
+                "@api/DataStore": {
+                    delMany: async () => {},
+                    getMany: async () => {
+                        if (stage === "read") await wait();
+                        return [new Map([["old", { name: "Old guild" }]]), new Map([["old", { name: "Old group" }]]), { friends: ["friend"], requests: ["request"] }];
+                    },
+                    set: async () => { writes++; if (stage === "write") await wait(); }
+                },
+                "@api/Notices": {},
+                "@api/Notifications": { showNotification: () => notifications++ },
+                "@utils/discord": { getUniqueUsername: () => "Old user" },
+                "@vencord/discord-types/enums": { ChannelType: { GROUP_DM: 3 }, RelationshipType: { FRIEND: 1, INCOMING_REQUEST: 3 } },
+                "@webpack": { findStoreLazy: () => ({ isUnavailable: () => false }) },
+                "@webpack/common": {
+                    UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined },
+                    GuildStore: { getGuilds: () => ({}) },
+                    GuildMemberStore: { isMember: () => true },
+                    ChannelStore: { getSortedPrivateChannels: () => [] },
+                    RelationshipStore: { getMutableRelationships: () => new Map(), getRelationshipType: () => 0 },
+                    UserUtils: { getUser: async () => { await wait(); return { id: "old", getAvatarURL() {} }; } }
+                },
+                "./settings": { __esModule: true, default: { store: {
+                    offlineRemovals: true, groups: stage === "write", servers: stage === "write",
+                    friends: stage === "friend", friendRequestCancels: stage === "request"
+                } } }
+            });
+            const checking = utils.syncAndRunChecks();
+            await setImmediate();
+            assert.equal(reached, true);
+            userId = nextUser;
+            release();
+            await checking;
+            assert.equal(writes, stage === "read" ? 0 : 3, stage);
+            assert.equal(notifications, 0, stage);
+        }
+    }
+});

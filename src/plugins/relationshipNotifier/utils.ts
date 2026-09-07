@@ -67,7 +67,10 @@ export async function syncAndRunChecks() {
         friendsKey(currentUserId)
     ]) as [Map<string, SimpleGuild> | undefined, Map<string, SimpleGroupChannel> | undefined, Record<"friends" | "requests", string[]> | undefined];
 
+    if (UserStore.getCurrentUser()?.id !== currentUserId) return;
+
     await Promise.all([syncGuildsForUser(currentUserId), syncGroupsForUser(currentUserId), syncFriendsForUser(currentUserId)]);
+    if (UserStore.getCurrentUser()?.id !== currentUserId) return;
 
     if (settings.store.offlineRemovals) {
         if (settings.store.groups && oldGroups?.size) {
@@ -89,6 +92,7 @@ export async function syncAndRunChecks() {
                 if (friends.friends.includes(id)) continue;
 
                 const user = await UserUtils.getUser(id).catch(() => void 0);
+                if (UserStore.getCurrentUser()?.id !== currentUserId) return;
                 if (user)
                     notify(
                         `You are no longer friends with ${getUniqueUsername(user)}.`,
@@ -106,6 +110,7 @@ export async function syncAndRunChecks() {
                 ) continue;
 
                 const user = await UserUtils.getUser(id).catch(() => void 0);
+                if (UserStore.getCurrentUser()?.id !== currentUserId) return;
                 if (user)
                     notify(
                         `Friend request from ${getUniqueUsername(user)} has been revoked.`,

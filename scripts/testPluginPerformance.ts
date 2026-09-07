@@ -10203,3 +10203,39 @@ test("renderer updater ignores check results and errors invalidated by reset or 
         }
     }
 });
+
+
+test("renderer updater keeps a failed rebuild available for retry", async () => {
+    for (const failure of ["false", "ipc", "transport"]) {
+        let failing = true;
+        let updates = 0;
+        let builds = 0;
+        const api = loadSource("src/utils/updater.ts", {
+            "~git-hash": { __esModule: true, default: "current" },
+            "./Logger": { Logger: class {} }, "./native": {}, "./updateClassification": {}
+        }, { IS_STANDALONE: true, Vencord: { Settings: { updateChannel: "nightly" } }, VencordNative: { updater: {
+            getUpdates: async () => ({ ok: true, value: failing ? [{ hash: "next", author: "author", message: "update" }] : [] }),
+            update: async () => { updates++; return { ok: true, value: true }; },
+            rebuild: async () => {
+                builds++;
+                if (failing && failure === "transport") throw new Error("Transport failed");
+                if (failing && failure === "ipc") return { ok: false, error: new Error("Build failed") };
+                return { ok: true, value: !failing };
+            }
+        } } });
+        await api.checkForUpdates();
+        await assert.rejects(api.update());
+        assert.equal(api.isOutdated, true);
+        assert.equal(updates, 1);
+        assert.equal(builds, 1);
+        failing = false;
+        assert.equal(await api.checkForUpdates(), true);
+        assert.equal(await api.update(), true);
+        assert.equal(api.isOutdated, false);
+        assert.equal(updates, 1);
+        assert.equal(builds, 2);
+        assert.equal(await api.update(), true);
+        assert.equal(updates, 1);
+        assert.equal(builds, 2);
+    }
+});

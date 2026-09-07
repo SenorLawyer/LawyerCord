@@ -30,6 +30,7 @@ export let updateError: any;
 export let changes: Record<"hash" | "author" | "message", string>[] = [];
 
 let updateCheck = Symbol();
+let needsRebuild = false;
 
 function Unwrap<T>(res: IpcRes<T>) {
     if (res.ok) return res.value;
@@ -39,6 +40,7 @@ function Unwrap<T>(res: IpcRes<T>) {
 }
 
 export async function checkForUpdates() {
+    if (needsRebuild) return true;
     const check = updateCheck = Symbol();
     updateError = undefined;
     const result = await VencordNative.updater.getUpdates(Vencord.Settings.updateChannel);
@@ -58,6 +60,7 @@ export async function checkForUpdates() {
 
 export function resetUpdateState() {
     updateCheck = Symbol();
+    needsRebuild = false;
     isOutdated = false;
     isNewer = false;
     updateError = undefined;
@@ -67,15 +70,17 @@ export function resetUpdateState() {
 export async function update() {
     if (!isOutdated) return true;
 
-    const res = Unwrap(await VencordNative.updater.update(Vencord.Settings.updateChannel));
-
-    if (res) {
-        isOutdated = false;
-        if (!Unwrap(await VencordNative.updater.rebuild()))
-            throw new Error("The Build failed. Please try manually building the new update");
+    if (!needsRebuild) {
+        if (!Unwrap(await VencordNative.updater.update(Vencord.Settings.updateChannel))) return false;
+        needsRebuild = true;
     }
 
-    return res;
+    if (!Unwrap(await VencordNative.updater.rebuild()))
+        throw new Error("The Build failed. Please try manually building the new update");
+
+    needsRebuild = false;
+    isOutdated = false;
+    return true;
 }
 
 export const getRepo = async () => Unwrap(await VencordNative.updater.getRepo());

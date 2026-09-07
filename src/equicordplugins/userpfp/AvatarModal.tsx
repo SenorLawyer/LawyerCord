@@ -9,20 +9,11 @@ import { Heading } from "@components/Heading";
 import { Margins } from "@components/margins";
 import { classNameFactory } from "@utils/css";
 import { RenderModalProps } from "@vencord/discord-types";
-import { IconUtils, Modal, React, TextInput, Toasts, UserStore, useState } from "@webpack/common";
+import { IconUtils, Modal, React, TextInput, Toasts, useEffect, UserStore, useState } from "@webpack/common";
 
 import { data, KEY_DATASTORE } from ".";
 
 const cl = classNameFactory("vc-userpfp-");
-
-function fileToDataUrl(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
-}
 
 export function SetAvatarModal({ userId, modalProps }: { userId: string; modalProps: RenderModalProps; }) {
     const { avatars } = data;
@@ -33,12 +24,22 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
     const preview = url.trim();
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
+    const readerRef = React.useRef<FileReader | null>(null);
+
+    function cancelRead() {
+        const reader = readerRef.current;
+        readerRef.current = null;
+        reader?.abort();
+    }
+
+    useEffect(() => cancelRead, []);
 
     function handleKey(e: React.KeyboardEvent) {
         if (e.key === "Enter") saveUserAvatar(url.trim());
     }
 
-    async function handleFile(file: File) {
+    function handleFile(file: File) {
+        cancelRead();
         if (!file.type.startsWith("image/")) return;
 
         if (file.type === "image/gif" || file.type === "image/webp") {
@@ -50,8 +51,18 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
             return;
         }
 
-        const dataUrl = await fileToDataUrl(file);
-        setUrl(dataUrl);
+        const reader = readerRef.current = new FileReader();
+        reader.onload = () => {
+            if (readerRef.current !== reader) return;
+            readerRef.current = null;
+            setUrl(reader.result as string);
+        };
+        reader.onerror = () => {
+            if (readerRef.current !== reader) return;
+            readerRef.current = null;
+            Toasts.show({ message: "Could not read the image.", type: Toasts.Type.FAILURE, id: Toasts.genId() });
+        };
+        reader.readAsDataURL(file);
     }
 
     async function saveUserAvatar(value: string) {
@@ -117,7 +128,7 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
                     <TextInput
                         placeholder="https://example.com/image.png"
                         value={url.startsWith("data:") ? "(uploaded file)" : url}
-                        onChange={setUrl}
+                        onChange={value => { cancelRead(); setUrl(value); }}
                         autoFocus
                     />
                 </section>

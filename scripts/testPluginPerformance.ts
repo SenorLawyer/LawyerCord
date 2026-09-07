@@ -1535,6 +1535,42 @@ test("blocked sticker placeholders subscribe to display preferences", () => {
     assert.equal(subscriptions[0], subscriptions[2]);
 });
 
+test("avatar file reads stop on replacement, typed URLs, and unmount", () => {
+    const readers: { result: string; onload?: () => void; onerror?: () => void; aborted: boolean; }[] = [];
+    const urls: string[] = [];
+    const errors: string[] = [];
+    let cleanup: () => void = () => {};
+    let stateIndex = 0;
+    const { SetAvatarModal } = loadSource("src/equicordplugins/userpfp/AvatarModal.tsx", {
+        "@api/DataStore": {}, "@components/Heading": {}, "@components/margins": { Margins: {} },
+        "@utils/css": { classNameFactory: () => () => "" }, ".": { data: { avatars: {} } },
+        "@webpack/common": {
+            React: { createElement: (type: unknown, props: unknown, ...children: unknown[]) => ({ type, props, children }), useRef: (current: unknown) => ({ current }) },
+            useEffect: (effect: () => () => void) => { cleanup = effect(); },
+            useState: (value: unknown) => [value, stateIndex++ === 0 ? (url: string) => urls.push(url) : () => {}],
+            UserStore: { getUser: () => ({}) }, IconUtils: { getUserAvatarURL: () => "" }, TextInput: "text-input",
+            Toasts: { show: ({ message }: { message: string; }) => errors.push(message), Type: { FAILURE: "failure" }, genId: () => "toast" },
+        },
+    }, { FileReader: class { result = ""; aborted = false; constructor() { readers.push(this); } abort() { this.aborted = true; } readAsDataURL() {} } });
+    const tree = SetAvatarModal({ userId: "user", modalProps: {} });
+    const fileInput = tree.children[0].children[2].children[1];
+    const textInput = tree.children[0].children[1].children[1];
+    const select = () => fileInput.props.onChange({ currentTarget: { files: [{ type: "image/png" }], value: "" } });
+    select(); select();
+    readers[0].result = "old"; readers[0].onload?.();
+    assert.equal(readers[0].aborted, true);
+    assert.deepEqual(urls, []);
+    readers[1].result = "new"; readers[1].onload?.();
+    select(); textInput.props.onChange("typed");
+    readers[2].result = "stale"; readers[2].onload?.();
+    assert.equal(readers[2].aborted, true);
+    select(); readers[3].onerror?.();
+    assert.deepEqual(errors, ["Could not read the image."]);
+    select(); cleanup(); readers[4].onload?.();
+    assert.equal(readers[4].aborted, true);
+    assert.deepEqual(urls, ["new", "typed"]);
+});
+
 test("UserPFP avatar edits commit before publishing and preserve newer stored entries", async () => {
     for (const action of ["Save", "Delete"]) for (const fail of [false, true]) {
         const data = { avatars: { local: "https://fixture.invalid/new.png" }, remoteAvatars: { remote: "https://fixture.invalid/remote.png" } };
@@ -1553,7 +1589,7 @@ test("UserPFP avatar edits commit before publishing and preserve newer stored en
             "@utils/css": { classNameFactory: () => () => "" }, ".": { data, KEY_DATASTORE: "avatars" },
             "@webpack/common": {
                 React: { createElement: (type: unknown, props: unknown) => ({ type, props }), useRef: () => ({ current: null }) },
-                useState: (value: unknown) => [value, () => {}], UserStore: { getUser: () => ({}) },
+                useEffect() {}, useState: (value: unknown) => [value, () => {}], UserStore: { getUser: () => ({}) },
                 IconUtils: { getUserAvatarURL: () => "original" },
                 Toasts: { show: ({ message }: { message: string; }) => toasts.push(message), Type: { FAILURE: "failure" }, genId: () => "toast" },
             },

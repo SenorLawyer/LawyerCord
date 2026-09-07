@@ -227,7 +227,7 @@ const getFontSize = (s: string) => {
     return sizes[s.length] ?? 4;
 };
 
-const nameValidator = /^\w+$/i;
+const nameValidator = /^\w{2,32}$/;
 
 function CloneModal({ data }: { data: Sticker | Emoji; }) {
     const [isCloning, setIsCloning] = React.useState(false);
@@ -243,10 +243,9 @@ function CloneModal({ data }: { data: Sticker | Emoji; }) {
             <CheckedTextInput
                 initialValue={name}
                 onChange={setName}
-                validate={v =>
-                    (data.t === "Emoji" && v.length > 2 && v.length < 32 && nameValidator.test(v))
-                    || (data.t === "Sticker" && v.length > 2 && v.length < 30)
-                    || "Name must be between 2 and 32 characters and only contain alphanumeric characters"
+                validate={v => data.t === "Emoji"
+                    ? nameValidator.test(v) || "Emoji names must be 2 to 32 characters and use only letters, numbers, or underscores."
+                    : (v.length >= 2 && v.length <= 30) || "Sticker names must be 2 to 30 characters."
                 }
             />
             <div style={{

@@ -12332,3 +12332,15 @@ test("UnitConverter uses exact length, speed and avoirdupois mass factors", () =
     assert.equal(convert("28.349523125 g"), "1.00oz");
     assert.equal(convert("30.48 m"), "100ft");
 });
+
+test("UnitConverter does not match inside identifiers or longer unit words", () => {
+    const settings = { store: { myUnits: "imperial" } };
+    const { convert } = loadSource("src/equicordplugins/unitConverter/converter.ts", { ".": { settings } });
+    for (const input of ["model100m", "value_25cm", "1.2.3m", ".5m", "100kmphoton"])
+        assert.equal(convert(input), input);
+    settings.store.myUnits = "metric";
+    for (const input of ["abc32f", "model10ft", "10ftwide", "10inside", "10poundstone", "100mphoton", "1.2.3oz"])
+        assert.equal(convert(input), input);
+    assert.equal(convert("(10 inches)"), "(25.40cm)");
+    assert.equal(convert("5 feet 11 inches"), "1.80m");
+});

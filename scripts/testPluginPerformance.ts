@@ -1537,7 +1537,9 @@ test("blocked sticker placeholders subscribe to display preferences", () => {
 
 test("voice playback keeps a speed selected before first play", () => {
     for (const selected of [false, true]) {
+        const preferences: Record<string, unknown> = { defaultVoiceMessageSpeed: 2, defaultAudioSpeed: 1.5 };
         let play: (() => void) | undefined;
+        const emitPlay = () => play?.();
         let cleanup: (() => void) | undefined;
         let menu: { children: { children: { props: { label: string; checked: boolean; action(): void; }; }[][]; }[]; } | undefined;
         const media = { tagName: "AUDIO", className: "renamed-discord-class", playbackRate: 1,
@@ -1545,7 +1547,7 @@ test("voice playback keeps a speed selected before first play", () => {
             removeEventListener: (_event: string, handler: () => void) => { assert.equal(handler, play); play = undefined; },
         };
         const { default: plugin } = loadSource("src/equicordplugins/mediaPlaybackSpeed/index.tsx", {
-            "@api/Settings": { definePluginSettings: () => ({ store: { defaultVoiceMessageSpeed: 2, defaultAudioSpeed: 1.5 } }) },
+            "@api/Settings": { definePluginSettings: () => ({ store: preferences }) },
             "@components/Button": { Button: "shared-button" },
             "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
             "@utils/constants": { Devs: {} }, "@utils/css": { classNameFactory: () => () => "" },
@@ -1568,7 +1570,7 @@ test("voice playback keeps a speed selected before first play", () => {
             assert.equal(media.playbackRate, 3);
         }
         media.playbackRate = 1;
-        play?.();
+        emitPlay();
         assert.equal(media.playbackRate, selected ? 3 : 2);
         button.props.onClick({});
         assert.ok(menu);
@@ -1579,6 +1581,16 @@ test("voice playback keeps a speed selected before first play", () => {
         plugin.renderPlaybackSpeedComponent({ mediaRef: { current: media } });
         assert.equal(media.playbackRate, 1.5);
         assert.equal(play, undefined);
+        for (const rate of [NaN, Infinity, -1, 0, 0.1, 4, "2"]) {
+            preferences.defaultAudioSpeed = rate;
+            preferences.defaultVoiceMessageSpeed = rate;
+            plugin.renderPlaybackSpeedComponent({ mediaRef: { current: media } });
+            assert.equal(media.playbackRate, 1);
+            plugin.renderPlaybackSpeedComponent({ mediaRef: { current: media }, isVoiceMessage: true });
+            emitPlay();
+            assert.equal(media.playbackRate, 1);
+            cleanup?.();
+        }
     }
 });
 

@@ -80,11 +80,11 @@ export default definePlugin({
     ],
     renderPlaybackSpeedComponent: ErrorBoundary.wrap(({ mediaRef, isVoiceMessage = false }: { mediaRef: MediaRef; isVoiceMessage?: boolean; }) => {
         const selectedSpeed = useRef<{ media: HTMLMediaElement; speed: number; } | null>(null);
-        const changeSpeed = (speed: number) => {
-            const media = mediaRef?.current;
+        const changeSpeed = (speed: number, media = mediaRef?.current) => {
             if (media) {
-                selectedSpeed.current = { media, speed };
-                media.playbackRate = speed;
+                const rate = Number.isFinite(speed) && speed >= min && speed <= max ? speed : 1;
+                selectedSpeed.current = { media, speed: rate };
+                media.playbackRate = rate;
             }
         };
 
@@ -96,7 +96,7 @@ export default definePlugin({
                     // Workaround because Discord seems to override it somewhere
                     const setVoiceSpeed = () => {
                         const selected = selectedSpeed.current;
-                        media.playbackRate = selected?.media === media ? selected.speed : settings.store.defaultVoiceMessageSpeed;
+                        changeSpeed(selected?.media === media ? selected.speed : settings.store.defaultVoiceMessageSpeed, media);
                     };
                     media.addEventListener("play", setVoiceSpeed, { once: true });
                     return () => media.removeEventListener("play", setVoiceSpeed);

@@ -60,7 +60,7 @@ Message pronouns now read the message channel's guild rather than the browsed ch
 
 StatusWhileActive binds saved status to its account, discards it on logout, initializes from the current call when enabled, and preserves manual status changes when leaving or stopping. The unrelated channel-status text event handler was deleted. Mocked lifecycle regressions cover these changes. Repeated in-call voice events can still override manual presence; live event ordering remains unverified.
 
-AutoDND now binds restoration to the account and the status it applied, clears saved state on logout, and restores on shutdown without overwriting manual changes. Invisible-status exclusion no longer blocks game-exit cleanup. Both automatic status plugins propagate Flux update promises and log asynchronous lifecycle failures locally. Failed restoration recovery and repeated activity events remain under review.
+AutoDND now binds restoration to the account and the status it applied, clears saved state on logout, and restores on shutdown without overwriting manual changes. Enabling AutoDND reads already-running games from the shared store. Invisible-status exclusion no longer blocks game-exit cleanup. Both automatic status plugins propagate Flux update promises and log asynchronous lifecycle failures locally. Failed restoration recovery and repeated activity events remain under review.
 
 GIF descriptions handle missing sources, exclude query parameters and fragments, and match literal GIF extensions. BetterGifPicker now marks its patch-dependent setting as requiring restart. StickerBlocker removes unused wrappers and a repeated ID, uses Discord's React export, and subscribes to display preferences without requiring restart. Restoring a sticker immediately after unblocking and live patch compatibility remain open. SteamStatusSync skips unmapped status launches; its event payload assumptions and live protocol behavior still require validation.
 
@@ -68,7 +68,7 @@ TalkInReverse now has one plugin-owned send hook, preserves grapheme clusters wh
 
 StreamingCodecDisabler no longer assumes all codecs are supported or carries capability values across responses. It validates complete responses before applying settings, ignores callbacks from stopped runs, logs asynchronous failures, and hides the unimplemented VP8/VP9 controls while retaining saved keys. Codec support does not prove prior enabled state, so restoration still needs native evidence.
 
-StatusPresets saves special object-property names as ordinary entries, deletes by the stored key, and subscribes its submenu to preset and premium-state changes. Actual SettingsStore tests cover change notifications and serialization/reloading. Live custom-status payloads, failed updates, and remaining saved-data validation still need work.
+StatusPresets saves special object-property names as ordinary entries, deletes by the stored key, and subscribes its submenu to preset and premium-state changes. Actual SettingsStore tests cover change notifications and serialization/reloading. Failed applications produce one failure toast; invalid expiration values are rejected before updating Discord. Valid expiration tests cover no expiration, timed expiration, and next local midnight across daylight saving. The internal saved-record field is hidden from plugin settings. Live custom-status payloads and remaining saved-data validation still need work.
 
 ## Verification record
 
@@ -76,13 +76,13 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `7b5525275` | 393 tests and timezone correctness checks passed. |
+| Broader performance/correctness suite | `0fc6ab63b` | 395 tests and timezone correctness checks passed. |
 | Repository-wide ESLint | `c8e1a691a` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
 | CSS lint | `c50d116a4` | Passed; excludes userplugins. |
 | Internationalization lint | `5e869fea9` | Passed for tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest plugin regressions and TypeScript | `7b5525275` | 341 plugin tests, full TypeScript, and focused StatusPresets lint passed. |
+| Latest plugin regressions and TypeScript | `0fc6ab63b` | 343 plugin tests, full TypeScript, and focused AutoDND lint passed. |
 | Standalone build | `c8e1a691a` | Passed after status, GIF, Steam, and sticker changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
-| Development build | `7b5525275` | Passed after composer, codec, and preset changes. |
+| Development build | `0fc6ab63b` | Passed after composer, codec, preset, and game-status startup changes. |
 | Installer review browser checks | `d7b99b737` | Actual templates and generator functions in isolated Chrome preserved literal metadata, all four native/pre-send warning combinations, the native acknowledgement gate, and cancellation. Electron IPC and real installation were not exercised. |
 | Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |
 | Web build | `b87aa473b` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
@@ -94,7 +94,7 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Uninstall button browser checks | `d4efc449d` | Actual shared component props and styles in isolated Chrome verified the accessible name, keyboard focus indicator, and consistent 32px sizing in both stylesheet orders. Full Discord layout was not exercised. |
 | Other isolated browser checks | Earlier audit commits | Specific sticker-storage transactions, codec conversion, and CSS behavior were exercised. These are not general live-client acceptance. |
 
-Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `7b5525275`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
+Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `0fc6ab63b`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
 
 ## Remaining work
 

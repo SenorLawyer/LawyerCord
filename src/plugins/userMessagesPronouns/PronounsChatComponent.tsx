@@ -22,7 +22,7 @@ import { getIntlMessage } from "@utils/discord";
 import { classes } from "@utils/misc";
 import { Message } from "@vencord/discord-types";
 import { findCssClassesLazy } from "@webpack";
-import { Tooltip, UserStore } from "@webpack/common";
+import { Tooltip, UserStore, useStateFromStores } from "@webpack/common";
 
 import { settings } from "./settings";
 import { useFormattedPronouns } from "./utils";
@@ -31,11 +31,14 @@ const TimestampClasses = findCssClassesLazy("timestampInline", "timestamp");
 const MessageDisplayCompact = getUserSettingLazy("textAndImages", "messageDisplayCompact")!;
 
 const AUTO_MODERATION_ACTION = 24;
+const VISIBILITY_SETTINGS: "showSelf"[] = ["showSelf"];
 
-function shouldShow(message: Message): boolean {
+function useShouldShow(message: Message): boolean {
+    const { showSelf } = settings.use(VISIBILITY_SETTINGS);
+    const currentId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
     if (message.author.bot || message.author.system || message.type === AUTO_MODERATION_ACTION)
         return false;
-    if (!settings.store.showSelf && message.author.id === UserStore.getCurrentUser()?.id)
+    if (!showSelf && message.author.id === currentId)
         return false;
 
     return true;
@@ -57,15 +60,16 @@ function PronounsChatComponent({ message }: { message: Message; }) {
 }
 
 export const PronounsChatComponentWrapper = ErrorBoundary.wrap(({ message }: { message: Message; }) => {
-    return shouldShow(message)
+    return useShouldShow(message)
         ? <PronounsChatComponent message={message} />
         : null;
 }, { noop: true });
 
 export const CompactPronounsChatComponentWrapper = ErrorBoundary.wrap(({ message }: { message: Message; }) => {
     const compact = MessageDisplayCompact.useSetting();
+    const show = useShouldShow(message);
 
-    if (!compact || !shouldShow(message)) {
+    if (!compact || !show) {
         return null;
     }
 

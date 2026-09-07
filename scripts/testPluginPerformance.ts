@@ -1608,6 +1608,29 @@ test("webpack tar archives contain only the supplied byte view", () => {
     assert.equal(archive.length, 2048);
 });
 
+test("message pronoun visibility subscribes to self settings and account changes", () => {
+    let showSelf = true;
+    let currentId = "me";
+    const userStore = { getCurrentUser: () => ({ id: currentId }) };
+    const api = loadSource("src/plugins/userMessagesPronouns/PronounsChatComponent.tsx", {
+        "@api/UserSettings": { getUserSettingLazy: () => ({ useSetting: () => true }) },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/discord": {}, "@utils/misc": {}, "@webpack": { findCssClassesLazy: () => ({}) },
+        "@webpack/common": { UserStore: userStore, useStateFromStores: (stores: unknown[], read: () => unknown) => { assert.equal(stores[0], userStore); return read(); } },
+        "./settings": { settings: { store: { showSelf: true }, use: (keys: string[]) => { assert.equal(keys[0], "showSelf"); return { showSelf }; } } }, "./utils": {}
+    }, { React: { createElement: () => ({}) } });
+    for (const render of [api.PronounsChatComponentWrapper, api.CompactPronounsChatComponentWrapper]) {
+        const message = { author: { id: "me" }, type: 0 };
+        showSelf = true; currentId = "me";
+        assert.notEqual(render({ message }), null);
+        showSelf = false;
+        assert.equal(render({ message }), null);
+        currentId = "other";
+        assert.notEqual(render({ message }), null);
+        assert.equal(render({ message: { ...message, author: { id: "bot", bot: true } } }), null);
+    }
+});
+
 test("message pronouns use the message channel instead of the browsed channel", () => {
     let format = "original";
     const subscriptions: string[][] = [];

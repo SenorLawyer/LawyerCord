@@ -11395,7 +11395,7 @@ test("stopped transcription translations discard delayed success and failure", a
         let writes = 0;
         const update = () => updates++;
         const context = {
-            cacheGeneration: 0, jobIdRef: { current: 1 }, messageId: "message",
+            cacheGeneration: 0, jobIdRef: { current: 1 }, cacheKey: "message",
             useCallback: (fn: unknown) => fn, translateText: () => pending,
             setStatus: update, setError: update, setTargetLanguage: update, setTargetLanguageLabel: update, setTranslation: update,
             cacheResult: () => writes++
@@ -11423,10 +11423,37 @@ test("transcription plugin stop terminates every active worker and clears caches
         preparedAudioCache: new Map([["audio", 1]]), resultCache: new Map([["result", 1]])
     };
     const stop = runInNewContext("(() => {" + source.slice(start + "    stop() {".length, end) + "})", context);
-    stop(); stop();
+    const logoutBody = source.match(/LOGOUT\(this: \{ stop\(\): void; \}\) \{([^}]+)\}/)?.[1];
+    assert.ok(logoutBody);
+    const logout = runInNewContext("(function () {" + logoutBody + "})");
+    logout.call({ stop });
+    stop();
     assert.equal(terminated, 2);
     assert.equal(context.activeWorkers.size, 0);
     assert.equal(context.preparedAudioCache.size, 0);
     assert.equal(context.resultCache.size, 0);
     assert.equal(context.cacheGeneration, 2);
+});
+
+test("transcription accessories keep account-specific cache and React identity", () => {
+    const source = readFileSync("src/equicordplugins/voiceMessageTranscriber.desktop/index.tsx", "utf8");
+    const start = source.indexOf("function VoiceMessageAccessory(");
+    const end = source.indexOf("export default definePlugin", start);
+    assert.ok(start >= 0 && end > start);
+    const code = transpileModule(source.slice(start, end), { compilerOptions: { target: ScriptTarget.ES2022, jsx: JsxEmit.React } }).outputText;
+    let id: string | undefined = "first";
+    const store = { getCurrentUser: () => id ? { id } : undefined };
+    const render = runInNewContext(code + ";VoiceMessageAccessory", {
+        UserStore: store, useStateFromStores: (stores: unknown[], select: () => unknown) => { assert.equal(stores[0], store); return select(); },
+        getVoiceMessageMedia: () => ({ url: "audio", waveform: "wave" }), VoiceMessageTranscriptionAccessory: "accessory",
+        React: { createElement: (type: unknown, props: object) => ({ type, props }) }
+    });
+    const first = render({ message: { id: "message" } });
+    id = "second";
+    const second = render({ message: { id: "message" } });
+    assert.notEqual(first.props.key, second.props.key);
+    assert.notEqual(first.props.cacheKey, second.props.cacheKey);
+    assert.equal(second.props.key, second.props.cacheKey);
+    id = undefined;
+    assert.equal(render({ message: { id: "message" } }), null);
 });

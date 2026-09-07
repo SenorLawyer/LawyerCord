@@ -11625,3 +11625,28 @@ test("translation parse errors do not expose malformed response snippets", async
         });
     }
 });
+
+test("DeepL failures do not send text to another provider or reset settings", async () => {
+    for (const missingKey of [false, true]) {
+        let googleRequests = 0;
+        let nativeRequests = 0;
+        let resets = 0;
+        const settings = { store: { service: "deepl", deeplApiKey: missingKey ? "" : "fixture" } };
+        const { translateText } = loadSource("src/plugins/translate/utils.ts", {
+            "@utils/css": { classNameFactory: () => () => "" }, "@utils/onlyOnce": { onlyOnce: (fn: unknown) => fn },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object", tryOrElse: (fn: () => unknown) => fn() },
+            "@webpack/common": { showToast() {}, Toasts: { Type: { FAILURE: "failure" } } },
+            "./languages": { GoogleLanguages: {}, deeplLanguageToGoogleLanguage: (value: string) => value },
+            "./settings": { settings, resetLanguageDefaults: () => resets++ }
+        }, {
+            IS_WEB: false, URLSearchParams,
+            fetch: async () => { googleRequests++; return { ok: true, json: async () => ({ translation: "fallback", sourceLanguage: "en" }) }; },
+            VencordNative: { pluginHelpers: { Translate: { makeDeeplTranslateRequest: async () => { nativeRequests++; return { status: 456, data: "" }; } } } }
+        });
+        await assert.rejects(translateText("fixture", "en", "fr"), missingKey ? /API key is not set/ : /quota exceeded/);
+        assert.equal(googleRequests, 0);
+        assert.equal(nativeRequests, missingKey ? 0 : 1);
+        assert.equal(settings.store.service, "deepl");
+        assert.equal(resets, 0);
+    }
+});

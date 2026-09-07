@@ -92,6 +92,8 @@ Transcription workers release script URLs when construction fails. Prepared-audi
 
 Transcription stop and logout terminate active workers and invalidate pending results before clearing caches. Result caches and component keys include the account, and jobs check current account ownership before starting and accepting delayed results. Language pickers retain their opening account, session, and job. Model URLs require HTTPS without credentials or nonstandard ports on the existing hosts; cached and downloaded responses share one path using the transferred byte length. Cache storage failures are reported, and progress percentages are finite and bounded. Fixtures cover these changes; live account event ordering, already-issued native/provider requests, model integrity, redirects, and memory limits remain open.
 
+Translate retains the selected provider when DeepL credentials are missing or its quota is exhausted. It reports the failure instead of forwarding text to Google or resetting provider and language settings. The existing auto-translation send hook cancels sending on translation failure. Provider fixtures verify that these failures make no Google request.
+
 ## Verification record
 
 Evidence applies to the recorded commit and scope, not to a future merge with main.

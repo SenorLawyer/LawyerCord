@@ -8,7 +8,7 @@ import { definePluginSettings } from "@api/Settings";
 import { Button } from "@components/Button";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { makeRange, OptionType } from "@utils/types";
-import { Channel, Message } from "@vencord/discord-types";
+import { Channel, Message, MessageJSON } from "@vencord/discord-types";
 import { UserNotificationSetting } from "@vencord/discord-types/enums";
 import { findByPropsLazy } from "@webpack";
 import { ChannelStore, IconUtils, MessageStore, NavigationRouter, PresenceStore, RelationshipStore, SelectedChannelStore, StreamerModeStore, UserGuildSettingsStore, UserStore } from "@webpack/common";
@@ -122,7 +122,7 @@ export default definePlugin({
     flux: {
         LOGOUT: teardownNotifications,
         CONNECTION_OPEN: teardownNotifications,
-        MESSAGE_CREATE({ message }: { message: Message; }) {
+        MESSAGE_CREATE({ message }: { message: MessageJSON; }) {
             const authorId = message.author?.id;
             if (!authorId) return;
             const currentUser = UserStore.getCurrentUser();
@@ -203,7 +203,7 @@ function parseIdSet(str: string): Set<string> {
     return ids;
 }
 
-function getMockedMessage(message: Message): Message | undefined {
+function getMockedMessage(message: MessageJSON): Message | undefined {
     return MessageStore.getMessage(message.channel_id, message.id)
         ?? MessageStore.getMessages(message.channel_id)?.receiveMessage(message)?.get(message.id);
 }
@@ -222,7 +222,7 @@ function navigateToChannel(channel: Channel) {
  * channel allowlist, friend-server-notifications setting, channel/guild mutes,
  * and the user's configured notification level for the channel/guild.
  */
-function shouldNotifyForGuildMessage(message: Message, channel: Channel, currentUserId: string, authorId: string): boolean {
+function shouldNotifyForGuildMessage(message: MessageJSON, channel: Channel, currentUserId: string, authorId: string): boolean {
     if (!channel.guild_id) return false;
 
     // Allowlist always wins.
@@ -239,7 +239,7 @@ function shouldNotifyForGuildMessage(message: Message, channel: Channel, current
     if (level === UserNotificationSetting.ALL_MESSAGES) return true;
 
     // Otherwise we only notify if the user was mentioned.
-    return message.content.includes(`<@${currentUserId}>`) || message.content.includes(`<@!${currentUserId}>`);
+    return message.mentions.some(user => user.id === currentUserId);
 }
 
 function showExampleNotification(): Promise<void> {

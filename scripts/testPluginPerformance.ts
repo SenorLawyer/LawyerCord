@@ -2035,8 +2035,14 @@ test("guild toasts use Discord's resolved notification level", () => {
         } },
         "./components/Notifications": {}
     }, {}, "({ shouldNotifyForGuildMessage })");
-    for (level of [0, 1, 2]) for (const content of ["Hello", "<@current>", "<@!current>"]) {
-        assert.equal(api.shouldNotifyForGuildMessage({ content }, channel, "current", "author"), level === 0 || level === 1 && content !== "Hello");
+    for (level of [0, 1, 2]) for (const message of [
+        { content: "Hello", mentions: [] },
+        { content: "`<@current>`", mentions: [] },
+        { content: "Reply without a literal mention", mentions: [{ id: "current" }] },
+        { content: "<@!current>", mentions: [{ id: "current" }] },
+        { content: "Hello", mentions: [{ id: "someone-else" }] }
+    ]) {
+        assert.equal(api.shouldNotifyForGuildMessage(message, channel, "current", "author"), level === 0 || level === 1 && message.mentions.some(user => user.id === "current"));
     }
 });
 

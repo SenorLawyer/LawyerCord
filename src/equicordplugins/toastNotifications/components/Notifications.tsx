@@ -5,7 +5,7 @@
  */
 
 import { settings as PluginSettings } from "@equicordplugins/toastNotifications/index";
-import { Channel, Message } from "@vencord/discord-types";
+import { Channel, Message, MessageJSON } from "@vencord/discord-types";
 import { createRoot } from "@webpack/common";
 import type { JSX } from "react";
 import type { Root } from "react-dom/client";
@@ -55,7 +55,7 @@ interface BaseNotification {
 }
 
 export interface MessageNotification extends BaseNotification {
-    message: Message;
+    message: MessageJSON;
     mockedMessage: Message;
     channel: Channel;
 }

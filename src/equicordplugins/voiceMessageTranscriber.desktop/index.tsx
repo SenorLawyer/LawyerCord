@@ -41,6 +41,8 @@ interface CachedResult {
 }
 
 const resultCache = new Map<string, CachedResult>();
+let cacheGeneration = 0;
+const activeWorkers = new Set<TranscriptionWorker>();
 interface PreparedAudio {
     blob: Blob;
     samples: Float32Array;
@@ -261,11 +263,15 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
     const autoStartedRef = useRef(false);
 
     const stopWorker = useCallback(() => {
-        workerRef.current?.terminate();
-        workerRef.current = null;
+        if (workerRef.current) {
+            activeWorkers.delete(workerRef.current);
+            workerRef.current.terminate();
+            workerRef.current = null;
+        }
     }, []);
 
     const translateTranscript = useCallback(async (value: TranscriptionResult, language: LanguageOption, jobId: number) => {
+        const generation = cacheGeneration;
         setStatus("translating");
         setError(null);
         setTargetLanguage(language.value);
@@ -273,7 +279,7 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
 
         try {
             const translated = await translateText(value.text, "auto", language.value);
-            if (jobIdRef.current !== jobId) return;
+            if (jobIdRef.current !== jobId || generation !== cacheGeneration) return;
 
             setTranslation(translated);
             setStatus("complete");
@@ -284,7 +290,7 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
                 targetLanguageLabel: language.label
             });
         } catch (caught) {
-            if (jobIdRef.current !== jobId) return;
+            if (jobIdRef.current !== jobId || generation !== cacheGeneration) return;
             setError(`Translation failed: ${caught instanceof Error ? caught.message : String(caught)}`);
             setStatus("complete");
             cacheResult(messageId, { transcript: value });
@@ -292,6 +298,7 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
     }, [messageId]);
 
     const startTranscription = useCallback((language?: LanguageOption) => {
+        const generation = cacheGeneration;
         const jobId = ++jobIdRef.current;
         stopWorker();
         setStatus("downloading_audio");
@@ -302,16 +309,16 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
         void (async () => {
             try {
                 const prepared = await prepareAudio(src);
-                if (jobIdRef.current !== jobId) return;
+                if (jobIdRef.current !== jobId || generation !== cacheGeneration) return;
                 setStatus("processing_audio");
                 const audio = new Float32Array(prepared.samples);
 
                 workerRef.current = new TranscriptionWorker(
                     nextStatus => {
-                        if (jobIdRef.current === jobId) setStatus(nextStatus as ProcessingStatus);
+                        if (jobIdRef.current === jobId && generation === cacheGeneration) setStatus(nextStatus as ProcessingStatus);
                     },
                     output => {
-                        if (jobIdRef.current !== jobId) return;
+                        if (jobIdRef.current !== jobId || generation !== cacheGeneration) return;
                         const value = normalizeTranscriptionResult(output);
                         stopWorker();
 
@@ -331,21 +338,22 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
                         }
                     },
                     caught => {
-                        if (jobIdRef.current !== jobId) return;
+                        if (jobIdRef.current !== jobId || generation !== cacheGeneration) return;
                         stopWorker();
                         setError(caught instanceof Error ? caught.message : String(caught));
                         setStatus("idle");
                     },
                     partial => {
-                        if (jobIdRef.current !== jobId) return;
+                        if (jobIdRef.current !== jobId || generation !== cacheGeneration) return;
                         const value = normalizeTranscriptionResult(partial);
                         if (value.text) setTranscript(value);
                     },
                     nextProgress => {
-                        if (jobIdRef.current === jobId) setProgress(nextProgress);
+                        if (jobIdRef.current === jobId && generation === cacheGeneration) setProgress(nextProgress);
                     }
                 );
 
+                activeWorkers.add(workerRef.current);
                 const { audioLanguage, quantized, selectedModel } = settings.store;
                 workerRef.current.run(
                     audio,
@@ -354,7 +362,7 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
                     audioLanguage === "auto" ? undefined : audioLanguage
                 );
             } catch (caught) {
-                if (jobIdRef.current !== jobId) return;
+                if (jobIdRef.current !== jobId || generation !== cacheGeneration) return;
                 stopWorker();
                 setError(caught instanceof Error ? caught.message : String(caught));
                 setStatus("idle");
@@ -536,6 +544,9 @@ export default definePlugin({
     settings,
     renderMessageAccessory: props => <VoiceMessageAccessory message={props.message} />,
     stop() {
+        cacheGeneration++;
+        for (const worker of activeWorkers) worker.terminate();
+        activeWorkers.clear();
         preparedAudioCache.clear();
         resultCache.clear();
     }

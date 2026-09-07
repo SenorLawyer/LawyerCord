@@ -11380,3 +11380,53 @@ test("transcription model responses describe the transferred bytes", async () =>
         worker.terminate();
     }
 });
+
+test("stopped transcription translations discard delayed success and failure", async () => {
+    const source = readFileSync("src/equicordplugins/voiceMessageTranscriber.desktop/index.tsx", "utf8");
+    const start = source.indexOf("const translateTranscript = useCallback(");
+    const end = source.indexOf("const startTranscription = useCallback(", start);
+    assert.ok(start >= 0 && end > start);
+    const code = transpileModule(source.slice(start, end), { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
+    for (const phase of ["stopped-success", "stopped-failure", "current"]) {
+        let resolve: (value: object) => void = () => {};
+        let reject: (error: Error) => void = () => {};
+        const pending = new Promise<object>((yes, no) => { resolve = yes; reject = no; });
+        let updates = 0;
+        let writes = 0;
+        const update = () => updates++;
+        const context = {
+            cacheGeneration: 0, jobIdRef: { current: 1 }, messageId: "message",
+            useCallback: (fn: unknown) => fn, translateText: () => pending,
+            setStatus: update, setError: update, setTargetLanguage: update, setTargetLanguageLabel: update, setTranslation: update,
+            cacheResult: () => writes++
+        };
+        const translate = runInNewContext(code + ";translateTranscript", context);
+        const result = translate({ text: "hello" }, { value: "en", label: "English" }, 1);
+        updates = 0;
+        if (phase !== "current") context.cacheGeneration++;
+        if (phase === "stopped-failure") reject(new Error("Failed")); else resolve({ text: "hello" });
+        await result;
+        assert.equal(updates, phase === "current" ? 2 : 0);
+        assert.equal(writes, phase === "current" ? 1 : 0);
+    }
+});
+
+test("transcription plugin stop terminates every active worker and clears caches", () => {
+    const source = readFileSync("src/equicordplugins/voiceMessageTranscriber.desktop/index.tsx", "utf8").replace(/\r\n/g, "\n");
+    const start = source.lastIndexOf("    stop() {");
+    const end = source.lastIndexOf("\n    }\n});");
+    assert.ok(start >= 0 && end > start);
+    let terminated = 0;
+    const context = {
+        cacheGeneration: 0,
+        activeWorkers: new Set([{ terminate: () => terminated++ }, { terminate: () => terminated++ }]),
+        preparedAudioCache: new Map([["audio", 1]]), resultCache: new Map([["result", 1]])
+    };
+    const stop = runInNewContext("(() => {" + source.slice(start + "    stop() {".length, end) + "})", context);
+    stop(); stop();
+    assert.equal(terminated, 2);
+    assert.equal(context.activeWorkers.size, 0);
+    assert.equal(context.preparedAudioCache.size, 0);
+    assert.equal(context.resultCache.size, 0);
+    assert.equal(context.cacheGeneration, 2);
+});

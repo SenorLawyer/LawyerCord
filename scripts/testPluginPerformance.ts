@@ -1540,12 +1540,12 @@ test("voice playback keeps a speed selected before first play", () => {
         let play: (() => void) | undefined;
         let cleanup: (() => void) | undefined;
         let menu: { children: { children: { props: { label: string; checked: boolean; action(): void; }; }[][]; }[]; } | undefined;
-        const media = { tagName: "AUDIO", className: "audioElement", playbackRate: 1,
+        const media = { tagName: "AUDIO", className: "renamed-discord-class", playbackRate: 1,
             addEventListener: (_event: string, handler: () => void) => { play = handler; },
             removeEventListener: (_event: string, handler: () => void) => { assert.equal(handler, play); play = undefined; },
         };
         const { default: plugin } = loadSource("src/equicordplugins/mediaPlaybackSpeed/index.tsx", {
-            "@api/Settings": { definePluginSettings: () => ({ store: { defaultVoiceMessageSpeed: 2 } }) },
+            "@api/Settings": { definePluginSettings: () => ({ store: { defaultVoiceMessageSpeed: 2, defaultAudioSpeed: 1.5 } }) },
             "@components/Button": { Button: "shared-button" },
             "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
             "@utils/constants": { Devs: {} }, "@utils/css": { classNameFactory: () => () => "" },
@@ -1557,7 +1557,7 @@ test("voice playback keeps a speed selected before first play", () => {
                 ContextMenuApi: { openContextMenu: (_event: unknown, render: () => typeof menu) => { menu = render(); } },
             },
         });
-        const view = plugin.renderPlaybackSpeedComponent({ mediaRef: { current: media } });
+        const view = plugin.renderPlaybackSpeedComponent({ mediaRef: { current: media }, isVoiceMessage: true });
         const button = view.children[0]({});
         assert.equal(button.type, "shared-button");
         assert.equal(button.props["aria-label"], "Playback speed");
@@ -1574,6 +1574,10 @@ test("voice playback keeps a speed selected before first play", () => {
         assert.ok(menu);
         assert.deepEqual(menu.children[0].children[0].filter(item => item.props.checked).map(item => item.props.label), [selected ? "3x" : "2x"]);
         cleanup?.();
+        assert.equal(play, undefined);
+        media.className = "audioElement";
+        plugin.renderPlaybackSpeedComponent({ mediaRef: { current: media } });
+        assert.equal(media.playbackRate, 1.5);
         assert.equal(play, undefined);
     }
 });

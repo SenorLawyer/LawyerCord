@@ -58,7 +58,7 @@ export default definePlugin({
             find: "\"--:--\"",
             replacement: {
                 match: /\(0,\i\.jsxs?\)\(.{0,50}\.\i,onClick:\(\).+?\}\)\}\)(?<=playbackCacheKey:\i\}=\i,(\i).+?)/,
-                replace: "$self.renderPlaybackSpeedComponent({mediaRef:$1})"
+                replace: "$self.renderPlaybackSpeedComponent({mediaRef:$1,isVoiceMessage:true})"
             }
         },
         // audio & video embeds
@@ -78,7 +78,7 @@ export default definePlugin({
             }
         }
     ],
-    renderPlaybackSpeedComponent: ErrorBoundary.wrap(({ mediaRef }: { mediaRef: MediaRef; }) => {
+    renderPlaybackSpeedComponent: ErrorBoundary.wrap(({ mediaRef, isVoiceMessage = false }: { mediaRef: MediaRef; isVoiceMessage?: boolean; }) => {
         const selectedSpeed = useRef<{ media: HTMLMediaElement; speed: number; } | null>(null);
         const changeSpeed = (speed: number) => {
             const media = mediaRef?.current;
@@ -92,7 +92,6 @@ export default definePlugin({
             const media = mediaRef?.current;
             if (!media) return;
             if (media.tagName === "AUDIO") {
-                const isVoiceMessage = media.className.includes("audioElement");
                 if (isVoiceMessage) {
                     // Workaround because Discord seems to override it somewhere
                     const setVoiceSpeed = () => {
@@ -107,7 +106,7 @@ export default definePlugin({
             } else if (media.tagName === "VIDEO") {
                 changeSpeed(settings.store.defaultVideoSpeed);
             }
-        }, [mediaRef]);
+        }, [mediaRef, isVoiceMessage]);
 
         return (
             <Tooltip text="Playback speed">

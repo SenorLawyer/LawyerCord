@@ -6,7 +6,10 @@
 
 import { IpcMainInvokeEvent } from "electron";
 
-export async function makeDeeplTranslateRequest(_: IpcMainInvokeEvent, pro: boolean, apiKey: string, payload: string) {
+export async function makeDeeplTranslateRequest(_: IpcMainInvokeEvent, pro: unknown, apiKey: unknown, payload: unknown) {
+    if (typeof pro !== "boolean" || typeof apiKey !== "string" || typeof payload !== "string")
+        return { status: -1, data: "" };
+
     const url = pro
         ? "https://api.deepl.com/v2/translate"
         : "https://api-free.deepl.com/v2/translate";
@@ -34,7 +37,10 @@ export async function makeDeeplTranslateRequest(_: IpcMainInvokeEvent, pro: bool
     }
 }
 
-export async function makeKagiTranslateRequest(_: IpcMainInvokeEvent, token: string, text: string, sourceLang: string, targetLang: string) {
+export async function makeKagiTranslateRequest(_: IpcMainInvokeEvent, token: unknown, text: unknown, sourceLang: unknown, targetLang: unknown) {
+    if (typeof token !== "string" || typeof text !== "string" || typeof sourceLang !== "string" || typeof targetLang !== "string")
+        return { status: -1, data: null };
+
     const url = "https://translate.kagi.com/api/translate";
 
     try {

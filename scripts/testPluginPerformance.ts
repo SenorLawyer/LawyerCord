@@ -11533,7 +11533,7 @@ test("native translation preserves HTTP failures without parsing error bodies", 
                     }), { status });
                 }
             });
-            const result = await native[provider]({}, false, "fixture", "fixture", "fixture");
+            const result = await native[provider]({}, ...(provider === "makeDeeplTranslateRequest" ? [false, "fixture", "fixture"] : ["fixture", "fixture", "auto", "en"]));
             assert.equal(result.status, status, provider);
             assert.equal(cancelled, 1, provider);
             assert.ok(result.data === "" || result.data === null);
@@ -11747,9 +11747,31 @@ test("native translation failures omit exception details from IPC responses", as
             const native = loadSource("src/plugins/translate/native.ts", {}, {
                 fetch: async () => phase === "fetch" ? fail() : { status: 200, text: fail, json: fail }
             });
-            const result = await native[provider]({}, false, "fixture", "fixture", "fixture");
+            const result = await native[provider]({}, ...(provider === "makeDeeplTranslateRequest" ? [false, "fixture", "fixture"] : ["fixture", "fixture", "auto", "en"]));
             assert.equal(result.status, -1);
             assert.equal(result.data, provider === "makeDeeplTranslateRequest" ? "" : null);
         }
+    }
+});
+
+
+test("native translation rejects invalid IPC argument types before fetching", async () => {
+    for (const provider of ["makeDeeplTranslateRequest", "makeKagiTranslateRequest"]) {
+        let requests = 0;
+        const native = loadSource("src/plugins/translate/native.ts", {}, {
+            fetch: async () => { requests++; return { status: 200, text: async () => "{}", json: async () => ({}) }; }
+        });
+        const valid: unknown[] = provider === "makeDeeplTranslateRequest" ? [false, "key", "{}"] : ["session", "text", "auto", "en"];
+        for (let index = 0; index < valid.length; index++) {
+            for (const invalid of [null, undefined, 42, [], {}, index === 0 && provider === "makeDeeplTranslateRequest" ? "false" : false]) {
+                const args = [...valid];
+                args[index] = invalid;
+                const result = await native[provider]({}, ...args);
+                assert.equal(result.status, -1);
+                assert.equal(requests, 0);
+            }
+        }
+        assert.equal((await native[provider]({}, ...valid)).status, 200);
+        assert.equal(requests, 1);
     }
 });

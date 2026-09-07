@@ -11525,6 +11525,7 @@ test("native translation preserves HTTP failures without parsing error bodies", 
         for (const status of [401, 403, 456, 500]) {
             let cancelled = 0;
             const native = loadSource("src/plugins/translate/native.ts", {}, {
+                Buffer,
                 fetch: async (_url: string, options: RequestInit) => {
                     assert.equal(options.redirect, "error");
                     return new Response(new ReadableStream({
@@ -11745,6 +11746,7 @@ test("native translation failures omit exception details from IPC responses", as
         for (const phase of ["fetch", "body"]) {
             const fail = () => { throw new Error("private native path or response snippet"); };
             const native = loadSource("src/plugins/translate/native.ts", {}, {
+                Buffer,
                 fetch: async () => phase === "fetch" ? fail() : { status: 200, text: fail, json: fail }
             });
             const result = await native[provider]({}, ...(provider === "makeDeeplTranslateRequest" ? [false, "fixture", "fixture"] : ["fixture", "fixture", "auto", "en"]));
@@ -11759,6 +11761,7 @@ test("native translation rejects invalid IPC argument types before fetching", as
     for (const provider of ["makeDeeplTranslateRequest", "makeKagiTranslateRequest"]) {
         let requests = 0;
         const native = loadSource("src/plugins/translate/native.ts", {}, {
+                Buffer,
             fetch: async () => { requests++; return { status: 200, text: async () => "{}", json: async () => ({}) }; }
         });
         const valid: unknown[] = provider === "makeDeeplTranslateRequest" ? [false, "key", "{}"] : ["session", "text", "auto", "en"];
@@ -11905,4 +11908,24 @@ test("DeepL automatic detection omits the source language request field", async 
         assert.equal(payload.target_lang, "fr");
         assert.deepEqual(payload.text, ["fixture"]);
     }
+});
+
+
+test("native DeepL requests enforce the UTF-8 body limit before fetching", async () => {
+    let requests = 0;
+    const native = loadSource("src/plugins/translate/native.ts", {}, {
+        Buffer,
+        fetch: async () => { requests++; return { status: 200, text: async () => "{}" }; }
+    });
+    const limit = 128 * 1024;
+    for (const payload of ["a".repeat(limit + 1), "é".repeat(limit / 2 + 1), "😀".repeat(limit / 4 + 1)]) {
+        const result = await native.makeDeeplTranslateRequest({}, false, "fixture", payload);
+        assert.equal(result.status, 413);
+        assert.equal(result.data, "");
+        assert.equal(requests, 0);
+    }
+    for (const payload of ["a".repeat(limit), "é".repeat(limit / 2), "😀".repeat(limit / 4)]) {
+        assert.equal((await native.makeDeeplTranslateRequest({}, false, "fixture", payload)).status, 200);
+    }
+    assert.equal(requests, 3);
 });

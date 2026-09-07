@@ -10,6 +10,9 @@ export async function makeDeeplTranslateRequest(_: IpcMainInvokeEvent, pro: unkn
     if (typeof pro !== "boolean" || typeof apiKey !== "string" || typeof payload !== "string")
         return { status: -1, data: "" };
 
+    if (Buffer.byteLength(payload, "utf8") > 128 * 1024)
+        return { status: 413, data: "" };
+
     const url = pro
         ? "https://api.deepl.com/v2/translate"
         : "https://api-free.deepl.com/v2/translate";

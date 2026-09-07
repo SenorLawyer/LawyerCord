@@ -173,13 +173,14 @@ function VoiceMessageModal({ modalProps }: { modalProps: RenderModalProps; }) {
         return () => URL.revokeObjectURL(url);
     }, [blob]);
 
-    const [meta, metaError] = useAwaiter(async () => {
-        if (!blob) return EMPTY_META;
+    const [meta, metaError, metaPending] = useAwaiter(async () => {
+        if (!blob) return { ...EMPTY_META, blob };
 
         const audioContext = new AudioContext();
         try {
             const audioBuffer = await audioContext.decodeAudioData(await blob.arrayBuffer());
             return {
+                blob,
                 waveform: generateWaveform(audioBuffer.getChannelData(0), audioBuffer.sampleRate),
                 duration: audioBuffer.duration,
             };
@@ -188,9 +189,10 @@ function VoiceMessageModal({ modalProps }: { modalProps: RenderModalProps; }) {
         }
     }, {
         deps: [blob],
-        fallbackValue: EMPTY_META,
+        fallbackValue: { ...EMPTY_META, blob: undefined },
     });
 
+    const canSend = blob && !isRecording && !metaPending && !metaError && meta?.blob === blob;
     const isUnsupportedFormat = blob && (!blob.type.startsWith("audio/ogg") || blob.type.includes("codecs") && !blob.type.includes("opus"));
 
     return (
@@ -201,11 +203,12 @@ function VoiceMessageModal({ modalProps }: { modalProps: RenderModalProps; }) {
                 text: "Send",
                 variant: "primary",
                 onClick: () => {
-                    sendAudio(blob!, meta ?? EMPTY_META);
+                    if (!blob || !canSend) return;
+                    sendAudio(blob, meta);
                     modalProps.onClose();
                     showToast("Now sending voice message... Please be patient", Toasts.Type.MESSAGE);
                 },
-                disabled: !blob
+                disabled: !canSend
             }]}
         >
             <div className={cl("buttons")}>

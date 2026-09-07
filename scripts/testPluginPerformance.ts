@@ -11136,3 +11136,36 @@ test("voice preview URLs belong to committed blobs and are released once", () =>
     setAudioBlob(new Blob(["late"]));
     assert.equal(created.length, 2);
 });
+
+
+test("voice messages require matching completed metadata before sending", () => {
+    for (const phase of ["empty", "pending", "error", "recording", "stale", "ready"]) {
+        let stateIndex = 0;
+        let sends = 0;
+        let closes = 0;
+        const blob = phase === "empty" ? undefined : new Blob(["audio"], { type: "audio/ogg" });
+        const meta = { blob: phase === "stale" ? new Blob(["old"]) : blob, waveform: "wave", duration: 2 };
+        const React = { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props: { ...props, children } }) };
+        const { VoiceMessageModal } = loadSource("src/plugins/voiceMessages/index.tsx", {
+            "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+            "@components/Card": {}, "@components/Icons": {}, "@components/Link": {}, "@components/Paragraph": {},
+            "@plugins/silentMessageToggle": {}, "@utils/constants": { Devs: {} },
+            "@utils/css": { classNameFactory: () => () => "" }, "@utils/margins": {},
+            "@utils/react": { useAwaiter: () => [meta, phase === "error" ? new Error("Invalid audio") : null, phase === "pending"] },
+            "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} }, "@utils/web": {},
+            "@vencord/discord-types/enums": {},
+            "@webpack/common": { React, Forms: {}, Toasts: { Type: {} }, showToast() {}, useEffect() {}, useState: () => {
+                const index = stateIndex++;
+                return [index === 0 ? phase === "recording" : index === 1 ? blob : undefined, () => {}];
+            } },
+            "./components/DesktopRecorder": {}, "./components/WebRecorder": {}, "./components/VoicePreview": {},
+            "./waveform": { DEFAULT_WAVEFORM: "" }
+        }, { IS_DISCORD_DESKTOP: false, React, captureSend: (audio: Blob, metadata: object) => { assert.equal(audio, blob); assert.equal(metadata, meta); sends++; } }, "sendAudio = captureSend; ({ VoiceMessageModal })");
+        const modal = VoiceMessageModal({ modalProps: { onClose: () => closes++ } });
+        const action = modal.props.actions[0];
+        assert.equal(action.disabled, phase !== "ready", phase);
+        action.onClick();
+        assert.equal(sends, phase === "ready" ? 1 : 0, phase);
+        assert.equal(closes, sends);
+    }
+});

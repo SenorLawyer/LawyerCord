@@ -21,7 +21,7 @@ import { runInNewContext } from "node:vm";
 import * as typescript from "typescript";
 import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
-import { SettingsStore } from "../src/shared/SettingsStore";
+import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
 test("Streaks badges only display the current account's conversation", () => {
@@ -10750,4 +10750,60 @@ test("pinned DM helpers use current account settings instead of a retained array
     data.createCategory(category("logged-out"));
     assert.equal(store.userBasedCategoryList.first.length, 2);
     assert.equal(store.userBasedCategoryList.second.length, 0);
+});
+
+
+test("pinned DM category modals reject stale owners and replaced categories", () => {
+    for (const editing of [false, true]) {
+        for (const boundary of ["unchanged", "account", "logout", "replacement"]) {
+            let userId: string | undefined = "first";
+            const original = { id: "category", name: "Original", color: 0, channels: ["channel"] };
+            const categoryStore = new SettingsStore({ category: original });
+            let created = 0;
+            let closed = 0;
+            const { NewCategoryModal } = loadComponent("src/plugins/pinDms/components/CreateCategoryModal.tsx", {
+                UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined },
+                useMemo: (callback: () => unknown) => callback(),
+                useState: (value: unknown) => [typeof value === "string" ? "Edited" : value, () => {}],
+                Toasts: { genId: () => "new" }, Modal: "modal"
+            }, {
+                "@shared/SettingsStore": { SYM_GET_RAW_TARGET }, "@components/Heading": {}, "@plugins/pinDms/constants": { DEFAULT_COLOR: 0, SWATCHES: [] },
+                "@plugins/pinDms/data": { getCategory: () => categoryStore.store.category, categoryLen: () => 1, createCategory: () => created++ },
+                "@webpack": { extractAndLoadChunksLazy: () => () => {}, findComponentByCodeLazy: () => "picker" }
+            });
+            const modal = NewCategoryModal({ categoryId: editing ? "category" : null, initialChannelId: "channel", userId: "first", modalProps: { onClose: () => closed++ } });
+            if (boundary === "account") userId = "second";
+            if (boundary === "logout") userId = undefined;
+            if (boundary === "replacement") categoryStore.store.category = { ...original };
+            modal.props.actions[0].onClick();
+            const valid = boundary === "unchanged" || !editing && boundary === "replacement";
+            assert.equal(created, !editing && valid ? 1 : 0);
+            assert.equal(original.name, editing && valid ? "Edited" : "Original");
+            assert.equal(closed, 1);
+        }
+    }
+});
+
+
+test("pinned DM modal loading preserves the originating account", async () => {
+    let userId: string | undefined = "first";
+    let release = () => {};
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    let loads = 0;
+    const { openCategoryModal } = loadComponent("src/plugins/pinDms/components/CreateCategoryModal.tsx", {
+        UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined },
+        openModalLazy: (load: () => Promise<unknown>) => load()
+    }, {
+        "@shared/SettingsStore": { SYM_GET_RAW_TARGET }, "@components/Heading": {}, "@plugins/pinDms/constants": {}, "@plugins/pinDms/data": {},
+        "@webpack": { extractAndLoadChunksLazy: () => () => { loads++; return pending; }, findComponentByCodeLazy: () => "picker" }
+    });
+    const opening = openCategoryModal(null, "channel");
+    userId = "second";
+    release();
+    assert.equal((await opening)({}), null);
+    const render = await openCategoryModal(null, "channel");
+    assert.equal(render({}).props.userId, "second");
+    userId = undefined;
+    assert.equal(openCategoryModal(null, "channel"), undefined);
+    assert.equal(loads, 2);
 });

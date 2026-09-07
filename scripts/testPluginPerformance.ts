@@ -11524,10 +11524,13 @@ test("native translation preserves HTTP failures without parsing error bodies", 
         for (const status of [401, 403, 456, 500]) {
             let cancelled = 0;
             const native = loadSource("src/plugins/translate/native.ts", {}, {
-                fetch: async () => new Response(new ReadableStream({
+                fetch: async (_url: string, options: RequestInit) => {
+                    assert.equal(options.redirect, "error");
+                    return new Response(new ReadableStream({
                     start(controller) { controller.enqueue(new TextEncoder().encode("<html>private response</html>")); controller.close(); },
                     cancel() { cancelled++; }
-                }), { status })
+                    }), { status });
+                }
             });
             const result = await native[provider]({}, false, "fixture", "fixture", "fixture");
             assert.equal(result.status, status, provider);

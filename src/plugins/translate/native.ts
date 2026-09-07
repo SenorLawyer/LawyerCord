@@ -14,6 +14,7 @@ export async function makeDeeplTranslateRequest(_: IpcMainInvokeEvent, pro: bool
     try {
         const res = await fetch(url, {
             method: "POST",
+            redirect: "error",
             headers: {
                 "Content-Type": "application/json",
                 "Authorization": `DeepL-Auth-Key ${apiKey}`
@@ -39,6 +40,7 @@ export async function makeKagiTranslateRequest(_: IpcMainInvokeEvent, token: str
     try {
         const res = await fetch(url, {
             method: "POST",
+            redirect: "error",
             headers: {
                 "Content-Type": "application/json",
                 "Cookie": `kagi_session=${token}`

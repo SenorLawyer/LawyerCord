@@ -1609,6 +1609,11 @@ test("UserPFP ignores avatar loads after stop or restart", async () => {
         assert.equal(avatar({ id: "shared" }, true, 128), "https://fixture.invalid/local.png");
         delete data.avatars.shared;
         assert.equal(avatar({ id: "shared" }, true, 128), "https://fixture.invalid/remote.png");
+        const guildAvatar = plugin.getAvatarServerHook(() => "default");
+        for (const url of ["data:image/png;base64,iVBORw0KGgo=", "https://fixture.invalid/avatar?size=64&signature=a%20b"]) {
+            data.avatars.shared = url;
+            assert.equal(guildAvatar({ userId: "shared", size: 128, canAnimate: true }), url);
+        }
         assert.equal(signals[0].aborted, mode !== "current");
     }
 });

@@ -154,15 +154,7 @@ export default definePlugin({
         const { userId, avatar, size, canAnimate } = config;
         const customUrl = data.avatars[userId] || data.remoteAvatars[userId];
 
-        if (customUrl) {
-            try {
-                const res = new URL(customUrl);
-                if (size) res.searchParams.set("size", size.toString());
-                return res.toString();
-            } catch {
-                return customUrl;
-            }
-        }
+        if (customUrl) return customUrl;
 
         if (avatar) {
             const user = UserStore.getUser(userId);

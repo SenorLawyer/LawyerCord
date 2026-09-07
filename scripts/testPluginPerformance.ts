@@ -8238,6 +8238,19 @@ test("installer inventory excludes hidden folders and files before reading metad
 });
 
 
+test("narrator formatting preserves placeholder text inside names", () => {
+    const api = loadSource("src/plugins/vcNarrator/index.tsx", {
+        "@api/Settings": { migrateSettingsFromPlugin() {} },
+        "@components/ErrorCard": {}, "@components/Heading": {}, "@components/Paragraph": {},
+        "@utils/constants": { Devs: {} }, "@utils/Logger": {}, "@utils/margins": {}, "@utils/text": {},
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, ReporterTestable: {} },
+        "@webpack/common": {}, "./settings": { settings: { store: { latinOnly: false } } }
+    }, {}, "({ formatText })");
+    assert.equal(api.formatText("{{USER}} joined {{CHANNEL}}", "Name {{CHANNEL}}", "General", "", ""), "Name {{CHANNEL}} joined General");
+    assert.equal(api.formatText("{{CHANNEL}} {{DISPLAY_NAME}} {{NICKNAME}} {{USER}} {{USER}} {{OTHER}}", "Alice", "{{DISPLAY_NAME}}", "{{NICKNAME}}", "Nick"), "{{DISPLAY_NAME}} {{NICKNAME}} Nick Alice Alice {{OTHER}}");
+    assert.equal(api.formatText("{{USER}}/{{CHANNEL}}/{{DISPLAY_NAME}}/{{NICKNAME}}", "", "", "💡", ""), "/channel/Someone/");
+});
+
 test("narrator voice lookup preserves the selected voice while voices load", () => {
     const store = { voice: "preferred" };
     const api = loadSource("src/plugins/vcNarrator/settings.ts", {

@@ -71,11 +71,13 @@ function clean(str: string) {
 }
 
 function formatText(str: string, user: string, channel: string, displayName: string, nickname: string) {
-    return str
-        .replaceAll("{{USER}}", clean(user) || (user ? "Someone" : ""))
-        .replaceAll("{{CHANNEL}}", clean(channel) || "channel")
-        .replaceAll("{{DISPLAY_NAME}}", clean(displayName) || (displayName ? "Someone" : ""))
-        .replaceAll("{{NICKNAME}}", clean(nickname) || (nickname ? "Someone" : ""));
+    const values: Record<string, string> = {
+        USER: clean(user) || (user ? "Someone" : ""),
+        CHANNEL: clean(channel) || "channel",
+        DISPLAY_NAME: clean(displayName) || (displayName ? "Someone" : ""),
+        NICKNAME: clean(nickname) || (nickname ? "Someone" : "")
+    };
+    return str.replace(/{{(USER|CHANNEL|DISPLAY_NAME|NICKNAME)}}/g, (_, key: string) => values[key]);
 }
 
 // For every user, channelId and oldChannelId will differ when moving channel.

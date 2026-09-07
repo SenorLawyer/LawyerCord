@@ -10335,7 +10335,7 @@ test("relationship notifier skips user lookups for irrelevant or disabled remova
             const { onRelationshipRemove } = loadSource("src/plugins/relationshipNotifier/functions.ts", {
                 "@utils/discord": { getUniqueUsername: () => "User" },
                 "@vencord/discord-types/enums": { RelationshipType: { FRIEND: 1, BLOCKED: 2, INCOMING_REQUEST: 3, OUTGOING_REQUEST: 4 } },
-                "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "owner" }) }, UserUtils: { getUser: async () => { lookups++; return { id: "user", getAvatarURL() {} }; } } },
+                "@webpack/common": { RelationshipStore: { getRelationshipType: () => 0 }, UserStore: { getCurrentUser: () => ({ id: "owner" }) }, UserUtils: { getUser: async () => { lookups++; return { id: "user", getAvatarURL() {} }; } } },
                 "./settings": { __esModule: true, default: { store: { friends, friendRequestCancels } } },
                 "./utils": { notify: () => notifications++ }
             });
@@ -10529,7 +10529,7 @@ test("relationship notifier invalidates pending work across stop, logout, and re
                 UserStore: { getCurrentUser: () => ({ id: "owner" }) },
                 GuildStore: { getGuilds: () => ({}) },
                 ChannelStore: { getSortedPrivateChannels: () => [] },
-                RelationshipStore: { getMutableRelationships: () => new Map() },
+                RelationshipStore: { getMutableRelationships: () => new Map(), getRelationshipType: () => 0 },
                 UserUtils: { getUser: async () => { await wait(); return { id: "friend", getAvatarURL() {} }; } }
             };
             const utils = loadSource("src/plugins/relationshipNotifier/utils.ts", {
@@ -10581,6 +10581,7 @@ test("relationship notifier tracks overlapping manual removals independently", a
                 "@utils/discord": { getUniqueUsername: () => "Friend" },
                 "@vencord/discord-types/enums": { ChannelType: { GROUP_DM: 3 }, RelationshipType: { FRIEND: 1 } },
                 "@webpack/common": {
+                    RelationshipStore: { getRelationshipType: () => 0 },
                     UserStore: { getCurrentUser: () => ({ id: "owner" }) },
                     UserUtils: { getUser: async () => ({ id: "friend", getAvatarURL() {} }) }
                 },
@@ -10607,6 +10608,34 @@ test("relationship notifier tracks overlapping manual removals independently", a
             handlers.reset();
             await remove("first");
             assert.equal(notifications, 2);
+        }
+    }
+});
+
+
+test("relationship notifications recheck restored relationships after user lookup", async () => {
+    for (const removedType of [1, 3]) {
+        for (const currentType of [0, 1, 2, 3, 4]) {
+            let relation = 0;
+            let release = () => {};
+            const pending = new Promise<void>(resolve => { release = resolve; });
+            let notifications = 0;
+            const { onRelationshipRemove } = loadSource("src/plugins/relationshipNotifier/functions.ts", {
+                "@utils/discord": { getUniqueUsername: () => "Friend" },
+                "@vencord/discord-types/enums": { RelationshipType: { FRIEND: 1, BLOCKED: 2, INCOMING_REQUEST: 3, OUTGOING_REQUEST: 4 } },
+                "@webpack/common": {
+                    UserStore: { getCurrentUser: () => ({ id: "owner" }) },
+                    RelationshipStore: { getRelationshipType: () => relation },
+                    UserUtils: { getUser: async () => { await pending; return { id: "friend", getAvatarURL() {} }; } }
+                },
+                "./settings": { __esModule: true, default: { store: { friends: true, friendRequestCancels: true } } },
+                "./utils": { notify: () => notifications++ }
+            });
+            const work = onRelationshipRemove({ relationship: { id: "friend", type: removedType } });
+            relation = currentType;
+            release();
+            await work;
+            assert.equal(notifications, removedType === 1 ? Number(currentType !== 1) : Number(currentType === 0), `${removedType} -> ${currentType}`);
         }
     }
 });

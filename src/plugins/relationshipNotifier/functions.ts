@@ -18,7 +18,7 @@
 
 import { getUniqueUsername, openUserProfile } from "@utils/discord";
 import { ChannelType, RelationshipType } from "@vencord/discord-types/enums";
-import { UserStore, UserUtils } from "@webpack/common";
+import { RelationshipStore, UserStore, UserUtils } from "@webpack/common";
 
 import settings from "./settings";
 import { ChannelDelete, GuildDelete, RelationshipRemove } from "./types";
@@ -52,6 +52,10 @@ export async function onRelationshipRemove({ relationship: { type, id } }: Relat
     const user = await UserUtils.getUser(id)
         .catch(() => null);
     if (!user || currentSession !== session || UserStore.getCurrentUser()?.id !== currentUserId) return;
+
+    const currentType = RelationshipStore.getRelationshipType(id);
+    if (currentType === type || type === RelationshipType.INCOMING_REQUEST
+        && [RelationshipType.FRIEND, RelationshipType.BLOCKED, RelationshipType.OUTGOING_REQUEST].includes(currentType)) return;
 
     switch (type) {
         case RelationshipType.FRIEND:

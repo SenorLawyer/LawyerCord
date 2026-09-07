@@ -10845,3 +10845,30 @@ test("pinned DM forms validate submissions and normalize cleared colors", () => 
         }
     }
 });
+
+
+test("pinned DM render callbacks are released without clearing a newer mount", () => {
+    const cleanups: (() => void)[] = [];
+    const keys: unknown[] = [];
+    let first = 0;
+    let second = 0;
+    let callback = () => { first++; };
+    const data = loadSource("src/plugins/pinDms/data.ts", {
+        "@plugins/pinDms": { settings: { use: (value: unknown) => keys.push(value) }, PinOrder: {}, PrivateChannelSortStore: {} },
+        "@utils/react": { useForceUpdater: () => callback },
+        "@webpack/common": { useEffect: (effect: () => () => void) => cleanups.push(effect()) }
+    });
+    data.usePinnedDms();
+    data.init();
+    assert.equal(first, 1);
+    assert.equal(cleanups.length, 1);
+    callback = () => { second++; };
+    data.usePinnedDms();
+    assert.equal(keys[0], keys[1]);
+    cleanups[0]();
+    data.init();
+    assert.equal(second, 1);
+    cleanups[1]();
+    data.init();
+    assert.equal(second, 1);
+});

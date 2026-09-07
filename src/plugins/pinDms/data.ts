@@ -6,7 +6,7 @@
 
 import { PinOrder, PrivateChannelSortStore, settings } from "@plugins/pinDms";
 import { useForceUpdater } from "@utils/react";
-import { UserStore } from "@webpack/common";
+import { useEffect, UserStore } from "@webpack/common";
 
 export interface Category {
     id: string;
@@ -16,9 +16,12 @@ export interface Category {
     collapsed?: boolean;
 }
 
+const SETTINGS_KEYS = ["pinOrder", "canCollapseDmSection", "dmSectionCollapsed", "userBasedCategoryList"] satisfies Array<keyof typeof settings.store>;
+
 let forceUpdateDms: (() => void) | undefined = undefined;
 let lastPrivateChannelIds: string[] | null = null;
 const lastSortOrder = new Map<string, number>();
+
 export function getCurrentUserCategories(): Category[] {
     const userId = UserStore.getCurrentUser()?.id;
     return userId == null ? [] : settings.store.userBasedCategoryList[userId] ??= [];
@@ -29,8 +32,14 @@ export function init() {
 }
 
 export function usePinnedDms() {
-    forceUpdateDms = useForceUpdater();
-    settings.use(["pinOrder", "canCollapseDmSection", "dmSectionCollapsed", "userBasedCategoryList"]);
+    const forceUpdate = useForceUpdater();
+    useEffect(() => {
+        forceUpdateDms = forceUpdate;
+        return () => {
+            if (forceUpdateDms === forceUpdate) forceUpdateDms = undefined;
+        };
+    }, [forceUpdate]);
+    settings.use(SETTINGS_KEYS);
 }
 
 export function getCategory(id: string) {

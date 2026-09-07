@@ -116,7 +116,7 @@ async function deeplTranslate(text: string, sourceLang: string, targetLang: stri
         JSON.stringify({
             text: [text],
             target_lang: targetLang,
-            source_lang: sourceLang.split("-")[0]
+            source_lang: sourceLang.split("-")[0] || undefined
         })
     );
 

@@ -11882,3 +11882,27 @@ test("Kagi translation requires a session before sending text", async () => {
     assert.equal((await translateText("fixture", "en", "fr")).text, "bonjour");
     assert.equal(requests, 1);
 });
+
+
+test("DeepL automatic detection omits the source language request field", async () => {
+    const payloads: Array<{ source_lang?: string; target_lang: string; text: string[]; }> = [];
+    const { translateText } = loadSource("src/plugins/translate/utils.ts", {
+        "@utils/css": { classNameFactory: () => () => "" }, "@utils/misc": {},
+        "@webpack/common": { showToast() {}, Toasts: { Type: { FAILURE: "failure" } } },
+        "./languages": {}, "./settings": { settings: { store: { service: "deepl", deeplApiKey: "fixture" } } }
+    }, {
+        IS_WEB: false,
+        VencordNative: { pluginHelpers: { Translate: { makeDeeplTranslateRequest: async (_pro: boolean, _key: string, payload: string) => {
+            payloads.push(JSON.parse(payload));
+            return { status: 500, data: "" };
+        } } } }
+    });
+    for (const source of ["auto", "", "en-us", "de"]) {
+        await assert.rejects(translateText("fixture", source, "fr"), /500/);
+        const payload = payloads[payloads.length - 1];
+        assert.equal(Object.hasOwn(payload, "source_lang"), source !== "auto" && source !== "");
+        assert.equal(payload.source_lang, source === "en-us" ? "en" : source === "de" ? "de" : undefined);
+        assert.equal(payload.target_lang, "fr");
+        assert.deepEqual(payload.text, ["fixture"]);
+    }
+});

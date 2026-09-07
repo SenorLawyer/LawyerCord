@@ -1062,7 +1062,7 @@ test("automatic translation cancels failed sends and preserves the original text
     let fail = true;
     const { default: plugin } = loadSource("src/plugins/translate/index.tsx", {
         "@api/ContextMenu": {}, "@utils/constants": { Devs: {} },
-        "@utils/types": { __esModule: true, default: (value: object) => value }, "@webpack/common": {},
+        "@utils/types": { __esModule: true, default: (value: object) => value }, "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "self" }) } },
         "./settings": { settings: { store: { autoTranslate: true } } }, "./TranslateIcon": {}, "./TranslationAccessory": {},
         "./utils": { translate: async () => { if (fail) throw new Error("service unavailable"); return { text: "Translated" }; } },
     }, { setTimeout: () => 1, clearTimeout() {} });
@@ -11773,5 +11773,33 @@ test("native translation rejects invalid IPC argument types before fetching", as
         }
         assert.equal((await native[provider]({}, ...valid)).status, 200);
         assert.equal(requests, 1);
+    }
+});
+
+
+test("automatic translation rejects results after account or plugin lifecycle changes", async () => {
+    for (const phase of ["current", "account", "logout", "stop", "disabled", "edited"]) {
+        let userId: string | undefined = "first";
+        let resolve: (value: { text: string; }) => void = () => assert.fail("Missing deferred resolver");
+        const pending = new Promise<{ text: string; }>(done => { resolve = done; });
+        const store = { autoTranslate: true };
+        const { default: plugin } = loadSource("src/plugins/translate/index.tsx", {
+            "@api/ContextMenu": {}, "@utils/constants": { Devs: {} },
+            "@utils/types": { __esModule: true, default: (value: object) => value },
+            "@webpack/common": { UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined } },
+            "./settings": { settings: { store } }, "./TranslateIcon": {}, "./TranslationAccessory": {},
+            "./utils": { translate: () => pending }
+        }, { setTimeout: () => 1, clearTimeout() {} });
+        const message = { content: "Original" };
+        const sending = plugin.onBeforeMessageSend("channel", message);
+        if (phase === "account") userId = "second";
+        if (phase === "logout") { plugin.flux.LOGOUT(); userId = "first"; }
+        if (phase === "stop") plugin.stop();
+        if (phase === "disabled") store.autoTranslate = false;
+        if (phase === "edited") message.content = "Edited";
+        resolve({ text: "Translated" });
+        const result = await sending;
+        assert.equal(result?.cancel, phase === "current" ? undefined : true, phase);
+        assert.equal(message.content, phase === "current" ? "Translated" : phase === "edited" ? "Edited" : "Original", phase);
     }
 });

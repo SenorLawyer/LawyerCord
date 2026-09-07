@@ -22,7 +22,7 @@ import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/Co
 import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
 import { Message } from "@vencord/discord-types";
-import { ChannelStore, Menu } from "@webpack/common";
+import { ChannelStore, Menu, UserStore } from "@webpack/common";
 
 import { settings } from "./settings";
 import { setShouldShowTranslateEnabledTooltip, TranslateChatBarIcon, TranslateIcon } from "./TranslateIcon";
@@ -58,6 +58,7 @@ function getMessageContent(message: Message) {
         || message.embeds?.find(embed => embed.type === "auto_moderation_message")?.rawDescription || "";
 }
 
+let translationGeneration = 0;
 let tooltipTimeout: ReturnType<typeof setTimeout> | undefined;
 
 function clearTranslateTooltipTimeout() {
@@ -106,9 +107,20 @@ export default definePlugin({
         }
     },
 
+    flux: {
+        LOGOUT() {
+            translationGeneration++;
+        }
+    },
+
     async onBeforeMessageSend(_, message) {
         if (!settings.store.autoTranslate) return;
         if (!message.content) return;
+
+        const userId = UserStore.getCurrentUser()?.id;
+        if (!userId) return { cancel: true };
+        const generation = translationGeneration;
+        const { content } = message;
 
         setShouldShowTranslateEnabledTooltip?.(true);
         clearTranslateTooltipTimeout();
@@ -118,7 +130,10 @@ export default definePlugin({
         }, 2000);
 
         try {
-            const trans = await translate("sent", message.content);
+            const trans = await translate("sent", content);
+            if (generation !== translationGeneration || UserStore.getCurrentUser()?.id !== userId
+                || !settings.store.autoTranslate || message.content !== content)
+                return { cancel: true };
             message.content = trans.text;
         } catch {
             return { cancel: true };
@@ -126,6 +141,7 @@ export default definePlugin({
     },
 
     stop() {
+        translationGeneration++;
         clearTranslateTooltipTimeout();
         setShouldShowTranslateEnabledTooltip?.(false);
     }

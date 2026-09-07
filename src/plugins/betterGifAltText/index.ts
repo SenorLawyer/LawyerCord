@@ -45,19 +45,23 @@ export default definePlugin({
         },
     ],
 
-    altify(props: any) {
+    altify(props: { alt?: string; original?: string; src?: string; }) {
         props.alt ??= "GIF";
         if (props.alt !== "GIF") return props.alt;
 
-        let url: string = props.original || props.src;
+        const source = props.original || props.src;
+        if (!source) return props.alt;
+        let url = source.split(/[?#]/, 1)[0];
         try {
             url = decodeURI(url);
-        } catch { }
+        } catch {
+            url = source.split(/[?#]/, 1)[0];
+        }
 
         let name = url
             .slice(url.lastIndexOf("/") + 1)
             .replace(/\d/g, "") // strip numbers
-            .replace(/.gif$/, "") // strip extension
+            .replace(/\.gif$/i, "") // strip extension
             .split(/[,\-_ ]+/g)
             .slice(0, 20)
             .join(" ");

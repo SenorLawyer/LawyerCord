@@ -1306,6 +1306,24 @@ test("BetterSessions returns its settings-close save to the flux error handler",
     await rejected;
 });
 
+test("GIF alt text excludes URL metadata and handles missing sources", () => {
+    const { default: plugin } = loadSource("src/plugins/betterGifAltText/index.ts", {
+        "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value },
+    });
+    for (const [src, expected] of [
+        [undefined, "GIF"],
+        ["https://example.test/happy-cat123.gif?width=200#preview", "GIF - happy cat"],
+        ["https://example.test/happy.GIF", "GIF - happy"],
+        ["https://example.test/agif", "GIF - agif"],
+        ["https://example.test/hello%20cat.gif", "GIF - hello cat"],
+        ["https://example.test/bad%zz.gif", "GIF - bad%zz"],
+    ]) {
+        assert.equal(plugin.altify({ src }), expected);
+    }
+    assert.equal(plugin.altify({ alt: "Custom description" }), "Custom description");
+});
+
 test("automatic status lifecycle failures are logged without rejecting", async () => {
     for (const mode of ["voice-start", "voice-stop", "game-stop"]) {
         let status = "online";

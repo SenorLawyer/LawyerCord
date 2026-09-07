@@ -5,14 +5,15 @@
  */
 
 import { TextButton } from "@components/Button";
-import { languages } from "@equicordplugins/translatePlus/misc/languages";
 import { cl, Translation } from "@equicordplugins/translatePlus/misc/types";
+import { GoogleLanguages } from "@plugins/translate/languages";
 import { Message } from "@vencord/discord-types";
 import { Parser, showToast, Toasts, useEffect, UserStore, useState } from "@webpack/common";
 
 import { Icon } from "./icon";
 import { translate } from "./translator";
 
+const languages = { ...GoogleLanguages, tp: "Toki Pona", sh: "Shavian" };
 const setters = new Map<string, { listeners: Set<(translation: Translation | undefined) => void>; request?: symbol; }>();
 
 export function Accessory({ message }: { message: Message & { vencordEmbeddedBy?: string[]; }; }) {

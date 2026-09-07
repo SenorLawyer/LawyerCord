@@ -12078,7 +12078,7 @@ test("TranslatePlus delivers to surviving views and rejects detached requests", 
     let finish: (value: { text: string; src: string; }) => void = () => {};
     const accessory = loadSource("src/equicordplugins/translatePlus/utils/accessory.tsx", {
         "@components/Button": {},
-        "@equicordplugins/translatePlus/misc/languages": {},
+        "@plugins/translate/languages": {},
         "@equicordplugins/translatePlus/misc/types": {},
         "./icon": {},
         "./translator": { translate: () => new Promise(resolve => { finish = resolve; }) },
@@ -12115,20 +12115,20 @@ test("TranslatePlus delivers to surviving views and rejects detached requests", 
 });
 
 test("TranslatePlus language labels ignore inherited properties", () => {
-    const { languages } = loadSource("src/equicordplugins/translatePlus/misc/languages.ts", {});
-    for (const src of ["en", "constructor", "__proto__", "toString", "unknown-language"]) {
+    const { GoogleLanguages } = loadSource("src/plugins/translate/languages.ts", {});
+    for (const src of ["en", "tp", "sh", "constructor", "__proto__", "toString", "unknown-language"]) {
         const { Accessory } = loadComponent("src/equicordplugins/translatePlus/utils/accessory.tsx", {
             useState: () => [{ text: "Translated", src }, () => {}],
             useEffect: () => {},
             Parser: { parse: (value: string) => value }
         }, {
             "@components/Button": {},
-            "@equicordplugins/translatePlus/misc/languages": { languages },
+            "@plugins/translate/languages": { GoogleLanguages },
             "@equicordplugins/translatePlus/misc/types": { cl: () => "" },
             "./icon": {}, "./translator": {}
         });
         const children = Accessory({ message: { id: "message" } }).props.children;
-        assert.ok(children.includes(src === "en" ? "English" : src), `Expected readable language label for ${src}`);
+        assert.ok(children.includes(src === "en" ? "English" : src === "tp" ? "Toki Pona" : src === "sh" ? "Shavian" : src), `Expected readable language label for ${src}`);
     }
 });
 
@@ -12140,7 +12140,7 @@ test("TranslatePlus failures show one toast without replacing translations or lo
     let reject: (error: Error) => void = () => {};
     const accessory = loadSource("src/equicordplugins/translatePlus/utils/accessory.tsx", {
         "@components/Button": {},
-        "@equicordplugins/translatePlus/misc/languages": {},
+        "@plugins/translate/languages": {},
         "@equicordplugins/translatePlus/misc/types": {},
         "./icon": {},
         "./translator": { translate: () => new Promise((_resolve, fail) => { reject = fail; }) },
@@ -12174,7 +12174,7 @@ test("TranslatePlus ignores older request results and failures", async () => {
     const pending: { resolve: (value: { text: string; src: string; }) => void; reject: (error: Error) => void; }[] = [];
     const accessory = loadSource("src/equicordplugins/translatePlus/utils/accessory.tsx", {
         "@components/Button": {},
-        "@equicordplugins/translatePlus/misc/languages": {},
+        "@plugins/translate/languages": {},
         "@equicordplugins/translatePlus/misc/types": {}, "./icon": {},
         "./translator": { translate: () => new Promise((resolve, reject) => pending.push({ resolve, reject })) },
         "@webpack/common": {
@@ -12228,7 +12228,7 @@ test("TranslatePlus rejects account changes before accessory cleanup", async () 
     const toasts: unknown[] = [];
     const accessory = loadSource("src/equicordplugins/translatePlus/utils/accessory.tsx", {
         "@components/Button": {},
-        "@equicordplugins/translatePlus/misc/languages": {},
+        "@plugins/translate/languages": {},
         "@equicordplugins/translatePlus/misc/types": {}, "./icon": {},
         "./translator": { translate: () => { requests++; return new Promise((resolve, reject) => { finish = resolve; fail = reject; }); } },
         "@webpack/common": {

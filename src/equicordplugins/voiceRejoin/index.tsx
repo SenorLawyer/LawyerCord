@@ -145,6 +145,11 @@ export default definePlugin({
     settings,
 
     flux: {
+        LOGOUT() {
+            cancelReconnectAttempt();
+            resetPersistCache();
+        },
+
         VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceState[]; }) {
             const currentUser = UserStore.getCurrentUser();
             if (!currentUser) return;

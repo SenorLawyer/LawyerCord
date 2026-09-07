@@ -1632,7 +1632,7 @@ test("voice rejoin saves the channel and session flag in one transaction", async
 });
 
 test("voice rejoin cancels pending attempts when the current user changes voice state", async () => {
-    for (const channelId of ["chosen", undefined]) {
+    for (const channelId of ["chosen", undefined, "logout"]) {
         let reconnect: () => Promise<void> = async () => assert.fail("Missing reconnect");
         let cleared = 0;
         let reads = 0;
@@ -1646,7 +1646,8 @@ test("voice rejoin cancels pending attempts when the current user changes voice 
         await api.default.flux.CONNECTION_OPEN();
         api.default.flux.VOICE_STATE_UPDATES({ voiceStates: [{ userId: "other", channelId: "unrelated" }] });
         assert.equal(cleared, 0);
-        api.default.flux.VOICE_STATE_UPDATES({ voiceStates: [{ userId: "me", channelId }] });
+        if (channelId === "logout") api.default.flux.LOGOUT?.();
+        else api.default.flux.VOICE_STATE_UPDATES({ voiceStates: [{ userId: "me", channelId }] });
         assert.equal(cleared, 1);
         await reconnect();
         assert.equal(reads, 1);

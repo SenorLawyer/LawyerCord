@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { set } from "@api/DataStore";
+import { update } from "@api/DataStore";
 import { Heading } from "@components/Heading";
 import { Margins } from "@components/margins";
 import { classNameFactory } from "@utils/css";
@@ -35,7 +35,7 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     function handleKey(e: React.KeyboardEvent) {
-        if (e.key === "Enter") saveUserAvatar();
+        if (e.key === "Enter") saveUserAvatar(url.trim());
     }
 
     async function handleFile(file: File) {
@@ -54,27 +54,27 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
         setUrl(dataUrl);
     }
 
-    async function saveUserAvatar() {
-        if (!url.trim()) {
-            await deleteUserAvatar();
-            return;
+    async function saveUserAvatar(value: string) {
+        try {
+            let saved: Record<string, string> = {};
+            await update<Record<string, string>>(KEY_DATASTORE, stored => {
+                saved = { ...stored };
+                if (value) saved[userId] = value;
+                else delete saved[userId];
+                return saved;
+            });
+            data.avatars = saved;
+            modalProps.onClose();
+        } catch {
+            Toasts.show({ message: "Could not save the avatar.", type: Toasts.Type.FAILURE, id: Toasts.genId() });
         }
-        avatars[userId] = url.trim();
-        await set(KEY_DATASTORE, avatars);
-        modalProps.onClose();
-    }
-
-    async function deleteUserAvatar() {
-        delete avatars[userId];
-        await set(KEY_DATASTORE, avatars);
-        modalProps.onClose();
     }
 
     const actions = [
         {
             text: "Save",
             variant: "primary",
-            onClick: saveUserAvatar
+            onClick: () => saveUserAvatar(url.trim())
         }
     ];
 
@@ -82,7 +82,7 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
         actions.unshift({
             text: "Delete",
             variant: "dangerPrimary",
-            onClick: deleteUserAvatar
+            onClick: () => saveUserAvatar("")
         });
     }
 

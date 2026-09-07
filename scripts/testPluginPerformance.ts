@@ -1535,24 +1535,39 @@ test("blocked sticker placeholders subscribe to display preferences", () => {
     assert.equal(subscriptions[0], subscriptions[2]);
 });
 
-test("UserPFP avatar editing persists local overrides without remote entries", async () => {
-    const data = { avatars: { local: "https://fixture.invalid/local.png" }, remoteAvatars: { remote: "https://fixture.invalid/remote.png" } };
-    const persisted: object[] = [];
-    const { SetAvatarModal } = loadSource("src/equicordplugins/userpfp/AvatarModal.tsx", {
-        "@api/DataStore": { set: async (key: string, value: object) => { assert.equal(key, "avatars"); persisted.push({ ...value }); } },
-        "@components/Heading": {}, "@components/margins": { Margins: {} },
-        "@utils/css": { classNameFactory: () => () => "" }, ".": { data, KEY_DATASTORE: "avatars" },
-        "@webpack/common": {
-            React: { createElement: (type: unknown, props: unknown) => ({ type, props }), useRef: () => ({ current: null }) },
-            useState: (value: unknown) => [value, () => {}], UserStore: { getUser: () => ({}) },
-            IconUtils: { getUserAvatarURL: () => "original" },
-        },
-    });
-    let closed = 0;
-    const modal = SetAvatarModal({ userId: "local", modalProps: { onClose: () => { closed++; } } });
-    await modal.props.actions.find((action: { text: string; }) => action.text === "Save").onClick();
-    assert.deepEqual(persisted, [{ local: "https://fixture.invalid/local.png" }]);
-    assert.equal(closed, 1);
+test("UserPFP avatar edits commit before publishing and preserve newer stored entries", async () => {
+    for (const action of ["Save", "Delete"]) for (const fail of [false, true]) {
+        const data = { avatars: { local: "https://fixture.invalid/new.png" }, remoteAvatars: { remote: "https://fixture.invalid/remote.png" } };
+        const previous = data.avatars;
+        let persisted: Record<string, string> = { local: "old", newer: "other" };
+        const toasts: string[] = [];
+        const { SetAvatarModal } = loadSource("src/equicordplugins/userpfp/AvatarModal.tsx", {
+            "@api/DataStore": { update: async (key: string, updater: (value: object) => Record<string, string>) => {
+                assert.equal(key, "avatars");
+                const next = updater(persisted);
+                assert.equal(data.avatars, previous);
+                if (fail) throw new Error("storage failed");
+                persisted = next;
+            } },
+            "@components/Heading": {}, "@components/margins": { Margins: {} },
+            "@utils/css": { classNameFactory: () => () => "" }, ".": { data, KEY_DATASTORE: "avatars" },
+            "@webpack/common": {
+                React: { createElement: (type: unknown, props: unknown) => ({ type, props }), useRef: () => ({ current: null }) },
+                useState: (value: unknown) => [value, () => {}], UserStore: { getUser: () => ({}) },
+                IconUtils: { getUserAvatarURL: () => "original" },
+                Toasts: { show: ({ message }: { message: string; }) => toasts.push(message), Type: { FAILURE: "failure" }, genId: () => "toast" },
+            },
+        });
+        let closed = 0;
+        const modal = SetAvatarModal({ userId: "local", modalProps: { onClose: () => { closed++; } } });
+        await modal.props.actions.find((item: { text: string; }) => item.text === action).onClick();
+        assert.deepEqual({ ...persisted }, !fail && action === "Delete" ? { newer: "other" } : { local: fail ? "old" : "https://fixture.invalid/new.png", newer: "other" });
+        assert.equal(closed, fail ? 0 : 1);
+        assert.deepEqual(toasts, fail ? ["Could not save the avatar."] : []);
+        if (fail) assert.equal(data.avatars, previous);
+        else assert.equal(data.avatars, persisted);
+        assert.equal(Object.hasOwn(persisted, "remote"), false);
+    }
 });
 
 test("UserPFP ignores avatar loads after stop or restart", async () => {

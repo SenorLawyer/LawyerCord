@@ -11086,3 +11086,53 @@ test("voice preview only mounts its timer while recording", () => {
     assert.equal(timer.type(), "1:05");
     assert.equal(timers, 1);
 });
+
+
+test("voice preview URLs belong to committed blobs and are released once", () => {
+    const states: unknown[] = [];
+    let stateIndex = 0;
+    let previous: unknown[] | undefined;
+    let cleanup: (() => void) | undefined;
+    const created: string[] = [];
+    const revoked: string[] = [];
+    const React = { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props: { ...props, children } }) };
+    const { VoiceMessageModal } = loadSource("src/plugins/voiceMessages/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@components/Card": {}, "@components/Icons": {}, "@components/Link": {}, "@components/Paragraph": {},
+        "@plugins/silentMessageToggle": {}, "@utils/constants": { Devs: {} },
+        "@utils/css": { classNameFactory: () => () => "" }, "@utils/margins": { Margins: {} },
+        "@utils/react": { useAwaiter: () => [{ waveform: "" }, undefined] },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} }, "@utils/web": {},
+        "@vencord/discord-types/enums": {},
+        "@webpack/common": {
+            React, Forms: {}, useState: () => { const index = stateIndex++; return [states[index], (value: unknown) => { states[index] = value; }]; },
+            useEffect: (effect: () => (() => void) | undefined, deps: unknown[]) => {
+                if (previous && deps.every((value, index) => value === previous?.[index])) return;
+                cleanup?.(); cleanup = effect(); previous = [...deps];
+            }
+        },
+        "./components/DesktopRecorder": {}, "./components/WebRecorder": { VoiceRecorderWeb: "recorder" }, "./components/VoicePreview": {},
+        "./waveform": { DEFAULT_WAVEFORM: "" }
+    }, { IS_DISCORD_DESKTOP: false, React, URL: {
+        createObjectURL: () => { const url = `blob:${created.length}`; created.push(url); return url; },
+        revokeObjectURL: (url: string) => revoked.push(url)
+    } }, "({ VoiceMessageModal })");
+    const render = () => { stateIndex = 0; return VoiceMessageModal({ modalProps: {} }); };
+    const view = render();
+    const setAudioBlob = view.props.children[0].props.children[0].props.setAudioBlob;
+    setAudioBlob(new Blob(["first"]));
+    setAudioBlob(new Blob(["second"]));
+    assert.equal(created.length, 0);
+    render();
+    render();
+    assert.equal(created.length, 1);
+    assert.deepEqual(revoked, []);
+    setAudioBlob(new Blob(["third"]));
+    render();
+    assert.equal(created.length, 2);
+    assert.deepEqual(revoked, ["blob:0"]);
+    cleanup?.();
+    assert.deepEqual(revoked, ["blob:0", "blob:1"]);
+    setAudioBlob(new Blob(["late"]));
+    assert.equal(created.length, 2);
+});

@@ -161,25 +161,17 @@ function sendAudio(blob: Blob, meta: AudioMetadata) {
     upload.upload();
 }
 
-function useObjectUrl() {
-    const [url, setUrl] = useState<string>();
-    const setWithFree = (blob: Blob) => {
-        if (url) URL.revokeObjectURL(url);
-        setUrl(URL.createObjectURL(blob));
-    };
-
-    return [url, setWithFree] as const;
-}
-
 function VoiceMessageModal({ modalProps }: { modalProps: RenderModalProps; }) {
     const [isRecording, setRecording] = useState(false);
     const [blob, setBlob] = useState<Blob>();
-    const [blobUrl, setBlobUrl] = useObjectUrl();
+    const [blobUrl, setBlobUrl] = useState<string>();
 
-    useEffect(() => () => {
-        if (blobUrl)
-            URL.revokeObjectURL(blobUrl);
-    }, [blobUrl]);
+    useEffect(() => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        setBlobUrl(url);
+        return () => URL.revokeObjectURL(url);
+    }, [blob]);
 
     const [meta, metaError] = useAwaiter(async () => {
         if (!blob) return EMPTY_META;
@@ -218,20 +210,14 @@ function VoiceMessageModal({ modalProps }: { modalProps: RenderModalProps; }) {
         >
             <div className={cl("buttons")}>
                 <VoiceRecorder
-                    setAudioBlob={blob => {
-                        setBlob(blob);
-                        setBlobUrl(blob);
-                    }}
+                    setAudioBlob={setBlob}
                     onRecordingChange={setRecording}
                 />
 
                 <Button
                     onClick={async () => {
                         const file = await chooseFile("audio/*");
-                        if (file) {
-                            setBlob(file);
-                            setBlobUrl(file);
-                        }
+                        if (file) setBlob(file);
                     }}
                 >
                     Upload File

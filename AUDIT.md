@@ -80,18 +80,20 @@ Sticker menus use format metadata instead of CSS-name guesses, and sticker block
 
 CopyStatusUrls awaits the shared clipboard helper and reports asynchronous failures. Its metadata result is validated before copying; malformed results leave the clipboard untouched. The broad webpack finder and patch still need live-client validation.
 
+Updater checks now clear stale selections and reject superseded downloads before writing. Renderer checks respect resets, concurrent update requests share work, failed rebuilds remain available for retry, and recovery prompts relaunch only after success. HTTP archive replacement writes to a temporary sibling before renaming it into place. Isolated filesystem tests cover partial writes, rename failures, retries, and real ASAR contents. Native operations already in flight, actual Electron archive locking, archive integrity checks, and crash durability remain open.
+
 ## Verification record
 
 Evidence applies to the recorded commit and scope, not to a future merge with main.
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `5a9fe600f` | 413 tests and timezone correctness checks passed, including 361 plugin regressions. |
+| Broader performance/correctness suite | `c68fad023` | 418 tests and timezone correctness checks passed, including 366 plugin regressions. |
 | Repository-wide ESLint | `5a9fe600f` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
 | CSS lint | `c50d116a4` | Passed; excludes userplugins. |
 | Internationalization lint | `5e869fea9` | Passed for tracked source markers and patch strings, not live Discord module compatibility. |
 | Latest focused regressions and TypeScript | `5a9fe600f` | All 11 narrator regressions, full TypeScript, and focused lint passed. Source fixtures reject TypeScript syntax diagnostics before execution. |
-| Standalone build | `5a9fe600f` | Passed after cloning cancellation, clipboard, presence, and narrator changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
+| Standalone build | `0ea68f8c4` | Passed after updater selection, retry, and archive replacement changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
 | Development build | `0fc6ab63b` | Passed after composer, codec, preset, and game-status startup changes. |
 | Installer review browser checks | `d7b99b737` | Actual templates and generator functions in isolated Chrome preserved literal metadata, all four native/pre-send warning combinations, the native acknowledgement gate, and cancellation. Electron IPC and real installation were not exercised. |
 | Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |
@@ -108,6 +110,7 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Video preview decoding | `fd216ca34` | Actual preview code in isolated Chrome produced a PNG from an FFmpeg-generated WebM and returned null for invalid video. |
 | Theme replacement on the filesystem | `07903f31c` | Actual native code preserves installed files after injected partial writes and rename failures, and cleans temporary files. This is not crash-durability testing. |
 | Theme provider download | `9b03d446d` | The actual native handler downloaded catalog entry 91 with HTTP 200 and no redirect into an isolated directory. All 136 catalog entries were separately checked against ID, filename, and catalog-content size rules. |
+| HTTP archive replacement | `0ea68f8c4` | Actual updater code on Windows preserved old ASAR bytes and readable contents after injected partial-write and rename failures. Retrying installed the complete new archive and removed temporary output. Electron original-fs was represented by Node fs; live Electron locks and crash durability were not tested. |
 | Extension archive extraction | `e33811df0` | Actual extraction code, fflate ZIP decoding, and the Windows filesystem preserved nested files/directories, skipped metadata, rejected three traversal/absolute paths, removed partial output, and preserved an outside sentinel. Electron loading, archive resource limits, and crash durability were not tested. |
 | Uninstall button browser checks | `d4efc449d` | Actual shared component props and styles in isolated Chrome verified the accessible name, keyboard focus indicator, and consistent 32px sizing in both stylesheet orders. Full Discord layout was not exercised. |
 | Other isolated browser checks | Earlier audit commits | Specific sticker-storage transactions, codec conversion, and CSS behavior were exercised. These are not general live-client acceptance. |

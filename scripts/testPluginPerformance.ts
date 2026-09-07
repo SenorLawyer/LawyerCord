@@ -1367,9 +1367,10 @@ test("StatusWhileActive never restores another account's status", () => {
 test("AutoDND restores each game's saved status only once", () => {
     let userId = "first";
     let status = "online";
+    const preferences = { statusToSet: "dnd", excludeInvisible: false };
     const updates: string[] = [];
     const { default: plugin } = loadSource("src/plugins/autoDndWhilePlaying.discordDesktop/index.ts", {
-        "@api/Settings": { definePluginSettings: () => ({ store: { statusToSet: "dnd", excludeInvisible: false } }), migratePluginSettings() {} },
+        "@api/Settings": { definePluginSettings: () => ({ store: preferences }), migratePluginSettings() {} },
         "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => status, updateSetting: (value: string) => { status = value; updates.push(value); } }) },
         "@utils/constants": { Devs: {} },
         "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
@@ -1404,6 +1405,20 @@ test("AutoDND restores each game's saved status only once", () => {
         plugin.stop();
         assert.equal(status, action === "stop" ? "online" : action === "foreign-stop" ? "invisible" : "idle");
     }
+    status = "invisible";
+    change({ games: [{}] });
+    preferences.excludeInvisible = true;
+    change({ games: [] });
+    assert.equal(status, "invisible");
+    change({ games: [{}] });
+    assert.equal(status, "invisible");
+    status = "online";
+    change({ games: [{}] });
+    status = "invisible";
+    change({ games: [{}] });
+    assert.equal(status, "invisible");
+    change({ games: [] });
+    assert.equal(status, "invisible");
 });
 
 test("Apple Music format substitutions preserve literal metadata", () => {

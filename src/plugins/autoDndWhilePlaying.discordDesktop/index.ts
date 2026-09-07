@@ -70,9 +70,8 @@ export default definePlugin({
             if (!userId) return;
             const status = StatusSettings.getSetting();
 
-            if (settings.store.excludeInvisible && (savedStatus?.value ?? status) === "invisible") return;
-
             if (games.length > 0) {
+                if (settings.store.excludeInvisible && status === "invisible") return;
                 if (status !== settings.store.statusToSet) {
                     savedStatus = { userId, value: status, applied: settings.store.statusToSet };
                     StatusSettings.updateSetting(settings.store.statusToSet);

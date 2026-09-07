@@ -241,10 +241,7 @@ function CloneModal({ data }: { data: Sticker | Emoji; }) {
             <Heading tag="h5">Custom Name</Heading>
             <CheckedTextInput
                 initialValue={name}
-                onChange={v => {
-                    data.name = v;
-                    setName(v);
-                }}
+                onChange={setName}
                 validate={v =>
                     (data.t === "Emoji" && v.length > 2 && v.length < 32 && nameValidator.test(v))
                     || (data.t === "Sticker" && v.length > 2 && v.length < 30)
@@ -279,9 +276,9 @@ function CloneModal({ data }: { data: Sticker | Emoji; }) {
                                     cursor: isCloning ? "not-allowed" : "pointer",
                                     filter: isCloning ? "brightness(50%)" : "none"
                                 }}
-                                onClick={isCloning ? void 0 : async () => {
+                                onClick={isCloning ? void 0 : () => {
                                     setIsCloning(true);
-                                    doClone(g.id, data).finally(() => {
+                                    return doClone(g.id, { ...data, name }).finally(() => {
                                         invalidateMemo();
                                         setIsCloning(false);
                                     });

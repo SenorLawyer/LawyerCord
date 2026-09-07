@@ -9774,3 +9774,47 @@ test("expression cloning preserves valid server errors and falls back for malfor
         assert.deepEqual(logs[0], ["Failed to clone expression.", failure]);
     }
 });
+
+test("cloning keeps the name selected when the request starts", async () => {
+    const uploads: Array<{ name: string; }> = [];
+    const busy: unknown[] = [];
+    let finishDownload: (value: unknown) => void = () => assert.fail("No download");
+    const download = new Promise(resolve => { finishDownload = resolve; });
+    const React = {
+        createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props: { ...props, children } }),
+        useState: (initial: unknown) => [initial, (value: unknown) => busy.push(value)],
+        useReducer: () => [0, () => {}],
+        useMemo: () => [{ id: "guild", name: "Guild" }]
+    };
+    const { CloneModal } = loadSource("src/plugins/expressionCloner/index.tsx", {
+        "@api/ContextMenu": {}, "@api/Settings": { migratePluginSettings() {} },
+        "@components/BaseText": {}, "@components/CheckedTextInput": {}, "@components/Flex": {},
+        "@components/Heading": {}, "@components/Paragraph": {},
+        "@utils/constants": { Devs: {} }, "@utils/discord": { getGuildAcronym: () => "G" },
+        "@utils/Logger": { Logger: class { error() {} } }, "@utils/misc": {},
+        "@utils/types": { __esModule: true, default: (value: object) => value },
+        "@vencord/discord-types/enums": { StickerFormatType: { PNG: 1, APNG: 2, LOTTIE: 3, GIF: 4 } },
+        "@webpack": { findByCodeLazy: () => (value: { name: string; }) => uploads.push(value) },
+        "@webpack/common": { React, GuildStore: { getGuild: () => ({ name: "Guild" }) }, Toasts: { Type: { SUCCESS: "success" }, genId: () => "id", show() {} } }
+    }, {
+        React, location: { protocol: "https:" }, window: { GLOBAL_ENV: { CDN_HOST: "fixture.invalid" } },
+        fetch: () => download,
+        FileReader: class {
+            result = "data:image/png;base64,fixture";
+            onload = () => {};
+            readAsDataURL() { this.onload(); }
+        }
+    }, "({ CloneModal })");
+    const data = { t: "Emoji", id: "emoji", name: "original", isAnimated: false };
+    const tree = CloneModal({ data });
+    const tooltip = tree.props.children[2].props.children[0][0];
+    const button = tooltip.props.children[0]({});
+    const pending = button.props.onClick();
+    tree.props.children[1].props.onChange("later");
+    assert.equal(data.name, "original");
+    finishDownload({ ok: true, blob: async () => ({ size: 1 }) });
+    await pending;
+    assert.equal(uploads.length, 1);
+    assert.equal(uploads[0].name, "original");
+    assert.deepEqual(busy, [true, "later", false]);
+});

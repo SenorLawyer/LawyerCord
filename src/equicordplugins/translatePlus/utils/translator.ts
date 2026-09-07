@@ -159,8 +159,9 @@ export async function translate(text: string): Promise<any> {
     if ((isTokiPona(text) || isSitelen(text)) && (toki || sitelen)) {
         if (isSitelen(text) && sitelen) text = await translateSitelen(text);
 
-        const translate = await (await fetch("https://aiapi.serversmp.xyz/toki", {
+        const response = await fetch("https://aiapi.serversmp.xyz/toki", {
             method: "POST",
+            redirect: "error",
             headers: {
                 "Accept": "application/json",
                 "Content-Type": "application/json"
@@ -170,7 +171,15 @@ export async function translate(text: string): Promise<any> {
                 src: "tl",
                 target: "en"
             })
-        })).json();
+        });
+        if (!response.ok) {
+            await response.body?.cancel();
+            throw new Error(`Toki Pona translation request failed (${response.status}).`);
+        }
+        const translate: unknown = await response.json();
+        if (!isObject(translate) || !("translation" in translate) || !Array.isArray(translate.translation)
+            || typeof translate.translation[0] !== "string")
+            throw new Error("Toki Pona provider returned an invalid response.");
 
         output.src = "tp";
         output.text = target === "en" ? translate.translation[0] : (await google(target, translate.translation[0])).text;

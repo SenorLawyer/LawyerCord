@@ -12004,3 +12004,29 @@ test("TranslatePlus rejects malformed dictionaries and retries failed loads", as
     assert.equal((await translate("𐑐")).text, "word");
     assert.equal(requests, 7);
 });
+
+
+test("TranslatePlus checks Toki provider status and payload before using text", async () => {
+    let status = 500;
+    let payload: unknown;
+    let parsed = 0;
+    let cancelled = 0;
+    const { translate } = loadSource("src/equicordplugins/translatePlus/utils/translator.ts", {
+        "@equicordplugins/translatePlus/settings": { settings: { store: { target: "en", shavian: false, toki: true, sitelen: false } } },
+        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
+        "@utils/text": { escapeRegExp: (text: string) => text }
+    }, { fetch: async (_url: string, options: RequestInit) => {
+        assert.equal(options.redirect, "error");
+        return { ok: status === 200, status, body: { cancel: async () => { cancelled++; } }, json: async () => { parsed++; return payload; } };
+    } });
+    await assert.rejects(translate("toki pona"), /500/);
+    assert.equal(parsed, 0);
+    assert.equal(cancelled, 1);
+    status = 200;
+    for (payload of [null, {}, { translation: [] }, { translation: [42] }])
+        await assert.rejects(translate("toki pona"), /invalid response/);
+    payload = { translation: ["Good language"] };
+    const result = await translate("toki pona");
+    assert.equal(result.src, "tp");
+    assert.equal(result.text, "Good language");
+});

@@ -12077,6 +12077,7 @@ test("TranslatePlus delivers to surviving views and rejects detached requests", 
     const deliveries: unknown[][] = [];
     let finish: (value: { text: string; src: string; }) => void = () => {};
     const accessory = loadSource("src/equicordplugins/translatePlus/utils/accessory.tsx", {
+        "@components/Button": {},
         "@equicordplugins/translatePlus/misc/languages": {},
         "@equicordplugins/translatePlus/misc/types": {},
         "./icon": {},

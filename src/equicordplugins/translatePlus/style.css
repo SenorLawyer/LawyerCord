@@ -10,13 +10,3 @@
 .eq-trans-accessory svg {
     margin-right: 0.25em;
 }
-
-.eq-trans-dismiss {
-    all: unset;
-    cursor: pointer;
-    color: var(--text-link);
-}
-
-.eq-trans-dismiss:is(:hover, :focus) {
-    text-decoration: underline;
-}

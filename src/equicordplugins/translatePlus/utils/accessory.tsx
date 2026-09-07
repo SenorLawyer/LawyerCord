@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { TextButton } from "@components/Button";
 import { languages } from "@equicordplugins/translatePlus/misc/languages";
 import { cl, Translation } from "@equicordplugins/translatePlus/misc/types";
 import { Message } from "@vencord/discord-types";
@@ -37,7 +38,7 @@ export function Accessory({ message }: { message: Message; }) {
             <Icon width={16} height={16} />
             {Parser.parse(translation.text)}
             {" "}
-            (translated from {languages[translation.src] ?? translation.src} - <button onClick={() => setTranslation(undefined)} className={cl("dismiss")}>Dismiss</button>)
+            (translated from {languages[translation.src] ?? translation.src} - <TextButton type="button" variant="link" onClick={() => setTranslation(undefined)}>Dismiss</TextButton>)
         </div>
     );
 }

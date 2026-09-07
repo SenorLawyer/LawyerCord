@@ -98,23 +98,25 @@ Translation responses validate required fields and report provider failures with
 
 Translate language options follow provider changes, and only the main composer owns the enabled tooltip. Native handlers reject invalid argument types and omit raw exceptions from IPC failures. Auto-translation cancels before changing text after account changes, logout, plugin stop, disabled settings, or intervening text edits. Context-menu and popover translations share one delivery function that rejects results from previous sessions. Deferred fixtures cover these cases; already-issued requests, overlapping same-message requests, mounted accessory state, response limits, and live account-event ordering remain open.
 
+DeepL automatic detection omits the source-language field, and source labels use the real language tables without inherited object properties. Its native handler rejects UTF-8 request bodies above the documented 128 KiB limit. Kagi stops before sending without a session token. The unused plugin-object translation export was removed. Translation accessories are keyed by account and message, and each message retains setters for all mounted views. Actual React fixtures verify state reset, duplicate-view delivery, and cleanup; Discord stores and parsing remain mocked. Request cancellation, response limits, concurrent result ordering, and live event timing remain open.
+
 ## Verification record
 
 Evidence applies to the recorded commit and scope, not to a future merge with main.
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `5c103909a` | 472 tests and timezone correctness checks passed, including 419 plugin regressions. |
-| Repository-wide ESLint | `5c103909a` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
+| Broader performance/correctness suite | `bd695428d` | 476 tests and timezone correctness checks passed, including 423 plugin regressions. |
+| Repository-wide ESLint | `bd695428d` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
 | CSS lint | `c50d116a4` | Passed; excludes userplugins. |
 | Internationalization lint | `5e869fea9` | Passed for tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest focused regressions and TypeScript | `5c103909a` | Translation provider and accessory lifecycle regressions, full TypeScript, and focused lint passed. Earlier voice lifecycle, preview, and metadata regressions also pass in the broader suite. Source fixtures reject TypeScript syntax diagnostics before execution. |
-| Standalone build | `5c103909a` | Passed after the translation changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
+| Latest focused regressions and TypeScript | `bd695428d` | Translation provider and accessory lifecycle regressions, full TypeScript, and focused lint passed. Earlier voice lifecycle, preview, and metadata regressions also pass in the broader suite. Source fixtures reject TypeScript syntax diagnostics before execution. |
+| Standalone build | `bd695428d` | Passed after the translation changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
 | Development build | `0fc6ab63b` | Passed after composer, codec, preset, and game-status startup changes. |
 | Installer review browser checks | `d7b99b737` | Actual templates and generator functions in isolated Chrome preserved literal metadata, all four native/pre-send warning combinations, the native acknowledgement gate, and cancellation. Electron IPC and real installation were not exercised. |
 | Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |
-| Web build | `5c103909a` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
-| Release artifact audit | `5c103909a` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
+| Web build | `bd695428d` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
+| Release artifact audit | `bd695428d` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
 | Avatar startup and edit ordering | `296e36989` | Actual loader, editor actions, and DataStore in isolated Chrome preserved edits in 20 overlapping runs, ten with startup first and ten with saving first. This checks one client context, not synchronization between clients. No extra production guard was added. |
 | Avatar edit transactions | `3bf4098d6` | Actual AvatarModal actions and DataStore code in isolated Chrome preserved storage and memory after an aborted write, kept both concurrent user edits, and deleted only the selected override. React rendering and Discord dependencies were mocked. |
 | Real IndexedDB queue behavior | `ce04cc40a` | Isolated Chrome verified aborted additions, ordered concurrent additions, aborted clearing, and subsequent successful clearing using actual queue and DataStore code. |
@@ -123,6 +125,7 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Clone button keyboard behavior | `38736e4cd` | Actual CloneModal props, shared Button, and stylesheet in isolated Chrome produced 64px controls at a 16px parent font, Tab focus, a focus ring, Enter/Space activation, and no activation while disabled. React and Discord dependencies were mocked; full client layout and uploads were not exercised. |
 | Playback rate application | `44d2a1156` | Actual MediaPlaybackSpeed code with Chrome audio/video elements passed 42 valid/invalid rate cases, preserved a 3x first-play selection, and verified one-shot listener and cleanup behavior. Play events were synthetic; no audio or live Discord UI was exercised. |
 | Image copy conversion | `41343b959` | Actual WebContextMenus code in isolated Chrome converted a JPEG to a 3 by 2 PNG, preserved red pixels, and closed the source bitmap exactly once. Clipboard delivery was intercepted; OS clipboard permission and live Discord menus were not tested. |
+| Translation accessory reconciliation | `bd695428d` | Actual plugin rendering and accessory code with isolated React 18.3.1 and its test renderer reset state on message/account changes, unmounted on logout, delivered to two views of one message, and preserved the remaining view after cleanup. Discord stores used a controlled external-store bridge; parsing and icons were mocked. No live Discord client or provider was exercised. |
 | Native translation redirects | `638d668e6` | Actual native handlers with Node fetch rejected local 301, 302, 303, 307, and 308 redirects. Ten valid initial requests reached the server; none reached the redirect destination. Failure responses contained no exception details. Credentials and text were synthetic; remote provider compatibility and Electron IPC were not exercised. |
 | Transcription model response transfer | `28bf744a0` | Actual worker wrapper with native Node fetch decoded a local 66-byte gzip response into 2,030 bytes. Download and cache-hit responses reported the decoded size and preserved every byte; native structured-clone transfers detached both sending buffers. Worker delivery and persistent storage were represented by a transfer sink and cloned in-memory cache. Remote models, IndexedDB, and Electron were not exercised. |
 | Transcription audio decoding | `d7c9fcdf9` | Actual decoder in isolated Chrome passed mono/stereo WAV cases at 16 kHz and 48 kHz, producing 16,000 samples per second and the expected channel average. All five native AudioContexts reached closed state, including invalid-input failure. Audio was synthetic; Electron integration, long-file memory limits, and transcription models were not exercised. |
@@ -134,7 +137,7 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Uninstall button browser checks | `d4efc449d` | Actual shared component props and styles in isolated Chrome verified the accessible name, keyboard focus indicator, and consistent 32px sizing in both stylesheet orders. Full Discord layout was not exercised. |
 | Other isolated browser checks | Earlier audit commits | Specific sticker-storage transactions, codec conversion, and CSS behavior were exercised. These are not general live-client acceptance. |
 
-Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `5c103909a`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
+Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `bd695428d`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
 
 ## Remaining work
 

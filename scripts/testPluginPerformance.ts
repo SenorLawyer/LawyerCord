@@ -12130,3 +12130,38 @@ test("TranslatePlus language labels ignore inherited properties", () => {
         assert.ok(children.includes(src === "en" ? "English" : src), `Expected readable language label for ${src}`);
     }
 });
+
+test("TranslatePlus failures show one toast without replacing translations or logging response text", async () => {
+    const cleanups: (() => void)[] = [];
+    const deliveries: unknown[] = [];
+    const toasts: unknown[][] = [];
+    const logs: unknown[][] = [];
+    let reject: (error: Error) => void = () => {};
+    const accessory = loadSource("src/equicordplugins/translatePlus/utils/accessory.tsx", {
+        "@components/Button": {},
+        "@equicordplugins/translatePlus/misc/languages": {},
+        "@equicordplugins/translatePlus/misc/types": {},
+        "./icon": {},
+        "./translator": { translate: () => new Promise((_resolve, fail) => { reject = fail; }) },
+        "@webpack/common": {
+            useState: () => [undefined, (value: unknown) => deliveries.push(value)],
+            useEffect: (effect: () => () => void) => cleanups.push(effect()),
+            showToast: (...args: unknown[]) => toasts.push(args), Toasts: { Type: { FAILURE: 2 } }
+        }
+    }, { console: { error: (...args: unknown[]) => logs.push(args) } });
+    const message = { id: "message", content: "Hello" };
+    accessory.Accessory({ message });
+    accessory.Accessory({ message });
+    const request = accessory.handleTranslate(message);
+    reject(new Error("Private provider response"));
+    await request;
+    assert.deepEqual(deliveries, []);
+    assert.deepEqual(toasts, [["Could not translate this message.", 2]]);
+    assert.deepEqual(logs, []);
+    const detached = accessory.handleTranslate(message);
+    for (const cleanup of cleanups) cleanup();
+    reject(new Error("Private detached response"));
+    await detached;
+    assert.equal(toasts.length, 1);
+    assert.deepEqual(logs, []);
+});

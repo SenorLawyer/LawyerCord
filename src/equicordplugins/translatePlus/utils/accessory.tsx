@@ -8,7 +8,7 @@ import { TextButton } from "@components/Button";
 import { languages } from "@equicordplugins/translatePlus/misc/languages";
 import { cl, Translation } from "@equicordplugins/translatePlus/misc/types";
 import { Message } from "@vencord/discord-types";
-import { Parser, useEffect, useState } from "@webpack/common";
+import { Parser, showToast, Toasts, useEffect, useState } from "@webpack/common";
 
 import { Icon } from "./icon";
 import { translate } from "./translator";
@@ -53,9 +53,8 @@ export async function handleTranslate(message: Message) {
         const translation = await translate(message.content);
         if (setters.get(message.id) === listeners)
             for (const setter of listeners) setter(translation);
-    } catch (error) {
-        console.error("[TranslatePlus] Failed to translate message:", error);
+    } catch {
         if (setters.get(message.id) === listeners)
-            for (const setter of listeners) setter({ src: "en", text: "Translation failed due to an error." });
+            showToast("Could not translate this message.", Toasts.Type.FAILURE);
     }
 }

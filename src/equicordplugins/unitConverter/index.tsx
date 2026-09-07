@@ -63,9 +63,10 @@ export default definePlugin({
                 message,
                 channel: ChannelStore.getChannel(message.channel_id),
                 onClick: () => {
-                    const setConversion = conversions.get(message.id);
-                    if (!setConversion) return;
-                    setConversion(convert(message.content));
+                    const setters = conversions.get(message.id);
+                    if (!setters) return;
+                    const conversion = convert(message.content);
+                    for (const setter of setters) setter(conversion);
                 }
             };
         }

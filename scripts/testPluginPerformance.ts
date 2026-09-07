@@ -12271,3 +12271,40 @@ test("UnitConverter converts compound measurements before their components", () 
         assert.equal(convert(input), "4.76kg", input);
     assert.equal(convert("10 lbs and 8 oz"), "4.54kg and 226.80g");
 });
+
+test("UnitConverter updates all message views and preserves surviving registrations", () => {
+    const cleanups: (() => void)[] = [];
+    const deliveries: string[][] = [];
+    const accessory = loadSource("src/equicordplugins/unitConverter/ConverterAccessory.tsx", {
+        "@components/Button": {},
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@webpack/common": {
+            useState: () => {
+                const values: string[] = [];
+                deliveries.push(values);
+                return ["", (value: string) => values.push(value)];
+            },
+            useEffect: (effect: () => () => void) => cleanups.push(effect())
+        }
+    });
+    const { default: plugin } = loadSource("src/equicordplugins/unitConverter/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({}) },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+        "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: { SELECT: 1 } },
+        "@webpack/common": { ChannelStore: { getChannel: () => ({}) } },
+        "./converter": { convert: () => "1.80m" }, "./ConverterAccessory": accessory
+    });
+    const message = { id: "shared", content: "5ft 11in" };
+    accessory.ConverterAccessory({ message });
+    accessory.ConverterAccessory({ message });
+    const action = plugin.messagePopoverButton.render(message).onClick;
+    action();
+    assert.deepEqual(deliveries, [["1.80m"], ["1.80m"]]);
+    cleanups[0]();
+    action();
+    assert.deepEqual(deliveries, [["1.80m"], ["1.80m", "1.80m"]]);
+    cleanups[1]();
+    assert.doesNotThrow(action);
+    assert.equal(accessory.conversions.size, 0);
+});

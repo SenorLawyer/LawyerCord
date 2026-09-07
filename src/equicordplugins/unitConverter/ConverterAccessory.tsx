@@ -22,7 +22,7 @@ import { IconProps } from "@utils/types";
 import { Message } from "@vencord/discord-types";
 import { useEffect, useState } from "@webpack/common";
 
-export const conversions = new Map<string, (conv: string) => void>();
+export const conversions = new Map<string, Set<(conv: string) => void>>();
 const cl = classNameFactory("vc-converter-");
 // thanks <@408047304864432139>
 export function ConvertIcon({ width = 24, height = 24 }: IconProps) {
@@ -44,9 +44,12 @@ export function ConverterAccessory({ message }: { message: Message; }) {
     const [conversion, setConversion] = useState<string>("");
 
     useEffect(() => {
-        conversions.set(message.id, setConversion);
+        const setters = conversions.get(message.id) ?? new Set<(value: string) => void>();
+        setters.add(setConversion);
+        conversions.set(message.id, setters);
         return () => {
-            conversions.delete(message.id);
+            setters.delete(setConversion);
+            if (!setters.size) conversions.delete(message.id);
         };
     }, [message.id]);
 

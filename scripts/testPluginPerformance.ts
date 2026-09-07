@@ -9643,3 +9643,40 @@ test("sticker block picker actions use sticker formats instead of CSS names", ()
     plugin.contextMenus["expression-picker"](children, { target: { dataset: { id: "emoji", type: "emoji" } } });
     assert.equal(children.length, 0);
 });
+
+test("sticker link menus share format support regardless of picker CSS", () => {
+    type MenuTree = { props: { children: Array<{ props: { children: Array<{ props: { action(): void; }; }>; }; }>; }; };
+    const copied: string[] = [];
+    let sticker: { id: string; format_type: number; } | undefined;
+    const { default: plugin } = loadComponent("src/plugins/copyStickerLinks/index.tsx", {
+        Menu: { MenuGroup: "group", MenuItem: "item" },
+        StickersStore: { getStickerById: () => sticker }
+    }, {
+        "@api/ContextMenu": {}, "@api/PluginManager": { isPluginEnabled: () => false },
+        "@plugins/expressionCloner": { __esModule: true, default: { name: "ExpressionCloner" } },
+        "@utils/constants": { Devs: {} },
+        "@utils/discord": { copyWithToast: (url: string) => copied.push(url) },
+        "@utils/types": { __esModule: true, default: (value: object) => value }
+    }, { window: { GLOBAL_ENV: { CDN_HOST: "cdn.fixture.invalid", MEDIA_PROXY_ENDPOINT: "//media.fixture.invalid" } } });
+    for (const format of [1, 2, 3, 4]) {
+        sticker = { id: "sticker", format_type: format };
+        for (const className of ["renamed", "lottieCanvas_legacy"]) {
+            const picker: MenuTree[] = [];
+            const message: MenuTree[] = [];
+            plugin.contextMenus["expression-picker"](picker, { target: { dataset: { id: sticker.id }, className } });
+            plugin.contextMenus.message(message, { favoriteableId: sticker.id, favoriteableType: "sticker", message: { stickerItems: [sticker] } });
+            assert.equal(picker.length, 1);
+            assert.equal(message.length, 1);
+            picker[0].props.children[0].props.children[0].props.action();
+            message[0].props.children[0].props.children[0].props.action();
+            const extension = format === 3 ? "json" : format === 4 ? "gif" : "png";
+            const host = format === 4 ? "media.fixture.invalid" : "cdn.fixture.invalid";
+            assert.equal(copied.at(-1), `https://${host}/stickers/sticker.${extension}?size=512&lossless=true`);
+            assert.equal(copied.at(-2), copied.at(-1));
+        }
+    }
+    sticker = undefined;
+    const empty: unknown[] = [];
+    plugin.contextMenus["expression-picker"](empty, { target: { dataset: { id: "missing" } } });
+    assert.equal(empty.length, 0);
+});

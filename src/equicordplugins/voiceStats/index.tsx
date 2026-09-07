@@ -222,7 +222,9 @@ export default definePlugin({
                 logger.error("Saved voice statistics are invalid. Tracking has been paused to preserve them.");
                 return;
             }
-            for (const [userId, value] of Object.entries(saved as Record<string, number>)) totalsByUser.set(userId, value);
+            if (!totalsDirty) {
+                for (const [userId, value] of Object.entries(saved as Record<string, number>)) totalsByUser.set(userId, value);
+            }
         }
         pluginStarted = true;
 

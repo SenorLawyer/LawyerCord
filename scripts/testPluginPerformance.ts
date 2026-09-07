@@ -1608,6 +1608,31 @@ test("webpack tar archives contain only the supplied byte view", () => {
     assert.equal(archive.length, 2048);
 });
 
+test("voice statistics preserve unsaved totals when restarted after a failed write", async () => {
+    let fail = true;
+    let stored = { friend: 20 };
+    const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {
+        "@utils/Logger": { Logger: class { error() {} } },
+        "@api/DataStore": { get: async () => stored, set: async (_key: string, value: typeof stored) => { if (fail) throw new Error("Failed"); stored = value; } },
+        "@components/BaseText": {}, "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+        "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
+        "@webpack/common": { UserStore: { getCurrentUser: () => undefined } }
+    }, { Date: { now: () => 41000 } }, "({ plugin: exports.default, sessionStarts, totalsByUser, flushActiveSessions, persistTotals })");
+    await api.plugin.start();
+    api.sessionStarts.set("friend", 1000);
+    api.flushActiveSessions();
+    await api.persistTotals();
+    api.plugin.stop();
+    await api.plugin.start();
+    assert.equal(api.totalsByUser.get("friend"), 60);
+    fail = false;
+    await api.persistTotals();
+    assert.equal(stored.friend, 60);
+    api.plugin.stop();
+});
+
 test("voice statistics reject malformed saved totals without starting or overwriting them", async () => {
     for (const saved of [null, [], "bad", 5, { friend: "5" }, { friend: -1 }, { friend: NaN }, { friend: Infinity }, { friend: 1.5 }]) {
         let errors = 0;

@@ -8238,6 +8238,26 @@ test("installer inventory excludes hidden folders and files before reading metad
 });
 
 
+test("narrator starts from the existing voice channel and resets across restarts", () => {
+    let channelId: string | undefined = "existing";
+    const api = loadSource("src/plugins/vcNarrator/index.tsx", {
+        "@api/Settings": { migrateSettingsFromPlugin() {} },
+        "@components/Heading": {}, "@components/Paragraph": {},
+        "@utils/constants": { Devs: {} }, "@utils/margins": {}, "@utils/text": {},
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, ReporterTestable: {} },
+        "@webpack/common": { SelectedChannelStore: { getVoiceChannelId: () => channelId } },
+        "./settings": { settings: {} }
+    }, {}, "({ plugin: exports.default, getTypeAndChannelId })");
+    api.plugin.start?.();
+    assert.equal(api.getTypeAndChannelId({ channelId: "existing", oldChannelId: "existing" }, true)[0], "");
+    assert.equal(api.getTypeAndChannelId({ channelId: "next", oldChannelId: "next" }, true)[0], "move");
+    assert.equal(api.getTypeAndChannelId({}, true)[0], "leave");
+    api.plugin.stop();
+    channelId = undefined;
+    api.plugin.start?.();
+    assert.equal(api.getTypeAndChannelId({ channelId: "fresh", oldChannelId: "fresh" }, true)[0], "join");
+});
+
 test("narrator uses the announced voice channel guild for nicknames", () => {
     const spoken: { text: string; }[] = [];
     const guildReads: string[] = [];

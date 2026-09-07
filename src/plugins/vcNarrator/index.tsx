@@ -183,6 +183,10 @@ export default definePlugin({
         }
     },
 
+    start() {
+        myLastChannelId = SelectedChannelStore.getVoiceChannelId() ?? undefined;
+    },
+
     stop() {
         myLastChannelId = undefined;
     },

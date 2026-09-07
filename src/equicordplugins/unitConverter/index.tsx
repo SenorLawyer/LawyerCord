@@ -22,7 +22,7 @@ import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { ChannelStore } from "@webpack/common";
+import { ChannelStore, UserStore, useStateFromStores } from "@webpack/common";
 
 import { convert } from "./converter";
 import { conversions, ConverterAccessory, ConvertIcon } from "./ConverterAccessory";
@@ -71,6 +71,9 @@ export default definePlugin({
             };
         }
     },
-    renderMessageAccessory: props => <SafeConverterAccessory message={props.message} />,
+    renderMessageAccessory: props => {
+        const userId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
+        return userId ? <SafeConverterAccessory key={`${userId}:${props.message.id}`} message={props.message} /> : null;
+    },
     settings,
 });

@@ -7,6 +7,7 @@
 import "./styles.css";
 
 import { definePluginSettings } from "@api/Settings";
+import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
@@ -111,8 +112,11 @@ export default definePlugin({
         return (
             <Tooltip text="Playback speed">
                 {tooltipProps => (
-                    <button
+                    <Button
                         {...tooltipProps}
+                        variant="none"
+                        size="min"
+                        aria-label="Playback speed"
                         className={cl("icon")}
                         onClick={e => {
                             ContextMenuApi.openContextMenu(e, () =>
@@ -125,10 +129,12 @@ export default definePlugin({
                                         label="Playback speed"
                                     >
                                         {speeds.map(speed => (
-                                            <Menu.MenuItem
+                                            <Menu.MenuRadioItem
                                                 key={speed}
                                                 id={"speed-" + speed}
                                                 label={`${speed}x`}
+                                                group="playback-speed"
+                                                checked={mediaRef?.current?.playbackRate === speed}
                                                 action={() => changeSpeed(speed)}
                                             />
                                         ))}
@@ -137,7 +143,7 @@ export default definePlugin({
                             );
                         }}>
                         <SpeedIcon />
-                    </button>
+                    </Button>
                 )}
             </Tooltip>
         );

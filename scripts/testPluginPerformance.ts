@@ -1608,6 +1608,32 @@ test("webpack tar archives contain only the supplied byte view", () => {
     assert.equal(archive.length, 2048);
 });
 
+test("voice statistics wait for stored totals before starting tracking", async () => {
+    let finish: (value: object) => void = () => assert.fail("Missing read");
+    let channelId = "first";
+    const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {
+        "@api/DataStore": { get: () => new Promise(resolve => { finish = resolve; }) }, "@components/BaseText": {},
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+        "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
+        "@webpack/common": {
+            UserStore: { getCurrentUser: () => ({ id: "me" }) },
+            SelectedChannelStore: { getVoiceChannelId: () => channelId },
+            VoiceStateStore: { getVoiceStatesForChannel: () => ({ friend: { userId: "friend" } }) }
+        }
+    }, { setInterval: () => 1, clearInterval() {} }, "({ plugin: exports.default, sessionStarts, totalsByUser })");
+    const starting = api.plugin.start();
+    api.plugin.flux.VOICE_STATE_UPDATES({ voiceStates: [{ userId: "me", channelId }] });
+    assert.equal(api.sessionStarts.size, 0);
+    channelId = "latest";
+    finish({ friend: 40 });
+    await starting;
+    assert.equal(api.sessionStarts.has("friend"), true);
+    assert.equal(api.totalsByUser.get("friend"), 40);
+    api.plugin.stop();
+});
+
 test("voice statistics discard stored totals from a stopped generation", async () => {
     const reads: ((value: object) => void)[] = [];
     const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {

@@ -204,14 +204,15 @@ export default definePlugin({
     },
 
     async start() {
-        pluginStarted = true;
+        pluginStarted = false;
         const generation = ++startGeneration;
 
         const saved = await get<Record<string, number>>(storageKey);
-        if (!pluginStarted || generation !== startGeneration) return;
+        if (generation !== startGeneration) return;
         if (saved) {
             for (const [userId, value] of Object.entries(saved)) totalsByUser.set(userId, value);
         }
+        pluginStarted = true;
 
         const myId = UserStore.getCurrentUser()?.id;
         if (!myId) return;

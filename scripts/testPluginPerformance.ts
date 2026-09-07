@@ -1535,6 +1535,42 @@ test("blocked sticker placeholders subscribe to display preferences", () => {
     assert.equal(subscriptions[0], subscriptions[2]);
 });
 
+test("UserPFP ignores avatar loads after stop or restart", async () => {
+    for (const mode of ["local-stop", "remote-stop", "restart", "current"]) {
+        const local = Promise.withResolvers<Record<string, string>>();
+        const remote = Promise.withResolvers<object>();
+        const signals: AbortSignal[] = [];
+        let reads = 0;
+        const { default: plugin, data } = loadSource("src/equicordplugins/userpfp/index.tsx", {
+            "@api/DataStore": { get: () => ++reads === 1 ? local.promise : Promise.resolve({ newer: "local" }) },
+            "@api/Settings": { definePluginSettings: () => ({ store: { databaseSource: "https://fixture.invalid/data" } }) },
+            "@components/Button": {}, "@components/Flex": {}, "@components/Heart": {}, "@components/Icons": {}, "@components/margins": {}, "@components/Notice": {},
+            "@utils/constants": { Devs: {}, EquicordDevs: {} }, "@utils/css": { classNameFactory: () => () => "" }, "@utils/discord": {},
+            "@utils/Logger": { Logger: class { error() { assert.fail("Unexpected avatar load failure"); } } },
+            "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+            "@webpack": { extractAndLoadChunksLazy: () => () => {} }, "@webpack/common": {}, "./AvatarModal": {},
+        }, { IS_DEV: false, AbortController,
+            fetch: async (_url: string, { signal }: { signal: AbortSignal; }) => { signals.push(signal); return { ok: true, json: () => signals.length === 1 ? remote.promise : Promise.resolve({ avatars: { newerRemote: "remote" } }) }; },
+        });
+        const old = plugin.start();
+        if (mode === "local-stop") plugin.stop();
+        local.resolve({ original: "local" });
+        await setImmediate();
+        if (mode === "local-stop") {
+            await old;
+            assert.deepEqual(Object.keys(data.avatars), []);
+            assert.equal(signals.length, 0);
+            continue;
+        }
+        if (mode === "remote-stop") plugin.stop();
+        if (mode === "restart") await plugin.start();
+        remote.resolve({ avatars: { oldRemote: "remote" } });
+        await old;
+        assert.deepEqual(Object.keys(data.avatars), mode === "restart" ? ["newer", "newerRemote"] : mode === "current" ? ["original", "oldRemote"] : ["original"]);
+        assert.equal(signals[0].aborted, mode !== "current");
+    }
+});
+
 test("image URL rewriting preserves unrelated hosts and signed query text", () => {
     const { fixImageUrl } = loadSource("src/plugins/webContextMenus.web/index.ts", {
         "@api/Settings": { definePluginSettings: () => ({ store: {} }) },

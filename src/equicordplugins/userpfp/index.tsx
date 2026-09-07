@@ -17,12 +17,16 @@ import { Notice } from "@components/Notice";
 import { Devs, EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import { openInviteModal } from "@utils/discord";
+import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 import { User } from "@vencord/discord-types";
 import { extractAndLoadChunksLazy } from "@webpack";
 import { IconUtils, Menu, openModal, UserStore } from "@webpack/common";
 
 import { SetAvatarModal } from "./AvatarModal";
+
+let loadController: AbortController | undefined;
+const logger = new Logger("UserPFP");
 
 const cl = classNameFactory("vc-userpfp-");
 const DONO_URL = "https://ko-fi.com/coolesding";
@@ -172,11 +176,23 @@ export default definePlugin({
         return original(config);
     },
     async start() {
-        data.avatars = await get<Record<string, string>>(KEY_DATASTORE) || {};
+        loadController?.abort();
+        const controller = loadController = new AbortController();
+        try {
+            const local = await get<Record<string, string>>(KEY_DATASTORE);
+            if (controller.signal.aborted) return;
+            data.avatars = local || {};
 
-        await fetch(settings.store.databaseSource)
-            .then(res => res.ok && res.json())
-            .then(remote => remote?.avatars && Object.assign(data.avatars, remote.avatars))
-            .catch(() => null);
+            const response = await fetch(settings.store.databaseSource, { signal: controller.signal });
+            if (!response.ok) throw new Error("Could not download the avatar database.");
+            const remote = await response.json();
+            if (!controller.signal.aborted && remote?.avatars) Object.assign(data.avatars, remote.avatars);
+        } catch (error) {
+            if (!controller.signal.aborted) logger.error("Could not load avatars.", error);
+        }
+    },
+    stop() {
+        loadController?.abort();
+        loadController = undefined;
     }
 });

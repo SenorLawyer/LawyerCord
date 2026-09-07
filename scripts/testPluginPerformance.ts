@@ -12256,9 +12256,9 @@ test("UnitConverter handles metric speeds before distance units", () => {
         ".": { settings: { store: { myUnits: "imperial" } } }
     });
     for (const unit of ["km/h", "kmph", "kph", "kilometer/h", "kilometers/h", "kilometerh"])
-        assert.equal(convert(`100 ${unit}`), "62.15mph", unit);
-    assert.equal(convert("100 km and 100 km/h"), "62.15mi and 62.15mph");
-    assert.equal(convert("100 kilometers"), "62.15mi");
+        assert.equal(convert(`100 ${unit}`), "62.14mph", unit);
+    assert.equal(convert("100 km and 100 km/h"), "62.14mi and 62.14mph");
+    assert.equal(convert("100 kilometers"), "62.14mi");
 });
 
 test("UnitConverter converts compound measurements before their components", () => {
@@ -12317,4 +12317,18 @@ test("UnitConverter carries rounded inches into the next foot", () => {
     assert.equal(convert("0.304799m"), "1ft");
     assert.equal(convert("0.3046m"), "11.99in");
     assert.equal(convert("1.8m"), "5ft 10.87in");
+});
+
+test("UnitConverter uses exact length, speed and avoirdupois mass factors", () => {
+    const settings = { store: { myUnits: "metric" } };
+    const { convert } = loadSource("src/equicordplugins/unitConverter/converter.ts", { ".": { settings } });
+    assert.equal(convert("100 mph"), "160.93km/h");
+    assert.equal(convert("100 ft"), "30.48m");
+    assert.equal(convert("1000 pounds"), "453.59kg");
+    assert.equal(convert("1000 ounces"), "28349.52g");
+    settings.store.myUnits = "imperial";
+    assert.equal(convert("1.609344 km"), "1.00mi");
+    assert.equal(convert("0.45359237 kg"), "1.00lb");
+    assert.equal(convert("28.349523125 g"), "1.00oz");
+    assert.equal(convert("30.48 m"), "100ft");
 });

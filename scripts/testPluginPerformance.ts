@@ -1608,6 +1608,29 @@ test("webpack tar archives contain only the supplied byte view", () => {
     assert.equal(archive.length, 2048);
 });
 
+test("voice rejoin cancels pending attempts when the current user changes voice state", async () => {
+    for (const channelId of ["chosen", undefined]) {
+        let reconnect: () => Promise<void> = async () => assert.fail("Missing reconnect");
+        let cleared = 0;
+        let reads = 0;
+        const api = loadSource("src/equicordplugins/voiceRejoin/index.tsx", {
+            "@api/DataStore": { get: async () => { reads++; return true; }, set: async () => {} },
+            "@api/Settings": { definePluginSettings: () => ({ store: { rejoinDelay: 2 } }) },
+            "@utils/constants": { EquicordDevs: {} }, "@utils/Logger": { Logger: class { error(error: unknown) { assert.fail(String(error)); } } },
+            "@utils/types": { __esModule: true, default: (plugin: object) => plugin, makeRange: () => [], OptionType: {} },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "me" }) } }
+        }, { setTimeout: (callback: typeof reconnect) => { reconnect = callback; return 1; }, clearTimeout: () => { cleared++; } });
+        await api.default.flux.CONNECTION_OPEN();
+        api.default.flux.VOICE_STATE_UPDATES({ voiceStates: [{ userId: "other", channelId: "unrelated" }] });
+        assert.equal(cleared, 0);
+        api.default.flux.VOICE_STATE_UPDATES({ voiceStates: [{ userId: "me", channelId }] });
+        assert.equal(cleared, 1);
+        await reconnect();
+        assert.equal(reads, 1);
+        api.default.stop();
+    }
+});
+
 test("voice rejoin leaves an existing voice connection active", async () => {
     let reconnect: () => Promise<void> = async () => assert.fail("Missing reconnect");
     const api = loadSource("src/equicordplugins/voiceRejoin/index.tsx", {

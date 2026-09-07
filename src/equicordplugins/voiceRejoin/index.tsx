@@ -157,6 +157,7 @@ export default definePlugin({
                 break;
             }
             if (!myState) return;
+            cancelReconnectAttempt();
 
             if (myState.channelId) {
                 void persistActiveState(myState)

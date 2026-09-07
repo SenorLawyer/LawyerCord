@@ -38,6 +38,10 @@ export const requireSettingsModal = extractAndLoadChunksLazy(['type:"USER_SETTIN
 export const KEY_DATASTORE = "vencord-custom-avatars";
 export const data = { avatars: {} as Record<string, string>, remoteAvatars: {} as Record<string, string> };
 
+export function isAvatarMap(value: unknown): value is Record<string, string> {
+    return isObject(value) && Object.values(value).every(url => typeof url === "string");
+}
+
 const settings = definePluginSettings({
     overrideServerAvatars: {
         type: OptionType.BOOLEAN,
@@ -165,19 +169,20 @@ export default definePlugin({
         loadController?.abort();
         const controller = loadController = new AbortController();
         try {
-            const local = await get<Record<string, string>>(KEY_DATASTORE);
+            const local = await get<unknown>(KEY_DATASTORE);
             if (controller.signal.aborted) return;
-            data.avatars = local || {};
+            if (local === undefined) data.avatars = {};
+            else if (isAvatarMap(local)) data.avatars = local;
+            else logger.warn("Stored custom avatars are invalid.");
             data.remoteAvatars = {};
 
             const response = await fetch(settings.store.databaseSource, { signal: controller.signal });
             if (!response.ok) throw new Error("Could not download the avatar database.");
             const remote: unknown = await response.json();
             if (controller.signal.aborted) return;
-            if (!isObject(remote) || !("avatars" in remote) || !isObject(remote.avatars)
-                || Object.values(remote.avatars).some(url => typeof url !== "string"))
+            if (!isObject(remote) || !("avatars" in remote) || !isAvatarMap(remote.avatars))
                 throw new Error("Invalid avatar database.");
-            data.remoteAvatars = remote.avatars as Record<string, string>;
+            data.remoteAvatars = remote.avatars;
         } catch (error) {
             if (!controller.signal.aborted) logger.error("Could not load avatars.", error);
         }

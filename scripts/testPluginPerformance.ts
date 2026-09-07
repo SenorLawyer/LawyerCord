@@ -1572,7 +1572,8 @@ test("avatar file reads stop on replacement, typed URLs, and unmount", () => {
 });
 
 test("UserPFP avatar edits commit before publishing and preserve newer stored entries", async () => {
-    for (const action of ["Save", "Delete"]) for (const fail of [false, true]) {
+    for (const action of ["Save", "Delete"]) for (const failure of ["none", "write", "invalid"]) {
+        const fail = failure !== "none";
         const data = { avatars: { local: "https://fixture.invalid/new.png" }, remoteAvatars: { remote: "https://fixture.invalid/remote.png" } };
         const previous = data.avatars;
         let persisted: Record<string, string> = { local: "old", newer: "other" };
@@ -1580,13 +1581,13 @@ test("UserPFP avatar edits commit before publishing and preserve newer stored en
         const { SetAvatarModal } = loadSource("src/equicordplugins/userpfp/AvatarModal.tsx", {
             "@api/DataStore": { update: async (key: string, updater: (value: object) => Record<string, string>) => {
                 assert.equal(key, "avatars");
-                const next = updater(persisted);
+                const next = updater(failure === "invalid" ? { broken: 42 } : persisted);
                 assert.equal(data.avatars, previous);
                 if (fail) throw new Error("storage failed");
                 persisted = next;
             } },
             "@components/Heading": {}, "@components/margins": { Margins: {} },
-            "@utils/css": { classNameFactory: () => () => "" }, ".": { data, KEY_DATASTORE: "avatars" },
+            "@utils/css": { classNameFactory: () => () => "" }, ".": { data, KEY_DATASTORE: "avatars", isAvatarMap: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) && Object.values(value).every(url => typeof url === "string") },
             "@webpack/common": {
                 React: { createElement: (type: unknown, props: unknown) => ({ type, props }), useRef: () => ({ current: null }) },
                 useEffect() {}, useState: (value: unknown) => [value, () => {}], UserStore: { getUser: () => ({}) },
@@ -1611,18 +1612,19 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
         "invalid-mixed": { avatars: { oldRemote: "remote", broken: 42 } },
         "invalid-null": null, "invalid-array": [], "invalid-missing": {}, "invalid-map-array": { avatars: [] },
     };
-    for (const mode of ["local-stop", "remote-stop", "restart", "current", ...Object.keys(invalidResponses)]) {
-        const local = Promise.withResolvers<Record<string, string>>();
+    for (const mode of ["local-stop", "remote-stop", "restart", "current", "invalid-local", ...Object.keys(invalidResponses)]) {
+        const local = Promise.withResolvers<unknown>();
         const remote = Promise.withResolvers<unknown>();
         const signals: AbortSignal[] = [];
         let reads = 0;
         const errors: unknown[] = [];
+        const warnings: string[] = [];
         const { default: plugin, data } = loadSource("src/equicordplugins/userpfp/index.tsx", {
             "@api/DataStore": { get: () => ++reads === 1 ? local.promise : Promise.resolve({ newer: "local" }) },
             "@api/Settings": { definePluginSettings: () => ({ store: { databaseSource: "https://fixture.invalid/data" } }) },
             "@components/Button": {}, "@components/Flex": {}, "@components/Heart": {}, "@components/Icons": {}, "@components/margins": {}, "@components/Notice": {},
             "@utils/constants": { Devs: {}, EquicordDevs: {} }, "@utils/css": { classNameFactory: () => () => "" }, "@utils/discord": {},
-            "@utils/Logger": { Logger: class { error(_message: string, error: unknown) { errors.push(error); } } },
+            "@utils/Logger": { Logger: class { error(_message: string, error: unknown) { errors.push(error); } warn(message: string) { warnings.push(message); } } },
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
             "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
             "@webpack": { extractAndLoadChunksLazy: () => () => {} }, "@webpack/common": {}, "./AvatarModal": {},
@@ -1631,7 +1633,7 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
         });
         const old = plugin.start();
         if (mode === "local-stop") plugin.stop();
-        local.resolve({ original: "local" });
+        local.resolve(mode === "invalid-local" ? { original: 42 } : { original: "local" });
         await setImmediate();
         if (mode === "local-stop") {
             await old;
@@ -1643,8 +1645,8 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
         if (mode === "restart") await plugin.start();
         remote.resolve(mode in invalidResponses ? invalidResponses[mode] : { avatars: { oldRemote: "remote" } });
         await old;
-        assert.deepEqual(Object.keys(data.avatars), mode === "restart" ? ["newer"] : ["original"]);
-        assert.deepEqual(Object.keys(data.remoteAvatars), mode === "restart" ? ["newerRemote"] : mode === "current" ? ["oldRemote"] : []);
+        assert.deepEqual(Object.keys(data.avatars), mode === "restart" ? ["newer"] : mode === "invalid-local" ? [] : ["original"]);
+        assert.deepEqual(Object.keys(data.remoteAvatars), mode === "restart" ? ["newerRemote"] : mode === "current" || mode === "invalid-local" ? ["oldRemote"] : []);
         data.avatars.shared = "https://fixture.invalid/local.png";
         data.remoteAvatars.shared = "https://fixture.invalid/remote.png";
         const avatar = plugin.getAvatarHook(() => "default");
@@ -1662,6 +1664,7 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
         assert.equal(avatar({ id: "shared" }, false, 128), "https://raw.githubusercontent.com/UserPFP/img/main/avatar.png?animated=false");
         assert.equal(signals[0].aborted, mode === "remote-stop" || mode === "restart");
         assert.equal(errors.length, mode in invalidResponses ? 1 : 0);
+        assert.deepEqual(warnings, mode === "invalid-local" ? ["Stored custom avatars are invalid."] : []);
     }
 });
 

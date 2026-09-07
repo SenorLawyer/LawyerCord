@@ -11,7 +11,7 @@ import { classNameFactory } from "@utils/css";
 import { RenderModalProps } from "@vencord/discord-types";
 import { IconUtils, Modal, React, TextInput, Toasts, useEffect, UserStore, useState } from "@webpack/common";
 
-import { data, KEY_DATASTORE } from ".";
+import { data, isAvatarMap, KEY_DATASTORE } from ".";
 
 const cl = classNameFactory("vc-userpfp-");
 
@@ -68,7 +68,8 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
     async function saveUserAvatar(value: string) {
         try {
             let saved: Record<string, string> = {};
-            await update<Record<string, string>>(KEY_DATASTORE, stored => {
+            await update<unknown>(KEY_DATASTORE, stored => {
+                if (stored !== undefined && !isAvatarMap(stored)) throw new Error("Invalid stored avatars.");
                 saved = { ...stored };
                 if (value) saved[userId] = value;
                 else delete saved[userId];

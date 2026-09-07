@@ -21,7 +21,8 @@ import { IpcEvents } from "@shared/IpcEvents";
 import { normalizeUpdateChannel, type UpdateChannel } from "@shared/updateChannel";
 import { VENCORD_USER_AGENT } from "@shared/vencordUserAgent";
 import { ipcMain } from "electron";
-import { writeFileSync } from "original-fs";
+import { mkdtempSync, renameSync, rmSync, writeFileSync } from "original-fs";
+import { join } from "path";
 
 import gitHash from "~git-hash";
 import gitRemote from "~git-remote";
@@ -86,7 +87,14 @@ async function applyUpdates() {
     const check = updateCheck;
     const data = await fetchBuffer(PendingUpdate);
     if (check !== updateCheck || !PendingUpdate) return false;
-    writeFileSync(__dirname, data, { flush: true });
+    const tempDir = mkdtempSync(`${__dirname}.update-`);
+    try {
+        const tempFile = join(tempDir, ASAR_FILE);
+        writeFileSync(tempFile, data, { flush: true });
+        renameSync(tempFile, __dirname);
+    } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+    }
 
     PendingUpdate = null;
 

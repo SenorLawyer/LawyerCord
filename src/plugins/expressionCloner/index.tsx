@@ -19,6 +19,7 @@
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { migratePluginSettings } from "@api/Settings";
 import { BaseText } from "@components/BaseText";
+import { Button } from "@components/Button";
 import { CheckedTextInput } from "@components/CheckedTextInput";
 import { Flex } from "@components/Flex";
 import { Heading } from "@components/Heading";
@@ -259,12 +260,14 @@ function CloneModal({ data }: { data: Sticker | Emoji; }) {
                 {guilds.map(g => (
                     <Tooltip key={g.id} text={g.name}>
                         {({ onMouseLeave, onMouseEnter }) => (
-                            <div
+                            <Button
+                                type="button"
+                                variant="none"
+                                size="iconOnly"
                                 onMouseLeave={onMouseLeave}
                                 onMouseEnter={onMouseEnter}
-                                role="button"
                                 aria-label={"Clone to " + g.name}
-                                aria-disabled={isCloning}
+                                disabled={isCloning}
                                 style={{
                                     borderRadius: "50%",
                                     backgroundColor: "var(--background-base-lower)",
@@ -273,10 +276,9 @@ function CloneModal({ data }: { data: Sticker | Emoji; }) {
                                     alignItems: "center",
                                     width: "4em",
                                     height: "4em",
-                                    cursor: isCloning ? "not-allowed" : "pointer",
-                                    filter: isCloning ? "brightness(50%)" : "none"
+                                    fontSize: "inherit"
                                 }}
-                                onClick={isCloning ? void 0 : () => {
+                                onClick={() => {
                                     setIsCloning(true);
                                     return doClone(g.id, { ...data, name }).finally(() => {
                                         invalidateMemo();
@@ -314,7 +316,7 @@ function CloneModal({ data }: { data: Sticker | Emoji; }) {
                                         {getGuildAcronym(g)}
                                     </Paragraph>
                                 )}
-                            </div>
+                            </Button>
                         )}
                     </Tooltip>
                 ))}

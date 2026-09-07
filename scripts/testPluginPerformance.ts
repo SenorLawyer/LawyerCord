@@ -9689,7 +9689,7 @@ test("expression cloning filters picker stickers by format", () => {
     }, {
         "@api/ContextMenu": {}, "@api/Settings": { migratePluginSettings() {} },
         "@components/CheckedTextInput": {}, "@components/Flex": {},
-        "@components/Heading": {}, "@components/Paragraph": {},
+        "@components/Heading": {}, "@components/Paragraph": {}, "@components/Button": { Button: "button" },
         "@utils/constants": { Devs: {} }, "@utils/discord": {}, "@utils/Logger": { Logger: class { error() {} } },
         "@utils/misc": {},
         "@utils/types": { __esModule: true, default: (value: object) => value },
@@ -9712,7 +9712,7 @@ test("emoji cloning settles failed file reads without uploading", async () => {
         const { cloneEmoji } = loadSource("src/plugins/expressionCloner/index.tsx", {
             "@api/ContextMenu": {}, "@api/Settings": { migratePluginSettings() {} },
             "@components/BaseText": {}, "@components/CheckedTextInput": {}, "@components/Flex": {},
-            "@components/Heading": {}, "@components/Paragraph": {},
+            "@components/Heading": {}, "@components/Paragraph": {}, "@components/Button": { Button: "button" },
             "@utils/constants": { Devs: {} }, "@utils/discord": {}, "@utils/Logger": { Logger: class { error() {} } },
             "@utils/misc": {},
             "@utils/types": { __esModule: true, default: (value: object) => value },
@@ -9753,7 +9753,7 @@ test("expression cloning preserves valid server errors and falls back for malfor
         const { doClone } = loadSource("src/plugins/expressionCloner/index.tsx", {
             "@api/ContextMenu": {}, "@api/Settings": { migratePluginSettings() {} },
             "@components/BaseText": {}, "@components/CheckedTextInput": {}, "@components/Flex": {},
-            "@components/Heading": {}, "@components/Paragraph": {},
+            "@components/Heading": {}, "@components/Paragraph": {}, "@components/Button": { Button: "button" },
             "@utils/constants": { Devs: {} }, "@utils/discord": {},
             "@utils/Logger": { Logger: class { error(...args: unknown[]) { logs.push(args); } } },
             "@utils/misc": {
@@ -9789,7 +9789,7 @@ test("cloning keeps the name selected when the request starts", async () => {
     const { CloneModal } = loadSource("src/plugins/expressionCloner/index.tsx", {
         "@api/ContextMenu": {}, "@api/Settings": { migratePluginSettings() {} },
         "@components/BaseText": {}, "@components/CheckedTextInput": {}, "@components/Flex": {},
-        "@components/Heading": {}, "@components/Paragraph": {},
+        "@components/Heading": {}, "@components/Paragraph": {}, "@components/Button": { Button: "button" },
         "@utils/constants": { Devs: {} }, "@utils/discord": { getGuildAcronym: () => "G" },
         "@utils/Logger": { Logger: class { error() {} } }, "@utils/misc": {},
         "@utils/types": { __esModule: true, default: (value: object) => value },
@@ -9809,6 +9809,10 @@ test("cloning keeps the name selected when the request starts", async () => {
     const tree = CloneModal({ data });
     const tooltip = tree.props.children[2].props.children[0][0];
     const button = tooltip.props.children[0]({});
+    assert.equal(button.type, "button");
+    assert.equal(button.props.type, "button");
+    assert.equal(button.props.disabled, false);
+    assert.equal(button.props["aria-label"], "Clone to Guild");
     const pending = button.props.onClick();
     tree.props.children[1].props.onChange("later");
     assert.equal(data.name, "original");

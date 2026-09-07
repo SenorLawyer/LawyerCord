@@ -68,12 +68,10 @@ if (!IS_VANILLA && !IS_EXTENSION) {
         handleClientProtocol("equicord");
         handleClientProtocol("lawyercord");
 
-        try {
-            if (RendererSettings.store.enableReactDevtools)
-                installExt("fmkadmapgofadopljbjfkapdkoienihi")
-                    .then(() => console.info("[LawyerCord] Installed React Developer Tools"))
-                    .catch(err => console.error("[LawyerCord] Failed to install React Developer Tools", err));
-        } catch { }
+        if (RendererSettings.store.enableReactDevtools)
+            installExt("fmkadmapgofadopljbjfkapdkoienihi")
+                .then(() => console.info("[LawyerCord] Installed React Developer Tools"))
+                .catch(err => console.error("[LawyerCord] Failed to install React Developer Tools", err));
 
         initCsp();
     });

@@ -108,6 +108,7 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Video preview decoding | `fd216ca34` | Actual preview code in isolated Chrome produced a PNG from an FFmpeg-generated WebM and returned null for invalid video. |
 | Theme replacement on the filesystem | `07903f31c` | Actual native code preserves installed files after injected partial writes and rename failures, and cleans temporary files. This is not crash-durability testing. |
 | Theme provider download | `9b03d446d` | The actual native handler downloaded catalog entry 91 with HTTP 200 and no redirect into an isolated directory. All 136 catalog entries were separately checked against ID, filename, and catalog-content size rules. |
+| Extension archive extraction | `e33811df0` | Actual extraction code, fflate ZIP decoding, and the Windows filesystem preserved nested files/directories, skipped metadata, rejected three traversal/absolute paths, removed partial output, and preserved an outside sentinel. Electron loading, archive resource limits, and crash durability were not tested. |
 | Uninstall button browser checks | `d4efc449d` | Actual shared component props and styles in isolated Chrome verified the accessible name, keyboard focus indicator, and consistent 32px sizing in both stylesheet orders. Full Discord layout was not exercised. |
 | Other isolated browser checks | Earlier audit commits | Specific sticker-storage transactions, codec conversion, and CSS behavior were exercised. These are not general live-client acceptance. |
 

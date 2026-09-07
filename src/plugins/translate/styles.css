@@ -11,16 +11,6 @@
     margin-right: 0.25em;
 }
 
-.vc-trans-dismiss {
-    all: unset;
-    cursor: pointer;
-    color: var(--text-link);
-}
-
-.vc-trans-dismiss:is(:hover, :focus) {
-    text-decoration: underline;
-}
-
 .vc-trans-auto-translate {
     color: var(--green-360);
 }

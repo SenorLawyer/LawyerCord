@@ -11657,6 +11657,7 @@ test("translation delivery tolerates unmounted messages and preserves newer hand
     const cleanups: (() => void)[] = [];
     const deliveries: unknown[][] = [];
     const accessory = loadSource("src/plugins/translate/TranslationAccessory.tsx", {
+        "@components/Button": {},
         "@webpack/common": {
             useState: () => {
                 const values: unknown[] = [];

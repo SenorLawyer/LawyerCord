@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { TextButton } from "@components/Button";
 import { Message } from "@vencord/discord-types";
 import { Parser, useEffect, useState } from "@webpack/common";
 
@@ -27,17 +28,6 @@ const TranslationSetters = new Map<string, Set<(v: TranslationValue) => void>>()
 export function handleTranslate(messageId: string, data: TranslationValue) {
     for (const setter of TranslationSetters.get(messageId) ?? [])
         setter(data);
-}
-
-function Dismiss({ onDismiss }: { onDismiss: () => void; }) {
-    return (
-        <button
-            onClick={onDismiss}
-            className={cl("dismiss")}
-        >
-            Dismiss
-        </button>
-    );
 }
 
 export function TranslationAccessory({ message }: { message: Message & { vencordEmbeddedBy?: string[]; }; }) {
@@ -65,7 +55,7 @@ export function TranslationAccessory({ message }: { message: Message & { vencord
             <TranslateIcon width={16} height={16} className={cl("accessory-icon")} />
             {Parser.parse(translation.text)}
             <br />
-            (translated from {translation.sourceLanguage} - <Dismiss onDismiss={() => setTranslation(undefined)} />)
+            (translated from {translation.sourceLanguage} - <TextButton type="button" variant="link" onClick={() => setTranslation(undefined)}>Dismiss</TextButton>)
         </span>
     );
 }

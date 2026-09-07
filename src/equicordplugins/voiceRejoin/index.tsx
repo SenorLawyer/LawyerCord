@@ -166,12 +166,7 @@ export default definePlugin({
             if (!currentUser) return;
 
             const myUserId = currentUser.id;
-            let myState: VoiceState | undefined;
-            for (const voiceState of voiceStates) {
-                if (voiceState.userId !== myUserId) continue;
-                myState = voiceState;
-                break;
-            }
+            const myState = voiceStates.find(state => state.userId === myUserId);
             if (!myState) return;
             cancelReconnectAttempt();
 
@@ -237,11 +232,9 @@ export default definePlugin({
                             (preventionMode === "dms" && isDM) ||
                             (preventionMode === "servers" && !isDM);
 
-                        if (shouldPrevent) {
-                            if (!hasOtherUsersInChannel(saved.channelId, myUserId)) {
-                                await persistInactiveState();
-                                return;
-                            }
+                        if (shouldPrevent && !hasOtherUsersInChannel(saved.channelId, myUserId)) {
+                            await persistInactiveState();
+                            return;
                         }
                     }
 

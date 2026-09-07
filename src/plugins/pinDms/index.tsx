@@ -347,9 +347,5 @@ export default definePlugin({
         const channelId = getCategoryChannels(category)[index];
 
         return { channel: channels[channelId], category };
-    },
-
-    getCategoryChannels(category: Category) {
-        return getCategoryChannels(category);
     }
 });

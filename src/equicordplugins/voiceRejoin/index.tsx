@@ -202,6 +202,8 @@ export default definePlugin({
                     const isDM = channel.isDM() || channel.isGroupDM() || channel.isMultiUserDM();
                     const myUserId = currentUser.id;
                     const myVoiceState = VoiceStateStore.getVoiceStateForUser(myUserId);
+                    if (myVoiceState?.channelId) return;
+
                     const preventionMode = settings.store.preventReconnectIfCallEnded;
                     const timeoutMs = settings.store.rejoinTimeout * 1000;
 
@@ -227,11 +229,6 @@ export default definePlugin({
                                 return;
                             }
                         }
-                    }
-
-                    if (myVoiceState?.channelId) {
-                        await persistInactiveState();
-                        return;
                     }
 
                     FluxDispatcher.dispatch({

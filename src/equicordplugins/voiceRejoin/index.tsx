@@ -103,9 +103,9 @@ async function persistActiveState(state: VoiceState) {
 
     if (!shouldPersistActiveState(saved)) return;
 
-    await Promise.all([
-        DataStore.set(DATASTORE_KEY, saved),
-        DataStore.set(DATASTORE_SESSION_KEY, true)
+    await DataStore.setMany([
+        [DATASTORE_KEY, saved],
+        [DATASTORE_SESSION_KEY, true]
     ]);
     cachePersistedState(saved, true);
 }

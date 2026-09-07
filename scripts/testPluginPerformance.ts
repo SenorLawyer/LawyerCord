@@ -1608,13 +1608,36 @@ test("webpack tar archives contain only the supplied byte view", () => {
     assert.equal(archive.length, 2048);
 });
 
+test("voice rejoin saves the channel and session flag in one transaction", async () => {
+    let writes = 0;
+    const api = loadSource("src/equicordplugins/voiceRejoin/index.tsx", {
+        "@api/DataStore": { set: () => assert.fail("Separate writes can partially commit"), setMany: async (entries: [string, unknown][]) => {
+            writes++;
+            assert.equal(entries[0][0], "VCLastVoiceChannel");
+            assert.equal(JSON.stringify(entries[0][1]), JSON.stringify({ guildId: "guild", channelId: "voice", timestamp: 1000 }));
+            assert.equal(entries[1][0], "VCLastVoiceChannelSession");
+            assert.equal(entries[1][1], true);
+            if (writes === 1) throw new Error("Aborted");
+        } },
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@utils/constants": { EquicordDevs: {} }, "@utils/Logger": { Logger: class {} },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, makeRange: () => [], OptionType: {} },
+        "@webpack/common": {}
+    }, { Date: { now: () => 1000 } }, "({ persistActiveState })");
+    const state = { channelId: "voice", guildId: "guild" };
+    await assert.rejects(api.persistActiveState(state), /Aborted/);
+    await api.persistActiveState(state);
+    await api.persistActiveState(state);
+    assert.equal(writes, 2);
+});
+
 test("voice rejoin cancels pending attempts when the current user changes voice state", async () => {
     for (const channelId of ["chosen", undefined]) {
         let reconnect: () => Promise<void> = async () => assert.fail("Missing reconnect");
         let cleared = 0;
         let reads = 0;
         const api = loadSource("src/equicordplugins/voiceRejoin/index.tsx", {
-            "@api/DataStore": { get: async () => { reads++; return true; }, set: async () => {} },
+            "@api/DataStore": { get: async () => { reads++; return true; }, set: async () => {}, setMany: async () => {} },
             "@api/Settings": { definePluginSettings: () => ({ store: { rejoinDelay: 2 } }) },
             "@utils/constants": { EquicordDevs: {} }, "@utils/Logger": { Logger: class { error(error: unknown) { assert.fail(String(error)); } } },
             "@utils/types": { __esModule: true, default: (plugin: object) => plugin, makeRange: () => [], OptionType: {} },

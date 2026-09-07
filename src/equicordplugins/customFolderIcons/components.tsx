@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { makeRange } from "@utils/types";
 import { Button, closeModal, Menu, Modal, openModalLazy, Slider, TextInput, useState } from "@webpack/common";
 
 import { folderIconsData, settings } from "./settings";
@@ -18,9 +19,7 @@ export function ImageModal(folderProps: folderProp) {
             <TextInput
                 // this looks like a horrorshow
                 defaultValue={data}
-                onChange={(val, _n) => {
-                    setData(val);
-                }}
+                onChange={setData}
                 placeholder="https://example.com/image.png"
             >
             </TextInput>
@@ -31,13 +30,11 @@ export function ImageModal(folderProps: folderProp) {
                 }}>Change the size of the folder icon</div>
                 <Slider
                     initialValue={size}
-                    onValueChange={(v: number) => {
-                        setSize(v);
-                    }}
+                    onValueChange={setSize}
                     maxValue={200}
                     minValue={25}
                     // [25, 200]
-                    markers={Array.apply(0, Array(176)).map((_, i) => i + 25)}
+                    markers={makeRange(25, 200)}
                     stickToMarkers={true}
                     keyboardStep={1}
                     renderMarker={() => null} />

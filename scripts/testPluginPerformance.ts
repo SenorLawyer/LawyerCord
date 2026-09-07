@@ -4949,6 +4949,7 @@ test("folder icon editing preserves saved size and resetting an unused folder is
         Button: "button", Slider: "slider", closeModal: () => closes++
     }, {
         "./settings": { settings },
+        "@utils/types": { makeRange: (start: number, end: number) => Array.from({ length: end - start + 1 }, (_, i) => start + i) },
         "./util": {}
     });
     const props = { folderId: "folder", folderColor: 0 };

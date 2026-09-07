@@ -11228,3 +11228,28 @@ test("desktop voice recording settles failed audio reads", async () => {
         assert.equal(blobs.length, phase === "success" ? 1 : 0, phase);
     }
 });
+
+test("stale transcription audio failures preserve a newer cached request", async () => {
+    const source = readFileSync("src/equicordplugins/voiceMessageTranscriber.desktop/index.tsx", "utf8");
+    const start = source.indexOf("function prepareAudio(");
+    const end = source.indexOf("function cacheResult(", start);
+    assert.ok(start >= 0 && end > start);
+    const code = transpileModule(source.slice(start, end), { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
+    const cache = new Map<string, Promise<unknown>>();
+    const requests: Array<{ resolve: (value: Uint8Array) => void; reject: (error: Error) => void; }> = [];
+    const prepareAudio = runInNewContext(code + ";prepareAudio", {
+        preparedAudioCache: cache, MAX_PREPARED_AUDIO_CACHE_ENTRIES: 3,
+        Native: { fetchAudio: () => new Promise<Uint8Array>((resolve, reject) => requests.push({ resolve, reject })) },
+        Blob, detectAudioMimeType: () => "audio/ogg", decodeAudio: async () => new Float32Array([0]), generateWaveform: () => "AA=="
+    });
+    const old = prepareAudio("a");
+    const failed = assert.rejects(old, /old request failed/);
+    prepareAudio("b"); prepareAudio("c"); prepareAudio("d");
+    const current = prepareAudio("a");
+    requests[0].reject(new Error("old request failed"));
+    await failed;
+    assert.equal(cache.get("a"), current);
+    assert.equal(prepareAudio("a"), current);
+    requests.slice(1).forEach(request => request.resolve(new Uint8Array([1])));
+    await current;
+});

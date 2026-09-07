@@ -65,7 +65,7 @@ function prepareAudio(src: string): Promise<PreparedAudio> {
             };
         })
         .catch(error => {
-            preparedAudioCache.delete(src);
+            if (preparedAudioCache.get(src) === pending) preparedAudioCache.delete(src);
             throw error;
         });
 

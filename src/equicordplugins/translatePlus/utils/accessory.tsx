@@ -15,11 +15,11 @@ import { translate } from "./translator";
 
 const setters = new Map<string, Set<(translation: Translation | undefined) => void>>();
 
-export function Accessory({ message }: { message: Message; }) {
+export function Accessory({ message }: { message: Message & { vencordEmbeddedBy?: string[]; }; }) {
     const [translation, setTranslation] = useState<Translation | undefined>(undefined);
 
     useEffect(() => {
-        if ((message as any).vencordEmbeddedBy) return;
+        if (message.vencordEmbeddedBy) return;
 
         const listeners = setters.get(message.id) ?? new Set<(translation: Translation | undefined) => void>();
         listeners.add(setTranslation);

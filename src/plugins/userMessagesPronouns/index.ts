@@ -29,6 +29,7 @@ export default definePlugin({
     authors: [Devs.Tyman, Devs.TheKodeToad, Devs.Ven, Devs.Elvyra],
     description: "Adds pronouns to chat user messages",
     tags: ["Chat", "Appearance"],
+    dependencies: ["UserSettingsAPI"],
     settings,
 
     patches: [

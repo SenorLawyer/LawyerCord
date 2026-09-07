@@ -12112,3 +12112,21 @@ test("TranslatePlus delivers to surviving views and rejects detached requests", 
     assert.deepEqual(deliveries, [[result], [result, result], []]);
     cleanups[2]();
 });
+
+test("TranslatePlus language labels ignore inherited properties", () => {
+    const { languages } = loadSource("src/equicordplugins/translatePlus/misc/languages.ts", {});
+    for (const src of ["en", "constructor", "__proto__", "toString", "unknown-language"]) {
+        const { Accessory } = loadComponent("src/equicordplugins/translatePlus/utils/accessory.tsx", {
+            useState: () => [{ text: "Translated", src }, () => {}],
+            useEffect: () => {},
+            Parser: { parse: (value: string) => value }
+        }, {
+            "@components/Button": {},
+            "@equicordplugins/translatePlus/misc/languages": { languages },
+            "@equicordplugins/translatePlus/misc/types": { cl: () => "" },
+            "./icon": {}, "./translator": {}
+        });
+        const children = Accessory({ message: { id: "message" } }).props.children;
+        assert.ok(children.includes(src === "en" ? "English" : src), `Expected readable language label for ${src}`);
+    }
+});

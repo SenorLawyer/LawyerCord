@@ -38,7 +38,7 @@ export function Accessory({ message }: { message: Message; }) {
             <Icon width={16} height={16} />
             {Parser.parse(translation.text)}
             {" "}
-            (translated from {languages[translation.src] ?? translation.src} - <TextButton type="button" variant="link" onClick={() => setTranslation(undefined)}>Dismiss</TextButton>)
+            (translated from {Object.hasOwn(languages, translation.src) ? languages[translation.src] : translation.src} - <TextButton type="button" variant="link" onClick={() => setTranslation(undefined)}>Dismiss</TextButton>)
         </div>
     );
 }

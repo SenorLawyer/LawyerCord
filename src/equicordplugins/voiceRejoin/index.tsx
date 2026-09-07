@@ -196,8 +196,11 @@ export default definePlugin({
                 if (scheduledGeneration !== reconnectGeneration) return;
 
                 try {
-                    const [saved, sessionActive] = await DataStore.getMany<SavedVoiceChannel | boolean>([DATASTORE_KEY, DATASTORE_SESSION_KEY]);
-                    if (sessionActive === false || !saved || typeof saved !== "object" || !saved.channelId) return;
+                    const [saved, sessionActive] = await DataStore.getMany<unknown>([DATASTORE_KEY, DATASTORE_SESSION_KEY]);
+                    if (sessionActive === false || !saved || typeof saved !== "object"
+                        || !("channelId" in saved) || typeof saved.channelId !== "string" || !saved.channelId
+                        || !("guildId" in saved) || (saved.guildId !== null && typeof saved.guildId !== "string")
+                        || !("timestamp" in saved) || typeof saved.timestamp !== "number" || !Number.isSafeInteger(saved.timestamp) || saved.timestamp < 0) return;
 
                     const channel = await waitForChannel(saved.channelId, scheduledGeneration);
                     if (scheduledGeneration !== reconnectGeneration) return;
@@ -218,7 +221,7 @@ export default definePlugin({
                     const preventionMode = settings.store.preventReconnectIfCallEnded;
                     const timeoutMs = settings.store.rejoinTimeout * 1000;
 
-                    if (saved.timestamp && Date.now() - saved.timestamp > timeoutMs) {
+                    if (Date.now() - saved.timestamp > timeoutMs) {
                         await persistInactiveState();
                         return;
                     }

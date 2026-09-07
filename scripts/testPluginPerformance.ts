@@ -1608,6 +1608,23 @@ test("webpack tar archives contain only the supplied byte view", () => {
     assert.equal(archive.length, 2048);
 });
 
+test("voice rejoin rejects malformed saved channels before looking them up", async () => {
+    for (const saved of [{ channelId: 5, guildId: null, timestamp: 1000 }, { channelId: "voice", guildId: {}, timestamp: 1000 }, { channelId: "voice", guildId: null }, { channelId: "voice", guildId: null, timestamp: NaN }, { channelId: "voice", guildId: null, timestamp: -1 }]) {
+        let reconnect: () => Promise<void> = async () => assert.fail("Missing reconnect");
+        const api = loadSource("src/equicordplugins/voiceRejoin/index.tsx", {
+            "@utils/misc": {},
+            "@api/DataStore": { get: async () => true, getMany: async () => [saved, true] },
+            "@api/Settings": { definePluginSettings: () => ({ store: { rejoinDelay: 2 } }) },
+            "@utils/constants": { EquicordDevs: {} }, "@utils/Logger": { Logger: class { error(error: unknown) { assert.fail(String(error)); } } },
+            "@utils/types": { __esModule: true, default: (plugin: object) => plugin, makeRange: () => [], OptionType: {} },
+            "@webpack/common": { ChannelStore: { getChannel: () => assert.fail("Malformed saved channel reached lookup") } }
+        }, { setTimeout: (callback: typeof reconnect) => { reconnect = callback; return 1; }, clearTimeout() {} });
+        await api.default.flux.CONNECTION_OPEN();
+        await reconnect();
+        api.default.stop();
+    }
+});
+
 test("voice rejoin waits for voice state confirmation before persisting success", async () => {
     let reconnect: () => Promise<void> = async () => assert.fail("Missing reconnect");
     let dispatched = 0;

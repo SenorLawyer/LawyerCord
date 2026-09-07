@@ -86,23 +86,25 @@ RelationshipNotifier snapshots guild, group, friend, and request data before asy
 
 PinDMs reads categories from the current account settings instead of retaining a startup array. Category modals preserve account ownership through lazy loading and reject edits to replaced categories, using the underlying SettingsStore object identity rather than transient proxy identity. Forms reject blank names, normalize cleared colors, and ignore duplicate category saves. Render callbacks are released on unmount without clearing a newer mount. The shared settings hook now compares subscription path values and snapshots paths for cleanup, avoiding resubscriptions caused only by new array objects. Fixtures use actual SettingsStore behavior with mocked React hooks; live sidebar rendering and sorting assumptions remain unverified.
 
+VoiceMessages preserves the browser recorder MIME type, releases streams after failure or unmount, and handles repeated controls using the recorder state. Preview timers run only while recording, and preview URLs belong to committed audio blobs. Send requires completed metadata matching the current blob. Native recording paths reject invalid types before filesystem access. Focused fixtures cover these boundaries; isolated Chrome checks use synthetic audio streams. Desktop recorder lifecycle, upload format handling, account and channel ownership, and live message delivery remain open.
+
 ## Verification record
 
 Evidence applies to the recorded commit and scope, not to a future merge with main.
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `a3b0bd565` | 438 tests and timezone correctness checks passed, including 385 plugin regressions. |
-| Repository-wide ESLint | `a3b0bd565` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
+| Broader performance/correctness suite | `e2f1869ff` | 447 tests and timezone correctness checks passed, including 394 plugin regressions. |
+| Repository-wide ESLint | `e2f1869ff` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
 | CSS lint | `c50d116a4` | Passed; excludes userplugins. |
 | Internationalization lint | `5e869fea9` | Passed for tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest focused regressions and TypeScript | `a3b0bd565` | Six PinDM regressions, shared settings hook checks, full TypeScript, and focused lint passed. Source fixtures reject TypeScript syntax diagnostics before execution. |
-| Standalone build | `a3b0bd565` | Passed after shared settings and PinDM changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
+| Latest focused regressions and TypeScript | `e2f1869ff` | Voice recording path regression, full TypeScript, and focused lint passed. Earlier voice lifecycle, preview, and metadata regressions also pass in the broader suite. Source fixtures reject TypeScript syntax diagnostics before execution. |
+| Standalone build | `e2f1869ff` | Passed after the voice recording changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
 | Development build | `0fc6ab63b` | Passed after composer, codec, preset, and game-status startup changes. |
 | Installer review browser checks | `d7b99b737` | Actual templates and generator functions in isolated Chrome preserved literal metadata, all four native/pre-send warning combinations, the native acknowledgement gate, and cancellation. Electron IPC and real installation were not exercised. |
 | Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |
-| Web build | `a3b0bd565` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
-| Release artifact audit | `a3b0bd565` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
+| Web build | `e2f1869ff` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
+| Release artifact audit | `e2f1869ff` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
 | Avatar startup and edit ordering | `296e36989` | Actual loader, editor actions, and DataStore in isolated Chrome preserved edits in 20 overlapping runs, ten with startup first and ten with saving first. This checks one client context, not synchronization between clients. No extra production guard was added. |
 | Avatar edit transactions | `3bf4098d6` | Actual AvatarModal actions and DataStore code in isolated Chrome preserved storage and memory after an aborted write, kept both concurrent user edits, and deleted only the selected override. React rendering and Discord dependencies were mocked. |
 | Real IndexedDB queue behavior | `ce04cc40a` | Isolated Chrome verified aborted additions, ordered concurrent additions, aborted clearing, and subsequent successful clearing using actual queue and DataStore code. |
@@ -119,7 +121,7 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Uninstall button browser checks | `d4efc449d` | Actual shared component props and styles in isolated Chrome verified the accessible name, keyboard focus indicator, and consistent 32px sizing in both stylesheet orders. Full Discord layout was not exercised. |
 | Other isolated browser checks | Earlier audit commits | Specific sticker-storage transactions, codec conversion, and CSS behavior were exercised. These are not general live-client acceptance. |
 
-Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `a3b0bd565`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
+Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `e2f1869ff`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
 
 ## Remaining work
 

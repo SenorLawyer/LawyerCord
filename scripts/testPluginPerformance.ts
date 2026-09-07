@@ -10721,3 +10721,33 @@ test("relationship notifier handles asynchronous notification failures", async (
     await setImmediate();
     assert.deepEqual(errors, [failure]);
 });
+
+
+test("pinned DM helpers use current account settings instead of a retained array", async () => {
+    let userId: string | undefined = "first";
+    const category = (id: string) => ({ id, name: id, color: 0, channels: [id] });
+    const original = [category("old")];
+    const store = { userBasedCategoryList: { first: original, second: [category("second")] } };
+    const data = loadSource("src/plugins/pinDms/data.ts", {
+        "@plugins/pinDms": { settings: { store }, PinOrder: {}, PrivateChannelSortStore: {} },
+        "@utils/react": {}, "@webpack/common": { UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined } }
+    });
+    await data.init();
+    assert.equal(data.isPinned("old"), true);
+    store.userBasedCategoryList = { first: [category("replacement")], second: [category("second")] };
+    assert.equal(data.isPinned("old"), false);
+    assert.equal(data.isPinned("replacement"), true);
+    data.createCategory(category("new"));
+    assert.equal(store.userBasedCategoryList.first.length, 2);
+    assert.equal(original.length, 1);
+    userId = "second";
+    assert.equal(data.categoryLen(), 1);
+    assert.equal(data.isPinned("second"), true);
+    data.removeCategory("second");
+    assert.equal(store.userBasedCategoryList.second.length, 0);
+    userId = undefined;
+    assert.equal(data.categoryLen(), 0);
+    data.createCategory(category("logged-out"));
+    assert.equal(store.userBasedCategoryList.first.length, 2);
+    assert.equal(store.userBasedCategoryList.second.length, 0);
+});

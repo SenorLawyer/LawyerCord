@@ -44,6 +44,7 @@ export function ConverterAccessory({ message }: { message: Message; }) {
     const [conversion, setConversion] = useState<string>("");
 
     useEffect(() => {
+        setConversion("");
         const setters = conversions.get(message.id) ?? new Set<(value: string) => void>();
         setters.add(setConversion);
         conversions.set(message.id, setters);
@@ -51,7 +52,7 @@ export function ConverterAccessory({ message }: { message: Message; }) {
             setters.delete(setConversion);
             if (!setters.size) conversions.delete(message.id);
         };
-    }, [message.id]);
+    }, [message.id, message.content]);
 
     if (!conversion) return null;
     return (

@@ -12300,10 +12300,10 @@ test("UnitConverter updates all message views and preserves surviving registrati
     accessory.ConverterAccessory({ message });
     const action = plugin.messagePopoverButton.render(message).onClick;
     action();
-    assert.deepEqual(deliveries, [["1.80m"], ["1.80m"]]);
+    assert.deepEqual(deliveries, [["", "1.80m"], ["", "1.80m"]]);
     cleanups[0]();
     action();
-    assert.deepEqual(deliveries, [["1.80m"], ["1.80m", "1.80m"]]);
+    assert.deepEqual(deliveries, [["", "1.80m"], ["", "1.80m", "1.80m"]]);
     cleanups[1]();
     assert.doesNotThrow(action);
     assert.equal(accessory.conversions.size, 0);

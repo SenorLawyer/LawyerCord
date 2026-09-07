@@ -11033,3 +11033,36 @@ test("web voice recorder owns pending permission and releases failed or closed s
         assert.equal(tracksStopped, phase === "permission" ? 0 : 1);
     }
 });
+
+
+test("web voice controls consult the recorder state before stop and pause", () => {
+    for (const initial of ["recording", "paused", "inactive"]) {
+        let stateIndex = 0;
+        let paused = false;
+        let stops = 0;
+        const recorder = {
+            state: initial,
+            stop() { assert.notEqual(this.state, "inactive"); this.state = "inactive"; stops++; },
+            pause() { assert.notEqual(this.state, "inactive"); this.state = "paused"; },
+            resume() { assert.notEqual(this.state, "inactive"); this.state = "recording"; }
+        };
+        const { VoiceRecorderWeb } = loadComponent("src/plugins/voiceMessages/components/WebRecorder.tsx", {
+            useState: () => {
+                const index = stateIndex++;
+                return index === 0 ? [true, () => {}] : index === 1 ? [false, (value: boolean) => { paused = value; }] : [recorder, () => {}];
+            },
+            useRef: () => ({ current: undefined }), useEffect: () => {}, Button: "button"
+        }, { "..": {}, "@utils/Logger": { Logger: class { error() {} } } });
+        const view = VoiceRecorderWeb({ setAudioBlob() {} });
+        const stop = view.props.children[0].props.onClick;
+        const pause = view.props.children[1].props.onClick;
+        pause();
+        assert.equal(recorder.state, initial === "recording" ? "paused" : initial === "paused" ? "recording" : "inactive");
+        assert.equal(paused, initial === "recording");
+        stop();
+        stop();
+        pause();
+        assert.equal(stops, initial === "inactive" ? 0 : 1);
+        assert.equal(recorder.state, "inactive");
+    }
+});

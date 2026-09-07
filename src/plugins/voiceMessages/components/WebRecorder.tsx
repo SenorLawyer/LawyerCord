@@ -104,8 +104,8 @@ export const VoiceRecorderWeb: VoiceRecorder = ({ setAudioBlob, onRecordingChang
 
                 changeRecording(true);
             }).catch(fail);
-        } else {
-            recorder?.stop();
+        } else if (recorder && recorder.state !== "inactive") {
+            recorder.stop();
         }
     }
 
@@ -118,9 +118,11 @@ export const VoiceRecorderWeb: VoiceRecorder = ({ setAudioBlob, onRecordingChang
             <Button
                 disabled={!recording}
                 onClick={() => {
-                    setPaused(!paused);
-                    if (paused) recorder?.resume();
-                    else recorder?.pause();
+                    if (!recorder || recorder.state === "inactive") return;
+                    const nowPaused = recorder.state === "recording";
+                    if (nowPaused) recorder.pause();
+                    else recorder.resume();
+                    setPaused(nowPaused);
                 }}
             >
                 {paused ? "Resume" : "Pause"} recording

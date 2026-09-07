@@ -12308,3 +12308,13 @@ test("UnitConverter updates all message views and preserves surviving registrati
     assert.doesNotThrow(action);
     assert.equal(accessory.conversions.size, 0);
 });
+
+test("UnitConverter carries rounded inches into the next foot", () => {
+    const { convert } = loadSource("src/equicordplugins/unitConverter/converter.ts", {
+        ".": { settings: { store: { myUnits: "imperial" } } }
+    });
+    assert.equal(convert("1.82879m"), "6ft");
+    assert.equal(convert("0.304799m"), "1ft");
+    assert.equal(convert("0.3046m"), "11.99in");
+    assert.equal(convert("1.8m"), "5ft 10.87in");
+});

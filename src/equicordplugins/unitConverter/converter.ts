@@ -112,7 +112,7 @@ const regexes: regexes = {
         meters: {
             regex: /(\d+(?:\.\d+)?) ?(m|meters?)(?!\w)/gi,
             convert(...groups) {
-                const totalInches = parseFloat(groups[1]) * 39.3701;
+                const totalInches = Math.round(parseFloat(groups[1]) * 39.3701 * 100) / 100;
                 const feet = Math.floor(totalInches / 12);
                 const inches = totalInches % 12;
                 if (feet === 0) return `${inches.toFixed(2)}in`;

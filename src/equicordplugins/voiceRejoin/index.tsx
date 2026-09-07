@@ -8,6 +8,7 @@ import * as DataStore from "@api/DataStore";
 import { definePluginSettings } from "@api/Settings";
 import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
+import { sleep } from "@utils/misc";
 import definePlugin, { makeRange, OptionType } from "@utils/types";
 import { VoiceState } from "@vencord/discord-types";
 import { ChannelStore, FluxDispatcher, UserStore, VoiceStateStore } from "@webpack/common";
@@ -119,10 +120,12 @@ async function persistInactiveState() {
     if (generation === reconnectGeneration) cachePersistedState(null, false);
 }
 
-async function waitForChannel(channelId: string) {
+async function waitForChannel(channelId: string, generation: number) {
+    if (generation !== reconnectGeneration) return;
     let channel = ChannelStore.getChannel(channelId);
     for (let i = 0; i < 20 && !channel; i++) {
-        await new Promise(resolve => setTimeout(resolve, 250));
+        await sleep(250);
+        if (generation !== reconnectGeneration) return;
         channel = ChannelStore.getChannel(channelId);
     }
     return channel;
@@ -196,7 +199,7 @@ export default definePlugin({
                     const saved = await DataStore.get<SavedVoiceChannel>(DATASTORE_KEY);
                     if (!saved?.channelId) return;
 
-                    const channel = await waitForChannel(saved.channelId);
+                    const channel = await waitForChannel(saved.channelId, scheduledGeneration);
                     if (scheduledGeneration !== reconnectGeneration) return;
 
                     if (!channel) {

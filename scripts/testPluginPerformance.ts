@@ -1608,12 +1608,35 @@ test("webpack tar archives contain only the supplied byte view", () => {
     assert.equal(archive.length, 2048);
 });
 
+test("voice rejoin stops channel polling after cancellation", async () => {
+    let wake: () => void = () => assert.fail("Missing wait");
+    let reads = 0;
+    const wait = () => new Promise<void>(resolve => { wake = resolve; });
+    const api = loadSource("src/equicordplugins/voiceRejoin/index.tsx", {
+        "@utils/misc": { sleep: wait },
+        "@api/DataStore": {}, "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@utils/constants": { EquicordDevs: {} }, "@utils/Logger": { Logger: class {} },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, makeRange: () => [], OptionType: {} },
+        "@webpack/common": { ChannelStore: { getChannel: () => { reads++; return undefined; } } }
+    }, { setTimeout: (callback: () => void) => { wake = callback; return 1; } }, "({ waitForChannel, cancelReconnectAttempt })");
+    const pending = api.waitForChannel("missing", 0);
+    assert.equal(reads, 1);
+    api.cancelReconnectAttempt();
+    wake();
+    await Promise.resolve();
+    assert.equal(reads, 1);
+    assert.equal(await pending, undefined);
+    assert.equal(await api.waitForChannel("missing", 0), undefined);
+    assert.equal(reads, 1);
+});
+
 test("voice rejoin ignores cache updates from saves completed after logout", async () => {
     for (const active of [true, false]) {
         let finish: () => void = () => assert.fail("Missing write");
         let writes = 0;
         const write = () => { writes++; return writes === 1 ? new Promise<void>(resolve => { finish = resolve; }) : Promise.resolve(); };
         const api = loadSource("src/equicordplugins/voiceRejoin/index.tsx", {
+        "@utils/misc": {},
             "@api/DataStore": { set: write, setMany: write },
             "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
             "@utils/constants": { EquicordDevs: {} }, "@utils/Logger": { Logger: class {} },
@@ -1633,6 +1656,7 @@ test("voice rejoin ignores cache updates from saves completed after logout", asy
 test("voice rejoin saves the channel and session flag in one transaction", async () => {
     let writes = 0;
     const api = loadSource("src/equicordplugins/voiceRejoin/index.tsx", {
+        "@utils/misc": {},
         "@api/DataStore": { set: () => assert.fail("Separate writes can partially commit"), setMany: async (entries: [string, unknown][]) => {
             writes++;
             assert.equal(entries[0][0], "VCLastVoiceChannel");
@@ -1659,6 +1683,7 @@ test("voice rejoin cancels pending attempts when the current user changes voice 
         let cleared = 0;
         let reads = 0;
         const api = loadSource("src/equicordplugins/voiceRejoin/index.tsx", {
+        "@utils/misc": {},
             "@api/DataStore": { get: async () => { reads++; return true; }, set: async () => {}, setMany: async () => {} },
             "@api/Settings": { definePluginSettings: () => ({ store: { rejoinDelay: 2 } }) },
             "@utils/constants": { EquicordDevs: {} }, "@utils/Logger": { Logger: class { error(error: unknown) { assert.fail(String(error)); } } },
@@ -1680,6 +1705,7 @@ test("voice rejoin cancels pending attempts when the current user changes voice 
 test("voice rejoin leaves an existing voice connection active", async () => {
     let reconnect: () => Promise<void> = async () => assert.fail("Missing reconnect");
     const api = loadSource("src/equicordplugins/voiceRejoin/index.tsx", {
+        "@utils/misc": {},
         "@api/DataStore": { get: async (key: string) => key === "VCLastVoiceChannelSession" ? true : { channelId: "previous", guildId: "guild", timestamp: 1000 }, set: () => assert.fail("Must not mark an active connection inactive") },
         "@api/Settings": { definePluginSettings: () => ({ store: { rejoinDelay: 2, rejoinTimeout: 30, preventReconnectIfCallEnded: "none" } }) },
         "@utils/constants": { EquicordDevs: {} }, "@utils/Logger": { Logger: class { error(error: unknown) { assert.fail(String(error)); } } },

@@ -8238,6 +8238,33 @@ test("installer inventory excludes hidden folders and files before reading metad
 });
 
 
+test("narrator uses the announced voice channel guild for nicknames", () => {
+    const spoken: { text: string; }[] = [];
+    const guildReads: string[] = [];
+    let guildId: string | undefined = "voice-guild";
+    const api = loadSource("src/plugins/vcNarrator/index.tsx", {
+        "@api/Settings": { migrateSettingsFromPlugin() {} },
+        "@components/Heading": {}, "@components/Paragraph": {},
+        "@utils/constants": { Devs: {} }, "@utils/margins": {}, "@utils/text": {},
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, ReporterTestable: {} },
+        "@webpack/common": {
+            SelectedGuildStore: { getGuildId: () => "browsed-guild" },
+            SelectedChannelStore: { getVoiceChannelId: () => "voice" },
+            ChannelStore: { getChannel: () => ({ guild_id: guildId, name: "General", type: 2 }) },
+            UserStore: { getCurrentUser: () => ({ id: "me" }), getUser: () => ({ username: "Username", globalName: "Display" }) },
+            AuthenticationStore: { getSessionId: () => "session" },
+            GuildMemberStore: { getNick: (guild: string) => { guildReads.push(guild); return guild === "voice-guild" ? "Voice nickname" : "Wrong nickname"; } }
+        },
+        "./settings": { settings: { store: { joinMessage: "{{NICKNAME}} joined {{CHANNEL}}", leaveMessage: "{{NICKNAME}} left {{CHANNEL}}" } }, getCurrentVoice() {} }
+    }, { window: { speechSynthesis: { speak: (speech: { text: string; }) => spoken.push(speech) } }, SpeechSynthesisUtterance: class { constructor(public text: string) {} } });
+    api.default.flux.VOICE_STATE_UPDATES({ voiceStates: [{ userId: "other", channelId: "voice" }] });
+    api.default.flux.VOICE_STATE_UPDATES({ voiceStates: [{ userId: "other", oldChannelId: "voice" }] });
+    guildId = undefined;
+    api.default.flux.VOICE_STATE_UPDATES({ voiceStates: [{ userId: "other", channelId: "voice" }] });
+    assert.deepEqual(spoken.map(speech => speech.text), ["Voice nickname joined General", "Voice nickname left General", "Display joined General"]);
+    assert.deepEqual(guildReads, ["voice-guild", "voice-guild"]);
+});
+
 test("narrator settings offer samples without requiring English voices or a speech API", () => {
     const Button = Symbol("Button");
     let buttons = 0;

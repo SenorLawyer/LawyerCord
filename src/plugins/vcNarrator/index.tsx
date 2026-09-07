@@ -125,7 +125,6 @@ export default definePlugin({
 
     flux: {
         VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceStateChangeEvent[]; }) {
-            const myGuildId = SelectedGuildStore.getGuildId();
             const myChanId = SelectedChannelStore.getVoiceChannelId();
             const myId = UserStore.getCurrentUser()?.id;
             if (!myId) return;
@@ -151,11 +150,11 @@ export default definePlugin({
                 const shouldSayUser = !isMe || sayOwnName;
                 const userObj = shouldSayUser ? UserStore.getUser(userId) : null;
                 const user = shouldSayUser ? userObj?.username ?? "Someone" : "";
-                const displayName = user && ((userObj as any)?.globalName ?? user);
-                const nickname = user && ((myGuildId ? GuildMemberStore.getNick(myGuildId, userId) : null) ?? displayName);
-                const channel = ChannelStore.getChannel(id)?.name ?? "channel";
+                const displayName = user && (userObj?.globalName ?? user);
+                const channel = ChannelStore.getChannel(id);
+                const nickname = user && ((channel?.guild_id ? GuildMemberStore.getNick(channel.guild_id, userId) : null) ?? displayName);
 
-                speak(formatText(template, user, channel, displayName, nickname));
+                speak(formatText(template, user, channel?.name ?? "channel", displayName, nickname));
             }
         },
 

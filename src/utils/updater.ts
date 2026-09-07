@@ -31,6 +31,7 @@ export let changes: Record<"hash" | "author" | "message", string>[] = [];
 
 let updateCheck = Symbol();
 let needsRebuild = false;
+let pendingUpdate: Promise<boolean> | undefined;
 
 function Unwrap<T>(res: IpcRes<T>) {
     if (res.ok) return res.value;
@@ -40,7 +41,7 @@ function Unwrap<T>(res: IpcRes<T>) {
 }
 
 export async function checkForUpdates() {
-    if (needsRebuild) return true;
+    if (pendingUpdate || needsRebuild) return isOutdated;
     const check = updateCheck = Symbol();
     updateError = undefined;
     const result = await VencordNative.updater.getUpdates(Vencord.Settings.updateChannel);
@@ -68,19 +69,27 @@ export function resetUpdateState() {
 }
 
 export async function update() {
+    if (pendingUpdate) return pendingUpdate;
     if (!isOutdated) return true;
 
-    if (!needsRebuild) {
-        if (!Unwrap(await VencordNative.updater.update(Vencord.Settings.updateChannel))) return false;
-        needsRebuild = true;
-    }
+    const check = updateCheck = Symbol();
+    return pendingUpdate = (async () => {
+        if (!needsRebuild) {
+            const result = await VencordNative.updater.update(Vencord.Settings.updateChannel);
+            if (check !== updateCheck) return false;
+            if (!Unwrap(result)) return false;
+            needsRebuild = true;
+        }
 
-    if (!Unwrap(await VencordNative.updater.rebuild()))
-        throw new Error("The Build failed. Please try manually building the new update");
+        const result = await VencordNative.updater.rebuild();
+        if (check !== updateCheck) return false;
+        if (!Unwrap(result))
+            throw new Error("The Build failed. Please try manually building the new update");
 
-    needsRebuild = false;
-    isOutdated = false;
-    return true;
+        needsRebuild = false;
+        isOutdated = false;
+        return true;
+    })().finally(() => { pendingUpdate = undefined; });
 }
 
 export const getRepo = async () => Unwrap(await VencordNative.updater.getRepo());

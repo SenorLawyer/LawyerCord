@@ -10239,3 +10239,43 @@ test("renderer updater keeps a failed rebuild available for retry", async () => 
         assert.equal(builds, 2);
     }
 });
+
+
+test("renderer updater shares active work and rejects completion after a reset", async () => {
+    for (const resetAt of ["none", "update", "rebuild"]) {
+        const updateResult = Promise.withResolvers<unknown>();
+        const buildResult = Promise.withResolvers<unknown>();
+        const oldCheck = Promise.withResolvers<unknown>();
+        let deferCheck = false;
+        let updates = 0;
+        let builds = 0;
+        const api = loadSource("src/utils/updater.ts", {
+            "~git-hash": { __esModule: true, default: "current" },
+            "./Logger": { Logger: class {} }, "./native": {}, "./updateClassification": {}
+        }, { IS_STANDALONE: true, Vencord: { Settings: { updateChannel: "nightly" } }, VencordNative: { updater: {
+            getUpdates: async () => deferCheck ? oldCheck.promise : { ok: true, value: [{ hash: "next" }] },
+            update: () => { updates++; return updateResult.promise; },
+            rebuild: () => { builds++; return buildResult.promise; }
+        } } });
+        await api.checkForUpdates();
+        deferCheck = true;
+        const obsoleteCheck = api.checkForUpdates();
+        const first = api.update();
+        const second = api.update();
+        assert.equal(updates, 1);
+        oldCheck.resolve({ ok: true, value: [] });
+        assert.equal(await obsoleteCheck, true);
+        assert.equal(await api.checkForUpdates(), true);
+        if (resetAt === "update") api.resetUpdateState();
+        updateResult.resolve({ ok: true, value: true });
+        await setImmediate();
+        assert.equal(builds, resetAt === "update" ? 0 : 1);
+        if (resetAt === "rebuild") api.resetUpdateState();
+        buildResult.resolve(resetAt === "rebuild" ? { ok: false, error: "stale build failure" } : { ok: true, value: true });
+        assert.deepEqual(await Promise.all([first, second]), [resetAt === "none", resetAt === "none"]);
+        assert.equal(api.isOutdated, false);
+        assert.equal(api.updateError, undefined);
+        assert.equal(await api.update(), true);
+        assert.equal(updates, 1);
+    }
+});

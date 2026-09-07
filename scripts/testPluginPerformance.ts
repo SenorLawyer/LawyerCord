@@ -1309,11 +1309,12 @@ test("BetterSessions returns its settings-close save to the flux error handler",
 
 test("status preset application reports rejected updates once", async () => {
     const pending = Promise.withResolvers<void>();
+    let updates = 0;
     const toasts: { message: string; type: string; }[] = [];
     const { setStatus } = loadSource("src/equicordplugins/statusPresets/index.tsx", {
         "./style.css": {},
         "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
-        "@api/UserSettings": { getUserSettingLazy: () => ({ updateSetting: () => pending.promise }) },
+        "@api/UserSettings": { getUserSettingLazy: () => ({ updateSetting: () => { updates++; return pending.promise; } }) },
         "@components/ErrorBoundary": {}, "@utils/constants": { EquicordDevs: {} },
         "@utils/lazy": { proxyLazy: () => ({}) },
         "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {}, StartAt: {} },
@@ -1327,6 +1328,10 @@ test("status preset application reports rejected updates once", async () => {
     assert.equal(toasts.length, 1);
     assert.equal(toasts[0].type, "failure");
     assert.equal(toasts[0].message, "Could not apply the status preset.");
+    for (const clearAfter of [NaN, Infinity, -1, 0.5, Number.MAX_SAFE_INTEGER, "3600"])
+        await setStatus({ text: "Preset", clearAfter, emojiInfo: null });
+    assert.equal(updates, 1);
+    assert.equal(toasts.length, 7);
 });
 
 test("status preset menus subscribe and delete the actual saved key", () => {

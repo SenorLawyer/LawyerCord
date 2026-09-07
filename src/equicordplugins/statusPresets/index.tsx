@@ -59,9 +59,14 @@ const openCustomStatusModalLazy = () => openModalLazy(async () => {
 });
 
 function getExpirationMs(expiration: "TODAY" | number) {
-    if (expiration !== "TODAY") return Date.now() + expiration;
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+    if (expiration === "TODAY") {
+        const now = new Date();
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+    }
+    const expiresAt = Date.now() + expiration;
+    if (!Number.isSafeInteger(expiration) || expiration < 0 || !Number.isSafeInteger(expiresAt))
+        throw new Error("Invalid status expiration.");
+    return expiresAt;
 }
 
 async function setStatus(status: DiscordStatus) {

@@ -11539,3 +11539,22 @@ test("native translation preserves HTTP failures without parsing error bodies", 
         }
     }
 });
+
+test("translation selects one provider and normalizes automatic source language", async () => {
+    const source = readFileSync("src/plugins/translate/utils.ts", "utf8");
+    const start = source.indexOf("export async function translateText(");
+    const end = source.indexOf("export function translate(", start);
+    assert.ok(start >= 0 && end > start);
+    const code = transpileModule(source.slice(start, end).replace("export ", ""), { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
+    for (const web of [false, true]) for (const service of ["google", "kagi", "deepl", "deepl-pro"]) {
+        const calls: Array<{ provider: string; source: string; }> = [];
+        const provider = (name: string) => async (_text: string, source: string) => { calls.push({ provider: name, source }); return { text: "translated" }; };
+        const translate = runInNewContext(code + ";translateText", {
+            IS_WEB: web, settings: { store: { service } },
+            googleTranslate: provider("google"), kagiTranslate: provider("kagi"), deeplTranslate: provider("deepl")
+        });
+        await translate("fixture", "auto", "fr");
+        const expected = web ? "google" : service.startsWith("deepl") ? "deepl" : service;
+        assert.deepEqual(calls, [{ provider: expected, source: expected === "deepl" ? "" : "auto" }]);
+    }
+});

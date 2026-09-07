@@ -67,18 +67,10 @@ export const getLanguages = () => {
 };
 
 export async function translateText(text: string, sourceLang: string, targetLang: string): Promise<TranslationValue> {
-    const translateImpl = IS_WEB ? googleTranslate : (() => {
-        switch (settings.store.service) {
-            case "google":
-                return googleTranslate;
-            case "kagi":
-                return kagiTranslate;
-            default:
-                return deeplTranslate;
-        }
-    })();
+    const service = IS_WEB ? "google" : settings.store.service;
+    const translateImpl = service === "google" ? googleTranslate : service === "kagi" ? kagiTranslate : deeplTranslate;
 
-    if (!IS_WEB && (settings.store.service === "deepl" || settings.store.service === "deepl-pro") && sourceLang === "auto")
+    if (translateImpl === deeplTranslate && sourceLang === "auto")
         sourceLang = "";
 
     try {

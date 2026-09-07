@@ -11169,3 +11169,28 @@ test("voice messages require matching completed metadata before sending", () => 
         assert.equal(closes, sends);
     }
 });
+
+test("native voice recording rejects invalid paths before filesystem access", async () => {
+    for (const paths of [path.win32, path.posix]) {
+        const root = paths.resolve("voice-audit", "user");
+        const valid = paths.join(root, "123recording.ogg");
+        const reads: string[] = [];
+        const removals: string[] = [];
+        const { readRecording } = loadSource("src/plugins/voiceMessages/native.ts", {
+            electron: { app: { getPath: () => root } },
+            "fs/promises": {
+                readFile: async (file: string) => { reads.push(file); return new Uint8Array([1, 2, 3]); },
+                rm: async (file: string) => { removals.push(file); }
+            },
+            path: paths
+        });
+        for (const invalid of [undefined, null, 123, {}, [], "", paths.join(root + "-other", "recording.ogg"), paths.join(root, "..", "recording.ogg"), paths.join(root, "secret.txt")]) {
+            assert.equal(await readRecording({}, invalid), null);
+        }
+        assert.equal(reads.length, 0);
+        assert.equal(removals.length, 0);
+        assert.deepEqual(Array.from(await readRecording({}, valid)), [1, 2, 3]);
+        assert.deepEqual(reads, [valid]);
+        assert.deepEqual(removals, [valid]);
+    }
+});

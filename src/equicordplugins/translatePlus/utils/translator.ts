@@ -6,7 +6,6 @@
 
 import { settings } from "@equicordplugins/translatePlus/settings";
 import { isObject } from "@utils/misc";
-import { escapeRegExp } from "@utils/text";
 
 type Dictionary = Record<string, string>;
 
@@ -18,7 +17,7 @@ const SITELEN_REGEX = /(?:󱤀|󱤁|󱤂|󱤃|󱤄|󱤅|󱤆|󱤇|󱤈|󱤉|󱤊
 const SHAVIAN_REGEX = /[\u{10450}-\u{1047F}]+/u;
 
 let shavianDictionaryPromise: Promise<Dictionary> | undefined;
-let sitelenDictionaryPromise: Promise<{ dictionary: Dictionary; pattern: RegExp; }> | undefined;
+let sitelenDictionaryPromise: Promise<Dictionary> | undefined;
 
 function fetchDictionary(url: string): Promise<Dictionary> {
     return fetch(url).then(async response => {
@@ -43,19 +42,10 @@ function getShavianDictionary() {
 }
 
 function getSitelenDictionary() {
-    sitelenDictionaryPromise ??= fetchDictionary(SITELEN_DICTIONARY_URL)
-        .then(dictionary => {
-            const sorted = Object.keys(dictionary).sort((a, b) => b.length - a.length);
-            const patternSource = sorted.map(escapeRegExp).join("|");
-
-            const pattern = new RegExp(`(${patternSource})`, "g");
-
-            return { dictionary, pattern };
-        })
-        .catch(error => {
-            sitelenDictionaryPromise = undefined;
-            throw error;
-        });
+    sitelenDictionaryPromise ??= fetchDictionary(SITELEN_DICTIONARY_URL).catch(error => {
+        sitelenDictionaryPromise = undefined;
+        throw error;
+    });
 
     return sitelenDictionaryPromise;
 }
@@ -118,17 +108,8 @@ async function translateShavian(message: string) {
 }
 
 async function translateSitelen(message: string) {
-    let spacedMessage = "";
-    for (const char of message) {
-        if (spacedMessage) spacedMessage += " ";
-        spacedMessage += char;
-    }
-
-    const { dictionary, pattern } = await getSitelenDictionary();
-
-    const translate = spacedMessage.replace(pattern, match => dictionary[match]);
-
-    return translate;
+    const dictionary = await getSitelenDictionary();
+    return Array.from(message, char => Object.hasOwn(dictionary, char) ? dictionary[char] : char).join(" ");
 }
 
 async function google(target: string, text: string) {

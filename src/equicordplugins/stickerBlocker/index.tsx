@@ -74,7 +74,7 @@ function blockedComponentRender(sticker) {
 
     if (showMessage) {
         elements.push(
-            <div key="message" id="vc-blocked-sticker" className={classes(CodeContainerClasses.markup, MessageContentClasses.messageContent)}><span>Blocked Sticker. ID: {sticker.id}, NAME: {sticker.name}</span></div>
+            <div key="message" className={classes(CodeContainerClasses.markup, MessageContentClasses.messageContent)}><span>Blocked Sticker. ID: {sticker.id}, NAME: {sticker.name}</span></div>
         );
     }
 
@@ -90,20 +90,12 @@ function blockedComponentRender(sticker) {
 const messageContextMenuPatch: NavContextMenuPatchCallback = (children, props) => {
     const { favoriteableId, favoriteableType } = props ?? {};
 
-    if (!favoriteableId) return;
+    if (!favoriteableId || favoriteableType !== "sticker") return;
 
-    const menuItem = (() => {
-        switch (favoriteableType) {
-            case "sticker":
-                const sticker = props.message.stickerItems.find(s => s.id === favoriteableId);
-                if (sticker?.format_type === 3 /* LOTTIE */) return;
+    const sticker = props.message.stickerItems.find(s => s.id === favoriteableId);
+    if (sticker?.format_type === 3 /* LOTTIE */) return;
 
-                return buildMenuItem(favoriteableId);
-        }
-    })();
-
-    if (menuItem)
-        findGroupChildrenByChildId("copy-link", children)?.push(menuItem);
+    findGroupChildrenByChildId("copy-link", children)?.push(buildMenuItem(favoriteableId));
 };
 
 const expressionPickerPatch: NavContextMenuPatchCallback = (children, props: { target: HTMLElement; }) => {
@@ -120,7 +112,7 @@ function buildMenuItem(name) {
         <Menu.MenuItem
             id="add-sticker-block"
             key="add-sticker-block"
-            label={(isStickerBlocked(name)) ? "Unblock Sticker" : "Block Sticker"}
+            label={blockedStickerIds.has(name) ? "Unblock Sticker" : "Block Sticker"}
             action={() => toggleBlock(name)}
         />
     );
@@ -137,10 +129,6 @@ function toggleBlock(name) {
     }
 
     updateBlockedStickers(nextBlockedStickerIds);
-}
-
-function isStickerBlocked(name) {
-    return blockedStickerIds.has(name);
 }
 
 export default definePlugin({

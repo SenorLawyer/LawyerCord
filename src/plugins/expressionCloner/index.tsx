@@ -35,6 +35,8 @@ import { Constants, EmojiStore, FluxDispatcher, GuildStore, IconUtils, lodash, M
 import { Promisable } from "type-fest";
 
 const logger = new Logger("ExpressionCloner");
+let active = false;
+let cloneEpoch = 0;
 
 const uploadEmoji = findByCodeLazy(".GUILD_EMOJIS(", "EMOJI_UPLOAD_START");
 
@@ -100,25 +102,25 @@ async function fetchSticker(id: string) {
     return body as Sticker;
 }
 
-function ensureCloneAccount(userId: string) {
-    if (UserStore.getCurrentUser()?.id !== userId)
-        throw new Error("The account changed while cloning.");
+function ensureCloneAccount(userId: string, epoch: number) {
+    if (!active || epoch !== cloneEpoch || UserStore.getCurrentUser()?.id !== userId)
+        throw new Error("The cloning session ended.");
 }
 
-async function cloneSticker(guildId: string, sticker: Sticker, userId: string) {
+async function cloneSticker(guildId: string, sticker: Sticker, userId: string, epoch = cloneEpoch) {
     const data = new FormData();
     data.append("name", sticker.name);
     data.append("tags", sticker.tags);
     data.append("description", sticker.description);
     data.append("file", await fetchBlob(sticker));
 
-    ensureCloneAccount(userId);
+    ensureCloneAccount(userId, epoch);
     const { body } = await RestAPI.post({
         url: Constants.Endpoints.GUILD_STICKER_PACKS(guildId),
         body: data,
     });
 
-    ensureCloneAccount(userId);
+    ensureCloneAccount(userId, epoch);
     FluxDispatcher.dispatch({
         type: "GUILD_STICKERS_CREATE_SUCCESS",
         guildId,
@@ -129,7 +131,7 @@ async function cloneSticker(guildId: string, sticker: Sticker, userId: string) {
     });
 }
 
-async function cloneEmoji(guildId: string, emoji: Emoji, userId: string) {
+async function cloneEmoji(guildId: string, emoji: Emoji, userId: string, epoch = cloneEpoch) {
     const data = await fetchBlob(emoji);
 
     const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -139,7 +141,7 @@ async function cloneEmoji(guildId: string, emoji: Emoji, userId: string) {
         reader.readAsDataURL(data);
     });
 
-    ensureCloneAccount(userId);
+    ensureCloneAccount(userId, epoch);
     return uploadEmoji({
         guildId,
         name: emoji.name.split("~")[0],
@@ -201,13 +203,15 @@ async function fetchBlob(data: Data) {
 async function doClone(guildId: string, data: Sticker | Emoji) {
     try {
         const userId = UserStore.getCurrentUser()?.id;
+        const epoch = cloneEpoch;
         if (!userId) throw new Error("Sign in before cloning an expression.");
+        ensureCloneAccount(userId, epoch);
         if (data.t === "Sticker")
-            await cloneSticker(guildId, data, userId);
+            await cloneSticker(guildId, data, userId, epoch);
         else
-            await cloneEmoji(guildId, data, userId);
+            await cloneEmoji(guildId, data, userId, epoch);
 
-        ensureCloneAccount(userId);
+        ensureCloneAccount(userId, epoch);
         Toasts.show({
             message: `Successfully cloned ${data.name} to ${GuildStore.getGuild(guildId)?.name ?? "your server"}!`,
             type: Toasts.Type.SUCCESS,
@@ -429,6 +433,19 @@ export default definePlugin({
     tags: ["Emotes", "Servers"],
     searchTerms: ["StickerCloner", "EmoteCloner", "EmojiCloner"],
     authors: [Devs.Ven, Devs.Nuckyz],
+    start() {
+        active = true;
+        cloneEpoch++;
+    },
+    stop() {
+        active = false;
+        cloneEpoch++;
+    },
+    flux: {
+        LOGOUT() {
+            cloneEpoch++;
+        }
+    },
     contextMenus: {
         "message": messageContextMenuPatch,
         "expression-picker": expressionPickerPatch

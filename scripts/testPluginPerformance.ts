@@ -9733,7 +9733,7 @@ test("emoji cloning settles failed file reads without uploading", async () => {
                     else this.onload();
                 }
             }
-        }, "({ cloneEmoji })");
+        }, "(exports.default.start(), { cloneEmoji })");
         const pending = cloneEmoji("guild", { t: "Emoji", id: "emoji", name: "name~2", isAnimated: false }, "me");
         if (mode === "success") {
             await pending;
@@ -9748,9 +9748,10 @@ test("emoji cloning settles failed file reads without uploading", async () => {
 test("expression cloning preserves valid server errors and falls back for malformed responses", async () => {
     for (const text of ["not json", "null", "{}", '{"message":42}', '{"message":"   "}', '{"message":"No slots available."}']) {
         const messages: string[] = [];
+        let requests = 0;
         const logs: unknown[][] = [];
         const failure = { text };
-        const { doClone } = loadSource("src/plugins/expressionCloner/index.tsx", {
+        const { doClone, plugin } = loadSource("src/plugins/expressionCloner/index.tsx", {
             "@api/ContextMenu": {}, "@api/Settings": { migratePluginSettings() {} },
             "@components/BaseText": {}, "@components/CheckedTextInput": {}, "@components/Flex": {},
             "@components/Heading": {}, "@components/Paragraph": {}, "@components/Button": { Button: "button" },
@@ -9766,12 +9767,17 @@ test("expression cloning preserves valid server errors and falls back for malfor
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "me" }) }, Toasts: { Type: { FAILURE: "failure" }, genId: () => "id", show: ({ message }: { message: string; }) => messages.push(message) } }
         }, {
             location: { protocol: "https:" }, window: { GLOBAL_ENV: { CDN_HOST: "fixture.invalid" } },
-            fetch: async () => { throw failure; }
-        }, "({ doClone })");
+            fetch: async () => { requests++; throw failure; }
+        }, "(exports.default.start(), { doClone, plugin: exports.default })");
         await doClone("guild", { t: "Emoji", id: "emoji", name: "private-name", isAnimated: false });
         assert.deepEqual(messages, ["Failed to clone: " + (text.includes("No slots") ? "No slots available." : "Something went wrong.")]);
         assert.equal(logs.length, 1);
         assert.deepEqual(logs[0], ["Failed to clone expression.", failure]);
+        plugin.stop();
+        await doClone("guild", { t: "Emoji", id: "emoji", name: "name", isAnimated: false });
+        assert.equal(requests, 1);
+        assert.equal(messages.length, 2);
+        assert.equal(messages[1], "Failed to clone: Something went wrong.");
     }
 });
 
@@ -9819,7 +9825,7 @@ test("cloning keeps the name selected when the request starts", async () => {
             onload = () => {};
             readAsDataURL() { this.onload(); }
         }
-    }, "({ CloneModal })");
+    }, "(exports.default.start(), { CloneModal })");
     const data = { t: "Emoji", id: "emoji", name: "original", isAnimated: false };
     for (const kind of ["Emoji", "Sticker"]) {
         for (const value of ["", "a", "aa", "aaa", "a".repeat(29), "a".repeat(30), "a".repeat(31), "a".repeat(32), "a".repeat(33), "a_b", "a b"]) {
@@ -9866,11 +9872,11 @@ test("cloning keeps the name selected when the request starts", async () => {
 
 test("cloning stops before uploads and sticker publication after account changes", async () => {
     for (const kind of ["Emoji", "Sticker"]) {
-        for (const phase of ["stable", "download", "logout", ...(kind === "Sticker" ? ["response"] : [])]) {
+        for (const phase of ["stable", "download", "logout", "stop", "restart", "relogin", ...(kind === "Sticker" ? ["response"] : [])]) {
             let userId: string | undefined = "owner";
             let uploads = 0;
             let publications = 0;
-            const { cloneEmoji, cloneSticker } = loadSource("src/plugins/expressionCloner/index.tsx", {
+            const { cloneEmoji, cloneSticker, plugin } = loadSource("src/plugins/expressionCloner/index.tsx", {
                 "@api/ContextMenu": {}, "@api/Settings": { migratePluginSettings() {} },
                 "@components/BaseText": {}, "@components/Button": {}, "@components/Flex": {},
                 "@components/Heading": {}, "@components/Paragraph": {},
@@ -9888,6 +9894,9 @@ test("cloning stops before uploads and sticker publication after account changes
             }, {
                 location: { protocol: "https:" }, window: { GLOBAL_ENV: { CDN_HOST: "fixture.invalid", MEDIA_PROXY_ENDPOINT: "https://fixture.invalid" } },
                 fetch: async () => {
+                    if (phase === "stop" || phase === "restart") plugin.stop();
+                    if (phase === "restart") plugin.start();
+                    if (phase === "relogin") plugin.flux.LOGOUT();
                     if (phase === "download") userId = "other";
                     if (phase === "logout") userId = undefined;
                     return { ok: true, blob: async () => ({ size: 1 }) };
@@ -9898,11 +9907,11 @@ test("cloning stops before uploads and sticker publication after account changes
                     onload = () => {};
                     readAsDataURL() { this.onload(); }
                 }
-            }, "({ cloneEmoji, cloneSticker })");
+            }, "(exports.default.start(), { cloneEmoji, cloneSticker, plugin: exports.default })");
             const data = { t: kind, id: "expression", name: "name", format_type: 1, tags: "tag", description: "description" };
             const pending = (kind === "Emoji" ? cloneEmoji : cloneSticker)("guild", data, "owner");
             if (phase === "stable") await pending;
-            else await assert.rejects(pending, /account changed/);
+            else await assert.rejects(pending, /cloning session ended/);
             assert.equal(uploads, phase === "stable" || phase === "response" ? 1 : 0);
             assert.equal(publications, kind === "Sticker" && phase === "stable" ? 1 : 0);
         }

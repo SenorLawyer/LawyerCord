@@ -98,7 +98,7 @@ const StatusSubMenuComponent = () => {
                             label="Delete Preset"
                             action={() => {
                                 const newPresets = { ...settings.store.StatusPresets };
-                                delete newPresets[status.text];
+                                delete newPresets[index];
                                 settings.store.StatusPresets = newPresets;
                                 update();
                             }}
@@ -184,7 +184,7 @@ export default definePlugin({
             text: "Keep",
             style: { marginLeft: "20px" },
             onClick: () => {
-                settings.store.StatusPresets[status.text] = status;
+                settings.store.StatusPresets = { ...settings.store.StatusPresets, [status.text]: status };
                 Toasts.show({
                     message: "Successfully Saved Status",
                     type: Toasts.Type.SUCCESS,

@@ -1306,6 +1306,27 @@ test("BetterSessions returns its settings-close save to the flux error handler",
     await rejected;
 });
 
+test("status presets save object-property names as ordinary entries", () => {
+    const store = { StatusPresets: {} as Record<string, object> };
+    const { default: plugin } = loadSource("src/equicordplugins/statusPresets/index.tsx", {
+        "./style.css": {},
+        "@api/Settings": { definePluginSettings: () => ({ store }) },
+        "@api/UserSettings": { getUserSettingLazy: () => ({}) },
+        "@components/ErrorBoundary": {}, "@utils/constants": { EquicordDevs: {} },
+        "@utils/lazy": { proxyLazy: () => ({}) }, "@utils/react": {},
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {}, StartAt: {} },
+        "@webpack": { findComponentByCodeLazy: () => () => null, extractAndLoadChunksLazy: () => () => {} },
+        "@webpack/common": { Toasts: { show() {}, Type: {}, genId: () => "toast" } },
+    });
+    for (const text of ["existing", "__proto__", "constructor"]) {
+        const status = { text, emojiInfo: null, clearAfter: null };
+        plugin.renderRememberButton(status).onClick();
+        assert.equal(Object.hasOwn(store.StatusPresets, text), true);
+        assert.equal(store.StatusPresets[text], status);
+    }
+    assert.equal(Object.keys(store.StatusPresets).length, 3);
+});
+
 test("invalid codec responses never partially change the engine", async () => {
     let response = "";
     let writes = 0;

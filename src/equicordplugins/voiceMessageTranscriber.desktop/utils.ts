@@ -299,9 +299,10 @@ export class TranscriptionWorker {
     }
 
     private validateModelUrl(url: string): void {
-        const { hostname } = new URL(url);
-        if (hostname !== "huggingface.co" && hostname !== "cdn.jsdelivr.net")
-            throw new Error(`Blocked unexpected model host: ${hostname}`);
+        const { protocol, hostname, port, username, password } = new URL(url);
+        if (protocol !== "https:" || port || username || password
+            || (hostname !== "huggingface.co" && hostname !== "cdn.jsdelivr.net"))
+            throw new Error("Blocked an untrusted model URL.");
     }
 
     private async handleMessage(event: MessageEvent) {

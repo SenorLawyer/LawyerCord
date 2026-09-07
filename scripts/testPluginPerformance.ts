@@ -11280,3 +11280,30 @@ test("transcription clipboard feedback waits for success and handles rejection",
         assert.deepEqual(feedback, [failure ? "failure" : "success"]);
     }
 });
+
+test("transcription model requests reject insecure and credentialed URLs before cache access", async () => {
+    let instance: { onmessage?: (event: object) => Promise<void>; } = {};
+    let reads = 0;
+    const responses: Array<{ error?: string; }> = [];
+    const { TranscriptionWorker } = loadSource("src/equicordplugins/voiceMessageTranscriber.desktop/utils.ts", {
+        "@api/index": { DataStore: { get: async () => { reads++; return new ArrayBuffer(1); } } },
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@webpack/common": { lodash: { isArrayBuffer: () => true } }
+    }, {
+        Blob, AbortController,
+        URL: class extends URL { static createObjectURL() { return "blob:worker"; } static revokeObjectURL() {} },
+        Worker: class { constructor() { instance = this; } onmessage?: (event: object) => Promise<void>; terminate() {} postMessage(value: { error?: string; }) { responses.push(value); } }
+    });
+    const worker = new TranscriptionWorker(() => {}, () => {}, () => {}, () => {});
+    for (const url of ["http://huggingface.co/model", "https://user:password@huggingface.co/model", "https://cdn.jsdelivr.net:8080/model", "https://example.com/model"]) {
+        await instance.onmessage?.({ data: { type: "fetch_request", id: "model", url } });
+        assert.equal(reads, 0, url);
+        assert.equal(typeof responses.at(-1)?.error, "string", url);
+    }
+    for (const url of ["https://huggingface.co/model", "https://cdn.jsdelivr.net/model"]) {
+        await instance.onmessage?.({ data: { type: "fetch_request", id: "model", url } });
+        assert.equal(responses.at(-1)?.error, undefined);
+    }
+    assert.equal(reads, 2);
+    worker.terminate();
+});

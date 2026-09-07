@@ -74,12 +74,12 @@ export default definePlugin({
                 if (settings.store.excludeInvisible && status === "invisible") return;
                 if (status !== settings.store.statusToSet) {
                     savedStatus = { userId, value: status, applied: settings.store.statusToSet };
-                    StatusSettings.updateSetting(settings.store.statusToSet);
+                    return StatusSettings.updateSetting(settings.store.statusToSet);
                 }
             } else if (savedStatus) {
                 const previousStatus = savedStatus;
                 savedStatus = null;
-                if (status === previousStatus.applied) StatusSettings.updateSetting(previousStatus.value);
+                if (status === previousStatus.applied) return StatusSettings.updateSetting(previousStatus.value);
             }
         }
     }

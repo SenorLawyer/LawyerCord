@@ -1364,6 +1364,27 @@ test("StatusWhileActive never restores another account's status", () => {
     }
 });
 
+test("AutoDND returns status update failures to its flux wrapper", async () => {
+    let status = "online";
+    let pending = Promise.withResolvers<void>();
+    const { default: plugin } = loadSource("src/plugins/autoDndWhilePlaying.discordDesktop/index.ts", {
+        "@api/Settings": { definePluginSettings: () => ({ store: { statusToSet: "dnd" } }), migratePluginSettings() {} },
+        "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => status, updateSetting: () => pending.promise }) },
+        "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) } },
+    });
+    for (const games of [[{}], []]) {
+        const result = plugin.flux.RUNNING_GAMES_CHANGE({ games });
+        assert.equal(result, pending.promise);
+        const rejected = assert.rejects(result, /update failed/);
+        pending.reject(new Error("update failed"));
+        await rejected;
+        status = "dnd";
+        pending = Promise.withResolvers<void>();
+    }
+});
+
 test("AutoDND restores each game's saved status only once", () => {
     let userId = "first";
     let status = "online";

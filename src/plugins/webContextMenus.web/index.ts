@@ -271,29 +271,29 @@ export default definePlugin({
             try {
                 canvas.width = bitmap.width;
                 canvas.height = bitmap.height;
-                canvas.getContext("2d")!.drawImage(bitmap, 0, 0);
+                const context = canvas.getContext("2d");
+                if (!context) throw new Error("Could not create the image canvas.");
+                context.drawImage(bitmap, 0, 0);
             } finally {
                 bitmap.close();
             }
 
-            await new Promise<void>(done => {
+            imageData = await new Promise<Blob>((resolve, reject) => {
                 canvas.toBlob(data => {
-                    imageData = data!;
-                    done();
+                    if (data) resolve(data);
+                    else reject(new Error("Could not encode the image as PNG."));
                 }, "image/png");
             });
         }
 
-        if ((IS_VESKTOP || IS_EQUIBOP) && VesktopNative.clipboard) {
-            VesktopNative.clipboard.copyImage(await imageData.arrayBuffer(), url);
-            return;
-        } else {
-            navigator.clipboard.write([
-                new ClipboardItem({
-                    "image/png": imageData
-                })
-            ]);
-        }
+        if ((IS_VESKTOP || IS_EQUIBOP) && VesktopNative.clipboard)
+            return VesktopNative.clipboard.copyImage(await imageData.arrayBuffer(), url);
+
+        return navigator.clipboard.write([
+            new ClipboardItem({
+                "image/png": imageData
+            })
+        ]);
     },
 
     async saveImage(url: string) {

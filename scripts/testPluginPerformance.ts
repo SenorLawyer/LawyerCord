@@ -1535,14 +1535,14 @@ test("blocked sticker placeholders subscribe to display preferences", () => {
     assert.equal(subscriptions[0], subscriptions[2]);
 });
 
-test("web image copying releases decoded bitmaps after drawing or failure", async () => {
-    for (const fail of [false, true]) {
+test("web image copying releases bitmaps and propagates conversion and clipboard failures", async () => {
+    for (const mode of ["success", "draw", "context", "encode", "clipboard"]) {
         let closed = 0;
         let copied = 0;
         const bitmap = { width: 4, height: 3, close() { closed++; } };
         const canvas = { width: 0, height: 0,
-            getContext: () => ({ drawImage: (image: unknown) => { assert.equal(image, bitmap); if (fail) throw new Error("draw failed"); } }),
-            toBlob: (callback: (data: object) => void) => { assert.equal(closed, 1); callback({ type: "image/png" }); },
+            getContext: () => mode === "context" ? null : ({ drawImage: (image: unknown) => { assert.equal(image, bitmap); if (mode === "draw") throw new Error("draw failed"); } }),
+            toBlob: (callback: (data: object | null) => void) => { assert.equal(closed, 1); callback(mode === "encode" ? null : { type: "image/png" }); },
         };
         const { default: plugin } = loadSource("src/plugins/webContextMenus.web/index.ts", {
             "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
@@ -1553,12 +1553,12 @@ test("web image copying releases decoded bitmaps after drawing or failure", asyn
             IS_VESKTOP: false, IS_EQUIBOP: false, window: {}, URL,
             fetch: async () => ({ blob: async () => ({ type: "image/jpeg" }) }),
             createImageBitmap: async () => bitmap, document: { createElement: () => canvas },
-            navigator: { clipboard: { write: () => { copied++; } } }, ClipboardItem: class {},
+            navigator: { clipboard: { write: async () => { copied++; if (mode === "clipboard") throw new Error("clipboard failed"); } } }, ClipboardItem: class {},
         });
-        if (fail) await assert.rejects(plugin.copyImage("https://cdn.discordapp.com/image.jpg"), /draw failed/);
+        if (mode !== "success") await assert.rejects(plugin.copyImage("https://cdn.discordapp.com/image.jpg"), /draw failed|image canvas|encode the image|clipboard failed/);
         else await plugin.copyImage("https://cdn.discordapp.com/image.jpg");
         assert.equal(closed, 1);
-        assert.equal(copied, fail ? 0 : 1);
+        assert.equal(copied, mode === "success" || mode === "clipboard" ? 1 : 0);
     }
 });
 

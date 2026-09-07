@@ -12030,3 +12030,19 @@ test("TranslatePlus checks Toki provider status and payload before using text", 
     assert.equal(result.src, "tp");
     assert.equal(result.text, "Good language");
 });
+
+
+test("TranslatePlus malformed JSON errors omit response snippets", async () => {
+    for (const route of ["google", "shavian", "toki"]) {
+        const { translate } = loadSource("src/equicordplugins/translatePlus/utils/translator.ts", {
+            "@equicordplugins/translatePlus/settings": { settings: { store: { target: "en", shavian: route === "shavian", toki: route === "toki", sitelen: false } } },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
+            "@utils/text": { escapeRegExp: (text: string) => text }
+        }, { URLSearchParams, fetch: async () => new Response("private-response-invalid-json") });
+        await assert.rejects(translate(route === "shavian" ? "𐑐" : route === "toki" ? "toki pona" : "Hello"), (error: Error) => {
+            assert.match(error.message, /invalid (response|dictionary)/);
+            assert.equal(error.message.includes("private-response"), false);
+            return true;
+        });
+    }
+});

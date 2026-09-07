@@ -1611,9 +1611,10 @@ test("webpack tar archives contain only the supplied byte view", () => {
 test("voice rejoin waits for voice state confirmation before persisting success", async () => {
     let reconnect: () => Promise<void> = async () => assert.fail("Missing reconnect");
     let dispatched = 0;
+    let active = true;
     const api = loadSource("src/equicordplugins/voiceRejoin/index.tsx", {
         "@utils/misc": {},
-        "@api/DataStore": { get: async (key: string) => key === "VCLastVoiceChannelSession" ? true : { channelId: "previous", guildId: "guild", timestamp: 1000 }, set: () => assert.fail("A requested join is not confirmation") },
+        "@api/DataStore": { get: async (key: string) => key === "VCLastVoiceChannelSession" ? true : { channelId: "previous", guildId: "guild", timestamp: 1000 }, getMany: async () => [{ channelId: "previous", guildId: "guild", timestamp: 1000 }, active], set: () => assert.fail("A requested join is not confirmation") },
         "@api/Settings": { definePluginSettings: () => ({ store: { rejoinDelay: 2, rejoinTimeout: 30, preventReconnectIfCallEnded: "none" } }) },
         "@utils/constants": { EquicordDevs: {} }, "@utils/Logger": { Logger: class { error(error: unknown) { assert.fail(String(error)); } } },
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin, makeRange: () => [], OptionType: {} },
@@ -1625,6 +1626,10 @@ test("voice rejoin waits for voice state confirmation before persisting success"
         }
     }, { Date: { now: () => 2000 }, setTimeout: (callback: typeof reconnect) => { reconnect = callback; return 1; }, clearTimeout() {} });
     await api.default.flux.CONNECTION_OPEN();
+    await reconnect();
+    assert.equal(dispatched, 1);
+    await api.default.flux.CONNECTION_OPEN();
+    active = false;
     await reconnect();
     assert.equal(dispatched, 1);
     api.default.stop();
@@ -1729,7 +1734,7 @@ test("voice rejoin leaves an existing voice connection active", async () => {
     let reconnect: () => Promise<void> = async () => assert.fail("Missing reconnect");
     const api = loadSource("src/equicordplugins/voiceRejoin/index.tsx", {
         "@utils/misc": { sleep: async () => {} },
-        "@api/DataStore": { get: async (key: string) => key === "VCLastVoiceChannelSession" ? true : { channelId: "previous", guildId: "guild", timestamp: 1000 }, set: () => assert.fail("Must not mark an active connection inactive") },
+        "@api/DataStore": { get: async (key: string) => key === "VCLastVoiceChannelSession" ? true : { channelId: "previous", guildId: "guild", timestamp: 1000 }, getMany: async () => [{ channelId: "previous", guildId: "guild", timestamp: 1000 }, true], set: () => assert.fail("Must not mark an active connection inactive") },
         "@api/Settings": { definePluginSettings: () => ({ store: { rejoinDelay: 2, rejoinTimeout: 30, preventReconnectIfCallEnded: "none" } }) },
         "@utils/constants": { EquicordDevs: {} }, "@utils/Logger": { Logger: class { error(error: unknown) { assert.fail(String(error)); } } },
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin, makeRange: () => [], OptionType: {} },

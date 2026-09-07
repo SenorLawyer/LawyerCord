@@ -196,8 +196,8 @@ export default definePlugin({
                 if (scheduledGeneration !== reconnectGeneration) return;
 
                 try {
-                    const saved = await DataStore.get<SavedVoiceChannel>(DATASTORE_KEY);
-                    if (!saved?.channelId) return;
+                    const [saved, sessionActive] = await DataStore.getMany<SavedVoiceChannel | boolean>([DATASTORE_KEY, DATASTORE_SESSION_KEY]);
+                    if (sessionActive === false || !saved || typeof saved !== "object" || !saved.channelId) return;
 
                     const channel = await waitForChannel(saved.channelId, scheduledGeneration);
                     if (scheduledGeneration !== reconnectGeneration) return;

@@ -1130,6 +1130,7 @@ test("relationship removal returns notification and storage work to the flux wra
     let synced = false;
     const { default: plugin } = loadSource("src/plugins/relationshipNotifier/index.ts", {
         "@utils/constants": { Devs: {} },
+        "@utils/Logger": { Logger: class { error() {} } },
         "@utils/types": { __esModule: true, default: (value: object) => value },
         "./settings": {},
         "./functions": { onRelationshipRemove: async () => {} },
@@ -10344,4 +10345,35 @@ test("relationship notifier skips user lookups for irrelevant or disabled remova
             assert.equal(notifications, expected);
         }
     }
+});
+
+
+test("relationship notifier catches delayed startup failures and cancels its timer", async () => {
+    const timers = new Map<number, () => void>();
+    let timerId = 0;
+    let calls = 0;
+    const errors: unknown[] = [];
+    const failure = new Error("Storage unavailable");
+    const { default: plugin } = loadSource("src/plugins/relationshipNotifier/index.ts", {
+        "@utils/constants": { Devs: {} },
+        "@utils/Logger": { Logger: class { error(_message: string, error: unknown) { errors.push(error); } } },
+        "@utils/types": { __esModule: true, default: (value: object) => value },
+        "./settings": {}, "./functions": {},
+        "./utils": { syncAndRunChecks: async () => { calls++; throw failure; } }
+    }, {
+        setTimeout: (callback: () => void, delay: number) => { assert.equal(delay, 5000); timers.set(++timerId, callback); return timerId; },
+        clearTimeout: (id: number) => timers.delete(id)
+    });
+    plugin.start();
+    plugin.start();
+    assert.equal(timers.size, 1);
+    plugin.stop();
+    assert.equal(timers.size, 0);
+    assert.equal(calls, 0);
+    plugin.start();
+    for (const callback of timers.values()) callback();
+    timers.clear();
+    await setImmediate();
+    assert.equal(calls, 1);
+    assert.deepEqual(errors, [failure]);
 });

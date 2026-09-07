@@ -17,6 +17,7 @@
 */
 
 import { Devs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 
 import { onChannelDelete, onGuildDelete, onRelationshipRemove, removeFriend, removeGroup, removeGuild } from "./functions";
@@ -24,6 +25,7 @@ import settings from "./settings";
 import { syncAndRunChecks, syncFriends, syncGroups, syncGuilds } from "./utils";
 
 let startupSyncTimeout: ReturnType<typeof setTimeout> | undefined;
+const logger = new Logger("RelationshipNotifier");
 
 function clearStartupSyncTimeout() {
     if (startupSyncTimeout === undefined) return;
@@ -80,7 +82,7 @@ export default definePlugin({
         clearStartupSyncTimeout();
         startupSyncTimeout = setTimeout(() => {
             startupSyncTimeout = undefined;
-            void syncAndRunChecks();
+            void syncAndRunChecks().catch(error => logger.error("Could not sync relationships.", error));
         }, 5000);
     },
 

@@ -114,10 +114,9 @@ export const LANGUAGES = {
 
 export const cl = classNameFactory("vc-transcription-");
 
-const getAudioContext = () => new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
 export async function decodeAudio(blob: Blob): Promise<Float32Array> {
     const arrayBuffer = await blob.arrayBuffer();
-    const audioContext = getAudioContext();
+    const audioContext = new AudioContext({ sampleRate: 16000 });
     try {
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 

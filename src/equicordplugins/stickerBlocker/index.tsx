@@ -11,31 +11,29 @@ import { Devs } from "@utils/constants";
 import { classes } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import { findCssClassesLazy } from "@webpack";
-import { Button, Menu } from "@webpack/common";
-import React, { ReactNode } from "react";
+import { Button, Menu, React } from "@webpack/common";
+import type { ReactNode } from "react";
 
 const CodeContainerClasses = findCssClassesLazy("markup", "codeContainer");
 const MessageContentClasses = findCssClassesLazy("messageContent", "messageContentTrailingIcon");
 let blockedStickerIds = new Set<string>();
+const DISPLAY_SETTINGS: ("showGif" | "showMessage" | "showButton")[] = ["showGif", "showMessage", "showButton"];
 
 const settings = definePluginSettings({
     showGif: {
         type: OptionType.BOOLEAN,
         description: "Whether to show a snazzy cat gif",
-        default: true,
-        restartNeeded: true
+        default: true
     },
     showMessage: {
         type: OptionType.BOOLEAN,
         description: "Whether to show a message detailing which id was blocked",
-        default: false,
-        restartNeeded: true
+        default: false
     },
     showButton: {
         type: OptionType.BOOLEAN,
         description: "Whether to show a button to unblock the gif",
-        default: true,
-        restartNeeded: true
+        default: true
     },
     blockedStickers: {
         type: OptionType.STRING,
@@ -63,7 +61,7 @@ function updateBlockedStickers(nextBlockedStickerIds: Set<string>) {
 }
 
 function blockedComponentRender(sticker) {
-    const { showGif, showMessage, showButton } = settings.store;
+    const { showGif, showMessage, showButton } = settings.use(DISPLAY_SETTINGS);
     const elements = [] as ReactNode[];
 
     if (showGif) {

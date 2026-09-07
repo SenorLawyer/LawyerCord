@@ -1306,6 +1306,30 @@ test("BetterSessions returns its settings-close save to the flux error handler",
     await rejected;
 });
 
+test("blocked sticker placeholders subscribe to display preferences", () => {
+    let visible = "showGif";
+    const subscriptions: unknown[] = [];
+    const { default: plugin } = loadSource("src/equicordplugins/stickerBlocker/index.tsx", {
+        "@api/ContextMenu": {},
+        "@api/Settings": { definePluginSettings: () => ({ store: {}, use: (keys: string[]) => {
+            subscriptions.push(keys);
+            return Object.fromEntries(keys.map(key => [key, key === visible]));
+        } }) },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/constants": { Devs: {} }, "@utils/misc": { classes: () => "" },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack": { findCssClassesLazy: () => ({}) },
+        "@webpack/common": { Button: { Colors: {} }, Menu: {}, React: { createElement: (type: unknown, props: unknown, ...children: unknown[]) => ({ type, props, children }) } },
+    });
+    for (const [setting, key] of [["showGif", "gif"], ["showMessage", "message"], ["showButton", "button"]]) {
+        visible = setting;
+        const rendered = plugin.blockedComponent({ id: "sticker", name: "Sticker" });
+        assert.deepEqual(Array.from(rendered.children[0], (element: { props: { key: string; }; }) => element.props.key), [key]);
+    }
+    assert.equal(subscriptions.length, 3);
+    assert.equal(subscriptions[0], subscriptions[2]);
+});
+
 test("Steam status sync ignores unmapped and disabled statuses", () => {
     const opened: string[] = [];
     const { default: plugin } = loadSource("src/equicordplugins/steamStatusSync/index.tsx", {

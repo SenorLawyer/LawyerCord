@@ -164,27 +164,16 @@ export default definePlugin({
         return (
             <ErrorBoundary>
                 <div />
-                {status == null ?
-                    <PMenu
-                        id="sp-custom/presets-status"
-                        action="PRESS_SET_STATUS"
-                        onClick={openCustomStatusModalLazy}
-                        icon={() => <div />}
-                        label="Set Custom Status"
-                        renderSubmenu={StatusSubMenuComponent}
-                    />
-                    :
-                    <PMenu
-                        id="sp-edit/presets-status"
-                        action="PRESS_EDIT_CUSTOM_STATUS"
-                        onClick={openCustomStatusModalLazy}
-                        icon={() => status.emoji != null ? (
-                            <EmojiComponent emoji={status.emoji} animate={false} hideTooltip={false} />
-                        ) : null}
-                        label="Edit Custom Status"
-                        renderSubmenu={StatusSubMenuComponent}
-                    />
-                }
+                <PMenu
+                    id={status == null ? "sp-custom/presets-status" : "sp-edit/presets-status"}
+                    action={status == null ? "PRESS_SET_STATUS" : "PRESS_EDIT_CUSTOM_STATUS"}
+                    onClick={openCustomStatusModalLazy}
+                    icon={() => status == null ? <div /> : status.emoji != null ? (
+                        <EmojiComponent emoji={status.emoji} animate={false} hideTooltip={false} />
+                    ) : null}
+                    label={status == null ? "Set Custom Status" : "Edit Custom Status"}
+                    renderSubmenu={StatusSubMenuComponent}
+                />
             </ErrorBoundary>
         );
     },

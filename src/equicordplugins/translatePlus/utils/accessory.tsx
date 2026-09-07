@@ -12,7 +12,7 @@ import { Parser, useEffect, useState } from "@webpack/common";
 import { Icon } from "./icon";
 import { translate } from "./translator";
 
-const setters = new Map<string, (translation: Translation | undefined) => void>();
+const setters = new Map<string, Set<(translation: Translation | undefined) => void>>();
 
 export function Accessory({ message }: { message: Message; }) {
     const [translation, setTranslation] = useState<Translation | undefined>(undefined);
@@ -20,9 +20,14 @@ export function Accessory({ message }: { message: Message; }) {
     useEffect(() => {
         if ((message as any).vencordEmbeddedBy) return;
 
-        setters.set(message.id, setTranslation);
+        const listeners = setters.get(message.id) ?? new Set<(translation: Translation | undefined) => void>();
+        listeners.add(setTranslation);
+        setters.set(message.id, listeners);
 
-        return () => void setters.delete(message.id);
+        return () => {
+            listeners.delete(setTranslation);
+            if (!listeners.size) setters.delete(message.id);
+        };
     }, [message.id]);
 
     if (!translation) return null;
@@ -40,16 +45,16 @@ export function Accessory({ message }: { message: Message; }) {
 export async function handleTranslate(message: Message) {
     if (!message.content) return;
 
-    const setTranslation = setters.get(message.id);
-    if (!setTranslation) return;
+    const listeners = setters.get(message.id);
+    if (!listeners) return;
 
     try {
         const translation = await translate(message.content);
-        if (setters.get(message.id) === setTranslation) setTranslation(translation);
+        if (setters.get(message.id) === listeners)
+            for (const setter of listeners) setter(translation);
     } catch (error) {
         console.error("[TranslatePlus] Failed to translate message:", error);
-        if (setters.get(message.id) === setTranslation) {
-            setTranslation({ src: "en", text: "Translation failed due to an error." });
-        }
+        if (setters.get(message.id) === listeners)
+            for (const setter of listeners) setter({ src: "en", text: "Translation failed due to an error." });
     }
 }

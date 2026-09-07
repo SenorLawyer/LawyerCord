@@ -12071,3 +12071,43 @@ test("TranslatePlus malformed JSON errors omit response snippets", async () => {
         });
     }
 });
+
+test("TranslatePlus delivers to surviving views and rejects detached requests", async () => {
+    const cleanups: (() => void)[] = [];
+    const deliveries: unknown[][] = [];
+    let finish: (value: { text: string; src: string; }) => void = () => {};
+    const accessory = loadSource("src/equicordplugins/translatePlus/utils/accessory.tsx", {
+        "@equicordplugins/translatePlus/misc/languages": {},
+        "@equicordplugins/translatePlus/misc/types": {},
+        "./icon": {},
+        "./translator": { translate: () => new Promise(resolve => { finish = resolve; }) },
+        "@webpack/common": {
+            useState: () => {
+                const values: unknown[] = [];
+                deliveries.push(values);
+                return [undefined, (value: unknown) => values.push(value)];
+            },
+            useEffect: (effect: () => () => void) => cleanups.push(effect())
+        }
+    });
+    const message = { id: "message", content: "Hello" };
+    const result = { text: "Bonjour", src: "en" };
+    accessory.Accessory({ message });
+    accessory.Accessory({ message });
+    const first = accessory.handleTranslate(message);
+    finish(result);
+    await first;
+    assert.deepEqual(deliveries, [[result], [result]]);
+    cleanups[0]();
+    const second = accessory.handleTranslate(message);
+    finish(result);
+    await second;
+    assert.deepEqual(deliveries, [[result], [result, result]]);
+    const detached = accessory.handleTranslate(message);
+    cleanups[1]();
+    accessory.Accessory({ message });
+    finish(result);
+    await detached;
+    assert.deepEqual(deliveries, [[result], [result, result], []]);
+    cleanups[2]();
+});

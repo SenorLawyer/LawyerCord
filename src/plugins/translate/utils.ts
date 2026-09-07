@@ -107,8 +107,10 @@ async function googleTranslate(text: string, sourceLang: string, targetLang: str
     });
 
     const res = await fetch(url);
-    if (!res.ok)
+    if (!res.ok) {
+        await res.body?.cancel();
         throw new Error(`Google Translate request failed (${res.status}).`);
+    }
 
     const { sourceLanguage, translation }: GoogleData = await res.json();
 

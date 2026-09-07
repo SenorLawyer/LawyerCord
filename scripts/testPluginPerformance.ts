@@ -11558,3 +11558,20 @@ test("translation selects one provider and normalizes automatic source language"
         assert.deepEqual(calls, [{ provider: expected, source: expected === "deepl" ? "" : "auto" }]);
     }
 });
+
+test("Google translation cancels an unused error response", async () => {
+    let cancelled = 0;
+    const { translateText } = loadSource("src/plugins/translate/utils.ts", {
+        "@utils/css": { classNameFactory: () => () => "" }, "@utils/onlyOnce": { onlyOnce: (fn: unknown) => fn },
+        "@webpack/common": { showToast() {}, Toasts: { Type: { FAILURE: "failure" } } },
+        "./languages": {}, "./settings": { settings: { store: { service: "google" } } }
+    }, {
+        IS_WEB: true, URLSearchParams, VencordNative: { pluginHelpers: { Translate: {} } },
+        fetch: async () => new Response(new ReadableStream({
+            start(controller) { controller.enqueue(new Uint8Array([1])); },
+            cancel() { cancelled++; }
+        }), { status: 500 })
+    });
+    await assert.rejects(translateText("fixture", "en", "fr"), /Google Translate request failed \(500\)/);
+    assert.equal(cancelled, 1);
+});

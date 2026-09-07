@@ -20,7 +20,6 @@ import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/Co
 import { migratePluginSettings } from "@api/Settings";
 import { BaseText } from "@components/BaseText";
 import { Button } from "@components/Button";
-import { CheckedTextInput } from "@components/CheckedTextInput";
 import { Flex } from "@components/Flex";
 import { Heading } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
@@ -32,7 +31,7 @@ import definePlugin from "@utils/types";
 import { Guild, GuildSticker } from "@vencord/discord-types";
 import { StickerFormatType } from "@vencord/discord-types/enums";
 import { findByCodeLazy } from "@webpack";
-import { Constants, EmojiStore, FluxDispatcher, GuildStore, IconUtils, Menu, Modal, openModalLazy, PermissionsBits, PermissionStore, React, RestAPI, StickersStore, Toasts, Tooltip, UserStore } from "@webpack/common";
+import { Constants, EmojiStore, FluxDispatcher, GuildStore, IconUtils, Menu, Modal, openModalLazy, PermissionsBits, PermissionStore, React, RestAPI, StickersStore, TextInput, Toasts, Tooltip, UserStore } from "@webpack/common";
 import { Promisable } from "type-fest";
 
 const logger = new Logger("ExpressionCloner");
@@ -231,7 +230,10 @@ const nameValidator = /^\w{2,32}$/;
 
 function CloneModal({ data }: { data: Sticker | Emoji; }) {
     const [isCloning, setIsCloning] = React.useState(false);
-    const [name, setName] = React.useState(data.name);
+    const [name, setName] = React.useState(data.t === "Emoji" ? data.name.split("~")[0] : data.name);
+    const nameError = data.t === "Emoji"
+        ? nameValidator.test(name) ? undefined : "Emoji names must be 2 to 32 characters and use only letters, numbers, or underscores."
+        : name.length >= 2 && name.length <= 30 ? undefined : "Sticker names must be 2 to 30 characters.";
 
     const [x, invalidateMemo] = React.useReducer(x => x + 1, 0);
 
@@ -240,14 +242,7 @@ function CloneModal({ data }: { data: Sticker | Emoji; }) {
     return (
         <>
             <Heading tag="h5">Custom Name</Heading>
-            <CheckedTextInput
-                initialValue={name}
-                onChange={setName}
-                validate={v => data.t === "Emoji"
-                    ? nameValidator.test(v) || "Emoji names must be 2 to 32 characters and use only letters, numbers, or underscores."
-                    : (v.length >= 2 && v.length <= 30) || "Sticker names must be 2 to 30 characters."
-                }
-            />
+            <TextInput value={name} onChange={setName} error={nameError} />
             <div style={{
                 display: "flex",
                 flexWrap: "wrap",
@@ -266,7 +261,7 @@ function CloneModal({ data }: { data: Sticker | Emoji; }) {
                                 onMouseLeave={onMouseLeave}
                                 onMouseEnter={onMouseEnter}
                                 aria-label={"Clone to " + g.name}
-                                disabled={isCloning}
+                                disabled={isCloning || !!nameError}
                                 style={{
                                     borderRadius: "50%",
                                     backgroundColor: "var(--background-base-lower)",

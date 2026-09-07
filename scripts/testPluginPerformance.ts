@@ -9807,12 +9807,18 @@ test("cloning keeps the name selected when the request starts", async () => {
     }, "({ CloneModal })");
     const data = { t: "Emoji", id: "emoji", name: "original", isAnimated: false };
     for (const kind of ["Emoji", "Sticker"]) {
-        const validator = CloneModal({ data: { ...data, t: kind } }).props.children[1].props.validate;
-        for (const length of [0, 1, 2, 3, 29, 30, 31, 32, 33])
-            assert.equal(validator("a".repeat(length)) === true, length >= 2 && length <= (kind === "Emoji" ? 32 : 30));
-        assert.equal(validator("a_b"), true);
-        assert.equal(validator("a b") === true, kind === "Sticker");
+        for (const value of ["", "a", "aa", "aaa", "a".repeat(29), "a".repeat(30), "a".repeat(31), "a".repeat(32), "a".repeat(33), "a_b", "a b"]) {
+            const rendered = CloneModal({ data: { ...data, t: kind, name: value } });
+            const input = rendered.props.children[1].props;
+            const valid = value.length >= 2 && value.length <= (kind === "Emoji" ? 32 : 30) && (kind === "Sticker" || !value.includes(" "));
+            assert.equal(input.value, value);
+            assert.equal(input.error === undefined, valid);
+            const control = rendered.props.children[2].props.children[0][0].props.children[0]({});
+            assert.equal(control.props.disabled, !valid);
+        }
     }
+    const suffixed = CloneModal({ data: { ...data, name: "original~2" } });
+    assert.equal(suffixed.props.children[1].props.value, "original");
     const tree = CloneModal({ data });
     const tooltip = tree.props.children[2].props.children[0][0];
     const button = tooltip.props.children[0]({});

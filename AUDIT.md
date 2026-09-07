@@ -52,6 +52,8 @@ Narrator changes preserve saved voice preferences while voices load, refresh the
 
 VoiceStats now rejects stale startup reads before changing totals, waits for storage before tracking, keeps failed saves pending for a later attempt, preserves sessions on repeated channel events, and pauses tracking when stored totals are malformed. Actual DataStore code in isolated Chrome preserved invocation order for 100 concurrent writes with both cold and initialized storage, so no additional save queue was added. Account scope, unsaved totals across restart, recovery controls, and clock behavior remain open.
 
+VoiceRejoin now preserves existing active calls, cancels pending attempts on the user's voice activity or logout, stops stale channel polling, and ignores stale persistence-cache completions. Channel and active-session state are written in one DataStore transaction. Actual code in isolated Chrome verified that an aborted transaction preserves both old values and a retry updates both. Stored-state account ownership, consistent reads, saved-data validation, and live reconnect behavior remain open.
+
 The proposed version is `3.0.0.0` because older scheduled data now requires explicit recovery. See [VERSIONING.md](VERSIONING.md) for the compatibility and downgrade implications. No release tag has been created for this audit.
 
 ## Verification record
@@ -60,11 +62,11 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `e54c36833` | 368 tests and timezone correctness checks passed. |
+| Broader performance/correctness suite | `6a14e2a0e` | 375 tests and timezone correctness checks passed. |
 | Repository-wide ESLint | `e54c36833` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
 | CSS lint | `c50d116a4` | Passed; excludes userplugins. |
 | Internationalization lint | `5e869fea9` | Passed for tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest plugin regressions and TypeScript | `e54c36833` | 316 plugin tests and full TypeScript passed; focused VoiceStats lint passed. |
+| Latest plugin regressions and TypeScript | `6a14e2a0e` | 323 plugin tests and full TypeScript passed; focused VoiceRejoin lint passed. |
 | Standalone build | `e54c36833` | Passed after narrator and VoiceStats changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
 | Development build | `805c99eff` | Passed after narrator changes. |
 | Installer review browser checks | `d7b99b737` | Actual templates and generator functions in isolated Chrome preserved literal metadata, all four native/pre-send warning combinations, the native acknowledgement gate, and cancellation. Electron IPC and real installation were not exercised. |
@@ -78,7 +80,7 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Uninstall button browser checks | `d4efc449d` | Actual shared component props and styles in isolated Chrome verified the accessible name, keyboard focus indicator, and consistent 32px sizing in both stylesheet orders. Full Discord layout was not exercised. |
 | Other isolated browser checks | Earlier audit commits | Specific sticker-storage transactions, codec conversion, and CSS behavior were exercised. These are not general live-client acceptance. |
 
-Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `805c99eff`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
+Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `6a14e2a0e`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
 
 ## Remaining work
 

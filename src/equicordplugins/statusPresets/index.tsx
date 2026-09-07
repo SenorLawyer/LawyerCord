@@ -25,7 +25,7 @@ import { EquicordDevs } from "@utils/constants";
 import { proxyLazy } from "@utils/lazy";
 import definePlugin, { OptionType, StartAt } from "@utils/types";
 import { extractAndLoadChunksLazy, findComponentByCodeLazy, findModuleId, wreq } from "@webpack";
-import { Menu, openModalLazy,OverridePremiumTypeStore, Toasts } from "@webpack/common";
+import { Menu, openModalLazy, OverridePremiumTypeStore, Toasts, useStateFromStores } from "@webpack/common";
 
 interface Emoji {
     animated: boolean;
@@ -75,7 +75,7 @@ function setStatus(status: DiscordStatus) {
 }
 
 const StatusSubMenuComponent = () => {
-    const premiumType = OverridePremiumTypeStore.getState().premiumTypeActual ?? 0;
+    const premiumType = useStateFromStores([OverridePremiumTypeStore], () => OverridePremiumTypeStore.getState().premiumTypeActual ?? 0);
     const { StatusPresets } = settings.use(PRESET_SETTINGS);
 
     return (

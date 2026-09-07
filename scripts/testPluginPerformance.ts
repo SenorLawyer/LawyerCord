@@ -11495,3 +11495,26 @@ test("transcription language selection retains its initiating session", () => {
         assert.equal(settings.store.targetLanguage, phase === "current" ? "fr" : "en", phase);
     }
 });
+
+test("translation provider errors omit source text and response bodies", async () => {
+    for (const service of ["google", "deepl", "kagi"]) {
+        const { translateText } = loadSource("src/plugins/translate/utils.ts", {
+            "@utils/css": { classNameFactory: () => () => "" }, "@utils/onlyOnce": { onlyOnce: (fn: unknown) => fn },
+            "@webpack/common": { showToast() {}, Toasts: { Type: { FAILURE: "failure" } } },
+            "./languages": {}, "./settings": { settings: { store: { service, deeplApiKey: "fixture", kagiSession: "fixture" } } }
+        }, {
+            IS_WEB: false, URLSearchParams,
+            fetch: async () => ({ ok: false, status: 500, statusText: "private-response" }),
+            VencordNative: { pluginHelpers: { Translate: {
+                makeDeeplTranslateRequest: async () => ({ status: 500, data: "private-response" }),
+                makeKagiTranslateRequest: async () => ({ status: 500, data: "private-response" })
+            } } }
+        });
+        await assert.rejects(translateText("private-source", "en", "fr"), (error: Error) => {
+            assert.match(error.message, /500/);
+            assert.equal(error.message.includes("private-source"), false, service);
+            assert.equal(error.message.includes("private-response"), false, service);
+            return true;
+        });
+    }
+});

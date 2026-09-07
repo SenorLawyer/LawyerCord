@@ -116,10 +116,7 @@ async function googleTranslate(text: string, sourceLang: string, targetLang: str
 
     const res = await fetch(url);
     if (!res.ok)
-        throw new Error(
-            `Failed to translate "${text}" (${sourceLang} -> ${targetLang})`
-            + `\n${res.status} ${res.statusText}`
-        );
+        throw new Error(`Google Translate request failed (${res.status}).`);
 
     const { sourceLanguage, translation }: GoogleData = await res.json();
 
@@ -166,14 +163,14 @@ async function deeplTranslate(text: string, sourceLang: string, targetLang: stri
         case 200:
             break;
         case -1:
-            throw "Failed to connect to DeepL API: " + data;
+            throw "Failed to connect to DeepL API.";
         case 403:
             throw "Invalid DeepL API key or version";
         case 456:
             showDeeplApiQuotaToast();
             return fallbackToGoogle(text, sourceLang, targetLang);
         default:
-            throw new Error(`Failed to translate "${text}" (${sourceLang} -> ${targetLang})\n${status} ${data}`);
+            throw new Error(`DeepL translation request failed (${status}).`);
     }
 
     const { translations }: DeeplData = JSON.parse(data);
@@ -196,7 +193,7 @@ async function kagiTranslate(text: string, sourceLang: string, targetLang: strin
         case 401:
             throw "Invalid or expired Kagi session token";
         default:
-            throw new Error(`Failed to translate "${text}" (${sourceLang} -> ${targetLang})\n${status} ${data}`);
+            throw new Error(`Kagi translation request failed (${status}).`);
     }
 
     const { detected_language, translation }: KagiData = data;

@@ -6,21 +6,10 @@
 
 import { settings } from ".";
 
-interface regexes {
-    imperial: {
-        [key: string]: {
-            regex: RegExp,
-            convert: (...groups: string[]) => string;
-        };
-    };
-    metric: {
-        [key: string]: {
-            regex: RegExp,
-            convert: (...groups: string[]) => string;
-        };
-    };
-}
-const regexes: regexes = {
+const regexes: Record<"imperial" | "metric", Record<string, {
+    regex: RegExp;
+    convert: (...groups: string[]) => string;
+}>> = {
     // matches imperial units, converts them to metric
     imperial: {
         fahrenheit: {

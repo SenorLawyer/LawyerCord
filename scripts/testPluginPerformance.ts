@@ -11738,3 +11738,18 @@ test("translation tooltip belongs to the current main composer", () => {
     cleanups[cleanups.length - 1]();
     assert.equal(icon.setShouldShowTranslateEnabledTooltip, undefined);
 });
+
+
+test("native translation failures omit exception details from IPC responses", async () => {
+    for (const provider of ["makeDeeplTranslateRequest", "makeKagiTranslateRequest"]) {
+        for (const phase of ["fetch", "body"]) {
+            const fail = () => { throw new Error("private native path or response snippet"); };
+            const native = loadSource("src/plugins/translate/native.ts", {}, {
+                fetch: async () => phase === "fetch" ? fail() : { status: 200, text: fail, json: fail }
+            });
+            const result = await native[provider]({}, false, "fixture", "fixture", "fixture");
+            assert.equal(result.status, -1);
+            assert.equal(result.data, provider === "makeDeeplTranslateRequest" ? "" : null);
+        }
+    }
+});

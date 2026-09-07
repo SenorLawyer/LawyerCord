@@ -29,8 +29,8 @@ export async function makeDeeplTranslateRequest(_: IpcMainInvokeEvent, pro: bool
 
         const data = await res.text();
         return { status: res.status, data };
-    } catch (e) {
-        return { status: -1, data: String(e) };
+    } catch {
+        return { status: -1, data: "" };
     }
 }
 
@@ -60,7 +60,7 @@ export async function makeKagiTranslateRequest(_: IpcMainInvokeEvent, token: str
 
         const data = await res.json();
         return { status: res.status, data };
-    } catch (e) {
-        return { status: -1, data: String(e) };
+    } catch {
+        return { status: -1, data: null };
     }
 }

@@ -12200,3 +12200,18 @@ test("TranslatePlus ignores older request results and failures", async () => {
     assert.deepEqual(deliveries, [latest, latest]);
     assert.deepEqual(toasts, []);
 });
+
+test("TranslatePlus cancels unread dictionary and Google error bodies", async () => {
+    for (const shavian of [false, true]) {
+        let cancelled = 0;
+        const { translate } = loadSource("src/equicordplugins/translatePlus/utils/translator.ts", {
+            "@equicordplugins/translatePlus/settings": { settings: { store: { target: "en", toki: false, sitelen: false, shavian } } },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" }
+        }, {
+            URLSearchParams,
+            fetch: async () => new Response(new ReadableStream({ cancel: () => { cancelled++; } }), { status: 503 })
+        });
+        await assert.rejects(translate(shavian ? "𐑐" : "Hello"), /503/);
+        assert.equal(cancelled, 1);
+    }
+});

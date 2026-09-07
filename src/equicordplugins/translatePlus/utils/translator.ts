@@ -21,7 +21,10 @@ let sitelenDictionaryPromise: Promise<Dictionary> | undefined;
 
 function fetchDictionary(url: string): Promise<Dictionary> {
     return fetch(url).then(async response => {
-        if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+        if (!response.ok) {
+            await response.body?.cancel();
+            throw new Error(`Request failed with status ${response.status}`);
+        }
         const dictionary: unknown = await response.json().catch(() => null);
         if (!isObject(dictionary) || Array.isArray(dictionary))
             throw new Error("TranslatePlus received an invalid dictionary.");
@@ -115,7 +118,10 @@ async function translateSitelen(message: string) {
 async function google(target: string, text: string) {
     if (!text) return { src: "", text: "" };
     const res = await fetch(`https://translate.googleapis.com/translate_a/single?${new URLSearchParams({ client: "gtx", sl: "auto", tl: target, dt: "t", dj: "1", source: "input", q: text })}`);
-    if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+    if (!res.ok) {
+        await res.body?.cancel();
+        throw new Error(`Request failed with status ${res.status}`);
+    }
     const translate: unknown = await res.json().catch(() => null);
     if (!isObject(translate) || !("src" in translate) || typeof translate.src !== "string"
         || !("sentences" in translate) || !Array.isArray(translate.sentences))

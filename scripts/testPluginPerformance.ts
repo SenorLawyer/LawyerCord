@@ -1307,6 +1307,27 @@ test("BetterSessions returns its settings-close save to the flux error handler",
     await rejected;
 });
 
+test("status preset menus subscribe and delete the actual saved key", () => {
+    const store = new SettingsStore({ StatusPresets: { savedKey: { text: "display text", emojiInfo: null } } }).store;
+    const subscriptions: unknown[] = [];
+    const { StatusSubMenuComponent } = loadSource("src/equicordplugins/statusPresets/index.tsx", {
+        "./style.css": {},
+        "@api/Settings": { definePluginSettings: () => ({ store, use: (keys: string[]) => { subscriptions.push(keys); return store; } }) },
+        "@api/UserSettings": { getUserSettingLazy: () => ({}) },
+        "@components/ErrorBoundary": {}, "@utils/constants": { EquicordDevs: {} },
+        "@utils/lazy": { proxyLazy: () => ({}) },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {}, StartAt: {} },
+        "@webpack": { findComponentByCodeLazy: () => () => null, extractAndLoadChunksLazy: () => () => {} },
+        "@webpack/common": { Menu: {}, OverridePremiumTypeStore: { getState: () => ({ premiumTypeActual: 0 }) } },
+    }, { React: { createElement: (type: unknown, props: unknown, ...children: unknown[]) => ({ type, props, children }) } }, "({ StatusSubMenuComponent })");
+    const menu = StatusSubMenuComponent();
+    menu.children[0][0].children[0].props.action();
+    assert.deepEqual(Object.keys(store.StatusPresets), []);
+    assert.equal(StatusSubMenuComponent().children[0].length, 0);
+    assert.equal(subscriptions.length, 2);
+    assert.equal(subscriptions[0], subscriptions[1]);
+});
+
 test("status presets save object-property names as ordinary entries", () => {
     const settingsStore = new SettingsStore({ StatusPresets: {} as Record<string, object> });
     const store = settingsStore.store;

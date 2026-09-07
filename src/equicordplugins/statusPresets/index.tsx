@@ -23,7 +23,6 @@ import { getUserSettingLazy } from "@api/UserSettings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { EquicordDevs } from "@utils/constants";
 import { proxyLazy } from "@utils/lazy";
-import { useForceUpdater } from "@utils/react";
 import definePlugin, { OptionType, StartAt } from "@utils/types";
 import { extractAndLoadChunksLazy, findComponentByCodeLazy, findModuleId, wreq } from "@webpack";
 import { Menu, openModalLazy,OverridePremiumTypeStore, Toasts } from "@webpack/common";
@@ -44,6 +43,7 @@ const PMenu = findComponentByCodeLazy("#{intl::MORE_OPTIONS}", ",renderSubmenu:"
 const EmojiComponent = findComponentByCodeLazy(/\.translateSurrogatesToInlineEmoji\(\i\.name\);/);
 
 const CustomStatusSettings = getUserSettingLazy("status", "customStatus")!;
+const PRESET_SETTINGS: "StatusPresets"[] = ["StatusPresets"];
 const StatusModule = proxyLazy(() => {
     const id = findModuleId("#{intl::SAVE}", '"custom-status-input"', '"Invalid custom status clear timeout"),');
     return wreq(Number(id));
@@ -76,11 +76,11 @@ function setStatus(status: DiscordStatus) {
 
 const StatusSubMenuComponent = () => {
     const premiumType = OverridePremiumTypeStore.getState().premiumTypeActual ?? 0;
-    const update = useForceUpdater();
+    const { StatusPresets } = settings.use(PRESET_SETTINGS);
 
     return (
         <Menu.Menu navId="sp-custom-status-submenu" onClose={() => { }}>
-            {Object.entries((settings.store.StatusPresets as { [k: string]: DiscordStatus | undefined; })).map(([index, status]) =>
+            {Object.entries((StatusPresets as { [k: string]: DiscordStatus | undefined; })).map(([index, status]) =>
                 status != null ? (
                     <Menu.MenuItem
                         key={"status-presets-" + index}
@@ -100,7 +100,6 @@ const StatusSubMenuComponent = () => {
                                 const newPresets = { ...settings.store.StatusPresets };
                                 delete newPresets[index];
                                 settings.store.StatusPresets = newPresets;
-                                update();
                             }}
                         />
                     </Menu.MenuItem>

@@ -11675,6 +11675,14 @@ test("translation delivery tolerates unmounted messages and preserves newer hand
     assert.doesNotThrow(() => accessory.handleTranslate("absent", translation));
     accessory.TranslationAccessory({ message: { id: "message" } });
     accessory.TranslationAccessory({ message: { id: "message" } });
+    const embedded = new Proxy({ id: "message" }, {
+        get(target, property, receiver) {
+            return property === "vencordEmbeddedBy" ? ["parent"] : Reflect.get(target, property, receiver);
+        }
+    });
+    assert.equal("vencordEmbeddedBy" in embedded, false);
+    accessory.TranslationAccessory({ message: embedded });
+    assert.equal(cleanups.length, 2);
     cleanups[0]();
     accessory.handleTranslate("message", translation);
     assert.equal(deliveries[0].length, 0);

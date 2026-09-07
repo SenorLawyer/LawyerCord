@@ -39,12 +39,12 @@ function Dismiss({ onDismiss }: { onDismiss: () => void; }) {
     );
 }
 
-export function TranslationAccessory({ message }: { message: Message; }) {
+export function TranslationAccessory({ message }: { message: Message & { vencordEmbeddedBy?: string[]; }; }) {
     const [translation, setTranslation] = useState<TranslationValue>();
 
     useEffect(() => {
         // Ignore MessageLinkEmbeds messages
-        if ((message as any).vencordEmbeddedBy) return;
+        if (message.vencordEmbeddedBy) return;
 
         TranslationSetters.set(message.id, setTranslation);
 

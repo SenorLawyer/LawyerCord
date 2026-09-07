@@ -25,7 +25,7 @@ import { cl, TranslationValue } from "./utils";
 const TranslationSetters = new Map<string,(v: TranslationValue) => void>();
 
 export function handleTranslate(messageId: string, data: TranslationValue) {
-    TranslationSetters.get(messageId)!(data);
+    TranslationSetters.get(messageId)?.(data);
 }
 
 function Dismiss({ onDismiss }: { onDismiss: () => void; }) {
@@ -48,7 +48,10 @@ export function TranslationAccessory({ message }: { message: Message; }) {
 
         TranslationSetters.set(message.id, setTranslation);
 
-        return () => void TranslationSetters.delete(message.id);
+        return () => {
+            if (TranslationSetters.get(message.id) === setTranslation)
+                TranslationSetters.delete(message.id);
+        };
     }, []);
 
     if (!translation) return null;

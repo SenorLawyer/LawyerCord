@@ -11650,3 +11650,35 @@ test("DeepL failures do not send text to another provider or reset settings", as
         assert.equal(resets, 0);
     }
 });
+
+
+test("translation delivery tolerates unmounted messages and preserves newer handlers", () => {
+    const cleanups: (() => void)[] = [];
+    const deliveries: unknown[][] = [];
+    const accessory = loadSource("src/plugins/translate/TranslationAccessory.tsx", {
+        "@webpack/common": {
+            useState: () => {
+                const values: unknown[] = [];
+                deliveries.push(values);
+                return [undefined, (value: unknown) => values.push(value)];
+            },
+            useEffect: (effect: () => (() => void) | undefined) => {
+                const cleanup = effect();
+                if (cleanup) cleanups.push(cleanup);
+            }
+        },
+        "./TranslateIcon": {},
+        "./utils": {}
+    });
+    const translation = { text: "Bonjour", sourceLanguage: "English" };
+    assert.doesNotThrow(() => accessory.handleTranslate("absent", translation));
+    accessory.TranslationAccessory({ message: { id: "message" } });
+    accessory.TranslationAccessory({ message: { id: "message" } });
+    cleanups[0]();
+    accessory.handleTranslate("message", translation);
+    assert.equal(deliveries[0].length, 0);
+    assert.deepEqual(deliveries[1], [translation]);
+    cleanups[1]();
+    assert.doesNotThrow(() => accessory.handleTranslate("message", translation));
+    assert.equal(deliveries[1].length, 1);
+});

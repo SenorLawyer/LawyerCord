@@ -1395,6 +1395,15 @@ test("AutoDND restores each game's saved status only once", () => {
     status = "online";
     change({ games: [] });
     assert.equal(status, "online");
+    for (const action of ["stop", "manual-stop", "manual-exit", "foreign-stop"]) {
+        status = "online";
+        change({ games: [{}] });
+        if (action.startsWith("manual")) status = "idle";
+        if (action === "foreign-stop") { userId = "third"; status = "invisible"; }
+        if (action === "manual-exit") change({ games: [] });
+        plugin.stop();
+        assert.equal(status, action === "stop" ? "online" : action === "foreign-stop" ? "invisible" : "idle");
+    }
 });
 
 test("Apple Music format substitutions preserve literal metadata", () => {

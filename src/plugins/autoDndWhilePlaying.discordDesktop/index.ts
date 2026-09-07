@@ -10,7 +10,7 @@ import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { UserStore } from "@webpack/common";
 
-let savedStatus: { userId: string; value: string; } | null = null;
+let savedStatus: { userId: string; value: string; applied: string; } | null = null;
 
 const StatusSettings = getUserSettingLazy<string>("status", "status")!;
 
@@ -54,6 +54,12 @@ export default definePlugin({
     isModified: true,
     dependencies: ["UserSettingsAPI"],
     settings,
+    stop() {
+        const previousStatus = savedStatus;
+        savedStatus = null;
+        if (previousStatus && previousStatus.userId === UserStore.getCurrentUser()?.id && StatusSettings.getSetting() === previousStatus.applied)
+            StatusSettings.updateSetting(previousStatus.value);
+    },
     flux: {
         LOGOUT() {
             savedStatus = null;
@@ -68,13 +74,13 @@ export default definePlugin({
 
             if (games.length > 0) {
                 if (status !== settings.store.statusToSet) {
-                    savedStatus = { userId, value: status };
+                    savedStatus = { userId, value: status, applied: settings.store.statusToSet };
                     StatusSettings.updateSetting(settings.store.statusToSet);
                 }
             } else if (savedStatus) {
-                const previousStatus = savedStatus.value;
+                const previousStatus = savedStatus;
                 savedStatus = null;
-                if (status !== previousStatus) StatusSettings.updateSetting(previousStatus);
+                if (status === previousStatus.applied) StatusSettings.updateSetting(previousStatus.value);
             }
         }
     }

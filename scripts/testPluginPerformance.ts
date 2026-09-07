@@ -1306,11 +1306,35 @@ test("BetterSessions returns its settings-close save to the flux error handler",
     await rejected;
 });
 
+test("invalid codec responses never partially change the engine", async () => {
+    let response = "";
+    let writes = 0;
+    let errors = 0;
+    const { default: plugin } = loadSource("src/equicordplugins/streamingCodecDisabler/index.ts", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@utils/Logger": { Logger: class { error() { errors++; } } },
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack/common": { MediaEngineStore: { getMediaEngine: () => ({
+            getCodecCapabilities: (callback: (value: string) => void) => { if (response === "throw") throw new Error("native failure"); callback(response); },
+            setAv1Enabled: () => { writes++; },
+        }) } },
+    });
+    plugin.start();
+    for (const value of ["throw", "invalid", "null", "{}", '[{"codec":"AV1","encode":true},{"codec":"H264","encode":"false"}]']) {
+        response = value;
+        await assert.doesNotReject(plugin.updateDisabledCodecs());
+    }
+    assert.equal(errors, 5);
+    assert.equal(writes, 0);
+});
+
 test("codec disabling only updates capabilities reported by the current engine", async () => {
     let capabilities = [{ codec: "AV1", encode: true }];
     const calls: unknown[] = [];
     const { default: plugin } = loadSource("src/equicordplugins/streamingCodecDisabler/index.ts", {
         "@api/Settings": { definePluginSettings: () => ({ store: { disableAv1Codec: true } }) },
+        "@utils/Logger": { Logger: class { error() {} } },
         "@utils/constants": { EquicordDevs: {} },
         "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
         "@webpack/common": { MediaEngineStore: { getMediaEngine: () => ({
@@ -1332,6 +1356,7 @@ test("codec callbacks from stopped runs cannot update the media engine", async (
     const calls: boolean[] = [];
     const { default: plugin } = loadSource("src/equicordplugins/streamingCodecDisabler/index.ts", {
         "@api/Settings": { definePluginSettings: () => ({ store: { disableAv1Codec: true } }) },
+        "@utils/Logger": { Logger: class { error() {} } },
         "@utils/constants": { EquicordDevs: {} },
         "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
         "@webpack/common": { MediaEngineStore: { getMediaEngine: () => ({

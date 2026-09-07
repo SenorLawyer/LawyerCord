@@ -16,19 +16,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { getCurrentChannel } from "@utils/discord";
-import { UserProfileStore, useStateFromStores } from "@webpack/common";
+import { ChannelStore, UserProfileStore, useStateFromStores } from "@webpack/common";
 
 import { PronounsFormat, settings } from "./settings";
 
-function useDiscordPronouns(id: string): string | undefined {
-    const globalPronouns: string | undefined = useStateFromStores([UserProfileStore], () => UserProfileStore.getUserProfile(id)?.pronouns);
-    const guildPronouns: string | undefined = useStateFromStores([UserProfileStore], () => UserProfileStore.getGuildMemberProfile(id, getCurrentChannel()?.getGuildId())?.pronouns);
-
-    return guildPronouns || globalPronouns;
-}
-
-export function useFormattedPronouns(id: string) {
-    const pronouns = useDiscordPronouns(id)?.trim().replace(/\n+/g, "");
+export function useFormattedPronouns(id: string, channelId: string) {
+    const pronouns = useStateFromStores([UserProfileStore, ChannelStore], () => {
+        const guildId = ChannelStore.getChannel(channelId)?.getGuildId();
+        const guildPronouns = guildId ? UserProfileStore.getGuildMemberProfile(id, guildId)?.pronouns : undefined;
+        return guildPronouns || UserProfileStore.getUserProfile(id)?.pronouns;
+    }, [id, channelId])?.trim().replace(/\n+/g, "");
     return settings.store.pronounsFormat === PronounsFormat.Lowercase ? pronouns?.toLowerCase() : pronouns;
 }

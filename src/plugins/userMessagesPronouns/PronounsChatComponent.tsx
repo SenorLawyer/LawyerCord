@@ -42,7 +42,7 @@ function shouldShow(message: Message): boolean {
 }
 
 function PronounsChatComponent({ message }: { message: Message; }) {
-    const pronouns = useFormattedPronouns(message.author.id);
+    const pronouns = useFormattedPronouns(message.author.id, message.channel_id);
 
     return pronouns && (
         <Tooltip text={getIntlMessage("USER_PROFILE_PRONOUNS")}>

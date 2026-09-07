@@ -1608,6 +1608,18 @@ test("webpack tar archives contain only the supplied byte view", () => {
     assert.equal(archive.length, 2048);
 });
 
+test("message pronouns use the message channel instead of the browsed channel", () => {
+    const profileStore = { getUserProfile: () => ({ pronouns: "Global" }), getGuildMemberProfile: (_id: string, guild: string) => ({ pronouns: guild === "message-guild" ? "Message" : "Wrong" }) };
+    const channelStore = { getChannel: (id: string) => id === "message-channel" ? { getGuildId: () => "message-guild" } : undefined };
+    const api = loadSource("src/plugins/userMessagesPronouns/utils.ts", {
+        "@utils/discord": { getCurrentChannel: () => ({ getGuildId: () => "browsed-guild" }) },
+        "@webpack/common": { UserProfileStore: profileStore, ChannelStore: channelStore, useStateFromStores: (_stores: unknown[], read: () => unknown) => read() },
+        "./settings": { PronounsFormat: { Lowercase: "lowercase" }, settings: { store: {} } }
+    });
+    assert.equal(api.useFormattedPronouns("user", "message-channel"), "Message");
+    assert.equal(api.useFormattedPronouns("user", "dm"), "Global");
+});
+
 test("voice rejoin requires the saved owner and current account to match", async () => {
     for (const mode of ["ownerless", "foreign", "switch", "unknown-session"]) {
         let currentId = "me";

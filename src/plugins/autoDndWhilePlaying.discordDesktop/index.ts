@@ -7,12 +7,14 @@
 import { definePluginSettings, migratePluginSettings } from "@api/Settings";
 import { getUserSettingLazy } from "@api/UserSettings";
 import { Devs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 import { UserStore } from "@webpack/common";
 
 let savedStatus: { userId: string; value: string; applied: string; } | null = null;
 
 const StatusSettings = getUserSettingLazy<string>("status", "status")!;
+const logger = new Logger("AutoDNDWhilePlaying");
 
 const settings = definePluginSettings({
     statusToSet: {
@@ -54,11 +56,15 @@ export default definePlugin({
     isModified: true,
     dependencies: ["UserSettingsAPI"],
     settings,
-    stop() {
+    async stop() {
         const previousStatus = savedStatus;
         savedStatus = null;
-        if (previousStatus && previousStatus.userId === UserStore.getCurrentUser()?.id && StatusSettings.getSetting() === previousStatus.applied)
-            StatusSettings.updateSetting(previousStatus.value);
+        try {
+            if (previousStatus && previousStatus.userId === UserStore.getCurrentUser()?.id && StatusSettings.getSetting() === previousStatus.applied)
+                await StatusSettings.updateSetting(previousStatus.value);
+        } catch (error) {
+            logger.error("Could not restore your status.", error);
+        }
     },
     flux: {
         LOGOUT() {

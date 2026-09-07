@@ -1306,12 +1306,36 @@ test("BetterSessions returns its settings-close save to the flux error handler",
     await rejected;
 });
 
+test("automatic status lifecycle failures are logged without rejecting", async () => {
+    for (const mode of ["voice-start", "voice-stop", "game-stop"]) {
+        let status = "online";
+        let fail = false;
+        const errors: unknown[] = [];
+        const failure = new Error("settings unavailable");
+        const file = mode === "game-stop" ? "src/plugins/autoDndWhilePlaying.discordDesktop/index.ts" : "src/equicordplugins/statusWhileActive.desktop/index.ts";
+        const { default: plugin } = loadSource(file, {
+            "@api/Settings": { definePluginSettings: () => ({ store: { statusToSet: "dnd" } }), migratePluginSettings() {} },
+            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => status, updateSetting: async (value: string) => { if (fail) throw failure; status = value; } }) },
+            "@utils/Logger": { Logger: class { error(_message: string, error: unknown) { errors.push(error); } } },
+            "@utils/constants": { Devs: {}, EquicordDevs: {} },
+            "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, VoiceStateStore: { getVoiceStateForUser: () => ({ channelId: "voice" }) } },
+        });
+        if (mode === "game-stop") await plugin.flux.RUNNING_GAMES_CHANGE({ games: [{}] });
+        if (mode === "voice-stop") await plugin.start();
+        fail = true;
+        await assert.doesNotReject(mode === "voice-start" ? plugin.start() : plugin.stop());
+        assert.deepEqual(errors, [failure]);
+    }
+});
+
 test("StatusWhileActive returns voice status failures to its flux wrapper", async () => {
     let status = "online";
     let channelId: string | undefined = "voice";
     let pending = Promise.withResolvers<void>();
     const { default: plugin } = loadSource("src/equicordplugins/statusWhileActive.desktop/index.ts", {
         "@api/Settings": { definePluginSettings: () => ({ store: { statusToSet: "dnd" } }) },
+        "@utils/Logger": { Logger: class { error() {} } },
         "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => status, updateSetting: () => pending.promise }) },
         "@utils/constants": { EquicordDevs: {} },
         "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
@@ -1340,7 +1364,8 @@ test("StatusWhileActive never restores another account's status", () => {
         const updates: string[] = [];
         const { default: plugin } = loadSource("src/equicordplugins/statusWhileActive.desktop/index.ts", {
             "@api/Settings": { definePluginSettings: () => ({ store: { statusToSet: "dnd" } }) },
-            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => status, updateSetting: (value: string) => { status = value; updates.push(value); } }) },
+            "@utils/Logger": { Logger: class { error() {} } },
+        "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => status, updateSetting: (value: string) => { status = value; updates.push(value); } }) },
             "@utils/constants": { EquicordDevs: {} },
             "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
             "@webpack/common": {
@@ -1395,6 +1420,7 @@ test("AutoDND returns status update failures to its flux wrapper", async () => {
     let pending = Promise.withResolvers<void>();
     const { default: plugin } = loadSource("src/plugins/autoDndWhilePlaying.discordDesktop/index.ts", {
         "@api/Settings": { definePluginSettings: () => ({ store: { statusToSet: "dnd" } }), migratePluginSettings() {} },
+        "@utils/Logger": { Logger: class { error() {} } },
         "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => status, updateSetting: () => pending.promise }) },
         "@utils/constants": { Devs: {} },
         "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
@@ -1418,6 +1444,7 @@ test("AutoDND restores each game's saved status only once", () => {
     const updates: string[] = [];
     const { default: plugin } = loadSource("src/plugins/autoDndWhilePlaying.discordDesktop/index.ts", {
         "@api/Settings": { definePluginSettings: () => ({ store: preferences }), migratePluginSettings() {} },
+        "@utils/Logger": { Logger: class { error() {} } },
         "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => status, updateSetting: (value: string) => { status = value; updates.push(value); } }) },
         "@utils/constants": { Devs: {} },
         "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },

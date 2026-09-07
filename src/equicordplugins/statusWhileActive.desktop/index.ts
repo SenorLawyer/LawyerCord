@@ -7,6 +7,7 @@
 import { definePluginSettings } from "@api/Settings";
 import { getUserSettingLazy } from "@api/UserSettings";
 import { EquicordDevs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 import { VoiceState } from "@vencord/discord-types";
 import { UserStore, VoiceStateStore } from "@webpack/common";
@@ -14,6 +15,7 @@ import { UserStore, VoiceStateStore } from "@webpack/common";
 let savedStatus: { userId: string; value: string; applied: string; } | null = null;
 
 const StatusSettings = getUserSettingLazy<string>("status", "status")!;
+const logger = new Logger("StatusWhileActive");
 
 const settings = definePluginSettings({
     statusToSet: {
@@ -77,8 +79,12 @@ export default definePlugin({
     authors: [EquicordDevs.smuki],
     dependencies: ["UserSettingsAPI"],
     settings,
-    start() {
-        updateStatusForCurrentVoiceState();
+    async start() {
+        try {
+            await updateStatusForCurrentVoiceState();
+        } catch (error) {
+            logger.error("Could not update your status.", error);
+        }
     },
     flux: {
         LOGOUT() {
@@ -95,11 +101,14 @@ export default definePlugin({
         }
     },
 
-    stop() {
-        if (!savedStatus) return;
-
-        if (savedStatus.userId === UserStore.getCurrentUser()?.id && StatusSettings.getSetting() === savedStatus.applied)
-            StatusSettings?.updateSetting(savedStatus.value);
+    async stop() {
+        const previousStatus = savedStatus;
         savedStatus = null;
+        try {
+            if (previousStatus && previousStatus.userId === UserStore.getCurrentUser()?.id && StatusSettings.getSetting() === previousStatus.applied)
+                await StatusSettings.updateSetting(previousStatus.value);
+        } catch (error) {
+            logger.error("Could not restore your status.", error);
+        }
     }
 });

@@ -1608,6 +1608,28 @@ test("webpack tar archives contain only the supplied byte view", () => {
     assert.equal(archive.length, 2048);
 });
 
+test("voice rejoin ignores cache updates from saves completed after logout", async () => {
+    for (const active of [true, false]) {
+        let finish: () => void = () => assert.fail("Missing write");
+        let writes = 0;
+        const write = () => { writes++; return writes === 1 ? new Promise<void>(resolve => { finish = resolve; }) : Promise.resolve(); };
+        const api = loadSource("src/equicordplugins/voiceRejoin/index.tsx", {
+            "@api/DataStore": { set: write, setMany: write },
+            "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+            "@utils/constants": { EquicordDevs: {} }, "@utils/Logger": { Logger: class {} },
+            "@utils/types": { __esModule: true, default: (plugin: object) => plugin, makeRange: () => [], OptionType: {} },
+            "@webpack/common": {}
+        }, {}, "({ plugin: exports.default, persistActiveState, persistInactiveState })");
+        const save = () => active ? api.persistActiveState({ channelId: "voice" }) : api.persistInactiveState();
+        const pending = save();
+        api.plugin.flux.LOGOUT();
+        finish();
+        await pending;
+        await save();
+        assert.equal(writes, 2);
+    }
+});
+
 test("voice rejoin saves the channel and session flag in one transaction", async () => {
     let writes = 0;
     const api = loadSource("src/equicordplugins/voiceRejoin/index.tsx", {

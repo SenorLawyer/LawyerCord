@@ -102,19 +102,21 @@ async function persistActiveState(state: VoiceState) {
     };
 
     if (!shouldPersistActiveState(saved)) return;
+    const generation = reconnectGeneration;
 
     await DataStore.setMany([
         [DATASTORE_KEY, saved],
         [DATASTORE_SESSION_KEY, true]
     ]);
-    cachePersistedState(saved, true);
+    if (generation === reconnectGeneration) cachePersistedState(saved, true);
 }
 
 async function persistInactiveState() {
     if (lastPersistedSessionState === false) return;
+    const generation = reconnectGeneration;
 
     await DataStore.set(DATASTORE_SESSION_KEY, false);
-    cachePersistedState(null, false);
+    if (generation === reconnectGeneration) cachePersistedState(null, false);
 }
 
 async function waitForChannel(channelId: string) {
@@ -182,7 +184,7 @@ export default definePlugin({
 
             if (wasInVC === false) {
                 await DataStore.del(DATASTORE_KEY);
-                resetPersistCache();
+                if (scheduledGeneration === reconnectGeneration) resetPersistCache();
                 return;
             }
 
@@ -244,7 +246,7 @@ export default definePlugin({
                     });
 
                     await DataStore.set(DATASTORE_SESSION_KEY, true);
-                    cachePersistedState(saved, true);
+                    if (scheduledGeneration === reconnectGeneration) cachePersistedState(saved, true);
                 } catch (err) {
                     logger.error("Failed to run voice rejoin", err);
                 }

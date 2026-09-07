@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { Readable } from "node:stream";
@@ -5667,15 +5667,33 @@ test("DevCompanion replacement closes the old socket and ignores its late events
     assert.equal(sockets[1].sent.length, 1);
 });
 
+test("source fixtures reject recoverable syntax errors before execution", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "lawyercord-source-syntax-"));
+    const fixture = path.join(directory, "fixture.ts");
+    let executed = false;
+    try {
+        writeFileSync(fixture, "executed(); function broken() { return Math.max(1, 2; }");
+        assert.throws(() => loadSource(fixture, {}, { executed: () => { executed = true; } }), /fixture\.ts:.*expected/);
+        assert.equal(executed, false);
+    } finally {
+        rmSync(directory, { recursive: true, force: true });
+    }
+});
+
 function loadSource(path: string, mocks: Record<string, object>, globals: Record<string, unknown> = {}, result = "exports") {
     if (path === "src/equicordplugins/userpluginInstaller.dev/native.ts") {
         mocks = { typescript, ...mocks };
         globals = { process: { env: {} }, ...globals };
     }
-    const code = transpileModule(readFileSync(path, "utf8"), {
+    const { outputText: code, diagnostics = [] } = transpileModule(readFileSync(path, "utf8"), {
         fileName: path,
+        reportDiagnostics: true,
         compilerOptions: { jsx: JsxEmit.React, module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
-    }).outputText;
+    });
+    for (const diagnostic of diagnostics) {
+        if (diagnostic.category === typescript.DiagnosticCategory.Error)
+            assert.fail(`${path}: ${typescript.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`);
+    }
     return runInNewContext(code + `\n${result};`, {
         exports: {}, ...globals,
         require(name: string) {

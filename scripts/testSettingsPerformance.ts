@@ -116,3 +116,61 @@ test("Plugin pagination cancels delayed work and loads fixed batches", () => {
     cleanup?.();
     assert.equal(timers.size, 0);
 });
+
+
+test("settings subscriptions depend on path values and clean up original paths", () => {
+    const source = readFileSync("src/api/Settings.ts", "utf8").replaceAll("\r\n", "\n");
+    const start = source.indexOf("export function useSettings(");
+    const end = source.indexOf("\n}", start) + 2;
+    assert.ok(start >= 0 && end > start);
+    const store = new SettingsStore({ first: 0, second: 0, nested: { value: 0 } });
+    let subscriptions = 0;
+    let updates = 0;
+    let previous: unknown[] | undefined;
+    let cleanup: (() => void) | undefined;
+    const update = () => updates++;
+    const settingsStore = {
+        store: store.store,
+        addChangeListener: (path: "first" | "second", callback: () => void) => { subscriptions++; store.addChangeListener(path, callback); },
+        removeChangeListener: (path: "first" | "second", callback: () => void) => store.removeChangeListener(path, callback),
+        addPrefixChangeListener: (path: string, callback: () => void) => { subscriptions++; store.addPrefixChangeListener(path, callback); },
+        removePrefixChangeListener: (path: string, callback: () => void) => store.removePrefixChangeListener(path, callback),
+        addGlobalChangeListener: (callback: () => void) => { subscriptions++; store.addGlobalChangeListener(callback); },
+        removeGlobalChangeListener: (callback: () => void) => store.removeGlobalChangeListener(callback)
+    };
+    const exports: { useSettings?: (paths?: string[]) => unknown; } = {};
+    runInNewContext(compile(source.slice(start, end)), {
+        exports, SettingsStore: settingsStore, React: { useReducer: () => [null, update] },
+        useEffect: (effect: () => () => void, deps: unknown[]) => {
+            if (previous && deps.length === previous.length && deps.every((value, index) => Object.is(value, previous?.[index]))) return;
+            cleanup?.();
+            cleanup = effect();
+            previous = [...deps];
+        }
+    });
+    assert.ok(exports.useSettings);
+    const paths = ["first"];
+    exports.useSettings(paths);
+    exports.useSettings(["first"]);
+    assert.equal(subscriptions, 1);
+    store.store.first++;
+    assert.equal(updates, 1);
+    paths[0] = "second";
+    exports.useSettings(paths);
+    store.store.first++;
+    assert.equal(updates, 1);
+    store.store.second++;
+    assert.equal(updates, 2);
+    exports.useSettings(["nested.*"]);
+    store.store.nested.value++;
+    assert.equal(updates, 3);
+    exports.useSettings([]);
+    store.store.nested.value++;
+    assert.equal(updates, 3);
+    exports.useSettings();
+    store.store.first++;
+    assert.equal(updates, 4);
+    cleanup?.();
+    store.store.first++;
+    assert.equal(updates, 4);
+});

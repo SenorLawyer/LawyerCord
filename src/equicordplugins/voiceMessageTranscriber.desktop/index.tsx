@@ -217,12 +217,13 @@ function LanguageSelectionModal({ modalProps, onSelect }: LanguageSelectionModal
     );
 }
 
-function chooseTargetLanguage(onSelect: (language: LanguageOption) => void): void {
+function chooseTargetLanguage(onSelect: (language: LanguageOption) => void, job: { current: number; }): void {
     const userId = UserStore.getCurrentUser()?.id;
     if (!userId) return;
     const generation = cacheGeneration;
+    const jobId = job.current;
     const select = (language: LanguageOption) => {
-        if (generation !== cacheGeneration || UserStore.getCurrentUser()?.id !== userId) return;
+        if (job.current !== jobId || generation !== cacheGeneration || UserStore.getCurrentUser()?.id !== userId) return;
         settings.store.targetLanguage = language.value;
         onSelect(language);
     };
@@ -438,7 +439,7 @@ function VoiceMessageTranscriptionAccessory({ duration, cacheKey, needsPlaybackF
                 )}
                 <Flex gap={8} alignItems="center" flexWrap="wrap">
                     <Button size="xs" onClick={() => startTranscription()}>Transcribe</Button>
-                    <Button size="xs" variant="secondary" onClick={() => chooseTargetLanguage(startTranslation)}>Translate…</Button>
+                    <Button size="xs" variant="secondary" onClick={() => chooseTargetLanguage(startTranslation, jobIdRef)}>Translate…</Button>
                     <Span size="xs" color="text-muted">Voice message · on-device speech recognition</Span>
                 </Flex>
                 {error && <BaseText className={cl("error")} size="xs">{error}</BaseText>}
@@ -504,7 +505,7 @@ function VoiceMessageTranscriptionAccessory({ duration, cacheKey, needsPlaybackF
 
                     {!busy && (
                         <Flex gap={10} alignItems="center" flexWrap="wrap">
-                            <Button size="xs" variant="secondary" onClick={() => chooseTargetLanguage(startTranslation)}>
+                            <Button size="xs" variant="secondary" onClick={() => chooseTargetLanguage(startTranslation, jobIdRef)}>
                                 {translation ? "Change translation…" : "Translate…"}
                             </Button>
                             <TextButton

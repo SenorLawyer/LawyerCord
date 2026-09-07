@@ -11464,7 +11464,7 @@ test("transcription language selection retains its initiating session", () => {
     const end = source.indexOf("function progressPercent(", start);
     assert.ok(start >= 0 && end > start);
     const code = transpileModule(source.slice(start, end), { compilerOptions: { target: ScriptTarget.ES2022, jsx: JsxEmit.React } }).outputText;
-    for (const phase of ["current", "account", "logout", "stop"]) {
+    for (const phase of ["current", "account", "logout", "stop", "replaced-job"]) {
         let userId: string | undefined = "first";
         let select: (value: object) => void = () => {};
         let selected = 0;
@@ -11475,10 +11475,12 @@ test("transcription language selection retains its initiating session", () => {
             openModal: (render: (props: object) => void) => render({})
         };
         const choose = runInNewContext(code + ";chooseTargetLanguage", context);
-        choose(() => selected++);
+        const job = { current: 1 };
+        choose(() => selected++, job);
         if (phase === "account") userId = "second";
         if (phase === "logout") userId = undefined;
         if (phase === "stop") context.cacheGeneration++;
+        if (phase === "replaced-job") job.current++;
         select({ value: "fr", label: "French" });
         assert.equal(selected, phase === "current" ? 1 : 0, phase);
         assert.equal(settings.store.targetLanguage, phase === "current" ? "fr" : "en", phase);

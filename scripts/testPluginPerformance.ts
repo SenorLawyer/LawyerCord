@@ -10956,13 +10956,14 @@ test("web voice recordings preserve the recorder MIME type", async () => {
         let audio: Blob | undefined;
         let stopped = 0;
         const { VoiceRecorderWeb } = loadComponent("src/plugins/voiceMessages/components/WebRecorder.tsx", {
-            useState: (value: unknown) => [value, () => {}], Button: "button",
+            useState: (value: unknown) => [value, () => {}], useRef: () => ({ current: undefined }), useEffect: () => {}, Button: "button",
             MediaEngineStore: { getInputDeviceId: () => "default" }
-        }, { "..": { settings: { store: {} } } }, {
+        }, { "..": { settings: { store: {} } }, "@utils/Logger": { Logger: class { error() {} } } }, {
             Blob,
             navigator: { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [{ stop: () => stopped++ }] }) } },
             MediaRecorder: class {
                 mimeType = mimeType;
+                state = "inactive";
                 addEventListener(name: string, callback: (event?: { data: Blob; }) => void) { listeners.set(name, callback); }
                 removeEventListener(name: string) { listeners.delete(name); }
                 start() {}
@@ -10978,5 +10979,57 @@ test("web voice recordings preserve the recorder MIME type", async () => {
         assert.equal(await audio.text(), "audio");
         assert.equal(stopped, 1);
         assert.equal(listeners.size, 0);
+    }
+});
+
+
+test("web voice recorder owns pending permission and releases failed or closed sessions", async () => {
+    for (const phase of ["pending", "recording", "permission", "constructor", "start", "error"]) {
+        let resolveStream = (_stream: object) => {};
+        let rejectStream = (_error: Error) => {};
+        const permission = new Promise<object>((resolve, reject) => { resolveStream = resolve; rejectStream = reject; });
+        let requests = 0;
+        let tracksStopped = 0;
+        let recorderStops = 0;
+        let published = 0;
+        let cleanup: (() => void) | undefined;
+        const listeners = new Map<string, () => void>();
+        const errors: unknown[] = [];
+        const { VoiceRecorderWeb } = loadComponent("src/plugins/voiceMessages/components/WebRecorder.tsx", {
+            useState: (value: unknown) => [value, () => {}], useRef: () => ({ current: undefined }),
+            useEffect: (effect: () => () => void) => { cleanup = effect(); },
+            Button: "button", MediaEngineStore: { getInputDeviceId: () => "default" }
+        }, {
+            "..": { settings: { store: {} } },
+            "@utils/Logger": { Logger: class { error(_message: string, error: unknown) { errors.push(error); } } }
+        }, {
+            Blob, navigator: { mediaDevices: { getUserMedia: () => { requests++; return permission; } } },
+            MediaRecorder: class {
+                state = "inactive";
+                constructor() { if (phase === "constructor") throw new Error("Constructor failed"); }
+                addEventListener(name: string, callback: () => void) { listeners.set(name, callback); }
+                removeEventListener(name: string) { listeners.delete(name); }
+                start() { if (phase === "start") throw new Error("Start failed"); this.state = "recording"; }
+                stop() { recorderStops++; this.state = "inactive"; }
+            }
+        });
+        const view = VoiceRecorderWeb({ setAudioBlob: () => published++ });
+        view.props.children[0].props.onClick();
+        view.props.children[0].props.onClick();
+        assert.equal(requests, 1);
+        assert.ok(cleanup);
+        if (phase === "pending") cleanup();
+        if (phase === "permission") rejectStream(new Error("Permission denied"));
+        else resolveStream({ getTracks: () => [{ stop: () => tracksStopped++ }] });
+        await setImmediate();
+        if (phase === "recording") cleanup();
+        if (phase === "error") listeners.get("error")?.();
+        assert.equal(tracksStopped, phase === "permission" ? 0 : 1, phase);
+        assert.equal(recorderStops, phase === "recording" || phase === "error" ? 1 : 0, phase);
+        assert.equal(published, 0);
+        assert.equal(listeners.size, 0);
+        assert.equal(errors.length, ["permission", "constructor", "start", "error"].includes(phase) ? 1 : 0);
+        cleanup();
+        assert.equal(tracksStopped, phase === "permission" ? 0 : 1);
     }
 });

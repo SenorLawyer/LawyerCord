@@ -68,19 +68,15 @@ const CDN_URL = "cdn.discordapp.com";
 
 function fixImageUrl(urlString: string) {
     const url = new URL(urlString);
-    if (url.host === CDN_URL) return urlString;
+    if (url.origin !== MEDIA_PROXY_URL) return urlString;
 
     url.searchParams.delete("width");
     url.searchParams.delete("height");
 
-    if (url.origin === MEDIA_PROXY_URL) {
-        url.host = CDN_URL;
-        url.searchParams.delete("size");
-        url.searchParams.delete("quality");
-        url.searchParams.delete("format");
-    } else {
-        url.searchParams.set("quality", "lossless");
-    }
+    url.host = CDN_URL;
+    url.searchParams.delete("size");
+    url.searchParams.delete("quality");
+    url.searchParams.delete("format");
 
     return url.toString();
 }

@@ -1535,6 +1535,22 @@ test("blocked sticker placeholders subscribe to display preferences", () => {
     assert.equal(subscriptions[0], subscriptions[2]);
 });
 
+test("image URL rewriting preserves unrelated hosts and signed query text", () => {
+    const { fixImageUrl } = loadSource("src/plugins/webContextMenus.web/index.ts", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@utils/clipboard": {}, "@utils/constants": { Devs: {} }, "@utils/web": {},
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack": { filters: { byCode() {} }, mapMangledModuleLazy: () => ({}) }, "@webpack/common": {},
+    }, { IS_VESKTOP: false, IS_EQUIBOP: false, window: {}, URL }, "({ fixImageUrl })");
+    for (const url of [
+        "https://images.example.test/image?width=40&height=30&quality=80&signature=a%20b",
+        "https://cdn.discordapp.com/attachments/1/2/image.png?width=40&signature=a%20b",
+        "https://media.discordapp.net.example.test/image?width=40",
+    ]) assert.equal(fixImageUrl(url), url);
+    assert.equal(fixImageUrl("https://media.discordapp.net/attachments/1/2/image.png?width=40&height=30&size=40&quality=80&format=webp&ex=123&hm=abc"),
+        "https://cdn.discordapp.com/attachments/1/2/image.png?ex=123&hm=abc");
+});
+
 test("web image copying releases bitmaps and reports conversion, download, and clipboard failures", async () => {
     for (const mode of ["success", "draw", "context", "encode", "clipboard", "http"]) {
         let closed = 0;

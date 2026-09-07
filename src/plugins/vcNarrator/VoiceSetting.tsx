@@ -6,6 +6,7 @@
 
 import { Heading } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
+import { IS_LINUX } from "@utils/constants";
 import { lodash, SearchableSelect, useEffect, useMemo, useState } from "@webpack/common";
 
 import { getCurrentVoice, settings } from "./settings";
@@ -111,7 +112,11 @@ function VoiceSetting() {
     }, []);
 
     if (!voices.length)
-        return <Paragraph>No voices found.</Paragraph>;
+        return <Paragraph>
+            No narrator voices are available yet. {IS_LINUX
+                ? "If none load, install speech-dispatcher or espeak and run Discord with the --enable-speech-dispatcher flag."
+                : "If none load, check the speech voices installed in your operating system settings."}
+        </Paragraph>;
 
     // espeak on Linux has a ridiculous amount of voices (26k for me).
     // If there are more than 20 voices, we split it up into two pickers, one for language, then one with only the voices for that language.

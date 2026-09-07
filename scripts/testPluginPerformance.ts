@@ -8238,6 +8238,21 @@ test("installer inventory excludes hidden folders and files before reading metad
 });
 
 
+test("narrator settings offer samples without requiring English voices or a speech API", () => {
+    const Button = Symbol("Button");
+    let buttons = 0;
+    const api = loadSource("src/plugins/vcNarrator/index.tsx", {
+        "@api/Settings": { migrateSettingsFromPlugin() {} },
+        "@components/Heading": {}, "@components/Paragraph": {},
+        "@utils/constants": { Devs: {} }, "@utils/margins": { Margins: {} }, "@utils/text": { wordsToTitle: (words: string[]) => words.join(" ") },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, ReporterTestable: {} },
+        "@webpack/common": { Button, useMemo: (read: () => unknown) => read() },
+        "./settings": { settings: { def: { joinMessage: {}, leaveMessage: {}, volume: {} } } }
+    }, { window: {}, React: { createElement: (type: unknown) => { if (type === Button) buttons++; return {}; } } });
+    api.default.settingsAboutComponent();
+    assert.equal(buttons, 2);
+});
+
 test("narrator speech tolerates an unavailable API and uses the browser default voice", () => {
     const window: { speechSynthesis?: { speak: (speech: unknown) => void; }; __OVERLAY__?: boolean; } = {};
     const spoken: unknown[] = [];
@@ -8306,6 +8321,7 @@ test("narrator language picker keeps voices with unrecognized language tags", ()
         const voices = Array.from({ length: 21 }, (_, id) => ({ lang: language, voiceURI: String(id), name: String(id) }));
         let grouped = 0;
         const api = loadSource("src/plugins/vcNarrator/VoiceSetting.tsx", {
+            "@utils/constants": { IS_LINUX: false },
             "@components/Heading": {}, "@components/Paragraph": {},
             "@webpack/common": { lodash: { groupBy: (items: unknown, key: (voice: object) => string) => {
                 grouped++;
@@ -8332,6 +8348,7 @@ test("narrator voice picker observes voice loading and releases its listener", (
     let value: unknown;
     let effect: () => (() => void) = () => assert.fail("Missing effect");
     const api = loadSource("src/plugins/vcNarrator/VoiceSetting.tsx", {
+            "@utils/constants": { IS_LINUX: false },
         "@components/Heading": {}, "@components/Paragraph": {},
         "@webpack/common": {
             useState: (initial: () => unknown) => { value ??= initial(); return [value, (next: unknown) => { value = next; }]; },
@@ -8355,6 +8372,7 @@ test("narrator language picker falls back when its selected language disappears"
     const english = [{ lang: "en", voiceURI: "english" }];
     const german = [{ lang: "de", voiceURI: "german" }];
     const api = loadSource("src/plugins/vcNarrator/VoiceSetting.tsx", {
+            "@utils/constants": { IS_LINUX: false },
         "@components/Heading": {}, "@components/Paragraph": {},
         "@webpack/common": { lodash: { groupBy: () => ({ en: english, de: german }) }, useMemo: (read: () => unknown) => read(), useState: () => ["removed", () => {}] },
         "./settings": { settings: {} }

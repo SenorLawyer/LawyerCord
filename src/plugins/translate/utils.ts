@@ -17,6 +17,7 @@
 */
 
 import { classNameFactory } from "@utils/css";
+import { isObject } from "@utils/misc";
 import { onlyOnce } from "@utils/onlyOnce";
 import { PluginNative } from "@utils/types";
 import { showToast, Toasts } from "@webpack/common";
@@ -27,25 +28,6 @@ import { resetLanguageDefaults, settings } from "./settings";
 export const cl = classNameFactory("vc-trans-");
 
 const Native = VencordNative.pluginHelpers.Translate as PluginNative<typeof import("./native")>;
-
-interface GoogleData {
-    translation: string;
-    sourceLanguage: string;
-}
-
-interface DeeplData {
-    translations: {
-        detected_source_language: string;
-        text: string;
-    }[];
-}
-
-interface KagiData {
-    translation: string;
-    detected_language: {
-        label: string;
-    };
-}
 
 export interface TranslationValue {
     sourceLanguage: string;
@@ -112,7 +94,11 @@ async function googleTranslate(text: string, sourceLang: string, targetLang: str
         throw new Error(`Google Translate request failed (${res.status}).`);
     }
 
-    const { sourceLanguage, translation }: GoogleData = await res.json();
+    const response: unknown = await res.json();
+    if (!isObject(response) || !("sourceLanguage" in response) || typeof response.sourceLanguage !== "string"
+        || !("translation" in response) || typeof response.translation !== "string")
+        throw new Error("Google Translate returned an invalid response.");
+    const { sourceLanguage, translation } = response;
 
     return {
         sourceLanguage: GoogleLanguages[sourceLanguage] ?? sourceLanguage,
@@ -167,12 +153,16 @@ async function deeplTranslate(text: string, sourceLang: string, targetLang: stri
             throw new Error(`DeepL translation request failed (${status}).`);
     }
 
-    const { translations }: DeeplData = JSON.parse(data);
-    const src = translations[0].detected_source_language;
+    const response: unknown = JSON.parse(data);
+    const translation: unknown = isObject(response) && "translations" in response && Array.isArray(response.translations)
+        ? response.translations[0] : null;
+    if (!isObject(translation) || !("detected_source_language" in translation) || typeof translation.detected_source_language !== "string"
+        || !("text" in translation) || typeof translation.text !== "string")
+        throw new Error("DeepL returned an invalid response.");
 
     return {
-        sourceLanguage: DeeplLanguages[src] ?? src,
-        text: translations[0].text
+        sourceLanguage: DeeplLanguages[translation.detected_source_language] ?? translation.detected_source_language,
+        text: translation.text
     };
 }
 
@@ -190,10 +180,13 @@ async function kagiTranslate(text: string, sourceLang: string, targetLang: strin
             throw new Error(`Kagi translation request failed (${status}).`);
     }
 
-    const { detected_language, translation }: KagiData = data;
-
+    const response: unknown = data;
+    if (!isObject(response) || !("translation" in response) || typeof response.translation !== "string"
+        || !("detected_language" in response) || !isObject(response.detected_language)
+        || !("label" in response.detected_language) || typeof response.detected_language.label !== "string")
+        throw new Error("Kagi returned an invalid response.");
     return {
-        sourceLanguage: detected_language.label,
-        text: translation
+        sourceLanguage: response.detected_language.label,
+        text: response.translation
     };
 }

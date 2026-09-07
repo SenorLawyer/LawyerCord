@@ -11500,6 +11500,7 @@ test("translation provider errors omit source text and response bodies", async (
     for (const service of ["google", "deepl", "kagi"]) {
         const { translateText } = loadSource("src/plugins/translate/utils.ts", {
             "@utils/css": { classNameFactory: () => () => "" }, "@utils/onlyOnce": { onlyOnce: (fn: unknown) => fn },
+        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
             "@webpack/common": { showToast() {}, Toasts: { Type: { FAILURE: "failure" } } },
             "./languages": {}, "./settings": { settings: { store: { service, deeplApiKey: "fixture", kagiSession: "fixture" } } }
         }, {
@@ -11563,6 +11564,7 @@ test("Google translation cancels an unused error response", async () => {
     let cancelled = 0;
     const { translateText } = loadSource("src/plugins/translate/utils.ts", {
         "@utils/css": { classNameFactory: () => () => "" }, "@utils/onlyOnce": { onlyOnce: (fn: unknown) => fn },
+        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
         "@webpack/common": { showToast() {}, Toasts: { Type: { FAILURE: "failure" } } },
         "./languages": {}, "./settings": { settings: { store: { service: "google" } } }
     }, {
@@ -11574,4 +11576,33 @@ test("Google translation cancels an unused error response", async () => {
     });
     await assert.rejects(translateText("fixture", "en", "fr"), /Google Translate request failed \(500\)/);
     assert.equal(cancelled, 1);
+});
+
+test("translation validates successful provider payloads before returning text", async () => {
+    for (const service of ["google", "deepl", "kagi"]) {
+        const valid = service === "google" ? { translation: "bonjour", sourceLanguage: "en" }
+            : service === "deepl" ? { translations: [{ text: "bonjour", detected_source_language: "en" }] }
+                : { translation: "bonjour", detected_language: { label: "English" } };
+        for (const payload of [null, {}, [], "invalid", { translation: 1 }, { translations: [] }, valid]) {
+            const { translateText } = loadSource("src/plugins/translate/utils.ts", {
+                "@utils/css": { classNameFactory: () => () => "" }, "@utils/onlyOnce": { onlyOnce: (fn: unknown) => fn },
+                "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
+                "@webpack/common": { showToast() {}, Toasts: { Type: { FAILURE: "failure" } } },
+                "./languages": { GoogleLanguages: { en: "English" }, DeeplLanguages: { en: "English" } },
+                "./settings": { settings: { store: { service, deeplApiKey: "fixture", kagiSession: "fixture" } } }
+            }, {
+                IS_WEB: false, URLSearchParams, fetch: async () => ({ ok: true, json: async () => payload }),
+                VencordNative: { pluginHelpers: { Translate: {
+                    makeDeeplTranslateRequest: async () => ({ status: 200, data: JSON.stringify(payload) }),
+                    makeKagiTranslateRequest: async () => ({ status: 200, data: payload })
+                } } }
+            });
+            if (payload !== valid) await assert.rejects(translateText("hello", "en", "fr"), /invalid response/);
+            else {
+                const result = await translateText("hello", "en", "fr");
+                assert.equal(result.text, "bonjour");
+                assert.equal(result.sourceLanguage, "English");
+            }
+        }
+    }
 });

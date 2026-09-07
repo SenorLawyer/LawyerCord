@@ -51,7 +51,8 @@ export function getCategoryByIndex(index: number) {
 }
 
 export function createCategory(category: Category) {
-    getCurrentUserCategories().push(category);
+    const categories = getCurrentUserCategories();
+    if (!categories.some(c => c.id === category.id)) categories.push(category);
 }
 
 export function addChannelToCategory(channelId: string, categoryId: string) {

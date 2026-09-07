@@ -10872,3 +10872,25 @@ test("pinned DM render callbacks are released without clearing a newer mount", (
     data.init();
     assert.equal(second, 1);
 });
+
+
+test("pinned DM category creation ignores repeat saves of the same category", () => {
+    let userId = "first";
+    const settings = new SettingsStore({ userBasedCategoryList: {} as Record<string, object[]> });
+    const data = loadSource("src/plugins/pinDms/data.ts", {
+        "@plugins/pinDms": { settings, PinOrder: {}, PrivateChannelSortStore: {} },
+        "@utils/react": {}, "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } }
+    });
+    const category = { id: "category", name: "Original", color: 0, channels: ["channel"] };
+    data.createCategory(category);
+    data.createCategory(category);
+    data.createCategory({ ...category, name: "Duplicate" });
+    assert.equal(data.categoryLen(), 1);
+    assert.equal(data.getCategory("category").name, "Original");
+    data.createCategory({ ...category, id: "another" });
+    assert.equal(data.categoryLen(), 2);
+    userId = "second";
+    data.createCategory(category);
+    assert.equal(data.categoryLen(), 1);
+    assert.equal(settings.plain.userBasedCategoryList.first.length, 2);
+});

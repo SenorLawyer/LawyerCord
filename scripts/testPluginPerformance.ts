@@ -10948,3 +10948,35 @@ test("pinned DM categories render and edit legacy null colors", () => {
         assert.equal(modal.props.children[0].props.children[1].props.children[1].props.value, color ?? 42);
     }
 });
+
+
+test("web voice recordings preserve the recorder MIME type", async () => {
+    for (const mimeType of ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4"]) {
+        const listeners = new Map<string, (event?: { data: Blob; }) => void>();
+        let audio: Blob | undefined;
+        let stopped = 0;
+        const { VoiceRecorderWeb } = loadComponent("src/plugins/voiceMessages/components/WebRecorder.tsx", {
+            useState: (value: unknown) => [value, () => {}], Button: "button",
+            MediaEngineStore: { getInputDeviceId: () => "default" }
+        }, { "..": { settings: { store: {} } } }, {
+            Blob,
+            navigator: { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [{ stop: () => stopped++ }] }) } },
+            MediaRecorder: class {
+                mimeType = mimeType;
+                addEventListener(name: string, callback: (event?: { data: Blob; }) => void) { listeners.set(name, callback); }
+                removeEventListener(name: string) { listeners.delete(name); }
+                start() {}
+            }
+        });
+        const view = VoiceRecorderWeb({ setAudioBlob: (blob: Blob) => { audio = blob; } });
+        view.props.children[0].props.onClick();
+        await setImmediate();
+        listeners.get("dataavailable")?.({ data: new Blob(["audio"], { type: mimeType }) });
+        listeners.get("stop")?.();
+        assert.ok(audio);
+        assert.equal(audio.type, mimeType);
+        assert.equal(await audio.text(), "audio");
+        assert.equal(stopped, 1);
+        assert.equal(listeners.size, 0);
+    }
+});

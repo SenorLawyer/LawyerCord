@@ -51,7 +51,7 @@ export const VoiceRecorderWeb: VoiceRecorder = ({ setAudioBlob, onRecordingChang
                 };
 
                 const handleStop = () => {
-                    setAudioBlob(new Blob(chunks, { type: "audio/ogg; codecs=opus" }));
+                    setAudioBlob(new Blob(chunks, { type: recorder.mimeType }));
                     changeRecording(false);
 
                     recorder.removeEventListener("dataavailable", handleDataAvailable);

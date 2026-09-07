@@ -1606,18 +1606,24 @@ test("UserPFP avatar edits commit before publishing and preserve newer stored en
     }
 });
 
-test("UserPFP ignores avatar loads after stop or restart", async () => {
-    for (const mode of ["local-stop", "remote-stop", "restart", "current"]) {
+test("UserPFP ignores stopped loads and rejects malformed remote maps", async () => {
+    const invalidResponses: Record<string, unknown> = {
+        "invalid-mixed": { avatars: { oldRemote: "remote", broken: 42 } },
+        "invalid-null": null, "invalid-array": [], "invalid-missing": {}, "invalid-map-array": { avatars: [] },
+    };
+    for (const mode of ["local-stop", "remote-stop", "restart", "current", ...Object.keys(invalidResponses)]) {
         const local = Promise.withResolvers<Record<string, string>>();
-        const remote = Promise.withResolvers<object>();
+        const remote = Promise.withResolvers<unknown>();
         const signals: AbortSignal[] = [];
         let reads = 0;
+        const errors: unknown[] = [];
         const { default: plugin, data } = loadSource("src/equicordplugins/userpfp/index.tsx", {
             "@api/DataStore": { get: () => ++reads === 1 ? local.promise : Promise.resolve({ newer: "local" }) },
             "@api/Settings": { definePluginSettings: () => ({ store: { databaseSource: "https://fixture.invalid/data" } }) },
             "@components/Button": {}, "@components/Flex": {}, "@components/Heart": {}, "@components/Icons": {}, "@components/margins": {}, "@components/Notice": {},
             "@utils/constants": { Devs: {}, EquicordDevs: {} }, "@utils/css": { classNameFactory: () => () => "" }, "@utils/discord": {},
-            "@utils/Logger": { Logger: class { error() { assert.fail("Unexpected avatar load failure"); } } },
+            "@utils/Logger": { Logger: class { error(_message: string, error: unknown) { errors.push(error); } } },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
             "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
             "@webpack": { extractAndLoadChunksLazy: () => () => {} }, "@webpack/common": {}, "./AvatarModal": {},
         }, { IS_DEV: false, AbortController, URL,
@@ -1635,7 +1641,7 @@ test("UserPFP ignores avatar loads after stop or restart", async () => {
         }
         if (mode === "remote-stop") plugin.stop();
         if (mode === "restart") await plugin.start();
-        remote.resolve({ avatars: { oldRemote: "remote" } });
+        remote.resolve(mode in invalidResponses ? invalidResponses[mode] : { avatars: { oldRemote: "remote" } });
         await old;
         assert.deepEqual(Object.keys(data.avatars), mode === "restart" ? ["newer"] : ["original"]);
         assert.deepEqual(Object.keys(data.remoteAvatars), mode === "restart" ? ["newerRemote"] : mode === "current" ? ["oldRemote"] : []);
@@ -1650,7 +1656,8 @@ test("UserPFP ignores avatar loads after stop or restart", async () => {
             data.avatars.shared = url;
             assert.equal(guildAvatar({ userId: "shared", size: 128, canAnimate: true }), url);
         }
-        assert.equal(signals[0].aborted, mode !== "current");
+        assert.equal(signals[0].aborted, mode === "remote-stop" || mode === "restart");
+        assert.equal(errors.length, mode in invalidResponses ? 1 : 0);
     }
 });
 

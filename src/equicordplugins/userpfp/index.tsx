@@ -18,6 +18,7 @@ import { Devs, EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import { openInviteModal } from "@utils/discord";
 import { Logger } from "@utils/Logger";
+import { isObject } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import { User } from "@vencord/discord-types";
 import { extractAndLoadChunksLazy } from "@webpack";
@@ -176,8 +177,12 @@ export default definePlugin({
 
             const response = await fetch(settings.store.databaseSource, { signal: controller.signal });
             if (!response.ok) throw new Error("Could not download the avatar database.");
-            const remote = await response.json();
-            if (!controller.signal.aborted && remote?.avatars) data.remoteAvatars = remote.avatars;
+            const remote: unknown = await response.json();
+            if (controller.signal.aborted) return;
+            if (!isObject(remote) || !("avatars" in remote) || !isObject(remote.avatars)
+                || Object.values(remote.avatars).some(url => typeof url !== "string"))
+                throw new Error("Invalid avatar database.");
+            data.remoteAvatars = remote.avatars as Record<string, string>;
         } catch (error) {
             if (!controller.signal.aborted) logger.error("Could not load avatars.", error);
         }

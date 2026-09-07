@@ -50,6 +50,8 @@ Notification changes remove unused toast close callbacks, clear toasts on sessio
 
 Narrator changes preserve saved voice preferences while voices load, refresh the voice picker on browser events, retain unfamiliar language tags, and remove stale availability warnings and the English-only sample restriction. Speech formatting preserves placeholder text inside names. Announcements use the voice channel's server for nicknames, tolerate unavailable speech support, and initialize from an existing voice connection. Tests exercise actual helpers and components with mocked speech, stores, and React hooks; live playback, session transitions, and speech queue ownership remain open.
 
+VoiceStats now rejects stale startup reads before changing totals, waits for storage before tracking, keeps failed saves pending for a later attempt, preserves sessions on repeated channel events, and pauses tracking when stored totals are malformed. Actual DataStore code in isolated Chrome preserved invocation order for 100 concurrent writes with both cold and initialized storage, so no additional save queue was added. Account scope, unsaved totals across restart, recovery controls, and clock behavior remain open.
+
 The proposed version is `3.0.0.0` because older scheduled data now requires explicit recovery. See [VERSIONING.md](VERSIONING.md) for the compatibility and downgrade implications. No release tag has been created for this audit.
 
 ## Verification record
@@ -58,12 +60,12 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `805c99eff` | 362 tests and timezone correctness checks passed. |
-| Repository-wide ESLint | `c50d116a4` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
+| Broader performance/correctness suite | `e54c36833` | 368 tests and timezone correctness checks passed. |
+| Repository-wide ESLint | `e54c36833` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
 | CSS lint | `c50d116a4` | Passed; excludes userplugins. |
 | Internationalization lint | `5e869fea9` | Passed for tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest plugin regressions and TypeScript | `805c99eff` | 310 plugin tests and full TypeScript passed; focused narrator lint passed. |
-| Standalone build | `c50d116a4` | Passed after shared-notification changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
+| Latest plugin regressions and TypeScript | `e54c36833` | 316 plugin tests and full TypeScript passed; focused VoiceStats lint passed. |
+| Standalone build | `e54c36833` | Passed after narrator and VoiceStats changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
 | Development build | `805c99eff` | Passed after narrator changes. |
 | Installer review browser checks | `d7b99b737` | Actual templates and generator functions in isolated Chrome preserved literal metadata, all four native/pre-send warning combinations, the native acknowledgement gate, and cancellation. Electron IPC and real installation were not exercised. |
 | Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |

@@ -1679,6 +1679,28 @@ test("voice statistics discard stored totals from a stopped generation", async (
     api.plugin.stop();
 });
 
+test("voice statistics keep sessions intact when tracking the same channel twice", () => {
+    let now = 1000;
+    let saves = 0;
+    const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {
+        "@utils/Logger": { Logger: class { error() {} } },
+        "@api/DataStore": { set: async () => { saves++; } }, "@components/BaseText": {},
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+        "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
+        "@webpack/common": { VoiceStateStore: { getVoiceStatesForChannel: () => ({ friend: { userId: "friend" } }) } }
+    }, { Date: { now: () => now }, setInterval: () => 1, clearInterval() {} }, "({ startTrackingChannel, stopTrackingChannel, sessionStarts, getLiveSeconds })");
+    api.startTrackingChannel("voice", "me");
+    now = 2600;
+    api.startTrackingChannel("voice", "me");
+    assert.equal(api.sessionStarts.get("friend"), 1000);
+    assert.equal(saves, 0);
+    now = 3100;
+    assert.equal(api.getLiveSeconds("friend"), 2);
+    api.stopTrackingChannel();
+});
+
 test("voice statistics retain fractional seconds across periodic saves", () => {
     let now = 1000;
     const { sessionStarts, totalsByUser, flushActiveSessions, getLiveSeconds } = loadSource("src/equicordplugins/voiceStats/index.tsx", {

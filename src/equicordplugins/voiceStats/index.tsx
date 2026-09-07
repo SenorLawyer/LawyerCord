@@ -74,6 +74,7 @@ function stopSaveInterval() {
 }
 
 function startTrackingChannel(channelId: string, myId: string) {
+    if (trackedChannelId === channelId) return;
     if (trackedChannelId) stopTrackingChannel();
 
     trackedChannelId = channelId;
@@ -181,7 +182,6 @@ export default definePlugin({
                     if (!oldChannelId && channelId) startTrackingChannel(channelId, myId);
                     else if (oldChannelId && !channelId) stopTrackingChannel();
                     else if (channelId && channelId !== oldChannelId) {
-                        stopTrackingChannel();
                         startTrackingChannel(channelId, myId);
                     }
                     continue;

@@ -9718,7 +9718,7 @@ test("emoji cloning settles failed file reads without uploading", async () => {
             "@utils/types": { __esModule: true, default: (value: object) => value },
             "@vencord/discord-types/enums": { StickerFormatType: { PNG: 1, APNG: 2, LOTTIE: 3, GIF: 4 } },
             "@webpack": { findByCodeLazy: () => (value: unknown) => uploads.push(value) },
-            "@webpack/common": {}
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "me" }) } }
         }, {
             location: { protocol: "https:" }, window: { GLOBAL_ENV: { CDN_HOST: "fixture.invalid" } },
             fetch: async () => ({ ok: true, blob: async () => ({ size: 1 }) }),
@@ -9734,7 +9734,7 @@ test("emoji cloning settles failed file reads without uploading", async () => {
                 }
             }
         }, "({ cloneEmoji })");
-        const pending = cloneEmoji("guild", { t: "Emoji", id: "emoji", name: "name~2", isAnimated: false });
+        const pending = cloneEmoji("guild", { t: "Emoji", id: "emoji", name: "name~2", isAnimated: false }, "me");
         if (mode === "success") {
             await pending;
             assert.deepEqual({ ...uploads[0] as object }, { guildId: "guild", name: "name", image: "data:image/png;base64,fixture" });
@@ -9763,7 +9763,7 @@ test("expression cloning preserves valid server errors and falls back for malfor
             "@utils/types": { __esModule: true, default: (value: object) => value },
             "@vencord/discord-types/enums": { StickerFormatType: { PNG: 1, APNG: 2, LOTTIE: 3, GIF: 4 } },
             "@webpack": { findByCodeLazy: () => () => assert.fail("Unexpected upload") },
-            "@webpack/common": { Toasts: { Type: { FAILURE: "failure" }, genId: () => "id", show: ({ message }: { message: string; }) => messages.push(message) } }
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "me" }) }, Toasts: { Type: { FAILURE: "failure" }, genId: () => "id", show: ({ message }: { message: string; }) => messages.push(message) } }
         }, {
             location: { protocol: "https:" }, window: { GLOBAL_ENV: { CDN_HOST: "fixture.invalid" } },
             fetch: async () => { throw failure; }
@@ -9862,4 +9862,49 @@ test("cloning keeps the name selected when the request starts", async () => {
     assert.equal(CloneModal({ data: { ...data, t: "Sticker" } }).props.children[2].props.children[0].length, 0);
     stickerCount = 4;
     assert.equal(CloneModal({ data: { ...data, t: "Sticker" } }).props.children[2].props.children[0].length, 1);
+});
+
+test("cloning stops before uploads and sticker publication after account changes", async () => {
+    for (const kind of ["Emoji", "Sticker"]) {
+        for (const phase of ["stable", "download", "logout", ...(kind === "Sticker" ? ["response"] : [])]) {
+            let userId: string | undefined = "owner";
+            let uploads = 0;
+            let publications = 0;
+            const { cloneEmoji, cloneSticker } = loadSource("src/plugins/expressionCloner/index.tsx", {
+                "@api/ContextMenu": {}, "@api/Settings": { migratePluginSettings() {} },
+                "@components/BaseText": {}, "@components/Button": {}, "@components/Flex": {},
+                "@components/Heading": {}, "@components/Paragraph": {},
+                "@utils/constants": { Devs: {} }, "@utils/discord": {},
+                "@utils/Logger": { Logger: class { error() {} } }, "@utils/misc": {},
+                "@utils/types": { __esModule: true, default: (value: object) => value },
+                "@vencord/discord-types/enums": { StickerFormatType: { PNG: 1, APNG: 2, LOTTIE: 3, GIF: 4 } },
+                "@webpack": { findByCodeLazy: () => () => { uploads++; } },
+                "@webpack/common": {
+                    UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined },
+                    Constants: { Endpoints: { GUILD_STICKER_PACKS: () => "fixture" } },
+                    RestAPI: { post: async () => { uploads++; if (phase === "response") userId = "other"; return { body: {} }; } },
+                    FluxDispatcher: { dispatch: () => publications++ }
+                }
+            }, {
+                location: { protocol: "https:" }, window: { GLOBAL_ENV: { CDN_HOST: "fixture.invalid", MEDIA_PROXY_ENDPOINT: "https://fixture.invalid" } },
+                fetch: async () => {
+                    if (phase === "download") userId = "other";
+                    if (phase === "logout") userId = undefined;
+                    return { ok: true, blob: async () => ({ size: 1 }) };
+                },
+                FormData: class { append() {} },
+                FileReader: class {
+                    result = "data:image/png;base64,fixture";
+                    onload = () => {};
+                    readAsDataURL() { this.onload(); }
+                }
+            }, "({ cloneEmoji, cloneSticker })");
+            const data = { t: kind, id: "expression", name: "name", format_type: 1, tags: "tag", description: "description" };
+            const pending = (kind === "Emoji" ? cloneEmoji : cloneSticker)("guild", data, "owner");
+            if (phase === "stable") await pending;
+            else await assert.rejects(pending, /account changed/);
+            assert.equal(uploads, phase === "stable" || phase === "response" ? 1 : 0);
+            assert.equal(publications, kind === "Sticker" && phase === "stable" ? 1 : 0);
+        }
+    }
 });

@@ -100,18 +100,25 @@ async function fetchSticker(id: string) {
     return body as Sticker;
 }
 
-async function cloneSticker(guildId: string, sticker: Sticker) {
+function ensureCloneAccount(userId: string) {
+    if (UserStore.getCurrentUser()?.id !== userId)
+        throw new Error("The account changed while cloning.");
+}
+
+async function cloneSticker(guildId: string, sticker: Sticker, userId: string) {
     const data = new FormData();
     data.append("name", sticker.name);
     data.append("tags", sticker.tags);
     data.append("description", sticker.description);
     data.append("file", await fetchBlob(sticker));
 
+    ensureCloneAccount(userId);
     const { body } = await RestAPI.post({
         url: Constants.Endpoints.GUILD_STICKER_PACKS(guildId),
         body: data,
     });
 
+    ensureCloneAccount(userId);
     FluxDispatcher.dispatch({
         type: "GUILD_STICKERS_CREATE_SUCCESS",
         guildId,
@@ -122,7 +129,7 @@ async function cloneSticker(guildId: string, sticker: Sticker) {
     });
 }
 
-async function cloneEmoji(guildId: string, emoji: Emoji) {
+async function cloneEmoji(guildId: string, emoji: Emoji, userId: string) {
     const data = await fetchBlob(emoji);
 
     const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -132,6 +139,7 @@ async function cloneEmoji(guildId: string, emoji: Emoji) {
         reader.readAsDataURL(data);
     });
 
+    ensureCloneAccount(userId);
     return uploadEmoji({
         guildId,
         name: emoji.name.split("~")[0],
@@ -192,11 +200,14 @@ async function fetchBlob(data: Data) {
 
 async function doClone(guildId: string, data: Sticker | Emoji) {
     try {
+        const userId = UserStore.getCurrentUser()?.id;
+        if (!userId) throw new Error("Sign in before cloning an expression.");
         if (data.t === "Sticker")
-            await cloneSticker(guildId, data);
+            await cloneSticker(guildId, data, userId);
         else
-            await cloneEmoji(guildId, data);
+            await cloneEmoji(guildId, data, userId);
 
+        ensureCloneAccount(userId);
         Toasts.show({
             message: `Successfully cloned ${data.name} to ${GuildStore.getGuild(guildId)?.name ?? "your server"}!`,
             type: Toasts.Type.SUCCESS,

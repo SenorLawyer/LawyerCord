@@ -70,15 +70,15 @@ export function onGuildDelete({ guild: { id, unavailable } }: GuildDelete) {
     if (unavailable || GuildAvailabilityStore.isUnavailable(id)) return;
 
     if (manuallyRemovedGuild === id) {
-        deleteGuild(id);
         manuallyRemovedGuild = undefined;
-        return;
+        return deleteGuild(id);
     }
 
     const guild = getGuild(id);
     if (guild) {
-        deleteGuild(id);
+        const synced = deleteGuild(id);
         notify(`You were removed from the server ${guild.name}.`, guild.iconURL);
+        return synced;
     }
 }
 
@@ -87,14 +87,14 @@ export function onChannelDelete({ channel: { id, type } }: ChannelDelete) {
     if (type !== ChannelType.GROUP_DM) return;
 
     if (manuallyRemovedGroup === id) {
-        deleteGroup(id);
         manuallyRemovedGroup = undefined;
-        return;
+        return deleteGroup(id);
     }
 
     const group = getGroup(id);
     if (group) {
-        deleteGroup(id);
+        const synced = deleteGroup(id);
         notify(`You were removed from the group ${group.name}.`, group.iconURL);
+        return synced;
     }
 }

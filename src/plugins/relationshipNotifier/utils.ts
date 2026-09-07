@@ -135,7 +135,7 @@ export function getGuild(id: string) {
 
 export function deleteGuild(id: string) {
     guilds.delete(id);
-    syncGuilds();
+    return syncGuilds();
 }
 
 export async function syncGuilds() {
@@ -165,7 +165,7 @@ export function getGroup(id: string) {
 
 export function deleteGroup(id: string) {
     groups.delete(id);
-    syncGroups();
+    return syncGroups();
 }
 
 export async function syncGroups() {

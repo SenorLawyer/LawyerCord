@@ -10377,3 +10377,43 @@ test("relationship notifier catches delayed startup failures and cancels its tim
     assert.equal(calls, 1);
     assert.deepEqual(errors, [failure]);
 });
+
+
+test("relationship guild and group removals propagate storage failures to Flux", async () => {
+    for (const kind of ["guild", "group"]) {
+        for (const manual of [false, true]) {
+            let removed = false;
+            let notices = 0;
+            const failure = new Error("Save failed");
+            const settings = { __esModule: true, default: { store: { servers: true, groups: true } } };
+            const enums = { ChannelType: { GROUP_DM: 3 }, RelationshipType: {} };
+            const utils = loadSource("src/plugins/relationshipNotifier/utils.ts", {
+                "@api/DataStore": { set: async () => { if (removed) throw failure; } },
+                "@api/Notices": {}, "@api/Notifications": {}, "@utils/discord": {},
+                "@vencord/discord-types/enums": enums,
+                "@webpack": { findStoreLazy: () => ({ isUnavailable: () => false }) },
+                "@webpack/common": {
+                    UserStore: { getCurrentUser: () => ({ id: "owner" }) },
+                    GuildStore: { getGuilds: () => removed ? {} : { item: { name: "Guild" } } },
+                    GuildMemberStore: { isMember: () => true },
+                    ChannelStore: { getSortedPrivateChannels: () => removed ? [] : [{ id: "item", name: "Group", type: 3, rawRecipients: [] }] }
+                },
+                "./settings": settings
+            });
+            await utils.syncGuilds();
+            await utils.syncGroups();
+            const handlers = loadSource("src/plugins/relationshipNotifier/functions.ts", {
+                "@utils/discord": {}, "@vencord/discord-types/enums": enums,
+                "@webpack/common": {}, "./settings": settings,
+                "./utils": { ...utils, notify: () => notices++ }
+            });
+            if (manual) (kind === "guild" ? handlers.removeGuild : handlers.removeGroup)("item");
+            removed = true;
+            const pending = kind === "guild"
+                ? handlers.onGuildDelete({ guild: { id: "item" } })
+                : handlers.onChannelDelete({ channel: { id: "item", type: 3 } });
+            await assert.rejects(pending, error => error === failure);
+            assert.equal(notices, manual ? 0 : 1);
+        }
+    }
+});

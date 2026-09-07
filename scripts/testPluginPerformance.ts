@@ -11386,28 +11386,37 @@ test("stopped transcription translations discard delayed success and failure", a
     const start = source.indexOf("const translateTranscript = useCallback(");
     const end = source.indexOf("const startTranscription = useCallback(", start);
     assert.ok(start >= 0 && end > start);
-    const code = transpileModule(source.slice(start, end), { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
-    for (const phase of ["stopped-success", "stopped-failure", "current"]) {
+    const guardStart = source.indexOf("const isCurrentJob = useCallback(");
+    const guardEnd = source.indexOf("const stopWorker = useCallback(", guardStart);
+    assert.ok(guardStart >= 0 && guardEnd > guardStart);
+    const code = transpileModule(source.slice(guardStart, guardEnd) + source.slice(start, end), { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
+    for (const phase of ["stopped-success", "stopped-failure", "account-before", "account-after", "logout-after", "current"]) {
         let resolve: (value: object) => void = () => {};
         let reject: (error: Error) => void = () => {};
         const pending = new Promise<object>((yes, no) => { resolve = yes; reject = no; });
+        let activeUser: string | undefined = phase === "account-before" ? "second" : "first";
+        let requests = 0;
         let updates = 0;
         let writes = 0;
         const update = () => updates++;
         const context = {
+            userId: "first", UserStore: { getCurrentUser: () => activeUser ? { id: activeUser } : undefined },
             cacheGeneration: 0, jobIdRef: { current: 1 }, cacheKey: "message",
-            useCallback: (fn: unknown) => fn, translateText: () => pending,
+            useCallback: (fn: unknown) => fn, translateText: () => { requests++; return pending; },
             setStatus: update, setError: update, setTargetLanguage: update, setTargetLanguageLabel: update, setTranslation: update,
             cacheResult: () => writes++
         };
         const translate = runInNewContext(code + ";translateTranscript", context);
         const result = translate({ text: "hello" }, { value: "en", label: "English" }, 1);
         updates = 0;
-        if (phase !== "current") context.cacheGeneration++;
+        if (phase.startsWith("stopped")) context.cacheGeneration++;
+        if (phase === "account-after") activeUser = "second";
+        if (phase === "logout-after") activeUser = undefined;
         if (phase === "stopped-failure") reject(new Error("Failed")); else resolve({ text: "hello" });
         await result;
         assert.equal(updates, phase === "current" ? 2 : 0);
         assert.equal(writes, phase === "current" ? 1 : 0);
+        assert.equal(requests, phase === "account-before" ? 0 : 1);
     }
 });
 

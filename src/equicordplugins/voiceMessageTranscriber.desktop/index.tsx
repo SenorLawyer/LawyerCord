@@ -247,6 +247,7 @@ async function copy(text: string) {
 }
 
 interface VoiceMessageTranscriptionAccessoryProps {
+    userId: string;
     duration?: number;
     cacheKey: string;
     needsPlaybackFallback: boolean;
@@ -254,7 +255,7 @@ interface VoiceMessageTranscriptionAccessoryProps {
     waveform?: string;
 }
 
-function VoiceMessageTranscriptionAccessory({ duration, cacheKey, needsPlaybackFallback, src, waveform }: VoiceMessageTranscriptionAccessoryProps) {
+function VoiceMessageTranscriptionAccessory({ userId, duration, cacheKey, needsPlaybackFallback, src, waveform }: VoiceMessageTranscriptionAccessoryProps) {
     const initial = resultCache.get(cacheKey);
     const [status, setStatus] = useState<ProcessingStatus>(initial ? "complete" : "idle");
     const [transcript, setTranscript] = useState<TranscriptionResult | null>(initial?.transcript ?? null);
@@ -270,6 +271,9 @@ function VoiceMessageTranscriptionAccessory({ duration, cacheKey, needsPlaybackF
     const jobIdRef = useRef(0);
     const autoStartedRef = useRef(false);
 
+    const isCurrentJob = useCallback((jobId: number, generation: number) =>
+        jobIdRef.current === jobId && generation === cacheGeneration && UserStore.getCurrentUser()?.id === userId, [userId]);
+
     const stopWorker = useCallback(() => {
         if (workerRef.current) {
             activeWorkers.delete(workerRef.current);
@@ -280,6 +284,7 @@ function VoiceMessageTranscriptionAccessory({ duration, cacheKey, needsPlaybackF
 
     const translateTranscript = useCallback(async (value: TranscriptionResult, language: LanguageOption, jobId: number) => {
         const generation = cacheGeneration;
+        if (!isCurrentJob(jobId, generation)) return;
         setStatus("translating");
         setError(null);
         setTargetLanguage(language.value);
@@ -287,7 +292,7 @@ function VoiceMessageTranscriptionAccessory({ duration, cacheKey, needsPlaybackF
 
         try {
             const translated = await translateText(value.text, "auto", language.value);
-            if (jobIdRef.current !== jobId || generation !== cacheGeneration) return;
+            if (!isCurrentJob(jobId, generation)) return;
 
             setTranslation(translated);
             setStatus("complete");
@@ -298,14 +303,15 @@ function VoiceMessageTranscriptionAccessory({ duration, cacheKey, needsPlaybackF
                 targetLanguageLabel: language.label
             });
         } catch (caught) {
-            if (jobIdRef.current !== jobId || generation !== cacheGeneration) return;
+            if (!isCurrentJob(jobId, generation)) return;
             setError(`Translation failed: ${caught instanceof Error ? caught.message : String(caught)}`);
             setStatus("complete");
             cacheResult(cacheKey, { transcript: value });
         }
-    }, [cacheKey]);
+    }, [cacheKey, isCurrentJob]);
 
     const startTranscription = useCallback((language?: LanguageOption) => {
+        if (UserStore.getCurrentUser()?.id !== userId) return;
         const generation = cacheGeneration;
         const jobId = ++jobIdRef.current;
         stopWorker();
@@ -317,16 +323,16 @@ function VoiceMessageTranscriptionAccessory({ duration, cacheKey, needsPlaybackF
         void (async () => {
             try {
                 const prepared = await prepareAudio(src);
-                if (jobIdRef.current !== jobId || generation !== cacheGeneration) return;
+                if (!isCurrentJob(jobId, generation)) return;
                 setStatus("processing_audio");
                 const audio = new Float32Array(prepared.samples);
 
                 workerRef.current = new TranscriptionWorker(
                     nextStatus => {
-                        if (jobIdRef.current === jobId && generation === cacheGeneration) setStatus(nextStatus as ProcessingStatus);
+                        if (isCurrentJob(jobId, generation)) setStatus(nextStatus as ProcessingStatus);
                     },
                     output => {
-                        if (jobIdRef.current !== jobId || generation !== cacheGeneration) return;
+                        if (!isCurrentJob(jobId, generation)) return;
                         const value = normalizeTranscriptionResult(output);
                         stopWorker();
 
@@ -346,18 +352,18 @@ function VoiceMessageTranscriptionAccessory({ duration, cacheKey, needsPlaybackF
                         }
                     },
                     caught => {
-                        if (jobIdRef.current !== jobId || generation !== cacheGeneration) return;
+                        if (!isCurrentJob(jobId, generation)) return;
                         stopWorker();
                         setError(caught instanceof Error ? caught.message : String(caught));
                         setStatus("idle");
                     },
                     partial => {
-                        if (jobIdRef.current !== jobId || generation !== cacheGeneration) return;
+                        if (!isCurrentJob(jobId, generation)) return;
                         const value = normalizeTranscriptionResult(partial);
                         if (value.text) setTranscript(value);
                     },
                     nextProgress => {
-                        if (jobIdRef.current === jobId && generation === cacheGeneration) setProgress(nextProgress);
+                        if (isCurrentJob(jobId, generation)) setProgress(nextProgress);
                     }
                 );
 
@@ -370,13 +376,13 @@ function VoiceMessageTranscriptionAccessory({ duration, cacheKey, needsPlaybackF
                     audioLanguage === "auto" ? undefined : audioLanguage
                 );
             } catch (caught) {
-                if (jobIdRef.current !== jobId || generation !== cacheGeneration) return;
+                if (!isCurrentJob(jobId, generation)) return;
                 stopWorker();
                 setError(caught instanceof Error ? caught.message : String(caught));
                 setStatus("idle");
             }
         })();
-    }, [cacheKey, src, stopWorker, translateTranscript]);
+    }, [cacheKey, isCurrentJob, src, stopWorker, translateTranscript, userId]);
 
     const startTranslation = useCallback((language: LanguageOption) => {
         if (!transcript) {
@@ -535,6 +541,7 @@ function VoiceMessageAccessory({ message }: { message: Message; }) {
 
     return (
         <VoiceMessageTranscriptionAccessory
+            userId={userId}
             key={`${userId}:${message.id}`}
             cacheKey={`${userId}:${message.id}`}
             duration={media.duration}

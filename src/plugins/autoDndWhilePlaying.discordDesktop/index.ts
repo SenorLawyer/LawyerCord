@@ -51,6 +51,7 @@ export default definePlugin({
     tags: ["Activity", "Utility"],
     authors: [Devs.thororen],
     isModified: true,
+    dependencies: ["UserSettingsAPI"],
     settings,
     flux: {
         RUNNING_GAMES_CHANGE({ games }) {

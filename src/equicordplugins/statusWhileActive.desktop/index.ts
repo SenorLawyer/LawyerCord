@@ -73,6 +73,7 @@ export default definePlugin({
     description: "Automatically updates your online status when in a voice channel.",
     tags: ["Activity", "Customisation", "Voice"],
     authors: [EquicordDevs.smuki],
+    dependencies: ["UserSettingsAPI"],
     settings,
     flux: {
         VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceState[]; }) {

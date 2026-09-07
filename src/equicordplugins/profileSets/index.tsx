@@ -31,6 +31,7 @@ export default definePlugin({
     description: "Allows you to save and load different profile presets, via the Profile Section in Settings.",
     tags: ["Appearance", "Customisation", "Utility"],
     authors: [EquicordDevs.omaw, EquicordDevs.justjxke],
+    dependencies: ["UserSettingsAPI"],
     settings,
     patches: [
         {

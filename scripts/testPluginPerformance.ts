@@ -1307,7 +1307,7 @@ test("BetterSessions returns its settings-close save to the flux error handler",
 });
 
 test("StatusWhileActive never restores another account's status", () => {
-    for (const change of ["stop", "leave", "logout", "same"]) {
+    for (const change of ["stop", "leave", "logout", "same", "start", "disconnected", "manual-stop", "manual-leave"]) {
         let userId = "first";
         let status = "online";
         let channelId: string | undefined = "voice";
@@ -1323,10 +1323,29 @@ test("StatusWhileActive never restores another account's status", () => {
             },
         });
         const changeVoice = () => plugin.flux.VOICE_STATE_UPDATES({ voiceStates: [{ userId }] });
-        changeVoice();
+        if (change === "disconnected") {
+            channelId = undefined;
+            plugin.start();
+            plugin.stop();
+            assert.deepEqual(updates, []);
+            continue;
+        }
+        if (change === "start") plugin.start();
+        else changeVoice();
         assert.deepEqual(updates, ["dnd"]);
+        if (change.startsWith("manual")) {
+            status = "invisible";
+            if (change === "manual-leave") {
+                channelId = undefined;
+                changeVoice();
+            }
+            plugin.stop();
+            assert.deepEqual(updates, ["dnd"]);
+            assert.equal(status, "invisible");
+            continue;
+        }
         if (change === "logout") plugin.flux.LOGOUT();
-        if (change !== "same") {
+        if (change !== "same" && change !== "start") {
             userId = "second";
             status = "idle";
         }
@@ -1335,7 +1354,7 @@ test("StatusWhileActive never restores another account's status", () => {
             changeVoice();
         }
         plugin.stop();
-        assert.deepEqual(updates, change === "same" ? ["dnd", "online"] : ["dnd"]);
+        assert.deepEqual(updates, change === "same" || change === "start" ? ["dnd", "online"] : ["dnd"]);
     }
 });
 

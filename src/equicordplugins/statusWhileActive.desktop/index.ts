@@ -11,7 +11,7 @@ import definePlugin, { OptionType } from "@utils/types";
 import { VoiceState } from "@vencord/discord-types";
 import { UserStore, VoiceStateStore } from "@webpack/common";
 
-let savedStatus: { userId: string; value: string; } | null = null;
+let savedStatus: { userId: string; value: string; applied: string; } | null = null;
 
 const StatusSettings = getUserSettingLazy<string>("status", "status")!;
 
@@ -46,14 +46,14 @@ function setStatus(userId: string, inVoiceChannel: boolean, status: string) {
 
     if (inVoiceChannel) {
         if (status !== settings.store.statusToSet) {
-            savedStatus = { userId, value: status };
+            savedStatus = { userId, value: status, applied: settings.store.statusToSet };
             StatusSettings?.updateSetting(settings.store.statusToSet);
         }
         return;
     }
 
     if (savedStatus) {
-        if (savedStatus.value !== settings.store.statusToSet) {
+        if (status === savedStatus.applied) {
             StatusSettings?.updateSetting(savedStatus.value);
         }
         savedStatus = null;
@@ -77,6 +77,9 @@ export default definePlugin({
     authors: [EquicordDevs.smuki],
     dependencies: ["UserSettingsAPI"],
     settings,
+    start() {
+        updateStatusForCurrentVoiceState();
+    },
     flux: {
         LOGOUT() {
             savedStatus = null;
@@ -98,7 +101,7 @@ export default definePlugin({
     stop() {
         if (!savedStatus) return;
 
-        if (savedStatus.userId === UserStore.getCurrentUser()?.id)
+        if (savedStatus.userId === UserStore.getCurrentUser()?.id && StatusSettings.getSetting() === savedStatus.applied)
             StatusSettings?.updateSetting(savedStatus.value);
         savedStatus = null;
     }

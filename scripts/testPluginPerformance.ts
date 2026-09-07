@@ -4939,6 +4939,42 @@ test("sound imports validate all overrides before replacing settings", () => {
     assert.deepEqual(JSON.parse(store.message1), makeEmptyOverride());
 });
 
+test("folder icon rendering handles unset entries and uses the shared error boundary", () => {
+    const settings: { store: { folderIcons?: Record<string, { url: string; size?: number; } | null>; solidIcon: boolean; } } = {
+        store: { solidIcon: false }
+    };
+    let boundaryOptions: unknown;
+    const { default: plugin } = loadComponent("src/equicordplugins/customFolderIcons/index.tsx", {}, {
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown, options: unknown) => {
+            boundaryOptions = options;
+            return component;
+        } } },
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value },
+        "./components": {}, "./settings": { settings },
+        "./util": { int2rgba: (_color: number, alpha: number) => String(alpha) }
+    });
+    assert.equal((boundaryOptions as { noop: boolean }).noop, true);
+    const props = { folderNode: { id: "folder", color: 0 } };
+    const unsetEntries: Array<typeof settings.store.folderIcons> = [undefined, {}, { folder: null }];
+    for (const folderIcons of unsetEntries) {
+        settings.store.folderIcons = folderIcons;
+        assert.equal(plugin.shouldReplace(props), false);
+        assert.equal(plugin.replace(props), null);
+    }
+    settings.store.folderIcons = { folder: { url: "https://fixture.invalid/icon.png", size: 175 } };
+    assert.equal(plugin.shouldReplace(props), true);
+    let tree = plugin.replace(props);
+    assert.equal(tree.props.children[0].props.src, "https://fixture.invalid/icon.png");
+    assert.equal(tree.props.children[0].props.width, "175%");
+    assert.equal(tree.props.style.backgroundColor, "0.4");
+    settings.store.solidIcon = true;
+    settings.store.folderIcons = { folder: { url: "https://fixture.invalid/icon.png" } };
+    tree = plugin.replace(props);
+    assert.equal(tree.props.children[0].props.width, "100%");
+    assert.equal(tree.props.style.backgroundColor, "1");
+});
+
 test("folder icon editing preserves saved size and resetting an unused folder is safe", () => {
     const settings: { store: { folderIcons?: Record<string, { url: string; size: number; }> } } = {
         store: { folderIcons: { folder: { url: "https://fixture.invalid/icon.png", size: 175 } } }

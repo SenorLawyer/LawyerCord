@@ -4,12 +4,17 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import ErrorBoundary from "@components/ErrorBoundary";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
 
 import { makeContextItem } from "./components";
 import { folderIconsData, settings } from "./settings";
 import { folderProp, int2rgba } from "./util";
+
+interface FolderIconProps {
+    folderNode: { id: string; color: number; };
+}
 
 export default definePlugin({
     name: "CustomFolderIcons",
@@ -32,28 +37,25 @@ export default definePlugin({
             menuItems.push(makeContextItem(props));
         }
     },
-    shouldReplace(props: any): boolean {
+    shouldReplace(props: FolderIconProps): boolean {
         return !!((settings.store.folderIcons as folderIconsData)?.[props.folderNode.id]?.url);
     },
-    replace(props: any) {
-        const folderSettings = (settings.store.folderIcons as folderIconsData);
-        if (folderSettings && folderSettings[props.folderNode.id]) {
-            const data = folderSettings[props.folderNode.id];
-            return (
-                <div
-                    style={{
-                        backgroundColor: int2rgba(props.folderNode.color, +settings.store.solidIcon || .4),
-                        display: "flex",
-                        justifyContent: "center",
-                        alignItems: "center",
-                        width: "100%",
-                        height: "100%"
-                    }}
-                >
-                    <img alt="" src={data!.url} width={`${data!.size ?? 100}%`} height={`${data!.size ?? 100}%`}
-                    />
-                </div>
-            );
-        }
-    }
+    replace: ErrorBoundary.wrap((props: FolderIconProps) => {
+        const data = (settings.store.folderIcons as folderIconsData | undefined)?.[props.folderNode.id];
+        if (!data) return null;
+        return (
+            <div
+                style={{
+                    backgroundColor: int2rgba(props.folderNode.color, settings.store.solidIcon ? 1 : .4),
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    width: "100%",
+                    height: "100%"
+                }}
+            >
+                <img alt="" src={data.url} width={`${data.size ?? 100}%`} height={`${data.size ?? 100}%`} />
+            </div>
+        );
+    }, { noop: true })
 });

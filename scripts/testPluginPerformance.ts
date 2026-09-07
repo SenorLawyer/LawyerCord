@@ -10807,3 +10807,41 @@ test("pinned DM modal loading preserves the originating account", async () => {
     assert.equal(openCategoryModal(null, "channel"), undefined);
     assert.equal(loads, 2);
 });
+
+
+test("pinned DM forms validate submissions and normalize cleared colors", () => {
+    for (const name of ["", "   ", "Valid"]) {
+        for (const pickerKind of ["swatch", "custom"]) {
+            let color = 123;
+            let stateIndex = 0;
+            let saved: { name: string; color: number; } | undefined;
+            let closed = 0;
+            const { NewCategoryModal } = loadComponent("src/plugins/pinDms/components/CreateCategoryModal.tsx", {
+                UserStore: { getCurrentUser: () => ({ id: "owner" }) },
+                useMemo: (callback: () => unknown) => callback(),
+                useState: () => stateIndex++ === 0 ? [name, () => {}] : [color, (value: number) => { color = value; }],
+                Toasts: { genId: () => "new" }, Modal: "modal", ColorPicker: "custom-picker"
+            }, {
+                "@shared/SettingsStore": { SYM_GET_RAW_TARGET }, "@components/Heading": {},
+                "@plugins/pinDms/constants": { DEFAULT_COLOR: 42, SWATCHES: [] },
+                "@plugins/pinDms/data": { categoryLen: () => 0, createCategory: (value: { name: string; color: number; }) => { saved = value; } },
+                "@webpack": { extractAndLoadChunksLazy: () => () => {}, findComponentByCodeLazy: () => "picker" }
+            });
+            const render = () => {
+                stateIndex = 0;
+                return NewCategoryModal({ categoryId: null, initialChannelId: "channel", userId: "owner", modalProps: { onClose: () => closed++ } });
+            };
+            let modal = render();
+            const picker = modal.props.children[0].props.children[1].props.children[1];
+            (pickerKind === "swatch" ? picker : picker.props.renderCustomButton()).props.onChange(null);
+            modal = render();
+            assert.equal(modal.props.children[0].props.children[1].props.children[1].props.value, 42);
+            assert.equal(modal.props.actions[0].disabled, !name.trim());
+            let prevented = false;
+            modal.props.children[0].props.onSubmit({ preventDefault: () => { prevented = true; } });
+            assert.equal(prevented, true);
+            assert.equal(closed, name.trim() ? 1 : 0);
+            assert.deepEqual(saved ? { name: saved.name, color: saved.color } : undefined, name.trim() ? { name, color: 42 } : undefined);
+        }
+    }
+});

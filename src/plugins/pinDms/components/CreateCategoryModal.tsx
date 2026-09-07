@@ -63,6 +63,8 @@ export function NewCategoryModal({ categoryId, modalProps, initialChannelId, use
     const [color, setColor] = useState(category.color);
 
     const onSave = () => {
+        if (!name.trim()) return;
+
         const currentCategory = categoryId ? getCategory(categoryId) : undefined;
         if (UserStore.getCurrentUser()?.id !== userId || categoryId && (!currentCategory
             || Reflect.get(currentCategory, SYM_GET_RAW_TARGET) !== Reflect.get(category, SYM_GET_RAW_TARGET))) {
@@ -88,7 +90,7 @@ export function NewCategoryModal({ categoryId, modalProps, initialChannelId, use
                 text: categoryId ? "Save" : "Create",
                 variant: "primary",
                 onClick: onSave,
-                disabled: !name
+                disabled: !name.trim()
             }]}
         >
             <form
@@ -112,13 +114,13 @@ export function NewCategoryModal({ categoryId, modalProps, initialChannelId, use
                         key={category.id}
                         defaultColor={DEFAULT_COLOR}
                         colors={SWATCHES}
-                        onChange={c => setColor(c!)}
+                        onChange={c => setColor(c ?? DEFAULT_COLOR)}
                         value={color}
                         renderDefaultButton={() => null}
                         renderCustomButton={() => (
                             <ColorPicker
                                 color={color}
-                                onChange={c => setColor(c!)}
+                                onChange={c => setColor(c ?? DEFAULT_COLOR)}
                                 key={category.id}
                                 showEyeDropper={false}
                             />

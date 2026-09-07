@@ -55,7 +55,7 @@ function prepareAudio(src: string): Promise<PreparedAudio> {
 
     const pending = Native.fetchAudio(src)
         .then(async bytes => {
-            const blob = new Blob([bytes as any], { type: detectAudioMimeType(bytes) ?? "application/octet-stream" });
+            const blob = new Blob([bytes], { type: detectAudioMimeType(bytes) ?? "application/octet-stream" });
             const samples = await decodeAudio(blob);
             return {
                 blob,

@@ -9,7 +9,7 @@ import { IpcMainInvokeEvent } from "electron";
 import { isRecognizedAudioContainer } from "./audioValidation";
 
 // we love CORS
-export async function fetchAudio(_: IpcMainInvokeEvent, url: unknown): Promise<Uint8Array> {
+export async function fetchAudio(_: IpcMainInvokeEvent, url: unknown): Promise<Uint8Array<ArrayBuffer>> {
     const parsed = typeof url === "string" && url.length <= 8192 ? URL.parse(url) : null;
     if (!parsed || parsed.protocol !== "https:" || parsed.port || parsed.username || parsed.password
         || (parsed.hostname !== "cdn.discordapp.com" && parsed.hostname !== "media.discordapp.net"))

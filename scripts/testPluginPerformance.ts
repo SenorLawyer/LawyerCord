@@ -12250,3 +12250,13 @@ test("TranslatePlus rejects account changes before accessory cleanup", async () 
     await accessory.handleTranslate(message);
     assert.equal(requests, 2);
 });
+
+test("UnitConverter handles metric speeds before distance units", () => {
+    const { convert } = loadSource("src/equicordplugins/unitConverter/converter.ts", {
+        ".": { settings: { store: { myUnits: "imperial" } } }
+    });
+    for (const unit of ["km/h", "kmph", "kph", "kilometer/h", "kilometers/h", "kilometerh"])
+        assert.equal(convert(`100 ${unit}`), "62.15mph", unit);
+    assert.equal(convert("100 km and 100 km/h"), "62.15mi and 62.15mph");
+    assert.equal(convert("100 kilometers"), "62.15mi");
+});

@@ -120,6 +120,13 @@ const regexes: regexes = {
                 return `${feet}ft ${inches.toFixed(2)}in`;
             },
         },
+        kilometersPerHour: {
+            regex: /(\d+(?:\.\d+)?) ?(km\/h|kmph|kph|kilometers?\/?h)/gi,
+            convert(...groups) {
+                const kph = (parseFloat(groups[1]) / 1.609).toFixed(2);
+                return `${kph}mph`;
+            },
+        },
         // convert to miles
         kilometers: {
             regex: /(\d+(?:\.\d+)?) ?(km|kilometers?|kms?)(?!\w)/gi,
@@ -142,13 +149,6 @@ const regexes: regexes = {
                 return `${kg}lb`;
             },
         },
-        kilometersPerHour: {
-            regex: /(\d+(?:\.\d+)?) ?(km\/h|kmph|kph|kilometers?\/?h)/gi,
-            convert(...groups) {
-                const kph = (parseFloat(groups[1]) / 1.609).toFixed(2);
-                return `${kph}mph`;
-            },
-        }
     }
 
 };

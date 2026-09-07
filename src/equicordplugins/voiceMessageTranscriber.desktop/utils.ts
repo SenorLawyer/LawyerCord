@@ -265,27 +265,16 @@ async function runTranscription({ audio, model, quantized, language }) {
 export class TranscriptionWorker {
     private worker: Worker;
     private workerUrl: string;
-    private onStatus: (status: string) => void;
-    private onComplete: (output: any) => void;
-    private onError: (error: any) => void;
-    private onPartial: (output: any) => void;
-    private onProgress: (progress: TranscriptionProgress) => void;
     private terminated = false;
     private downloads = new AbortController();
 
     constructor(
-        onStatus: (status: string) => void,
-        onComplete: (output: any) => void,
-        onError: (error: any) => void,
-        onPartial: (output: any) => void,
-        onProgress: (progress: TranscriptionProgress) => void = () => { }
+        private onStatus: (status: string) => void,
+        private onComplete: (output: unknown) => void,
+        private onError: (error: unknown) => void,
+        private onPartial: (output: unknown) => void,
+        private onProgress: (progress: TranscriptionProgress) => void = () => { }
     ) {
-        this.onStatus = onStatus;
-        this.onComplete = onComplete;
-        this.onError = onError;
-        this.onPartial = onPartial;
-        this.onProgress = onProgress;
-
         const blob = new Blob([workerCode], { type: "text/javascript" });
         this.workerUrl = URL.createObjectURL(blob);
         try {

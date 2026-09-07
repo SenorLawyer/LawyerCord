@@ -9680,3 +9680,26 @@ test("sticker link menus share format support regardless of picker CSS", () => {
     plugin.contextMenus["expression-picker"](empty, { target: { dataset: { id: "missing" } } });
     assert.equal(empty.length, 0);
 });
+
+test("expression cloning filters picker stickers by format", () => {
+    let format: number | undefined;
+    const { default: plugin } = loadComponent("src/plugins/expressionCloner/index.tsx", {
+        Menu: { MenuItem: "item" },
+        StickersStore: { getStickerById: () => format === undefined ? undefined : { format_type: format } }
+    }, {
+        "@api/ContextMenu": {}, "@api/Settings": { migratePluginSettings() {} },
+        "@components/CheckedTextInput": {}, "@components/Flex": {},
+        "@components/Heading": {}, "@components/Paragraph": {},
+        "@utils/constants": { Devs: {} }, "@utils/discord": {}, "@utils/Logger": {},
+        "@utils/types": { __esModule: true, default: (value: object) => value },
+        "@vencord/discord-types/enums": { StickerFormatType: { PNG: 1, APNG: 2, LOTTIE: 3, GIF: 4 } },
+        "@webpack": { findByCodeLazy: () => () => {} }
+    });
+    for (format of [undefined, 1, 2, 3, 4]) {
+        for (const className of ["renamed", "lottieCanvas_legacy"]) {
+            const children: unknown[] = [];
+            plugin.contextMenus["expression-picker"](children, { target: { dataset: { id: "sticker", type: "sticker" }, className } });
+            assert.equal(children.length, format === undefined || format === 3 ? 0 : 1);
+        }
+    }
+});

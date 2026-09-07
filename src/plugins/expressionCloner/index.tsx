@@ -404,7 +404,9 @@ const expressionPickerPatch: NavContextMenuPatchCallback = (children, props: { t
             name,
             isAnimated: firstChild && isGifUrl(firstChild.src)
         })));
-    } else if (type === "sticker" && !props.target.className?.includes("lottieCanvas")) {
+    } else if (type === "sticker") {
+        const sticker = StickersStore.getStickerById(id);
+        if (!sticker || sticker.format_type === StickerFormatType.LOTTIE) return;
         children.push(buildMenuItem("Sticker", () => fetchSticker(id)));
     }
 };

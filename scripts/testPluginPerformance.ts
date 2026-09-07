@@ -9720,7 +9720,7 @@ test("emoji cloning settles failed file reads without uploading", async () => {
             "@webpack": { findByCodeLazy: () => (value: unknown) => uploads.push(value) },
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "me" }) } }
         }, {
-            location: { protocol: "https:" }, window: { GLOBAL_ENV: { CDN_HOST: "fixture.invalid" } },
+            AbortController, location: { protocol: "https:" }, window: { GLOBAL_ENV: { CDN_HOST: "fixture.invalid" } },
             fetch: async () => ({ ok: true, blob: async () => ({ size: 1 }) }),
             FileReader: class {
                 result = "data:image/png;base64,fixture";
@@ -9766,7 +9766,7 @@ test("expression cloning preserves valid server errors and falls back for malfor
             "@webpack": { findByCodeLazy: () => () => assert.fail("Unexpected upload") },
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "me" }) }, Toasts: { Type: { FAILURE: "failure" }, genId: () => "id", show: ({ message }: { message: string; }) => messages.push(message) } }
         }, {
-            location: { protocol: "https:" }, window: { GLOBAL_ENV: { CDN_HOST: "fixture.invalid" } },
+            AbortController, location: { protocol: "https:" }, window: { GLOBAL_ENV: { CDN_HOST: "fixture.invalid" } },
             fetch: async () => { requests++; throw failure; }
         }, "(exports.default.start(), { doClone, plugin: exports.default })");
         await doClone("guild", { t: "Emoji", id: "emoji", name: "private-name", isAnimated: false });
@@ -9818,7 +9818,7 @@ test("cloning keeps the name selected when the request starts", async () => {
             },
             Toasts: { Type: { SUCCESS: "success" }, genId: () => "id", show() {} } }
     }, {
-        React, location: { protocol: "https:" }, window: { GLOBAL_ENV: { CDN_HOST: "fixture.invalid" } },
+        React, AbortController, location: { protocol: "https:" }, window: { GLOBAL_ENV: { CDN_HOST: "fixture.invalid" } },
         fetch: () => download,
         FileReader: class {
             result = "data:image/png;base64,fixture";
@@ -9892,11 +9892,14 @@ test("cloning stops before uploads and sticker publication after account changes
                     FluxDispatcher: { dispatch: () => publications++ }
                 }
             }, {
-                location: { protocol: "https:" }, window: { GLOBAL_ENV: { CDN_HOST: "fixture.invalid", MEDIA_PROXY_ENDPOINT: "https://fixture.invalid" } },
-                fetch: async () => {
+                AbortController, location: { protocol: "https:" }, window: { GLOBAL_ENV: { CDN_HOST: "fixture.invalid", MEDIA_PROXY_ENDPOINT: "https://fixture.invalid" } },
+                fetch: async (_url: string, { signal }: { signal: AbortSignal; }) => {
+                    assert.ok(signal instanceof AbortSignal);
+                    assert.equal(signal.aborted, false);
                     if (phase === "stop" || phase === "restart") plugin.stop();
                     if (phase === "restart") plugin.start();
                     if (phase === "relogin") plugin.flux.LOGOUT();
+                    assert.equal(signal.aborted, ["stop", "restart", "relogin"].includes(phase));
                     if (phase === "download") userId = "other";
                     if (phase === "logout") userId = undefined;
                     return { ok: true, blob: async () => ({ size: 1 }) };

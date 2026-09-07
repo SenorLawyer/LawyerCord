@@ -35,8 +35,7 @@ import { Constants, EmojiStore, FluxDispatcher, GuildStore, IconUtils, lodash, M
 import { Promisable } from "type-fest";
 
 const logger = new Logger("ExpressionCloner");
-let active = false;
-let cloneEpoch = 0;
+let cloneController: AbortController | undefined;
 
 const uploadEmoji = findByCodeLazy(".GUILD_EMOJIS(", "EMOJI_UPLOAD_START");
 
@@ -102,25 +101,25 @@ async function fetchSticker(id: string) {
     return body as Sticker;
 }
 
-function ensureCloneAccount(userId: string, epoch: number) {
-    if (!active || epoch !== cloneEpoch || UserStore.getCurrentUser()?.id !== userId)
+function ensureCloneAccount(userId: string, signal: AbortSignal | undefined) {
+    if (!signal || signal.aborted || UserStore.getCurrentUser()?.id !== userId)
         throw new Error("The cloning session ended.");
 }
 
-async function cloneSticker(guildId: string, sticker: Sticker, userId: string, epoch = cloneEpoch) {
+async function cloneSticker(guildId: string, sticker: Sticker, userId: string, signal = cloneController?.signal) {
     const data = new FormData();
     data.append("name", sticker.name);
     data.append("tags", sticker.tags);
     data.append("description", sticker.description);
-    data.append("file", await fetchBlob(sticker));
+    data.append("file", await fetchBlob(sticker, signal));
 
-    ensureCloneAccount(userId, epoch);
+    ensureCloneAccount(userId, signal);
     const { body } = await RestAPI.post({
         url: Constants.Endpoints.GUILD_STICKER_PACKS(guildId),
         body: data,
     });
 
-    ensureCloneAccount(userId, epoch);
+    ensureCloneAccount(userId, signal);
     FluxDispatcher.dispatch({
         type: "GUILD_STICKERS_CREATE_SUCCESS",
         guildId,
@@ -131,8 +130,8 @@ async function cloneSticker(guildId: string, sticker: Sticker, userId: string, e
     });
 }
 
-async function cloneEmoji(guildId: string, emoji: Emoji, userId: string, epoch = cloneEpoch) {
-    const data = await fetchBlob(emoji);
+async function cloneEmoji(guildId: string, emoji: Emoji, userId: string, signal = cloneController?.signal) {
+    const data = await fetchBlob(emoji, signal);
 
     const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -141,7 +140,7 @@ async function cloneEmoji(guildId: string, emoji: Emoji, userId: string, epoch =
         reader.readAsDataURL(data);
     });
 
-    ensureCloneAccount(userId, epoch);
+    ensureCloneAccount(userId, signal);
     return uploadEmoji({
         guildId,
         name: emoji.name.split("~")[0],
@@ -181,14 +180,14 @@ function getGuildCandidates(data: Data) {
     }).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-async function fetchBlob(data: Data) {
+async function fetchBlob(data: Data, signal: AbortSignal | undefined) {
     const MAX_SIZE = data.t === "Sticker"
         ? MAX_STICKER_SIZE_BYTES
         : MAX_EMOJI_SIZE_BYTES;
 
     for (let size = 4096; size >= 16; size /= 2) {
         const url = getUrl(data, size);
-        const res = await fetch(url);
+        const res = await fetch(url, { signal });
         if (!res.ok)
             throw new Error(`Failed to fetch ${url} - ${res.status}`);
 
@@ -203,15 +202,15 @@ async function fetchBlob(data: Data) {
 async function doClone(guildId: string, data: Sticker | Emoji) {
     try {
         const userId = UserStore.getCurrentUser()?.id;
-        const epoch = cloneEpoch;
+        const signal = cloneController?.signal;
         if (!userId) throw new Error("Sign in before cloning an expression.");
-        ensureCloneAccount(userId, epoch);
+        ensureCloneAccount(userId, signal);
         if (data.t === "Sticker")
-            await cloneSticker(guildId, data, userId, epoch);
+            await cloneSticker(guildId, data, userId, signal);
         else
-            await cloneEmoji(guildId, data, userId, epoch);
+            await cloneEmoji(guildId, data, userId, signal);
 
-        ensureCloneAccount(userId, epoch);
+        ensureCloneAccount(userId, signal);
         Toasts.show({
             message: `Successfully cloned ${data.name} to ${GuildStore.getGuild(guildId)?.name ?? "your server"}!`,
             type: Toasts.Type.SUCCESS,
@@ -434,16 +433,17 @@ export default definePlugin({
     searchTerms: ["StickerCloner", "EmoteCloner", "EmojiCloner"],
     authors: [Devs.Ven, Devs.Nuckyz],
     start() {
-        active = true;
-        cloneEpoch++;
+        cloneController?.abort();
+        cloneController = new AbortController();
     },
     stop() {
-        active = false;
-        cloneEpoch++;
+        cloneController?.abort();
+        cloneController = undefined;
     },
     flux: {
         LOGOUT() {
-            cloneEpoch++;
+            cloneController?.abort();
+            if (cloneController) cloneController = new AbortController();
         }
     },
     contextMenus: {

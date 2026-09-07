@@ -21,6 +21,7 @@ import { runInNewContext } from "node:vm";
 import * as typescript from "typescript";
 import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
+import { SettingsStore } from "../src/shared/SettingsStore";
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
 test("Streaks badges only display the current account's conversation", () => {
@@ -1307,7 +1308,10 @@ test("BetterSessions returns its settings-close save to the flux error handler",
 });
 
 test("status presets save object-property names as ordinary entries", () => {
-    const store = { StatusPresets: {} as Record<string, object> };
+    const settingsStore = new SettingsStore({ StatusPresets: {} as Record<string, object> });
+    const store = settingsStore.store;
+    const changes: string[] = [];
+    settingsStore.addGlobalChangeListener((_data, path) => changes.push(path));
     const { default: plugin } = loadSource("src/equicordplugins/statusPresets/index.tsx", {
         "./style.css": {},
         "@api/Settings": { definePluginSettings: () => ({ store }) },
@@ -1322,9 +1326,13 @@ test("status presets save object-property names as ordinary entries", () => {
         const status = { text, emojiInfo: null, clearAfter: null };
         plugin.renderRememberButton(status).onClick();
         assert.equal(Object.hasOwn(store.StatusPresets, text), true);
-        assert.equal(store.StatusPresets[text], status);
+        assert.equal(settingsStore.plain.StatusPresets[text], status);
     }
     assert.equal(Object.keys(store.StatusPresets).length, 3);
+    const reloaded = new SettingsStore(JSON.parse(JSON.stringify(settingsStore.plain)));
+    assert.deepEqual(Object.keys(reloaded.store.StatusPresets), ["existing", "__proto__", "constructor"]);
+    assert.equal(reloaded.store.StatusPresets.__proto__.text, "__proto__");
+    assert.deepEqual(changes, ["StatusPresets", "StatusPresets", "StatusPresets"]);
 });
 
 test("invalid codec responses never partially change the engine", async () => {

@@ -1609,15 +1609,22 @@ test("webpack tar archives contain only the supplied byte view", () => {
 });
 
 test("message pronouns use the message channel instead of the browsed channel", () => {
+    let format = "original";
+    const subscriptions: string[][] = [];
     const profileStore = { getUserProfile: () => ({ pronouns: "Global" }), getGuildMemberProfile: (_id: string, guild: string) => ({ pronouns: guild === "message-guild" ? "Message" : "Wrong" }) };
     const channelStore = { getChannel: (id: string) => id === "message-channel" ? { getGuildId: () => "message-guild" } : undefined };
     const api = loadSource("src/plugins/userMessagesPronouns/utils.ts", {
         "@utils/discord": { getCurrentChannel: () => ({ getGuildId: () => "browsed-guild" }) },
         "@webpack/common": { UserProfileStore: profileStore, ChannelStore: channelStore, useStateFromStores: (_stores: unknown[], read: () => unknown) => read() },
-        "./settings": { PronounsFormat: { Lowercase: "lowercase" }, settings: { store: {} } }
+        "./settings": { PronounsFormat: { Lowercase: "lowercase" }, settings: { store: {}, use: (keys: string[]) => { subscriptions.push(keys); return { pronounsFormat: format }; } } }
     });
     assert.equal(api.useFormattedPronouns("user", "message-channel"), "Message");
     assert.equal(api.useFormattedPronouns("user", "dm"), "Global");
+    format = "lowercase";
+    assert.equal(api.useFormattedPronouns("user", "message-channel"), "message");
+    assert.equal(subscriptions.length, 3);
+    assert.equal(subscriptions[0], subscriptions[1]);
+    assert.equal(subscriptions[0][0], "pronounsFormat");
 });
 
 test("voice rejoin requires the saved owner and current account to match", async () => {

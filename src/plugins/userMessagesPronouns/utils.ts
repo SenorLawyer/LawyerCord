@@ -20,11 +20,14 @@ import { ChannelStore, UserProfileStore, useStateFromStores } from "@webpack/com
 
 import { PronounsFormat, settings } from "./settings";
 
+const FORMAT_SETTINGS: "pronounsFormat"[] = ["pronounsFormat"];
+
 export function useFormattedPronouns(id: string, channelId: string) {
+    const { pronounsFormat } = settings.use(FORMAT_SETTINGS);
     const pronouns = useStateFromStores([UserProfileStore, ChannelStore], () => {
         const guildId = ChannelStore.getChannel(channelId)?.getGuildId();
         const guildPronouns = guildId ? UserProfileStore.getGuildMemberProfile(id, guildId)?.pronouns : undefined;
         return guildPronouns || UserProfileStore.getUserProfile(id)?.pronouns;
     }, [id, channelId])?.trim().replace(/\n+/g, "");
-    return settings.store.pronounsFormat === PronounsFormat.Lowercase ? pronouns?.toLowerCase() : pronouns;
+    return pronounsFormat === PronounsFormat.Lowercase ? pronouns?.toLowerCase() : pronouns;
 }

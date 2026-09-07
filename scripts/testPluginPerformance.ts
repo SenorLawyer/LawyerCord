@@ -11803,3 +11803,32 @@ test("automatic translation rejects results after account or plugin lifecycle ch
         assert.equal(message.content, phase === "current" ? "Translated" : phase === "edited" ? "Edited" : "Original", phase);
     }
 });
+
+
+test("received translation actions discard results from previous sessions", async () => {
+    for (const surface of ["menu", "popover"]) for (const phase of ["current", "account", "logout", "stop", "absent"]) {
+        let userId: string | undefined = phase === "absent" ? undefined : "first";
+        let resolve: (value: { text: string; }) => void = () => assert.fail("Missing resolver");
+        const pending = new Promise<{ text: string; }>(done => { resolve = done; });
+        let requests = 0;
+        const delivered: unknown[] = [];
+        const group = [{ props: { id: "copy-text", action: () => Promise.resolve() } }];
+        const { default: plugin } = loadSource("src/plugins/translate/index.tsx", {
+            "@api/ContextMenu": { findGroupChildrenByChildId: () => group }, "@utils/constants": { Devs: {} },
+            "@utils/types": { __esModule: true, default: (value: object) => value },
+            "@webpack/common": { Menu: {}, ChannelStore: { getChannel: () => ({}) }, UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined } },
+            "./settings": {}, "./TranslateIcon": {}, "./TranslationAccessory": { handleTranslate: (...args: unknown[]) => delivered.push(args) },
+            "./utils": { translate: () => { requests++; return pending; } }
+        }, { React: { createElement: (_type: unknown, props: object) => ({ props }) }, clearTimeout() {} });
+        const message = { id: "message", channel_id: "channel", content: "Original" };
+        plugin.contextMenus.message([], { message });
+        const result = surface === "menu" ? group[1].props.action() : plugin.messagePopoverButton.render(message).onClick();
+        if (phase === "account") userId = "second";
+        if (phase === "logout") plugin.flux.LOGOUT();
+        if (phase === "stop") plugin.stop();
+        resolve({ text: "Translated" });
+        await result;
+        assert.equal(delivered.length, phase === "current" ? 1 : 0, surface + phase);
+        assert.equal(requests, phase === "absent" ? 0 : 1);
+    }
+});

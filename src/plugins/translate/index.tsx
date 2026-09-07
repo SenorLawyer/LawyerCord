@@ -41,10 +41,7 @@ const messageCtxPatch: NavContextMenuPatchCallback = (children, { message }: { m
             id="vc-trans"
             label="Translate"
             icon={TranslateIcon}
-            action={async () => {
-                const trans = await translate("received", content);
-                handleTranslate(message.id, trans);
-            }}
+            action={() => translateReceivedMessage(message.id, content)}
         />
     ));
 };
@@ -60,6 +57,15 @@ function getMessageContent(message: Message) {
 
 let translationGeneration = 0;
 let tooltipTimeout: ReturnType<typeof setTimeout> | undefined;
+
+async function translateReceivedMessage(messageId: string, content: string) {
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return;
+    const generation = translationGeneration;
+    const trans = await translate("received", content);
+    if (generation === translationGeneration && UserStore.getCurrentUser()?.id === userId)
+        handleTranslate(messageId, trans);
+}
 
 function clearTranslateTooltipTimeout() {
     if (tooltipTimeout === undefined) return;
@@ -99,10 +105,7 @@ export default definePlugin({
                 icon: TranslateIcon,
                 message,
                 channel: ChannelStore.getChannel(message.channel_id),
-                onClick: async () => {
-                    const trans = await translate("received", content);
-                    handleTranslate(message.id, trans);
-                }
+                onClick: () => translateReceivedMessage(message.id, content)
             };
         }
     },

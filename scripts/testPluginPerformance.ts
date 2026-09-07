@@ -11986,3 +11986,21 @@ test("TranslatePlus validates Google source and sentence fields", async () => {
     assert.equal(result.src, "en");
     assert.equal(result.text, "Bonjour\nMonde");
 });
+
+
+test("TranslatePlus rejects malformed dictionaries and retries failed loads", async () => {
+    let payload: unknown;
+    let requests = 0;
+    const { translate } = loadSource("src/equicordplugins/translatePlus/utils/translator.ts", {
+        "@equicordplugins/translatePlus/settings": { settings: { store: { target: "en", shavian: true, toki: false, sitelen: false } } },
+        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
+        "@utils/text": { escapeRegExp: (text: string) => text }
+    }, { fetch: async () => { requests++; return { ok: true, json: async () => payload }; } });
+    for (payload of [null, [], {}, "invalid", { "": "empty key" }, { "𐑐": 7 }])
+        await assert.rejects(translate("𐑐"), /invalid dictionary/);
+    payload = { "𐑐": "word" };
+    assert.equal((await translate("𐑐")).text, "word");
+    assert.equal(requests, 7);
+    assert.equal((await translate("𐑐")).text, "word");
+    assert.equal(requests, 7);
+});

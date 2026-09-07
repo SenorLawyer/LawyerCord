@@ -21,9 +21,15 @@ let shavianDictionaryPromise: Promise<Dictionary> | undefined;
 let sitelenDictionaryPromise: Promise<{ dictionary: Dictionary; pattern: RegExp; }> | undefined;
 
 function fetchDictionary(url: string): Promise<Dictionary> {
-    return fetch(url).then(response => {
+    return fetch(url).then(async response => {
         if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
-        return response.json();
+        const dictionary: unknown = await response.json();
+        if (!isObject(dictionary) || Array.isArray(dictionary))
+            throw new Error("TranslatePlus received an invalid dictionary.");
+        const entries = Object.entries(dictionary);
+        if (!entries.length || entries.some(([key, value]: [string, unknown]) => !key || typeof value !== "string"))
+            throw new Error("TranslatePlus received an invalid dictionary.");
+        return dictionary as Dictionary;
     });
 }
 

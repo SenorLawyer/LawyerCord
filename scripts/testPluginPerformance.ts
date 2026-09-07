@@ -10920,3 +10920,31 @@ test("pinned DM navigation retains the visible selected channel in collapsed cat
         assert.deepEqual([...data.getAllUncollapsedChannels()], open);
     }
 });
+
+
+test("pinned DM categories render and edit legacy null colors", () => {
+    for (const color of [null, undefined, 0, 0xabcdef]) {
+        const category = { id: "category", name: "Category", channels: [], color };
+        const { default: plugin } = loadComponent("src/plugins/pinDms/index.tsx", { Clickable: "div" }, {
+            "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+            "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+            "@utils/constants": { Devs: {} },
+            "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {}, StartAt: {} },
+            "@webpack": { findCssClassesLazy: () => ({}), findStoreLazy: () => ({}) },
+            "./components/contextMenu": {}, "./components/CreateCategoryModal": {},
+            "./constants": { DEFAULT_COLOR: 42 }, "./data": { getCategoryByIndex: () => category }
+        });
+        const heading = plugin.renderCategory({ section: 1 }).props.children[0];
+        assert.equal(heading.props.style.color, `#${(color ?? 42).toString(16).padStart(6, "0")}`);
+        const { NewCategoryModal } = loadComponent("src/plugins/pinDms/components/CreateCategoryModal.tsx", {
+            useMemo: (callback: () => unknown) => callback(), useState: (value: unknown) => [value, () => {}], Modal: "modal"
+        }, {
+            "@shared/SettingsStore": { SYM_GET_RAW_TARGET }, "@components/Heading": {},
+            "@plugins/pinDms/constants": { DEFAULT_COLOR: 42, SWATCHES: [] },
+            "@plugins/pinDms/data": { getCategory: () => category },
+            "@webpack": { extractAndLoadChunksLazy: () => () => {}, findComponentByCodeLazy: () => "picker" }
+        });
+        const modal = NewCategoryModal({ categoryId: "category", userId: "owner", modalProps: {}, initialChannelId: null });
+        assert.equal(modal.props.children[0].props.children[1].props.children[1].props.value, color ?? 42);
+    }
+});

@@ -17,7 +17,7 @@ import { Clickable, ContextMenuApi, FluxDispatcher, Menu, React } from "@webpack
 
 import { contextMenus } from "./components/contextMenu";
 import { openCategoryModal, requireSettingsModal } from "./components/CreateCategoryModal";
-import { DEFAULT_CHUNK_SIZE } from "./constants";
+import { DEFAULT_CHUNK_SIZE, DEFAULT_COLOR } from "./constants";
 import { canMoveCategory, canMoveCategoryInDirection, Category, categoryLen, collapseCategory, getAllUncollapsedChannels, getCategoryByIndex, getCategoryChannels, getSections, init, isPinned, moveCategory, removeCategory, usePinnedDms } from "./data";
 
 interface ChannelComponentProps {
@@ -309,7 +309,7 @@ export default definePlugin({
             >
                 <h2
                     className={classes(headerClasses.privateChannelsHeaderContainer, "vc-pindms-section-container", category.collapsed ? "vc-pindms-collapsed" : "")}
-                    style={{ color: `#${category.color.toString(16).padStart(6, "0")}` }}
+                    style={{ color: `#${(category.color ?? DEFAULT_COLOR).toString(16).padStart(6, "0")}` }}
                 >
                     <span className={headerClasses.headerText}>
                         {category?.name ?? "uh oh"}

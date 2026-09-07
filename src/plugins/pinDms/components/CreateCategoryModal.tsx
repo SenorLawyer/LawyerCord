@@ -60,7 +60,7 @@ export function NewCategoryModal({ categoryId, modalProps, initialChannelId, use
     if (!category) return null;
 
     const [name, setName] = useState(category.name);
-    const [color, setColor] = useState(category.color);
+    const [color, setColor] = useState(category.color ?? DEFAULT_COLOR);
 
     const onSave = () => {
         if (!name.trim()) return;

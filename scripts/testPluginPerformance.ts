@@ -11682,3 +11682,25 @@ test("translation delivery tolerates unmounted messages and preserves newer hand
     assert.doesNotThrow(() => accessory.handleTranslate("message", translation));
     assert.equal(deliveries[1].length, 1);
 });
+
+
+test("translation language options follow provider changes and exclude automatic targets", () => {
+    let languages: Record<string, string> = { en: "English", auto: "Detect language", fr: "French" };
+    let cached: unknown;
+    let subscribed: string[] = [];
+    const select = loadSource("src/plugins/translate/TranslateModal.tsx", {
+        "@components/Divider": {}, "@components/FormSwitch": {}, "@components/Heading": {},
+        "@utils/margins": { Margins: {} },
+        "@webpack/common": { SearchableSelect: "select", useMemo: (make: () => unknown) => cached ??= make() },
+        "./settings": { settings: {
+            use: (keys: string[]) => { subscribed = keys; return { sentOutput: "en", service: "google" }; },
+            def: { sentOutput: { description: "Target" } }
+        } },
+        "./utils": { getLanguages: () => languages }
+    }, { React: { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props, children }) } }, "LanguageSelect");
+    const render = () => select({ settingsKey: "sentOutput", includeAuto: false }).children[1].props.options;
+    assert.deepEqual(Array.from(render(), (option: { value: string; }) => option.value), ["en", "fr"]);
+    languages = { "": "Detect language", "en-us": "English (US)", de: "German" };
+    assert.deepEqual(Array.from(render(), (option: { value: string; }) => option.value), ["en-us", "de"]);
+    assert.ok(subscribed.includes("service"));
+});

@@ -154,14 +154,8 @@ const regexes: regexes = {
 };
 export function convert(message: string): string {
     let newMessage = message;
-    if (settings.store.myUnits === "imperial") {
-        for (const unit in regexes.metric) {
-            newMessage = newMessage.replaceAll(regexes.metric[unit].regex, regexes.metric[unit].convert);
-        }
-    } else {
-        for (const unit in regexes.imperial) {
-            newMessage = newMessage.replaceAll(regexes.imperial[unit].regex, regexes.imperial[unit].convert);
-        }
-    }
+    const units = settings.store.myUnits === "imperial" ? regexes.metric : regexes.imperial;
+    for (const unit of Object.values(units))
+        newMessage = newMessage.replaceAll(unit.regex, unit.convert);
     return newMessage;
 }

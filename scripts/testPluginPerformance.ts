@@ -10169,3 +10169,37 @@ test("HTTP updater ignores superseded checks and downloads even when their URLs 
         assert.equal(writes, before + 2);
     }
 });
+
+
+test("renderer updater ignores check results and errors invalidated by reset or a newer check", async () => {
+    for (const reset of [false, true]) {
+        for (const failure of [false, true]) {
+            const pending: ReturnType<typeof Promise.withResolvers<unknown>>[] = [];
+            const api = loadSource("src/utils/updater.ts", {
+                "~git-hash": { __esModule: true, default: "current" },
+                "./Logger": { Logger: class {} }, "./native": {}, "./updateClassification": {}
+            }, { IS_STANDALONE: true, Vencord: { Settings: { updateChannel: "nightly" } }, VencordNative: { updater: { getUpdates: () => {
+                const request = Promise.withResolvers<unknown>();
+                pending.push(request);
+                return request.promise;
+            } } } });
+            const old = api.checkForUpdates();
+            if (reset) api.resetUpdateState();
+            else {
+                const current = api.checkForUpdates();
+                pending[1].resolve({ ok: true, value: [{ hash: "new", author: "author", message: "new" }] });
+                assert.equal(await current, true);
+            }
+            pending[0].resolve(failure ? { ok: false, error: "stale failure" } : { ok: true, value: [{ hash: "old" }] });
+            assert.equal(await old, !reset);
+            assert.equal(api.isOutdated, !reset);
+            assert.equal(api.updateError, undefined);
+            assert.equal(api.changes.length, reset ? 0 : 1);
+            if (!reset) assert.equal(api.changes[0].hash, "new");
+            const current = api.checkForUpdates();
+            pending.at(-1)?.resolve({ ok: false, error: "current failure" });
+            await assert.rejects(current, error => error === "current failure");
+            assert.equal(api.updateError, "current failure");
+        }
+    }
+});

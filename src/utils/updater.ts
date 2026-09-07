@@ -29,9 +29,9 @@ export let isNewer = false;
 export let updateError: any;
 export let changes: Record<"hash" | "author" | "message", string>[] = [];
 
-async function Unwrap<T>(p: Promise<IpcRes<T>>) {
-    const res = await p;
+let updateCheck = Symbol();
 
+function Unwrap<T>(res: IpcRes<T>) {
     if (res.ok) return res.value;
 
     updateError = res.error;
@@ -39,8 +39,11 @@ async function Unwrap<T>(p: Promise<IpcRes<T>>) {
 }
 
 export async function checkForUpdates() {
+    const check = updateCheck = Symbol();
     updateError = undefined;
-    changes = await Unwrap(VencordNative.updater.getUpdates(Vencord.Settings.updateChannel));
+    const result = await VencordNative.updater.getUpdates(Vencord.Settings.updateChannel);
+    if (check !== updateCheck) return isOutdated;
+    changes = Unwrap(result);
 
     // we only want to check this for the git updater, not the http updater
     if (!IS_STANDALONE) {
@@ -54,6 +57,7 @@ export async function checkForUpdates() {
 }
 
 export function resetUpdateState() {
+    updateCheck = Symbol();
     isOutdated = false;
     isNewer = false;
     updateError = undefined;
@@ -63,18 +67,18 @@ export function resetUpdateState() {
 export async function update() {
     if (!isOutdated) return true;
 
-    const res = await Unwrap(VencordNative.updater.update(Vencord.Settings.updateChannel));
+    const res = Unwrap(await VencordNative.updater.update(Vencord.Settings.updateChannel));
 
     if (res) {
         isOutdated = false;
-        if (!await Unwrap(VencordNative.updater.rebuild()))
+        if (!Unwrap(await VencordNative.updater.rebuild()))
             throw new Error("The Build failed. Please try manually building the new update");
     }
 
     return res;
 }
 
-export const getRepo = () => Unwrap(VencordNative.updater.getRepo());
+export const getRepo = async () => Unwrap(await VencordNative.updater.getRepo());
 
 export async function maybePromptToUpdate(confirmMessage: string, checkForDev = false) {
     if (IS_WEB || IS_UPDATER_DISABLED) return;

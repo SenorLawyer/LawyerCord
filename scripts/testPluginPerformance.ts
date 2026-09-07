@@ -1307,20 +1307,25 @@ test("BetterSessions returns its settings-close save to the flux error handler",
     await rejected;
 });
 
-test("status preset application reports rejected updates once", async () => {
+test("status preset application validates expiration and reports rejected updates once", async () => {
+    const clock = runInNewContext(`(class extends Date {
+        constructor(...args) { super(...(args.length ? args : [2026, 2, 29, 0, 30])); }
+        static now() { return new this().getTime(); }
+    })`);
+    const payloads: { expiresAtMs: string; createdAtMs: string; text: string; }[] = [];
     const pending = Promise.withResolvers<void>();
     let updates = 0;
     const toasts: { message: string; type: string; }[] = [];
     const { setStatus } = loadSource("src/equicordplugins/statusPresets/index.tsx", {
         "./style.css": {},
         "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
-        "@api/UserSettings": { getUserSettingLazy: () => ({ updateSetting: () => { updates++; return pending.promise; } }) },
+        "@api/UserSettings": { getUserSettingLazy: () => ({ updateSetting: (payload: typeof payloads[number]) => { payloads.push(payload); return ++updates === 1 ? pending.promise : Promise.resolve(); } }) },
         "@components/ErrorBoundary": {}, "@utils/constants": { EquicordDevs: {} },
         "@utils/lazy": { proxyLazy: () => ({}) },
         "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {}, StartAt: {} },
         "@webpack": { findComponentByCodeLazy: () => () => null, extractAndLoadChunksLazy: () => () => {} },
         "@webpack/common": { Toasts: { show: (toast: { message: string; type: string; }) => toasts.push(toast), Type: { FAILURE: "failure" }, genId: () => "toast" } },
-    }, {}, "({ setStatus })");
+    }, { Date: clock }, "({ setStatus })");
     const applying = setStatus({ text: "Preset", clearAfter: null, emojiInfo: null });
     assert.equal(toasts.length, 0);
     pending.reject(new Error("update failed"));
@@ -1331,6 +1336,16 @@ test("status preset application reports rejected updates once", async () => {
     for (const clearAfter of [NaN, Infinity, -1, 0.5, Number.MAX_SAFE_INTEGER, "3600"])
         await setStatus({ text: "Preset", clearAfter, emojiInfo: null });
     assert.equal(updates, 1);
+    assert.equal(toasts.length, 7);
+    assert.equal(payloads[0].expiresAtMs, "0");
+    for (const [clearAfter, expected] of [[null, 0], [0, clock.now()], [60_000, clock.now() + 60_000], ["TODAY", new clock(2026, 2, 30).getTime()]] as const) {
+        await setStatus({ text: " Preset ", clearAfter, emojiInfo: null });
+        const payload = payloads[payloads.length - 1];
+        assert.equal(payload.expiresAtMs, String(expected));
+        assert.equal(payload.createdAtMs, String(clock.now()));
+        assert.equal(payload.text, "Preset");
+    }
+    assert.equal(updates, 5);
     assert.equal(toasts.length, 7);
 });
 

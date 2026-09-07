@@ -10310,3 +10310,17 @@ test("update recovery prompt relaunches only after a successful update", async (
         assert.equal(alerts, mode === "failed" ? 1 : 0);
     }
 });
+
+
+test("updater error dialog preserves ordinary error messages and command diagnostics", () => {
+    const { getErrorMessage } = loadSource("src/components/settings/tabs/updater/runWithDispatch.tsx", {
+        "@components/ErrorCard": {}, "@utils/updater": {}, "@webpack/common": {}
+    }, {}, "({ getErrorMessage })");
+    for (const error of [new Error("Download failed"), { message: "Download failed" }])
+        assert.equal(getErrorMessage(error), "Download failed");
+    for (const error of [null, undefined, {}, { message: "  " }, { message: 42 }])
+        assert.match(getErrorMessage(error), /An unknown error occurred/);
+    assert.match(getErrorMessage({ code: "ENOENT", cmd: "git pull", path: "git" }), /Command `git` not found/);
+    assert.match(getErrorMessage({ code: 1, cmd: "git pull", stderr: "Local changes would be overwritten", message: "generic" }), /Local changes would be overwritten/);
+    assert.match(getErrorMessage({ code: 1, cmd: "git pull" }), /Code `1`/);
+});

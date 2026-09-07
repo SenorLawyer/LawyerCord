@@ -6,7 +6,7 @@ This audit is still in progress. File coverage records review work; it does not 
 
 - Baseline: `6e664e03ba3d0b7746ce34740ca444f5112b04bc`, published as `nightly-20260905-1918-6e664e03`.
 - The baseline inventory contains 1,661 tracked files, including source, tests, configuration, documentation, and assets. The review ledger records all baseline entries as reviewed.
-- At `2a806877d`, the branch contains 1,655 tracked files: this report and five added test files, with twelve removals relative to the baseline.
+- At `cea3c2003`, the branch contains 1,654 tracked files: this report and five added test files, with thirteen removals relative to the baseline.
 - The five added tests cover startup flags, CRX conversion, extension installation, file selection, and settings synchronization. Their file hashes were rechecked against the reviewed versions at `480d81f23`.
 - The generated internationalization mapping was checked semantically against the runtime hash function across 19,440 pairs. That is generated-data validation, not manual review of each pair.
 - Main at `8fc182ba7` was reviewed separately. A fresh fetch at `480d81f23` confirmed that main and the published nightly remain unchanged. Main changes have not been integrated into this branch.
@@ -100,6 +100,8 @@ Translate language options follow provider changes, and only the main composer o
 
 DeepL automatic detection omits the source-language field, and source labels use the real language tables without inherited object properties. Its native handler rejects UTF-8 request bodies above the documented 128 KiB limit. Kagi stops before sending without a session token. The unused plugin-object translation export was removed. Translation accessories are keyed by account and message, and each message retains setters for all mounted views. Actual React fixtures verify state reset, duplicate-view delivery, and cleanup; Discord stores and parsing remain mocked. Request cancellation, response limits, concurrent result ordering, and live event timing remain open.
 
+UnitConverter now processes speed and compound measurements before their component units, carries rounded inches into feet, and preserves registrations across multiple message views. Message/account changes reset displayed conversions. Duplicate icons, dismiss controls, unused CSS, conversion loops, and rule types were removed or consolidated. Matching boundaries, negative values, conversion-factor precision, embedded-message behavior, and same-message edits remain open.
+
 TranslatePlus propagates provider failures, validates Google and Toki response fields, and rejects malformed dictionaries before caching. Failed dictionary loads remain retryable. Inherited dictionary names cannot become translated text, and JSON parse failures omit response snippets. Direct branch returns replace the mutable result accumulator. The pinned dictionaries were checked for compatibility; language toggles now control their own routes. Multiple message views retain independent handlers, and account/message changes reset displayed state. The shared dismiss button replaces duplicate CSS; unknown language codes render as text. The duplicate language file and unused Sitelen regex conversion machinery were deleted; existing labels and conversion output were checked against the previous code. Superseded requests and results from a previous account are ignored. Failures show one toast instead of replacing translated text or logging raw exceptions, and unread error bodies are released. The custom provider policy, dictionary conversion semantics, response limits, cancellation, and remaining request lifecycle concerns remain open.
 
 ## Verification record
@@ -108,17 +110,17 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `2a806877d` | 489 tests and timezone correctness checks passed, including 436 plugin regressions. |
-| Repository-wide ESLint | `2a806877d` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
+| Broader performance/correctness suite | `cea3c2003` | 493 tests and timezone correctness checks passed, including 440 plugin regressions. |
+| Repository-wide ESLint | `cea3c2003` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
 | CSS lint | `c50d116a4` | Passed; excludes userplugins. |
 | Internationalization lint | `5e869fea9` | Passed for tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest focused regressions and TypeScript | `2a806877d` | Translation provider and accessory lifecycle regressions, full TypeScript, and focused lint passed. Earlier voice lifecycle, preview, and metadata regressions also pass in the broader suite. Source fixtures reject TypeScript syntax diagnostics before execution. |
-| Standalone build | `2a806877d` | Passed after the translation changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
+| Latest focused regressions and TypeScript | `cea3c2003` | Translation and UnitConverter regressions, full TypeScript, and focused lint passed. Earlier voice lifecycle, preview, and metadata regressions also pass in the broader suite. Source fixtures reject TypeScript syntax diagnostics before execution. |
+| Standalone build | `cea3c2003` | Passed after the translation and UnitConverter changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
 | Development build | `0fc6ab63b` | Passed after composer, codec, preset, and game-status startup changes. |
 | Installer review browser checks | `d7b99b737` | Actual templates and generator functions in isolated Chrome preserved literal metadata, all four native/pre-send warning combinations, the native acknowledgement gate, and cancellation. Electron IPC and real installation were not exercised. |
 | Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |
-| Web build | `2a806877d` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
-| Release artifact audit | `2a806877d` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
+| Web build | `cea3c2003` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
+| Release artifact audit | `cea3c2003` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
 | Avatar startup and edit ordering | `296e36989` | Actual loader, editor actions, and DataStore in isolated Chrome preserved edits in 20 overlapping runs, ten with startup first and ten with saving first. This checks one client context, not synchronization between clients. No extra production guard was added. |
 | Avatar edit transactions | `3bf4098d6` | Actual AvatarModal actions and DataStore code in isolated Chrome preserved storage and memory after an aborted write, kept both concurrent user edits, and deleted only the selected override. React rendering and Discord dependencies were mocked. |
 | Real IndexedDB queue behavior | `ce04cc40a` | Isolated Chrome verified aborted additions, ordered concurrent additions, aborted clearing, and subsequent successful clearing using actual queue and DataStore code. |
@@ -128,6 +130,7 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Playback rate application | `44d2a1156` | Actual MediaPlaybackSpeed code with Chrome audio/video elements passed 42 valid/invalid rate cases, preserved a 3x first-play selection, and verified one-shot listener and cleanup behavior. Play events were synthetic; no audio or live Discord UI was exercised. |
 | Image copy conversion | `41343b959` | Actual WebContextMenus code in isolated Chrome converted a JPEG to a 3 by 2 PNG, preserved red pixels, and closed the source bitmap exactly once. Clipboard delivery was intercepted; OS clipboard permission and live Discord menus were not tested. |
 | Translation dismissal keyboard behavior | `7e5ae9a39` | Actual shared TextButton props and shared/plugin CSS in isolated Chrome passed Tab focus, a visible focus ring, Enter and Space activation, and zero form submissions. React dismissal behavior was verified separately with the actual shared component. Browser event handlers were fixture counters; full Discord layout was not exercised. |
+| UnitConverter accessory checks | `28491ec83` | Isolated React 18.3.1 verified multiple views, surviving registrations, shared dismissal, message/account resets, and logout cleanup. Source fixtures separately exercised the actual popover action. Discord stores and conversion delivery were controlled fixtures; live client behavior remains unverified. |
 | TranslatePlus accessory checks | `2bfa43606` | Actual React 18.3.1 fixtures verified multiple views, cleanup, message/account replacement, logout, stale completion after remount, shared dismissal, unknown language labels, and proxy-backed embedded-message exclusion. Providers and Discord stores were mocked; live event ordering and request cancellation remain unverified. |
 | Translation accessory reconciliation | `bd695428d` | Actual plugin rendering and accessory code with isolated React 18.3.1 and its test renderer reset state on message/account changes, unmounted on logout, delivered to two views of one message, and preserved the remaining view after cleanup. Discord stores used a controlled external-store bridge; parsing and icons were mocked. No live Discord client or provider was exercised. |
 | Native translation redirects | `638d668e6` | Actual native handlers with Node fetch rejected local 301, 302, 303, 307, and 308 redirects. Ten valid initial requests reached the server; none reached the redirect destination. Failure responses contained no exception details. Credentials and text were synthetic; remote provider compatibility and Electron IPC were not exercised. |
@@ -141,7 +144,7 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Uninstall button browser checks | `d4efc449d` | Actual shared component props and styles in isolated Chrome verified the accessible name, keyboard focus indicator, and consistent 32px sizing in both stylesheet orders. Full Discord layout was not exercised. |
 | Other isolated browser checks | Earlier audit commits | Specific sticker-storage transactions, codec conversion, and CSS behavior were exercised. These are not general live-client acceptance. |
 
-Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `2a806877d`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
+Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `cea3c2003`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
 
 ## Remaining work
 

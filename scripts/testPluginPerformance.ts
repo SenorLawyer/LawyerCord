@@ -9784,12 +9784,16 @@ test("expression cloning preserves valid server errors and falls back for malfor
 test("cloning keeps the name selected when the request starts", async () => {
     const uploads: Array<{ name: string; }> = [];
     const busy: unknown[] = [];
+    const cleanups: Array<() => void> = [];
     let userId: string | undefined = "me";
     let emojiCount = 0;
     let stickerCount = 0;
     let finishDownload: (value: unknown) => void = () => assert.fail("No download");
     const download = new Promise(resolve => { finishDownload = resolve; });
+    let fetchResponse: (_url: string, options: { signal: AbortSignal; }) => Promise<unknown> = () => download;
     const React = {
+        useRef: (current: unknown) => ({ current }),
+        useEffect: (effect: () => () => void) => cleanups.push(effect()),
         createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props: { ...props, children } }),
         useState: (initial: unknown) => [initial, (value: unknown) => busy.push(value)]
     };
@@ -9798,7 +9802,7 @@ test("cloning keeps the name selected when the request starts", async () => {
         "@components/BaseText": {}, "@components/CheckedTextInput": {}, "@components/Flex": {},
         "@components/Heading": {}, "@components/Paragraph": {}, "@components/Button": { Button: "button" },
         "@utils/constants": { Devs: {} }, "@utils/discord": { getGuildAcronym: () => "G" },
-        "@utils/Logger": { Logger: class { error() {} } }, "@utils/misc": {},
+        "@utils/Logger": { Logger: class { error() {} } }, "@utils/misc": { isObject: () => false },
         "@utils/types": { __esModule: true, default: (value: object) => value },
         "@vencord/discord-types/enums": { StickerFormatType: { PNG: 1, APNG: 2, LOTTIE: 3, GIF: 4 } },
         "@webpack": { findByCodeLazy: (code: string) => code === ".additionalEmojiSlots" ? () => 50 : (value: { name: string; }) => uploads.push(value) },
@@ -9819,7 +9823,7 @@ test("cloning keeps the name selected when the request starts", async () => {
             Toasts: { Type: { SUCCESS: "success" }, genId: () => "id", show() {} } }
     }, {
         React, AbortController, location: { protocol: "https:" }, window: { GLOBAL_ENV: { CDN_HOST: "fixture.invalid" } },
-        fetch: () => download,
+        fetch: (url: string, options: { signal: AbortSignal; }) => fetchResponse(url, options),
         FileReader: class {
             result = "data:image/png;base64,fixture";
             onload = () => {};
@@ -9848,6 +9852,7 @@ test("cloning keeps the name selected when the request starts", async () => {
     assert.equal(button.props.disabled, false);
     assert.equal(button.props["aria-label"], "Clone to Guild");
     const pending = button.props.onClick();
+    assert.equal(button.props.onClick(), undefined);
     tree.props.children[1].props.onChange("later");
     assert.equal(data.name, "original");
     finishDownload({ ok: true, blob: async () => ({ size: 1 }) });
@@ -9868,6 +9873,25 @@ test("cloning keeps the name selected when the request starts", async () => {
     assert.equal(CloneModal({ data: { ...data, t: "Sticker" } }).props.children[2].props.children[0].length, 0);
     stickerCount = 4;
     assert.equal(CloneModal({ data: { ...data, t: "Sticker" } }).props.children[2].props.children[0].length, 1);
+    const requests: Array<{ signal: AbortSignal; resolve(value: unknown): void; }> = [];
+    fetchResponse = (_url, { signal }) => new Promise((resolve, reject) => {
+        requests.push({ signal, resolve });
+        signal.addEventListener("abort", () => reject(new Error("Cancelled")), { once: true });
+    });
+    const first = CloneModal({ data });
+    const closeFirst = cleanups.at(-1);
+    assert.ok(closeFirst);
+    const second = CloneModal({ data });
+    const firstPending = first.props.children[2].props.children[0][0].props.children[0]({}).props.onClick();
+    const secondPending = second.props.children[2].props.children[0][0].props.children[0]({}).props.onClick();
+    assert.equal(requests.length, 2);
+    closeFirst();
+    await firstPending;
+    assert.equal(requests[0].signal.aborted, true);
+    assert.equal(requests[1].signal.aborted, false);
+    requests[1].resolve({ ok: true, blob: async () => ({ size: 1 }) });
+    await secondPending;
+    assert.equal(uploads.length, 2);
 });
 
 test("cloning stops before uploads and sticker publication after account changes", async () => {

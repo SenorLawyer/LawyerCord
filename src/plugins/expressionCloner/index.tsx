@@ -199,10 +199,14 @@ async function fetchBlob(data: Data, signal: AbortSignal | undefined) {
     throw new Error(`Failed to fetch ${data.t} within size limit of ${MAX_SIZE / 1000}kB`);
 }
 
-async function doClone(guildId: string, data: Sticker | Emoji) {
+async function doClone(guildId: string, data: Sticker | Emoji, controller = new AbortController()) {
+    const sessionSignal = cloneController?.signal;
+    const abort = () => controller.abort();
+    if (!sessionSignal || sessionSignal.aborted) abort();
+    else sessionSignal.addEventListener("abort", abort, { once: true });
     try {
         const userId = UserStore.getCurrentUser()?.id;
-        const signal = cloneController?.signal;
+        const { signal } = controller;
         if (!userId) throw new Error("Sign in before cloning an expression.");
         ensureCloneAccount(userId, signal);
         if (data.t === "Sticker")
@@ -231,6 +235,8 @@ async function doClone(guildId: string, data: Sticker | Emoji) {
             type: Toasts.Type.FAILURE,
             id: Toasts.genId()
         });
+    } finally {
+        sessionSignal?.removeEventListener("abort", abort);
     }
 }
 
@@ -243,6 +249,8 @@ const getFontSize = (s: string) => {
 const nameValidator = /^\w{2,32}$/;
 
 function CloneModal({ data }: { data: Sticker | Emoji; }) {
+    const pendingClone = React.useRef<AbortController | null>(null);
+    React.useEffect(() => () => pendingClone.current?.abort(), []);
     const [isCloning, setIsCloning] = React.useState(false);
     const [name, setName] = React.useState(data.t === "Emoji" ? data.name.split("~")[0] : data.name);
     const nameError = data.t === "Emoji"
@@ -288,8 +296,11 @@ function CloneModal({ data }: { data: Sticker | Emoji; }) {
                                     fontSize: "inherit"
                                 }}
                                 onClick={() => {
+                                    if (pendingClone.current) return;
+                                    const controller = pendingClone.current = new AbortController();
                                     setIsCloning(true);
-                                    return doClone(g.id, { ...data, name }).finally(() => {
+                                    return doClone(g.id, { ...data, name }, controller).finally(() => {
+                                        pendingClone.current = null;
                                         setIsCloning(false);
                                     });
                                 }}

@@ -11938,3 +11938,16 @@ test("native DeepL requests enforce the UTF-8 body limit before fetching", async
     }
     assert.equal(requests, 3);
 });
+
+
+test("TranslatePlus Shavian translation preserves inherited dictionary names", async () => {
+    const { translate } = loadSource("src/equicordplugins/translatePlus/utils/translator.ts", {
+        "@equicordplugins/translatePlus/settings": { settings: { store: { target: "en", shavian: true, toki: false, sitelen: false } } },
+        "@utils/text": { escapeRegExp: (text: string) => text }
+    }, { fetch: async () => ({ ok: true, json: async () => ({ "𐑐": "word" }) }) });
+    for (const word of ["constructor", "__proto__", "toString", "ordinary"]) {
+        const result = await translate(`𐑐 ${word}`);
+        assert.equal(result.text, `word ${word}`);
+        assert.equal(result.src, "sh");
+    }
+});

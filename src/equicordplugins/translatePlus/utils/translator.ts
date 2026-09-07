@@ -101,7 +101,7 @@ async function translateShavian(message: string) {
 
         translated += punctuationBefore;
 
-        if (word in dictionary) translated += dictionary[word];
+        if (Object.hasOwn(dictionary, word)) translated += dictionary[word];
         else translated += word;
 
         translated += punctuationAfter + " ";

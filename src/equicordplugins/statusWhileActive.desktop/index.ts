@@ -92,9 +92,6 @@ export default definePlugin({
             if (!myState) return;
 
             updateStatusForCurrentVoiceState();
-        },
-        VOICE_CHANNEL_STATUS_UPDATE() {
-            updateStatusForCurrentVoiceState();
         }
     },
 

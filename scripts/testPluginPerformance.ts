@@ -1333,6 +1333,12 @@ test("StatusWhileActive never restores another account's status", () => {
         if (change === "start") plugin.start();
         else changeVoice();
         assert.deepEqual(updates, ["dnd"]);
+        if (change === "same") {
+            status = "idle";
+            plugin.flux.VOICE_CHANNEL_STATUS_UPDATE?.({ id: "unrelated", guild_id: "guild", status: "Chatting" });
+            assert.equal(status, "idle");
+            status = "dnd";
+        }
         if (change.startsWith("manual")) {
             status = "invisible";
             if (change === "manual-leave") {

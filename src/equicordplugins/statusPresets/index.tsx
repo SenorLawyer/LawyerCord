@@ -23,6 +23,7 @@ import { getUserSettingLazy } from "@api/UserSettings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { EquicordDevs } from "@utils/constants";
 import { proxyLazy } from "@utils/lazy";
+import { NoopComponent } from "@utils/react";
 import definePlugin, { OptionType, StartAt } from "@utils/types";
 import { extractAndLoadChunksLazy, findComponentByCodeLazy, findModuleId, wreq } from "@webpack";
 import { Menu, openModalLazy, OverridePremiumTypeStore, Toasts, useStateFromStores } from "@webpack/common";
@@ -121,8 +122,8 @@ const StatusSubMenuComponent = () => {
 const settings = definePluginSettings({
     StatusPresets: {
         type: OptionType.COMPONENT,
-        description: "Status Presets",
-        component: () => <></>,
+        hidden: true,
+        component: NoopComponent,
         default: {}
     }
 });

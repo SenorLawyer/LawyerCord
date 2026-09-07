@@ -103,10 +103,7 @@ export async function maybePromptToUpdate(confirmMessage: string, checkForDev = 
         if (isOutdated) {
             const wantsUpdate = confirm(confirmMessage);
             if (wantsUpdate && isNewer) return alert("Your local copy has more recent commits. Please stash or reset them.");
-            if (wantsUpdate) {
-                await update();
-                relaunch();
-            }
+            if (wantsUpdate && await update()) relaunch();
         }
     } catch (err) {
         UpdateLogger.error(err);

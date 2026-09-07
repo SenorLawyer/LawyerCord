@@ -10279,3 +10279,32 @@ test("renderer updater shares active work and rejects completion after a reset",
         assert.equal(updates, 1);
     }
 });
+
+
+test("update recovery prompt relaunches only after a successful update", async () => {
+    for (const mode of ["declined", "unchanged", "success", "failed"]) {
+        let relaunches = 0;
+        let updates = 0;
+        let builds = 0;
+        let errors = 0;
+        let alerts = 0;
+        const api = loadSource("src/utils/updater.ts", {
+            "~git-hash": { __esModule: true, default: "current" },
+            "./Logger": { Logger: class { error() { errors++; } } },
+            "./native": { relaunch: () => relaunches++ }, "./updateClassification": {}
+        }, { IS_STANDALONE: true, IS_WEB: false, IS_UPDATER_DISABLED: false,
+            confirm: () => mode !== "declined", alert: () => alerts++,
+            Vencord: { Settings: { updateChannel: "nightly" } }, VencordNative: { updater: {
+                getUpdates: async () => ({ ok: true, value: [{ hash: "next" }] }),
+                update: async () => { updates++; return { ok: true, value: mode !== "unchanged" }; },
+                rebuild: async () => { builds++; return { ok: true, value: mode !== "failed" }; }
+            } }
+        });
+        await api.maybePromptToUpdate("Update now?");
+        assert.equal(relaunches, mode === "success" ? 1 : 0);
+        assert.equal(updates, mode === "declined" ? 0 : 1);
+        assert.equal(builds, mode === "success" || mode === "failed" ? 1 : 0);
+        assert.equal(errors, mode === "failed" ? 1 : 0);
+        assert.equal(alerts, mode === "failed" ? 1 : 0);
+    }
+});

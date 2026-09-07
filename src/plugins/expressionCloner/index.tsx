@@ -133,12 +133,21 @@ async function cloneSticker(guildId: string, sticker: Sticker, userId: string, s
 async function cloneEmoji(guildId: string, emoji: Emoji, userId: string, signal = cloneController?.signal) {
     const data = await fetchBlob(emoji, signal);
 
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(data);
-    });
+    const reader = new FileReader();
+    const abort = () => reader.abort();
+    let dataUrl: string;
+    try {
+        ensureCloneAccount(userId, signal);
+        dataUrl = await new Promise<string>((resolve, reject) => {
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => reject(reader.error);
+            reader.onabort = () => reject(new Error("The cloning session ended."));
+            signal?.addEventListener("abort", abort, { once: true });
+            reader.readAsDataURL(data);
+        });
+    } finally {
+        signal?.removeEventListener("abort", abort);
+    }
 
     ensureCloneAccount(userId, signal);
     return uploadEmoji({

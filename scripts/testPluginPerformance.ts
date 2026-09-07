@@ -9706,10 +9706,11 @@ test("expression cloning filters picker stickers by format", () => {
 });
 
 test("emoji cloning settles failed file reads without uploading", async () => {
-    for (const mode of ["success", "error", "throw"]) {
+    for (const mode of ["success", "error", "throw", "abort"]) {
         const uploads: unknown[] = [];
+        let aborts = 0;
         const failure = new Error("Fixture read failed");
-        const { cloneEmoji } = loadSource("src/plugins/expressionCloner/index.tsx", {
+        const { cloneEmoji, plugin } = loadSource("src/plugins/expressionCloner/index.tsx", {
             "@api/ContextMenu": {}, "@api/Settings": { migratePluginSettings() {} },
             "@components/BaseText": {}, "@components/CheckedTextInput": {}, "@components/Flex": {},
             "@components/Heading": {}, "@components/Paragraph": {}, "@components/Button": { Button: "button" },
@@ -9727,21 +9728,25 @@ test("emoji cloning settles failed file reads without uploading", async () => {
                 error = failure;
                 onload = () => {};
                 onerror = () => {};
+                onabort = () => {};
+                abort() { aborts++; this.onabort(); }
                 readAsDataURL() {
                     if (mode === "throw") throw failure;
-                    if (mode === "error") this.onerror();
+                    if (mode === "abort") plugin.stop();
+                    else if (mode === "error") this.onerror();
                     else this.onload();
                 }
             }
-        }, "(exports.default.start(), { cloneEmoji })");
+        }, "(exports.default.start(), { cloneEmoji, plugin: exports.default })");
         const pending = cloneEmoji("guild", { t: "Emoji", id: "emoji", name: "name~2", isAnimated: false }, "me");
         if (mode === "success") {
             await pending;
             assert.deepEqual({ ...uploads[0] as object }, { guildId: "guild", name: "name", image: "data:image/png;base64,fixture" });
         } else {
-            await assert.rejects(pending, error => error === failure);
+            await assert.rejects(pending, mode === "abort" ? /cloning session ended/ : error => error === failure);
             assert.equal(uploads.length, 0);
         }
+        assert.equal(aborts, mode === "abort" ? 1 : 0);
     }
 });
 

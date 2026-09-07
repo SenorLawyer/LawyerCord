@@ -10335,7 +10335,7 @@ test("relationship notifier skips user lookups for irrelevant or disabled remova
             const { onRelationshipRemove } = loadSource("src/plugins/relationshipNotifier/functions.ts", {
                 "@utils/discord": { getUniqueUsername: () => "User" },
                 "@vencord/discord-types/enums": { RelationshipType: { FRIEND: 1, BLOCKED: 2, INCOMING_REQUEST: 3, OUTGOING_REQUEST: 4 } },
-                "@webpack/common": { UserUtils: { getUser: async () => { lookups++; return { id: "user", getAvatarURL() {} }; } } },
+                "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "owner" }) }, UserUtils: { getUser: async () => { lookups++; return { id: "user", getAvatarURL() {} }; } } },
                 "./settings": { __esModule: true, default: { store: { friends, friendRequestCancels } } },
                 "./utils": { notify: () => notifications++ }
             });
@@ -10358,7 +10358,7 @@ test("relationship notifier catches delayed startup failures and cancels its tim
         "@utils/constants": { Devs: {} },
         "@utils/Logger": { Logger: class { error(_message: string, error: unknown) { errors.push(error); } } },
         "@utils/types": { __esModule: true, default: (value: object) => value },
-        "./settings": {}, "./functions": {},
+        "./settings": {}, "./functions": { reset() {} },
         "./utils": { syncAndRunChecks: async () => { calls++; throw failure; } }
     }, {
         setTimeout: (callback: () => void, delay: number) => { assert.equal(delay, 5000); timers.set(++timerId, callback); return timerId; },
@@ -10376,6 +10376,13 @@ test("relationship notifier catches delayed startup failures and cancels its tim
     await setImmediate();
     assert.equal(calls, 1);
     assert.deepEqual(errors, [failure]);
+    plugin.start();
+    plugin.flux.LOGOUT();
+    assert.equal(timers.size, 0);
+    plugin.start();
+    await assert.rejects(plugin.flux.CONNECTION_OPEN(), error => error === failure);
+    assert.equal(timers.size, 0);
+    assert.equal(calls, 2);
 });
 
 
@@ -10501,6 +10508,64 @@ test("relationship offline checks stop when the account changes during awaited w
             await checking;
             assert.equal(writes, stage === "read" ? 0 : 3, stage);
             assert.equal(notifications, 0, stage);
+        }
+    }
+});
+
+
+test("relationship notifier invalidates pending work across stop, logout, and reconnect", async () => {
+    for (const boundary of ["stop", "logout", "reconnect"]) {
+        for (const stage of ["migration", "read", "write", "offline lookup", "event lookup"]) {
+            let release = () => {};
+            const pending = new Promise<void>(resolve => { release = resolve; });
+            let reached = false;
+            let writes = 0;
+            let notifications = 0;
+            const wait = async () => { reached = true; await pending; };
+            const settings = { __esModule: true, default: { store: { offlineRemovals: true, friends: true } } };
+            const enums = { ChannelType: { GROUP_DM: 3 }, RelationshipType: { FRIEND: 1, INCOMING_REQUEST: 3 } };
+            const common = {
+                UserStore: { getCurrentUser: () => ({ id: "owner" }) },
+                GuildStore: { getGuilds: () => ({}) },
+                ChannelStore: { getSortedPrivateChannels: () => [] },
+                RelationshipStore: { getMutableRelationships: () => new Map() },
+                UserUtils: { getUser: async () => { await wait(); return { id: "friend", getAvatarURL() {} }; } }
+            };
+            const utils = loadSource("src/plugins/relationshipNotifier/utils.ts", {
+                "@api/DataStore": {
+                    delMany: async () => { if (stage === "migration") await wait(); },
+                    getMany: async () => { if (stage === "read") await wait(); return [undefined, undefined, { friends: ["friend"], requests: [] }]; },
+                    set: async () => { writes++; if (stage === "write") await wait(); }
+                },
+                "@api/Notices": {}, "@api/Notifications": { showNotification: () => notifications++ },
+                "@utils/discord": { getUniqueUsername: () => "Friend" },
+                "@vencord/discord-types/enums": enums, "@webpack": { findStoreLazy: () => ({}) },
+                "@webpack/common": common, "./settings": settings
+            });
+            const handlers = loadSource("src/plugins/relationshipNotifier/functions.ts", {
+                "@utils/discord": { getUniqueUsername: () => "Friend" },
+                "@vencord/discord-types/enums": enums, "@webpack/common": common,
+                "./settings": settings, "./utils": utils
+            });
+            const { default: plugin } = loadSource("src/plugins/relationshipNotifier/index.ts", {
+                "@utils/constants": { Devs: {} }, "@utils/Logger": { Logger: class { error() {} } },
+                "@utils/types": { __esModule: true, default: (value: object) => value },
+                "./settings": settings, "./functions": handlers,
+                "./utils": { ...utils, syncAndRunChecks: () => {} }
+            }, { setTimeout: () => 1, clearTimeout() {} });
+            plugin.start();
+            const work = stage === "event lookup"
+                ? handlers.onRelationshipRemove({ relationship: { type: 1, id: "friend" } })
+                : utils.syncAndRunChecks();
+            await setImmediate();
+            assert.equal(reached, true);
+            if (boundary === "stop") { plugin.stop(); plugin.start(); }
+            else if (boundary === "logout") plugin.flux.LOGOUT();
+            else plugin.flux.CONNECTION_OPEN();
+            release();
+            await work;
+            assert.equal(notifications, 0, `${boundary}: ${stage}`);
+            assert.equal(writes, stage === "migration" || stage === "read" || stage === "event lookup" ? 0 : 3);
         }
     }
 });

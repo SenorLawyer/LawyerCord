@@ -18,15 +18,20 @@
 
 import { getUniqueUsername, openUserProfile } from "@utils/discord";
 import { ChannelType, RelationshipType } from "@vencord/discord-types/enums";
-import { UserUtils } from "@webpack/common";
+import { UserStore, UserUtils } from "@webpack/common";
 
 import settings from "./settings";
 import { ChannelDelete, GuildDelete, RelationshipRemove } from "./types";
-import { deleteGroup, deleteGuild, getGroup, getGuild, GuildAvailabilityStore, notify } from "./utils";
+import { deleteGroup, deleteGuild, getGroup, getGuild, GuildAvailabilityStore, notify, resetState, session } from "./utils";
 
 let manuallyRemovedFriend: string | undefined;
 let manuallyRemovedGuild: string | undefined;
 let manuallyRemovedGroup: string | undefined;
+
+export function reset() {
+    manuallyRemovedFriend = manuallyRemovedGuild = manuallyRemovedGroup = undefined;
+    resetState();
+}
 
 export const removeFriend = (id: string) => manuallyRemovedFriend = id;
 export const removeGuild = (id: string) => manuallyRemovedGuild = id;
@@ -41,9 +46,13 @@ export async function onRelationshipRemove({ relationship: { type, id } }: Relat
     if (!(type === RelationshipType.FRIEND && settings.store.friends
         || type === RelationshipType.INCOMING_REQUEST && settings.store.friendRequestCancels)) return;
 
+    const currentSession = session;
+    const currentUserId = UserStore.getCurrentUser()?.id;
+    if (!currentUserId) return;
+
     const user = await UserUtils.getUser(id)
         .catch(() => null);
-    if (!user) return;
+    if (!user || currentSession !== session || UserStore.getCurrentUser()?.id !== currentUserId) return;
 
     switch (type) {
         case RelationshipType.FRIEND:

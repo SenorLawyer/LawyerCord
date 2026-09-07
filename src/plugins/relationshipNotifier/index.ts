@@ -20,7 +20,7 @@ import { Devs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 
-import { onChannelDelete, onGuildDelete, onRelationshipRemove, removeFriend, removeGroup, removeGuild } from "./functions";
+import { onChannelDelete, onGuildDelete, onRelationshipRemove, removeFriend, removeGroup, removeGuild, reset } from "./functions";
 import settings from "./settings";
 import { syncAndRunChecks, syncFriends, syncGroups, syncGuilds } from "./utils";
 
@@ -75,11 +75,20 @@ export default definePlugin({
         async RELATIONSHIP_REMOVE(e) {
             await Promise.all([onRelationshipRemove(e), syncFriends()]);
         },
-        CONNECTION_OPEN: syncAndRunChecks
+        CONNECTION_OPEN() {
+            clearStartupSyncTimeout();
+            reset();
+            return syncAndRunChecks();
+        },
+        LOGOUT() {
+            clearStartupSyncTimeout();
+            reset();
+        }
     },
 
     start() {
         clearStartupSyncTimeout();
+        reset();
         startupSyncTimeout = setTimeout(() => {
             startupSyncTimeout = undefined;
             void syncAndRunChecks().catch(error => logger.error("Could not sync relationships.", error));
@@ -88,6 +97,7 @@ export default definePlugin({
 
     stop() {
         clearStartupSyncTimeout();
+        reset();
     },
 
     removeFriend,

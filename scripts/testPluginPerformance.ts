@@ -8272,6 +8272,8 @@ test("narrator starts from the existing voice channel and resets across restarts
     channelId = undefined;
     api.plugin.start?.();
     assert.equal(api.getTypeAndChannelId({ channelId: "fresh", oldChannelId: "fresh" }, true)[0], "join");
+    api.plugin.flux.LOGOUT?.();
+    assert.equal(api.getTypeAndChannelId({ channelId: "another-account", oldChannelId: "another-account" }, true)[0], "join");
 });
 
 test("narrator uses the announced voice channel guild for nicknames", () => {

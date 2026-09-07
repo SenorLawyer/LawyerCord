@@ -124,6 +124,10 @@ export default definePlugin({
     settings,
 
     flux: {
+        LOGOUT() {
+            myLastChannelId = undefined;
+        },
+
         VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceStateChangeEvent[]; }) {
             const myChanId = SelectedChannelStore.getVoiceChannelId();
             const myId = UserStore.getCurrentUser()?.id;

@@ -47,22 +47,26 @@ const settings = definePluginSettings({
     },
 });
 
-function updateStatus(isPlaying: boolean) {
+async function updateStatus(isPlaying: boolean) {
     const userId = UserStore.getCurrentUser()?.id;
     if (savedStatus?.userId !== userId) savedStatus = null;
     if (!userId) return;
     const status = StatusSettings.getSetting();
 
     if (isPlaying) {
-        if (settings.store.excludeInvisible && status === "invisible") return;
-        if (status !== settings.store.statusToSet) {
-            savedStatus = { userId, value: status, applied: settings.store.statusToSet };
-            return StatusSettings.updateSetting(settings.store.statusToSet);
+        if (savedStatus || settings.store.excludeInvisible && status === "invisible") return;
+        const previousStatus = savedStatus = { userId, value: status, applied: settings.store.statusToSet };
+        if (status === previousStatus.applied) return;
+        try {
+            await StatusSettings.updateSetting(previousStatus.applied);
+        } catch (error) {
+            if (savedStatus === previousStatus) savedStatus = null;
+            throw error;
         }
     } else if (savedStatus) {
         const previousStatus = savedStatus;
         savedStatus = null;
-        if (status === previousStatus.applied) return StatusSettings.updateSetting(previousStatus.value);
+        if (status === previousStatus.applied && previousStatus.value !== previousStatus.applied) return StatusSettings.updateSetting(previousStatus.value);
     }
 }
 
@@ -86,7 +90,7 @@ export default definePlugin({
         const previousStatus = savedStatus;
         savedStatus = null;
         try {
-            if (previousStatus && previousStatus.userId === UserStore.getCurrentUser()?.id && StatusSettings.getSetting() === previousStatus.applied)
+            if (previousStatus && previousStatus.userId === UserStore.getCurrentUser()?.id && StatusSettings.getSetting() === previousStatus.applied && previousStatus.value !== previousStatus.applied)
                 await StatusSettings.updateSetting(previousStatus.value);
         } catch (error) {
             logger.error("Could not restore your status.", error);

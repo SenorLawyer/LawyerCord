@@ -43,13 +43,18 @@ const settings = definePluginSettings({
     }
 });
 
-function setStatus(userId: string, inVoiceChannel: boolean, status: string) {
+async function setStatus(userId: string, inVoiceChannel: boolean, status: string) {
     if (savedStatus?.userId !== userId) savedStatus = null;
 
     if (inVoiceChannel) {
-        if (status !== settings.store.statusToSet) {
-            savedStatus = { userId, value: status, applied: settings.store.statusToSet };
-            return StatusSettings?.updateSetting(settings.store.statusToSet);
+        if (savedStatus) return;
+        const previousStatus = savedStatus = { userId, value: status, applied: settings.store.statusToSet };
+        if (status === previousStatus.applied) return;
+        try {
+            await StatusSettings.updateSetting(previousStatus.applied);
+        } catch (error) {
+            if (savedStatus === previousStatus) savedStatus = null;
+            throw error;
         }
         return;
     }
@@ -57,7 +62,7 @@ function setStatus(userId: string, inVoiceChannel: boolean, status: string) {
     if (savedStatus) {
         const previousStatus = savedStatus;
         savedStatus = null;
-        if (status === previousStatus.applied)
+        if (status === previousStatus.applied && previousStatus.value !== previousStatus.applied)
             return StatusSettings?.updateSetting(previousStatus.value);
     }
 }
@@ -105,7 +110,7 @@ export default definePlugin({
         const previousStatus = savedStatus;
         savedStatus = null;
         try {
-            if (previousStatus && previousStatus.userId === UserStore.getCurrentUser()?.id && StatusSettings.getSetting() === previousStatus.applied)
+            if (previousStatus && previousStatus.userId === UserStore.getCurrentUser()?.id && StatusSettings.getSetting() === previousStatus.applied && previousStatus.value !== previousStatus.applied)
                 await StatusSettings.updateSetting(previousStatus.value);
         } catch (error) {
             logger.error("Could not restore your status.", error);

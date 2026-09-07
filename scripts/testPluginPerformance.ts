@@ -1839,30 +1839,83 @@ test("automatic status lifecycle failures are logged without rejecting", async (
     }
 });
 
-test("StatusWhileActive returns voice status failures to its flux wrapper", async () => {
-    let status = "online";
-    let channelId: string | undefined = "voice";
-    let pending = Promise.withResolvers<void>();
-    const { default: plugin } = loadSource("src/equicordplugins/statusWhileActive.desktop/index.ts", {
-        "@api/Settings": { definePluginSettings: () => ({ store: { statusToSet: "dnd" } }) },
-        "@utils/Logger": { Logger: class { error() {} } },
-        "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => status, updateSetting: () => pending.promise }) },
-        "@utils/constants": { EquicordDevs: {} },
-        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
-        "@webpack/common": {
-            UserStore: { getCurrentUser: () => ({ id: "account" }) },
-            VoiceStateStore: { getVoiceStateForUser: () => ({ channelId }) },
-        },
-    });
-    for (let attempt = 0; attempt < 2; attempt++) {
-        const result = plugin.flux.VOICE_STATE_UPDATES({ voiceStates: [{ userId: "account" }] });
-        assert.equal(result, pending.promise);
-        const rejected = assert.rejects(result, /update failed/);
-        pending.reject(new Error("update failed"));
-        await rejected;
-        status = "dnd";
-        channelId = undefined;
-        pending = Promise.withResolvers<void>();
+test("automatic statuses retry failed applications and preserve manual choices during activity", async () => {
+    for (const voice of [false, true]) {
+        for (const initial of ["online", "dnd"]) {
+            let status = initial;
+            let active = true;
+            let pending: ReturnType<typeof Promise.withResolvers<void>> | undefined;
+            const updates: string[] = [];
+            const { default: plugin } = loadSource(voice
+                ? "src/equicordplugins/statusWhileActive.desktop/index.ts"
+                : "src/plugins/autoDndWhilePlaying.discordDesktop/index.ts", {
+                "@api/Settings": { definePluginSettings: () => ({ store: { statusToSet: "dnd", excludeInvisible: false } }), migratePluginSettings() {} },
+                "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => status, updateSetting: (value: string) => {
+                    updates.push(value);
+                    if (pending) return pending.promise;
+                    status = value;
+                    return Promise.resolve();
+                } }) },
+                "@utils/Logger": { Logger: class { error() {} } },
+                "@utils/constants": { EquicordDevs: {}, Devs: {} },
+                "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+                "@webpack/common": {
+                    UserStore: { getCurrentUser: () => ({ id: "owner" }) },
+                    VoiceStateStore: { getVoiceStateForUser: () => ({ channelId: active ? "voice" : undefined }) },
+                    RunningGameStore: { getRunningGames: () => active ? [{}] : [] }
+                }
+            });
+            const event = () => voice
+                ? plugin.flux.VOICE_STATE_UPDATES({ voiceStates: [{ userId: "owner" }] })
+                : plugin.flux.RUNNING_GAMES_CHANGE({ games: active ? [{}] : [] });
+            if (initial === "online") {
+                pending = Promise.withResolvers<void>();
+                const result = event();
+                await event();
+                assert.deepEqual(updates, ["dnd"]);
+                const rejected = assert.rejects(result, /update failed/);
+                pending.reject(new Error("update failed"));
+                await rejected;
+                pending = undefined;
+            }
+            await event();
+            const appliedCount = updates.length;
+            status = "invisible";
+            await event();
+            await event();
+            assert.equal(status, "invisible");
+            assert.equal(updates.length, appliedCount);
+            active = false;
+            await event();
+            assert.equal(status, "invisible");
+            active = true;
+            await event();
+            assert.equal(status, "dnd");
+            pending = Promise.withResolvers<void>();
+            active = false;
+            const rejected = assert.rejects(event(), /restore failed/);
+            pending.reject(new Error("restore failed"));
+            await rejected;
+            pending = undefined;
+            await plugin.stop();
+            active = true;
+            status = "online";
+            pending = Promise.withResolvers<void>();
+            const oldUpdate = event();
+            const oldPending = pending;
+            plugin.flux.LOGOUT();
+            pending = undefined;
+            await event();
+            const oldRejected = assert.rejects(oldUpdate, /old update failed/);
+            oldPending.reject(new Error("old update failed"));
+            await oldRejected;
+            status = "invisible";
+            const beforeRepeatedEvent = updates.length;
+            await event();
+            assert.equal(updates.length, beforeRepeatedEvent);
+            assert.equal(status, "invisible");
+            await plugin.stop();
+        }
     }
 });
 
@@ -1944,28 +1997,6 @@ test("AutoDND starts from currently running games and restores on stop", async (
         assert.deepEqual(updates, mode === "playing" ? ["dnd"] : []);
         await plugin.stop();
         assert.deepEqual(updates, mode === "playing" ? ["dnd", "online"] : []);
-    }
-});
-
-test("AutoDND returns status update failures to its flux wrapper", async () => {
-    let status = "online";
-    let pending = Promise.withResolvers<void>();
-    const { default: plugin } = loadSource("src/plugins/autoDndWhilePlaying.discordDesktop/index.ts", {
-        "@api/Settings": { definePluginSettings: () => ({ store: { statusToSet: "dnd" } }), migratePluginSettings() {} },
-        "@utils/Logger": { Logger: class { error() {} } },
-        "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => status, updateSetting: () => pending.promise }) },
-        "@utils/constants": { Devs: {} },
-        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
-        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) } },
-    });
-    for (const games of [[{}], []]) {
-        const result = plugin.flux.RUNNING_GAMES_CHANGE({ games });
-        assert.equal(result, pending.promise);
-        const rejected = assert.rejects(result, /update failed/);
-        pending.reject(new Error("update failed"));
-        await rejected;
-        status = "dnd";
-        pending = Promise.withResolvers<void>();
     }
 });
 

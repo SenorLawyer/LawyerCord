@@ -214,10 +214,15 @@ export default definePlugin({
         pluginStarted = false;
         const generation = ++startGeneration;
 
-        const saved = await get<Record<string, number>>(storageKey);
+        const saved = await get<unknown>(storageKey);
         if (generation !== startGeneration) return;
-        if (saved) {
-            for (const [userId, value] of Object.entries(saved)) totalsByUser.set(userId, value);
+        if (saved !== undefined) {
+            if (saved === null || typeof saved !== "object" || Array.isArray(saved)
+                || Object.values(saved).some(value => typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)) {
+                logger.error("Saved voice statistics are invalid. Tracking has been paused to preserve them.");
+                return;
+            }
+            for (const [userId, value] of Object.entries(saved as Record<string, number>)) totalsByUser.set(userId, value);
         }
         pluginStarted = true;
 

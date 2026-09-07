@@ -1608,6 +1608,25 @@ test("webpack tar archives contain only the supplied byte view", () => {
     assert.equal(archive.length, 2048);
 });
 
+test("voice statistics reject malformed saved totals without starting or overwriting them", async () => {
+    for (const saved of [null, [], "bad", 5, { friend: "5" }, { friend: -1 }, { friend: NaN }, { friend: Infinity }, { friend: 1.5 }]) {
+        let errors = 0;
+        const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {
+            "@utils/Logger": { Logger: class { error() { errors++; } } },
+            "@api/DataStore": { get: async () => saved, set: () => assert.fail("Must preserve malformed data") }, "@components/BaseText": {},
+            "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+            "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
+            "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+            "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
+            "@webpack/common": { UserStore: { getCurrentUser: () => assert.fail("Must not start tracking") } }
+        }, {}, "({ plugin: exports.default, totalsByUser })");
+        await api.plugin.start();
+        assert.equal(api.totalsByUser.size, 0);
+        assert.equal(errors, 1);
+        api.plugin.stop();
+    }
+});
+
 test("voice statistics retain failed saves for the next persistence attempt", async () => {
     let attempts = 0;
     let errors = 0;

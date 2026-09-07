@@ -1306,6 +1306,32 @@ test("BetterSessions returns its settings-close save to the flux error handler",
     await rejected;
 });
 
+test("StatusWhileActive returns voice status failures to its flux wrapper", async () => {
+    let status = "online";
+    let channelId: string | undefined = "voice";
+    let pending = Promise.withResolvers<void>();
+    const { default: plugin } = loadSource("src/equicordplugins/statusWhileActive.desktop/index.ts", {
+        "@api/Settings": { definePluginSettings: () => ({ store: { statusToSet: "dnd" } }) },
+        "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => status, updateSetting: () => pending.promise }) },
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack/common": {
+            UserStore: { getCurrentUser: () => ({ id: "account" }) },
+            VoiceStateStore: { getVoiceStateForUser: () => ({ channelId }) },
+        },
+    });
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const result = plugin.flux.VOICE_STATE_UPDATES({ voiceStates: [{ userId: "account" }] });
+        assert.equal(result, pending.promise);
+        const rejected = assert.rejects(result, /update failed/);
+        pending.reject(new Error("update failed"));
+        await rejected;
+        status = "dnd";
+        channelId = undefined;
+        pending = Promise.withResolvers<void>();
+    }
+});
+
 test("StatusWhileActive never restores another account's status", () => {
     for (const change of ["stop", "leave", "logout", "same", "start", "disconnected", "manual-stop", "manual-leave"]) {
         let userId = "first";

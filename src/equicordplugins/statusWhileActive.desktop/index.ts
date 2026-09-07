@@ -47,16 +47,16 @@ function setStatus(userId: string, inVoiceChannel: boolean, status: string) {
     if (inVoiceChannel) {
         if (status !== settings.store.statusToSet) {
             savedStatus = { userId, value: status, applied: settings.store.statusToSet };
-            StatusSettings?.updateSetting(settings.store.statusToSet);
+            return StatusSettings?.updateSetting(settings.store.statusToSet);
         }
         return;
     }
 
     if (savedStatus) {
-        if (status === savedStatus.applied) {
-            StatusSettings?.updateSetting(savedStatus.value);
-        }
+        const previousStatus = savedStatus;
         savedStatus = null;
+        if (status === previousStatus.applied)
+            return StatusSettings?.updateSetting(previousStatus.value);
     }
 }
 
@@ -67,7 +67,7 @@ function updateStatusForCurrentVoiceState() {
     const status = StatusSettings.getSetting();
     const inVoiceChannel = !!VoiceStateStore.getVoiceStateForUser(userId)?.channelId;
 
-    setStatus(userId, inVoiceChannel, status);
+    return setStatus(userId, inVoiceChannel, status);
 }
 
 export default definePlugin({
@@ -91,7 +91,7 @@ export default definePlugin({
             const myState = voiceStates.find(state => state.userId === userId);
             if (!myState) return;
 
-            updateStatusForCurrentVoiceState();
+            return updateStatusForCurrentVoiceState();
         }
     },
 

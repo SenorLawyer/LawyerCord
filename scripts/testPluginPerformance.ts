@@ -12079,7 +12079,6 @@ test("TranslatePlus delivers to surviving views and rejects detached requests", 
     const accessory = loadSource("src/equicordplugins/translatePlus/utils/accessory.tsx", {
         "@components/Button": {},
         "@plugins/translate/languages": {},
-        "@equicordplugins/translatePlus/misc/types": {},
         "./icon": {},
         "./translator": { translate: () => new Promise(resolve => { finish = resolve; }) },
         "@webpack/common": {
@@ -12124,7 +12123,6 @@ test("TranslatePlus language labels ignore inherited properties", () => {
         }, {
             "@components/Button": {},
             "@plugins/translate/languages": { GoogleLanguages },
-            "@equicordplugins/translatePlus/misc/types": { cl: () => "" },
             "./icon": {}, "./translator": {}
         });
         const children = Accessory({ message: { id: "message" } }).props.children;
@@ -12141,7 +12139,6 @@ test("TranslatePlus failures show one toast without replacing translations or lo
     const accessory = loadSource("src/equicordplugins/translatePlus/utils/accessory.tsx", {
         "@components/Button": {},
         "@plugins/translate/languages": {},
-        "@equicordplugins/translatePlus/misc/types": {},
         "./icon": {},
         "./translator": { translate: () => new Promise((_resolve, fail) => { reject = fail; }) },
         "@webpack/common": {
@@ -12175,7 +12172,7 @@ test("TranslatePlus ignores older request results and failures", async () => {
     const accessory = loadSource("src/equicordplugins/translatePlus/utils/accessory.tsx", {
         "@components/Button": {},
         "@plugins/translate/languages": {},
-        "@equicordplugins/translatePlus/misc/types": {}, "./icon": {},
+        "./icon": {},
         "./translator": { translate: () => new Promise((resolve, reject) => pending.push({ resolve, reject })) },
         "@webpack/common": {
             UserStore: { getCurrentUser: () => ({ id: "account" }) },
@@ -12229,7 +12226,7 @@ test("TranslatePlus rejects account changes before accessory cleanup", async () 
     const accessory = loadSource("src/equicordplugins/translatePlus/utils/accessory.tsx", {
         "@components/Button": {},
         "@plugins/translate/languages": {},
-        "@equicordplugins/translatePlus/misc/types": {}, "./icon": {},
+        "./icon": {},
         "./translator": { translate: () => { requests++; return new Promise((resolve, reject) => { finish = resolve; fail = reject; }); } },
         "@webpack/common": {
             UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined },

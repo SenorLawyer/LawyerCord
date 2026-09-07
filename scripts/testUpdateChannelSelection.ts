@@ -14,7 +14,6 @@ function release(tag_name: string, published_at: string, prerelease = false): Gi
         prerelease,
         published_at,
         tag_name,
-        target_commitish: tag_name,
     };
 }
 

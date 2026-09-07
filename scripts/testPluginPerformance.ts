@@ -1535,10 +1535,13 @@ test("blocked sticker placeholders subscribe to display preferences", () => {
     assert.equal(subscriptions[0], subscriptions[2]);
 });
 
-test("web image copying releases bitmaps and propagates conversion and clipboard failures", async () => {
-    for (const mode of ["success", "draw", "context", "encode", "clipboard"]) {
+test("web image copying releases bitmaps and reports conversion, download, and clipboard failures", async () => {
+    for (const mode of ["success", "draw", "context", "encode", "clipboard", "http"]) {
         let closed = 0;
         let copied = 0;
+        let saved = 0;
+        let saveFailure = false;
+        const toasts: string[] = [];
         const bitmap = { width: 4, height: 3, close() { closed++; } };
         const canvas = { width: 0, height: 0,
             getContext: () => mode === "context" ? null : ({ drawImage: (image: unknown) => { assert.equal(image, bitmap); if (mode === "draw") throw new Error("draw failed"); } }),
@@ -1546,19 +1549,27 @@ test("web image copying releases bitmaps and propagates conversion and clipboard
         };
         const { default: plugin } = loadSource("src/plugins/webContextMenus.web/index.ts", {
             "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
-            "@utils/clipboard": {}, "@utils/constants": { Devs: {} }, "@utils/web": {},
+            "@utils/clipboard": {}, "@utils/constants": { Devs: {} }, "@utils/web": { saveFile: () => { if (saveFailure) throw new Error("save failed"); saved++; } },
             "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
-            "@webpack": { filters: { byCode() {} }, mapMangledModuleLazy: () => ({}) }, "@webpack/common": {},
+            "@webpack": { filters: { byCode() {} }, mapMangledModuleLazy: () => ({}) }, "@webpack/common": { showToast: (message: string, type: string) => { assert.equal(type, "failure"); toasts.push(message); }, Toasts: { Type: { FAILURE: "failure" } } },
         }, {
-            IS_VESKTOP: false, IS_EQUIBOP: false, window: {}, URL,
-            fetch: async () => ({ blob: async () => ({ type: "image/jpeg" }) }),
+            IS_VESKTOP: false, IS_EQUIBOP: false, window: {}, URL, File: class {},
+            fetch: async () => ({ ok: mode !== "http", blob: async () => ({ type: "image/jpeg" }) }),
             createImageBitmap: async () => bitmap, document: { createElement: () => canvas },
             navigator: { clipboard: { write: async () => { copied++; if (mode === "clipboard") throw new Error("clipboard failed"); } } }, ClipboardItem: class {},
         });
-        if (mode !== "success") await assert.rejects(plugin.copyImage("https://cdn.discordapp.com/image.jpg"), /draw failed|image canvas|encode the image|clipboard failed/);
-        else await plugin.copyImage("https://cdn.discordapp.com/image.jpg");
-        assert.equal(closed, 1);
+        await assert.doesNotReject(plugin.copyImage("https://cdn.discordapp.com/image.jpg"));
+        assert.deepEqual(toasts, mode === "success" ? [] : ["Could not copy the image."]);
+        assert.equal(closed, mode === "http" ? 0 : 1);
         assert.equal(copied, mode === "success" || mode === "clipboard" ? 1 : 0);
+        toasts.length = 0;
+        await assert.doesNotReject(plugin.saveImage("https://cdn.discordapp.com/image.jpg"));
+        assert.equal(saved, mode === "http" ? 0 : 1);
+        assert.deepEqual(toasts, mode === "http" ? ["Could not save the image."] : []);
+        toasts.length = 0;
+        saveFailure = true;
+        await assert.doesNotReject(plugin.saveImage("https://cdn.discordapp.com/image.jpg"));
+        assert.deepEqual(toasts, ["Could not save the image."]);
     }
 });
 

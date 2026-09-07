@@ -9591,3 +9591,30 @@ test("narrator language picker falls back when its selected language disappears"
     assert.equal(picker.children[1].props.value, "en");
     assert.equal(picker.children[3].props.voices, english);
 });
+
+test("sticker blocking reads current settings without a startup cache", () => {
+    const store = { blockedStickers: "first, second, first" };
+    const subscriptions: unknown[] = [];
+    const { plugin, toggleBlock } = loadSource("src/equicordplugins/stickerBlocker/index.tsx", {
+        "@api/ContextMenu": {},
+        "@api/Settings": { definePluginSettings: () => ({ store, use: (keys: unknown) => {
+            subscriptions.push(keys);
+            return store;
+        } }) },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/constants": { Devs: {} }, "@utils/misc": {},
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack": { findCssClassesLazy: () => ({}) }, "@webpack/common": {}
+    }, {}, "({ plugin: exports.default, toggleBlock })");
+    assert.equal(plugin.isBlocked("first"), true);
+    toggleBlock("first");
+    assert.equal(store.blockedStickers, "second");
+    assert.equal(plugin.isBlocked("first"), false);
+    store.blockedStickers = "third";
+    assert.equal(plugin.isBlocked("second"), false);
+    assert.equal(plugin.isBlocked("third"), true);
+    toggleBlock("fourth");
+    assert.equal(store.blockedStickers, "third, fourth");
+    assert.deepEqual(Array.from(subscriptions[0] as string[]), ["blockedStickers"]);
+    assert.ok(subscriptions.every(keys => keys === subscriptions[0]));
+});

@@ -16,7 +16,7 @@ import type { ReactNode } from "react";
 
 const CodeContainerClasses = findCssClassesLazy("markup", "codeContainer");
 const MessageContentClasses = findCssClassesLazy("messageContent", "messageContentTrailingIcon");
-let blockedStickerIds = new Set<string>();
+const BLOCK_SETTINGS: "blockedStickers"[] = ["blockedStickers"];
 const DISPLAY_SETTINGS: ("showGif" | "showMessage" | "showButton")[] = ["showGif", "showMessage", "showButton"];
 
 const settings = definePluginSettings({
@@ -38,7 +38,6 @@ const settings = definePluginSettings({
     blockedStickers: {
         type: OptionType.STRING,
         description: "The list of blocked sticker IDs (don't edit unless you know what you're doing)",
-        onChange: value => { blockedStickerIds = parseStickerIds(value); },
         default: ""
     }
 });
@@ -53,11 +52,6 @@ function parseStickerIds(value: string | null | undefined): Set<string> {
     }
 
     return ids;
-}
-
-function updateBlockedStickers(nextBlockedStickerIds: Set<string>) {
-    blockedStickerIds = nextBlockedStickerIds;
-    settings.store.blockedStickers = [...nextBlockedStickerIds].join(", ");
 }
 
 function blockedComponentRender(sticker) {
@@ -110,14 +104,14 @@ function buildMenuItem(name) {
         <Menu.MenuItem
             id="add-sticker-block"
             key="add-sticker-block"
-            label={blockedStickerIds.has(name) ? "Unblock Sticker" : "Block Sticker"}
+            label={parseStickerIds(settings.store.blockedStickers).has(name) ? "Unblock Sticker" : "Block Sticker"}
             action={() => toggleBlock(name)}
         />
     );
 }
 
 function toggleBlock(name) {
-    const nextBlockedStickerIds = new Set(blockedStickerIds);
+    const nextBlockedStickerIds = parseStickerIds(settings.store.blockedStickers);
     const excepted = nextBlockedStickerIds.has(name);
 
     if (excepted) {
@@ -126,7 +120,7 @@ function toggleBlock(name) {
         nextBlockedStickerIds.add(name);
     }
 
-    updateBlockedStickers(nextBlockedStickerIds);
+    settings.store.blockedStickers = [...nextBlockedStickerIds].join(", ");
 }
 
 export default definePlugin({
@@ -147,11 +141,9 @@ export default definePlugin({
         "message": messageContextMenuPatch,
         "expression-picker": expressionPickerPatch,
     },
-    start() {
-        blockedStickerIds = parseStickerIds(settings.store.blockedStickers);
-    },
-    isBlocked(stickerId) {
-        return blockedStickerIds.has(stickerId);
+    isBlocked(stickerId: string) {
+        const { blockedStickers } = settings.use(BLOCK_SETTINGS);
+        return parseStickerIds(blockedStickers).has(stickerId);
     },
     blockedComponent: ErrorBoundary.wrap(blockedComponentRender, { fallback: () => <p style={{ color: "red" }}>Failed to render :(</p> }),
     settings,

@@ -76,7 +76,9 @@ UserPFP separates remote avatars from saved local overrides, gives local choices
 
 MediaPlaybackSpeed preserves a speed chosen before the first voice play event, identifies voice controls through an explicit patch prop, and falls back to 1x for invalid saved rates. Its control uses the shared button and radio menu items. CustomFolderIcons removes the redundant save helper, unused class, forwarding callbacks, repeated lookups, and non-null assertions; its renderer uses the shared error boundary. Regression fixtures cover these paths. Live patch matches, layout, and remaining settings reactivity are unverified.
 
-Sticker menus use format metadata instead of CSS-name guesses, and sticker blocking reads subscribed settings without a duplicate cache. Expression cloning settles file-read failures, validates server errors, captures the chosen name before asynchronous work, keeps visible input and validation aligned, and subscribes its server list to account, permission, emoji, and sticker stores. Clone controls use shared keyboard-accessible buttons.
+Sticker menus use format metadata instead of CSS-name guesses, and sticker blocking reads subscribed settings without a duplicate cache. Expression cloning settles file-read failures, validates server errors, captures the chosen name before asynchronous work, keeps visible input and validation aligned, and subscribes its server list to account, permission, emoji, and sticker stores. Clone controls use shared keyboard-accessible buttons. Each modal owns its pending request, prevents duplicate activation, and cancels on cleanup; a two-modal fixture verifies that closing one leaves the other request running. Plugin stop and logout cancel downloads and file reads. Intentional cancellation produces no failure toast.
+
+CopyStatusUrls awaits the shared clipboard helper and reports asynchronous failures. Its metadata result is validated before copying; malformed results leave the clipboard untouched. The broad webpack finder and patch still need live-client validation.
 
 ## Verification record
 
@@ -84,11 +86,11 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `06bc30cc3` | 410 tests and timezone correctness checks passed. |
+| Broader performance/correctness suite | `c7b150ae8` | 412 tests and timezone correctness checks passed. |
 | Repository-wide ESLint | `06bc30cc3` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
 | CSS lint | `c50d116a4` | Passed; excludes userplugins. |
 | Internationalization lint | `5e869fea9` | Passed for tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest plugin regressions and TypeScript | `06bc30cc3` | 358 plugin tests, full TypeScript, and focused ExpressionCloner lint passed. Source fixtures reject TypeScript syntax diagnostics before execution. |
+| Latest focused regressions and TypeScript | `95582ee58` | Both status URL regressions, full TypeScript, and focused lint passed. The metadata fixture covers nine valid and malformed results. Source fixtures reject TypeScript syntax diagnostics before execution. |
 | Standalone build | `06bc30cc3` | Passed after sticker and expression-cloning changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
 | Development build | `0fc6ab63b` | Passed after composer, codec, preset, and game-status startup changes. |
 | Installer review browser checks | `d7b99b737` | Actual templates and generator functions in isolated Chrome preserved literal metadata, all four native/pre-send warning combinations, the native acknowledgement gate, and cancellation. Electron IPC and real installation were not exercised. |
@@ -98,7 +100,8 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Avatar startup and edit ordering | `296e36989` | Actual loader, editor actions, and DataStore in isolated Chrome preserved edits in 20 overlapping runs, ten with startup first and ten with saving first. This checks one client context, not synchronization between clients. No extra production guard was added. |
 | Avatar edit transactions | `3bf4098d6` | Actual AvatarModal actions and DataStore code in isolated Chrome preserved storage and memory after an aborted write, kept both concurrent user edits, and deleted only the selected override. React rendering and Discord dependencies were mocked. |
 | Real IndexedDB queue behavior | `ce04cc40a` | Isolated Chrome verified aborted additions, ordered concurrent additions, aborted clearing, and subsequent successful clearing using actual queue and DataStore code. |
-| Clone download cancellation | `3cce21c8f` | Actual cloning code in isolated Chromium against a local HTTP server passed stop/logout checks before response headers and during body download. All four cases closed the connection, settled with failure feedback, and made no upload call. Discord stores, upload helpers, and toasts were mocked; already-issued uploads and modal-close cancellation remain unverified. |
+| Clone download cancellation | `1ea9bc2e2` | Actual cloning code in isolated Chromium against a local HTTP server passed stop/logout checks before response headers and during body download. All four cases closed the connection, settled without failure feedback, and made no upload call. Discord stores, upload helpers, and toasts were mocked; already-issued uploads remain unverified. |
+| Clone file-read cancellation | `4c491774d` | Actual clone helper with native Chromium Blob and FileReader aborted a pending read once without uploading. A completed read removed its abort listener. Downloads, stores, and uploads were mocked. |
 | Clone button keyboard behavior | `38736e4cd` | Actual CloneModal props, shared Button, and stylesheet in isolated Chrome produced 64px controls at a 16px parent font, Tab focus, a focus ring, Enter/Space activation, and no activation while disabled. React and Discord dependencies were mocked; full client layout and uploads were not exercised. |
 | Playback rate application | `44d2a1156` | Actual MediaPlaybackSpeed code with Chrome audio/video elements passed 42 valid/invalid rate cases, preserved a 3x first-play selection, and verified one-shot listener and cleanup behavior. Play events were synthetic; no audio or live Discord UI was exercised. |
 | Image copy conversion | `41343b959` | Actual WebContextMenus code in isolated Chrome converted a JPEG to a 3 by 2 PNG, preserved red pixels, and closed the source bitmap exactly once. Clipboard delivery was intercepted; OS clipboard permission and live Discord menus were not tested. |

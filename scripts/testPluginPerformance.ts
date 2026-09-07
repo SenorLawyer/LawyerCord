@@ -1608,6 +1608,28 @@ test("webpack tar archives contain only the supplied byte view", () => {
     assert.equal(archive.length, 2048);
 });
 
+test("voice rejoin waits for voice state confirmation before persisting success", async () => {
+    let reconnect: () => Promise<void> = async () => assert.fail("Missing reconnect");
+    let dispatched = 0;
+    const api = loadSource("src/equicordplugins/voiceRejoin/index.tsx", {
+        "@utils/misc": {},
+        "@api/DataStore": { get: async (key: string) => key === "VCLastVoiceChannelSession" ? true : { channelId: "previous", guildId: "guild", timestamp: 1000 }, set: () => assert.fail("A requested join is not confirmation") },
+        "@api/Settings": { definePluginSettings: () => ({ store: { rejoinDelay: 2, rejoinTimeout: 30, preventReconnectIfCallEnded: "none" } }) },
+        "@utils/constants": { EquicordDevs: {} }, "@utils/Logger": { Logger: class { error(error: unknown) { assert.fail(String(error)); } } },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, makeRange: () => [], OptionType: {} },
+        "@webpack/common": {
+            ChannelStore: { getChannel: () => ({ isDM: () => false, isGroupDM: () => false, isMultiUserDM: () => false }) },
+            UserStore: { getCurrentUser: () => ({ id: "me" }) },
+            VoiceStateStore: { getVoiceStateForUser: () => undefined },
+            FluxDispatcher: { dispatch: (event: { type: string; channelId: string; }) => { assert.equal(event.type, "VOICE_CHANNEL_SELECT"); assert.equal(event.channelId, "previous"); dispatched++; } }
+        }
+    }, { Date: { now: () => 2000 }, setTimeout: (callback: typeof reconnect) => { reconnect = callback; return 1; }, clearTimeout() {} });
+    await api.default.flux.CONNECTION_OPEN();
+    await reconnect();
+    assert.equal(dispatched, 1);
+    api.default.stop();
+});
+
 test("voice rejoin stops channel polling after cancellation", async () => {
     let wake: () => void = () => assert.fail("Missing wait");
     let reads = 0;

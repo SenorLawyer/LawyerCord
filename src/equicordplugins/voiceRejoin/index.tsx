@@ -247,9 +247,6 @@ export default definePlugin({
                         guildId: saved.guildId,
                         channelId: saved.channelId,
                     });
-
-                    await DataStore.set(DATASTORE_SESSION_KEY, true);
-                    if (scheduledGeneration === reconnectGeneration) cachePersistedState(saved, true);
                 } catch (err) {
                     logger.error("Failed to run voice rejoin", err);
                 }

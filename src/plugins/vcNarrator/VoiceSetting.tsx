@@ -6,20 +6,9 @@
 
 import { Heading } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
-import { SearchableSelect, useMemo, useState } from "@webpack/common";
+import { lodash, SearchableSelect, useMemo, useState } from "@webpack/common";
 
 import { getCurrentVoice, settings } from "./settings";
-
-// TODO: replace by [Object.groupBy](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/groupBy) once it has more maturity
-
-function groupBy<T extends object, K extends PropertyKey>(arr: T[], fn: (obj: T) => K) {
-    return arr.reduce((acc, obj) => {
-        const value = fn(obj);
-        acc[value] ??= [];
-        acc[value].push(obj);
-        return acc;
-    }, {} as Record<K, T[]>);
-}
 
 interface PickerProps {
     voice: string | undefined;
@@ -48,24 +37,25 @@ function SimplePicker({ voice, voices }: PickerProps) {
 const languageNames = new Intl.DisplayNames(["en"], { type: "language" });
 
 function ComplexPicker({ voice, voices }: PickerProps) {
-    const groupedVoices = useMemo(() => groupBy(voices, voice => voice.lang), [voices]);
+    const groupedVoices = useMemo(() => lodash.groupBy(voices, voice => voice.lang), [voices]);
 
     const languageNameMapping = useMemo(() => {
-        const list = [] as Record<"name" | "friendlyName", string>[];
+        const list: { name: string; friendlyName: string; }[] = [];
 
         for (const name in groupedVoices) {
+            let friendlyName = name;
             try {
-                const friendlyName = languageNames.of(name);
-                if (friendlyName) {
-                    list.push({ name, friendlyName });
-                }
-            } catch { }
+                friendlyName = languageNames.of(name) ?? name;
+            } catch {
+                friendlyName = name;
+            }
+            list.push({ name, friendlyName });
         }
 
         return list;
     }, [groupedVoices]);
 
-    const [selectedLanguage, setSelectedLanguage] = useState(() => getCurrentVoice()?.lang ?? languageNameMapping[0].name);
+    const [selectedLanguage, setSelectedLanguage] = useState(() => getCurrentVoice(voices)?.lang ?? languageNameMapping[0].name);
 
     if (languageNameMapping.length === 1) {
         return (

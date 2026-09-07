@@ -8255,3 +8255,25 @@ test("narrator voice lookup preserves the selected voice while voices load", () 
     assert.equal(api.getCurrentVoice(), undefined);
     assert.equal(store.voice, "preferred");
 });
+
+
+test("narrator language picker keeps voices with unrecognized language tags", () => {
+    for (const language of ["not_a_language", "en"]) {
+        const voices = Array.from({ length: 21 }, (_, id) => ({ lang: language, voiceURI: String(id), name: String(id) }));
+        let grouped = 0;
+        const api = loadSource("src/plugins/vcNarrator/VoiceSetting.tsx", {
+            "@components/Heading": {}, "@components/Paragraph": {},
+            "@webpack/common": { lodash: { groupBy: (items: unknown, key: (voice: object) => string) => {
+                grouped++;
+                assert.equal(items, voices);
+                assert.equal(key(voices[0]), language);
+                return { [language]: voices };
+            } }, useMemo: (read: () => unknown) => read(), useState: (read: () => unknown) => [read(), () => {}] },
+            "./settings": { getCurrentVoice: (items: unknown) => { assert.equal(items, voices); }, settings: {} }
+        }, { React: { createElement: (type: unknown, props: object) => ({ type, props }) }, Intl }, "({ ComplexPicker })");
+        const picker = api.ComplexPicker({ voices, voice: "0" });
+        assert.equal(grouped, 1);
+        assert.equal(picker.props.voices, voices);
+        assert.equal(picker.props.voice, "0");
+    }
+});

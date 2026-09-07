@@ -156,7 +156,7 @@ async function syncGuildsForUser(userId: string) {
                 iconURL: icon && `https://cdn.discordapp.com/icons/${id}/${icon}.png`
             });
     }
-    await DataStore.set(guildsKey(userId), guilds);
+    await DataStore.set(guildsKey(userId), new Map(guilds));
 }
 
 export function getGroup(id: string) {
@@ -194,7 +194,7 @@ async function syncGroupsForUser(userId: string) {
         }
     }
 
-    await DataStore.set(groupsKey(userId), groups);
+    await DataStore.set(groupsKey(userId), new Map(groups));
 }
 
 export async function syncFriends() {
@@ -220,5 +220,5 @@ async function syncFriendsForUser(userId: string) {
         }
     }
 
-    await DataStore.set(friendsKey(userId), friends);
+    await DataStore.set(friendsKey(userId), { ...friends });
 }

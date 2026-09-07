@@ -10417,3 +10417,40 @@ test("relationship guild and group removals propagate storage failures to Flux",
         }
     }
 });
+
+
+test("relationship persistence keeps each account snapshot while storage opens", async () => {
+    let userId = "first";
+    const saved = new Map<string, unknown>();
+    const dataStore = loadSource("src/api/DataStore/index.ts", {});
+    const utils = loadSource("src/plugins/relationshipNotifier/utils.ts", {
+        "@api/DataStore": { set: (key: string, value: unknown) => dataStore.set(key, value, (_mode: string, callback: (store: object) => unknown) => Promise.resolve().then(() => {
+            const transaction: { oncomplete?: () => void; } = {};
+            const result = callback({ transaction, put: (data: unknown, id: string) => saved.set(id, structuredClone(data)) });
+            queueMicrotask(() => transaction.oncomplete?.());
+            return result;
+        })) },
+        "@api/Notices": {}, "@api/Notifications": {}, "@utils/discord": {},
+        "@vencord/discord-types/enums": { ChannelType: { GROUP_DM: 3 }, RelationshipType: { FRIEND: 1, INCOMING_REQUEST: 3 } },
+        "@webpack": { findStoreLazy: () => ({}) },
+        "@webpack/common": {
+            UserStore: { getCurrentUser: () => ({ id: userId }) },
+            GuildStore: { getGuilds: () => ({ [userId]: { name: userId } }) },
+            GuildMemberStore: { isMember: () => true },
+            ChannelStore: { getSortedPrivateChannels: () => [{ id: userId, name: userId, type: 3, rawRecipients: [] }] },
+            RelationshipStore: { getMutableRelationships: () => new Map([[userId + "-friend", 1], [userId + "-request", 3]]) }
+        },
+        "./settings": {}
+    });
+    const first = [utils.syncGuilds(), utils.syncGroups(), utils.syncFriends()];
+    userId = "second";
+    await Promise.all([...first, utils.syncGuilds(), utils.syncGroups(), utils.syncFriends()]);
+    for (const owner of ["first", "second"]) {
+        for (const kind of ["guilds", "groups"]) {
+            const snapshot = saved.get(`relationship-notifier-${kind}-${owner}`);
+            assert.ok(snapshot instanceof Map);
+            assert.deepEqual([...snapshot.keys()], [owner]);
+        }
+        assert.deepEqual(saved.get(`relationship-notifier-friends-${owner}`), { friends: [owner + "-friend"], requests: [owner + "-request"] });
+    }
+});

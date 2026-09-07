@@ -140,9 +140,10 @@ async function deeplTranslate(text: string, sourceLang: string, targetLang: stri
         || !("text" in translation) || typeof translation.text !== "string")
         throw new Error("DeepL returned an invalid response.");
 
+    const language = translation.detected_source_language.toLowerCase();
     return {
-        sourceLanguage: Object.hasOwn(DeeplLanguages, translation.detected_source_language)
-            ? DeeplLanguages[translation.detected_source_language] : translation.detected_source_language,
+        sourceLanguage: Object.hasOwn(DeeplLanguages, language) ? DeeplLanguages[language]
+            : Object.hasOwn(GoogleLanguages, language) ? GoogleLanguages[language] : translation.detected_source_language,
         text: translation.text
     };
 }

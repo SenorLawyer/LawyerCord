@@ -11834,14 +11834,14 @@ test("received translation actions discard results from previous sessions", asyn
 });
 
 test("translation language labels ignore inherited dictionary properties", async () => {
-    for (const service of ["google", "deepl"]) for (const language of ["en", "unknown", "constructor", "__proto__", "toString"]) {
+    for (const service of ["google", "deepl"]) for (const language of ["en", "EN", "DE", "PT", "unknown", "constructor", "__proto__", "toString"]) {
         const payload = service === "google" ? { translation: "bonjour", sourceLanguage: language }
             : { translations: [{ text: "bonjour", detected_source_language: language }] };
         const { translateText } = loadSource("src/plugins/translate/utils.ts", {
             "@utils/css": { classNameFactory: () => () => "" },
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object", tryOrElse: (fn: () => unknown, fallback: unknown) => { try { return fn(); } catch { return fallback; } } },
             "@webpack/common": { showToast() {}, Toasts: { Type: { FAILURE: "failure" } } },
-            "./languages": { GoogleLanguages: { en: "English" }, DeeplLanguages: { en: "English" } },
+            "./languages": loadSource("src/plugins/translate/languages.ts", {}),
             "./settings": { settings: { store: { service, deeplApiKey: "fixture" } } }
         }, {
             IS_WEB: false, URLSearchParams, fetch: async () => ({ ok: true, json: async () => payload }),
@@ -11852,6 +11852,9 @@ test("translation language labels ignore inherited dictionary properties", async
 
         const result = await translateText("hello", "en", "fr");
         assert.equal(result.text, "bonjour");
-        assert.equal(result.sourceLanguage, language === "en" ? "English" : language);
+        const expected = language === "en" || (service === "deepl" && language === "EN") ? "English"
+            : service === "deepl" && language === "DE" ? "German"
+                : service === "deepl" && language === "PT" ? "Portuguese" : language;
+        assert.equal(result.sourceLanguage, expected);
     }
 });

@@ -1566,24 +1566,24 @@ test("GIF alt text excludes URL metadata and handles missing sources", () => {
 });
 
 test("automatic status lifecycle failures are logged without rejecting", async () => {
-    for (const mode of ["voice-start", "voice-stop", "game-stop"]) {
+    for (const mode of ["voice-start", "voice-stop", "game-start", "game-stop"]) {
         let status = "online";
         let fail = false;
         const errors: unknown[] = [];
         const failure = new Error("settings unavailable");
-        const file = mode === "game-stop" ? "src/plugins/autoDndWhilePlaying.discordDesktop/index.ts" : "src/equicordplugins/statusWhileActive.desktop/index.ts";
+        const file = mode.startsWith("game") ? "src/plugins/autoDndWhilePlaying.discordDesktop/index.ts" : "src/equicordplugins/statusWhileActive.desktop/index.ts";
         const { default: plugin } = loadSource(file, {
             "@api/Settings": { definePluginSettings: () => ({ store: { statusToSet: "dnd" } }), migratePluginSettings() {} },
             "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => status, updateSetting: async (value: string) => { if (fail) throw failure; status = value; } }) },
             "@utils/Logger": { Logger: class { error(_message: string, error: unknown) { errors.push(error); } } },
             "@utils/constants": { Devs: {}, EquicordDevs: {} },
             "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
-            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, VoiceStateStore: { getVoiceStateForUser: () => ({ channelId: "voice" }) } },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, VoiceStateStore: { getVoiceStateForUser: () => ({ channelId: "voice" }) }, RunningGameStore: { getRunningGames: () => [{}] } },
         });
         if (mode === "game-stop") await plugin.flux.RUNNING_GAMES_CHANGE({ games: [{}] });
         if (mode === "voice-stop") await plugin.start();
         fail = true;
-        await assert.doesNotReject(mode === "voice-start" ? plugin.start() : plugin.stop());
+        await assert.doesNotReject(mode.endsWith("start") ? plugin.start() : plugin.stop());
         assert.deepEqual(errors, [failure]);
     }
 });
@@ -1671,6 +1671,28 @@ test("StatusWhileActive never restores another account's status", () => {
         }
         plugin.stop();
         assert.deepEqual(updates, change === "same" || change === "start" ? ["dnd", "online"] : ["dnd"]);
+    }
+});
+
+test("AutoDND starts from currently running games and restores on stop", async () => {
+    for (const mode of ["playing", "empty", "invisible", "logged-out"]) {
+        let status = mode === "invisible" ? "invisible" : "online";
+        const updates: string[] = [];
+        const { default: plugin } = loadSource("src/plugins/autoDndWhilePlaying.discordDesktop/index.ts", {
+            "@api/Settings": { definePluginSettings: () => ({ store: { statusToSet: "dnd", excludeInvisible: true } }), migratePluginSettings() {} },
+            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => status, updateSetting: async (value: string) => { status = value; updates.push(value); } }) },
+            "@utils/Logger": { Logger: class { error() { assert.fail("Unexpected status failure"); } } },
+            "@utils/constants": { Devs: {} },
+            "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => mode === "logged-out" ? undefined : { id: "account" } },
+                RunningGameStore: { getRunningGames: () => mode === "empty" ? [] : [{}] },
+            },
+        });
+        await plugin.start();
+        assert.deepEqual(updates, mode === "playing" ? ["dnd"] : []);
+        await plugin.stop();
+        assert.deepEqual(updates, mode === "playing" ? ["dnd", "online"] : []);
     }
 });
 

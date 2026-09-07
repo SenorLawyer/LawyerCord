@@ -9,7 +9,7 @@ import { getUserSettingLazy } from "@api/UserSettings";
 import { Devs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
-import { UserStore } from "@webpack/common";
+import { RunningGameStore, UserStore } from "@webpack/common";
 
 let savedStatus: { userId: string; value: string; applied: string; } | null = null;
 
@@ -47,6 +47,25 @@ const settings = definePluginSettings({
     },
 });
 
+function updateStatus(isPlaying: boolean) {
+    const userId = UserStore.getCurrentUser()?.id;
+    if (savedStatus?.userId !== userId) savedStatus = null;
+    if (!userId) return;
+    const status = StatusSettings.getSetting();
+
+    if (isPlaying) {
+        if (settings.store.excludeInvisible && status === "invisible") return;
+        if (status !== settings.store.statusToSet) {
+            savedStatus = { userId, value: status, applied: settings.store.statusToSet };
+            return StatusSettings.updateSetting(settings.store.statusToSet);
+        }
+    } else if (savedStatus) {
+        const previousStatus = savedStatus;
+        savedStatus = null;
+        if (status === previousStatus.applied) return StatusSettings.updateSetting(previousStatus.value);
+    }
+}
+
 migratePluginSettings("AutoDNDWhilePlaying", "StatusWhilePlaying");
 export default definePlugin({
     name: "AutoDNDWhilePlaying",
@@ -56,6 +75,13 @@ export default definePlugin({
     isModified: true,
     dependencies: ["UserSettingsAPI"],
     settings,
+    async start() {
+        try {
+            await updateStatus(RunningGameStore.getRunningGames().length > 0);
+        } catch (error) {
+            logger.error("Could not update your status.", error);
+        }
+    },
     async stop() {
         const previousStatus = savedStatus;
         savedStatus = null;
@@ -71,22 +97,7 @@ export default definePlugin({
             savedStatus = null;
         },
         RUNNING_GAMES_CHANGE({ games }) {
-            const userId = UserStore.getCurrentUser()?.id;
-            if (savedStatus?.userId !== userId) savedStatus = null;
-            if (!userId) return;
-            const status = StatusSettings.getSetting();
-
-            if (games.length > 0) {
-                if (settings.store.excludeInvisible && status === "invisible") return;
-                if (status !== settings.store.statusToSet) {
-                    savedStatus = { userId, value: status, applied: settings.store.statusToSet };
-                    return StatusSettings.updateSetting(settings.store.statusToSet);
-                }
-            } else if (savedStatus) {
-                const previousStatus = savedStatus;
-                savedStatus = null;
-                if (status === previousStatus.applied) return StatusSettings.updateSetting(previousStatus.value);
-            }
+            return updateStatus(games.length > 0);
         }
     }
 });

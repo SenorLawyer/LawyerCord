@@ -11307,3 +11307,18 @@ test("transcription model requests reject insecure and credentialed URLs before 
     assert.equal(reads, 2);
     worker.terminate();
 });
+
+test("transcription progress only displays finite bounded percentages", () => {
+    const source = readFileSync("src/equicordplugins/voiceMessageTranscriber.desktop/index.tsx", "utf8");
+    const start = source.indexOf("function progressPercent(");
+    const end = source.indexOf("async function copy(", start);
+    assert.ok(start >= 0 && end > start);
+    const code = transpileModule(source.slice(start, end), { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
+    const progressPercent = runInNewContext(code + ";progressPercent");
+    for (const [input, expected] of [
+        [null, null], [{}, null], [{ progress: NaN }, null], [{ progress: Infinity }, null],
+        [{ progress: -1 }, 0], [{ progress: 150 }, 100], [{ progress: 42.6 }, 43],
+        [{ loaded: 1, total: 4 }, 25], [{ loaded: 1, total: 0 }, null],
+        [{ loaded: Infinity, total: 4 }, null], [{ loaded: 5, total: 4 }, 100]
+    ]) assert.equal(progressPercent(input), expected);
+});

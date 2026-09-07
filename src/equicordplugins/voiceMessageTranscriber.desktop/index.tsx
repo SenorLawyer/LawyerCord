@@ -222,10 +222,10 @@ function chooseTargetLanguage(onSelect: (language: LanguageOption) => void): voi
 
 function progressPercent(progress: TranscriptionProgress | null): number | null {
     if (!progress) return null;
-    if (typeof progress.progress === "number") return Math.round(progress.progress);
-    if (typeof progress.loaded === "number" && typeof progress.total === "number" && progress.total > 0)
-        return Math.round(progress.loaded / progress.total * 100);
-    return null;
+    const percent = typeof progress.progress === "number" ? progress.progress
+        : typeof progress.loaded === "number" && typeof progress.total === "number" && progress.total > 0
+            ? progress.loaded / progress.total * 100 : NaN;
+    return Number.isFinite(percent) ? Math.min(100, Math.max(0, Math.round(percent))) : null;
 }
 
 async function copy(text: string) {

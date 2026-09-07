@@ -11194,3 +11194,32 @@ test("native voice recording rejects invalid paths before filesystem access", as
         assert.deepEqual(removals, [valid]);
     }
 });
+
+test("desktop voice recording settles failed audio reads", async () => {
+    for (const phase of ["success", "empty", "missing", "rejected"]) {
+        let callback: (file: string) => Promise<void> = async () => {};
+        const changes: boolean[] = [];
+        const states: boolean[] = [];
+        let toasts = 0;
+        const blobs: Blob[] = [];
+        const React = { createElement: (type: unknown, props: object) => ({ type, props }) };
+        const { VoiceRecorderDesktop } = loadSource("src/plugins/voiceMessages/components/DesktopRecorder.tsx", {
+            "@webpack/common": { React, Button: "button", useState: () => [true, (value: boolean) => states.push(value)],
+                Toasts: { Type: { FAILURE: "failure" } }, showToast: () => toasts++ },
+            "..": { settings: { store: {} } }
+        }, {
+            React, Blob, VencordNative: { pluginHelpers: { VoiceMessages: { readRecording: async () => {
+                if (phase === "rejected") throw new Error("IPC disconnected");
+                return phase === "missing" ? null : new Uint8Array([1, 2]);
+            } } } },
+            DiscordNative: { nativeModules: { requireModule: () => ({ stopLocalAudioRecording: (fn: typeof callback) => callback = fn }) } }
+        });
+        const button = VoiceRecorderDesktop({ setAudioBlob: (blob: Blob) => blobs.push(blob), onRecordingChange: (value: boolean) => changes.push(value) });
+        button.props.onClick();
+        await callback(phase === "empty" ? "" : "recording.ogg");
+        assert.deepEqual(states, [false], phase);
+        assert.deepEqual(changes, [false], phase);
+        assert.equal(toasts, phase === "success" ? 0 : 1, phase);
+        assert.equal(blobs.length, phase === "success" ? 1 : 0, phase);
+    }
+});

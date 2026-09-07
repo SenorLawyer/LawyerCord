@@ -303,23 +303,6 @@ export const DeeplLanguages = {
     "zu": "Zulu"
 } as const;
 
-export function deeplLanguageToGoogleLanguage(language: string) {
-    switch (language) {
-        case "": return "auto";
-        case "nb": return "no";
-        case "zh-hans": return "zh-CN";
-        case "zh-hant": return "zh-TW";
-        case "en-us":
-        case "en-gb":
-            return "en";
-        case "pt-br":
-        case "pt-pt":
-            return "pt";
-        default:
-            return language;
-    }
-}
-
 // Generated using:
 // curl https://translate.kagi.com/api/list-languages | jq 'map({(.language | ascii_downcase): .name}) | add | to_entries | sort_by(.value) | from_entries'
 // Add "auto": "Detect language", as Kagi has no "language" for Detect Language, however anything not

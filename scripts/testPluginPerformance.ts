@@ -11636,7 +11636,7 @@ test("DeepL failures do not send text to another provider or reset settings", as
             "@utils/css": { classNameFactory: () => () => "" }, "@utils/onlyOnce": { onlyOnce: (fn: unknown) => fn },
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object", tryOrElse: (fn: () => unknown) => fn() },
             "@webpack/common": { showToast() {}, Toasts: { Type: { FAILURE: "failure" } } },
-            "./languages": { GoogleLanguages: {}, deeplLanguageToGoogleLanguage: (value: string) => value },
+            "./languages": { GoogleLanguages: {} },
             "./settings": { settings, resetLanguageDefaults: () => resets++ }
         }, {
             IS_WEB: false, URLSearchParams,

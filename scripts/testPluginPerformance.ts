@@ -2005,6 +2005,7 @@ test("toast shutdown settles pending notifications and releases its root", async
     const { default: plugin } = loadSource("src/equicordplugins/toastNotifications/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
         "@components/Button": {}, "@utils/constants": { EquicordDevs: {} },
+        "@vencord/discord-types/enums": { UserNotificationSetting: { ALL_MESSAGES: 0, ONLY_MENTIONS: 1, NO_MESSAGES: 2 } },
         "@utils/types": { __esModule: true, default: (plugin: unknown) => plugin, makeRange: () => [], OptionType: {} },
         "@webpack": { findByPropsLazy: () => ({}), findStoreLazy: () => ({}) }, "@webpack/common": {},
         "./components/Notifications": notifications
@@ -2016,6 +2017,26 @@ test("toast shutdown settles pending notifications and releases its root", async
         await pending;
         assert.equal(unmounts, roots);
         assert.equal(removals, roots);
+    }
+});
+
+test("guild toasts use Discord's resolved notification level", () => {
+    let level = 0;
+    const channel = { id: "channel", guild_id: "guild" };
+    const api = loadSource("src/equicordplugins/toastNotifications/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: { friendServerNotifications: false } }) },
+        "@components/Button": {}, "@utils/constants": { EquicordDevs: {} },
+        "@vencord/discord-types/enums": { UserNotificationSetting: { ALL_MESSAGES: 0, ONLY_MENTIONS: 1, NO_MESSAGES: 2 } },
+        "@utils/types": { __esModule: true, default: (plugin: unknown) => plugin, makeRange: () => [], OptionType: {} },
+        "@webpack": { findByPropsLazy: () => ({ isGuildOrCategoryOrChannelMuted: () => false }) },
+        "@webpack/common": { UserGuildSettingsStore: {
+            getAllSettings: () => assert.fail("Do not reinterpret Discord settings"),
+            resolvedMessageNotifications: (value: unknown) => { assert.equal(value, channel); return level; }
+        } },
+        "./components/Notifications": {}
+    }, {}, "({ shouldNotifyForGuildMessage })");
+    for (level of [0, 1, 2]) for (const content of ["Hello", "<@current>", "<@!current>"]) {
+        assert.equal(api.shouldNotifyForGuildMessage({ content }, channel, "current", "author"), level === 0 || level === 1 && content !== "Hello");
     }
 });
 

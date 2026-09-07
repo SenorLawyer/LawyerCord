@@ -1608,6 +1608,28 @@ test("webpack tar archives contain only the supplied byte view", () => {
     assert.equal(archive.length, 2048);
 });
 
+test("voice statistics discard stored totals from a stopped generation", async () => {
+    const reads: ((value: object) => void)[] = [];
+    const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {
+        "@api/DataStore": { get: () => new Promise(resolve => reads.push(resolve)) }, "@components/BaseText": {},
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+        "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
+        "@webpack/common": { UserStore: { getCurrentUser: () => undefined } }
+    }, {}, "({ plugin: exports.default, totalsByUser })");
+    const first = api.plugin.start();
+    api.plugin.stop();
+    const second = api.plugin.start();
+    reads[1]({ friend: 20 });
+    await second;
+    reads[0]({ friend: 10, stale: 99 });
+    await first;
+    assert.equal(api.totalsByUser.get("friend"), 20);
+    assert.equal(api.totalsByUser.has("stale"), false);
+    api.plugin.stop();
+});
+
 test("voice statistics retain fractional seconds across periodic saves", () => {
     let now = 1000;
     const { sessionStarts, totalsByUser, flushActiveSessions, getLiveSeconds } = loadSource("src/equicordplugins/voiceStats/index.tsx", {

@@ -31,12 +31,6 @@ let totalsDirty = false;
 let pluginStarted = false;
 let startGeneration = 0;
 
-async function loadStoredTotals() {
-    const saved = await get<Record<string, number>>(storageKey);
-    if (!saved) return;
-    for (const [userId, value] of Object.entries(saved)) totalsByUser.set(userId, value);
-}
-
 async function persistTotals() {
     if (!totalsDirty) return;
 
@@ -213,8 +207,11 @@ export default definePlugin({
         pluginStarted = true;
         const generation = ++startGeneration;
 
-        await loadStoredTotals();
+        const saved = await get<Record<string, number>>(storageKey);
         if (!pluginStarted || generation !== startGeneration) return;
+        if (saved) {
+            for (const [userId, value] of Object.entries(saved)) totalsByUser.set(userId, value);
+        }
 
         const myId = UserStore.getCurrentUser()?.id;
         if (!myId) return;

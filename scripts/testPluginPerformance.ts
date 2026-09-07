@@ -12344,3 +12344,14 @@ test("UnitConverter does not match inside identifiers or longer unit words", () 
     assert.equal(convert("(10 inches)"), "(25.40cm)");
     assert.equal(convert("5 feet 11 inches"), "1.80m");
 });
+
+test("UnitConverter preserves Unicode identifiers and dimension suffixes", () => {
+    const settings = { store: { myUnits: "imperial" } };
+    const { convert } = loadSource("src/equicordplugins/unitConverter/converter.ts", { ".": { settings } });
+    for (const input of ["模型100m", "é100cm", "e\u030110cm", "100m²", "100m³", "100mé", "١10m"])
+        assert.equal(convert(input), input);
+    settings.store.myUnits = "metric";
+    for (const input of ["модель10ft", "10ft²", "10iné"])
+        assert.equal(convert(input), input);
+    assert.equal(convert("📏10in"), "📏25.40cm");
+});

@@ -10106,3 +10106,66 @@ test("HTTP updater discards a pending download when a later check finds nothing 
         assert.equal(writes, 1);
     }
 });
+
+
+test("HTTP updater ignores superseded checks and downloads even when their URLs match", async () => {
+    for (const newest of ["current", "next"]) {
+        const handlers: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
+        const commits: ReturnType<typeof Promise.withResolvers<{ sha: string }>>[] = [];
+        let deferChecks = true;
+        let download: ReturnType<typeof Promise.withResolvers<Buffer>> | undefined;
+        let downloads = 0;
+        let writes = 0;
+        loadSource("src/main/updater/http.ts", {
+            "@main/utils/http": {
+                fetchJson: async (url: string) => {
+                    if (url.includes("/releases?")) return [{ tag_name: "tag", assets: [{ name: "fixture.asar", browser_download_url: "https://fixture.invalid/same" }] }];
+                    if (!deferChecks) return { sha: "next" };
+                    const pending = Promise.withResolvers<{ sha: string }>();
+                    commits.push(pending);
+                    return pending.promise;
+                },
+                fetchBuffer: async () => { downloads++; return download ? download.promise : Buffer.from("fixture"); }
+            },
+            "@shared/IpcEvents": { IpcEvents: { GET_REPO: "repo", GET_UPDATES: "check", UPDATE: "update", BUILD: "build" } },
+            "@shared/updateChannel": { normalizeUpdateChannel: () => "nightly" },
+            "@shared/vencordUserAgent": { VENCORD_USER_AGENT: "fixture" },
+            electron: { ipcMain: { handle: (name: string, handler: (...args: unknown[]) => Promise<unknown>) => { handlers[name] = handler; } } },
+            "original-fs": { writeFileSync: () => writes++ },
+            "~git-hash": { __esModule: true, default: "current" },
+            "~git-remote": { __esModule: true, default: "fixture/repo" },
+            "./common": { ASAR_FILE: "fixture.asar", serializeErrors: (handler: unknown) => handler },
+            "./releaseSelection": { selectUpdateRelease: (releases: unknown[]) => releases[0] }
+        }, { __dirname: "fixture.asar" });
+        const older = handlers.update(null, "nightly");
+        await setImmediate();
+        const newer = handlers.update(null, "nightly");
+        await setImmediate();
+        commits[1].resolve({ sha: newest });
+        assert.equal(await newer, newest === "next");
+        commits[0].resolve({ sha: "next" });
+        assert.equal(await older, false);
+        await handlers.build();
+        assert.equal(downloads, newest === "next" ? 1 : 0);
+        assert.equal(writes, downloads);
+        deferChecks = false;
+        await handlers.update(null, "nightly");
+        download = Promise.withResolvers<Buffer>();
+        const staleBuild = handlers.build();
+        await handlers.update(null, "nightly");
+        const before = writes;
+        download.resolve(Buffer.from("old"));
+        assert.equal(await staleBuild, false);
+        assert.equal(writes, before);
+        download = undefined;
+        assert.equal(await handlers.build(), true);
+        assert.equal(writes, before + 1);
+        await handlers.update(null, "nightly");
+        download = Promise.withResolvers<Buffer>();
+        const firstBuild = handlers.build();
+        const duplicateBuild = handlers.build();
+        download.resolve(Buffer.from("current"));
+        assert.deepEqual(await Promise.all([firstBuild, duplicateBuild]), [true, false]);
+        assert.equal(writes, before + 2);
+    }
+});

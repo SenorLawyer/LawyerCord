@@ -31,6 +31,7 @@ import { type GithubRelease, selectUpdateRelease } from "./releaseSelection";
 
 const API_BASE = `https://api.github.com/repos/${gitRemote}`;
 let PendingUpdate: string | null = null;
+let updateCheck = Symbol();
 
 async function githubGet<T = any>(endpoint: string) {
     return fetchJson<T>(API_BASE + endpoint, {
@@ -54,10 +55,11 @@ async function getReleaseCommit(release: GithubRelease): Promise<string> {
 }
 
 async function fetchUpdates(channel: UpdateChannel) {
+    const check = updateCheck = Symbol();
     PendingUpdate = null;
     const release = await getRelease(channel);
     const releaseCommit = await getReleaseCommit(release);
-    if (releaseCommit === gitHash) return null;
+    if (check !== updateCheck || releaseCommit === gitHash) return null;
 
     const asset = release.assets.find(asset => asset.name === ASAR_FILE);
     if (!asset) throw new Error(`The ${channel} release does not include ${ASAR_FILE}`);
@@ -81,7 +83,9 @@ async function calculateGitChanges(_: unknown, updateChannel: unknown) {
 async function applyUpdates() {
     if (!PendingUpdate) return true;
 
+    const check = updateCheck;
     const data = await fetchBuffer(PendingUpdate);
+    if (check !== updateCheck || !PendingUpdate) return false;
     writeFileSync(__dirname, data, { flush: true });
 
     PendingUpdate = null;

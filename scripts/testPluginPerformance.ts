@@ -1306,6 +1306,39 @@ test("BetterSessions returns its settings-close save to the flux error handler",
     await rejected;
 });
 
+test("StatusWhileActive never restores another account's status", () => {
+    for (const change of ["stop", "leave", "logout", "same"]) {
+        let userId = "first";
+        let status = "online";
+        let channelId: string | undefined = "voice";
+        const updates: string[] = [];
+        const { default: plugin } = loadSource("src/equicordplugins/statusWhileActive.desktop/index.ts", {
+            "@api/Settings": { definePluginSettings: () => ({ store: { statusToSet: "dnd" } }) },
+            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => status, updateSetting: (value: string) => { status = value; updates.push(value); } }) },
+            "@utils/constants": { EquicordDevs: {} },
+            "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: userId }) },
+                VoiceStateStore: { getVoiceStateForUser: () => ({ channelId }) },
+            },
+        });
+        const changeVoice = () => plugin.flux.VOICE_STATE_UPDATES({ voiceStates: [{ userId }] });
+        changeVoice();
+        assert.deepEqual(updates, ["dnd"]);
+        if (change === "logout") plugin.flux.LOGOUT();
+        if (change !== "same") {
+            userId = "second";
+            status = "idle";
+        }
+        if (change === "leave") {
+            channelId = undefined;
+            changeVoice();
+        }
+        plugin.stop();
+        assert.deepEqual(updates, change === "same" ? ["dnd", "online"] : ["dnd"]);
+    }
+});
+
 test("AutoDND restores each game's saved status only once", () => {
     let status = "online";
     const updates: string[] = [];

@@ -1,13 +1,3 @@
-.vc-converter-dismiss {
-    all: unset;
-    cursor: pointer;
-    color: var(--text-link);
-}
-
-.vc-converter-dismiss:is(:hover, :focus) {
-    text-decoration: underline;
-}
-
 .vc-converter-accessory {
     color: var(--text-muted);
     margin-top: 0.5em;

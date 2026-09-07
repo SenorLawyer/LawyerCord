@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { TextButton } from "@components/Button";
 import { classNameFactory } from "@utils/css";
 import { IconProps } from "@utils/types";
 import { Message } from "@vencord/discord-types";
@@ -23,16 +24,6 @@ import { useEffect, useState } from "@webpack/common";
 
 export const conversions = new Map<string, (conv: string) => void>();
 const cl = classNameFactory("vc-converter-");
-function Dismiss({ onDismiss }: { onDismiss: () => void; }) {
-    return (
-        <button
-            onClick={onDismiss}
-            className={cl("dismiss")}
-        >
-            Dismiss
-        </button>
-    );
-}
 // thanks <@408047304864432139>
 export function ConvertIcon({ width = 24, height = 24 }: IconProps) {
     return (
@@ -65,7 +56,7 @@ export function ConverterAccessory({ message }: { message: Message; }) {
             <ConvertIcon width={16} height={16} />
             {conversion}
             {" - "}
-            <Dismiss onDismiss={() => setConversion("")} />
+            <TextButton type="button" variant="link" onClick={() => setConversion("")}>Dismiss</TextButton>
         </span>
     );
 }

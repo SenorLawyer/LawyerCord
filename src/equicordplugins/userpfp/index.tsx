@@ -35,7 +35,7 @@ const USERPFP_IMG_URL = "https://raw.githubusercontent.com/UserPFP/img";
 
 export const requireSettingsModal = extractAndLoadChunksLazy(['type:"USER_SETTINGS_MODAL_OPEN"']);
 export const KEY_DATASTORE = "vencord-custom-avatars";
-export const data = { avatars: {} as Record<string, string> };
+export const data = { avatars: {} as Record<string, string>, remoteAvatars: {} as Record<string, string> };
 
 const settings = definePluginSettings({
     overrideServerAvatars: {
@@ -132,9 +132,8 @@ export default definePlugin({
     },
     getAvatarHook: (original: any) => (user: User, animated: boolean, size: number) => {
         if (settings.store.preferNitro && user.avatar?.startsWith("a_")) return original(user, animated, size);
-        if (!data.avatars[user.id]) return original(user, animated, size);
-
-        const avatarUrl = data.avatars[user.id];
+        const avatarUrl = data.avatars[user.id] || data.remoteAvatars[user.id];
+        if (!avatarUrl) return original(user, animated, size);
 
         if (avatarUrl.startsWith("data:")) return avatarUrl;
 
@@ -153,10 +152,9 @@ export default definePlugin({
     },
     getAvatarServerHook: (original: any) => (config: any) => {
         const { userId, avatar, size, canAnimate } = config;
-        const { avatars } = data;
+        const customUrl = data.avatars[userId] || data.remoteAvatars[userId];
 
-        if (avatars[userId]) {
-            const customUrl = avatars[userId];
+        if (customUrl) {
             try {
                 const res = new URL(customUrl);
                 if (size) res.searchParams.set("size", size.toString());
@@ -182,11 +180,12 @@ export default definePlugin({
             const local = await get<Record<string, string>>(KEY_DATASTORE);
             if (controller.signal.aborted) return;
             data.avatars = local || {};
+            data.remoteAvatars = {};
 
             const response = await fetch(settings.store.databaseSource, { signal: controller.signal });
             if (!response.ok) throw new Error("Could not download the avatar database.");
             const remote = await response.json();
-            if (!controller.signal.aborted && remote?.avatars) Object.assign(data.avatars, remote.avatars);
+            if (!controller.signal.aborted && remote?.avatars) data.remoteAvatars = remote.avatars;
         } catch (error) {
             if (!controller.signal.aborted) logger.error("Could not load avatars.", error);
         }

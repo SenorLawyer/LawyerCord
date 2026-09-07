@@ -5,6 +5,7 @@
  */
 
 import { settings } from "@equicordplugins/translatePlus/settings";
+import { isObject } from "@utils/misc";
 import { escapeRegExp } from "@utils/text";
 
 type Dictionary = Record<string, string>;
@@ -128,16 +129,15 @@ async function google(target: string, text: string) {
     if (!text) return { src: "", text: "" };
     const res = await fetch(`https://translate.googleapis.com/translate_a/single?${new URLSearchParams({ client: "gtx", sl: "auto", tl: target, dt: "t", dj: "1", source: "input", q: text })}`);
     if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
-    const translate = await res.json();
-    let translatedText = "";
-
-    if (translate.sentences) {
-        for (const sentence of translate.sentences) {
-            if (!sentence.trans) continue;
-            if (translatedText) translatedText += "\n";
-            translatedText += sentence.trans;
-        }
-    }
+    const translate: unknown = await res.json();
+    if (!isObject(translate) || !("src" in translate) || typeof translate.src !== "string"
+        || !("sentences" in translate) || !Array.isArray(translate.sentences))
+        throw new Error("Google Translate returned an invalid response.");
+    const translatedText = translate.sentences.map((sentence: unknown) => {
+        if (!isObject(sentence) || !("trans" in sentence) || typeof sentence.trans !== "string")
+            throw new Error("Google Translate returned an invalid response.");
+        return sentence.trans;
+    }).filter(Boolean).join("\n");
 
     return {
         src: translate.src,

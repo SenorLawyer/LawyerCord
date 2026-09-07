@@ -9618,3 +9618,28 @@ test("sticker blocking reads current settings without a startup cache", () => {
     assert.deepEqual(Array.from(subscriptions[0] as string[]), ["blockedStickers"]);
     assert.ok(subscriptions.every(keys => keys === subscriptions[0]));
 });
+
+test("sticker block picker actions use sticker formats instead of CSS names", () => {
+    let format: number | undefined;
+    const { default: plugin } = loadComponent("src/equicordplugins/stickerBlocker/index.tsx", {
+        Menu: { MenuItem: "item" },
+        StickersStore: { getStickerById: () => format === undefined ? undefined : { format_type: format } }
+    }, {
+        "@api/ContextMenu": {},
+        "@api/Settings": { definePluginSettings: () => ({ store: { blockedStickers: "" } }) },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack": { findCssClassesLazy: () => ({}) }
+    });
+    for (format of [undefined, 1, 2, 3, 4]) {
+        for (const className of ["renamed", "lottieCanvas_legacy"]) {
+            const children: unknown[] = [];
+            plugin.contextMenus["expression-picker"](children, { target: { dataset: { id: "sticker", type: "sticker" }, className } });
+            assert.equal(children.length, format === undefined || format === 3 ? 0 : 1);
+        }
+    }
+    const children: unknown[] = [];
+    plugin.contextMenus["expression-picker"](children, { target: { dataset: { id: "emoji", type: "emoji" } } });
+    assert.equal(children.length, 0);
+});

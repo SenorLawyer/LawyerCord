@@ -11,7 +11,7 @@ import { Devs } from "@utils/constants";
 import { classes } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import { findCssClassesLazy } from "@webpack";
-import { Button, Menu, React } from "@webpack/common";
+import { Button, Menu, React, StickersStore } from "@webpack/common";
 import type { ReactNode } from "react";
 
 const CodeContainerClasses = findCssClassesLazy("markup", "codeContainer");
@@ -92,11 +92,11 @@ const messageContextMenuPatch: NavContextMenuPatchCallback = (children, props) =
 
 const expressionPickerPatch: NavContextMenuPatchCallback = (children, props: { target: HTMLElement; }) => {
     const { id, type } = props?.target?.dataset ?? {};
-    if (!id) return;
+    if (!id || type !== "sticker") return;
 
-    if (type === "sticker" && !props.target.className?.includes("lottieCanvas")) {
-        children.push(buildMenuItem(id));
-    }
+    const sticker = StickersStore.getStickerById(id);
+    if (!sticker || sticker.format_type === 3) return;
+    children.push(buildMenuItem(id));
 };
 
 function buildMenuItem(name) {

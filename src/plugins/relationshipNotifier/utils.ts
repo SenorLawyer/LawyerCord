@@ -20,6 +20,7 @@ import * as DataStore from "@api/DataStore";
 import { popNotice, showNotice } from "@api/Notices";
 import { showNotification } from "@api/Notifications";
 import { getUniqueUsername, openUserProfile } from "@utils/discord";
+import { Logger } from "@utils/Logger";
 import { FluxStore } from "@vencord/discord-types";
 import { ChannelType, RelationshipType } from "@vencord/discord-types/enums";
 import { findStoreLazy } from "@webpack";
@@ -35,6 +36,7 @@ export const GuildAvailabilityStore = findStoreLazy("GuildAvailabilityStore") as
     isUnavailable(guildId: string): boolean;
 };
 
+const logger = new Logger("RelationshipNotifier");
 const guilds = new Map<string, SimpleGuild>();
 const groups = new Map<string, SimpleGroupChannel>();
 const friends = {
@@ -140,12 +142,12 @@ export function notify(text: string, icon?: string, onClick?: () => void) {
     if (settings.store.notices)
         showNotice(text, "OK", () => popNotice());
 
-    showNotification({
+    void showNotification({
         title: "Relationship Notifier",
         body: text,
         icon,
         onClick
-    });
+    }).catch(error => logger.error("Could not show relationship notification.", error));
 }
 
 export function getGuild(id: string) {

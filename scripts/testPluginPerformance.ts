@@ -10396,7 +10396,7 @@ test("relationship guild and group removals propagate storage failures to Flux",
             const enums = { ChannelType: { GROUP_DM: 3 }, RelationshipType: {} };
             const utils = loadSource("src/plugins/relationshipNotifier/utils.ts", {
                 "@api/DataStore": { set: async () => { if (removed) throw failure; } },
-                "@api/Notices": {}, "@api/Notifications": {}, "@utils/discord": {},
+                "@utils/Logger": { Logger: class { error() {} } }, "@api/Notices": {}, "@api/Notifications": {}, "@utils/discord": {},
                 "@vencord/discord-types/enums": enums,
                 "@webpack": { findStoreLazy: () => ({ isUnavailable: () => false }) },
                 "@webpack/common": {
@@ -10438,7 +10438,7 @@ test("relationship persistence keeps each account snapshot while storage opens",
             queueMicrotask(() => transaction.oncomplete?.());
             return result;
         })) },
-        "@api/Notices": {}, "@api/Notifications": {}, "@utils/discord": {},
+        "@utils/Logger": { Logger: class { error() {} } }, "@api/Notices": {}, "@api/Notifications": {}, "@utils/discord": {},
         "@vencord/discord-types/enums": { ChannelType: { GROUP_DM: 3 }, RelationshipType: { FRIEND: 1, INCOMING_REQUEST: 3 } },
         "@webpack": { findStoreLazy: () => ({}) },
         "@webpack/common": {
@@ -10483,8 +10483,8 @@ test("relationship offline checks stop when the account changes during awaited w
                     },
                     set: async () => { writes++; if (stage === "write") await wait(); }
                 },
-                "@api/Notices": {},
-                "@api/Notifications": { showNotification: () => notifications++ },
+                "@utils/Logger": { Logger: class { error() {} } }, "@api/Notices": {},
+                "@api/Notifications": { showNotification: async () => notifications++ },
                 "@utils/discord": { getUniqueUsername: () => "Old user" },
                 "@vencord/discord-types/enums": { ChannelType: { GROUP_DM: 3 }, RelationshipType: { FRIEND: 1, INCOMING_REQUEST: 3 } },
                 "@webpack": { findStoreLazy: () => ({ isUnavailable: () => false }) },
@@ -10538,7 +10538,7 @@ test("relationship notifier invalidates pending work across stop, logout, and re
                     getMany: async () => { if (stage === "read") await wait(); return [undefined, undefined, { friends: ["friend"], requests: [] }]; },
                     set: async () => { writes++; if (stage === "write") await wait(); }
                 },
-                "@api/Notices": {}, "@api/Notifications": { showNotification: () => notifications++ },
+                "@utils/Logger": { Logger: class { error() {} } }, "@api/Notices": {}, "@api/Notifications": { showNotification: async () => notifications++ },
                 "@utils/discord": { getUniqueUsername: () => "Friend" },
                 "@vencord/discord-types/enums": enums, "@webpack": { findStoreLazy: () => ({}) },
                 "@webpack/common": common, "./settings": settings
@@ -10653,7 +10653,7 @@ test("offline relationship alerts use current stores and settings after lookup",
                 const store: Record<string, boolean> = { offlineRemovals: true, friends: true, friendRequestCancels: true };
                 const utils = loadSource("src/plugins/relationshipNotifier/utils.ts", {
                     "@api/DataStore": { delMany: async () => {}, set: async () => {}, getMany: async () => [undefined, undefined, { friends: [], requests: [], [kind]: ["user"] }] },
-                    "@api/Notices": {}, "@api/Notifications": { showNotification: () => notifications++ },
+                    "@utils/Logger": { Logger: class { error() {} } }, "@api/Notices": {}, "@api/Notifications": { showNotification: async () => notifications++ },
                     "@utils/discord": { getUniqueUsername: () => "User" },
                     "@vencord/discord-types/enums": { ChannelType: {}, RelationshipType: { FRIEND: 1, BLOCKED: 2, INCOMING_REQUEST: 3, OUTGOING_REQUEST: 4 } },
                     "@webpack": { findStoreLazy: () => ({}) },
@@ -10702,4 +10702,22 @@ test("relationship deletion observes storage failures when notification throws",
         error => error === (fails ? storageError : notificationError));
         assert.equal(observed, 1);
     }
+});
+
+
+test("relationship notifier handles asynchronous notification failures", async () => {
+    const failure = new Error("Notification permission failed");
+    const errors: unknown[] = [];
+    const rejected = Promise.reject(failure);
+    void rejected.catch(() => {});
+    const utils = loadSource("src/plugins/relationshipNotifier/utils.ts", {
+        "@api/DataStore": {}, "@api/Notices": {},
+        "@api/Notifications": { showNotification: () => rejected },
+        "@utils/discord": {}, "@utils/Logger": { Logger: class { error(_message: string, error: unknown) { errors.push(error); } } },
+        "@vencord/discord-types/enums": {}, "@webpack": { findStoreLazy: () => ({}) }, "@webpack/common": {},
+        "./settings": { __esModule: true, default: { store: { notices: false } } }
+    });
+    utils.notify("Removed");
+    await setImmediate();
+    assert.deepEqual(errors, [failure]);
 });

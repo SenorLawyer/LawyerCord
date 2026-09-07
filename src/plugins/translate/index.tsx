@@ -85,7 +85,7 @@ export default definePlugin({
         "message": messageCtxPatch
     },
 
-    renderMessageAccessory: props => <TranslationAccessory message={props.message} />,
+    renderMessageAccessory: props => <TranslationAccessory key={props.message.id} message={props.message} />,
 
     chatBarButton: {
         icon: TranslateIcon,

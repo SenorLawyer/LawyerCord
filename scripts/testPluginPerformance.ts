@@ -9949,3 +9949,35 @@ test("cloning stops before uploads and sticker publication after account changes
         }
     }
 });
+
+test("status URL copying waits for clipboard completion and catches rejection", async () => {
+    for (const fail of [false, true]) {
+        let resolveCopy: () => void = () => {};
+        let rejectCopy: (error: Error) => void = () => {};
+        const copying = new Promise<void>((resolve, reject) => { resolveCopy = resolve; rejectCopy = reject; });
+        const feedback: string[] = [];
+        let logged = 0;
+        const { default: plugin } = loadSource("src/equicordplugins/copyStatusUrls/index.ts", {
+            "@utils/constants": { Devs: {} },
+            "@utils/discord": { copyWithToast: (url: string, message: string) => {
+                assert.equal(url, "https://fixture.invalid/status");
+                assert.equal(message, "Copied URL");
+                return copying;
+            } },
+            "@utils/Logger": { Logger: class { error() { logged++; } } },
+            "@utils/types": { __esModule: true, default: (value: object) => value },
+            "@webpack": { findByCodeLazy: () => async () => ({ button_urls: ["https://fixture.invalid/status"] }) },
+            "@webpack/common": { Toasts: { Type: { FAILURE: "failure" }, Position: { TOP: "top" }, genId: () => "id", show: ({ message }: { message: string; }) => feedback.push(message) } }
+        });
+        let settled = false;
+        const pending = plugin.makeContextMenu({ user: { id: "user" }, activity: {} }, 0)().then(() => { settled = true; });
+        await setImmediate();
+        assert.equal(settled, false);
+        assert.equal(feedback.length, 0);
+        if (fail) rejectCopy(new Error("Clipboard denied"));
+        else resolveCopy();
+        await pending;
+        assert.equal(logged, fail ? 1 : 0);
+        assert.deepEqual(feedback, fail ? ["Could not copy the status URL."] : []);
+    }
+});

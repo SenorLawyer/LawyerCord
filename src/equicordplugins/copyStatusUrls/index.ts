@@ -4,12 +4,15 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { copyToClipboard } from "@utils/clipboard";
 import { Devs } from "@utils/constants";
+import { copyWithToast } from "@utils/discord";
+import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { User } from "@vencord/discord-types";
 import { findByCodeLazy } from "@webpack";
 import { Toasts } from "@webpack/common";
+
+const logger = new Logger("CopyStatusUrls");
 
 interface MakeContextMenuProps {
     user: User,
@@ -43,20 +46,12 @@ export default definePlugin({
                 if (!button_urls[index]) {
                     throw new Error("button_urls does not contain index");
                 }
-                copyToClipboard(button_urls[index]);
-                Toasts.show({
-                    id: Toasts.genId(),
-                    message: "Copied URL",
-                    type: Toasts.Type.SUCCESS,
-                    options: {
-                        position: Toasts.Position.TOP
-                    }
-                });
+                await copyWithToast(button_urls[index], "Copied URL");
             } catch (e) {
-                console.error(e);
+                logger.error("Could not copy the status URL.", e);
                 Toasts.show({
                     id: Toasts.genId(),
-                    message: "Error copying URL, check console for more info",
+                    message: "Could not copy the status URL.",
                     type: Toasts.Type.FAILURE,
                     options: {
                         position: Toasts.Position.TOP

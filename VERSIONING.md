@@ -41,3 +41,7 @@ For a stable release:
 5. Test the artifact on its target platform before enabling it for automatic updates.
 
 Release tags are immutable. Fix a bad release with a new version instead of moving an existing tag.
+
+## VoiceRejoin compatibility in 3.0.0.0
+
+Saved reconnect targets now include the originating account. Older targets without an owner are retained but ignored; joining a call records a new target. Older clients ignore this owner field, so disabling VoiceRejoin before downgrading avoids using a target from another account.

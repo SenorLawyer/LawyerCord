@@ -19,6 +19,7 @@ const PERSIST_THROTTLE_MS = 15_000;
 const logger = new Logger("VoiceRejoin");
 
 type SavedVoiceChannel = {
+    userId: string;
     guildId: string | null;
     channelId: string;
     timestamp: number;
@@ -27,6 +28,7 @@ type SavedVoiceChannel = {
 let reconnectTimeoutId: ReturnType<typeof setTimeout> | undefined;
 let reconnectGeneration = 0;
 let lastPersistedChannelId: string | null = null;
+let lastPersistedUserId: string | null = null;
 let lastPersistedGuildId: string | null = null;
 let lastPersistedSessionState: boolean | null = null;
 let lastPersistedAt = 0;
@@ -72,6 +74,7 @@ function cancelReconnectAttempt() {
 }
 
 function resetPersistCache() {
+    lastPersistedUserId = null;
     lastPersistedChannelId = null;
     lastPersistedGuildId = null;
     lastPersistedSessionState = null;
@@ -79,6 +82,7 @@ function resetPersistCache() {
 }
 
 function cachePersistedState(saved: SavedVoiceChannel | null, sessionState: boolean) {
+    lastPersistedUserId = saved?.userId ?? null;
     lastPersistedChannelId = saved?.channelId ?? null;
     lastPersistedGuildId = saved?.guildId ?? null;
     lastPersistedSessionState = sessionState;
@@ -87,6 +91,7 @@ function cachePersistedState(saved: SavedVoiceChannel | null, sessionState: bool
 
 function shouldPersistActiveState(saved: SavedVoiceChannel) {
     return lastPersistedSessionState !== true
+        || lastPersistedUserId !== saved.userId
         || lastPersistedChannelId !== saved.channelId
         || lastPersistedGuildId !== saved.guildId
         || saved.timestamp - lastPersistedAt >= PERSIST_THROTTLE_MS;
@@ -97,6 +102,7 @@ async function persistActiveState(state: VoiceState) {
     if (!channelId) return;
 
     const saved: SavedVoiceChannel = {
+        userId: state.userId,
         guildId: state.guildId ?? null,
         channelId,
         timestamp: Date.now(),
@@ -178,18 +184,11 @@ export default definePlugin({
             }
         },
 
-        async CONNECTION_OPEN() {
+        CONNECTION_OPEN() {
             cancelReconnectAttempt();
             const scheduledGeneration = reconnectGeneration;
-
-            const wasInVC = await DataStore.get(DATASTORE_SESSION_KEY);
-            if (scheduledGeneration !== reconnectGeneration) return;
-
-            if (wasInVC === false) {
-                await DataStore.del(DATASTORE_KEY);
-                if (scheduledGeneration === reconnectGeneration) resetPersistCache();
-                return;
-            }
+            const userId = UserStore.getCurrentUser()?.id;
+            if (!userId) return;
 
             reconnectTimeoutId = setTimeout(async () => {
                 reconnectTimeoutId = undefined;
@@ -197,7 +196,8 @@ export default definePlugin({
 
                 try {
                     const [saved, sessionActive] = await DataStore.getMany<unknown>([DATASTORE_KEY, DATASTORE_SESSION_KEY]);
-                    if (sessionActive === false || !saved || typeof saved !== "object"
+                    if (sessionActive !== true || !saved || typeof saved !== "object"
+                        || !("userId" in saved) || saved.userId !== userId || UserStore.getCurrentUser()?.id !== userId
                         || !("channelId" in saved) || typeof saved.channelId !== "string" || !saved.channelId
                         || !("guildId" in saved) || (saved.guildId !== null && typeof saved.guildId !== "string")
                         || !("timestamp" in saved) || typeof saved.timestamp !== "number" || !Number.isSafeInteger(saved.timestamp) || saved.timestamp < 0) return;
@@ -206,7 +206,7 @@ export default definePlugin({
                     if (scheduledGeneration !== reconnectGeneration) return;
 
                     const currentUser = UserStore.getCurrentUser();
-                    if (!currentUser) return;
+                    if (currentUser?.id !== userId) return;
 
                     const myUserId = currentUser.id;
                     const myVoiceState = VoiceStateStore.getVoiceStateForUser(myUserId);

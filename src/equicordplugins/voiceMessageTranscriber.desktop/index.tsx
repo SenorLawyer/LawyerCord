@@ -187,7 +187,6 @@ function LanguageSelectionModal({ modalProps, onSelect }: LanguageSelectionModal
         const selected = options.find(option => option.value === language);
         if (!selected) return;
 
-        settings.store.targetLanguage = selected.value;
         modalProps.onClose();
         onSelect(selected);
     };
@@ -219,7 +218,15 @@ function LanguageSelectionModal({ modalProps, onSelect }: LanguageSelectionModal
 }
 
 function chooseTargetLanguage(onSelect: (language: LanguageOption) => void): void {
-    openModal(modalProps => <LanguageSelectionModal modalProps={modalProps} onSelect={onSelect} />);
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return;
+    const generation = cacheGeneration;
+    const select = (language: LanguageOption) => {
+        if (generation !== cacheGeneration || UserStore.getCurrentUser()?.id !== userId) return;
+        settings.store.targetLanguage = language.value;
+        onSelect(language);
+    };
+    openModal(modalProps => <LanguageSelectionModal modalProps={modalProps} onSelect={select} />);
 }
 
 function progressPercent(progress: TranscriptionProgress | null): number | null {

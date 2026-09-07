@@ -11457,3 +11457,30 @@ test("transcription accessories keep account-specific cache and React identity",
     id = undefined;
     assert.equal(render({ message: { id: "message" } }), null);
 });
+
+test("transcription language selection retains its initiating session", () => {
+    const source = readFileSync("src/equicordplugins/voiceMessageTranscriber.desktop/index.tsx", "utf8");
+    const start = source.indexOf("function chooseTargetLanguage(");
+    const end = source.indexOf("function progressPercent(", start);
+    assert.ok(start >= 0 && end > start);
+    const code = transpileModule(source.slice(start, end), { compilerOptions: { target: ScriptTarget.ES2022, jsx: JsxEmit.React } }).outputText;
+    for (const phase of ["current", "account", "logout", "stop"]) {
+        let userId: string | undefined = "first";
+        let select: (value: object) => void = () => {};
+        let selected = 0;
+        const settings = { store: { targetLanguage: "en" } };
+        const context = {
+            cacheGeneration: 0, settings, UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined },
+            LanguageSelectionModal: "modal", React: { createElement: (_type: unknown, props: { onSelect: typeof select; }) => { select = props.onSelect; } },
+            openModal: (render: (props: object) => void) => render({})
+        };
+        const choose = runInNewContext(code + ";chooseTargetLanguage", context);
+        choose(() => selected++);
+        if (phase === "account") userId = "second";
+        if (phase === "logout") userId = undefined;
+        if (phase === "stop") context.cacheGeneration++;
+        select({ value: "fr", label: "French" });
+        assert.equal(selected, phase === "current" ? 1 : 0, phase);
+        assert.equal(settings.store.targetLanguage, phase === "current" ? "fr" : "en", phase);
+    }
+});

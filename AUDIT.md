@@ -82,7 +82,9 @@ CopyStatusUrls awaits the shared clipboard helper and reports asynchronous failu
 
 Updater checks now clear stale selections and reject superseded downloads before writing. Renderer checks respect resets, concurrent update requests share work, failed rebuilds remain available for retry, and recovery prompts relaunch only after success. HTTP archive replacement writes to a temporary sibling before renaming it into place. Isolated filesystem tests cover partial writes, rename failures, retries, and real ASAR contents. Native operations already in flight, actual Electron archive locking, archive integrity checks, and crash durability remain open.
 
-RelationshipNotifier snapshots guild, group, friend, and request data before asynchronous persistence. Checks stop after account changes, logout, restart, or reconnect; old caches and manual-removal markers are cleared at session boundaries. Startup sync failures are logged, and connection setup cancels the duplicate startup timer. Guild and group removals keep storage current with alerts disabled, using one path for manual and external removals; two redundant deletion helpers were removed. Deferred-storage and lifecycle fixtures cover these changes. Real Discord event ordering, concurrent manual operations, and reconnect baseline ordering remain open.
+RelationshipNotifier snapshots guild, group, friend, and request data before asynchronous persistence. Checks stop after account changes, logout, restart, or reconnect; old caches and manual-removal markers are cleared at session boundaries. Overlapping manual removals retain separate markers, and delayed alerts recheck current relationships and settings. Notification rejections are logged. Startup sync failures are logged, and connection setup cancels the duplicate startup timer. Guild and group removals keep storage current with alerts disabled, using one path for manual and external removals; two redundant deletion helpers were removed. Deferred-storage and lifecycle fixtures cover these changes. Real Discord event ordering, failed manual operations, and reconnect baseline ordering remain open.
+
+PinDMs reads categories from the current account settings instead of retaining a startup array. Category modals preserve account ownership through lazy loading and reject edits to replaced categories, using the underlying SettingsStore object identity rather than transient proxy identity. Forms reject blank names, normalize cleared colors, and ignore duplicate category saves. Render callbacks are released on unmount without clearing a newer mount. The shared settings hook now compares subscription path values and snapshots paths for cleanup, avoiding resubscriptions caused only by new array objects. Fixtures use actual SettingsStore behavior with mocked React hooks; live sidebar rendering and sorting assumptions remain unverified.
 
 ## Verification record
 
@@ -90,17 +92,17 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `20bca7126` | 426 tests and timezone correctness checks passed, including 374 plugin regressions. |
-| Repository-wide ESLint | `20bca7126` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
+| Broader performance/correctness suite | `a3b0bd565` | 438 tests and timezone correctness checks passed, including 385 plugin regressions. |
+| Repository-wide ESLint | `a3b0bd565` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
 | CSS lint | `c50d116a4` | Passed; excludes userplugins. |
 | Internationalization lint | `5e869fea9` | Passed for tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest focused regressions and TypeScript | `20bca7126` | Seven relationship regression tests, full TypeScript, and focused lint passed. Source fixtures reject TypeScript syntax diagnostics before execution. |
-| Standalone build | `20bca7126` | Passed after relationship persistence and lifecycle changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
+| Latest focused regressions and TypeScript | `a3b0bd565` | Six PinDM regressions, shared settings hook checks, full TypeScript, and focused lint passed. Source fixtures reject TypeScript syntax diagnostics before execution. |
+| Standalone build | `a3b0bd565` | Passed after shared settings and PinDM changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
 | Development build | `0fc6ab63b` | Passed after composer, codec, preset, and game-status startup changes. |
 | Installer review browser checks | `d7b99b737` | Actual templates and generator functions in isolated Chrome preserved literal metadata, all four native/pre-send warning combinations, the native acknowledgement gate, and cancellation. Electron IPC and real installation were not exercised. |
 | Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |
-| Web build | `20bca7126` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
-| Release artifact audit | `20bca7126` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
+| Web build | `a3b0bd565` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
+| Release artifact audit | `a3b0bd565` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
 | Avatar startup and edit ordering | `296e36989` | Actual loader, editor actions, and DataStore in isolated Chrome preserved edits in 20 overlapping runs, ten with startup first and ten with saving first. This checks one client context, not synchronization between clients. No extra production guard was added. |
 | Avatar edit transactions | `3bf4098d6` | Actual AvatarModal actions and DataStore code in isolated Chrome preserved storage and memory after an aborted write, kept both concurrent user edits, and deleted only the selected override. React rendering and Discord dependencies were mocked. |
 | Real IndexedDB queue behavior | `ce04cc40a` | Isolated Chrome verified aborted additions, ordered concurrent additions, aborted clearing, and subsequent successful clearing using actual queue and DataStore code. |
@@ -117,7 +119,7 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Uninstall button browser checks | `d4efc449d` | Actual shared component props and styles in isolated Chrome verified the accessible name, keyboard focus indicator, and consistent 32px sizing in both stylesheet orders. Full Discord layout was not exercised. |
 | Other isolated browser checks | Earlier audit commits | Specific sticker-storage transactions, codec conversion, and CSS behavior were exercised. These are not general live-client acceptance. |
 
-Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `20bca7126`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
+Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `a3b0bd565`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
 
 ## Remaining work
 

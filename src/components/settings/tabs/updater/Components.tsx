@@ -6,14 +6,13 @@
 
 import { Button } from "@components/Button";
 import { Card } from "@components/Card";
-import { ErrorCard } from "@components/ErrorCard";
 import { Flex } from "@components/Flex";
 import { Link } from "@components/Link";
 import { Paragraph } from "@components/Paragraph";
 import { Span } from "@components/Span";
 import { Margins } from "@utils/margins";
 import { relaunch } from "@utils/native";
-import { changes, checkForUpdates, update, updateError } from "@utils/updater";
+import { changes, checkForUpdates, update } from "@utils/updater";
 import { ConfirmModal, openModal, React, Toasts, useState } from "@webpack/common";
 
 import { runWithDispatch } from "./runWithDispatch";
@@ -75,7 +74,7 @@ export function Updatable(props: CommonProps) {
     const [isChecking, setIsChecking] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
 
-    const isOutdated = (updates?.length ?? 0) > 0;
+    const isOutdated = updates.length > 0;
 
     return (
         <>
@@ -130,14 +129,7 @@ export function Updatable(props: CommonProps) {
                     </Button>
                 )}
             </Flex>
-            {!updates && updateError ? (
-                <>
-                    <Span size="md" weight="medium" color="text-strong">Error checking for updates</Span>
-                    <ErrorCard className={Margins.top8} style={{ padding: "1em" }}>
-                        <p>{updateError.stderr || updateError.stdout || "An unknown error occurred"}</p>
-                    </ErrorCard>
-                </>
-            ) : isOutdated ? (
+            {isOutdated ? (
                 <>
                     <Paragraph>
                         There {updates.length === 1 ? "is 1 update" : `are ${updates.length} updates`} available. Click the button above to download and install.

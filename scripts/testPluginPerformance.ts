@@ -12083,6 +12083,7 @@ test("TranslatePlus delivers to surviving views and rejects detached requests", 
         "./icon": {},
         "./translator": { translate: () => new Promise(resolve => { finish = resolve; }) },
         "@webpack/common": {
+            UserStore: { getCurrentUser: () => ({ id: "account" }) },
             useState: () => {
                 const values: unknown[] = [];
                 deliveries.push(values);
@@ -12144,6 +12145,7 @@ test("TranslatePlus failures show one toast without replacing translations or lo
         "./icon": {},
         "./translator": { translate: () => new Promise((_resolve, fail) => { reject = fail; }) },
         "@webpack/common": {
+            UserStore: { getCurrentUser: () => ({ id: "account" }) },
             useState: () => [undefined, (value: unknown) => deliveries.push(value)],
             useEffect: (effect: () => () => void) => cleanups.push(effect()),
             showToast: (...args: unknown[]) => toasts.push(args), Toasts: { Type: { FAILURE: 2 } }
@@ -12176,6 +12178,7 @@ test("TranslatePlus ignores older request results and failures", async () => {
         "@equicordplugins/translatePlus/misc/types": {}, "./icon": {},
         "./translator": { translate: () => new Promise((resolve, reject) => pending.push({ resolve, reject })) },
         "@webpack/common": {
+            UserStore: { getCurrentUser: () => ({ id: "account" }) },
             useState: () => [undefined, (value: unknown) => deliveries.push(value)],
             useEffect: (effect: () => () => void) => effect(),
             showToast: (text: string) => toasts.push(text), Toasts: { Type: { FAILURE: 2 } }
@@ -12214,4 +12217,39 @@ test("TranslatePlus cancels unread dictionary and Google error bodies", async ()
         await assert.rejects(translate(shavian ? "𐑐" : "Hello"), /503/);
         assert.equal(cancelled, 1);
     }
+});
+
+test("TranslatePlus rejects account changes before accessory cleanup", async () => {
+    let userId: string | undefined = "first";
+    let finish: (value: { text: string; src: string; }) => void = () => {};
+    let fail: (error: Error) => void = () => {};
+    let requests = 0;
+    const deliveries: unknown[] = [];
+    const toasts: unknown[] = [];
+    const accessory = loadSource("src/equicordplugins/translatePlus/utils/accessory.tsx", {
+        "@components/Button": {},
+        "@equicordplugins/translatePlus/misc/languages": {},
+        "@equicordplugins/translatePlus/misc/types": {}, "./icon": {},
+        "./translator": { translate: () => { requests++; return new Promise((resolve, reject) => { finish = resolve; fail = reject; }); } },
+        "@webpack/common": {
+            UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined },
+            useState: () => [undefined, (value: unknown) => deliveries.push(value)],
+            useEffect: (effect: () => () => void) => effect(),
+            showToast: (value: string) => toasts.push(value), Toasts: { Type: { FAILURE: 2 } }
+        }
+    });
+    const message = { id: "message", content: "Hello" };
+    accessory.Accessory({ message });
+    const first = accessory.handleTranslate(message);
+    userId = "second";
+    finish({ text: "Previous account", src: "en" });
+    await first;
+    assert.deepEqual(deliveries, []);
+    const second = accessory.handleTranslate(message);
+    userId = undefined;
+    fail(new Error("Previous account failure"));
+    await second;
+    assert.deepEqual(toasts, []);
+    await accessory.handleTranslate(message);
+    assert.equal(requests, 2);
 });

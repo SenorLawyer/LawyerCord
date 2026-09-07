@@ -8,7 +8,7 @@ import { TextButton } from "@components/Button";
 import { languages } from "@equicordplugins/translatePlus/misc/languages";
 import { cl, Translation } from "@equicordplugins/translatePlus/misc/types";
 import { Message } from "@vencord/discord-types";
-import { Parser, showToast, Toasts, useEffect, useState } from "@webpack/common";
+import { Parser, showToast, Toasts, useEffect, UserStore, useState } from "@webpack/common";
 
 import { Icon } from "./icon";
 import { translate } from "./translator";
@@ -48,14 +48,16 @@ export async function handleTranslate(message: Message) {
 
     const entry = setters.get(message.id);
     if (!entry) return;
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return;
     const request = entry.request = Symbol();
 
     try {
         const translation = await translate(message.content);
-        if (setters.get(message.id) === entry && entry.request === request)
+        if (setters.get(message.id) === entry && entry.request === request && UserStore.getCurrentUser()?.id === userId)
             for (const setter of entry.listeners) setter(translation);
     } catch {
-        if (setters.get(message.id) === entry && entry.request === request)
+        if (setters.get(message.id) === entry && entry.request === request && UserStore.getCurrentUser()?.id === userId)
             showToast("Could not translate this message.", Toasts.Type.FAILURE);
     }
 }

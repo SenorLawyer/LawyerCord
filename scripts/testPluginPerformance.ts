@@ -8277,3 +8277,45 @@ test("narrator language picker keeps voices with unrecognized language tags", ()
         assert.equal(picker.props.voice, "0");
     }
 });
+
+
+test("narrator voice picker observes voice loading and releases its listener", () => {
+    class Voices extends EventTarget {
+        available: { voiceURI: string; }[] = [];
+        getVoices() { return this.available; }
+    }
+    const synthesis = new Voices();
+    let value: unknown;
+    let effect: () => (() => void) = () => assert.fail("Missing effect");
+    const api = loadSource("src/plugins/vcNarrator/VoiceSetting.tsx", {
+        "@components/Heading": {}, "@components/Paragraph": {},
+        "@webpack/common": {
+            useState: (initial: () => unknown) => { value ??= initial(); return [value, (next: unknown) => { value = next; }]; },
+            useEffect: (callback: typeof effect) => { effect = callback; }
+        },
+        "./settings": { settings: { use: () => ({ voice: "preferred" }) } }
+    }, { window: { speechSynthesis: synthesis }, React: { createElement: (type: unknown, props: object) => ({ type, props }) }, Intl }, "({ VoiceSetting })");
+    api.VoiceSetting();
+    const cleanup = effect();
+    synthesis.available = [{ voiceURI: "preferred" }];
+    synthesis.dispatchEvent(new Event("voiceschanged"));
+    assert.equal(api.VoiceSetting().props.voices, synthesis.available);
+    const previous = value;
+    cleanup();
+    synthesis.available = [];
+    synthesis.dispatchEvent(new Event("voiceschanged"));
+    assert.equal(value, previous);
+});
+
+test("narrator language picker falls back when its selected language disappears", () => {
+    const english = [{ lang: "en", voiceURI: "english" }];
+    const german = [{ lang: "de", voiceURI: "german" }];
+    const api = loadSource("src/plugins/vcNarrator/VoiceSetting.tsx", {
+        "@components/Heading": {}, "@components/Paragraph": {},
+        "@webpack/common": { lodash: { groupBy: () => ({ en: english, de: german }) }, useMemo: (read: () => unknown) => read(), useState: () => ["removed", () => {}] },
+        "./settings": { settings: {} }
+    }, { React: { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props, children }) }, Intl }, "({ ComplexPicker })");
+    const picker = api.ComplexPicker({ voices: [...english, ...german], voice: "english" });
+    assert.equal(picker.children[1].props.value, "en");
+    assert.equal(picker.children[3].props.voices, english);
+});

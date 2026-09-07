@@ -6,7 +6,7 @@
 
 import { Heading } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
-import { lodash, SearchableSelect, useMemo, useState } from "@webpack/common";
+import { lodash, SearchableSelect, useEffect, useMemo, useState } from "@webpack/common";
 
 import { getCurrentVoice, settings } from "./settings";
 
@@ -66,7 +66,8 @@ function ComplexPicker({ voice, voices }: PickerProps) {
         );
     }
 
-    const voicesForLanguage = groupedVoices[selectedLanguage];
+    const language = languageNameMapping.find(item => item.name === selectedLanguage)?.name ?? languageNameMapping[0].name;
+    const voicesForLanguage = groupedVoices[language];
 
     const languageOptions = languageNameMapping.map(l => ({
         label: l.friendlyName,
@@ -79,7 +80,7 @@ function ComplexPicker({ voice, voices }: PickerProps) {
             <SearchableSelect
                 placeholder="Select a language"
                 options={languageOptions}
-                value={languageOptions.find(l => l.value === selectedLanguage)?.value}
+                value={language}
                 onChange={v => setSelectedLanguage(v)}
                 maxVisibleItems={5}
                 closeOnSelect
@@ -93,9 +94,21 @@ function ComplexPicker({ voice, voices }: PickerProps) {
     );
 }
 
+const VOICE_SETTINGS: "voice"[] = ["voice"];
+
 function VoiceSetting() {
-    const voices = useMemo(() => window.speechSynthesis?.getVoices() ?? [], []);
-    const { voice } = settings.use(["voice"]);
+    const [voices, setVoices] = useState(() => window.speechSynthesis?.getVoices() ?? []);
+    const { voice } = settings.use(VOICE_SETTINGS);
+
+    useEffect(() => {
+        const synthesis = window.speechSynthesis;
+        if (!synthesis) return;
+
+        const updateVoices = () => setVoices(synthesis.getVoices());
+        synthesis.addEventListener("voiceschanged", updateVoices);
+        updateVoices();
+        return () => synthesis.removeEventListener("voiceschanged", updateVoices);
+    }, []);
 
     if (!voices.length)
         return <Paragraph>No voices found.</Paragraph>;

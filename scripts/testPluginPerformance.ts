@@ -12165,3 +12165,38 @@ test("TranslatePlus failures show one toast without replacing translations or lo
     assert.equal(toasts.length, 1);
     assert.deepEqual(logs, []);
 });
+
+test("TranslatePlus ignores older request results and failures", async () => {
+    const deliveries: unknown[] = [];
+    const toasts: unknown[] = [];
+    const pending: { resolve: (value: { text: string; src: string; }) => void; reject: (error: Error) => void; }[] = [];
+    const accessory = loadSource("src/equicordplugins/translatePlus/utils/accessory.tsx", {
+        "@components/Button": {},
+        "@equicordplugins/translatePlus/misc/languages": {},
+        "@equicordplugins/translatePlus/misc/types": {}, "./icon": {},
+        "./translator": { translate: () => new Promise((resolve, reject) => pending.push({ resolve, reject })) },
+        "@webpack/common": {
+            useState: () => [undefined, (value: unknown) => deliveries.push(value)],
+            useEffect: (effect: () => () => void) => effect(),
+            showToast: (text: string) => toasts.push(text), Toasts: { Type: { FAILURE: 2 } }
+        }
+    });
+    const message = { id: "message", content: "Hello" };
+    accessory.Accessory({ message });
+    const first = accessory.handleTranslate(message);
+    const second = accessory.handleTranslate(message);
+    const latest = { text: "Latest", src: "en" };
+    pending[1].resolve(latest);
+    await second;
+    pending[0].resolve({ text: "Obsolete", src: "en" });
+    await first;
+    assert.deepEqual(deliveries, [latest]);
+    const third = accessory.handleTranslate(message);
+    const fourth = accessory.handleTranslate(message);
+    pending[3].resolve(latest);
+    await fourth;
+    pending[2].reject(new Error("Obsolete failure"));
+    await third;
+    assert.deepEqual(deliveries, [latest, latest]);
+    assert.deepEqual(toasts, []);
+});

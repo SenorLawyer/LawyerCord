@@ -13,7 +13,7 @@ import { Parser, showToast, Toasts, useEffect, useState } from "@webpack/common"
 import { Icon } from "./icon";
 import { translate } from "./translator";
 
-const setters = new Map<string, Set<(translation: Translation | undefined) => void>>();
+const setters = new Map<string, { listeners: Set<(translation: Translation | undefined) => void>; request?: symbol; }>();
 
 export function Accessory({ message }: { message: Message & { vencordEmbeddedBy?: string[]; }; }) {
     const [translation, setTranslation] = useState<Translation | undefined>(undefined);
@@ -21,13 +21,13 @@ export function Accessory({ message }: { message: Message & { vencordEmbeddedBy?
     useEffect(() => {
         if (message.vencordEmbeddedBy) return;
 
-        const listeners = setters.get(message.id) ?? new Set<(translation: Translation | undefined) => void>();
-        listeners.add(setTranslation);
-        setters.set(message.id, listeners);
+        const entry = setters.get(message.id) ?? { listeners: new Set<(translation: Translation | undefined) => void>() };
+        entry.listeners.add(setTranslation);
+        setters.set(message.id, entry);
 
         return () => {
-            listeners.delete(setTranslation);
-            if (!listeners.size) setters.delete(message.id);
+            entry.listeners.delete(setTranslation);
+            if (!entry.listeners.size) setters.delete(message.id);
         };
     }, [message.id]);
 
@@ -46,15 +46,16 @@ export function Accessory({ message }: { message: Message & { vencordEmbeddedBy?
 export async function handleTranslate(message: Message) {
     if (!message.content) return;
 
-    const listeners = setters.get(message.id);
-    if (!listeners) return;
+    const entry = setters.get(message.id);
+    if (!entry) return;
+    const request = entry.request = Symbol();
 
     try {
         const translation = await translate(message.content);
-        if (setters.get(message.id) === listeners)
-            for (const setter of listeners) setter(translation);
+        if (setters.get(message.id) === entry && entry.request === request)
+            for (const setter of entry.listeners) setter(translation);
     } catch {
-        if (setters.get(message.id) === listeners)
+        if (setters.get(message.id) === entry && entry.request === request)
             showToast("Could not translate this message.", Toasts.Type.FAILURE);
     }
 }

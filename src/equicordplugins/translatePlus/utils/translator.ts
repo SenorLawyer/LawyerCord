@@ -151,10 +151,8 @@ async function google(target: string, text: string) {
     };
 }
 
-export async function translate(text: string): Promise<any> {
+export async function translate(text: string) {
     const { target, toki, sitelen, shavian } = settings.store;
-
-    const output = { src: "", text: "" };
 
     if ((isTokiPona(text) || isSitelen(text)) && (toki || sitelen)) {
         if (isSitelen(text) && sitelen) text = await translateSitelen(text);
@@ -181,19 +179,17 @@ export async function translate(text: string): Promise<any> {
             || typeof translate.translation[0] !== "string")
             throw new Error("Toki Pona provider returned an invalid response.");
 
-        output.src = "tp";
-        output.text = target === "en" ? translate.translation[0] : (await google(target, translate.translation[0])).text;
-    } else if (isShavian(text) && shavian) {
-        const translate = await translateShavian(text);
-
-        output.src = "sh";
-        output.text = target === "en" ? translate : (await google(target, translate)).text;
-    } else {
-        const translate = await google(target, text);
-
-        output.src = translate.src;
-        output.text = translate.text;
+        return {
+            src: "tp",
+            text: target === "en" ? translate.translation[0] : (await google(target, translate.translation[0])).text
+        };
     }
-
-    return output;
+    if (isShavian(text) && shavian) {
+        const translate = await translateShavian(text);
+        return {
+            src: "sh",
+            text: target === "en" ? translate : (await google(target, translate)).text
+        };
+    }
+    return google(target, text);
 }

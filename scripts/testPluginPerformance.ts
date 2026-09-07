@@ -9452,6 +9452,34 @@ test("narrator starts from the existing voice channel and resets across restarts
     assert.equal(api.getTypeAndChannelId({ channelId: "another-account", oldChannelId: "another-account" }, true)[0], "join");
 });
 
+test("narrator tracks silent stage visits before returning to a voice channel", () => {
+    let channelId = "voice";
+    const spoken: string[] = [];
+    const { default: plugin } = loadSource("src/plugins/vcNarrator/index.tsx", {
+        "@api/Settings": { migrateSettingsFromPlugin() {} },
+        "@components/Heading": {}, "@components/Paragraph": {},
+        "@utils/constants": { Devs: {} }, "@utils/margins": {}, "@utils/text": {},
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, ReporterTestable: {} },
+        "@webpack/common": {
+            SelectedChannelStore: { getVoiceChannelId: () => channelId },
+            ChannelStore: { getChannel: (id: string) => ({ name: id, type: id === "stage" ? 13 : 2 }) },
+            UserStore: { getCurrentUser: () => ({ id: "me" }) },
+            AuthenticationStore: { getSessionId: () => "session" }
+        },
+        "./settings": { settings: { store: { moveMessage: "Moved to {{CHANNEL}}" } }, getCurrentVoice() {} }
+    }, { window: { speechSynthesis: { speak: ({ text }: { text: string; }) => spoken.push(text) } }, SpeechSynthesisUtterance: class { constructor(public text: string) {} } });
+    plugin.start();
+    const event = () => plugin.flux.VOICE_STATE_UPDATES({ voiceStates: [{ userId: "me", channelId, oldChannelId: channelId, sessionId: "session" }] });
+    channelId = "stage";
+    event();
+    assert.deepEqual(spoken, []);
+    channelId = "voice";
+    event();
+    assert.deepEqual(spoken, ["Moved to voice"]);
+    event();
+    assert.deepEqual(spoken, ["Moved to voice"]);
+});
+
 test("narrator uses the announced voice channel guild for nicknames", () => {
     const spoken: { text: string; }[] = [];
     const guildReads: string[] = [];

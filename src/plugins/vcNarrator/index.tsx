@@ -133,7 +133,10 @@ export default definePlugin({
             const myId = UserStore.getCurrentUser()?.id;
             if (!myId) return;
 
-            if (myChanId && ChannelStore.getChannel(myChanId)?.type === 13 /* Stage Channel */) return;
+            if (myChanId && ChannelStore.getChannel(myChanId)?.type === 13 /* Stage Channel */) {
+                myLastChannelId = myChanId;
+                return;
+            }
 
             const sessionId = AuthenticationStore.getSessionId();
             const { sayOwnName } = settings.store;

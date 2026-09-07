@@ -1320,10 +1320,38 @@ test("codec disabling only updates capabilities reported by the current engine",
             setH264Enabled: (value: boolean) => calls.push(["H264", value]),
         }) } },
     });
+    plugin.start();
     await plugin.updateDisabledCodecs();
     capabilities = [{ codec: "H264", encode: false }, { codec: "VP8", encode: true }];
     await plugin.updateDisabledCodecs();
     assert.deepEqual(calls, [["AV1", false], ["H264", false]]);
+});
+
+test("codec callbacks from stopped runs cannot update the media engine", async () => {
+    const callbacks: ((value: string) => void)[] = [];
+    const calls: boolean[] = [];
+    const { default: plugin } = loadSource("src/equicordplugins/streamingCodecDisabler/index.ts", {
+        "@api/Settings": { definePluginSettings: () => ({ store: { disableAv1Codec: true } }) },
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack/common": { MediaEngineStore: { getMediaEngine: () => ({
+            getCodecCapabilities: (callback: (value: string) => void) => callbacks.push(callback),
+            setAv1Enabled: (value: boolean) => calls.push(value),
+        }) } },
+    });
+    plugin.start();
+    const old = plugin.updateDisabledCodecs();
+    plugin.stop();
+    await plugin.updateDisabledCodecs();
+    assert.equal(callbacks.length, 1);
+    plugin.start();
+    const current = plugin.updateDisabledCodecs();
+    callbacks[0]('[{"codec":"AV1","encode":true}]');
+    await old;
+    assert.deepEqual(calls, []);
+    callbacks[1]('[{"codec":"AV1","encode":true}]');
+    await current;
+    assert.deepEqual(calls, [false]);
 });
 
 test("TalkInReverse uses one send hook and preserves grapheme clusters", () => {

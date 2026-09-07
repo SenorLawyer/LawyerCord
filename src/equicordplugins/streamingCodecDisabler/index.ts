@@ -9,6 +9,9 @@ import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { MediaEngineStore } from "@webpack/common";
 
+let active = false;
+let generation = 0;
+
 const settings = definePluginSettings({
     disableAv1Codec: {
         description: "Make Discord not consider using AV1 for streaming.",
@@ -43,6 +46,14 @@ export default definePlugin({
     tags: ["Utility", "Voice"],
     authors: [EquicordDevs.davidkra230],
     settings,
+    start() {
+        active = true;
+        generation++;
+    },
+    stop() {
+        active = false;
+        generation++;
+    },
 
     patches: [
         {
@@ -55,8 +66,12 @@ export default definePlugin({
     ],
 
     async updateDisabledCodecs() {
+        if (!active) return;
+        const currentGeneration = generation;
         const mediaEngine = MediaEngineStore.getMediaEngine();
-        const capabilities = JSON.parse(await new Promise<string>(resolve => mediaEngine.getCodecCapabilities(resolve)));
+        const response = await new Promise<string>(resolve => mediaEngine.getCodecCapabilities(resolve));
+        if (currentGeneration !== generation) return;
+        const capabilities = JSON.parse(response);
         const { disableAv1Codec, disableH265Codec, disableH264Codec } = settings.store;
         capabilities.forEach((codec: { codec: string; encode: boolean; }) => {
             switch (codec.codec) {

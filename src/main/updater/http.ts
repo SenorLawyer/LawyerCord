@@ -54,6 +54,7 @@ async function getReleaseCommit(release: GithubRelease): Promise<string> {
 }
 
 async function fetchUpdates(channel: UpdateChannel) {
+    PendingUpdate = null;
     const release = await getRelease(channel);
     const releaseCommit = await getReleaseCommit(release);
     if (releaseCommit === gitHash) return null;

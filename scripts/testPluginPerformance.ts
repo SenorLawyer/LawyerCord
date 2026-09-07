@@ -10061,3 +10061,48 @@ test("status URL copying rejects malformed metadata without changing the clipboa
         assert.equal(failures, valid ? 0 : 1);
     }
 });
+
+
+test("HTTP updater discards a pending download when a later check finds nothing or fails", async () => {
+    for (const outcome of ["current", "release-error", "commit-error"]) {
+        const handlers: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
+        let secondCheck = false;
+        let downloads = 0;
+        let writes = 0;
+        loadSource("src/main/updater/http.ts", {
+            "@main/utils/http": {
+                fetchJson: async (url: string) => {
+                    if (url.includes("/releases?")) {
+                        if (secondCheck && outcome === "release-error") throw new Error("Release lookup failed");
+                        return [{ tag_name: "tag", assets: [{ name: "fixture.asar", browser_download_url: "https://fixture.invalid/old" }] }];
+                    }
+                    if (secondCheck && outcome === "commit-error") throw new Error("Commit lookup failed");
+                    return { sha: secondCheck ? "current" : "next" };
+                },
+                fetchBuffer: async (url: string) => { assert.equal(url, "https://fixture.invalid/old"); downloads++; return Buffer.from("fixture"); }
+            },
+            "@shared/IpcEvents": { IpcEvents: { GET_REPO: "repo", GET_UPDATES: "check", UPDATE: "update", BUILD: "build" } },
+            "@shared/updateChannel": { normalizeUpdateChannel: () => "nightly" },
+            "@shared/vencordUserAgent": { VENCORD_USER_AGENT: "fixture" },
+            electron: { ipcMain: { handle: (name: string, handler: (...args: unknown[]) => Promise<unknown>) => { handlers[name] = handler; } } },
+            "original-fs": { writeFileSync: () => writes++ },
+            "~git-hash": { __esModule: true, default: "current" },
+            "~git-remote": { __esModule: true, default: "fixture/repo" },
+            "./common": { ASAR_FILE: "fixture.asar", serializeErrors: (handler: unknown) => handler },
+            "./releaseSelection": { selectUpdateRelease: (releases: unknown[]) => releases[0] }
+        }, { __dirname: "fixture.asar" });
+        assert.equal(await handlers.update(null, "nightly"), true);
+        secondCheck = true;
+        if (outcome === "current") assert.equal(await handlers.update(null, "nightly"), false);
+        else await assert.rejects(handlers.update(null, "nightly"), /lookup failed/);
+        assert.equal(await handlers.build(), true);
+        assert.equal(downloads, 0);
+        assert.equal(writes, 0);
+        secondCheck = false;
+        await handlers.update(null, "nightly");
+        await handlers.build();
+        await handlers.build();
+        assert.equal(downloads, 1);
+        assert.equal(writes, 1);
+    }
+});

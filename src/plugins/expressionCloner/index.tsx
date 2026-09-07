@@ -31,7 +31,7 @@ import definePlugin from "@utils/types";
 import { Guild, GuildSticker } from "@vencord/discord-types";
 import { StickerFormatType } from "@vencord/discord-types/enums";
 import { findByCodeLazy } from "@webpack";
-import { Constants, EmojiStore, FluxDispatcher, GuildStore, IconUtils, Menu, Modal, openModalLazy, PermissionsBits, PermissionStore, React, RestAPI, StickersStore, TextInput, Toasts, Tooltip, UserStore } from "@webpack/common";
+import { Constants, EmojiStore, FluxDispatcher, GuildStore, IconUtils, lodash, Menu, Modal, openModalLazy, PermissionsBits, PermissionStore, React, RestAPI, StickersStore, TextInput, Toasts, Tooltip, UserStore, useStateFromStores } from "@webpack/common";
 import { Promisable } from "type-fest";
 
 const logger = new Logger("ExpressionCloner");
@@ -235,9 +235,10 @@ function CloneModal({ data }: { data: Sticker | Emoji; }) {
         ? nameValidator.test(name) ? undefined : "Emoji names must be 2 to 32 characters and use only letters, numbers, or underscores."
         : name.length >= 2 && name.length <= 30 ? undefined : "Sticker names must be 2 to 30 characters.";
 
-    const [x, invalidateMemo] = React.useReducer(x => x + 1, 0);
-
-    const guilds = React.useMemo(() => getGuildCandidates(data), [data.id, x]);
+    const guilds = useStateFromStores(
+        [UserStore, GuildStore, PermissionStore, EmojiStore, StickersStore],
+        () => getGuildCandidates(data), [data], lodash.isEqual
+    );
 
     return (
         <>
@@ -275,7 +276,6 @@ function CloneModal({ data }: { data: Sticker | Emoji; }) {
                                 onClick={() => {
                                     setIsCloning(true);
                                     return doClone(g.id, { ...data, name }).finally(() => {
-                                        invalidateMemo();
                                         setIsCloning(false);
                                     });
                                 }}

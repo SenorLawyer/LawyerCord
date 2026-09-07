@@ -9778,13 +9778,14 @@ test("expression cloning preserves valid server errors and falls back for malfor
 test("cloning keeps the name selected when the request starts", async () => {
     const uploads: Array<{ name: string; }> = [];
     const busy: unknown[] = [];
+    let userId: string | undefined = "me";
+    let emojiCount = 0;
+    let stickerCount = 0;
     let finishDownload: (value: unknown) => void = () => assert.fail("No download");
     const download = new Promise(resolve => { finishDownload = resolve; });
     const React = {
         createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props: { ...props, children } }),
-        useState: (initial: unknown) => [initial, (value: unknown) => busy.push(value)],
-        useReducer: () => [0, () => {}],
-        useMemo: () => [{ id: "guild", name: "Guild" }]
+        useState: (initial: unknown) => [initial, (value: unknown) => busy.push(value)]
     };
     const { CloneModal } = loadSource("src/plugins/expressionCloner/index.tsx", {
         "@api/ContextMenu": {}, "@api/Settings": { migratePluginSettings() {} },
@@ -9794,8 +9795,22 @@ test("cloning keeps the name selected when the request starts", async () => {
         "@utils/Logger": { Logger: class { error() {} } }, "@utils/misc": {},
         "@utils/types": { __esModule: true, default: (value: object) => value },
         "@vencord/discord-types/enums": { StickerFormatType: { PNG: 1, APNG: 2, LOTTIE: 3, GIF: 4 } },
-        "@webpack": { findByCodeLazy: () => (value: { name: string; }) => uploads.push(value) },
-        "@webpack/common": { React, GuildStore: { getGuild: () => ({ name: "Guild" }) }, Toasts: { Type: { SUCCESS: "success" }, genId: () => "id", show() {} } }
+        "@webpack": { findByCodeLazy: (code: string) => code === ".additionalEmojiSlots" ? () => 50 : (value: { name: string; }) => uploads.push(value) },
+        "@webpack/common": {
+            React, lodash: { isEqual: Object.is },
+            UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined },
+            GuildStore: { getGuild: () => ({ name: "Guild" }), getGuilds: () => ({ guild: { id: "guild", name: "Guild", ownerId: "me", features: new Set(), premiumTier: 0 } }) },
+            PermissionStore: { getGuildPermissions: () => 0n }, PermissionsBits: { CREATE_GUILD_EXPRESSIONS: 1n },
+            EmojiStore: { getGuildEmoji: () => Array.from({ length: emojiCount }, () => ({ animated: false, managed: false })) },
+            StickersStore: { getStickersByGuildId: () => Array.from({ length: stickerCount }) },
+            useStateFromStores: (stores: unknown[], selector: () => unknown, deps: unknown[], equal: unknown) => {
+                assert.equal(stores.length, 5);
+                assert.ok(stores.every(Boolean));
+                assert.equal(deps.length, 1);
+                assert.equal(equal, Object.is);
+                return selector();
+            },
+            Toasts: { Type: { SUCCESS: "success" }, genId: () => "id", show() {} } }
     }, {
         React, location: { protocol: "https:" }, window: { GLOBAL_ENV: { CDN_HOST: "fixture.invalid" } },
         fetch: () => download,
@@ -9834,4 +9849,17 @@ test("cloning keeps the name selected when the request starts", async () => {
     assert.equal(uploads.length, 1);
     assert.equal(uploads[0].name, "original");
     assert.deepEqual(busy, [true, "later", false]);
+    for (userId of ["other", undefined]) {
+        const changed = CloneModal({ data });
+        assert.equal(changed.props.children[2].props.children[0].length, 0);
+    }
+    userId = "me";
+    emojiCount = 50;
+    assert.equal(CloneModal({ data }).props.children[2].props.children[0].length, 0);
+    emojiCount = 49;
+    assert.equal(CloneModal({ data }).props.children[2].props.children[0].length, 1);
+    stickerCount = 5;
+    assert.equal(CloneModal({ data: { ...data, t: "Sticker" } }).props.children[2].props.children[0].length, 0);
+    stickerCount = 4;
+    assert.equal(CloneModal({ data: { ...data, t: "Sticker" } }).props.children[2].props.children[0].length, 1);
 });

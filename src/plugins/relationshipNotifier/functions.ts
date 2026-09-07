@@ -77,26 +77,32 @@ export async function onRelationshipRemove({ relationship: { type, id } }: Relat
     }
 }
 
-export function onGuildDelete({ guild: { id, unavailable } }: GuildDelete) {
+export async function onGuildDelete({ guild: { id, unavailable } }: GuildDelete) {
     if (unavailable || GuildAvailabilityStore.isUnavailable(id)) return;
 
     const guild = getGuild(id);
     const manual = manuallyRemovedGuilds.delete(id);
 
     const synced = syncGuilds();
-    if (guild && !manual && settings.store.servers)
-        notify(`You were removed from the server ${guild.name}.`, guild.iconURL);
-    return synced;
+    try {
+        if (guild && !manual && settings.store.servers)
+            notify(`You were removed from the server ${guild.name}.`, guild.iconURL);
+    } finally {
+        await synced;
+    }
 }
 
-export function onChannelDelete({ channel: { id, type } }: ChannelDelete) {
+export async function onChannelDelete({ channel: { id, type } }: ChannelDelete) {
     if (type !== ChannelType.GROUP_DM) return;
 
     const group = getGroup(id);
     const manual = manuallyRemovedGroups.delete(id);
 
     const synced = syncGroups();
-    if (group && !manual && settings.store.groups)
-        notify(`You were removed from the group ${group.name}.`, group.iconURL);
-    return synced;
+    try {
+        if (group && !manual && settings.store.groups)
+            notify(`You were removed from the group ${group.name}.`, group.iconURL);
+    } finally {
+        await synced;
+    }
 }

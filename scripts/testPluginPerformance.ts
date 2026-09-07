@@ -10678,3 +10678,28 @@ test("offline relationship alerts use current stores and settings after lookup",
         }
     }
 });
+
+
+test("relationship deletion observes storage failures when notification throws", async () => {
+    for (const [kind, fails] of [["guild", false], ["guild", true], ["group", false], ["group", true]]) {
+        let observed = 0;
+        const storageError = new Error("Save failed");
+        const notificationError = new Error("Notification failed");
+        const save = () => ({ then(resolve: () => void, reject: (error: Error) => void) { observed++; if (fails) reject(storageError); else resolve(); } });
+        const handlers = loadSource("src/plugins/relationshipNotifier/functions.ts", {
+            "@utils/discord": {}, "@vencord/discord-types/enums": { ChannelType: { GROUP_DM: 3 } },
+            "@webpack/common": {},
+            "./settings": { __esModule: true, default: { store: { servers: true, groups: true } } },
+            "./utils": {
+                getGuild: () => ({ name: "Guild" }), getGroup: () => ({ name: "Group" }),
+                GuildAvailabilityStore: { isUnavailable: () => false },
+                syncGuilds: save, syncGroups: save, notify: () => { throw notificationError; }
+            }
+        });
+        await assert.rejects(async () => kind === "guild"
+            ? handlers.onGuildDelete({ guild: { id: "item" } })
+            : handlers.onChannelDelete({ channel: { id: "item", type: 3 } }),
+        error => error === (fails ? storageError : notificationError));
+        assert.equal(observed, 1);
+    }
+});

@@ -7,7 +7,7 @@
 import { Button, closeModal, Menu, Modal, openModalLazy, Slider, TextInput, useState } from "@webpack/common";
 
 import { folderIconsData, settings } from "./settings";
-import { folderProp, int2rgba, setFolderData } from "./util";
+import { folderProp, int2rgba } from "./util";
 
 export function ImageModal(folderProps: folderProp) {
     const saved = (settings.store.folderIcons as folderIconsData | undefined)?.[folderProps.folderId];
@@ -43,10 +43,10 @@ export function ImageModal(folderProps: folderProp) {
                     renderMarker={() => null} />
             </>}
             <Button onClick={() => {
-                setFolderData(folderProps, {
-                    url: data,
-                    size: size
-                });
+                settings.store.folderIcons = {
+                    ...settings.store.folderIcons,
+                    [folderProps.folderId]: { url: data, size }
+                };
                 closeModal("custom-folder-icon");
             }}
             >
@@ -70,7 +70,7 @@ export function ImageModal(folderProps: folderProp) {
 export function RenderPreview({ folderProps, url, size }: { folderProps: folderProp; url: string; size: number; }) {
     if (!url) return null;
     return (
-        <div className="test1234" style={{
+        <div style={{
             width: "20vh",
             height: "20vh",
             overflow: "hidden",

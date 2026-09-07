@@ -1608,6 +1608,30 @@ test("webpack tar archives contain only the supplied byte view", () => {
     assert.equal(archive.length, 2048);
 });
 
+test("voice statistics replace clean cached totals when storage changes", async () => {
+    let saved: Record<string, number> | undefined = { friend: 20, removed: 9 };
+    const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {
+        "@utils/Logger": { Logger: class { error() {} } },
+        "@api/DataStore": { get: async () => saved }, "@components/BaseText": {},
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+        "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
+        "@webpack/common": { UserStore: { getCurrentUser: () => undefined } }
+    }, {}, "({ plugin: exports.default, totalsByUser })");
+    await api.plugin.start();
+    api.plugin.stop();
+    saved = { friend: 30 };
+    await api.plugin.start();
+    assert.equal(api.totalsByUser.get("friend"), 30);
+    assert.equal(api.totalsByUser.has("removed"), false);
+    api.plugin.stop();
+    saved = undefined;
+    await api.plugin.start();
+    assert.equal(api.totalsByUser.size, 0);
+    api.plugin.stop();
+});
+
 test("voice statistics preserve unsaved totals when restarted after a failed write", async () => {
     let fail = true;
     let stored = { friend: 20 };

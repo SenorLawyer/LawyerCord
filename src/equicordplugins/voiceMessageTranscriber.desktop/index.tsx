@@ -151,7 +151,7 @@ const settings = definePluginSettings({
 
                     setSize(totalSize);
                     setDeleteKeys(keys);
-                });
+                }).catch(() => showToast("Failed to load downloaded speech models.", Toasts.Type.FAILURE));
             }, []);
 
             return (
@@ -161,7 +161,7 @@ const settings = definePluginSettings({
                         DataStore.delMany(deleteKeys).then(() => {
                             setSize(0);
                             setDeleteKeys([]);
-                        });
+                        }).catch(() => showToast("Failed to delete downloaded speech models.", Toasts.Type.FAILURE));
                     }}
                 >
                     Delete downloaded speech models ({(size / 1024 / 1024).toFixed(2)} MB)

@@ -11322,3 +11322,32 @@ test("transcription progress only displays finite bounded percentages", () => {
         [{ loaded: Infinity, total: 4 }, null], [{ loaded: 5, total: 4 }, 100]
     ]) assert.equal(progressPercent(input), expected);
 });
+
+test("transcription model cache controls report storage failures", async () => {
+    const source = readFileSync("src/equicordplugins/voiceMessageTranscriber.desktop/index.tsx", "utf8").replace(/\r\n/g, "\n");
+    const start = source.indexOf("component: () => {");
+    const end = source.indexOf("\n    }\n});", start);
+    assert.ok(start >= 0 && end > start);
+    const code = transpileModule("const component = " + source.slice(start + "component: ".length, end), { compilerOptions: { target: ScriptTarget.ES2022, jsx: JsxEmit.React } }).outputText;
+    for (const phase of ["read", "delete", "success"]) {
+        let effect: () => void = () => {};
+        let index = 0;
+        const updates: unknown[] = [];
+        const messages: string[] = [];
+        const component = runInNewContext(code + ";component", {
+            useState: () => [index++ === 0 ? 12 : ["VoiceMessageTranscriber_model"], (value: unknown) => updates.push(value)],
+            useEffect: (callback: () => void) => effect = callback,
+            DataStore: {
+                entries: async () => { throw new Error("Read failed"); },
+                delMany: async (keys: string[]) => { assert.deepEqual(keys, ["VoiceMessageTranscriber_model"]); if (phase === "delete") throw new Error("Delete failed"); }
+            },
+            React: { createElement: (type: unknown, props: object) => ({ type, props }) }, Button: "button",
+            showToast: (message: string) => messages.push(message), Toasts: { Type: { FAILURE: "failure" } }
+        });
+        const button = component();
+        if (phase === "read") effect(); else button.props.onClick();
+        await setImmediate();
+        assert.equal(messages.length, phase === "success" ? 0 : 1);
+        assert.equal(updates.length, phase === "success" ? 2 : 0);
+    }
+});

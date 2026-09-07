@@ -4,26 +4,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { definePluginSettings, Settings } from "@api/Settings";
+import { definePluginSettings } from "@api/Settings";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { MediaEngineStore } from "@webpack/common";
-
-interface Codecs {
-    AV1: boolean;
-    H265: boolean,
-    H264: boolean;
-    VP8: boolean;
-    VP9: boolean;
-}
-
-const originalCodecStatuses: Codecs = {
-    AV1: true,
-    H265: true,
-    H264: true,
-    VP8: true,
-    VP9: true,
-};
 
 const settings = definePluginSettings({
     disableAv1Codec: {
@@ -72,16 +56,20 @@ export default definePlugin({
 
     async updateDisabledCodecs() {
         const mediaEngine = MediaEngineStore.getMediaEngine();
-        const options = Object.keys(originalCodecStatuses);
-        const CodecCapabilities = JSON.parse(await new Promise(res => mediaEngine.getCodecCapabilities(res)));
-        CodecCapabilities.forEach((codec: { codec: string; encode: boolean; }) => {
-            if (options.includes(codec.codec)) {
-                originalCodecStatuses[codec.codec] = codec.encode;
+        const capabilities = JSON.parse(await new Promise<string>(resolve => mediaEngine.getCodecCapabilities(resolve)));
+        const { disableAv1Codec, disableH265Codec, disableH264Codec } = settings.store;
+        capabilities.forEach((codec: { codec: string; encode: boolean; }) => {
+            switch (codec.codec) {
+                case "AV1":
+                    mediaEngine.setAv1Enabled(codec.encode && !disableAv1Codec);
+                    break;
+                case "H265":
+                    mediaEngine.setH265Enabled(codec.encode && !disableH265Codec);
+                    break;
+                case "H264":
+                    mediaEngine.setH264Enabled(codec.encode && !disableH264Codec);
+                    break;
             }
         });
-
-        mediaEngine.setAv1Enabled(originalCodecStatuses.AV1 && !Settings.plugins.StreamingCodecDisabler.disableAv1Codec);
-        mediaEngine.setH265Enabled(originalCodecStatuses.H265 && !Settings.plugins.StreamingCodecDisabler.disableH265Codec);
-        mediaEngine.setH264Enabled(originalCodecStatuses.H264 && !Settings.plugins.StreamingCodecDisabler.disableH264Codec);
     },
 });

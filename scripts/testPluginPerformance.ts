@@ -1306,6 +1306,26 @@ test("BetterSessions returns its settings-close save to the flux error handler",
     await rejected;
 });
 
+test("codec disabling only updates capabilities reported by the current engine", async () => {
+    let capabilities = [{ codec: "AV1", encode: true }];
+    const calls: unknown[] = [];
+    const { default: plugin } = loadSource("src/equicordplugins/streamingCodecDisabler/index.ts", {
+        "@api/Settings": { definePluginSettings: () => ({ store: { disableAv1Codec: true } }) },
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack/common": { MediaEngineStore: { getMediaEngine: () => ({
+            getCodecCapabilities: (callback: (value: string) => void) => callback(JSON.stringify(capabilities)),
+            setAv1Enabled: (value: boolean) => calls.push(["AV1", value]),
+            setH265Enabled: (value: boolean) => calls.push(["H265", value]),
+            setH264Enabled: (value: boolean) => calls.push(["H264", value]),
+        }) } },
+    });
+    await plugin.updateDisabledCodecs();
+    capabilities = [{ codec: "H264", encode: false }, { codec: "VP8", encode: true }];
+    await plugin.updateDisabledCodecs();
+    assert.deepEqual(calls, [["AV1", false], ["H264", false]]);
+});
+
 test("TalkInReverse uses one send hook and preserves grapheme clusters", () => {
     const { default: plugin } = loadSource("src/equicordplugins/talkInReverse/index.tsx", {
         "@api/ChatButtons": {},

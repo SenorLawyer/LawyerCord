@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { detectAudioMimeType, isRecognizedAudioContainer } from "../src/equicordplugins/voiceMessageTranscriber.desktop/audioValidation";
 import { buildTargetLanguageOptions, getVoiceMessageMedia, resolveTargetLanguage, VOICE_MESSAGE_FLAG } from "../src/equicordplugins/voiceMessageTranscriber.desktop/options";
 import { formatTimestampedTranscript, normalizeTranscriptionResult } from "../src/equicordplugins/voiceMessageTranscriber.desktop/transcriptionData";
-import { generateWaveform } from "../src/plugins/voiceMessages/waveform";
+import { DEFAULT_WAVEFORM, generateWaveform } from "../src/plugins/voiceMessages/waveform";
 
 const attachment = {
     content_type: "audio/ogg",
@@ -58,5 +58,19 @@ const waveform = Uint8Array.from(globalThis.atob(generateWaveform(samples, 16_00
 assert.equal(waveform.length, 32, "short audio uses Discord's minimum waveform resolution");
 assert.ok(waveform.some(value => value > 0), "generated waveforms contain audible amplitude");
 assert.ok(new Set(waveform).size > 1, "generated waveforms preserve changing amplitude instead of rendering flat");
+
+for (const length of [1, 2, 31, 32, 33, 16_000, 64_000, 480_000]) {
+    const silent = new Float32Array(length);
+    const decoded = Uint8Array.from(atob(generateWaveform(silent, 16_000)), character => character.charCodeAt(0));
+    assert.ok(decoded.length > 0 && decoded.length <= Math.min(length, 256));
+    assert.ok(decoded.every(value => value === 0), "silence stays silent");
+    const positive = new Float32Array(length).fill(1);
+    const negative = new Float32Array(length).fill(-1);
+    assert.equal(generateWaveform(positive, 16_000), generateWaveform(negative, 16_000), "waveform amplitude ignores polarity");
+    assert.ok([...atob(generateWaveform(positive, 16_000))].every(value => value.charCodeAt(0) === 255));
+}
+assert.equal(generateWaveform(new Float32Array(), 16_000), DEFAULT_WAVEFORM);
+for (const rate of [0, -1, NaN, Infinity])
+    assert.equal(generateWaveform(new Float32Array([1]), rate), DEFAULT_WAVEFORM);
 
 console.log("voice-message transcription checks passed");

@@ -150,11 +150,6 @@ export function getGuild(id: string) {
     return guilds.get(id);
 }
 
-export function deleteGuild(id: string) {
-    guilds.delete(id);
-    return syncGuilds();
-}
-
 export async function syncGuilds() {
     const currentUserId = UserStore.getCurrentUser()?.id;
     if (!currentUserId) return;
@@ -178,11 +173,6 @@ async function syncGuildsForUser(userId: string) {
 
 export function getGroup(id: string) {
     return groups.get(id);
-}
-
-export function deleteGroup(id: string) {
-    groups.delete(id);
-    return syncGroups();
 }
 
 export async function syncGroups() {

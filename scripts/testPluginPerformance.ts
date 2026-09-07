@@ -10388,11 +10388,11 @@ test("relationship notifier catches delayed startup failures and cancels its tim
 
 test("relationship guild and group removals propagate storage failures to Flux", async () => {
     for (const kind of ["guild", "group"]) {
-        for (const manual of [false, true]) {
+        for (const [manual, enabled] of [[false, false], [false, true], [true, false], [true, true]]) {
             let removed = false;
             let notices = 0;
             const failure = new Error("Save failed");
-            const settings = { __esModule: true, default: { store: { servers: true, groups: true } } };
+            const settings = { __esModule: true, default: { store: { servers: enabled, groups: enabled } } };
             const enums = { ChannelType: { GROUP_DM: 3 }, RelationshipType: {} };
             const utils = loadSource("src/plugins/relationshipNotifier/utils.ts", {
                 "@api/DataStore": { set: async () => { if (removed) throw failure; } },
@@ -10420,7 +10420,8 @@ test("relationship guild and group removals propagate storage failures to Flux",
                 ? handlers.onGuildDelete({ guild: { id: "item" } })
                 : handlers.onChannelDelete({ channel: { id: "item", type: 3 } });
             await assert.rejects(pending, error => error === failure);
-            assert.equal(notices, manual ? 0 : 1);
+            assert.equal(notices, !manual && enabled ? 1 : 0);
+            assert.equal(kind === "guild" ? utils.getGuild("item") : utils.getGroup("item"), undefined);
         }
     }
 });

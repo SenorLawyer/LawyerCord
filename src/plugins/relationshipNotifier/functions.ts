@@ -22,7 +22,7 @@ import { UserStore, UserUtils } from "@webpack/common";
 
 import settings from "./settings";
 import { ChannelDelete, GuildDelete, RelationshipRemove } from "./types";
-import { deleteGroup, deleteGuild, getGroup, getGuild, GuildAvailabilityStore, notify, resetState, session } from "./utils";
+import { getGroup, getGuild, GuildAvailabilityStore, notify, resetState, session, syncGroups, syncGuilds } from "./utils";
 
 let manuallyRemovedFriend: string | undefined;
 let manuallyRemovedGuild: string | undefined;
@@ -75,35 +75,27 @@ export async function onRelationshipRemove({ relationship: { type, id } }: Relat
 }
 
 export function onGuildDelete({ guild: { id, unavailable } }: GuildDelete) {
-    if (!settings.store.servers) return;
     if (unavailable || GuildAvailabilityStore.isUnavailable(id)) return;
 
-    if (manuallyRemovedGuild === id) {
-        manuallyRemovedGuild = undefined;
-        return deleteGuild(id);
-    }
-
     const guild = getGuild(id);
-    if (guild) {
-        const synced = deleteGuild(id);
+    const manual = manuallyRemovedGuild === id;
+    if (manual) manuallyRemovedGuild = undefined;
+
+    const synced = syncGuilds();
+    if (guild && !manual && settings.store.servers)
         notify(`You were removed from the server ${guild.name}.`, guild.iconURL);
-        return synced;
-    }
+    return synced;
 }
 
 export function onChannelDelete({ channel: { id, type } }: ChannelDelete) {
-    if (!settings.store.groups) return;
     if (type !== ChannelType.GROUP_DM) return;
 
-    if (manuallyRemovedGroup === id) {
-        manuallyRemovedGroup = undefined;
-        return deleteGroup(id);
-    }
-
     const group = getGroup(id);
-    if (group) {
-        const synced = deleteGroup(id);
+    const manual = manuallyRemovedGroup === id;
+    if (manual) manuallyRemovedGroup = undefined;
+
+    const synced = syncGroups();
+    if (group && !manual && settings.store.groups)
         notify(`You were removed from the group ${group.name}.`, group.iconURL);
-        return synced;
-    }
+    return synced;
 }

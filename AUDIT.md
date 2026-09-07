@@ -60,19 +60,23 @@ Message pronouns now read the message channel's guild rather than the browsed ch
 
 StatusWhileActive binds saved status to its account, discards it on logout, initializes from the current call when enabled, and preserves manual status changes when leaving or stopping. The unrelated channel-status text event handler was deleted. Mocked lifecycle regressions cover these changes. Repeated in-call voice events can still override manual presence; live event ordering remains unverified.
 
+AutoDND now binds restoration to the account and the status it applied, clears saved state on logout, and restores on shutdown without overwriting manual changes. Invisible-status exclusion no longer blocks game-exit cleanup. Both automatic status plugins propagate Flux update promises and log asynchronous lifecycle failures locally. Failed restoration recovery and repeated activity events remain under review.
+
+GIF descriptions handle missing sources, exclude query parameters and fragments, and match literal GIF extensions. BetterGifPicker now marks its patch-dependent setting as requiring restart. StickerBlocker removes unused wrappers and a repeated ID, uses Discord's React export, and subscribes to display preferences without requiring restart. Restoring a sticker immediately after unblocking and live patch compatibility remain open. SteamStatusSync skips unmapped status launches; its event payload assumptions and live protocol behavior still require validation.
+
 ## Verification record
 
 Evidence applies to the recorded commit and scope, not to a future merge with main.
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `538340940` | 381 tests and timezone correctness checks passed. |
-| Repository-wide ESLint | `e54c36833` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
+| Broader performance/correctness suite | `ad34bca13` | 385 tests and timezone correctness checks passed. |
+| Repository-wide ESLint | `c8e1a691a` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
 | CSS lint | `c50d116a4` | Passed; excludes userplugins. |
 | Internationalization lint | `5e869fea9` | Passed for tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest plugin regressions and TypeScript | `7bdd25a3c`, `538340940` | 329 plugin tests passed before the channel-status handler deletion. The expanded status regression, full TypeScript, and focused lint passed after deletion. The broader suite above includes all plugin regressions at the newer commit. |
-| Standalone build | `e54c36833` | Passed after narrator and VoiceStats changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
-| Development build | `538340940` | Passed after pronoun and status lifecycle changes. |
+| Latest plugin regressions and TypeScript | `c8e1a691a` | 335 plugin tests, full TypeScript, and focused StickerBlocker lint passed. |
+| Standalone build | `c8e1a691a` | Passed after status, GIF, Steam, and sticker changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
+| Development build | `ad34bca13` | Passed after status lifecycle and GIF changes. |
 | Installer review browser checks | `d7b99b737` | Actual templates and generator functions in isolated Chrome preserved literal metadata, all four native/pre-send warning combinations, the native acknowledgement gate, and cancellation. Electron IPC and real installation were not exercised. |
 | Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |
 | Web build | `b87aa473b` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |

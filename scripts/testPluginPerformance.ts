@@ -11951,3 +11951,20 @@ test("TranslatePlus Shavian translation preserves inherited dictionary names", a
         assert.equal(result.src, "sh");
     }
 });
+
+
+test("TranslatePlus propagates Google failures instead of returning error text as translation", async () => {
+    let fail = true;
+    const { translate } = loadSource("src/equicordplugins/translatePlus/utils/translator.ts", {
+        "@equicordplugins/translatePlus/settings": { settings: { store: { target: "fr", shavian: false, toki: false, sitelen: false } } },
+        "@utils/text": { escapeRegExp: (text: string) => text }
+    }, {
+        URLSearchParams,
+        fetch: async () => ({ ok: !fail, status: fail ? 500 : 200, json: async () => ({ src: "en", sentences: [{ trans: "Bonjour" }] }) })
+    });
+    await assert.rejects(translate("Hello"), /500/);
+    fail = false;
+    const result = await translate("Hello");
+    assert.equal(result.src, "en");
+    assert.equal(result.text, "Bonjour");
+});

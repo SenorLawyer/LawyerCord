@@ -1656,6 +1656,10 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
             data.avatars.shared = url;
             assert.equal(guildAvatar({ userId: "shared", size: 128, canAnimate: true }), url);
         }
+        data.avatars.shared = "https://raw.githubusercontent.com/UserPFP/img-other/main/avatar.gif";
+        assert.equal(avatar({ id: "shared" }, false, 128), data.avatars.shared);
+        data.avatars.shared = "https://raw.githubusercontent.com/UserPFP/img/main/avatar.gif";
+        assert.equal(avatar({ id: "shared" }, false, 128), "https://raw.githubusercontent.com/UserPFP/img/main/avatar.png?animated=false");
         assert.equal(signals[0].aborted, mode === "remote-stop" || mode === "restart");
         assert.equal(errors.length, mode in invalidResponses ? 1 : 0);
     }

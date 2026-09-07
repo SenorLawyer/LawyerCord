@@ -32,7 +32,7 @@ const logger = new Logger("UserPFP");
 const cl = classNameFactory("vc-userpfp-");
 const DONO_URL = "https://ko-fi.com/coolesding";
 const INVITE_LINK = "userpfp-1129784704267210844";
-const USERPFP_IMG_URL = "https://raw.githubusercontent.com/UserPFP/img";
+const USERPFP_IMG_URL = "https://raw.githubusercontent.com/UserPFP/img/";
 
 export const requireSettingsModal = extractAndLoadChunksLazy(['type:"USER_SETTINGS_MODAL_OPEN"']);
 export const KEY_DATASTORE = "vencord-custom-avatars";
@@ -42,7 +42,8 @@ const settings = definePluginSettings({
     overrideServerAvatars: {
         type: OptionType.BOOLEAN,
         description: "Override server avatars with custom avatars or the default user avatar if no custom avatar is set.",
-        default: true
+        default: true,
+        restartNeeded: true
     },
     preferNitro: {
         description: "Which avatar to use if both default animated (Nitro) pfp and UserPFP avatars are present",
@@ -57,13 +58,7 @@ const settings = definePluginSettings({
         type: OptionType.STRING,
         default: "https://userpfp.github.io/UserPFP/source/data.json",
         hidden: !IS_DEV,
-        isValid: (value => {
-            if (!value) {
-                value = "https://userpfp.github.io/UserPFP/source/data.json";
-                return false;
-            }
-            return true;
-        })
+        isValid: value => Boolean(value)
     },
 });
 

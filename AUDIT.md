@@ -62,7 +62,7 @@ StatusWhileActive binds saved status to its account, discards it on logout, init
 
 AutoDND now binds restoration to the account and the status it applied, clears saved state on logout, and restores on shutdown without overwriting manual changes. Enabling AutoDND reads already-running games from the shared store. Invisible-status exclusion no longer blocks game-exit cleanup. Both automatic status plugins propagate Flux update promises and log asynchronous lifecycle failures locally. Failed restoration recovery and repeated activity events remain under review.
 
-GIF descriptions handle missing sources, exclude query parameters and fragments, and match literal GIF extensions. BetterGifPicker now marks its patch-dependent setting as requiring restart. StickerBlocker removes unused wrappers and a repeated ID, uses Discord's React export, and subscribes to display preferences without requiring restart. Restoring a sticker immediately after unblocking and live patch compatibility remain open. SteamStatusSync skips unmapped status launches; its event payload assumptions and live protocol behavior still require validation.
+GIF descriptions handle missing sources, exclude query parameters and fragments, and match literal GIF extensions. BetterGifPicker now marks its patch-dependent setting as requiring restart. StickerBlocker removes unused wrappers and a repeated ID, uses Discord's React export, and subscribes to display preferences without requiring restart. The block decision now subscribes to the saved list; live patch compatibility and actual client refresh remain open. SteamStatusSync skips unmapped status launches; its event payload assumptions and live protocol behavior still require validation.
 
 TalkInReverse now has one plugin-owned send hook, preserves grapheme clusters when reversing text, and shares temporary toggle state across composers using the existing Zustand API. Its duplicate SVG was removed. The chat-button API already provides the error boundary; no extra wrapper was added. Live composer and subscription behavior remain unverified.
 
@@ -76,26 +76,29 @@ UserPFP separates remote avatars from saved local overrides, gives local choices
 
 MediaPlaybackSpeed preserves a speed chosen before the first voice play event, identifies voice controls through an explicit patch prop, and falls back to 1x for invalid saved rates. Its control uses the shared button and radio menu items. CustomFolderIcons removes the redundant save helper, unused class, forwarding callbacks, repeated lookups, and non-null assertions; its renderer uses the shared error boundary. Regression fixtures cover these paths. Live patch matches, layout, and remaining settings reactivity are unverified.
 
+Sticker menus use format metadata instead of CSS-name guesses, and sticker blocking reads subscribed settings without a duplicate cache. Expression cloning settles file-read failures, validates server errors, captures the chosen name before asynchronous work, keeps visible input and validation aligned, and subscribes its server list to account, permission, emoji, and sticker stores. Clone controls use shared keyboard-accessible buttons.
+
 ## Verification record
 
 Evidence applies to the recorded commit and scope, not to a future merge with main.
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `8309ceb16` | 403 tests and timezone correctness checks passed. |
-| Repository-wide ESLint | `8309ceb16` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
+| Broader performance/correctness suite | `06bc30cc3` | 410 tests and timezone correctness checks passed. |
+| Repository-wide ESLint | `06bc30cc3` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
 | CSS lint | `c50d116a4` | Passed; excludes userplugins. |
 | Internationalization lint | `5e869fea9` | Passed for tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest plugin regressions and TypeScript | `8309ceb16` | 351 plugin tests, full TypeScript, and focused folder-icon lint passed. Source fixtures reject TypeScript syntax diagnostics before execution. |
-| Standalone build | `8309ceb16` | Passed after avatar, playback, and folder-icon changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
+| Latest plugin regressions and TypeScript | `06bc30cc3` | 358 plugin tests, full TypeScript, and focused ExpressionCloner lint passed. Source fixtures reject TypeScript syntax diagnostics before execution. |
+| Standalone build | `06bc30cc3` | Passed after sticker and expression-cloning changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
 | Development build | `0fc6ab63b` | Passed after composer, codec, preset, and game-status startup changes. |
 | Installer review browser checks | `d7b99b737` | Actual templates and generator functions in isolated Chrome preserved literal metadata, all four native/pre-send warning combinations, the native acknowledgement gate, and cancellation. Electron IPC and real installation were not exercised. |
 | Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |
-| Web build | `8309ceb16` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
-| Release artifact audit | `8309ceb16` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
+| Web build | `06bc30cc3` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
+| Release artifact audit | `06bc30cc3` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
 | Avatar startup and edit ordering | `296e36989` | Actual loader, editor actions, and DataStore in isolated Chrome preserved edits in 20 overlapping runs, ten with startup first and ten with saving first. This checks one client context, not synchronization between clients. No extra production guard was added. |
 | Avatar edit transactions | `3bf4098d6` | Actual AvatarModal actions and DataStore code in isolated Chrome preserved storage and memory after an aborted write, kept both concurrent user edits, and deleted only the selected override. React rendering and Discord dependencies were mocked. |
 | Real IndexedDB queue behavior | `ce04cc40a` | Isolated Chrome verified aborted additions, ordered concurrent additions, aborted clearing, and subsequent successful clearing using actual queue and DataStore code. |
+| Clone button keyboard behavior | `38736e4cd` | Actual CloneModal props, shared Button, and stylesheet in isolated Chrome produced 64px controls at a 16px parent font, Tab focus, a focus ring, Enter/Space activation, and no activation while disabled. React and Discord dependencies were mocked; full client layout and uploads were not exercised. |
 | Playback rate application | `44d2a1156` | Actual MediaPlaybackSpeed code with Chrome audio/video elements passed 42 valid/invalid rate cases, preserved a 3x first-play selection, and verified one-shot listener and cleanup behavior. Play events were synthetic; no audio or live Discord UI was exercised. |
 | Image copy conversion | `41343b959` | Actual WebContextMenus code in isolated Chrome converted a JPEG to a 3 by 2 PNG, preserved red pixels, and closed the source bitmap exactly once. Clipboard delivery was intercepted; OS clipboard permission and live Discord menus were not tested. |
 | Video preview decoding | `fd216ca34` | Actual preview code in isolated Chrome produced a PNG from an FFmpeg-generated WebM and returned null for invalid video. |
@@ -104,7 +107,7 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Uninstall button browser checks | `d4efc449d` | Actual shared component props and styles in isolated Chrome verified the accessible name, keyboard focus indicator, and consistent 32px sizing in both stylesheet orders. Full Discord layout was not exercised. |
 | Other isolated browser checks | Earlier audit commits | Specific sticker-storage transactions, codec conversion, and CSS behavior were exercised. These are not general live-client acceptance. |
 
-Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `8309ceb16`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
+Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `06bc30cc3`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
 
 ## Remaining work
 

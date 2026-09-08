@@ -24,7 +24,6 @@ import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { ChannelStore, UserStore, useStateFromStores } from "@webpack/common";
 
-import { convert } from "./converter";
 import { conversions, ConverterAccessory, ConvertIcon } from "./ConverterAccessory";
 
 const SafeConverterAccessory = ErrorBoundary.wrap(ConverterAccessory, { noop: true });
@@ -63,10 +62,7 @@ export default definePlugin({
                 message,
                 channel: ChannelStore.getChannel(message.channel_id),
                 onClick: () => {
-                    const setters = conversions.get(message.id);
-                    if (!setters) return;
-                    const conversion = convert(message.content);
-                    for (const setter of setters) setter(conversion);
+                    for (const convertMessage of conversions.get(message.id) ?? []) convertMessage();
                 }
             };
         }

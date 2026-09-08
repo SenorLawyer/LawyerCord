@@ -12277,6 +12277,7 @@ test("UnitConverter updates all message views and preserves surviving registrati
     const deliveries: string[][] = [];
     const accessory = loadSource("src/equicordplugins/unitConverter/ConverterAccessory.tsx", {
         "@components/Button": {},
+        "./converter": { convert: () => "1.80m" },
         "@utils/css": { classNameFactory: () => () => "" },
         "@webpack/common": {
             useState: () => {
@@ -12293,7 +12294,7 @@ test("UnitConverter updates all message views and preserves surviving registrati
         "@utils/constants": { Devs: {} },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: { SELECT: 1 } },
         "@webpack/common": { ChannelStore: { getChannel: () => ({}) } },
-        "./converter": { convert: () => "1.80m" }, "./ConverterAccessory": accessory
+        "./ConverterAccessory": accessory
     });
     const message = { id: "shared", content: "5ft 11in" };
     accessory.ConverterAccessory({ message });

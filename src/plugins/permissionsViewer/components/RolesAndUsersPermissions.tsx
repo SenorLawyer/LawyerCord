@@ -124,12 +124,14 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
                                         )}
                                         {permission.type === PermissionOverwriteType.ROLE && roleIconSrc != null && (
                                             <img
+                                                alt=""
                                                 className={cl("modal-role-image")}
                                                 src={roleIconSrc}
                                             />
                                         )}
                                         {permission.type === PermissionOverwriteType.MEMBER && user != null && (
                                             <img
+                                                alt=""
                                                 className={cl("modal-user-img")}
                                                 src={user.getAvatarURL(void 0, void 0, false)}
                                             />

@@ -196,6 +196,7 @@ export default definePlugin({
                     <TooltipContainer text="View Permissions">
                         <Button
                             {...popoutProps}
+                            aria-label="View Permissions"
                             ref={buttonRef}
                             color={Button.Colors.CUSTOM}
                             look={Button.Looks.FILLED}

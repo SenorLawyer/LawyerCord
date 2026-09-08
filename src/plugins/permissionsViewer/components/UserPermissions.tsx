@@ -25,7 +25,7 @@ import { classes } from "@utils/misc";
 import type { Guild, GuildMember, RoleOrUserPermission } from "@vencord/discord-types";
 import { PermissionOverwriteType } from "@vencord/discord-types/enums";
 import { findCssClassesLazy } from "@webpack";
-import { GuildRoleStore, PermissionsBits, Tooltip, useMemo, UserStore, useStateFromStores } from "@webpack/common";
+import { Clickable, GuildRoleStore, PermissionsBits, Tooltip, useMemo, UserStore, useStateFromStores } from "@webpack/common";
 
 import { PermissionsSortOrder, settings } from "..";
 import openRolesAndUsersPermissionsModal from "./RolesAndUsersPermissions";
@@ -148,16 +148,16 @@ function UserPermissionsComponent({ guild, guildMember, closePopout }: { guild: 
             <div className={cl("user-header-btns")}>
                 <Tooltip text={`Sorting by ${permissionsSortOrder === PermissionsSortOrder.HighestRole ? "Highest Role" : "Lowest Role"}`}>
                     {tooltipProps => (
-                        <div
+                        <Clickable
                             {...tooltipProps}
                             className={cl("user-header-btn")}
-                            role="button"
-                            tabIndex={0}
+                            aria-label="Toggle permission sort order"
                             onClick={() => {
                                 settings.store.permissionsSortOrder = permissionsSortOrder === PermissionsSortOrder.HighestRole ? PermissionsSortOrder.LowestRole : PermissionsSortOrder.HighestRole;
                             }}
                         >
                             <svg
+                                aria-hidden="true"
                                 width="24"
                                 height="24"
                                 viewBox="0 96 960 960"
@@ -165,29 +165,29 @@ function UserPermissionsComponent({ guild, guildMember, closePopout }: { guild: 
                             >
                                 <path fill="var(--text-default)" d="M440 896V409L216 633l-56-57 320-320 320 320-56 57-224-224v487h-80Z" />
                             </svg>
-                        </div>
+                        </Clickable>
                     )}
                 </Tooltip>
                 <Tooltip text="Role Details">
                     {tooltipProps => (
-                        <div
+                        <Clickable
                             {...tooltipProps}
                             className={cl("user-header-btn")}
-                            role="button"
-                            tabIndex={0}
+                            aria-label="Role Details"
                             onClick={() => {
                                 closePopout();
                                 openRolesAndUsersPermissionsModal(rolePermissions, guild, guildMember.nick || UserStore.getUser(guildMember.userId).username);
                             }}
                         >
                             <svg
+                                aria-hidden="true"
                                 width="24"
                                 height="24"
                                 viewBox="0 0 24 24"
                             >
                                 <path fill="var(--text-default)" d="M7 12.001C7 10.8964 6.10457 10.001 5 10.001C3.89543 10.001 3 10.8964 3 12.001C3 13.1055 3.89543 14.001 5 14.001C6.10457 14.001 7 13.1055 7 12.001ZM14 12.001C14 10.8964 13.1046 10.001 12 10.001C10.8954 10.001 10 10.8964 10 12.001C10 13.1055 10.8954 14.001 12 14.001C13.1046 14.001 14 13.1055 14 12.001ZM19 10.001C20.1046 10.001 21 10.8964 21 12.001C21 13.1055 20.1046 14.001 19 14.001C17.8954 14.001 17 13.1055 17 12.001C17 10.8964 17.8954 10.001 19 10.001Z" />
                             </svg>
-                        </div>
+                        </Clickable>
                     )}
                 </Tooltip>
             </div>

@@ -67,7 +67,9 @@ function isNumberValid(value: number) {
 }
 
 function isUrlValid(value: string) {
-    if (value && !/^https?:\/\/.+/.test(value)) return "Must be a valid URL.";
+    if (!value) return true;
+    const url = parseUrl(value);
+    if (!url || !/^https?:$/.test(url.protocol)) return "Must be a valid URL.";
     return true;
 }
 

@@ -12432,3 +12432,17 @@ test("CustomRPC streaming links validate the parsed destination", () => {
     for (const value of ["text https://twitch.tv/channel", "https://example.com/https://twitch.tv/channel", "https://twitch.tv.evil.test/channel", "https://user:password@twitch.tv/channel", "ftp://twitch.tv/channel", "https://twitch.tv/"])
         assert.notEqual(isStreamLinkValid(value), true, value);
 });
+
+test("CustomRPC optional URLs reject malformed addresses", () => {
+    const isUrlValid = loadSource("src/plugins/customRPC/RpcSettings.tsx", {
+        "@components/Divider": {}, "@components/Heading": {},
+        "@components/settings/tabs/plugins/components/Common": {},
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } },
+        "@vencord/discord-types/enums": {}, "@webpack/common": {}, ".": {}
+    }, {}, "isUrlValid");
+    for (const value of ["", "https://example.com/path?value=1", "http://localhost:8080/path"])
+        assert.equal(isUrlValid(value), true, value);
+    for (const value of ["https:// bad", "http://[invalid", "https://example.com:bad", "javascript:alert(1)", "ftp://example.com/file"])
+        assert.notEqual(isUrlValid(value), true, value);
+});

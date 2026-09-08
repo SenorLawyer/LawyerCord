@@ -12446,3 +12446,17 @@ test("CustomRPC optional URLs reject malformed addresses", () => {
     for (const value of ["https:// bad", "http://[invalid", "https://example.com:bad", "javascript:alert(1)", "ftp://example.com/file"])
         assert.notEqual(isUrlValid(value), true, value);
 });
+
+test("CustomRPC image validation checks hosts without rejecting asset keys or URL paths", () => {
+    const isImageKeyValid = loadSource("src/plugins/customRPC/RpcSettings.tsx", {
+        "@components/Divider": {}, "@components/Heading": {},
+        "@components/settings/tabs/plugins/components/Common": {},
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } },
+        "@vencord/discord-types/enums": {}, "@webpack/common": {}, ".": {}
+    }, {}, "isImageKeyValid");
+    for (const value of ["", "my_asset", "https://i.imgur.com/image.png", "https://media.tenor.com/image.gif", "https://example.com/https://imgur.com/image", "https://example.com/https://cdn.discordapp.com/image"])
+        assert.equal(isImageKeyValid(value), true, value);
+    for (const value of ["https://imgur.com/image", "https://tenor.com/view/image", "https://cdn.discordapp.com/image", "https://media.discordapp.net/image"])
+        assert.notEqual(isImageKeyValid(value), true, value);
+});

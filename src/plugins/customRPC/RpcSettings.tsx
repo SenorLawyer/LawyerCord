@@ -74,9 +74,10 @@ function isUrlValid(value: string) {
 }
 
 function isImageKeyValid(value: string) {
-    if (/https?:\/\/(cdn|media)\.discordapp\.(com|net)\//.test(value)) return "Don't use a Discord link. Use an Imgur image link instead.";
-    if (/https?:\/\/(?!i\.)?imgur\.com\//.test(value)) return "Imgur link must be a direct link to the image (e.g. https://i.imgur.com/...). Right click the image and click 'Copy image address'";
-    if (/https?:\/\/(?!media\.)?tenor\.com\//.test(value)) return "Tenor link must be a direct link to the image (e.g. https://media.tenor.com/...). Right click the GIF and click 'Copy image address'";
+    const host = parseUrl(value)?.hostname ?? "";
+    if (/^(cdn|media)\.discordapp\.(com|net)$/.test(host)) return "Don't use a Discord link. Use an Imgur image link instead.";
+    if (host === "imgur.com") return "Imgur link must be a direct link to the image (e.g. https://i.imgur.com/...). Right click the image and click 'Copy image address'";
+    if (host === "tenor.com") return "Tenor link must be a direct link to the image (e.g. https://media.tenor.com/...). Right click the GIF and click 'Copy image address'";
     return true;
 }
 

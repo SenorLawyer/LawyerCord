@@ -118,8 +118,8 @@ async function createActivity(): Promise<Activity | undefined> {
         stateURL,
         type,
         streamLink,
-        startTime,
-        endTime,
+        startTime: storedStartTime,
+        endTime: storedEndTime,
         imageBig,
         imageBigURL,
         imageBigTooltip,
@@ -136,6 +136,9 @@ async function createActivity(): Promise<Activity | undefined> {
     } = settings.store;
 
     if (!appName) return;
+
+    const startTime = validTimestamp(storedStartTime);
+    const endTime = validTimestamp(storedEndTime);
 
     const activity: Activity = {
         application_id: appID || "0",

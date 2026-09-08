@@ -12366,3 +12366,23 @@ test("UnitConverter accepts spaced Fahrenheit temperatures", () => {
     assert.equal(convert("-40 °F"), "-40.00°C");
     assert.equal(convert("Model32 F"), "Model32 F");
 });
+
+test("CustomRPC numeric settings reject partial, fractional and unsafe values", () => {
+    const { RPCSettings } = loadSource("src/plugins/customRPC/RpcSettings.tsx", {
+        "@components/Divider": {}, "@components/Heading": {},
+        "@components/settings/tabs/plugins/components/Common": {},
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@vencord/discord-types/enums": { ActivityType: {} },
+        "@webpack/common": {},
+        ".": { settings: { use: () => ({}) }, TimestampMode: {} }
+    }, { React: { createElement: (_type: unknown, props: Record<string, unknown>, ...children: unknown[]) => ({ props, children }) } });
+    const numericOptions = RPCSettings().children.flatMap((child: { props?: { data?: { transform?: (value: string) => number; isValid: (value: number) => true | string; }[]; }; }) => child.props?.data ?? [])
+        .filter((option: { transform?: unknown; }) => option.transform);
+    assert.equal(numericOptions.length, 4);
+    for (const option of numericOptions) {
+        for (const input of ["12abc", "1.5", "Infinity", "9".repeat(400), "9007199254740992", "-1"])
+            assert.notEqual(option.isValid(option.transform(input)), true, input);
+        for (const input of ["", "0", "12", "1720000000000"])
+            assert.equal(option.isValid(option.transform(input)), true, input);
+    }
+});

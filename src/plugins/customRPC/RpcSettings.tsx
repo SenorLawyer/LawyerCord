@@ -59,13 +59,9 @@ function isStreamLinkValid(value: string) {
     return true;
 }
 
-function parseNumber(value: string) {
-    return value ? parseInt(value, 10) : 0;
-}
-
 function isNumberValid(value: number) {
-    if (isNaN(value)) return "Must be a number.";
-    if (value < 0) return "Must be a positive number.";
+    if (!Number.isSafeInteger(value)) return "Must be a whole number within the supported range.";
+    if (value < 0) return "Must be zero or greater.";
     return true;
 }
 
@@ -201,14 +197,14 @@ export function RPCSettings() {
                 {
                     settingsKey: "partySize",
                     label: "Party Size",
-                    transform: parseNumber,
+                    transform: Number,
                     isValid: isNumberValid,
                     disabled: s.type !== ActivityType.PLAYING,
                 },
                 {
                     settingsKey: "partyMaxSize",
                     label: "Maximum Party Size",
-                    transform: parseNumber,
+                    transform: Number,
                     isValid: isNumberValid,
                     disabled: s.type !== ActivityType.PLAYING,
                 },
@@ -269,14 +265,14 @@ export function RPCSettings() {
                 {
                     settingsKey: "startTime",
                     label: "Start Timestamp (in milliseconds)",
-                    transform: parseNumber,
+                    transform: Number,
                     isValid: isNumberValid,
                     disabled: s.timestampMode !== TimestampMode.CUSTOM,
                 },
                 {
                     settingsKey: "endTime",
                     label: "End Timestamp (in milliseconds)",
-                    transform: parseNumber,
+                    transform: Number,
                     isValid: isNumberValid,
                     disabled: s.timestampMode !== TimestampMode.CUSTOM,
                 },

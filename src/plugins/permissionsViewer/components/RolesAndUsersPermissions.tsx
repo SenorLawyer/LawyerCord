@@ -57,6 +57,7 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
             .filter(p => p.type === PermissionOverwriteType.MEMBER && !GuildMemberStore.isMember(guild.id, p.id!))
             .map(({ id }) => id);
 
+        if (!usersToRequest.length) return;
         FluxDispatcher.dispatch({
             type: "GUILD_MEMBERS_REQUEST",
             guildIds: [guild.id],

@@ -12516,3 +12516,28 @@ test("PermissionsViewer orders modal entries before rendering without mutating t
     assert.deepEqual(input.map(entry => entry.id), ["user", "low", "high"]);
     assert.notEqual(sorted, input);
 });
+
+test("PermissionsViewer requests only missing members and skips empty requests", () => {
+    const requests: { userIds: string[]; }[] = [];
+    const render = loadSource("src/plugins/permissionsViewer/components/RolesAndUsersPermissions.tsx", {
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+        "@components/Flex": {}, "@components/Icons": {}, "@plugins/betterRoleContext": {},
+        "@plugins/permissionsViewer/utils": { cl: () => "", getGuildPermissionSpecMap: () => ({}) },
+        "@utils/clipboard": {}, "@utils/discord": {},
+        "@vencord/discord-types/enums": { PermissionOverwriteType: { ROLE: 0, MEMBER: 1 } },
+        "@webpack": { findByCodeLazy: () => () => {} },
+        "@webpack/common": {
+            useMemo: (factory: () => unknown) => factory(), useStateFromStores: () => [],
+            useEffect: (effect: () => void) => effect(), useState: () => [0, () => {}],
+            GuildMemberStore: { isMember: (_guild: string, id: string) => id === "known" },
+            GuildRoleStore: { getRolesSnapshot: () => ({}) }, UserStore: { getUser: () => undefined },
+            PermissionsBits: {}, FluxDispatcher: { dispatch: (value: { userIds: string[]; }) => requests.push(value) }
+        }, "..": {}, "./icons": {}
+    }, { React: { createElement: () => ({}) } }, "RolesAndUsersPermissionsComponent");
+    for (const permissions of [[], [{ id: "role", type: 0 }], [{ id: "known", type: 1 }]])
+        render({ permissions, guild: { id: "guild" }, modalProps: {}, header: "Fixture" });
+    assert.equal(requests.length, 0);
+    render({ permissions: [{ id: "known", type: 1 }, { id: "missing", type: 1 }], guild: { id: "guild" }, modalProps: {}, header: "Fixture" });
+    assert.deepEqual(Array.from(requests[0].userIds), ["missing"]);
+    assert.equal(requests.length, 1);
+});

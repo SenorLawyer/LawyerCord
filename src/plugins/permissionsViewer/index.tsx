@@ -24,18 +24,21 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { SafetyIcon } from "@components/Icons";
 import { TooltipContainer } from "@components/TooltipContainer";
 import { Devs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import { classes } from "@utils/misc";
+import { useAwaiter } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
 import type { Guild, RoleOrUserPermission } from "@vencord/discord-types";
 import { PermissionOverwriteType } from "@vencord/discord-types/enums";
 import { findCssClassesLazy } from "@webpack";
-import { Button, ChannelStore, Dialog, GuildMemberStore, GuildRoleStore, GuildStore, Menu, PermissionsBits, Popout, useEffect, useRef, UserStore, useStateFromStores } from "@webpack/common";
+import { Button, ChannelStore, Dialog, GuildMemberStore, GuildRoleStore, GuildStore, Menu, PermissionsBits, Popout, useRef, UserStore, useStateFromStores } from "@webpack/common";
 
 import openRolesAndUsersPermissionsModal from "./components/RolesAndUsersPermissions";
 import UserPermissions from "./components/UserPermissions";
 import { getSortedRolesForMember, loadGetGuildPermissionSpecMap, sortPermissionOverwrites } from "./utils";
 
 const PopoutClasses = findCssClassesLazy("container", "popoutRoleDot");
+const logger = new Logger("PermissionsViewer");
 
 export const enum PermissionsSortOrder {
     HighestRole,
@@ -158,10 +161,13 @@ export default definePlugin({
 
     ViewPermissionsButton: ErrorBoundary.wrap(({ className, guild, userId }: { className: string; guild: Guild; userId: string; }) => {
         const buttonRef = useRef(null);
-        useEffect(() => void loadGetGuildPermissionSpecMap(), []);
+        const [permissionsReady] = useAwaiter(loadGetGuildPermissionSpecMap, {
+            fallbackValue: false,
+            onError: () => logger.error("Could not load permission details.")
+        });
 
         const guildMember = useStateFromStores([GuildMemberStore], () => GuildMemberStore.getMember(guild.id, userId), [guild.id, userId]);
-        if (!guildMember) return null;
+        if (!guildMember || !permissionsReady) return null;
 
         return (
             <Popout

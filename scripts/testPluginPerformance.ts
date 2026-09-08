@@ -12592,7 +12592,7 @@ test("PermissionsViewer menu actions recheck their targets before opening", () =
         "@api/Settings": { definePluginSettings: () => ({ withPrivateSettings: () => ({}) }) },
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
         "@components/Icons": {}, "@components/TooltipContainer": {},
-        "@utils/constants": { Devs: {} }, "@utils/misc": {},
+        "@utils/constants": { Devs: {} }, "@utils/Logger": { Logger: class {} }, "@utils/misc": {}, "@utils/react": {},
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: { SELECT: 1 } },
         "@vencord/discord-types/enums": { PermissionOverwriteType: { ROLE: 0, OWNER: 2 } },
         "@webpack": { findCssClassesLazy: () => ({}) },

@@ -53,10 +53,6 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
     );
 
     useEffect(() => {
-        permissions.sort((a, b) => a.type - b.type);
-    }, [permissions]);
-
-    useEffect(() => {
         const usersToRequest = permissions
             .filter(p => p.type === PermissionOverwriteType.MEMBER && !GuildMemberStore.isMember(guild.id, p.id!))
             .map(({ id }) => id);
@@ -280,13 +276,14 @@ function UserContextMenu({ userId }: { userId: string; }) {
 const RolesAndUsersPermissions = ErrorBoundary.wrap(RolesAndUsersPermissionsComponent);
 
 export default function openRolesAndUsersPermissionsModal(permissions: Array<RoleOrUserPermission>, guild: Guild, header: string) {
+    const sortedPermissions = [...permissions].sort((a, b) => a.type - b.type);
     return openModalLazy(async () => {
         await loadGetGuildPermissionSpecMap();
 
         return modalProps => (
             <RolesAndUsersPermissions
                 modalProps={modalProps}
-                permissions={permissions}
+                permissions={sortedPermissions}
                 guild={guild}
                 header={header}
             />

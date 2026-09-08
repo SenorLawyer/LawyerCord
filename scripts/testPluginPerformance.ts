@@ -12498,3 +12498,21 @@ test("PermissionsViewer sorts mixed overwrites consistently by type and role pos
     const missing = [{ id: "missing", type: 0 }, { id: "high", type: 0 }, { id: "user1", type: 1 }, { id: "user2", type: 1 }];
     assert.deepEqual(Array.from(sortPermissionOverwrites(missing, "guild"), (value: { id: string; }) => value.id), ["high", "missing", "user1", "user2"]);
 });
+
+test("PermissionsViewer orders modal entries before rendering without mutating the caller", async () => {
+    const { default: open } = loadSource("src/plugins/permissionsViewer/components/RolesAndUsersPermissions.tsx", {
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+        "@components/Flex": {}, "@components/Icons": {}, "@plugins/betterRoleContext": {},
+        "@plugins/permissionsViewer/utils": { loadGetGuildPermissionSpecMap: async () => {} },
+        "@utils/clipboard": {}, "@utils/discord": {},
+        "@vencord/discord-types/enums": {}, "@webpack": { findByCodeLazy: () => () => {} },
+        "@webpack/common": { openModalLazy: (factory: () => unknown) => factory() },
+        "..": {}, "./icons": {}
+    }, { React: { createElement: (_type: unknown, props: Record<string, unknown>) => ({ props }) } });
+    const input = Object.freeze([{ id: "user", type: 1 }, { id: "low", type: 0 }, { id: "high", type: 0 }]);
+    const render = await open(input, { id: "guild" }, "Channel");
+    const sorted = render({}).props.permissions;
+    assert.deepEqual(Array.from(sorted, (entry: { id: string; }) => entry.id), ["low", "high", "user"]);
+    assert.deepEqual(input.map(entry => entry.id), ["user", "low", "high"]);
+    assert.notEqual(sorted, input);
+});

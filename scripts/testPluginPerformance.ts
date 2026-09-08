@@ -12356,3 +12356,13 @@ test("UnitConverter preserves Unicode identifiers and dimension suffixes", () =>
         assert.equal(convert(input), input);
     assert.equal(convert("📏10in"), "📏25.40cm");
 });
+
+test("UnitConverter accepts spaced Fahrenheit temperatures", () => {
+    const { convert } = loadSource("src/equicordplugins/unitConverter/converter.ts", {
+        ".": { settings: { store: { myUnits: "metric" } } }
+    });
+    for (const input of ["32F", "32°F", "32 F", "32 °F", "32\u00a0°F"])
+        assert.equal(convert(input), "0.00°C", input);
+    assert.equal(convert("-40 °F"), "-40.00°C");
+    assert.equal(convert("Model32 F"), "Model32 F");
+});

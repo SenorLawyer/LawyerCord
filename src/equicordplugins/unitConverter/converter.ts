@@ -13,7 +13,7 @@ const regexes: Record<"imperial" | "metric", Record<string, {
     // matches imperial units, converts them to metric
     imperial: {
         fahrenheit: {
-            regex: /(?<![\p{L}\p{N}\p{M}_.])(-?\d+(?:\.\d+)?)°?(f)(?![\p{L}\p{N}\p{M}_])/igu,
+            regex: /(?<![\p{L}\p{N}\p{M}_.])(-?\d+(?:\.\d+)?)\s?°?f(?![\p{L}\p{N}\p{M}_])/igu,
             convert(...groups) {
                 const c = ((parseFloat(groups[1]) - 32) * (5 / 9)).toFixed(2);
                 return `${c}°C`;

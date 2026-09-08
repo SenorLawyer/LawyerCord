@@ -12386,3 +12386,32 @@ test("CustomRPC numeric settings reject partial, fractional and unsafe values", 
             assert.equal(option.isValid(option.transform(input)), true, input);
     }
 });
+
+test("CustomRPC retains editable numeric text while saving only valid values", () => {
+    const store = { partySize: 4 };
+    const updates: unknown[][] = [];
+    const SingleSetting = loadSource("src/plugins/customRPC/RpcSettings.tsx", {
+        "@components/Divider": {}, "@components/Heading": {},
+        "@components/settings/tabs/plugins/components/Common": { resolveError: (value: true | string) => value === true ? null : value },
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@vencord/discord-types/enums": {},
+        "@webpack/common": { useState: (initial: unknown) => {
+            const values: unknown[] = [];
+            updates.push(values);
+            return [initial, (value: unknown) => values.push(value)];
+        } },
+        ".": { settings: { store } }
+    }, { React: { createElement: (_type: unknown, props: Record<string, unknown>, ...children: unknown[]) => ({ props, children }) } }, "SingleSetting");
+    const field = SingleSetting({ settingsKey: "partySize", transform: Number, isValid: (value: number) => Number.isSafeInteger(value) ? true : "Invalid number." });
+    const change = field.children[1].props.onChange;
+    change("12abc");
+    assert.equal(updates[0].at(-1), "12abc");
+    assert.equal(store.partySize, 4);
+    change("12");
+    assert.equal(updates[0].at(-1), "12");
+    assert.equal(store.partySize, 12);
+    assert.equal(updates[1].at(-1), null);
+    change("");
+    assert.equal(updates[0].at(-1), "");
+    assert.equal(store.partySize, 0);
+});

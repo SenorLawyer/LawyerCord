@@ -93,11 +93,11 @@ function SingleSetting<T>({ settingsKey, label, disabled, isValid, transform }: 
     const [error, setError] = useState<string | null>(null);
 
     function handleChange(newValue: any) {
+        setState(newValue);
         if (transform) newValue = transform(newValue);
 
         const valid = isValid?.(newValue) ?? true;
 
-        setState(newValue);
         setError(resolveError(valid));
 
         if (valid === true) {

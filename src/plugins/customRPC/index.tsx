@@ -164,8 +164,8 @@ async function createActivity(): Promise<Activity | undefined> {
         case TimestampMode.CUSTOM:
             if (startTime || endTime) {
                 activity.timestamps = {};
-                if (startTime && endTime && endTime > startTime) {
-                    const anchor = loopAnchor ?? Date.now();
+                const anchor = loopAnchor ?? Date.now();
+                if (startTime && endTime && endTime > startTime && endTime - startTime <= MAX_TIMESTAMP - anchor) {
                     activity.timestamps.start = anchor;
                     activity.timestamps.end = anchor + (endTime - startTime);
                 } else {

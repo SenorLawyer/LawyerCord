@@ -45,9 +45,9 @@ const logger = new Logger("CustomRPC");
 const ShowCurrentGame = getUserSettingLazy<boolean>("status", "showCurrentGame")!;
 
 const maxAssetCacheSize = 100;
-const assetCache = new Map<string, Promise<string>>();
+const assetCache = new Map<string, Promise<string | undefined>>();
 
-async function getApplicationAsset(key: string): Promise<string> {
+async function getApplicationAsset(key: string): Promise<string | undefined> {
     const appId = settings.store.appID || "0";
     const cacheKey = JSON.stringify([appId, key]);
     const cached = assetCache.get(cacheKey);
@@ -59,7 +59,11 @@ async function getApplicationAsset(key: string): Promise<string> {
     }
 
     const promise = ApplicationAssetUtils.fetchAssetIds(appId, [key])
-        .then(ids => ids[0]!)
+        .then(ids => {
+            const asset = ids[0];
+            if (!asset && assetCache.get(cacheKey) === promise) assetCache.delete(cacheKey);
+            return asset;
+        })
         .catch(error => {
             if (assetCache.get(cacheKey) === promise) assetCache.delete(cacheKey);
             throw error;

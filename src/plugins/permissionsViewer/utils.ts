@@ -51,7 +51,8 @@ export function sortPermissionOverwrites<T extends { id: string; type: number; }
     const roles = GuildRoleStore.getRolesSnapshot(guildId);
 
     return overwrites.sort((a, b) => {
-        if (a.type !== PermissionOverwriteType.ROLE || b.type !== PermissionOverwriteType.ROLE) return 0;
+        if (a.type !== b.type) return a.type - b.type;
+        if (a.type !== PermissionOverwriteType.ROLE) return 0;
 
         const roleA = roles[a.id];
         const roleB = roles[b.id];

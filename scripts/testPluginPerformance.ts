@@ -12484,3 +12484,17 @@ test("CustomRPC dropdowns select their declared default when a setting is unset"
     store.type = 0;
     assert.equal(isSelected(0), true);
 });
+
+test("PermissionsViewer sorts mixed overwrites consistently by type and role position", () => {
+    const { sortPermissionOverwrites } = loadSource("src/plugins/permissionsViewer/utils.ts", {
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@vencord/discord-types/enums": { PermissionOverwriteType: { ROLE: 0, MEMBER: 1 } },
+        "@webpack": { extractAndLoadChunksLazy: () => () => {}, findByPropsLazy: () => ({}) },
+        "@webpack/common": { GuildRoleStore: { getRolesSnapshot: () => ({ low: { position: 1 }, high: { position: 10 } }) } },
+        ".": {}
+    });
+    const input = [{ id: "low", type: 0 }, { id: "user", type: 1 }, { id: "high", type: 0 }];
+    assert.deepEqual(Array.from(sortPermissionOverwrites(input, "guild"), (value: { id: string; }) => value.id), ["high", "low", "user"]);
+    const missing = [{ id: "missing", type: 0 }, { id: "high", type: 0 }, { id: "user1", type: 1 }, { id: "user2", type: 1 }];
+    assert.deepEqual(Array.from(sortPermissionOverwrites(missing, "guild"), (value: { id: string; }) => value.id), ["high", "missing", "user1", "user2"]);
+});

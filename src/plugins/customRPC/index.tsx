@@ -216,7 +216,7 @@ async function createActivity(): Promise<Activity | undefined> {
         };
     }
 
-    if (partyMaxSize && partySize) {
+    if (partySize && partyMaxSize && Number.isSafeInteger(partySize) && Number.isSafeInteger(partyMaxSize) && partySize > 0 && partySize <= partyMaxSize) {
         activity.party = {
             size: [partySize, partyMaxSize]
         };

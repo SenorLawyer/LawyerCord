@@ -262,7 +262,7 @@ let rpcGeneration = 0;
 let pluginActive = false;
 
 function validTimestamp(value: unknown) {
-    return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= MAX_TIMESTAMP ? value : undefined;
+    return typeof value === "number" && Number.isSafeInteger(value) && value > 0 && value <= MAX_TIMESTAMP ? value : undefined;
 }
 
 function handleSettingsChange(_data?: unknown, path = "") {

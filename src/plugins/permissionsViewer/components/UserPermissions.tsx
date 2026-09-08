@@ -25,7 +25,7 @@ import { classes } from "@utils/misc";
 import type { Guild, GuildMember, RoleOrUserPermission } from "@vencord/discord-types";
 import { PermissionOverwriteType } from "@vencord/discord-types/enums";
 import { findCssClassesLazy } from "@webpack";
-import { PermissionsBits, Tooltip, useMemo, UserStore } from "@webpack/common";
+import { GuildRoleStore, PermissionsBits, Tooltip, useMemo, UserStore, useStateFromStores } from "@webpack/common";
 
 import { PermissionsSortOrder, settings } from "..";
 import openRolesAndUsersPermissionsModal from "./RolesAndUsersPermissions";
@@ -41,6 +41,7 @@ type UserPermissions = Array<UserPermission>;
 
 const RoleClasses = findCssClassesLazy("role", "roleName", "roleRemoveButton", "roleNameOverflow", "root");
 const RoleBorderClasses = findCssClassesLazy("roleCircle", "dot", "dotBorderColor");
+const SETTINGS_KEYS: ["permissionsSortOrder"] = ["permissionsSortOrder"];
 
 interface FakeRoleProps extends React.HTMLAttributes<HTMLDivElement> {
     text: string;
@@ -84,14 +85,20 @@ function GrantedByTooltip({ roleName, roleColor }: GrantedByTooltipProps) {
 }
 
 function UserPermissionsComponent({ guild, guildMember, closePopout }: { guild: Guild; guildMember: GuildMember; closePopout: () => void; }) {
-    const { permissionsSortOrder } = settings.use(["permissionsSortOrder"]);
+    const { permissionsSortOrder } = settings.use(SETTINGS_KEYS);
 
-    const guildPermissionSpecMap = useMemo(() => getGuildPermissionSpecMap(guild), [guild.id]);
+    const guildPermissionSpecMap = useMemo(() => getGuildPermissionSpecMap(guild), [guild]);
+    const memberRoles = useStateFromStores(
+        [GuildRoleStore],
+        () => getSortedRolesForMember(guild, guildMember),
+        [guild, guildMember],
+        (old, current) => old.length === current.length && old.every((role, index) => role === current[index])
+    );
 
     const [rolePermissions, userPermissions] = useMemo(() => {
         const userPermissions: UserPermissions = [];
 
-        const userRoles = getSortedRolesForMember(guild, guildMember);
+        const userRoles = [...memberRoles];
 
         const rolePermissions: Array<RoleOrUserPermission> = userRoles.map(role => ({
             type: PermissionOverwriteType.ROLE,
@@ -133,7 +140,7 @@ function UserPermissionsComponent({ guild, guildMember, closePopout }: { guild: 
         userPermissions.sort((a, b) => b.rolePosition - a.rolePosition);
 
         return [rolePermissions, userPermissions];
-    }, [permissionsSortOrder]);
+    }, [permissionsSortOrder, memberRoles, guild.ownerId, guildMember.userId, guildPermissionSpecMap]);
 
     return <div>
         <div className={cl("user-header-container")}>

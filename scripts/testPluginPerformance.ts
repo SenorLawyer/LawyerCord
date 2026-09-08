@@ -12372,6 +12372,7 @@ test("CustomRPC numeric settings reject partial, fractional and unsafe values", 
         "@components/Divider": {}, "@components/Heading": {},
         "@components/settings/tabs/plugins/components/Common": {},
         "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/misc": {},
         "@vencord/discord-types/enums": { ActivityType: {} },
         "@webpack/common": {},
         ".": { settings: { use: () => ({}) }, TimestampMode: {} }
@@ -12394,6 +12395,7 @@ test("CustomRPC retains editable numeric text while saving only valid values", (
         "@components/Divider": {}, "@components/Heading": {},
         "@components/settings/tabs/plugins/components/Common": { resolveError: (value: true | string) => value === true ? null : value },
         "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/misc": {},
         "@vencord/discord-types/enums": {},
         "@webpack/common": { useState: (initial: unknown) => {
             const values: unknown[] = [];
@@ -12414,4 +12416,19 @@ test("CustomRPC retains editable numeric text while saving only valid values", (
     change("");
     assert.equal(updates[0].at(-1), "");
     assert.equal(store.partySize, 0);
+});
+
+test("CustomRPC streaming links validate the parsed destination", () => {
+    const isStreamLinkValid = loadSource("src/plugins/customRPC/RpcSettings.tsx", {
+        "@components/Divider": {}, "@components/Heading": {},
+        "@components/settings/tabs/plugins/components/Common": {},
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } },
+        "@vencord/discord-types/enums": { ActivityType: { STREAMING: 1 } },
+        "@webpack/common": {}, ".": { settings: { store: { type: 1 } } }
+    }, {}, "isStreamLinkValid");
+    for (const value of ["https://twitch.tv/channel", "https://www.youtube.com/watch?v=example", "http://youtube.com/live/example"])
+        assert.equal(isStreamLinkValid(value), true, value);
+    for (const value of ["text https://twitch.tv/channel", "https://example.com/https://twitch.tv/channel", "https://twitch.tv.evil.test/channel", "https://user:password@twitch.tv/channel", "ftp://twitch.tv/channel", "https://twitch.tv/"])
+        assert.notEqual(isStreamLinkValid(value), true, value);
 });

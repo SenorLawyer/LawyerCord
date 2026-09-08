@@ -10,6 +10,7 @@ import { Divider } from "@components/Divider";
 import { Heading } from "@components/Heading";
 import { resolveError } from "@components/settings/tabs/plugins/components/Common";
 import { classNameFactory } from "@utils/css";
+import { parseUrl } from "@utils/misc";
 import { ActivityType } from "@vencord/discord-types/enums";
 import { Select, Text, TextInput, useState } from "@webpack/common";
 
@@ -49,12 +50,12 @@ function isAppIdValid(value: string) {
     return true;
 }
 
-function isStreamLinkDisabled() {
-    return settings.store.type !== ActivityType.STREAMING;
-}
-
 function isStreamLinkValid(value: string) {
-    if (!isStreamLinkDisabled() && !/https?:\/\/(www\.)?(twitch\.tv|youtube\.com)\/\w+/.test(value)) return "Streaming link must be a valid URL.";
+    if (settings.store.type === ActivityType.STREAMING) {
+        const url = parseUrl(value);
+        if (!url || !/^https?:$/.test(url.protocol) || !/^(www\.)?(twitch\.tv|youtube\.com)$/.test(url.host) || !/^\/\w/.test(url.pathname) || url.username || url.password)
+            return "Streaming link must be a valid URL.";
+    }
     if (value && value.length > 512) return "Streaming link must be not longer than 512 characters.";
     return true;
 }

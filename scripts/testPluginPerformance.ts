@@ -12519,6 +12519,7 @@ test("PermissionsViewer orders modal entries before rendering without mutating t
 
 test("PermissionsViewer requests only missing members and skips empty requests", () => {
     const requests: { userIds: string[]; }[] = [];
+    const subscriptions: string[] = [];
     const render = loadSource("src/plugins/permissionsViewer/components/RolesAndUsersPermissions.tsx", {
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
         "@components/Flex": {}, "@components/Icons": {}, "@plugins/betterRoleContext": {},
@@ -12527,10 +12528,10 @@ test("PermissionsViewer requests only missing members and skips empty requests",
         "@vencord/discord-types/enums": { PermissionOverwriteType: { ROLE: 0, MEMBER: 1 } },
         "@webpack": { findByCodeLazy: () => () => {} },
         "@webpack/common": {
-            useMemo: (factory: () => unknown) => factory(), useStateFromStores: () => [],
+            useMemo: (factory: () => unknown) => factory(), useStateFromStores: (stores: { kind: string; }[], read: () => unknown) => { subscriptions.push(...stores.map(store => store.kind)); return read(); },
             useEffect: (effect: () => void) => effect(), useState: () => [0, () => {}],
-            GuildMemberStore: { isMember: (_guild: string, id: string) => id === "known" },
-            GuildRoleStore: { getRolesSnapshot: () => ({}) }, UserStore: { getUser: () => undefined },
+            GuildMemberStore: { kind: "members", getMemberIds: () => [], isMember: (_guild: string, id: string) => id === "known" },
+            GuildRoleStore: { kind: "roles", getRolesSnapshot: () => ({}) }, UserStore: { kind: "users", getUser: () => undefined },
             PermissionsBits: {}, FluxDispatcher: { dispatch: (value: { userIds: string[]; }) => requests.push(value) }
         }, "..": {}, "./icons": {}
     }, { React: { createElement: (_type: unknown, props: unknown, ...children: unknown[]) => ({ props, children }) } }, "RolesAndUsersPermissionsComponent");
@@ -12542,4 +12543,6 @@ test("PermissionsViewer requests only missing members and skips empty requests",
     assert.equal(requests.length, 1);
     const tree = render({ permissions: [{ id: "known", type: 1 }], guild: { id: "guild" }, modalProps: {}, header: "Fixture" });
     assert.ok(JSON.stringify(tree).includes("Unknown User"));
+    assert.ok(subscriptions.includes("users"));
+    assert.ok(subscriptions.includes("roles"));
 });

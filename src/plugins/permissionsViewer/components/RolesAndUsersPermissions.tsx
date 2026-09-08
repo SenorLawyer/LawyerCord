@@ -45,11 +45,11 @@ function getRoleIconSrc(role: Role) {
 function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, header }: { permissions: Array<RoleOrUserPermission>; guild: Guild; modalProps: RenderModalProps; header: string; }) {
     const guildPermissionSpecMap = useMemo(() => getGuildPermissionSpecMap(guild), [guild.id]);
 
-    useStateFromStores(
-        [GuildMemberStore],
-        () => GuildMemberStore.getMemberIds(guild.id),
-        null,
-        (old, current) => old.length === current.length
+    const users = useStateFromStores(
+        [UserStore],
+        () => permissions.map(permission => UserStore.getUser(permission.id ?? "")),
+        [permissions],
+        (old, current) => old.length === current.length && old.every((user, index) => user === current[index])
     );
 
     useEffect(() => {
@@ -68,7 +68,7 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
     const [selectedItemIndex, selectItem] = useState(0);
     const selectedItem = permissions[selectedItemIndex];
 
-    const roles = GuildRoleStore.getRolesSnapshot(guild.id);
+    const roles = useStateFromStores([GuildRoleStore], () => GuildRoleStore.getRolesSnapshot(guild.id), [guild.id]);
 
     return (
         <Modal
@@ -86,7 +86,7 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
                 <div className={cl("modal-container")}>
                     <ScrollerThin className={cl("modal-list")} orientation="auto">
                         {permissions.map((permission, index) => {
-                            const user: User | undefined = UserStore.getUser(permission.id ?? "");
+                            const user: User | undefined = users[index];
                             const role: Role | undefined = roles[permission.id ?? ""];
                             const roleIconSrc = role != null ? getRoleIconSrc(role) : undefined;
 

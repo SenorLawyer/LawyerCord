@@ -12460,3 +12460,23 @@ test("CustomRPC image validation checks hosts without rejecting asset keys or UR
     for (const value of ["https://imgur.com/image", "https://tenor.com/view/image", "https://cdn.discordapp.com/image", "https://media.discordapp.net/image"])
         assert.notEqual(isImageKeyValid(value), true, value);
 });
+
+test("CustomRPC dropdowns select their declared default when a setting is unset", () => {
+    const store: Record<string, number> = {};
+    const SelectSetting = loadSource("src/plugins/customRPC/RpcSettings.tsx", {
+        "@components/Divider": {}, "@components/Heading": {},
+        "@components/settings/tabs/plugins/components/Common": {},
+        "@utils/css": { classNameFactory: () => () => "" }, "@utils/misc": {},
+        "@vencord/discord-types/enums": {}, "@webpack/common": {},
+        ".": { settings: { store } }
+    }, { React: { createElement: (_type: unknown, props: Record<string, unknown>, ...children: unknown[]) => ({ props, children }) } }, "SelectSetting");
+    const field = SelectSetting({ settingsKey: "type", options: [{ value: 0, default: true }, { value: 1 }] });
+    const { isSelected } = field.children[1].props;
+    assert.equal(isSelected(0), true);
+    assert.equal(isSelected(1), false);
+    store.type = 1;
+    assert.equal(isSelected(0), false);
+    assert.equal(isSelected(1), true);
+    store.type = 0;
+    assert.equal(isSelected(0), true);
+});

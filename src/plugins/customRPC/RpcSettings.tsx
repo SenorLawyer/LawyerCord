@@ -134,7 +134,7 @@ function SelectSetting<T>({ settingsKey, label, options, disabled }: SelectOptio
                 maxVisibleItems={5}
                 closeOnSelect={true}
                 select={v => settings.store[settingsKey] = v}
-                isSelected={v => v === settings.store[settingsKey]}
+                isSelected={v => v === (settings.store[settingsKey] ?? options.find(option => option.default)?.value)}
                 serialize={v => String(v)}
                 isDisabled={disabled}
             />

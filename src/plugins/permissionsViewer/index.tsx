@@ -29,7 +29,7 @@ import definePlugin, { OptionType } from "@utils/types";
 import type { Guild, RoleOrUserPermission } from "@vencord/discord-types";
 import { PermissionOverwriteType } from "@vencord/discord-types/enums";
 import { findCssClassesLazy } from "@webpack";
-import { Button, ChannelStore, Dialog, GuildMemberStore, GuildRoleStore, GuildStore, match, Menu, PermissionsBits, Popout, useEffect, useRef, UserStore } from "@webpack/common";
+import { Button, ChannelStore, Dialog, GuildMemberStore, GuildRoleStore, GuildStore, match, Menu, PermissionsBits, Popout, useEffect, useRef, UserStore, useStateFromStores } from "@webpack/common";
 
 import openRolesAndUsersPermissionsModal from "./components/RolesAndUsersPermissions";
 import UserPermissions from "./components/UserPermissions";
@@ -178,7 +178,7 @@ export default definePlugin({
         const buttonRef = useRef(null);
         useEffect(() => void loadGetGuildPermissionSpecMap(), []);
 
-        const guildMember = GuildMemberStore.getMember(guild.id, userId);
+        const guildMember = useStateFromStores([GuildMemberStore], () => GuildMemberStore.getMember(guild.id, userId), [guild.id, userId]);
         if (!guildMember) return null;
 
         return (

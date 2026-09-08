@@ -10,6 +10,10 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Older scheduled messages without an account remain saved but paused. Recreate them under the intended account before sending.
 - Older versions do not enforce saved account ownership or attempted-send markers. Downgrading with saved scheduled messages can send them from the wrong account or repeat a previous attempt.
 
+### Removed
+
+- Remove TriviaAI, which required a user-supplied API key and arbitrary AI endpoint. Its Answer With AI actions are no longer available.
+
 ### Fixed
 
 - Validate stored scheduled-message records before loading them, preserving invalid data and blocking queue changes until it is recovered.

@@ -12548,3 +12548,28 @@ test("PermissionsViewer requests only missing members and skips empty requests",
     assert.ok(subscriptions.includes("users"));
     assert.ok(subscriptions.includes("roles"));
 });
+
+test("PermissionsViewer preserves ID copying but omits view-as for missing roles", () => {
+    let role: { id: string; } | undefined;
+    const updates: unknown[] = [];
+    const RoleContextMenu = loadSource("src/plugins/permissionsViewer/components/RolesAndUsersPermissions.tsx", {
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+        "@components/Flex": {}, "@components/Icons": {},
+        "@plugins/betterRoleContext": { buildExtraRoleContextMenuItems: () => ({ before: [], after: [] }) },
+        "@plugins/permissionsViewer/utils": { cl: (value: string) => value },
+        "@utils/clipboard": {}, "@utils/discord": { getIntlMessage: (value: string) => value },
+        "@vencord/discord-types/enums": {}, "@webpack": { findByCodeLazy: () => () => {} },
+        "@webpack/common": { useRef: () => ({}), GuildRoleStore: { getRole: () => role }, ContextMenuApi: {}, Menu: {}, FluxDispatcher: { dispatch: (value: unknown) => updates.push(value) } },
+        "..": { settings: { store: { unsafeViewAsRole: true } } }, "./icons": {}
+    }, { React: { createElement: (_type: unknown, props: unknown, ...children: unknown[]) => ({ props, children }) } }, "RoleContextMenu");
+    const render = () => JSON.stringify(RoleContextMenu({ guild: { id: "guild" }, roleId: "role", onClose() {} }));
+    assert.ok(render().includes("copy-role-id"));
+    assert.ok(!render().includes("view-as-role"));
+    role = { id: "role" };
+    assert.ok(render().includes("view-as-role"));
+    const menu = RoleContextMenu({ guild: { id: "guild" }, roleId: "role", onClose() {} });
+    const action = menu.children.find((child: { props?: { id?: string; }; }) => child?.props?.id === "view-as-role").props.action;
+    role = undefined;
+    action();
+    assert.equal(updates.length, 0);
+});

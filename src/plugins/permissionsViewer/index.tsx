@@ -57,7 +57,7 @@ export const settings = definePluginSettings({
             { label: "Lowest Role", value: PermissionsSortOrder.LowestRole }
         ]
     },
-});
+}).withPrivateSettings<{ unsafeViewAsRole?: boolean; }>();
 
 function MenuItem(guildId: string, id?: string, type?: MenuItemParentType) {
     if (type === MenuItemParentType.User && !GuildMemberStore.isMember(guildId, id!)) return null;

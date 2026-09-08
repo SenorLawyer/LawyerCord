@@ -230,12 +230,14 @@ function RoleContextMenu({ guild, roleId, onClose }: { guild: Guild; roleId: str
 
             {after}
 
-            {(settings.store as any).unsafeViewAsRole && (
+            {role != null && settings.store.unsafeViewAsRole && (
                 <Menu.MenuItem
                     id={cl("view-as-role")}
                     label={getIntlMessage("VIEW_AS_ROLE")}
                     icon={ViewAsRoleIcon}
                     action={() => {
+                        const role = GuildRoleStore.getRole(guild.id, roleId);
+                        if (!role) return;
                         onClose();
                         FluxDispatcher.dispatch({
                             type: "IMPERSONATE_UPDATE",

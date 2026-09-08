@@ -12573,3 +12573,63 @@ test("PermissionsViewer preserves ID copying but omits view-as for missing roles
     action();
     assert.equal(updates.length, 0);
 });
+
+test("PermissionsViewer menu actions recheck their targets before opening", () => {
+    let guild: { id: string; name: string; ownerId: string; } | undefined = { id: "guild", name: "Server", ownerId: "other" };
+    let member: { userId: string; roles: string[]; } | null = { userId: "user", roles: ["role"] };
+    let channel: { id: string; name: string; permissionOverwrites: Record<string, unknown>; } | undefined = { id: "channel", name: "Room", permissionOverwrites: {} };
+    let user: { username: string; } | undefined = { username: "Viewer" };
+    const opened: unknown[][] = [];
+    const GuildRoleStore = { getSortedRoles: () => [{ id: "guild", name: "Everyone", permissions: 1n }, { id: "role", name: "Role", permissions: 2n }], getRolesSnapshot: () => ({}) };
+    const utils = loadSource("src/plugins/permissionsViewer/utils.ts", {
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@vencord/discord-types/enums": { PermissionOverwriteType: { ROLE: 0 } },
+        "@webpack": { extractAndLoadChunksLazy: () => () => {}, findByPropsLazy: () => ({}) },
+        "@webpack/common": { GuildRoleStore }, ".": {}
+    });
+    const { default: plugin } = loadSource("src/plugins/permissionsViewer/index.tsx", {
+        "@api/ContextMenu": { findGroupChildrenByChildId: (_id: unknown, children: unknown[]) => children },
+        "@api/Settings": { definePluginSettings: () => ({ withPrivateSettings: () => ({}) }) },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+        "@components/Icons": {}, "@components/TooltipContainer": {},
+        "@utils/constants": { Devs: {} }, "@utils/misc": {},
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: { SELECT: 1 } },
+        "@vencord/discord-types/enums": { PermissionOverwriteType: { ROLE: 0, OWNER: 2 } },
+        "@webpack": { findCssClassesLazy: () => ({}) },
+        "@webpack/common": {
+            Menu: {}, PermissionsBits: { VIEW: 1n, SEND: 2n }, GuildRoleStore,
+            GuildStore: { getGuild: () => guild }, ChannelStore: { getChannel: () => channel }, UserStore: { getUser: () => user },
+            GuildMemberStore: { isMember: () => member !== null, getMember: () => member }
+        }, "./components/RolesAndUsersPermissions": { __esModule: true, default: (...args: unknown[]) => opened.push(args) },
+        "./components/UserPermissions": {}, "./utils": utils
+    }, { React: { createElement: (_type: unknown, props: unknown) => ({ props }) } });
+    const userMenuProps = { guildId: "guild", user: { id: "user" } };
+    const actions = [
+        ["user-context", userMenuProps, "Viewer"],
+        ["channel-context", { guild: { id: "guild" }, channel: { id: "channel" } }, "Room"],
+        ["guild-context", { guild: { id: "guild" } }, "Server"]
+    ] as const;
+    for (const [context, props, expectedHeader] of actions) {
+        const children: { props: { action: () => void; }; }[] = [];
+        plugin.contextMenus[context](children, props);
+        const { action } = children[0].props;
+        action();
+        assert.equal(opened.at(-1)?.[2], expectedHeader);
+        const count = opened.length;
+        const saved = { guild, member, channel };
+        if (context === "user-context") member = null;
+        else if (context === "channel-context") channel = undefined;
+        else guild = undefined;
+        assert.doesNotThrow(action, context);
+        assert.equal(opened.length, count, context);
+        ({ guild, member, channel } = saved);
+    }
+    const children: { props: { action: () => void; }; }[] = [];
+    plugin.contextMenus["user-context"](children, userMenuProps);
+    user = undefined;
+    children[0].props.action();
+    assert.equal(opened.at(-1)?.[2], "Unknown User");
+    const dmChildren: unknown[] = [];
+    plugin.contextMenus["user-context"](dmChildren, { user: { id: "user" } });
+    assert.equal(dmChildren.length, 0);
+});

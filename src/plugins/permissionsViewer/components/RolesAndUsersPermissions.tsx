@@ -26,7 +26,7 @@ import { getIntlMessage, getUniqueUsername } from "@utils/discord";
 import { Guild, RenderModalProps, Role, RoleOrUserPermission, UnicodeEmoji, User } from "@vencord/discord-types";
 import { PermissionOverwriteType } from "@vencord/discord-types/enums";
 import { findByCodeLazy } from "@webpack";
-import { ContextMenuApi, FluxDispatcher, GuildMemberStore, GuildRoleStore, i18n, Menu, Modal, openModalLazy, PermissionsBits, ScrollerThin, Text, Tooltip, useEffect, useMemo, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
+import { Clickable, ContextMenuApi, FluxDispatcher, GuildMemberStore, GuildRoleStore, i18n, Menu, Modal, openModalLazy, PermissionsBits, ScrollerThin, Text, Tooltip, useEffect, useMemo, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
 
 import { settings } from "..";
 import { PermissionAllowedIcon, PermissionDeniedIcon } from "./icons";
@@ -91,12 +91,10 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
                             const roleIconSrc = role != null ? getRoleIconSrc(role) : undefined;
 
                             return (
-                                <div
+                                <Clickable
                                     key={index}
                                     className={cl("modal-list-item-btn")}
                                     onClick={() => selectItem(index)}
-                                    role="button"
-                                    tabIndex={0}
                                 >
                                     <div
                                         className={cl("modal-list-item", { "modal-list-item-active": selectedItemIndex === index })}
@@ -151,7 +149,7 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
                                             }
                                         </Text>
                                     </div>
-                                </div>
+                                </Clickable>
                             );
                         })}
                     </ScrollerThin>

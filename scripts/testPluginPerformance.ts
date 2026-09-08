@@ -12373,13 +12373,15 @@ test("CustomRPC numeric settings reject partial, fractional and unsafe values", 
         "@components/settings/tabs/plugins/components/Common": {},
         "@utils/css": { classNameFactory: () => () => "" },
         "@utils/misc": {},
-        "@vencord/discord-types/enums": { ActivityType: {} },
+        "@vencord/discord-types/enums": { ActivityType: { PLAYING: 0, STREAMING: 1 } },
         "@webpack/common": {},
         ".": { settings: { use: () => ({}) }, TimestampMode: {} }
     }, { React: { createElement: (_type: unknown, props: Record<string, unknown>, ...children: unknown[]) => ({ props, children }) } });
     const numericOptions = RPCSettings().children.flatMap((child: { props?: { data?: { transform?: (value: string) => number; isValid: (value: number) => true | string; }[]; }; }) => child.props?.data ?? [])
         .filter((option: { transform?: unknown; }) => option.transform);
     assert.equal(numericOptions.length, 4);
+    assert.equal(numericOptions[0].disabled, false);
+    assert.equal(numericOptions[1].disabled, false);
     for (const option of numericOptions) {
         for (const input of ["12abc", "1.5", "Infinity", "9".repeat(400), "9007199254740992", "-1"])
             assert.notEqual(option.isValid(option.transform(input)), true, input);

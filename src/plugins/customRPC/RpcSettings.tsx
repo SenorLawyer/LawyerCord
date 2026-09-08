@@ -203,14 +203,14 @@ export function RPCSettings() {
                     label: "Party Size",
                     transform: Number,
                     isValid: isNumberValid,
-                    disabled: s.type !== ActivityType.PLAYING,
+                    disabled: (s.type ?? ActivityType.PLAYING) !== ActivityType.PLAYING,
                 },
                 {
                     settingsKey: "partyMaxSize",
                     label: "Maximum Party Size",
                     transform: Number,
                     isValid: isNumberValid,
-                    disabled: s.type !== ActivityType.PLAYING,
+                    disabled: (s.type ?? ActivityType.PLAYING) !== ActivityType.PLAYING,
                 },
             ]} />
 

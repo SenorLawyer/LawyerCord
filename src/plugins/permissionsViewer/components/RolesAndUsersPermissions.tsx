@@ -141,7 +141,7 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
                                                 permission.type === PermissionOverwriteType.ROLE
                                                     ? role?.name ?? "Unknown Role"
                                                     : permission.type === PermissionOverwriteType.MEMBER
-                                                        ? (user != null && getUniqueUsername(user)) ?? "Unknown User"
+                                                        ? user != null ? getUniqueUsername(user) : "Unknown User"
                                                         : (
                                                             <Flex gap="0.2em">
                                                                 @owner

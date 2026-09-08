@@ -12533,11 +12533,13 @@ test("PermissionsViewer requests only missing members and skips empty requests",
             GuildRoleStore: { getRolesSnapshot: () => ({}) }, UserStore: { getUser: () => undefined },
             PermissionsBits: {}, FluxDispatcher: { dispatch: (value: { userIds: string[]; }) => requests.push(value) }
         }, "..": {}, "./icons": {}
-    }, { React: { createElement: () => ({}) } }, "RolesAndUsersPermissionsComponent");
+    }, { React: { createElement: (_type: unknown, props: unknown, ...children: unknown[]) => ({ props, children }) } }, "RolesAndUsersPermissionsComponent");
     for (const permissions of [[], [{ id: "role", type: 0 }], [{ id: "known", type: 1 }]])
         render({ permissions, guild: { id: "guild" }, modalProps: {}, header: "Fixture" });
     assert.equal(requests.length, 0);
     render({ permissions: [{ id: "known", type: 1 }, { id: "missing", type: 1 }], guild: { id: "guild" }, modalProps: {}, header: "Fixture" });
     assert.deepEqual(Array.from(requests[0].userIds), ["missing"]);
     assert.equal(requests.length, 1);
+    const tree = render({ permissions: [{ id: "known", type: 1 }], guild: { id: "guild" }, modalProps: {}, header: "Fixture" });
+    assert.ok(JSON.stringify(tree).includes("Unknown User"));
 });

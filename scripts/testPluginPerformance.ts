@@ -12406,7 +12406,8 @@ test("CustomRPC retains editable numeric text while saving only valid values", (
         } },
         ".": { settings: { store } }
     }, { React: { createElement: (_type: unknown, props: Record<string, unknown>, ...children: unknown[]) => ({ props, children }) } }, "SingleSetting");
-    const field = SingleSetting({ settingsKey: "partySize", transform: Number, isValid: (value: number) => Number.isSafeInteger(value) ? true : "Invalid number." });
+    const field = SingleSetting({ settingsKey: "partySize", label: "Party Size", transform: Number, isValid: (value: number) => Number.isSafeInteger(value) ? true : "Invalid number." });
+    assert.equal(field.children[1].props["aria-label"], "Party Size");
     const change = field.children[1].props.onChange;
     change("12abc");
     assert.equal(updates[0].at(-1), "12abc");
@@ -12472,7 +12473,8 @@ test("CustomRPC dropdowns select their declared default when a setting is unset"
         "@vencord/discord-types/enums": {}, "@webpack/common": {},
         ".": { settings: { store } }
     }, { React: { createElement: (_type: unknown, props: Record<string, unknown>, ...children: unknown[]) => ({ props, children }) } }, "SelectSetting");
-    const field = SelectSetting({ settingsKey: "type", options: [{ value: 0, default: true }, { value: 1 }] });
+    const field = SelectSetting({ settingsKey: "type", label: "Activity Type", options: [{ value: 0, default: true }, { value: 1 }] });
+    assert.equal(field.children[1].props["aria-label"], "Activity Type");
     const { isSelected } = field.children[1].props;
     assert.equal(isSelected(0), true);
     assert.equal(isSelected(1), false);

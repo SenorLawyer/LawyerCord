@@ -113,6 +113,7 @@ function SingleSetting<T>({ settingsKey, label, disabled, isValid, transform }: 
         <div className={cl("single", { disabled })}>
             <Heading tag="h5">{label}</Heading>
             <TextInput
+                aria-label={label}
                 type="text"
                 placeholder={"Enter a value"}
                 value={state}
@@ -129,6 +130,7 @@ function SelectSetting<T>({ settingsKey, label, options, disabled }: SelectOptio
         <div className={cl("single", { disabled })}>
             <Heading tag="h5">{label}</Heading>
             <Select
+                aria-label={label}
                 placeholder={"Select an option"}
                 options={options}
                 maxVisibleItems={5}

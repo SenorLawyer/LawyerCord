@@ -25,7 +25,6 @@ import { Heading } from "@components/Heading";
 import { Link } from "@components/Link";
 import { Paragraph } from "@components/Paragraph";
 import { Devs } from "@utils/constants";
-import { isTruthy } from "@utils/guards";
 import { proxyLazy } from "@utils/lazy";
 import { Logger } from "@utils/Logger";
 import { Margins } from "@utils/margins";
@@ -188,18 +187,11 @@ async function createActivity(): Promise<Activity | undefined> {
         activity.state_url = stateURL;
     }
 
-    if (buttonOneText) {
-        activity.buttons = [
-            buttonOneText,
-            buttonTwoText
-        ].filter(isTruthy);
-
-        activity.metadata = {
-            button_urls: [
-                buttonOneURL,
-                buttonTwoURL
-            ].filter(isTruthy)
-        };
+    const buttons = [[buttonOneText, buttonOneURL], [buttonTwoText, buttonTwoURL]]
+        .flatMap(([label, url]) => label && url ? [{ label, url }] : []);
+    if (buttons.length) {
+        activity.buttons = buttons.map(button => button.label);
+        activity.metadata = { button_urls: buttons.map(button => button.url) };
     }
 
     const [largeImageAsset, smallImageAsset] = await Promise.all([

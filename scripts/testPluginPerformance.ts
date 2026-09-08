@@ -12633,3 +12633,53 @@ test("PermissionsViewer menu actions recheck their targets before opening", () =
     plugin.contextMenus["user-context"](dmChildren, { user: { id: "user" } });
     assert.equal(dmChildren.length, 0);
 });
+
+test("lazy webpack chunk loads share work and retry failures on a later call", async () => {
+    const { canonicalizeMatch } = loadSource("src/utils/patches.ts", { "./intlHash": {} });
+    for (const failure of ["download", "factory", "entry"] as const) {
+        const { _initWebpack, extractAndLoadChunksLazy, lazyWebpackSearchHistory } = loadSource("src/webpack/webpack.ts", {
+            "@debug/Tracer": { traceFunction: (_name: string, fn: unknown) => fn }, "@utils/lazy": {},
+            "@utils/lazyReact": {}, "@utils/Logger": { Logger: class { warn() {} } },
+            "@utils/patches": { canonicalizeMatch }, "@utils/text": {}
+        }, { IS_DEV: false, IS_ANTI_CRASH_TEST: false, IS_REPORTER: true });
+        const factory = function AUDIT_LAZY(r: { e(id: string): Promise<void>; bind(target: unknown, id: string): () => void; }) {
+            return r.e("123").then(r.bind(r, "456"));
+        };
+        const factories: Record<string, unknown> = {};
+        if (failure !== "factory") factories.loader = factory;
+        if (failure !== "entry") factories["456"] = () => {};
+        let failDownload = failure === "download";
+        let loads = 0;
+        const executed: string[] = [];
+        const request = Object.assign((id: string) => { executed.push(id); }, {
+            c: {}, m: factories, e: async (id: string) => {
+                assert.equal(id, "123");
+                loads++;
+                if (failDownload) throw new Error("Synthetic chunk failure");
+            }
+        });
+        _initWebpack(request);
+        const load = extractAndLoadChunksLazy(["AUDIT_LAZY"]);
+        assert.equal(loads, 0);
+        assert.equal(lazyWebpackSearchHistory.length, 1);
+        const first = load();
+        assert.equal(load(), first, failure);
+        if (failure === "download") await assert.rejects(first, /Synthetic chunk failure/);
+        else assert.equal(await first, false, failure);
+        assert.equal(executed.length, 0);
+
+        failDownload = false;
+        factories.loader = factory;
+        factories["456"] = () => {};
+        const retry = load();
+        assert.notEqual(retry, first, failure);
+        assert.equal(load(), retry, failure);
+        assert.equal(await retry, true, failure);
+        assert.deepEqual(executed, ["456"]);
+        const successfulLoads = loads;
+        assert.equal(load(), retry, failure);
+        assert.equal(await load(), true, failure);
+        assert.equal(loads, successfulLoads, failure);
+        assert.deepEqual(executed, ["456"]);
+    }
+});

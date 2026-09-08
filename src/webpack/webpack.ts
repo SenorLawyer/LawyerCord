@@ -17,7 +17,7 @@
 */
 
 import { traceFunction } from "@debug/Tracer";
-import { makeLazy, proxyLazy } from "@utils/lazy";
+import { proxyLazy } from "@utils/lazy";
 import { LazyComponent } from "@utils/lazyReact";
 import { Logger } from "@utils/Logger";
 import { canonicalizeMatch } from "@utils/patches";
@@ -396,7 +396,7 @@ export const lazyWebpackSearchHistory = [] as Array<[TypeWebpackSearchHistory, a
 /**
  * This is just a wrapper around {@link proxyLazy} to make our reporter test for your webpack finds.
  *
- * Wraps the result of {@link makeLazy} in a Proxy you can consume as if it wasn't lazy.
+ * Wraps a deferred webpack lookup in a Proxy you can consume as if it wasn't lazy.
  * On first property access, the lazy is evaluated
  * @param factory lazy factory
  * @param attempts how many times to try to evaluate the lazy before giving up
@@ -759,12 +759,22 @@ export async function extractAndLoadChunks(code: CodeFilter, matcher = DefaultEx
  * Extract and load chunks using their entry point
  * @param code An array of all the code the module factory containing the lazy chunk loading must include
  * @param matcher A RegExp that returns the chunk ids array as the first capture group and the entry point id as the second. Defaults to a matcher that captures the first lazy chunk loading found in the module factory
- * @returns A function that returns a promise that resolves with a boolean whether the chunks were loaded, on first call
+ * @returns A function that shares pending and successful loads, retrying failed loads on its next call
  */
 export function extractAndLoadChunksLazy(code: CodeFilter, matcher = DefaultExtractAndLoadChunksRegex) {
     if (IS_REPORTER) lazyWebpackSearchHistory.push(["extractAndLoadChunks", [code, matcher]]);
 
-    return makeLazy(() => extractAndLoadChunks(code, matcher));
+    let promise: Promise<boolean> | undefined;
+    return () => promise ??= extractAndLoadChunks(code, matcher).then(
+        (loaded: boolean) => {
+            if (!loaded) promise = undefined;
+            return loaded;
+        },
+        (error: unknown) => {
+            promise = undefined;
+            throw error;
+        }
+    );
 }
 
 /**

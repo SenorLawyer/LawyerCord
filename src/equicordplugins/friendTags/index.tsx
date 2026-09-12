@@ -13,7 +13,7 @@ import { Devs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import { useAwaiter, useForceUpdater } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
-import { Button, ChannelStore, Menu, React, RelationshipStore, TextInput, UserStore, useState } from "@webpack/common";
+import { Button, ChannelStore, Menu, React, RelationshipStore, showToast, TextInput, Toasts, UserStore, useState } from "@webpack/common";
 
 interface UserTagData {
     tagName: string;
@@ -83,7 +83,15 @@ async function SetData() {
     const serialized = JSON.stringify(SavedData);
     if (serialized === savedDataSerialized) return;
 
-    await DataStore.set(tagStoreName, serialized);
+    try {
+        await DataStore.set(tagStoreName, serialized);
+    } catch {
+        if (dataPromise === pending) {
+            logger.error("Could not save tags.");
+            showToast("Could not save tags. Changes may be lost when FriendTags restarts.", Toasts.Type.FAILURE);
+        }
+        return;
+    }
     if (dataPromise === pending) savedDataSerialized = serialized;
 }
 

@@ -12980,23 +12980,31 @@ test("FrequentQuickSwitcher reads frequency once and preserves store records", (
 
 test("FriendTags retries failed saves and only skips committed tag data", async () => {
     let fail = true;
+    let wait: Promise<void> | undefined;
     const writes: string[] = [];
+    const feedback: string[] = [];
     const api = loadSource("src/equicordplugins/friendTags/index.tsx", {
         "@api/index": { DataStore: { get: async () => undefined, set: async (key: string, value: string) => {
             assert.equal(key, "vc-friendtags-tags");
             writes.push(value);
+            await wait;
             if (fail) throw new Error("Storage failed");
         } } },
         "@api/Settings": { definePluginSettings: () => ({}) },
         "@components/BaseText": {}, "@components/Divider": {}, "@utils/constants": { Devs: {} },
         "@utils/Logger": { Logger: class { error() {} } },
         "@utils/react": {}, "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
-        "@webpack/common": {}
-    }, {}, "({ GetData, SetData, replace(tags) { SavedData = tags; } })");
+        "@webpack/common": { Toasts: { Type: { FAILURE: "failure" } }, showToast: (message: string, type: string) => {
+            assert.equal(type, "failure");
+            feedback.push(message);
+        } }
+    }, {}, "({ GetData, SetData, stop: exports.default.stop, replace(tags) { SavedData = tags; } })");
     await api.GetData();
     const first = [{ tagName: "Friends", userIds: ["123"] }];
     api.replace(first);
-    await assert.rejects(api.SetData(), /Storage failed/);
+    await api.SetData();
+    assert.equal(feedback.length, 1);
+    assert.match(feedback[0], /Could not save tags/);
     fail = false;
     await api.SetData();
     assert.deepEqual(writes, [JSON.stringify(first), JSON.stringify(first)]);
@@ -13005,12 +13013,22 @@ test("FriendTags retries failed saves and only skips committed tag data", async 
     const second = [{ tagName: "Games", userIds: ["123", "456"] }];
     api.replace(second);
     fail = true;
-    await assert.rejects(api.SetData(), /Storage failed/);
+    await api.SetData();
+    assert.equal(feedback.length, 2);
     fail = false;
     await api.SetData();
     assert.deepEqual(writes.slice(2), [JSON.stringify(second), JSON.stringify(second)]);
     await api.SetData();
     assert.equal(writes.length, 4);
+    assert.equal(feedback.length, 2);
+    let rejectWrite: (error: Error) => void = () => {};
+    wait = new Promise<void>((_resolve, reject) => { rejectWrite = reject; });
+    api.replace(first);
+    const stale = api.SetData();
+    api.stop();
+    rejectWrite(new Error("Private storage failure details"));
+    await stale;
+    assert.equal(feedback.length, 2, "Stopped saves must not show stale feedback");
 });
 
 test("FriendTags preserves invalid storage and ignores stopped loads", async () => {

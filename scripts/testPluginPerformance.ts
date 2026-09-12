@@ -13034,8 +13034,8 @@ test("FriendTags preserves invalid storage and ignores stopped loads", async () 
         "@utils/Logger": { Logger: class { error() {} } },
         "@utils/react": { useForceUpdater: () => () => {}, useAwaiter: () => [null, errorUI, pendingUI] },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
-        "@webpack/common": {}
-    }, { React: { createElement: (_type: unknown, _props: unknown, ...children: unknown[]) => children } },
+        "@webpack/common": { React: { createElement: (_type: unknown, _props: unknown, ...children: unknown[]) => children } }
+    }, {},
     "({ GetData, SetData, plugin: exports.default, TagConfigurationComponent, read: () => JSON.stringify(SavedData) })");
     assert.match(String(api.TagConfigurationComponent()), /Loading tags/);
     const first = api.GetData();
@@ -13092,11 +13092,12 @@ test("FriendTags edits only the selected tag and never saves on mount", async ()
         "@utils/react": { useForceUpdater: () => () => {} },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
         "@webpack/common": {
+            React: { createElement: (type: unknown, props: object, ...children: Element[]) => ({ type, props, children: children.flat() }) },
             useState: (value: unknown) => [value, () => {}], useEffect: (effect: () => void) => effect(),
             TextInput: "input", Button: { Colors: {} },
             UserStore: { getUser: (id: string) => ({ username: id, getAvatarURL: () => "" }) }
         }
-    }, { React: { createElement: (type: unknown, props: object, ...children: Element[]) => ({ type, props, children: children.flat() }) } },
+    }, {},
     "({ GetData, TagConfigCard, tags: () => SavedData, stop: exports.default.stop })");
     await api.GetData();
     const empty = api.tags()[0];
@@ -13122,5 +13123,50 @@ test("FriendTags edits only the selected tag and never saves on mount", async ()
     inputs[0].props.onChange?.("Stale edit");
     inputs[1].props.onChange?.("999");
     assert.equal(selected.tagName, "Changed");
+    assert.equal(writes.length, count);
+});
+
+test("FriendTags keeps duplicate tags distinct in menus and deletion", async () => {
+    interface Element { props: { id: string; key: string; action(): void; onRemove(): void; }; children: Element[]; }
+    let updates = 0;
+    const writes: string[] = [];
+    const api = loadSource("src/equicordplugins/friendTags/index.tsx", {
+        "@api/index": { DataStore: { get: async () => '[{"tagName":"Same","userIds":[]},{"tagName":"Same","userIds":[]}]', set: async (_key: string, value: string) => { writes.push(value); } } },
+        "@api/Settings": { definePluginSettings: () => ({}) },
+        "@components/BaseText": {}, "@components/Divider": {}, "@utils/constants": { Devs: {} },
+        "@utils/Logger": { Logger: class { error() {} } },
+        "@utils/react": { useForceUpdater: () => () => { updates++; }, useAwaiter: () => [null, null, false] },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": { Menu: { MenuItem: "item" }, React: {
+            Fragment: "fragment", createElement: (_type: unknown, props: object, ...children: Element[]) => ({ props, children: children.flat() })
+        } }
+    }, {}, "({ GetData, userPatch, TagConfigurationComponent, tags: () => SavedData, stop: exports.default.stop })");
+    await api.GetData();
+    const first = api.tags()[0];
+    const second = api.tags()[1];
+    const menu: Element[] = [];
+    api.userPatch(menu, { user: { id: "123" } });
+    const items = menu[0].children;
+    assert.notEqual(items[0].props.id, items[1].props.id);
+    items[1].props.action();
+    await Promise.resolve();
+    assert.deepEqual(Array.from(first.userIds), []);
+    assert.deepEqual(Array.from(second.userIds), ["123"]);
+    const before: Element = api.TagConfigurationComponent();
+    const key = before.children[2].props.key;
+    before.children[1].children[0].props.onRemove();
+    await Promise.resolve();
+    assert.equal(updates, 1);
+    assert.equal(api.tags().length, 1);
+    assert.equal(api.tags()[0], second);
+    const after: Element = api.TagConfigurationComponent();
+    assert.equal(after.children[1].props.key, key);
+    assert.deepEqual(JSON.parse(writes[writes.length - 1]), [{ tagName: "Same", userIds: ["123"] }]);
+    const count = writes.length;
+    items[0].props.action();
+    before.children[1].children[0].props.onRemove();
+    assert.equal(writes.length, count);
+    api.stop();
+    items[1].props.action();
     assert.equal(writes.length, count);
 });

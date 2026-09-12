@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep duplicate-named FriendTags distinct when deleting tags or using context menus, and preserve other editor rows after deletion.
+
 - Stop FriendTags from saving on editor mount, edit the selected tag when names match, and remove complete user IDs.
 
 - Keep failed FriendTags saves eligible for a later retry. Preserve invalid stored tags, wait for loading before editing, and ignore reads from stopped plugin instances.

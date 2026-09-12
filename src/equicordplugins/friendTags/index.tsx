@@ -13,7 +13,7 @@ import { Devs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import { useAwaiter, useForceUpdater } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
-import { Button, ChannelStore, Menu, RelationshipStore, TextInput, UserStore, useState } from "@webpack/common";
+import { Button, ChannelStore, Menu, React, RelationshipStore, TextInput, UserStore, useState } from "@webpack/common";
 
 interface UserTagData {
     tagName: string;
@@ -25,6 +25,14 @@ let savedDataSerialized: string | undefined;
 let dataPromise: Promise<void> | undefined;
 const logger = new Logger("FriendTags");
 const tagStoreName = "vc-friendtags-tags";
+const tagIds = new WeakMap<UserTagData, number>();
+let nextTagId = 0;
+
+function getTagId(tag: UserTagData) {
+    let id = tagIds.get(tag);
+    if (id === undefined) tagIds.set(tag, id = nextTagId++);
+    return `vc-tag-${id}`;
+}
 
 function parseUsertags(text: string): string[] {
     const matches = text.match(/&([^&]+)/g);
@@ -98,11 +106,10 @@ function GetData() {
     return pending;
 }
 
-function TagConfigCard(props: { tag: UserTagData; }) {
+function TagConfigCard(props: { tag: UserTagData; onRemove(): void; }) {
     const { tag } = props;
     const [tagName, setTagName] = useState(tag.tagName);
     const [userIds, setUserIDs] = useState(tag.userIds.join(", "));
-    const update = useForceUpdater();
 
     function changeUserIds(value: string) {
         if (!SavedData.includes(tag)) return;
@@ -140,11 +147,7 @@ function TagConfigCard(props: { tag: UserTagData; }) {
                 </div>
             </div>
             <Button
-                onClick={async () => {
-                    SavedData = SavedData.filter(data => (data.tagName !== tagName));
-                    await SetData();
-                    update();
-                }}
+                onClick={props.onRemove}
                 color={Button.Colors.RED}
             >
                 Remove
@@ -164,11 +167,16 @@ function TagConfigurationComponent() {
         <>
             <Divider />
             {
-                SavedData?.map(e => (
-                    <>
-                        <TagConfigCard tag={e} />
+                SavedData.map(tag => (
+                    <React.Fragment key={getTagId(tag)}>
+                        <TagConfigCard tag={tag} onRemove={() => {
+                            if (!SavedData.includes(tag)) return;
+                            SavedData = SavedData.filter(data => data !== tag);
+                            update();
+                            void SetData();
+                        }} />
                         <Divider />
-                    </>
+                    </React.Fragment>
                 ))
             }
             <Button onClick={() => {
@@ -196,9 +204,8 @@ const settings = definePluginSettings({
     }
 });
 
-function UserToTagID(user, tag, remove) {
-    const dataTag = SavedData.find(e => e.tagName === tag);
-    if (!dataTag) return;
+function UserToTagID(user: string, dataTag: UserTagData, remove: boolean) {
+    if (!SavedData.includes(dataTag)) return;
 
     if (remove) {
         dataTag.userIds = dataTag.userIds.filter(e => e !== user);
@@ -223,15 +230,15 @@ const userPatch: NavContextMenuPatchCallback = (children, { user }) => {
                 return (
                     <Menu.MenuItem
                         label={`${isTagged ? "Remove from" : "Add to"} ${tag.tagName}`}
-                        key={`vc-tag-${tag.tagName}`}
-                        id={`vc-tag-${tag.tagName}`}
-                        action={() => { UserToTagID(user.id, tag.tagName, isTagged); }}
+                        key={getTagId(tag)}
+                        id={getTagId(tag)}
+                        action={() => { UserToTagID(user.id, tag, isTagged); }}
                     />
                 );
             })}
         </Menu.MenuItem>;
 
-    children.push({ ...buttonElement });
+    children.push(buttonElement);
 };
 
 export default definePlugin({

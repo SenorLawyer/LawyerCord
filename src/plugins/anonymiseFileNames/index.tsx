@@ -36,7 +36,7 @@ const enum Methods {
 }
 
 const ANONYMISE_UPLOAD_SYMBOL = Symbol("vcAnonymise");
-export const tarExtMatcher = /\.tar\.\w+$/;
+export const tarExtMatcher = /\.tar\.\w+$/i;
 
 const settings = definePluginSettings({
     anonymiseByDefault: {
@@ -143,7 +143,7 @@ export default definePlugin({
         const addSpoilerPrefix = (str: string) => settings.store.spoilerMessages ? "SPOILER_" + str : str;
 
         if (Settings.plugins.FixFileExtensions.enabled) {
-            ext = reverseExtensionMap[ext] || ext;
+            ext = reverseExtensionMap[ext.toLowerCase()] || ext;
         }
 
         if ((upload[ANONYMISE_UPLOAD_SYMBOL] ?? settings.store.anonymiseByDefault) === false) {

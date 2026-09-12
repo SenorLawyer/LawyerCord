@@ -4558,7 +4558,7 @@ test("FontLoader uses the escaped selected family for body and code fonts", asyn
 test("Filename plugins preserve names and apply extension fixes without anonymizing", () => {
     const definitions = { __esModule: true, default: (plugin: object) => plugin, OptionType: {}, ReporterTestable: {} };
     const fixer = loadSource("src/equicordplugins/fixFileExtensions/index.tsx", {
-        "@api/PluginManager": {}, "@plugins/anonymiseFileNames": { tarExtMatcher: /\.tar\.\w+$/ },
+        "@api/PluginManager": {}, "@plugins/anonymiseFileNames": { get tarExtMatcher() { return anonymizer.tarExtMatcher; } },
         "@utils/constants": { Devs: {} }, "@utils/types": definitions
     });
     const store = { anonymiseByDefault: false, spoilerMessages: false, method: 1, consistent: "image" };
@@ -4570,7 +4570,10 @@ test("Filename plugins preserve names and apply extension fixes without anonymiz
         "@equicordplugins/fixFileExtensions": fixer, "@utils/constants": { Devs: {} },
         "@utils/types": definitions, "@webpack": { findByCodeLazy: () => null }, "@webpack/common": {}
     });
-    for (const [filename, expected] of [["README", "README"], ["archive.tar.gz", "archive.tar.gz"], ["photo.jpe", "photo.jpg"]]) {
+    for (const [filename, expected] of [
+        ["README", "README"], ["archive.tar.gz", "archive.tar.gz"], ["archive.TAR.GZ", "archive.TAR.GZ"],
+        ["photo.jpe", "photo.jpg"], ["photo.JPE", "photo.jpg"], ["photo.JpE", "photo.jpg"], ["notes.TXT", "notes.TXT"]
+    ]) {
         const direct = { filename };
         fixer.default.fixExt(direct);
         assert.equal(direct.filename, expected);
@@ -4588,6 +4591,15 @@ test("Filename plugins preserve names and apply extension fixes without anonymiz
     const anonymous = { filename: "photo.jpe" };
     anonymizer.default.anonymise(anonymous);
     assert.equal(anonymous.filename, "SPOILER_image.jpg");
+    for (const [filename, expected] of [["photo.JPE", "image.jpg"], ["archive.TAR.GZ", "image.TAR.GZ"], ["archive.TaR.Gz", "image.TaR.Gz"], ["notes.TXT", "image.TXT"]]) {
+        const upload = { filename };
+        anonymizer.default.anonymise(upload);
+        assert.equal(upload.filename, "SPOILER_" + expected);
+    }
+    enabled.enabled = false;
+    const unmapped = { filename: "photo.JPE" };
+    anonymizer.default.anonymise(unmapped);
+    assert.equal(unmapped.filename, "SPOILER_image.JPE");
 });
 
 test("File upload destination selection respects disabled fallbacks and host order", () => {

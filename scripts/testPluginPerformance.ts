@@ -12800,3 +12800,34 @@ test("FindReply distinguishes replies from other message references", () => {
     mention.timestamp = target.timestamp - 1;
     assert.deepEqual(ids(), ["direct-19"]);
 });
+
+test("FollowVoiceUser context menus do not attach hooks to their caller", () => {
+    const userStore = { getCurrentUser: () => ({ id: "self" }) };
+    const relationships = { isFriend: (id: string) => id === "friend" };
+    const react = {
+        createElement: (type: unknown, props: unknown, ...children: unknown[]) => ({ type, props, children }),
+        useState: () => { throw new Error("Context menu patches cannot own React hooks"); }
+    };
+    const { default: plugin } = loadSource("src/equicordplugins/followVoiceUser/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: { onlyWhenInVoice: true } }) },
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": { React: react, Menu: {}, ChannelActions: { selectVoiceChannel() { throw new Error("No voice selection expected"); } }, UserStore: userStore, RelationshipStore: relationships, VoiceStateStore: { getVoiceStateForUser: () => undefined } }
+    });
+    const render = (id: string) => {
+        const items: { props: { checked: boolean; action(): void; }; }[] = [];
+        plugin.contextMenus["user-context"](items, { user: { id } });
+        return items;
+    };
+    assert.equal(render("self").length, 0);
+    assert.equal(render("stranger").length, 0);
+    const menu = render("friend")[1];
+    assert.equal(menu.props.checked, false);
+    menu.props.action();
+    assert.equal(render("friend")[1].props.checked, true);
+    render("friend")[1].props.action();
+    assert.equal(render("friend")[1].props.checked, false);
+    render("friend")[1].props.action();
+    plugin.stop();
+    assert.equal(render("friend")[1].props.checked, false);
+});

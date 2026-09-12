@@ -6,12 +6,10 @@
 
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { definePluginSettings } from "@api/Settings";
-import { Notice } from "@components/Notice";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { Channel, User, VoiceState } from "@vencord/discord-types";
-import { findByPropsLazy, findStoreLazy } from "@webpack";
-import { Menu, React, VoiceStateStore } from "@webpack/common";
+import { ChannelActions, Menu, React, RelationshipStore, UserStore, VoiceStateStore } from "@webpack/common";
 
 type TFollowedUserInfo = {
     lastChannelId: string | null;
@@ -25,10 +23,6 @@ interface UserContextProps {
 }
 
 let followedUserInfo: TFollowedUserInfo = null;
-
-const voiceChannelAction = findByPropsLazy("selectVoiceChannel");
-const UserStore = findStoreLazy("UserStore");
-const RelationshipStore = findStoreLazy("RelationshipStore");
 
 const settings = definePluginSettings({
     onlyWhenInVoice: {
@@ -47,18 +41,15 @@ const UserContextMenuPatch: NavContextMenuPatchCallback = (children, { user }: U
     const currentUserId = UserStore.getCurrentUser()?.id;
     if (!currentUserId || currentUserId === user.id || !RelationshipStore.isFriend(user.id)) return;
 
-    const [checked, setChecked] = React.useState(followedUserInfo?.userId === user.id);
-
     children.push(
         <Menu.MenuSeparator />,
         <Menu.MenuCheckboxItem
             id="fvu-follow-user"
             label="Follow User"
-            checked={checked}
+            checked={followedUserInfo?.userId === user.id}
             action={() => {
                 if (followedUserInfo?.userId === user.id) {
                     followedUserInfo = null;
-                    setChecked(false);
                     return;
                 }
 
@@ -70,10 +61,8 @@ const UserContextMenuPatch: NavContextMenuPatchCallback = (children, { user }: U
                 };
 
                 if (targetChannelId && (!settings.store.onlyWhenInVoice || currentVoiceState)) {
-                    voiceChannelAction.selectVoiceChannel(targetChannelId);
+                    ChannelActions.selectVoiceChannel(targetChannelId);
                 }
-
-                setChecked(true);
             }}
         />
     );
@@ -85,11 +74,6 @@ export default definePlugin({
     tags: ["Voice"],
     authors: [EquicordDevs.TheArmagan],
     settings,
-    settingsAboutComponent: () => (
-        <Notice.Info>
-            This Plugin is used to follow a Friend/Friends into voice chat(s).
-        </Notice.Info>
-    ),
     flux: {
         VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceState[]; }) {
             if (!followedUserInfo) return;
@@ -111,11 +95,11 @@ export default definePlugin({
 
             if (followedState.channelId && followedState.channelId !== followedUserInfo.lastChannelId) {
                 followedUserInfo.lastChannelId = followedState.channelId;
-                voiceChannelAction.selectVoiceChannel(followedState.channelId);
+                ChannelActions.selectVoiceChannel(followedState.channelId);
             } else if (!followedState.channelId) {
                 followedUserInfo.lastChannelId = null;
                 if (settings.store.leaveWhenUserLeaves) {
-                    voiceChannelAction.selectVoiceChannel(null);
+                    ChannelActions.selectVoiceChannel(null);
                 }
             }
         }

@@ -21,6 +21,7 @@ import { disableStyle, enableStyle } from "@api/Styles";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
+import { MessageType } from "@vencord/discord-types/enums";
 import { findByPropsLazy } from "@webpack";
 import { ChannelStore, createRoot, MessageStore, Toasts } from "@webpack/common";
 import { Root } from "react-dom/client";
@@ -67,14 +68,14 @@ function findReplies(message: Message) {
     for (const other of messages) {
         if (other.deleted || getMessageTimestamp(other) <= targetTimestamp) continue;
 
-        let isReply = other.messageReference?.message_id === message.id;
+        const referencedMessageId = other.type === MessageType.REPLY ? other.messageReference?.message_id : undefined;
+        let isReply = referencedMessageId === message.id;
 
         if (!isReply && settings.store.includePings && (other.content?.includes(plainMention) || other.content?.includes(nickMention))) {
             isReply = true;
         }
 
         if (!isReply && messageById) {
-            const referencedMessageId = other.messageReference?.message_id;
             isReply = referencedMessageId != null && messageById.get(referencedMessageId)?.author.id === authorId;
         }
 

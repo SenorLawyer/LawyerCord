@@ -12692,14 +12692,15 @@ test("FindReply creates a fresh navigator after stopping", async () => {
     const notices: string[] = [];
     const jumps: string[] = [];
     const messages = [
-        { id: "first", channel_id: "channel", timestamp: 2, author: { id: "other" }, messageReference: { message_id: "target" } },
-        { id: "second", channel_id: "channel", timestamp: 3, author: { id: "other" }, messageReference: { message_id: "target" } }
+        { id: "first", channel_id: "channel", timestamp: 2, type: 19, author: { id: "other" }, messageReference: { message_id: "target" } },
+        { id: "second", channel_id: "channel", timestamp: 3, type: 19, author: { id: "other" }, messageReference: { message_id: "target" } }
     ];
     const { default: plugin } = loadSource("src/equicordplugins/findReply/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({ store: { hideButtonIfNoReply: true } }) },
         "@api/Styles": { enableStyle: () => { stylesEnabled = true; }, disableStyle: () => { stylesEnabled = false; } },
         "@utils/constants": { Devs: {} },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@vencord/discord-types/enums": { MessageType: { REPLY: 19 } },
         "@webpack": { findByPropsLazy: () => ({ jumpToMessage: ({ messageId }: { messageId: string; }) => jumps.push(messageId) }) },
         "@webpack/common": {
             ChannelStore: { getChannel: () => ({}) }, MessageStore: { getMessages: () => ({ _array: messages }) },
@@ -12752,4 +12753,31 @@ test("FindReply creates a fresh navigator after stopping", async () => {
     assert.deepEqual(notices, ["Couldn't find a reply."]);
     assert.equal(jumps.length, 0);
     plugin.stop();
+});
+
+test("FindReply distinguishes replies from other message references", () => {
+    const settings = { store: { includeAuthor: true, includePings: false } };
+    const target = { id: "target", channel_id: "channel", timestamp: 1, author: { id: "author" }, type: 0 };
+    const messages = [
+        target,
+        { ...target, id: "earlier", timestamp: 0 },
+        ...[0, 6, 19, 21].map(type => ({ ...target, id: `direct-${type}`, timestamp: 2, type, author: { id: "other" }, messageReference: { message_id: "target", type: type === 0 ? 1 : 0 } })),
+        ...[0, 6, 19, 21].map(type => ({ ...target, id: `author-${type}`, timestamp: 3, type, author: { id: "other" }, messageReference: { message_id: "earlier", type: type === 0 ? 1 : 0 } })),
+        { ...target, id: "mention", timestamp: 4, author: { id: "other" }, content: "Hello <@author>" }
+    ];
+    const findReplies = loadSource("src/equicordplugins/findReply/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => settings }, "@api/Styles": {},
+        "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@vencord/discord-types/enums": { MessageType: { REPLY: 19 } },
+        "@webpack": { findByPropsLazy: () => ({}) },
+        "@webpack/common": { MessageStore: { getMessages: () => ({ _array: messages }) } },
+        "./ReplyNavigator": {}, "./styles.css?managed": {}
+    }, {}, "findReplies");
+    const ids = () => Array.from(findReplies(target), (message: { id: string; }) => message.id);
+    assert.deepEqual(ids(), ["direct-19", "author-19"]);
+    settings.store.includeAuthor = false;
+    assert.deepEqual(ids(), ["direct-19"]);
+    settings.store.includePings = true;
+    assert.deepEqual(ids(), ["direct-19", "mention"]);
 });

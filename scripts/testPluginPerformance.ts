@@ -12683,3 +12683,55 @@ test("lazy webpack chunk loads share work and retry failures on a later call", a
         assert.deepEqual(executed, ["456"]);
     }
 });
+
+test("FindReply creates a fresh navigator after stopping", async () => {
+    const roots: { mounted: boolean; renders: number; }[] = [];
+    let attached = 0;
+    let stylesEnabled = false;
+    const messages = [
+        { id: "first", channel_id: "channel", timestamp: 2, author: { id: "other" }, messageReference: { message_id: "target" } },
+        { id: "second", channel_id: "channel", timestamp: 3, author: { id: "other" }, messageReference: { message_id: "target" } }
+    ];
+    const { default: plugin } = loadSource("src/equicordplugins/findReply/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: { hideButtonIfNoReply: true } }) },
+        "@api/Styles": { enableStyle: () => { stylesEnabled = true; }, disableStyle: () => { stylesEnabled = false; } },
+        "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack": { findByPropsLazy: () => ({ jumpToMessage() {} }) },
+        "@webpack/common": {
+            ChannelStore: { getChannel: () => ({}) }, MessageStore: { getMessages: () => ({ _array: messages }) },
+            Toasts: { show() {}, genId() {}, Type: {} },
+            createRoot: () => {
+                const state = { mounted: true, renders: 0 };
+                roots.push(state);
+                return {
+                    render() { assert.ok(state.mounted, "Cannot render an unmounted root"); state.renders++; },
+                    unmount() { assert.ok(state.mounted, "Cannot unmount twice"); state.mounted = false; }
+                };
+            }
+        }, "./ReplyNavigator": {}, "./styles.css?managed": {}
+    }, {
+        React: { createElement: () => ({}) },
+        document: {
+            querySelector: () => ({ appendChild: () => { attached++; } }),
+            createElement: () => ({ remove: () => { attached--; } })
+        }
+    });
+    const click = () => plugin.messagePopoverButton.render({ id: "target", channel_id: "channel", timestamp: 1, author: { id: "author" } }).onClick();
+    plugin.stop();
+    for (let cycle = 0; cycle < 2; cycle++) {
+        plugin.start();
+        assert.equal(stylesEnabled, true);
+        await click();
+        await click();
+        assert.equal(roots.length, cycle + 1);
+        assert.equal(roots[cycle].renders, 2);
+        assert.equal(attached, 1);
+        plugin.stop();
+        assert.equal(attached, 0);
+        assert.equal(stylesEnabled, false);
+        assert.equal(roots[cycle].mounted, false);
+    }
+    plugin.stop();
+    assert.equal(attached, 0);
+});

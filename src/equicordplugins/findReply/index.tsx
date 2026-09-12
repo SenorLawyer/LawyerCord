@@ -37,7 +37,6 @@ const FindReplyIcon = () => {
 };
 let root: Root | null = null;
 let element: HTMLDivElement | null = null;
-let madeComponent = false;
 
 type CachedMessage = Message & { deleted?: boolean; };
 
@@ -153,13 +152,12 @@ export default definePlugin({
                                 return;
                             }
 
-                            if (!madeComponent) {
-                                madeComponent = true;
+                            if (!root) {
                                 element = document.createElement("div");
                                 container.appendChild(element);
                                 root = createRoot(element);
                             }
-                            root!.render(<ReplyNavigator replies={replies} />);
+                            root.render(<ReplyNavigator replies={replies} />);
                         }
                     } else {
                         Toasts.show({
@@ -176,8 +174,10 @@ export default definePlugin({
         enableStyle(styles);
     },
     stop() {
-        root && root.unmount();
+        root?.unmount();
+        root = null;
         element?.remove();
+        element = null;
         disableStyle(styles);
     },
 });

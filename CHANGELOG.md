@@ -19,7 +19,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
-- Keep failed FriendTags saves eligible for a later retry.
+- Keep failed FriendTags saves eligible for a later retry. Preserve invalid stored tags, wait for loading before editing, and ignore reads from stopped plugin instances.
 
 - Remove redundant frequency-setting reads from quick-switcher searches and skip unavailable or nameless channel records.
 

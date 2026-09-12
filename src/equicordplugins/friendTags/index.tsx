@@ -10,7 +10,8 @@ import { definePluginSettings } from "@api/Settings";
 import { BaseText } from "@components/BaseText";
 import { Divider } from "@components/Divider";
 import { Devs } from "@utils/constants";
-import { useForceUpdater } from "@utils/react";
+import { Logger } from "@utils/Logger";
+import { useAwaiter, useForceUpdater } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
 import { Button, ChannelStore, Menu, RelationshipStore, TextInput, useEffect, UserStore, useState } from "@webpack/common";
 
@@ -20,7 +21,9 @@ interface UserTagData {
 }
 
 let SavedData: UserTagData[] = [];
-let savedDataSerialized = "[]";
+let savedDataSerialized: string | undefined;
+let dataPromise: Promise<void> | undefined;
+const logger = new Logger("FriendTags");
 const tagStoreName = "vc-friendtags-tags";
 
 function parseUsertags(text: string): string[] {
@@ -67,31 +70,32 @@ function queryFriendTags(query) {
 }
 
 async function SetData() {
+    if (savedDataSerialized === undefined) return;
+    const pending = dataPromise;
     const serialized = JSON.stringify(SavedData);
-    if (serialized === savedDataSerialized) return true;
+    if (serialized === savedDataSerialized) return;
 
     await DataStore.set(tagStoreName, serialized);
-    savedDataSerialized = serialized;
-    return true;
+    if (dataPromise === pending) savedDataSerialized = serialized;
 }
 
-async function GetData() {
-    const fetchData = await DataStore.get<string>(tagStoreName);
-    if (!fetchData) {
-        SavedData = [];
-        savedDataSerialized = "[]";
-        void DataStore.set(tagStoreName, savedDataSerialized);
-        return;
-    }
-
-    try {
-        SavedData = JSON.parse(fetchData);
-        savedDataSerialized = fetchData;
-    } catch {
-        SavedData = [];
-        savedDataSerialized = "[]";
-        void DataStore.set(tagStoreName, savedDataSerialized);
-    }
+function GetData() {
+    if (dataPromise) return dataPromise;
+    const pending = DataStore.get<unknown>(tagStoreName).then(raw => {
+        if (dataPromise !== pending) return;
+        if (raw !== undefined && typeof raw !== "string") throw new Error("Invalid saved tags.");
+        const data: unknown = raw === undefined ? [] : JSON.parse(raw);
+        if (!Array.isArray(data) || !data.every((tag: unknown) =>
+            typeof tag === "object" && tag !== null
+            && "tagName" in tag && typeof tag.tagName === "string"
+            && "userIds" in tag && Array.isArray(tag.userIds)
+            && tag.userIds.every((id: unknown) => typeof id === "string")
+        )) throw new Error("Invalid saved tags.");
+        SavedData = data;
+        savedDataSerialized = JSON.stringify(data);
+    });
+    dataPromise = pending;
+    return pending;
 }
 
 function TagConfigCard(props) {
@@ -157,6 +161,10 @@ function TagConfigCard(props) {
 
 function TagConfigurationComponent() {
     const update = useForceUpdater();
+    const [, error, pending] = useAwaiter(GetData);
+
+    if (pending) return <BaseText>Loading tags...</BaseText>;
+    if (error) return <BaseText>Tags could not be loaded. Restart FriendTags to try again.</BaseText>;
 
     return (
         <>
@@ -208,7 +216,7 @@ function UserToTagID(user, tag, remove) {
 }
 
 const userPatch: NavContextMenuPatchCallback = (children, { user }) => {
-    if (!user?.id) return;
+    if (!user?.id || savedDataSerialized === undefined) return;
 
     const buttonElement =
         <Menu.MenuItem
@@ -250,8 +258,13 @@ export default definePlugin({
             },
         }
     ],
-    async start() {
-        GetData();
+    start() {
+        void GetData().catch(() => logger.error("Could not load saved tags."));
+    },
+    stop() {
+        dataPromise = undefined;
+        savedDataSerialized = undefined;
+        SavedData = [];
     },
     queryFriendTags,
 });

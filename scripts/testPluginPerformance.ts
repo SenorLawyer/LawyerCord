@@ -12982,16 +12982,18 @@ test("FriendTags retries failed saves and only skips committed tag data", async 
     let fail = true;
     const writes: string[] = [];
     const api = loadSource("src/equicordplugins/friendTags/index.tsx", {
-        "@api/index": { DataStore: { set: async (key: string, value: string) => {
+        "@api/index": { DataStore: { get: async () => undefined, set: async (key: string, value: string) => {
             assert.equal(key, "vc-friendtags-tags");
             writes.push(value);
             if (fail) throw new Error("Storage failed");
         } } },
         "@api/Settings": { definePluginSettings: () => ({}) },
         "@components/BaseText": {}, "@components/Divider": {}, "@utils/constants": { Devs: {} },
+        "@utils/Logger": { Logger: class { error() {} } },
         "@utils/react": {}, "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
         "@webpack/common": {}
-    }, {}, "({ SetData, replace(tags) { SavedData = tags; } })");
+    }, {}, "({ GetData, SetData, replace(tags) { SavedData = tags; } })");
+    await api.GetData();
     const first = [{ tagName: "Friends", userIds: ["123"] }];
     api.replace(first);
     await assert.rejects(api.SetData(), /Storage failed/);
@@ -13009,4 +13011,71 @@ test("FriendTags retries failed saves and only skips committed tag data", async 
     assert.deepEqual(writes.slice(2), [JSON.stringify(second), JSON.stringify(second)]);
     await api.SetData();
     assert.equal(writes.length, 4);
+});
+
+test("FriendTags preserves invalid storage and ignores stopped loads", async () => {
+    let resolveRead: (value: unknown) => void = () => {};
+    let rejectRead: (error: Error) => void = () => {};
+    let reads = 0;
+    const writes: string[] = [];
+    let pendingUI = true;
+    let errorUI: unknown;
+    const api = loadSource("src/equicordplugins/friendTags/index.tsx", {
+        "@api/index": { DataStore: {
+            get: () => {
+                reads++;
+                return new Promise((resolve, reject) => { resolveRead = resolve; rejectRead = reject; });
+            },
+            set: async (_key: string, value: string) => { writes.push(value); }
+        } },
+        "@api/Settings": { definePluginSettings: () => ({}) },
+        "@components/BaseText": { BaseText: "text" }, "@components/Divider": {},
+        "@utils/constants": { Devs: {} },
+        "@utils/Logger": { Logger: class { error() {} } },
+        "@utils/react": { useForceUpdater: () => () => {}, useAwaiter: () => [null, errorUI, pendingUI] },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": {}
+    }, { React: { createElement: (_type: unknown, _props: unknown, ...children: unknown[]) => children } },
+    "({ GetData, SetData, plugin: exports.default, TagConfigurationComponent, read: () => JSON.stringify(SavedData) })");
+    assert.match(String(api.TagConfigurationComponent()), /Loading tags/);
+    const first = api.GetData();
+    const resolveFirst = resolveRead;
+    assert.equal(api.GetData(), first);
+    assert.equal(reads, 1);
+    await api.SetData();
+    assert.equal(writes.length, 0);
+    api.plugin.stop();
+    const second = api.GetData();
+    const resolveSecond = resolveRead;
+    api.plugin.stop();
+    const third = api.GetData();
+    const valid = JSON.stringify([{ tagName: "Friends", userIds: ["123"] }]);
+    resolveRead(valid);
+    await third;
+    resolveFirst("invalid old data");
+    await first;
+    resolveSecond(JSON.stringify([{ tagName: "Old", userIds: [] }]));
+    await second;
+    assert.equal(api.read(), valid);
+    await api.SetData();
+    assert.deepEqual(writes, []);
+    for (const raw of [undefined, "", "{", "null", "{}", "[null]", '[{"tagName":1,"userIds":[]}]', '[{"tagName":"x","userIds":[1]}]', 3]) {
+        api.plugin.stop();
+        const load = api.GetData();
+        resolveRead(raw);
+        if (raw === undefined) await load;
+        else await assert.rejects(load);
+        await api.SetData();
+        assert.equal(api.read(), "[]");
+        assert.deepEqual(writes, []);
+    }
+    api.plugin.stop();
+    const failed = api.GetData();
+    rejectRead(new Error("Read failed"));
+    await assert.rejects(failed, /Read failed/);
+    pendingUI = false;
+    errorUI = new Error("Read failed");
+    assert.match(String(api.TagConfigurationComponent()), /could not be loaded/);
+    await api.SetData();
+    assert.deepEqual(writes, []);
 });

@@ -12688,6 +12688,8 @@ test("FindReply creates a fresh navigator after stopping", async () => {
     const roots: { mounted: boolean; renders: number; }[] = [];
     let attached = 0;
     let containerAvailable = true;
+    let currentContainer = "first-container";
+    let attachedContainer: string | null = null;
     const notices: string[] = [];
     const jumps: string[] = [];
     const messages = [
@@ -12715,8 +12717,8 @@ test("FindReply creates a fresh navigator after stopping", async () => {
     }, {
         React: { createElement: () => ({}) },
         document: {
-            querySelector: () => containerAvailable ? { appendChild: () => { attached++; } } : null,
-            createElement: () => ({ remove: () => { attached--; } })
+            querySelector: () => containerAvailable ? { appendChild: () => { if (attachedContainer === null) attached++; attachedContainer = currentContainer; } } : null,
+            createElement: () => ({ remove: () => { attached--; attachedContainer = null; } })
         }
     });
     const action = () => plugin.messagePopoverButton.render({ id: "target", channel_id: "channel", timestamp: 1, author: { id: "author" } }).onClick;
@@ -12725,7 +12727,9 @@ test("FindReply creates a fresh navigator after stopping", async () => {
     for (let cycle = 0; cycle < 2; cycle++) {
         plugin.start?.();
         await click();
+        currentContainer = `replacement-${cycle}`;
         await click();
+        assert.equal(attachedContainer, currentContainer);
         assert.equal(roots.length, cycle + 1);
         assert.equal(roots[cycle].renders, 2);
         assert.equal(attached, 1);

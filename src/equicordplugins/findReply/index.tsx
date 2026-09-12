@@ -146,11 +146,9 @@ export default definePlugin({
                                 return;
                             }
 
-                            if (!root) {
-                                element = document.createElement("div");
-                                container.appendChild(element);
-                                root = createRoot(element);
-                            }
+                            element ??= document.createElement("div");
+                            container.appendChild(element);
+                            root ??= createRoot(element);
                             root.render(<ReplyNavigator replies={replies} />);
                         }
                     } else {

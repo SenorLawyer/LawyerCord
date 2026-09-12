@@ -70,8 +70,8 @@ async function SetData() {
     const serialized = JSON.stringify(SavedData);
     if (serialized === savedDataSerialized) return true;
 
-    savedDataSerialized = serialized;
     await DataStore.set(tagStoreName, serialized);
+    savedDataSerialized = serialized;
     return true;
 }
 

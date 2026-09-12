@@ -12977,3 +12977,36 @@ test("FrequentQuickSwitcher reads frequency once and preserves store records", (
     assert.equal(reads, 1);
     assert.equal(plugin.generateSearchResults("absent").length, 0);
 });
+
+test("FriendTags retries failed saves and only skips committed tag data", async () => {
+    let fail = true;
+    const writes: string[] = [];
+    const api = loadSource("src/equicordplugins/friendTags/index.tsx", {
+        "@api/index": { DataStore: { set: async (key: string, value: string) => {
+            assert.equal(key, "vc-friendtags-tags");
+            writes.push(value);
+            if (fail) throw new Error("Storage failed");
+        } } },
+        "@api/Settings": { definePluginSettings: () => ({}) },
+        "@components/BaseText": {}, "@components/Divider": {}, "@utils/constants": { Devs: {} },
+        "@utils/react": {}, "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": {}
+    }, {}, "({ SetData, replace(tags) { SavedData = tags; } })");
+    const first = [{ tagName: "Friends", userIds: ["123"] }];
+    api.replace(first);
+    await assert.rejects(api.SetData(), /Storage failed/);
+    fail = false;
+    await api.SetData();
+    assert.deepEqual(writes, [JSON.stringify(first), JSON.stringify(first)]);
+    await api.SetData();
+    assert.equal(writes.length, 2);
+    const second = [{ tagName: "Games", userIds: ["123", "456"] }];
+    api.replace(second);
+    fail = true;
+    await assert.rejects(api.SetData(), /Storage failed/);
+    fail = false;
+    await api.SetData();
+    assert.deepEqual(writes.slice(2), [JSON.stringify(second), JSON.stringify(second)]);
+    await api.SetData();
+    assert.equal(writes.length, 4);
+});

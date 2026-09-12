@@ -126,6 +126,7 @@ export default definePlugin({
                 channel: ChannelStore.getChannel(message.channel_id),
                 onClick: () => {
                     const replies = findReplies(message);
+                    if (replies.length <= 1) root?.render(null);
                     if (replies.length) {
                         const channelId = replies[0].channel_id;
                         const messageId = replies[0].id;

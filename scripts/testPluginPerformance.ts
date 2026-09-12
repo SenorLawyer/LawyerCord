@@ -12685,7 +12685,7 @@ test("lazy webpack chunk loads share work and retry failures on a later call", a
 });
 
 test("FindReply creates a fresh navigator after stopping", async () => {
-    const roots: { mounted: boolean; renders: number; }[] = [];
+    const roots: { mounted: boolean; renders: number; visible: boolean; }[] = [];
     let attached = 0;
     let containerAvailable = true;
     let currentContainer = "first-container";
@@ -12706,10 +12706,10 @@ test("FindReply creates a fresh navigator after stopping", async () => {
             ChannelStore: { getChannel: () => ({}) }, MessageStore: { getMessages: () => ({ _array: messages }) },
             Toasts: { show: ({ message }: { message: string; }) => notices.push(message), genId() {}, Type: {} },
             createRoot: () => {
-                const state = { mounted: true, renders: 0 };
+                const state = { mounted: true, renders: 0, visible: false };
                 roots.push(state);
                 return {
-                    render() { assert.ok(state.mounted, "Cannot render an unmounted root"); state.renders++; },
+                    render(value: unknown) { assert.ok(state.mounted, "Cannot render an unmounted root"); state.renders++; state.visible = value !== null; },
                     unmount() { assert.ok(state.mounted, "Cannot unmount twice"); state.mounted = false; }
                 };
             }
@@ -12733,6 +12733,17 @@ test("FindReply creates a fresh navigator after stopping", async () => {
         assert.equal(roots.length, cycle + 1);
         assert.equal(roots[cycle].renders, 2);
         assert.equal(attached, 1);
+        const remaining = messages.splice(1);
+        await click();
+        assert.equal(roots[cycle].visible, false);
+        messages.push(...remaining);
+        await click();
+        assert.equal(roots[cycle].visible, true);
+        const staleAction = action();
+        const saved = messages.splice(0);
+        await staleAction();
+        assert.equal(roots[cycle].visible, false);
+        messages.push(...saved);
         plugin.stop();
         assert.equal(attached, 0);
         assert.equal(roots[cycle].mounted, false);

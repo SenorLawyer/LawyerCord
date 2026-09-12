@@ -17,7 +17,13 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
-- FindReply searches current replies when clicked, excludes non-reply message references, and retains direct replies sent within the same millisecond. Closing its navigator releases the controls and click listener.
+- Fix FollowVoiceUser menu crashes when eligibility changes and clear following on logout or account switching.
+
+- Match filename extensions regardless of casing and preserve compound tar extensions when anonymizing.
+
+- Bound random filename lengths and recover invalid saved anonymization methods without producing missing filenames.
+
+- FindReply searches current replies when clicked, excludes non-reply message references, and retains direct replies sent within the same millisecond. Closing its navigator releases the controls and click listener. New searches with zero or one result clear older navigation controls.
 
 - Restore FindReply navigation after re-enabling the plugin and wait for its paginator to load.
 

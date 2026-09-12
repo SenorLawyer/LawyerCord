@@ -21,7 +21,7 @@ import { jumper } from "./index";
 const containerStyles = findCssClassesLazy("containerBottom", "containerTop");
 const logger = new Logger("FindReply");
 
-export default function ReplyNavigator({ replies }: { replies: Message[]; }) {
+export default ErrorBoundary.wrap(function ReplyNavigator({ replies }: { replies: Message[]; }) {
     const [page, setPage] = useState(1);
     const [visible, setVisible] = useState(true);
     const [paginatorReady] = useAwaiter(requirePaginator, {
@@ -50,19 +50,17 @@ export default function ReplyNavigator({ replies }: { replies: Message[]; }) {
     }, [visible, paginatorReady]);
     if (!visible || !paginatorReady) return null;
     return (
-        <ErrorBoundary>
-            <div ref={ref} className={classes(containerStyles.containerBottom, "vc-findreply-div")}>
-                <Paginator
-                    className={"vc-findreply-paginator"}
-                    currentPage={page}
-                    maxVisiblePages={5}
-                    pageSize={1}
-                    totalCount={replies.length}
-                    onPageChange={processPageChange}
-                />
-                <CloseButton className={"vc-findreply-close"} onClick={() => setVisible(false)} />
-            </div>
-        </ErrorBoundary>
+        <div ref={ref} className={classes(containerStyles.containerBottom, "vc-findreply-div")}>
+            <Paginator
+                className={"vc-findreply-paginator"}
+                currentPage={page}
+                maxVisiblePages={5}
+                pageSize={1}
+                totalCount={replies.length}
+                onPageChange={processPageChange}
+            />
+            <CloseButton className={"vc-findreply-close"} onClick={() => setVisible(false)} />
+        </div>
     );
 
     function processPageChange(page: number) {
@@ -74,4 +72,4 @@ export default function ReplyNavigator({ replies }: { replies: Message[]; }) {
             jumpType: "INSTANT"
         });
     }
-}
+}, { noop: true });

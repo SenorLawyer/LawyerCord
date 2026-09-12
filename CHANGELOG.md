@@ -17,6 +17,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- FindReply searches current replies when clicked and excludes non-reply message references.
+
 - Restore FindReply navigation after re-enabling the plugin and wait for its paginator to load.
 
 - Update Stylelint's colord dependency to fix slow rejection of malformed color strings.

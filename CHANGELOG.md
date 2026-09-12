@@ -12,6 +12,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Remove the unused SVGO development dependency and its release-age exception.
 - Remove TriviaAI, which required a user-supplied API key and arbitrary AI endpoint. Its Answer With AI actions are no longer available.
 
 ### Fixed

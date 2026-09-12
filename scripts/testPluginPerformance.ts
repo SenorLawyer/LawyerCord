@@ -12751,6 +12751,12 @@ test("FindReply creates a fresh navigator after stopping", async () => {
         messages.push(...remaining);
         await click();
         assert.equal(roots[cycle].visible, true);
+        containerAvailable = false;
+        await click();
+        assert.equal(roots[cycle].visible, false, "A missing container must clear previous controls");
+        containerAvailable = true;
+        await click();
+        assert.equal(roots[cycle].visible, true);
         const staleAction = action();
         const saved = messages.splice(0);
         await staleAction();

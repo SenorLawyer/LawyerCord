@@ -139,6 +139,7 @@ export default definePlugin({
                         if (replies.length > 1) {
                             const container = document.querySelector("[class*=channelBottomBarArea_]");
                             if (!container) {
+                                root?.render(null);
                                 Toasts.show({
                                     id: Toasts.genId(),
                                     message: "Couldn't find the container element.",

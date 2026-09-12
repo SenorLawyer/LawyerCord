@@ -22,8 +22,9 @@ const containerStyles = findCssClassesLazy("containerBottom", "containerTop");
 const logger = new Logger("FindReply");
 
 export default ErrorBoundary.wrap(function ReplyNavigator({ replies }: { replies: Message[]; }) {
-    const [page, setPage] = useState(1);
-    const [visible, setVisible] = useState(true);
+    const [state, setState] = useState({ replies, page: 1, visible: true });
+    if (state.replies !== replies) setState({ replies, page: 1, visible: true });
+    const { page, visible } = state;
     const [paginatorReady] = useAwaiter(requirePaginator, {
         fallbackValue: false,
         deps: [replies],
@@ -31,15 +32,11 @@ export default ErrorBoundary.wrap(function ReplyNavigator({ replies }: { replies
     });
     const ref: MutableRefObject<HTMLDivElement | null> = useRef(null);
     React.useEffect(() => {
-        setPage(1);
-        setVisible(true);
-    }, [replies]);
-    React.useEffect(() => {
         if (!visible || !paginatorReady) return;
         // https://stackoverflow.com/a/42234988
         function onMouseDown(event: MouseEvent) {
             if (ref.current && event.target instanceof Element && !ref.current.contains(event.target)) {
-                setVisible(false);
+                setState(state => ({ ...state, visible: false }));
             }
         }
 
@@ -59,12 +56,12 @@ export default ErrorBoundary.wrap(function ReplyNavigator({ replies }: { replies
                 totalCount={replies.length}
                 onPageChange={processPageChange}
             />
-            <CloseButton className={"vc-findreply-close"} onClick={() => setVisible(false)} />
+            <CloseButton className={"vc-findreply-close"} onClick={() => setState(state => ({ ...state, visible: false }))} />
         </div>
     );
 
     function processPageChange(page: number) {
-        setPage(page);
+        setState(state => ({ ...state, page }));
         jumper.jumpToMessage({
             channelId: replies[page - 1].channel_id,
             messageId: replies[page - 1].id,

@@ -12687,7 +12687,6 @@ test("lazy webpack chunk loads share work and retry failures on a later call", a
 test("FindReply creates a fresh navigator after stopping", async () => {
     const roots: { mounted: boolean; renders: number; }[] = [];
     let attached = 0;
-    let stylesEnabled = false;
     let containerAvailable = true;
     const notices: string[] = [];
     const jumps: string[] = [];
@@ -12697,7 +12696,6 @@ test("FindReply creates a fresh navigator after stopping", async () => {
     ];
     const { default: plugin } = loadSource("src/equicordplugins/findReply/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({ store: { hideButtonIfNoReply: true } }) },
-        "@api/Styles": { enableStyle: () => { stylesEnabled = true; }, disableStyle: () => { stylesEnabled = false; } },
         "@utils/constants": { Devs: {} },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
         "@vencord/discord-types/enums": { MessageType: { REPLY: 19 } },
@@ -12725,8 +12723,7 @@ test("FindReply creates a fresh navigator after stopping", async () => {
     const click = () => action()();
     plugin.stop();
     for (let cycle = 0; cycle < 2; cycle++) {
-        plugin.start();
-        assert.equal(stylesEnabled, true);
+        plugin.start?.();
         await click();
         await click();
         assert.equal(roots.length, cycle + 1);
@@ -12734,12 +12731,11 @@ test("FindReply creates a fresh navigator after stopping", async () => {
         assert.equal(attached, 1);
         plugin.stop();
         assert.equal(attached, 0);
-        assert.equal(stylesEnabled, false);
         assert.equal(roots[cycle].mounted, false);
     }
     plugin.stop();
     assert.equal(attached, 0);
-    plugin.start();
+    plugin.start?.();
     containerAvailable = false;
     notices.length = 0;
     await click();

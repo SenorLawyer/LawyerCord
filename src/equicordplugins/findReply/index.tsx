@@ -17,7 +17,6 @@
 */
 
 import { definePluginSettings } from "@api/Settings";
-import { disableStyle, enableStyle } from "@api/Styles";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
@@ -117,6 +116,7 @@ export default definePlugin({
     tags: ["Chat", "Shortcuts"],
     authors: [Devs.newwares],
     settings,
+    managedStyle: styles,
     messagePopoverButton: {
         icon: FindReplyIcon,
         render(message) {
@@ -167,14 +167,10 @@ export default definePlugin({
             };
         }
     },
-    start() {
-        enableStyle(styles);
-    },
     stop() {
         root?.unmount();
         root = null;
         element?.remove();
         element = null;
-        disableStyle(styles);
     },
 });

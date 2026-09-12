@@ -12690,6 +12690,7 @@ test("FindReply creates a fresh navigator after stopping", async () => {
     let stylesEnabled = false;
     let containerAvailable = true;
     const notices: string[] = [];
+    const jumps: string[] = [];
     const messages = [
         { id: "first", channel_id: "channel", timestamp: 2, author: { id: "other" }, messageReference: { message_id: "target" } },
         { id: "second", channel_id: "channel", timestamp: 3, author: { id: "other" }, messageReference: { message_id: "target" } }
@@ -12699,7 +12700,7 @@ test("FindReply creates a fresh navigator after stopping", async () => {
         "@api/Styles": { enableStyle: () => { stylesEnabled = true; }, disableStyle: () => { stylesEnabled = false; } },
         "@utils/constants": { Devs: {} },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
-        "@webpack": { findByPropsLazy: () => ({ jumpToMessage() {} }) },
+        "@webpack": { findByPropsLazy: () => ({ jumpToMessage: ({ messageId }: { messageId: string; }) => jumps.push(messageId) }) },
         "@webpack/common": {
             ChannelStore: { getChannel: () => ({}) }, MessageStore: { getMessages: () => ({ _array: messages }) },
             Toasts: { show: ({ message }: { message: string; }) => notices.push(message), genId() {}, Type: {} },
@@ -12719,7 +12720,8 @@ test("FindReply creates a fresh navigator after stopping", async () => {
             createElement: () => ({ remove: () => { attached--; } })
         }
     });
-    const click = () => plugin.messagePopoverButton.render({ id: "target", channel_id: "channel", timestamp: 1, author: { id: "author" } }).onClick();
+    const action = () => plugin.messagePopoverButton.render({ id: "target", channel_id: "channel", timestamp: 1, author: { id: "author" } }).onClick;
+    const click = () => action()();
     plugin.stop();
     for (let cycle = 0; cycle < 2; cycle++) {
         plugin.start();
@@ -12742,5 +12744,12 @@ test("FindReply creates a fresh navigator after stopping", async () => {
     await click();
     assert.deepEqual(notices, ["Couldn't find the container element."]);
     assert.equal(roots.length, 2);
+    const staleAction = action();
+    messages.length = 0;
+    notices.length = 0;
+    jumps.length = 0;
+    await staleAction();
+    assert.deepEqual(notices, ["Couldn't find a reply."]);
+    assert.equal(jumps.length, 0);
     plugin.stop();
 });

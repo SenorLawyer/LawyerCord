@@ -119,14 +119,14 @@ export default definePlugin({
         icon: FindReplyIcon,
         render(message) {
             if (!message.id) return null;
-            const replies = findReplies(message);
-            if (settings.store.hideButtonIfNoReply && !replies.length) return null;
+            if (settings.store.hideButtonIfNoReply && !findReplies(message).length) return null;
             return {
                 label: "Jump to Reply",
                 icon: FindReplyIcon,
                 message,
                 channel: ChannelStore.getChannel(message.channel_id),
                 onClick: () => {
+                    const replies = findReplies(message);
                     if (replies.length) {
                         const channelId = replies[0].channel_id;
                         const messageId = replies[0].id;

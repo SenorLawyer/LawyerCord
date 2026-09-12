@@ -9,7 +9,7 @@ This audit is still in progress. File coverage records review work; it does not 
 - At `75aeb9d3a`, the branch contains 1,651 tracked files: this report and five added test files, with sixteen removals relative to the baseline.
 - The five added tests cover startup flags, CRX conversion, extension installation, file selection, and settings synchronization. Their file hashes were rechecked against the reviewed versions at `480d81f23`.
 - The generated internationalization mapping was checked semantically against the runtime hash function across 19,440 pairs. That is generated-data validation, not manual review of each pair.
-- Main at `8fc182ba7` was reviewed separately. A fresh fetch and release lookup during the `75aeb9d3a` validation confirmed that main and the published nightly remain unchanged. The nightly tag still resolves to the baseline commit. Main changes have not been integrated into this branch.
+- Main at `8fc182ba7` was reviewed separately. A fresh fetch and release lookup on September 12, during the `c9120d967` validation confirmed that main and the published nightly remain unchanged. The nightly tag still resolves to the baseline commit. Main changes have not been integrated into this branch.
 
 Changes are accumulated in [PR #47](https://github.com/SenorLawyer/LawyerCord/pull/47). The PR remains a draft with `release:nightly`; merge and auto-merge are paused. It still conflicts with main.
 
@@ -106,9 +106,13 @@ UnitConverter now processes speed and compound measurements before their compone
 
 TranslatePlus propagates provider failures, validates Google and Toki response fields, and rejects malformed dictionaries before caching. Failed dictionary loads remain retryable. Inherited dictionary names cannot become translated text, and JSON parse failures omit response snippets. Direct branch returns replace the mutable result accumulator. The pinned dictionaries were checked for compatibility; language toggles now control their own routes. Multiple message views retain independent handlers, and account/message changes reset displayed state. The shared dismiss button replaces duplicate CSS; unknown language codes render as text. The duplicate language file and unused Sitelen regex conversion machinery were deleted; existing labels and conversion output were checked against the previous code. Superseded requests and results from a previous account are ignored. Failures show one toast instead of replacing translated text or logging raw exceptions, and unread error bodies are released. The custom provider policy, dictionary conversion semantics, response limits, cancellation, and remaining request lifecycle concerns remain open.
 
-PermissionsViewer sorts mixed overwrites consistently and prepares a sorted copy before opening its modal. It skips empty member requests, displays unknown users, and subscribes open views to member, user, and role changes. Shared controls replace button-like divs; icon controls have accessible labels. Deleted roles retain ID copying without offering or dispatching the legacy View as Role action. Actual React fixtures cover member and role updates and subscription cleanup using controlled Discord stores. Live patches, native keyboard handling, permission semantics, and remaining context-menu lifecycle findings remain open.
+PermissionsViewer sorts mixed overwrites consistently and prepares a sorted copy before opening its modal. It skips empty member requests, displays unknown users, and subscribes open views to member, user, and role changes. Shared controls replace button-like divs; icon controls have accessible labels. Deleted roles retain ID copying without offering or dispatching the legacy View as Role action. Actual React fixtures cover member and role updates and subscription cleanup using controlled Discord stores. Menu actions recheck departed members and deleted guilds/channels before opening. The profile button waits for the permission module through the shared async hook; rejected loads log a generic error. Live patches, native keyboard handling, permission semantics, and remaining modal lifetime findings remain open.
 
 TriviaAI was deleted under the plugin policy because it required a user-supplied API key and arbitrary endpoint. Its three files contained 436 source lines and had no external callers. The generated catalog, all 32 built JavaScript/map files, and both extension packages exclude the plugin. Existing stored settings are retained; no replacement provider integration or cleanup mechanism was added.
+
+The shared webpack chunk loader retains pending and successful requests but clears failed results. A later caller can retry without a timer or retry loop. Regression fixtures exercise the actual loader and canonicalizer; a React integration check verifies that reopening PermissionsViewer after a failed chunk load succeeds and cleans up listeners. Unused loader aliases and exports were removed from PinDMs, CustomUserColors, and UserPFP. FindReply still uses ReviewDB's paginator export, so that export remains.
+
+SVGO was an unused development dependency and was removed with fifteen transitive package versions and its release-age exception. The [executable-link advisory](https://github.com/advisories/GHSA-w27v-7q3p-w38r) and [foreignObject advisory](https://github.com/advisories/GHSA-4vpr-x523-8j87) concern its opt-in sanitization feature, which this repository did not use. Stylelint's transitive colord dependency was updated within its supported range to 2.10.0 for the [malformed-color parsing advisory](https://github.com/advisories/GHSA-2wm5-q62r-hmrv). No override or new dependency was added. The registry audit reports zero known advisories for this branch on September 12; this does not certify the codebase or close alerts on unmerged main.
 
 ## Verification record
 
@@ -116,17 +120,19 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `75aeb9d3a` | 507 tests and timezone correctness checks passed, including 454 plugin regressions. |
-| Repository-wide ESLint | `75aeb9d3a` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
-| CSS lint | `c50d116a4` | Passed; excludes userplugins. |
+| Broader performance/correctness suite | `1923b0120` | 509 tests and timezone correctness checks passed, including 456 plugin regressions. |
+| Repository-wide ESLint | `1923b0120` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
+| CSS lint | `40bc540e6` | Passed with the updated colord dependency; excludes userplugins. |
 | Internationalization lint | `5e869fea9` | Passed for tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest focused regressions and TypeScript | `75aeb9d3a` | Full TypeScript and all four PermissionsViewer regressions passed. Source fixtures reject TypeScript syntax diagnostics before execution. |
-| Standalone build | `75aeb9d3a` | Passed after the PermissionsViewer changes and TriviaAI removal. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
+| Latest focused regressions and TypeScript | `1923b0120` | Full TypeScript passed. All five PermissionsViewer regressions and the shared-loader regression pass in the broader suite. Source fixtures reject TypeScript syntax diagnostics before execution. |
+| Standalone build | `1923b0120` | Passed after the shared-loader changes and SVGO removal. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
 | Development build | `0fc6ab63b` | Passed after composer, codec, preset, and game-status startup changes. |
 | Installer review browser checks | `d7b99b737` | Actual templates and generator functions in isolated Chrome preserved literal metadata, all four native/pre-send warning combinations, the native acknowledgement gate, and cancellation. Electron IPC and real installation were not exercised. |
 | Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |
-| Web build | `75aeb9d3a` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
-| Release artifact audit | `75aeb9d3a` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
+| Web build | `1923b0120` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
+| Release artifact audit | `1923b0120` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
+| Dependency audit and installed parser | `40bc540e6` | Frozen install passed. Stylelint resolves colord 2.10.0; three ordinary colors and two malformed 64 KiB inputs passed direct parser checks. Registry audit reported zero known advisories on September 12. |
+| Permission loading and retry | `a3013e6b1` | Actual React, useAwaiter, webpack loader, canonicalizer, and permission-view code recover on reopening after a rejected download and retain successful loads. Chunk downloads and Discord stores were controlled fixtures. |
 | Plugin catalog and removal | `75aeb9d3a` | Generated 380 plugin entries without TriviaAI. Built JavaScript, source maps, and extension ZIP entries also exclude it. |
 | PermissionsViewer React checks | `16ba9f64d` | Actual React 18.3.1 verified member-role and permission updates, member removal/return, sort action, and listener cleanup. Discord stores, popouts, and shared Clickable behavior were controlled fixtures; native client behavior remains unverified. |
 | Avatar startup and edit ordering | `296e36989` | Actual loader, editor actions, and DataStore in isolated Chrome preserved edits in 20 overlapping runs, ten with startup first and ten with saving first. This checks one client context, not synchronization between clients. No extra production guard was added. |
@@ -152,7 +158,7 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Uninstall button browser checks | `d4efc449d` | Actual shared component props and styles in isolated Chrome verified the accessible name, keyboard focus indicator, and consistent 32px sizing in both stylesheet orders. Full Discord layout was not exercised. |
 | Other isolated browser checks | Earlier audit commits | Specific sticker-storage transactions, codec conversion, and CSS behavior were exercised. These are not general live-client acceptance. |
 
-Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `75aeb9d3a`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
+Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `40bc540e6`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
 
 ## Remaining work
 

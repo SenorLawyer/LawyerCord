@@ -12,10 +12,16 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Remove the unused FriendTags stylesheet.
+
 - Remove the unused SVGO development dependency and its release-age exception.
 - Remove TriviaAI, which required a user-supplied API key and arbitrary AI endpoint. Its Answer With AI actions are no longer available.
 
 ### Fixed
+
+- Keep failed FriendTags saves eligible for a later retry.
+
+- Remove redundant frequency-setting reads from quick-switcher searches and skip unavailable or nameless channel records.
 
 - Fix FollowVoiceUser menu crashes when eligibility changes and clear following on logout or account switching.
 

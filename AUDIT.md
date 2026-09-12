@@ -6,7 +6,7 @@ This audit is still in progress. File coverage records review work; it does not 
 
 - Baseline: `6e664e03ba3d0b7746ce34740ca444f5112b04bc`, published as `nightly-20260905-1918-6e664e03`.
 - The baseline inventory contains 1,661 tracked files, including source, tests, configuration, documentation, and assets. The review ledger records all baseline entries as reviewed.
-- At `75aeb9d3a`, the branch contains 1,651 tracked files: this report and five added test files, with sixteen removals relative to the baseline.
+- At `e4b83b8c1`, the branch contains 1,650 tracked files: this report and five added test files, with seventeen removals relative to the baseline.
 - The five added tests cover startup flags, CRX conversion, extension installation, file selection, and settings synchronization. Their file hashes were rechecked against the reviewed versions at `480d81f23`.
 - The generated internationalization mapping was checked semantically against the runtime hash function across 19,440 pairs. That is generated-data validation, not manual review of each pair.
 - Main at `8fc182ba7` was reviewed separately. A fresh fetch and release lookup on September 12 confirmed that main and the published nightly remain unchanged. The nightly tag still resolves to the baseline commit. Main changes have not been integrated into this branch.
@@ -126,24 +126,31 @@ FollowVoiceUser no longer attaches conditional React state to the menu that call
 
 Filename extension matching is case-insensitive in both filename plugins, while unmapped extension casing is preserved. Anonymizing an uppercase or mixed-case compound tar extension retains the whole extension. Random-name lengths must be integers from 1 to 255; invalid stored values fall back to seven characters, and unknown stored methods use the same bounded random path. Existing method numbers remain unchanged. Actual React with the shared number-setting component verifies validation feedback, rejected edits preserving saved values, and correction. The allocation ceiling is a plugin limit informed by [common filesystem component sizes](https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation), not a claimed Discord filename limit or complete portability check. Broad non-alias extension mappings remain under review because renaming alone does not establish how Discord processes the contents.
 
+FrequentQuickSwitcher now retains the frequency entries it already read instead of discarding their values and reading settings again in every sort comparison. Its 20-result limit, result fields, and channel record identities remain intact. A controlled 30-channel test reduced frequency reads from 59 to one and verified fresh values on the next search, filtering, frozen records, and missing channel names. Live query handling, result types, selection, and incomplete frequency settings remain under review.
+
+FriendTags no longer records an unsuccessful write as saved, allowing the same data to be written on a later attempt. Successful duplicate saves are still skipped. Its unused managed stylesheet and import were deleted after checking that the build template only registers the style and that PermissionsViewer has its own stylesheet. Corrupted stored data, startup races, editing duplicate tag names, and save-error feedback remain open.
+
 ## Verification record
 
 Evidence applies to the recorded commit and scope, not to a future merge with main.
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `93de7dfa1` | 514 tests and timezone correctness checks passed, including 461 plugin regressions. |
+| Broader performance/correctness suite | `e4b83b8c1` | 516 tests and timezone correctness checks passed, including 463 plugin regressions. |
 | Repository-wide ESLint | `88ada37dd` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
 | CSS lint | `40bc540e6` | Passed with the updated colord dependency; excludes userplugins. |
 | Internationalization lint | `5e869fea9` | Passed for tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest focused regressions and TypeScript | `93de7dfa1` | Full TypeScript passed. Both tracked FindReply regressions, both FollowVoiceUser regressions, and filename casing and settings cases passed in the broader suite. The actual React list-replacement/boundary fixture, using the shared paginator exports, passed at `32c02f722`. All five PermissionsViewer regressions and the shared-loader regression passed in the broader suite. Source fixtures reject TypeScript syntax diagnostics before execution. |
-| Standalone build | `93de7dfa1` | Passed after the shared paginator and container-selector changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
+| Latest focused regressions and TypeScript | `e4b83b8c1` | Full TypeScript passed. Both tracked FindReply regressions, both FollowVoiceUser regressions, filename casing and settings cases, frequency lookup, and failed tag saves passed in the broader suite. The actual React list-replacement/boundary fixture, using the shared paginator exports, passed at `32c02f722`. All five PermissionsViewer regressions and the shared-loader regression passed in the broader suite. Source fixtures reject TypeScript syntax diagnostics before execution. |
+| Standalone build | `e4b83b8c1` | Passed after the quick-switcher and FriendTags changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
 | Development build | `0fc6ab63b` | Passed after composer, codec, preset, and game-status startup changes. |
 | Installer review browser checks | `d7b99b737` | Actual templates and generator functions in isolated Chrome preserved literal metadata, all four native/pre-send warning combinations, the native acknowledgement gate, and cancellation. Electron IPC and real installation were not exercised. |
 | Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |
-| Web build | `93de7dfa1` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
-| Release artifact audit | `93de7dfa1` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
+| Web build | `e4b83b8c1` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
+| Release artifact audit | `e4b83b8c1` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
 | Dependency audit and installed parser | `40bc540e6` | Frozen install passed. Stylelint resolves colord 2.10.0; three ordinary colors and two malformed 64 KiB inputs passed direct parser checks. Registry audit reported zero known advisories on September 12. |
+| FrequentQuickSwitcher search | `6708f7bcf` | Actual source preserves ordering, the 20-result limit, channel record identity, and fresh reads between searches. Frozen store fixtures remain unchanged. No live quick-switcher patch was exercised. |
+| FriendTags save retry | `e4b83b8c1` | Actual source retries after controlled storage rejection and skips only successfully committed duplicate data. Storage was controlled by the fixture. |
+| FriendTags stylesheet removal | `df56ee934` | Both desktop renderer bundles omit the unused style registration and retain PermissionsViewer CSS. |
 | FindReply container relocation | `93de7dfa1` | Isolated Chrome and actual React DOM preserve the root and component state when moving to a replacement container. Clicks continue working; zero/one-result searches and missing containers remove stale controls and their listener; resolved composed class names work with a leading hash; stop removes the element and a later action starts fresh. Discord message stores and navigator contents were controlled fixtures. |
 | FollowVoiceUser lifecycle | `5d723030d` | Actual React and the shared context-menu API preserve hook order across friend/self/no-account states and patch removal. Controlled store/action tests verify logout and account switching clear following, a fresh follow works, and stop clears it. No live voice selection was performed. |
 | Anonymous filename settings | `88ada37dd` | Actual React and the shared NumberSetting component preserve saved values on invalid edits and recover after correction. Actual filename code preserves method numbers and bounds allocation when the stored length or method is invalid. No upload was performed. |

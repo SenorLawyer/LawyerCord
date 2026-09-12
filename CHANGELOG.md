@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Stop FriendTags from saving on editor mount, edit the selected tag when names match, and remove complete user IDs.
+
 - Keep failed FriendTags saves eligible for a later retry. Preserve invalid stored tags, wait for loading before editing, and ignore reads from stopped plugin instances.
 
 - Remove redundant frequency-setting reads from quick-switcher searches and skip unavailable or nameless channel records.

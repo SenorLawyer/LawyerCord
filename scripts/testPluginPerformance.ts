@@ -13079,3 +13079,48 @@ test("FriendTags preserves invalid storage and ignores stopped loads", async () 
     await api.SetData();
     assert.deepEqual(writes, []);
 });
+
+test("FriendTags edits only the selected tag and never saves on mount", async () => {
+    const tags = [{ tagName: "Same", userIds: [] }, { tagName: "Same", userIds: ["123", "1234"] }];
+    const writes: string[] = [];
+    interface Element { type: unknown; props: { onChange?(value: string): void; onClick?(): void; }; children: Element[]; }
+    const api = loadSource("src/equicordplugins/friendTags/index.tsx", {
+        "@api/index": { DataStore: { get: async () => JSON.stringify(tags), set: async (_key: string, value: string) => { writes.push(value); } } },
+        "@api/Settings": { definePluginSettings: () => ({}) },
+        "@components/BaseText": { BaseText: "text" }, "@components/Divider": {}, "@utils/constants": { Devs: {} },
+        "@utils/Logger": { Logger: class { error() {} } },
+        "@utils/react": { useForceUpdater: () => () => {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": {
+            useState: (value: unknown) => [value, () => {}], useEffect: (effect: () => void) => effect(),
+            TextInput: "input", Button: { Colors: {} },
+            UserStore: { getUser: (id: string) => ({ username: id, getAvatarURL: () => "" }) }
+        }
+    }, { React: { createElement: (type: unknown, props: object, ...children: Element[]) => ({ type, props, children: children.flat() }) } },
+    "({ GetData, TagConfigCard, tags: () => SavedData, stop: exports.default.stop })");
+    await api.GetData();
+    const empty = api.tags()[0];
+    const selected = api.tags()[1];
+    api.TagConfigCard({ tag: empty });
+    const card: Element = api.TagConfigCard({ tag: selected });
+    assert.deepEqual(writes, [], "Opening settings must not mutate or save tags");
+    const inputs = card.children.filter(child => child.type === "input");
+    inputs[0].props.onChange?.("Changed");
+    assert.equal(empty.tagName, "Same");
+    assert.equal(selected.tagName, "Changed");
+    inputs[1].props.onChange?.("123,1234, , 456 ");
+    assert.deepEqual(Array.from(selected.userIds), ["123", "1234", "456"]);
+    const updated: Element = api.TagConfigCard({ tag: selected });
+    const userList = updated.children.find(child => child.type === "div");
+    assert.ok(userList);
+    userList.children[1].children[0].children[1].props.onClick?.();
+    assert.deepEqual(Array.from(selected.userIds), ["1234", "456"], "Removing an ID must preserve longer IDs containing it");
+    inputs[1].props.onChange?.("");
+    assert.deepEqual(Array.from(selected.userIds), []);
+    const count = writes.length;
+    api.stop();
+    inputs[0].props.onChange?.("Stale edit");
+    inputs[1].props.onChange?.("999");
+    assert.equal(selected.tagName, "Changed");
+    assert.equal(writes.length, count);
+});

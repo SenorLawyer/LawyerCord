@@ -13,7 +13,7 @@ import { Devs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import { useAwaiter, useForceUpdater } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
-import { Button, ChannelStore, Menu, RelationshipStore, TextInput, useEffect, UserStore, useState } from "@webpack/common";
+import { Button, ChannelStore, Menu, RelationshipStore, TextInput, UserStore, useState } from "@webpack/common";
 
 interface UserTagData {
     tagName: string;
@@ -98,47 +98,41 @@ function GetData() {
     return pending;
 }
 
-function TagConfigCard(props) {
+function TagConfigCard(props: { tag: UserTagData; }) {
     const { tag } = props;
     const [tagName, setTagName] = useState(tag.tagName);
     const [userIds, setUserIDs] = useState(tag.userIds.join(", "));
     const update = useForceUpdater();
 
-    useEffect(() => {
-        const dataTag = SavedData.find(obj => obj.tagName === tag.tagName);
-        if (dataTag) {
-            dataTag.tagName = tagName;
-        }
-        SetData();
-        update();
-    }, [tagName]);
-
-    useEffect(() => {
-        const dataTag = SavedData.find(obj => obj.userIds === tag.userIds);
-        if (dataTag) {
-            dataTag.userIds = userIds.split(", ");
-        }
-        SetData();
-        update();
-    }, [userIds]);
+    function changeUserIds(value: string) {
+        if (!SavedData.includes(tag)) return;
+        setUserIDs(value);
+        tag.userIds = value.split(",").map(id => id.trim()).filter(Boolean);
+        void SetData();
+    }
 
     return (
         <>
             <BaseText size="md" tag="h5">Name</BaseText>
-            <TextInput value={tagName} onChange={setTagName}></TextInput>
-            <BaseText size="md" tag="h5">Users (Seperated by comma)</BaseText>
-            <TextInput value={userIds} onChange={setUserIDs}></TextInput>
+            <TextInput value={tagName} onChange={(value: string) => {
+                if (!SavedData.includes(tag)) return;
+                setTagName(value);
+                tag.tagName = value;
+                void SetData();
+            }}></TextInput>
+            <BaseText size="md" tag="h5">Users (Separated by comma)</BaseText>
+            <TextInput value={userIds} onChange={changeUserIds}></TextInput>
             <div className={"vc-friend-tags-user-header-container"}>
                 <BaseText>User List (Click A User To Remove)</BaseText>
                 <div className={"vc-friend-tags-user-header-btns"}>
                     {
-                        userIds.split(", ").map(user => {
+                        tag.userIds.map(user => {
                             const userData: any = UserStore.getUser(user);
                             if (!userData) return null;
                             return (
                                 <div style={{ display: "flex" }} key={user}>
                                     <img src={userData.getAvatarURL()} style={{ height: "20px", borderRadius: "50%", marginRight: "5px" }}></img>
-                                    <BaseText style={{ cursor: "pointer" }} size="md" onClick={() => setUserIDs(userIds.replace(`, ${user}`, "").replace(user, ""))}>{userData.globalName || userData.username}</BaseText>
+                                    <BaseText style={{ cursor: "pointer" }} size="md" onClick={() => changeUserIds(tag.userIds.filter(id => id !== user).join(", "))}>{userData.globalName || userData.username}</BaseText>
                                 </div>
                             );
                         })

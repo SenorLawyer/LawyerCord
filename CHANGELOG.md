@@ -23,7 +23,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Bound random filename lengths and recover invalid saved anonymization methods without producing missing filenames.
 
-- FindReply searches current replies when clicked, excludes non-reply message references, and retains direct replies sent within the same millisecond. Closing its navigator releases the controls and click listener. New searches with zero or one result clear older navigation controls.
+- FindReply searches current replies when clicked, excludes non-reply message references, and retains direct replies sent within the same millisecond. Closing its navigator releases the controls and click listener. Older controls are cleared when a new search has fewer than two replies or its container is unavailable. Container lookup resolves Discord's CSS classes instead of assuming a hash suffix.
 
 - Restore FindReply navigation after re-enabling the plugin and wait for its paginator to load.
 

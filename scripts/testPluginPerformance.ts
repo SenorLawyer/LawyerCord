@@ -12697,6 +12697,7 @@ test("lazy webpack chunk loads share work and retry failures on a later call", a
 
 test("FindReply creates a fresh navigator after stopping", async () => {
     const roots: { mounted: boolean; renders: number; visible: boolean; }[] = [];
+    const cssClasses: { channelBottomBarArea?: string; } = { channelBottomBarArea: "_a1b2c3_channelBottomBarArea container-layout" };
     let attached = 0;
     let containerAvailable = true;
     let currentContainer = "first-container";
@@ -12710,9 +12711,10 @@ test("FindReply creates a fresh navigator after stopping", async () => {
     const { default: plugin } = loadSource("src/equicordplugins/findReply/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({ store: { hideButtonIfNoReply: true } }) },
         "@utils/constants": { Devs: {} },
+        "@utils/css": loadSource("src/utils/css.ts", {}),
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
         "@vencord/discord-types/enums": { MessageType: { REPLY: 19 } },
-        "@webpack": { findByPropsLazy: () => ({ jumpToMessage: ({ messageId }: { messageId: string; }) => jumps.push(messageId) }) },
+        "@webpack": { findCssClassesLazy: () => cssClasses, findByPropsLazy: () => ({ jumpToMessage: ({ messageId }: { messageId: string; }) => jumps.push(messageId) }) },
         "@webpack/common": {
             ChannelStore: { getChannel: () => ({}) }, MessageStore: { getMessages: () => ({ _array: messages }) },
             Toasts: { show: ({ message }: { message: string; }) => notices.push(message), genId() {}, Type: {} },
@@ -12728,7 +12730,10 @@ test("FindReply creates a fresh navigator after stopping", async () => {
     }, {
         React: { createElement: () => ({}) },
         document: {
-            querySelector: () => containerAvailable ? { appendChild: () => { if (attachedContainer === null) attached++; attachedContainer = currentContainer; } } : null,
+            querySelector: (selector: string) => {
+                assert.equal(selector, "._a1b2c3_channelBottomBarArea.container-layout");
+                return containerAvailable ? { appendChild: () => { if (attachedContainer === null) attached++; attachedContainer = currentContainer; } } : null;
+            },
             createElement: () => ({ remove: () => { attached--; attachedContainer = null; } })
         }
     });
@@ -12756,6 +12761,11 @@ test("FindReply creates a fresh navigator after stopping", async () => {
         containerAvailable = true;
         await click();
         assert.equal(roots[cycle].visible, true);
+        delete cssClasses.channelBottomBarArea;
+        await click();
+        assert.equal(roots[cycle].visible, false, "Missing CSS modules must clear previous controls without throwing");
+        cssClasses.channelBottomBarArea = "_a1b2c3_channelBottomBarArea container-layout";
+        await click();
         const staleAction = action();
         const saved = messages.splice(0);
         await staleAction();
@@ -12796,9 +12806,10 @@ test("FindReply distinguishes replies from other message references", () => {
     const findReplies = loadSource("src/equicordplugins/findReply/index.tsx", {
         "@api/Settings": { definePluginSettings: () => settings }, "@api/Styles": {},
         "@utils/constants": { Devs: {} },
+        "@utils/css": loadSource("src/utils/css.ts", {}),
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
         "@vencord/discord-types/enums": { MessageType: { REPLY: 19 } },
-        "@webpack": { findByPropsLazy: () => ({}) },
+        "@webpack": { findCssClassesLazy: () => ({}), findByPropsLazy: () => ({}) },
         "@webpack/common": { MessageStore: { getMessages: () => ({ _array: messages }) } },
         "./ReplyNavigator": {}, "./styles.css?managed": {}
     }, {}, "findReplies");

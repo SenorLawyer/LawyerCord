@@ -18,10 +18,11 @@
 
 import { definePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
+import { classNameToSelector } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
 import { MessageType } from "@vencord/discord-types/enums";
-import { findByPropsLazy } from "@webpack";
+import { findByPropsLazy, findCssClassesLazy } from "@webpack";
 import { ChannelStore, createRoot, MessageStore, Toasts } from "@webpack/common";
 import { Root } from "react-dom/client";
 
@@ -31,6 +32,7 @@ import styles from "./styles.css?managed";
 export const jumper: {
     jumpToMessage(options: { channelId: string; messageId: string; flash: boolean; jumpType: "INSTANT"; }): unknown;
 } = findByPropsLazy("jumpToMessage");
+const channelStyles = findCssClassesLazy("channelBottomBarArea");
 const FindReplyIcon = () => {
     return <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" width="18" height="18">
         <path
@@ -139,7 +141,8 @@ export default definePlugin({
                             jumpType: "INSTANT"
                         });
                         if (replies.length > 1) {
-                            const container = document.querySelector("[class*=channelBottomBarArea_]");
+                            const className = channelStyles.channelBottomBarArea;
+                            const container = className && document.querySelector(classNameToSelector(className));
                             if (!container) {
                                 root?.render(null);
                                 Toasts.show({

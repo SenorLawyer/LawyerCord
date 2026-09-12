@@ -12880,3 +12880,45 @@ test("FollowVoiceUser clears following when logging out or switching accounts", 
         assert.equal(selections.length, 3);
     }
 });
+
+test("AnonymiseFileNames bounds random lengths and recovers unknown methods", () => {
+    const store: Record<string, unknown> = { anonymiseByDefault: true, spoilerMessages: false, method: 0, randomisedLength: 7 };
+    const { default: plugin } = loadSource("src/plugins/anonymiseFileNames/index.tsx", {
+        "@api/Commands": { ApplicationCommandInputType: {}, ApplicationCommandOptionType: {} },
+        "@api/Settings": { definePluginSettings: (def: object) => ({ store, def }), Settings: { plugins: { FixFileExtensions: { enabled: false } } } },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@equicordplugins/fixFileExtensions": {}, "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack": { findByCodeLazy: () => null }, "@webpack/common": {}
+    }, {
+        Array: { from: (value: { length: number; }, mapper: (value: unknown, index: number) => string) => {
+            assert.ok(Number.isInteger(value.length) && value.length >= 1 && value.length <= 255, "Random allocation must be bounded");
+            return Array.from(value, mapper);
+        } }
+    });
+    for (const length of [1, 7, 255, -1, 0, 1.5, 256, 1e100, Infinity, NaN, null, "7"]) {
+        store.randomisedLength = length;
+        const upload = { filename: "original.TAR.GZ" };
+        plugin.anonymise(upload);
+        const expectedLength = [1, 7, 255].includes(Number(length)) && typeof length === "number" ? length : 7;
+        assert.match(upload.filename, new RegExp(`^[0-9bdfhjkmnpqrstvwxz]{${expectedLength}}\\.TAR\\.GZ$`));
+    }
+    for (const method of [99, -1, null, "0"]) {
+        store.method = method;
+        store.randomisedLength = Infinity;
+        const upload = { filename: "original.txt" };
+        plugin.anonymise(upload);
+        assert.match(upload.filename, /^[0-9bdfhjkmnpqrstvwxz]{7}\.txt$/);
+    }
+    store.consistent = "chosen";
+    store.dateFormat = "date";
+    for (const [method, expected] of [[1, /^chosen\.txt$/], [2, /^\d+\.txt$/], [3, /^date\.txt$/]] as const) {
+        store.method = method;
+        const upload = { filename: "original.txt" };
+        plugin.anonymise(upload);
+        assert.match(upload.filename, expected);
+    }
+    const { isValid } = plugin.settings.def.randomisedLength;
+    for (const value of ["1", "7", "255"]) assert.equal(isValid(value), true);
+    for (const value of ["", "0", "-1", "1.5", "256", "1e100", "Infinity", "abc"]) assert.equal(typeof isValid(value), "string");
+});

@@ -75,6 +75,9 @@ export default definePlugin({
     authors: [EquicordDevs.TheArmagan],
     settings,
     flux: {
+        LOGOUT() {
+            followedUserInfo = null;
+        },
         VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceState[]; }) {
             if (!followedUserInfo) return;
             if (!RelationshipStore.isFriend(followedUserInfo.userId)) {

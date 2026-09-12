@@ -12831,3 +12831,40 @@ test("FollowVoiceUser context menus do not attach hooks to their caller", () => 
     plugin.stop();
     assert.equal(render("friend")[1].props.checked, false);
 });
+
+test("FollowVoiceUser clears following when logging out or switching accounts", () => {
+    for (const isSwitchingAccount of [false, true]) {
+        let currentUserId = "first-account";
+        const selections: string[] = [];
+        const { default: plugin } = loadSource("src/equicordplugins/followVoiceUser/index.tsx", {
+            "@api/Settings": { definePluginSettings: () => ({ store: { onlyWhenInVoice: true } }) },
+            "@utils/constants": { EquicordDevs: {} },
+            "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+            "@webpack/common": {
+                React: { createElement: (type: unknown, props: unknown) => ({ type, props }) }, Menu: {},
+                UserStore: { getCurrentUser: () => ({ id: currentUserId }) },
+                RelationshipStore: { isFriend: (id: string) => id === "friend" },
+                VoiceStateStore: { getVoiceStateForUser: (id: string) => ({ channelId: id === "friend" ? "first-channel" : "own-channel" }) },
+                ChannelActions: { selectVoiceChannel: (channelId: string) => selections.push(channelId) }
+            }
+        });
+        const follow = () => {
+            const items: { props: { action(): void; }; }[] = [];
+            plugin.contextMenus["user-context"](items, { user: { id: "friend" } });
+            items[1].props.action();
+        };
+        const move = () => plugin.flux.VOICE_STATE_UPDATES({ voiceStates: [{ userId: "friend", channelId: "second-channel" }] });
+        follow();
+        assert.deepEqual(selections, ["first-channel"]);
+        plugin.flux.LOGOUT?.({ isSwitchingAccount });
+        currentUserId = "second-account";
+        move();
+        assert.deepEqual(selections, ["first-channel"], "The next account must not inherit following");
+        follow();
+        move();
+        assert.deepEqual(selections, ["first-channel", "first-channel", "second-channel"]);
+        plugin.stop();
+        plugin.flux.VOICE_STATE_UPDATES({ voiceStates: [{ userId: "friend", channelId: "third-channel" }] });
+        assert.equal(selections.length, 3);
+    }
+});

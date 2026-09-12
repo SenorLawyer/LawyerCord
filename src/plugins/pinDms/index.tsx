@@ -16,7 +16,7 @@ import { findCssClassesLazy, findStoreLazy } from "@webpack";
 import { Clickable, ContextMenuApi, FluxDispatcher, Menu, React } from "@webpack/common";
 
 import { contextMenus } from "./components/contextMenu";
-import { openCategoryModal, requireSettingsModal } from "./components/CreateCategoryModal";
+import { openCategoryModal } from "./components/CreateCategoryModal";
 import { DEFAULT_CHUNK_SIZE, DEFAULT_COLOR } from "./constants";
 import { canMoveCategory, canMoveCategoryInDirection, Category, categoryLen, collapseCategory, getAllUncollapsedChannels, getCategoryByIndex, getCategoryChannels, getSections, init, isPinned, moveCategory, removeCategory, usePinnedDms } from "./data";
 
@@ -169,7 +169,6 @@ export default definePlugin({
     categoryLen,
     getSections,
     getAllUncollapsedChannels,
-    requireSettingsMenu: requireSettingsModal,
 
     makeProps(instance, { sections }: { sections: number[]; }) {
         this.instance = instance;

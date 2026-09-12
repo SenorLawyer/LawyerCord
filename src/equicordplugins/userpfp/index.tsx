@@ -34,7 +34,7 @@ const DONO_URL = "https://ko-fi.com/coolesding";
 const INVITE_LINK = "userpfp-1129784704267210844";
 const USERPFP_IMG_URL = "https://raw.githubusercontent.com/UserPFP/img/";
 
-export const requireSettingsModal = extractAndLoadChunksLazy(['type:"USER_SETTINGS_MODAL_OPEN"']);
+const requireSettingsModal = extractAndLoadChunksLazy(['type:"USER_SETTINGS_MODAL_OPEN"']);
 export const KEY_DATASTORE = "vencord-custom-avatars";
 export const data = { avatars: {} as Record<string, string>, remoteAvatars: {} as Record<string, string> };
 

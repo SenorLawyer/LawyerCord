@@ -5,16 +5,14 @@
  */
 
 import ErrorBoundary from "@components/ErrorBoundary";
-import { Paginator, requirePaginator } from "@plugins/reviewDB/components/ReviewModal";
 import { Logger } from "@utils/Logger";
 import { classes } from "@utils/misc";
 import { useAwaiter } from "@utils/react";
 import { Message } from "@vencord/discord-types";
 import { findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
-import { React, useRef, useState } from "@webpack/common";
+import { Paginator, React, requirePaginator, useRef, useState } from "@webpack/common";
 
 const CloseButton = findComponentByCodeLazy("CLOSE_BUTTON_LABEL");
-import { MutableRefObject } from "react";
 
 import { jumper } from "./index";
 
@@ -30,7 +28,7 @@ export default ErrorBoundary.wrap(function ReplyNavigator({ replies }: { replies
         deps: [replies],
         onError: () => logger.error("Could not load reply navigation.")
     });
-    const ref: MutableRefObject<HTMLDivElement | null> = useRef(null);
+    const ref = useRef<HTMLDivElement>(null);
     React.useEffect(() => {
         if (!visible || !paginatorReady) return;
         // https://stackoverflow.com/a/42234988

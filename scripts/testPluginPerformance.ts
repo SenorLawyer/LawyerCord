@@ -295,8 +295,7 @@ test("ReviewDB modal state is keyed to the current account", async () => {
     const api = loadSource("src/plugins/reviewDB/components/ReviewModal.tsx", {
         "@components/BaseText": {}, "@plugins/reviewDB/auth": {}, "@plugins/reviewDB/reviewDbApi": {},
         "@plugins/reviewDB/utils": {}, "@utils/react": {},
-        "@webpack": { DefaultExtractAndLoadChunksRegex: /chunk/, extractAndLoadChunksLazy: () => async () => {}, findComponentByCodeLazy: () => ({}) },
-        "@webpack/common": { UserStore: store, openModalLazy: (value: typeof factory) => { factory = value; },
+        "@webpack/common": { requirePaginator: async () => true, UserStore: store, openModalLazy: (value: typeof factory) => { factory = value; },
             useStateFromStores: (stores: unknown[], select: () => unknown) => { assert.equal(stores[0], store); return select(); } },
         "./ReviewComponent": {}, "./ReviewsView": {},
     }, { React: { createElement: (_type: unknown, props: object) => ({ props }) } });

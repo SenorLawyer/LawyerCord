@@ -28,7 +28,9 @@ import { Root } from "react-dom/client";
 import ReplyNavigator from "./ReplyNavigator";
 import styles from "./styles.css?managed";
 
-export const jumper: any = findByPropsLazy("jumpToMessage");
+export const jumper: {
+    jumpToMessage(options: { channelId: string; messageId: string; flash: boolean; jumpType: "INSTANT"; }): unknown;
+} = findByPropsLazy("jumpToMessage");
 const FindReplyIcon = () => {
     return <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" width="18" height="18">
         <path

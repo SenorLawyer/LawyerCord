@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Render duplicate stored FriendTags user IDs once without rewriting saved tags.
+
 - Report failed FriendTags saves without leaving rejected promises unhandled or showing stale warnings after stop.
 
 - Keep duplicate-named FriendTags distinct when deleting tags or using context menus, and preserve other editor rows after deletion.

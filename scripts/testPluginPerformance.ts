@@ -13099,7 +13099,7 @@ test("FriendTags preserves invalid storage and ignores stopped loads", async () 
 });
 
 test("FriendTags edits only the selected tag and never saves on mount", async () => {
-    const tags = [{ tagName: "Same", userIds: [] }, { tagName: "Same", userIds: ["123", "1234"] }];
+    const tags = [{ tagName: "Same", userIds: [] }, { tagName: "Same", userIds: ["123", "1234", "123"] }];
     const writes: string[] = [];
     interface Element { type: unknown; props: { onChange?(value: string): void; onClick?(): void; }; children: Element[]; }
     const api = loadSource("src/equicordplugins/friendTags/index.tsx", {
@@ -13123,6 +13123,10 @@ test("FriendTags edits only the selected tag and never saves on mount", async ()
     api.TagConfigCard({ tag: empty });
     const card: Element = api.TagConfigCard({ tag: selected });
     assert.deepEqual(writes, [], "Opening settings must not mutate or save tags");
+    const renderedUsers = card.children.find(child => child.type === "div");
+    assert.ok(renderedUsers);
+    assert.equal(renderedUsers.children[1].children.length, 2, "Duplicate stored IDs render only one row per user");
+    assert.deepEqual(Array.from(selected.userIds), ["123", "1234", "123"], "Rendering must not rewrite stored tags");
     const inputs = card.children.filter(child => child.type === "input");
     inputs[0].props.onChange?.("Changed");
     assert.equal(empty.tagName, "Same");

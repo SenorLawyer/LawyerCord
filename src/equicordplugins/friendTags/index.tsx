@@ -13,6 +13,7 @@ import { Devs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import { useAwaiter, useForceUpdater } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
+import type { User } from "@vencord/discord-types";
 import { Button, ChannelStore, Menu, React, RelationshipStore, showToast, TextInput, Toasts, UserStore, useState } from "@webpack/common";
 
 interface UserTagData {
@@ -41,7 +42,7 @@ function parseUsertags(text: string): string[] {
     return tags.filter(tag => tag !== "");
 }
 
-function queryFriendTags(query) {
+function queryFriendTags(query: string) {
     const tags = new Set(parseUsertags(query).map(tag => tag.toLowerCase()));
     if (!tags.size) return [];
 
@@ -53,13 +54,13 @@ function queryFriendTags(query) {
     }
     if (!taggedUserIds.size) return [];
 
-    const users: Array<{ type: "USER"; record: any; score: number; comparator: string; sortable: string; }> = [];
+    const users: Array<{ type: "USER"; record: User; score: number; comparator: string; sortable: string; }> = [];
     const seenUserIds = new Set<string>();
     const addTaggedUser = (user: string) => {
         if (seenUserIds.has(user) || !taggedUserIds.has(user)) return;
         seenUserIds.add(user);
 
-        const userObject: any = UserStore.getUser(user);
+        const userObject = UserStore.getUser(user);
         if (!userObject) return;
 
         users.push({
@@ -141,8 +142,8 @@ function TagConfigCard(props: { tag: UserTagData; onRemove(): void; }) {
                 <BaseText>User List (Click A User To Remove)</BaseText>
                 <div className={"vc-friend-tags-user-header-btns"}>
                     {
-                        tag.userIds.map(user => {
-                            const userData: any = UserStore.getUser(user);
+                        Array.from(new Set(tag.userIds), user => {
+                            const userData = UserStore.getUser(user);
                             if (!userData) return null;
                             return (
                                 <div style={{ display: "flex" }} key={user}>
@@ -203,12 +204,8 @@ function TagConfigurationComponent() {
 const settings = definePluginSettings({
     tagConfiguration: {
         type: OptionType.COMPONENT,
-        description: "The tag configuration component",
-        component: () => {
-            return (
-                <TagConfigurationComponent />
-            );
-        }
+        description: "Configure tags and their users.",
+        component: TagConfigurationComponent
     }
 });
 

@@ -12938,3 +12938,42 @@ test("AnonymiseFileNames bounds random lengths and recovers unknown methods", ()
     for (const value of ["1", "7", "255"]) assert.equal(isValid(value), true);
     for (const value of ["", "0", "-1", "1.5", "256", "1e100", "Infinity", "abc"]) assert.equal(typeof isValid(value), "string");
 });
+
+test("FrequentQuickSwitcher reads frequency once and preserves store records", () => {
+    let reads = 0;
+    const channels: Record<string, { id: string; name: string | null; }> = {};
+    let frequency: Record<string, { totalUses: number; }> = {};
+    for (let index = 0; index < 30; index++) {
+        const id = `channel-${index}`;
+        channels[id] = Object.freeze({ id, name: `room-${index}` });
+        frequency[id] = Object.freeze({ totalUses: index });
+    }
+    channels.other = Object.freeze({ id: "other", name: "excluded" });
+    frequency.other = Object.freeze({ totalUses: 100 });
+    frequency.missing = Object.freeze({ totalUses: 100 });
+    Object.freeze(frequency);
+    const { default: plugin } = loadSource("src/equicordplugins/frequentQuickSwitcher/index.tsx", {
+        "@utils/constants": { Devs: {} }, "@utils/types": { __esModule: true, default: (value: unknown) => value },
+        "@webpack/common": {
+            ChannelStore: { getChannel: (id: string) => channels[id] },
+            UserSettingsActionCreators: { FrecencyUserSettingsActionCreators: { getCurrentValue: () => {
+                reads++;
+                return { guildAndChannelFrecency: { guildAndChannels: frequency } };
+            } } }
+        }
+    });
+    const results = plugin.generateSearchResults("room");
+    assert.deepEqual(Array.from(results, (result: { record: { id: string; }; }) => result.record.id), Array.from({ length: 20 }, (_, index) => `channel-${29 - index}`));
+    assert.equal(results[0].record, channels["channel-29"]);
+    assert.equal(reads, 1);
+    assert.equal(results[0].type, "TEXT_CHANNEL");
+    assert.equal(results[0].comparator, "room");
+    assert.equal(results[0].sortable, "room");
+    assert.equal(results[0].score, 20);
+    channels.nameless = { id: "nameless", name: null };
+    frequency = { nameless: { totalUses: 100 }, "channel-0": { totalUses: 2 }, "channel-29": { totalUses: 1 } };
+    reads = 0;
+    assert.deepEqual(Array.from(plugin.generateSearchResults("room"), (result: { record: { id: string; }; }) => result.record.id), ["channel-0", "channel-29"]);
+    assert.equal(reads, 1);
+    assert.equal(plugin.generateSearchResults("absent").length, 0);
+});

@@ -12780,4 +12780,12 @@ test("FindReply distinguishes replies from other message references", () => {
     assert.deepEqual(ids(), ["direct-19"]);
     settings.store.includePings = true;
     assert.deepEqual(ids(), ["direct-19", "mention"]);
+    const directReply = messages.find(message => message.id === "direct-19");
+    assert.ok(directReply);
+    directReply.timestamp = target.timestamp;
+    assert.deepEqual(ids(), ["direct-19", "mention"]);
+    const mention = messages.find(message => message.id === "mention");
+    assert.ok(mention);
+    mention.timestamp = target.timestamp - 1;
+    assert.deepEqual(ids(), ["direct-19"]);
 });

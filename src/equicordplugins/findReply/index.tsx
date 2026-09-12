@@ -66,10 +66,11 @@ function findReplies(message: Message) {
     const nickMention = settings.store.includePings ? `<@!${authorId}>` : "";
 
     for (const other of messages) {
-        if (other.deleted || getMessageTimestamp(other) <= targetTimestamp) continue;
+        if (other.deleted) continue;
 
         const referencedMessageId = other.type === MessageType.REPLY ? other.messageReference?.message_id : undefined;
         let isReply = referencedMessageId === message.id;
+        if (!isReply && getMessageTimestamp(other) <= targetTimestamp) continue;
 
         if (!isReply && settings.store.includePings && (other.content?.includes(plainMention) || other.content?.includes(nickMention))) {
             isReply = true;

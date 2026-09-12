@@ -112,6 +112,8 @@ TriviaAI was deleted under the plugin policy because it required a user-supplied
 
 The shared webpack chunk loader retains pending and successful requests but clears failed results. A later caller can retry without a timer or retry loop. Regression fixtures exercise the actual loader and canonicalizer; a React integration check verifies that reopening PermissionsViewer after a failed chunk load succeeds and cleans up listeners. Unused loader aliases and exports were removed from PinDMs, CustomUserColors, and UserPFP. FindReply still uses ReviewDB's paginator export, so that export remains.
 
+FindReply no longer keeps a second flag for whether its navigator exists. Stopping clears the released root and element; repeated enable/use/stop cycles create a fresh root. Its duplicate static stylesheet import and redundant navigation toast were deleted. The paginator waits through the shared async hook before rendering; actual React checks cover delayed success, false results, rejection, and unmount cleanup. Container attachment, message matching, stale reply lists, and live Discord behavior remain open.
+
 SVGO was an unused development dependency and was removed with fifteen transitive package versions and its release-age exception. The [executable-link advisory](https://github.com/advisories/GHSA-w27v-7q3p-w38r) and [foreignObject advisory](https://github.com/advisories/GHSA-4vpr-x523-8j87) concern its opt-in sanitization feature, which this repository did not use. Stylelint's transitive colord dependency was updated within its supported range to 2.10.0 for the [malformed-color parsing advisory](https://github.com/advisories/GHSA-2wm5-q62r-hmrv). No override or new dependency was added. The registry audit reports zero known advisories for this branch on September 12; this does not certify the codebase or close alerts on unmerged main.
 
 ## Verification record
@@ -120,18 +122,19 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `1923b0120` | 509 tests and timezone correctness checks passed, including 456 plugin regressions. |
+| Broader performance/correctness suite | `68199955c` | 510 tests and timezone correctness checks passed, including 457 plugin regressions. |
 | Repository-wide ESLint | `1923b0120` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
 | CSS lint | `40bc540e6` | Passed with the updated colord dependency; excludes userplugins. |
 | Internationalization lint | `5e869fea9` | Passed for tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest focused regressions and TypeScript | `1923b0120` | Full TypeScript passed. All five PermissionsViewer regressions and the shared-loader regression pass in the broader suite. Source fixtures reject TypeScript syntax diagnostics before execution. |
-| Standalone build | `1923b0120` | Passed after the shared-loader changes and SVGO removal. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
+| Latest focused regressions and TypeScript | `f6e902f8b` | Full TypeScript and the FindReply lifecycle/failure-toast regression passed. All five PermissionsViewer regressions and the shared-loader regression passed in the broader suite at `68199955c`. Source fixtures reject TypeScript syntax diagnostics before execution. |
+| Standalone build | `68199955c` | Passed after the FindReply lifecycle and paginator fixes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
 | Development build | `0fc6ab63b` | Passed after composer, codec, preset, and game-status startup changes. |
 | Installer review browser checks | `d7b99b737` | Actual templates and generator functions in isolated Chrome preserved literal metadata, all four native/pre-send warning combinations, the native acknowledgement gate, and cancellation. Electron IPC and real installation were not exercised. |
 | Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |
 | Web build | `1923b0120` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
 | Release artifact audit | `1923b0120` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
 | Dependency audit and installed parser | `40bc540e6` | Frozen install passed. Stylelint resolves colord 2.10.0; three ordinary colors and two malformed 64 KiB inputs passed direct parser checks. Registry audit reported zero known advisories on September 12. |
+| FindReply paginator loading | `68199955c` | Actual React and useAwaiter wait for a deferred paginator, handle false/rejected loads, and ignore completion after unmount. Document listener cleanup passed; Discord modules and DOM were controlled fixtures. |
 | Permission loading and retry | `a3013e6b1` | Actual React, useAwaiter, webpack loader, canonicalizer, and permission-view code recover on reopening after a rejected download and retain successful loads. Chunk downloads and Discord stores were controlled fixtures. |
 | Plugin catalog and removal | `75aeb9d3a` | Generated 380 plugin entries without TriviaAI. Built JavaScript, source maps, and extension ZIP entries also exclude it. |
 | PermissionsViewer React checks | `16ba9f64d` | Actual React 18.3.1 verified member-role and permission updates, member removal/return, sort action, and listener cleanup. Discord stores, popouts, and shared Clickable behavior were controlled fixtures; native client behavior remains unverified. |

@@ -12688,6 +12688,8 @@ test("FindReply creates a fresh navigator after stopping", async () => {
     const roots: { mounted: boolean; renders: number; }[] = [];
     let attached = 0;
     let stylesEnabled = false;
+    let containerAvailable = true;
+    const notices: string[] = [];
     const messages = [
         { id: "first", channel_id: "channel", timestamp: 2, author: { id: "other" }, messageReference: { message_id: "target" } },
         { id: "second", channel_id: "channel", timestamp: 3, author: { id: "other" }, messageReference: { message_id: "target" } }
@@ -12700,7 +12702,7 @@ test("FindReply creates a fresh navigator after stopping", async () => {
         "@webpack": { findByPropsLazy: () => ({ jumpToMessage() {} }) },
         "@webpack/common": {
             ChannelStore: { getChannel: () => ({}) }, MessageStore: { getMessages: () => ({ _array: messages }) },
-            Toasts: { show() {}, genId() {}, Type: {} },
+            Toasts: { show: ({ message }: { message: string; }) => notices.push(message), genId() {}, Type: {} },
             createRoot: () => {
                 const state = { mounted: true, renders: 0 };
                 roots.push(state);
@@ -12713,7 +12715,7 @@ test("FindReply creates a fresh navigator after stopping", async () => {
     }, {
         React: { createElement: () => ({}) },
         document: {
-            querySelector: () => ({ appendChild: () => { attached++; } }),
+            querySelector: () => containerAvailable ? { appendChild: () => { attached++; } } : null,
             createElement: () => ({ remove: () => { attached--; } })
         }
     });
@@ -12734,4 +12736,11 @@ test("FindReply creates a fresh navigator after stopping", async () => {
     }
     plugin.stop();
     assert.equal(attached, 0);
+    plugin.start();
+    containerAvailable = false;
+    notices.length = 0;
+    await click();
+    assert.deepEqual(notices, ["Couldn't find the container element."]);
+    assert.equal(roots.length, 2);
+    plugin.stop();
 });

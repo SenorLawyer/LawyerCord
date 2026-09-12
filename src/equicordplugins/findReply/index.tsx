@@ -126,7 +126,7 @@ export default definePlugin({
                 icon: FindReplyIcon,
                 message,
                 channel: ChannelStore.getChannel(message.channel_id),
-                onClick: async () => {
+                onClick: () => {
                     if (replies.length) {
                         const channelId = replies[0].channel_id;
                         const messageId = replies[0].id;
@@ -137,11 +137,6 @@ export default definePlugin({
                             jumpType: "INSTANT"
                         });
                         if (replies.length > 1) {
-                            Toasts.show({
-                                id: Toasts.genId(),
-                                message: "Use the bottom panel to navigate between replies.",
-                                type: Toasts.Type.MESSAGE
-                            });
                             const container = document.querySelector("[class*=channelBottomBarArea_]");
                             if (!container) {
                                 Toasts.show({

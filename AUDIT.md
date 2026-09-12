@@ -136,17 +136,17 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 
 | Check | Commit | Result and limits |
 | --- | --- | --- |
-| Broader performance/correctness suite | `e4b83b8c1` | 516 tests and timezone correctness checks passed, including 463 plugin regressions. |
-| Repository-wide ESLint | `88ada37dd` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
+| Broader performance/correctness suite | `dcdd1f5ab` | 519 tests and timezone correctness checks passed, including 466 plugin regressions. |
+| Repository-wide ESLint | `8a373e5fb` | Passed for configured source and config rules. Build output, browser output, vendored types, and test scripts are outside those rules. |
 | CSS lint | `40bc540e6` | Passed with the updated colord dependency; excludes userplugins. |
 | Internationalization lint | `5e869fea9` | Passed for tracked source markers and patch strings, not live Discord module compatibility. |
-| Latest focused regressions and TypeScript | `e4b83b8c1` | Full TypeScript passed. Both tracked FindReply regressions, both FollowVoiceUser regressions, filename casing and settings cases, frequency lookup, and failed tag saves passed in the broader suite. The actual React list-replacement/boundary fixture, using the shared paginator exports, passed at `32c02f722`. All five PermissionsViewer regressions and the shared-loader regression passed in the broader suite. Source fixtures reject TypeScript syntax diagnostics before execution. |
-| Standalone build | `e4b83b8c1` | Passed after the quick-switcher and FriendTags changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
+| Latest focused regressions and TypeScript | `8a373e5fb` | Full TypeScript and all four FriendTags regressions passed. Both tracked FindReply regressions, both FollowVoiceUser regressions, filename casing and settings cases, frequency lookup, and failed tag saves passed in the broader suite. The actual React list-replacement/boundary fixture, using the shared paginator exports, passed at `32c02f722`. All five PermissionsViewer regressions and the shared-loader regression passed in the broader suite. Source fixtures reject TypeScript syntax diagnostics before execution. |
+| Standalone build | `8a373e5fb` | Passed after the quick-switcher and FriendTags changes. Release installer/parser exclusion was verified separately at `1f7dab047`. This does not establish installed-client behavior. |
 | Development build | `0fc6ab63b` | Passed after composer, codec, preset, and game-status startup changes. |
 | Installer review browser checks | `d7b99b737` | Actual templates and generator functions in isolated Chrome preserved literal metadata, all four native/pre-send warning combinations, the native acknowledgement gate, and cancellation. Electron IPC and real installation were not exercised. |
 | Native development filter | `dc2df481a` | Actual development and reporter bundles retain the installer; release bundles exclude it. |
-| Web build | `e4b83b8c1` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
-| Release artifact audit | `e4b83b8c1` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
+| Web build | `8a373e5fb` | Passed. Packed Chromium/Firefox manifest versions match `3.0.0.0`. |
+| Release artifact audit | `8a373e5fb` | Passed for `dist`, including ZIP entries. This is a credential-pattern and private-runtime-path check. |
 | Dependency audit and installed parser | `40bc540e6` | Frozen install passed. Stylelint resolves colord 2.10.0; three ordinary colors and two malformed 64 KiB inputs passed direct parser checks. Registry audit reported zero known advisories on September 12. |
 | FrequentQuickSwitcher search | `6708f7bcf` | Actual source preserves ordering, the 20-result limit, channel record identity, and fresh reads between searches. Frozen store fixtures remain unchanged. No live quick-switcher patch was exercised. |
 | FriendTags save retry | `e4b83b8c1` | Actual source retries after controlled storage rejection and skips only successfully committed duplicate data. Storage was controlled by the fixture. |

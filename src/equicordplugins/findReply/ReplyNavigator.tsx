@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import "./styles.css";
-
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Paginator, requirePaginator } from "@plugins/reviewDB/components/ReviewModal";
 import { Message } from "@vencord/discord-types";

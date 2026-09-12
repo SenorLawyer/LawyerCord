@@ -6,6 +6,8 @@
 
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Paginator, requirePaginator } from "@plugins/reviewDB/components/ReviewModal";
+import { Logger } from "@utils/Logger";
+import { useAwaiter } from "@utils/react";
 import { Message } from "@vencord/discord-types";
 import { findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
 import { React, useRef, useState } from "@webpack/common";
@@ -16,10 +18,16 @@ import { MutableRefObject } from "react";
 import { jumper } from "./index";
 
 const containerStyles = findCssClassesLazy("containerBottom", "containerTop");
+const logger = new Logger("FindReply");
 
 export default function ReplyNavigator({ replies }: { replies: Message[]; }) {
     const [page, setPage] = useState(1);
     const [visible, setVisible] = useState(true);
+    const [paginatorReady] = useAwaiter(requirePaginator, {
+        fallbackValue: false,
+        deps: [replies],
+        onError: () => logger.error("Could not load reply navigation.")
+    });
     const ref: MutableRefObject<HTMLDivElement | null> = useRef(null);
     React.useEffect(() => {
         setPage(1);
@@ -38,7 +46,7 @@ export default function ReplyNavigator({ replies }: { replies: Message[]; }) {
             document.removeEventListener("mousedown", onMouseDown);
         };
     }, [ref]);
-    requirePaginator();
+    if (!paginatorReady) return null;
     return (
         <ErrorBoundary>
             <div ref={ref} className={containerStyles.containerBottom + " vc-findreply-div"} style={{

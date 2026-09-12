@@ -17,6 +17,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Restore FindReply navigation after re-enabling the plugin and wait for its paginator to load.
+
 - Update Stylelint's colord dependency to fix slow rejection of malformed color strings.
 
 - Validate stored scheduled-message records before loading them, preserving invalid data and blocking queue changes until it is recovered.

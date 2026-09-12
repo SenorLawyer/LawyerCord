@@ -7,6 +7,7 @@
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Paginator, requirePaginator } from "@plugins/reviewDB/components/ReviewModal";
 import { Logger } from "@utils/Logger";
+import { classes } from "@utils/misc";
 import { useAwaiter } from "@utils/react";
 import { Message } from "@vencord/discord-types";
 import { findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
@@ -34,6 +35,7 @@ export default function ReplyNavigator({ replies }: { replies: Message[]; }) {
         setVisible(true);
     }, [replies]);
     React.useEffect(() => {
+        if (!visible || !paginatorReady) return;
         // https://stackoverflow.com/a/42234988
         function onMouseDown(event: MouseEvent) {
             if (ref.current && event.target instanceof Element && !ref.current.contains(event.target)) {
@@ -45,13 +47,11 @@ export default function ReplyNavigator({ replies }: { replies: Message[]; }) {
         return () => {
             document.removeEventListener("mousedown", onMouseDown);
         };
-    }, [ref]);
-    if (!paginatorReady) return null;
+    }, [visible, paginatorReady]);
+    if (!visible || !paginatorReady) return null;
     return (
         <ErrorBoundary>
-            <div ref={ref} className={containerStyles.containerBottom + " vc-findreply-div"} style={{
-                display: visible ? "flex" : "none",
-            }}>
+            <div ref={ref} className={classes(containerStyles.containerBottom, "vc-findreply-div")}>
                 <Paginator
                     className={"vc-findreply-paginator"}
                     currentPage={page}

@@ -17,6 +17,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Update Stylelint's colord dependency to fix slow rejection of malformed color strings.
+
 - Validate stored scheduled-message records before loading them, preserving invalid data and blocking queue changes until it is recovered.
 
 - Keep a pending scheduling save from restoring previews after shutdown.

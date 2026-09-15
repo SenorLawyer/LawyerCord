@@ -178,6 +178,7 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Theme provider download | `9b03d446d` | The actual native handler downloaded catalog entry 91 with HTTP 200 and no redirect into an isolated directory. All 136 catalog entries were separately checked against ID, filename, and catalog-content size rules. |
 | HTTP archive replacement | `0ea68f8c4` | Actual updater code on Windows preserved old ASAR bytes and readable contents after injected partial-write and rename failures. Retrying installed the complete new archive and removed temporary output. Electron original-fs was represented by Node fs; live Electron locks and crash durability were not tested. |
 | Extension archive extraction | `e33811df0` | Actual extraction code, fflate ZIP decoding, and the Windows filesystem preserved nested files/directories, skipped metadata, rejected three traversal/absolute paths, removed partial output, and preserved an outside sentinel. Electron loading, archive resource limits, and crash durability were not tested. |
+| Extension install limits | `d26010040` | The actual installer passed 18 focused cases covering bounded streaming downloads, HTTP failures and cancellation, metadata-only ZIP preflight before inflation, entry and expanded-size limits, path checks, declared-size mismatch cleanup, both Electron loading APIs, and real temporary-filesystem cleanup. The broader 519-test suite and standalone build also passed. Live Electron loading and crash durability of an interrupted cache write remain unverified. |
 | Uninstall button browser checks | `d4efc449d` | Actual shared component props and styles in isolated Chrome verified the accessible name, keyboard focus indicator, and consistent 32px sizing in both stylesheet orders. Full Discord layout was not exercised. |
 | Other isolated browser checks | Earlier audit commits | Specific sticker-storage transactions, codec conversion, and CSS behavior were exercised. These are not general live-client acceptance. |
 
@@ -187,7 +188,7 @@ Mocked Discord requests do not establish live account-switch, message-send, or p
 
 The full finding ledger is still being worked through. This list identifies major open areas and is not an assertion that other findings are closed:
 
-- Scheduled-message recovery controls, remaining persisted-data constraints, modal lifetime handling, media cancellation, and coordination between separate client contexts.
+- Scheduled-message recovery controls, remaining persisted-data constraints, media cancellation, and coordination between separate client contexts.
 - Remaining plugin account, cancellation, network-response, storage, and resource-lifecycle findings across the broader codebase.
 - Runtime validation of patch anchors. The current patch validator reports 192 warnings; those warnings have not all been resolved or justified against current Discord modules.
 - Native and provider behavior that mocked tests cannot establish, including target-platform installer and live-client acceptance.

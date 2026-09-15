@@ -79,6 +79,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Keep an open scheduling dialog from acting on a different account or clearing its composer.
 
+- Keep closed scheduling dialogs from clearing drafts or uploads, showing save results, or mutating modal state after an in-flight save finishes.
+
 - Discard pending scheduling attachment reads after an account change or plugin shutdown.
 
 - Check patch definitions with quoted keys or whitespace instead of skipping them before parsing.
@@ -174,6 +176,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Remove an unused native download helper and correct the pull request release instructions.
 - Preserve literal CSS in userscript builds and remove obsolete browser editor metadata and About page scripting.
 - Use native integer decoding for extension headers and reject truncated archives.
+- Bound React DevTools extension downloads and ZIP expansion before extraction, reject duplicate or unsupported archive entries, and clean partial output after failed extraction.
 - Resolve cancelled file pickers and release their temporary inputs.
 - Simplify extension extraction, reject paths outside the extension directory, and finish cleanup before reporting installation failures.
 - Await backup file imports, preserve empty QuickCSS backups, and remove backup-content logging and duplicate import handling.

@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Update stale FriendCodes, MoreUserTags, and FakeNitro patch anchors and remove InvisibleChat's silent patch exception.
+
 - Render duplicate stored FriendTags user IDs once without rewriting saved tags.
 
 - Report failed FriendTags saves without leaving rejected promises unhandled or showing stale warnings after stop.

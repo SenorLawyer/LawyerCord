@@ -138,7 +138,7 @@ export default definePlugin({
             find: ".SEND_FAILED,",
             replacement: {
                 match: /let\{className:\i,message:\i[^}]*\}=(\i)/,
-                replace: "try {$1 && $self.INV_REGEX.test($1.message.content) ? $1.content.push($self.indicator()) : null } catch {};$&"
+                replace: "$1.message?.content&&Array.isArray($1.content)&&$self.INV_REGEX.test($1.message.content)&&$1.content.push($self.indicator());$&"
             }
         },
     ],

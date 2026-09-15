@@ -190,7 +190,7 @@ The full finding ledger is still being worked through. This list identifies majo
 
 - Scheduled-message recovery controls, remaining persisted-data constraints, media cancellation, and coordination between separate client contexts.
 - Remaining plugin account, cancellation, network-response, storage, and resource-lifecycle findings across the broader codebase.
-- Runtime validation of patch anchors. The current patch validator reports 192 warnings; those warnings have not all been resolved or justified against current Discord modules.
+- Runtime validation of patch anchors. The current patch validator reports 189 warnings; those warnings have not all been resolved or justified against current Discord modules. The latest source pass removed the sole replacement-level try/catch warning and two obsolete unbounded matches using current upstream anchors; remaining regex warnings are being reviewed against current code rather than mechanically bounded.
 - Native and provider behavior that mocked tests cannot establish, including target-platform installer and live-client acceptance.
 - Integration of separately reviewed main changes, preservation of main's release history, and final checks against the combined source.
 - A final finding-by-finding disposition, current-head CI, and final audit report before removing draft status.

@@ -6933,10 +6933,12 @@ test("scheduled interval changes only replace an active timer", async () => {
     assert.deepEqual(cleared, [1, 2]);
 });
 
-test("scheduling dialogs ignore account changes before and during saves", async () => {
-    for (const scenario of ["before", "during", "unchanged", "edited", "new-upload", "replaced-upload", "removed-upload", "failed", "failed-after-account"]) {
+test("scheduling dialogs preserve drafts after account changes or closing", async () => {
+    for (const scenario of ["before", "during", "unchanged", "edited", "new-upload", "replaced-upload", "removed-upload", "failed", "failed-after-account", "closed-before", "closed-during", "failed-after-close"]) {
         const before = scenario === "before";
-        const stale = before || scenario === "during" || scenario === "failed-after-account";
+        const closed = scenario === "closed-before" || scenario === "closed-during" || scenario === "failed-after-close";
+        const blocked = before || scenario === "closed-before";
+        const stale = before || scenario === "during" || scenario === "failed-after-account" || closed;
         const failed = scenario.startsWith("failed");
         const errors: unknown[] = [];
         const cleared: string[] = [];
@@ -6944,6 +6946,7 @@ test("scheduling dialogs ignore account changes before and during saves", async 
         let userId = "first";
         let writes = 0;
         let finish: () => void = () => {};
+        let cleanup: () => void = () => {};
         let schedule: () => Promise<void> = async () => assert.fail("Missing schedule action");
         const Modal = Symbol("Modal");
         const React = { createElement: (type: unknown, props: { actions: { onClick: () => Promise<void>; }[]; }) => {
@@ -6954,6 +6957,7 @@ test("scheduling dialogs ignore account changes before and during saves", async 
             "@components/Button": {}, "@components/Heading": {}, "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
             "@utils/css": { classNameFactory: () => () => "" }, "@webpack": { findByPropsLazy: () => ({ dispatchToLastSubscribed: () => assert.fail("No stale clear") }) },
             "@webpack/common": { Modal, useRef: (value: unknown) => ({ current: value }), DraftType: { ChannelMessage: 0 },
+                useEffect: (effect: () => () => void) => { cleanup = effect(); cleanup(); cleanup = effect(); },
                 DraftStore: { getDraft: () => scenario === "edited" ? "New text" : "Text" },
                 DraftActions: { clearDraft: (channelId: string) => cleared.push(channelId) }, Toasts: { Type: {} }, UserStore: { getCurrentUser: () => ({ id: userId }) },
                 ChannelStore: { getChannel: () => ({ isPrivate: () => true }) }, useState: (value: unknown) => [value, (next: unknown) => errors.push(next)],
@@ -6967,15 +6971,24 @@ test("scheduling dialogs ignore account changes before and during saves", async 
         }, { React }, "ScheduleTimeModalInner");
         component({ userId: "first", uploadIds: ["original"], channelId: "channel", content: "Text", close: () => { assert.equal(stale || failed, false); } });
         if (before) userId = "second";
+        if (scenario === "closed-before") cleanup();
         const pending = schedule();
         await schedule();
-        assert.equal(writes, before ? 0 : 1);
-        if (!before) { if (scenario === "during" || scenario === "failed-after-account") userId = "second"; finish(); }
+        assert.equal(writes, blocked ? 0 : 1);
+        if (!blocked) {
+            if (scenario === "during" || scenario === "failed-after-account") userId = "second";
+            if (closed) cleanup();
+            finish();
+        }
         await pending;
-        assert.equal(writes, before ? 0 : 1);
+        assert.equal(writes, blocked ? 0 : 1);
         assert.deepEqual(cleared, !stale && !failed && scenario !== "edited" ? ["channel"] : []);
         if (failed) assert.deepEqual(errors, stale ? [] : ["Could not save the scheduled message. Try again."]);
         assert.deepEqual(clearedUploads, scenario === "unchanged" || scenario === "edited" ? ["channel"] : []);
+        if (closed) {
+            await schedule();
+            assert.equal(writes, blocked ? 0 : 1);
+        }
         if (scenario === "failed") {
             const retry = schedule();
             finish();
@@ -8288,7 +8301,7 @@ test("scheduled delays use the complete numeric input without truncating it", as
         const component = loadSource("src/equicordplugins/scheduledMessages/components/ScheduleTimeModal.tsx", {
             "@components/Button": {}, "@components/Heading": {}, "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
             "@utils/css": { classNameFactory: () => () => "" },
-            "@webpack/common": { Modal, useRef: (value: unknown) => ({ current: value }),
+            "@webpack/common": { Modal, useEffect() {}, useRef: (value: unknown) => ({ current: value }),
                 useState: (value: unknown) => [value === "5" ? input : value, () => {}], UserStore: { getCurrentUser: () => ({ id: "account" }) },
                 ChannelStore: { getChannel: () => ({ isPrivate: () => true }) }, DraftType: { ChannelMessage: 0 }, DraftStore: { getDraft: () => "" },
                 UploadAttachmentStore: { getUploads: () => [] }, UploadManager: { clearAll() {} }, showToast() {}, Toasts: { Type: {} } },

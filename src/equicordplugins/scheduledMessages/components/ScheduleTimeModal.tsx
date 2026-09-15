@@ -9,7 +9,7 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { Heading } from "@components/Heading";
 import { classNameFactory } from "@utils/css";
 import { RenderModalProps } from "@vencord/discord-types";
-import { ChannelStore, closeModal, DraftActions, DraftStore, DraftType, Modal, openModal, showToast, TextInput, Toasts, UploadAttachmentStore, UploadManager, useRef,UserStore, useState } from "@webpack/common";
+import { ChannelStore, closeModal, DraftActions, DraftStore, DraftType, Modal, openModal, showToast, TextInput, Toasts, UploadAttachmentStore, UploadManager, useEffect, useRef, UserStore, useState } from "@webpack/common";
 
 import { ScheduledAttachment } from "../types";
 import { addScheduledMessage, getChannelDisplayInfo } from "../utils";
@@ -31,6 +31,12 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
     const [scheduledDateTime, setScheduledDateTime] = useState("");
     const [error, setError] = useState("");
     const submitting = useRef(false);
+    const active = useRef(true);
+
+    useEffect(() => {
+        active.current = true;
+        return () => { active.current = false; };
+    }, []);
 
     const { name, avatar } = getChannelDisplayInfo(channelId);
     const channel = ChannelStore.getChannel(channelId);
@@ -39,7 +45,7 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
     const isDM = channel.isPrivate();
 
     const handleSchedule = async () => {
-        if (submitting.current) return;
+        if (!active.current || submitting.current) return;
         if (UserStore.getCurrentUser()?.id !== userId) {
             setError("Account changed. Reopen the scheduling dialog.");
             return;
@@ -67,7 +73,7 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
             .catch(() => ({ success: false, error: "Could not save the scheduled message. Try again." }));
         submitting.current = false;
 
-        if (UserStore.getCurrentUser()?.id !== userId) return;
+        if (!active.current || UserStore.getCurrentUser()?.id !== userId) return;
         if (result.success) {
             if (DraftStore.getDraft(channelId, DraftType.ChannelMessage) === content) {
                 DraftActions.clearDraft(channelId, DraftType.ChannelMessage);

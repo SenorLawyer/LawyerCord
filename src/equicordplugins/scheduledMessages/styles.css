@@ -175,6 +175,11 @@
     min-width: 0;
 }
 
+.vc-scheduled-msg-message-actions {
+    display: flex;
+    gap: 8px;
+}
+
 .vc-scheduled-msg-message-header {
     display: flex;
     align-items: center;

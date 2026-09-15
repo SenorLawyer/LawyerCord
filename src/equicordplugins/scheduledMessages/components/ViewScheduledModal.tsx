@@ -10,7 +10,7 @@ import { classNameFactory } from "@utils/css";
 import { RenderModalProps } from "@vencord/discord-types";
 import { ChannelStore, closeModal, Modal, openModal, showToast, Toasts, UserStore, useState, useStateFromStores } from "@webpack/common";
 
-import { clearAllScheduledMessages, getChannelDisplayInfo, getScheduledMessages, removeScheduledMessage } from "../utils";
+import { clearAllScheduledMessages, getChannelDisplayInfo, getScheduledMessages, removeScheduledMessage, sendScheduledMessageNow } from "../utils";
 import { CalendarIcon, TimerIcon } from "./Icons";
 
 const cl = classNameFactory("vc-scheduled-msg-");
@@ -39,6 +39,14 @@ function ViewScheduledModalInner({ rootProps, close }: ViewScheduledModalProps) 
         if (UserStore.getCurrentUser()?.id !== userId) return;
         if (cleared) setMessages(getScheduledMessages());
         showToast(cleared ? "Scheduled messages cleared" : "Could not clear scheduled messages. Try again.", cleared ? Toasts.Type.SUCCESS : Toasts.Type.FAILURE);
+    };
+
+    const handleRetry = async (id: string) => {
+        if (!userId || UserStore.getCurrentUser()?.id !== userId) return;
+        const result = await sendScheduledMessageNow(id);
+        if (UserStore.getCurrentUser()?.id !== userId) return;
+        if (result.success) setMessages(getScheduledMessages());
+        showToast(result.success ? "Scheduled message sent" : result.error ?? "Could not send the scheduled message. Try again.", result.success ? Toasts.Type.SUCCESS : Toasts.Type.FAILURE);
     };
 
     const actions = [
@@ -94,13 +102,24 @@ function ViewScheduledModalInner({ rootProps, close }: ViewScheduledModalProps) 
                                     </div>
                                     <div className={cl("message-content")}>{displayContent}</div>
                                 </div>
-                                <Button
-                                    size="small"
-                                    variant="dangerPrimary"
-                                    onClick={() => handleDelete(msg.id)}
-                                >
-                                    Delete
-                                </Button>
+                                <div className={cl("message-actions")}>
+                                    {msg.attemptedAt !== undefined && msg.userId === userId && (
+                                        <Button
+                                            size="small"
+                                            variant="secondary"
+                                            onClick={() => handleRetry(msg.id)}
+                                        >
+                                            Retry
+                                        </Button>
+                                    )}
+                                    <Button
+                                        size="small"
+                                        variant="dangerPrimary"
+                                        onClick={() => handleDelete(msg.id)}
+                                    >
+                                        Delete
+                                    </Button>
+                                </div>
                             </div>
                         );
                     })}

@@ -20,6 +20,7 @@ The audit prioritizes deletion, then simplification, then optimization. Code is 
 The accumulated changes cover storage consistency, asynchronous lifecycle handling, plugin behavior, native boundaries, and build/release tooling. Recent scheduling work includes:
 
 - Retaining attempted messages after uncertain or failed sends instead of automatically replaying them.
+- Letting the owning account explicitly retry a retained attempted message from the queue, while suppressing stale results after an account switch.
 - Requiring every attachment upload to succeed before sending.
 - Recording the originating account and enforcing it for sending and preview creation.
 - Pausing older entries without a trustworthy account rather than assigning the active account.
@@ -188,7 +189,7 @@ Mocked Discord requests do not establish live account-switch, message-send, or p
 
 The full finding ledger is still being worked through. This list identifies major open areas and is not an assertion that other findings are closed:
 
-- Scheduled-message recovery controls, remaining persisted-data constraints, media cancellation, and coordination between separate client contexts.
+- Scheduled-message legacy recovery, remaining persisted-data constraints, media cancellation, and coordination between separate client contexts.
 - Remaining plugin account, cancellation, network-response, storage, and resource-lifecycle findings across the broader codebase.
 - Runtime validation of patch anchors. The current patch validator reports 189 warnings; those warnings have not all been resolved or justified against current Discord modules. The latest source pass removed the sole replacement-level try/catch warning and two obsolete unbounded matches using current upstream anchors; remaining regex warnings are being reviewed against current code rather than mechanically bounded.
 - Native and provider behavior that mocked tests cannot establish, including target-platform installer and live-client acceptance.

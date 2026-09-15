@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Allow retained attempted scheduled messages to be retried explicitly from the queue without showing stale results after an account switch.
+
 - Update stale FriendCodes, MoreUserTags, and FakeNitro patch anchors and remove InvisibleChat's silent patch exception.
 
 - Render duplicate stored FriendTags user IDs once without rewriting saved tags.

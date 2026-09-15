@@ -8293,6 +8293,47 @@ test("scheduled queue controls report failures without stale account feedback", 
 });
 
 
+test("scheduled attempted messages can be retried without stale account feedback", async () => {
+    for (const outcome of ["success", "failure"] as const) for (const timing of ["current", "before", "during"] as const) {
+        let userId = "account";
+        let retries = 0;
+        let listReads = 0;
+        let listWrites = 0;
+        const notices: string[] = [];
+        let finish: (value: { success: boolean; error?: string; }) => void = () => {};
+        let retry: () => Promise<void> = async () => assert.fail("Missing retry action");
+        const Button = Symbol("Button");
+        const component = loadSource("src/equicordplugins/scheduledMessages/components/ViewScheduledModal.tsx", {
+            "@components/Button": { Button }, "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+            "@utils/css": { classNameFactory: () => () => "" },
+            "@webpack/common": { Modal: Symbol("Modal"), useState: (value: unknown) => [value, () => listWrites++],
+                useStateFromStores: (_stores: unknown, selector: () => unknown) => selector(),
+                UserStore: { getCurrentUser: () => ({ id: userId }) }, ChannelStore: { getChannel: () => undefined },
+                Toasts: { Type: { SUCCESS: "success", FAILURE: "failure" } }, showToast: (message: string) => notices.push(message) },
+            "../utils": { getScheduledMessages: () => { listReads++; return [{ id: "saved", userId: "account", content: "Text", scheduledTime: 0, attemptedAt: 1 }]; },
+                getChannelDisplayInfo: () => ({ name: "Channel" }), removeScheduledMessage: async () => {}, clearAllScheduledMessages: async () => {},
+                sendScheduledMessageNow: () => { retries++; return new Promise(resolve => { finish = resolve; }); } }, "./Icons": {}
+        }, { React: { createElement: (type: unknown, props: { onClick?: () => Promise<void>; }, ...children: unknown[]) => {
+            if (type === Button && children[0] === "Retry") {
+                assert.ok(props.onClick);
+                retry = props.onClick;
+            }
+            return null;
+        } } }, "ViewScheduledModalInner");
+        component({});
+        if (timing === "before") userId = "other";
+        const pending = retry();
+        if (timing === "during") userId = "other";
+        if (timing !== "before") finish(outcome === "success" ? { success: true } : { success: false, error: "Failed to send scheduled message. It remains saved." });
+        await pending;
+        assert.equal(retries, timing === "before" ? 0 : 1);
+        assert.equal(listReads, 1 + (timing === "current" && outcome === "success" ? 1 : 0));
+        assert.equal(listWrites, timing === "current" && outcome === "success" ? 1 : 0);
+        assert.deepEqual(notices, timing === "current" ? [outcome === "success" ? "Scheduled message sent" : "Failed to send scheduled message. It remains saved."] : []);
+    }
+});
+
+
 test("scheduled delays use the complete numeric input without truncating it", async () => {
     for (const [input, minutes] of [["1.5", 1.5], ["1e2", 100], ["5", 5], ["2oops", null], ["Infinity", null], ["0", null], ["", null]] as const) {
         const times: number[] = [];

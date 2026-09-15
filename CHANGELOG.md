@@ -177,6 +177,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Preserve literal CSS in userscript builds and remove obsolete browser editor metadata and About page scripting.
 - Use native integer decoding for extension headers and reject truncated archives.
 - Bound React DevTools extension downloads and ZIP expansion before extraction, reject duplicate or unsupported archive entries, and clean partial output after failed extraction.
+- Stage React DevTools extensions outside the final cache path and promote them only after extraction completes.
 - Resolve cancelled file pickers and release their temporary inputs.
 - Simplify extension extraction, reject paths outside the extension directory, and finish cleanup before reporting installation failures.
 - Await backup file imports, preserve empty QuickCSS backups, and remove backup-content logging and duplicate import handling.

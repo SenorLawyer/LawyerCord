@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Refresh ClientSideBlock, StatusPresets, and MessageLoggerEnhanced patches for current Discord module shapes.
+
 - Update Timezones' profile patch to the current Discord profile module shape.
 
 - Update stale RPCEditor, NewGuildSettings, and OnePingPerDM patches to the current upstream Discord module shapes.

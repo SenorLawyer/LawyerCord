@@ -70,6 +70,7 @@ interface FixtureOptions {
     cached?: boolean;
     legacy?: boolean;
     writeError?: boolean;
+    renameError?: boolean;
     load?: () => Promise<string>;
     request?: typeof globalThis.fetch;
     timeoutMs?: number;
@@ -80,6 +81,7 @@ function fixture(options: FixtureOptions = {}) {
     const root = options.root ?? path.resolve("extension-fixture");
     const writes: { path: string; content: Buffer; }[] = [];
     const removals: string[] = [];
+    const renames: { from: string; to: string; }[] = [];
     let inflations = 0;
     let loads = 0;
     let downloads = 0;
@@ -103,6 +105,10 @@ function fixture(options: FixtureOptions = {}) {
             access: async () => { if (!options.cached) throw Object.assign(new Error("Not installed."), { code: "ENOENT" }); },
             mkdir: async () => { },
             rm: async (file: string) => { removals.push(file); },
+            rename: async (from: string, to: string) => {
+                renames.push({ from, to });
+                if (options.renameError) throw new Error("Rename failed.");
+            },
             writeFile: async (file: string, content: Uint8Array) => {
                 writes.push({ path: file, content: Buffer.from(content) });
                 if (options.writeError) throw new Error("Disk full.");
@@ -126,7 +132,7 @@ function fixture(options: FixtureOptions = {}) {
     const installer: { extract: (data: Buffer, outDir: string) => Promise<void>; installExt: (id: string) => Promise<string>; } = runInNewContext(
         `${sources.extensions}\n({ extract, installExt: exports.installExt });`, { ...globals, exports: {} }
     );
-    return { ...installer, root, writes, removals, get inflations() { return inflations; }, get loads() { return loads; }, get downloads() { return downloads; }, get signal() { return signal; } };
+    return { ...installer, root, writes, removals, renames, get inflations() { return inflations; }, get loads() { return loads; }, get downloads() { return downloads; }, get signal() { return signal; } };
 }
 
 test("real ZIP extraction preserves files and directories and skips signatures on both path platforms", async () => {
@@ -269,15 +275,32 @@ for (const declaredSize of [128 * 1024]) {
         await assert.rejects(installer.installExt("extension"));
         assert.equal(installer.loads, 0);
         assert.deepEqual(installer.writes, []);
-        assert.equal(installer.removals.length, 1);
+        assert.equal(installer.removals.length, 2);
+        assert.ok(installer.removals.every(path => path.endsWith("extension.tmp")));
     });
 }
 
 test("write failures clean extraction output and never load the extension", async () => {
     const installer = fixture({ writeError: true });
     await assert.rejects(installer.installExt("extension"), /Disk full/);
-    assert.equal(installer.removals.length, 1);
+    assert.equal(installer.removals.length, 2);
+    assert.ok(installer.removals.every(path => path.endsWith("extension.tmp")));
     assert.equal(installer.loads, 0);
+});
+
+test("extensions are staged before becoming cached and failed promotion is cleaned", async () => {
+    const installer = fixture();
+    assert.equal(await installer.installExt("extension"), "loaded");
+    assert.ok(installer.writes.every(write => write.path.includes("extension.tmp")));
+    assert.deepEqual(installer.renames, [{
+        from: posix.resolve("extension-fixture", "ExtensionCache/extension.tmp"),
+        to: posix.resolve("extension-fixture", "ExtensionCache/extension")
+    }]);
+
+    const failed = fixture({ renameError: true });
+    await assert.rejects(failed.installExt("extension"), /Rename failed/);
+    assert.equal(failed.loads, 0);
+    assert.ok(failed.removals.some(path => path.endsWith("extension.tmp")));
 });
 
 test("real filesystem extraction and malformed output cleanup stay within a temporary directory", async () => {

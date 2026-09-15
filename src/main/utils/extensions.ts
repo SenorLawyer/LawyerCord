@@ -19,7 +19,7 @@
 import { session } from "electron";
 import { unzip, unzipSync } from "fflate";
 import { constants as fsConstants } from "fs";
-import { access, mkdir, rm, writeFile } from "fs/promises";
+import { access, mkdir, rename, rm, writeFile } from "fs/promises";
 import { dirname, join, resolve, sep } from "path";
 import { promisify } from "util";
 
@@ -77,6 +77,7 @@ export async function installExt(id: string) {
     try {
         await access(extDir, fsConstants.F_OK);
     } catch (err) {
+        const stagedDir = `${extDir}.tmp`;
         const url = `https://clients2.google.com/service/update2/crx?response=redirect&acceptformat=crx2,crx3&x=id%3D${id}%26uc&prodversion=${process.versions.chrome}`;
 
         const controller = new AbortController();
@@ -110,7 +111,14 @@ export async function installExt(id: string) {
             controller.abort();
         }
 
-        await extract(crxToZip(buf.subarray(0, length)), extDir);
+        await rm(stagedDir, { recursive: true, force: true });
+        await extract(crxToZip(buf.subarray(0, length)), stagedDir);
+        try {
+            await rename(stagedDir, extDir);
+        } catch (error) {
+            await rm(stagedDir, { recursive: true, force: true });
+            throw error;
+        }
     }
 
     // Electron 36 Deprecates session.defaultSession.loadExtension()

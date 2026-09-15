@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Update Timezones' profile patch to the current Discord profile module shape.
+
 - Update stale RPCEditor, NewGuildSettings, and OnePingPerDM patches to the current upstream Discord module shapes.
 
 - Allow retained attempted scheduled messages to be retried explicitly from the queue without showing stale results after an account switch.

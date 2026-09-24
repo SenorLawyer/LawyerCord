@@ -34,7 +34,7 @@ export default definePlugin({
         {
             find: '?"PRESS_WATCH_ON_CRUNCHYROLL_BUTTON"',
             replacement: {
-                match: /(?=onClick)(?=.*index:(\i))/,
+                match: /(?=onClick:\i=>\{.{0,100}?"PRESS_WATCH_ON_CRUNCHYROLL_BUTTON".{0,100}?index:(\i)\})/g,
                 replace: "onContextMenu: $self.makeContextMenu(arguments[0], $1),"
             }
         }

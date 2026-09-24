@@ -23,6 +23,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Reject malformed USRBG feed records and unsupported image endpoints, cancel stopped, superseded, or timed-out loads, and prevent older responses from replacing current data. Keep feed URLs inside a single quoted voice-background image. Honor the voice-background setting for tile styling, remove the CSS-name heuristic, and preserve incoming tile props.
 
+- Attach CopyStatusUrls to both current status-button layouts without targeting earlier unrelated buttons.
 - Replace the unbounded member-list banner patch with a local insertion verified against the current public Discord client.
 - Subscribe member-list banners to Discord profile changes and animation settings. Keep banner and nameplate preference decisions aligned within each row render.
 - Keep banner conversion results attached to their source image. Preserve third-party URLs and the original image on failure, and allow failed conversions to retry.

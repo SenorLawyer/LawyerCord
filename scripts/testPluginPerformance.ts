@@ -11794,6 +11794,31 @@ test("cloning stops before uploads and sticker publication after account changes
     }
 });
 
+test("status URL patch targets both button variants without changing earlier buttons", () => {
+    const { default: plugin } = loadSource("src/equicordplugins/copyStatusUrls/index.ts", {
+        "@utils/constants": { Devs: {} }, "@utils/misc": {}, "@utils/discord": {},
+        "@utils/Logger": { Logger: class {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value },
+        "@webpack": { findByCodeLazy: () => () => {} }, "@webpack/common": {}
+    });
+    const { canonicalizeMatch } = loadSource("src/utils/patches.ts", { "./intlHash": {} });
+    const button = '(label,index)=>({onClick:event=>{event.stopPropagation(),action({action:custom?"PRESS_WATCH_ON_CRUNCHYROLL_BUTTON":"PRESS_CUSTOM_BUTTON"}),send({index:index})}})';
+    const source = `function render(props){const earlier={onClick:()=>{}};return {earlier,buttons:props.variant?props.buttons.map(${button}):props.buttons.map(${button})}}`;
+    const { match, replace } = plugin.patches[0].replacement;
+    const patched = source.replace(canonicalizeMatch(match), replace.replaceAll("$self", "plugin"));
+    plugin.makeContextMenu = (props: unknown, index: number) => () => ({ props, index });
+    const render = new Function("plugin", `return (${patched})`)(plugin);
+    for (const variant of [false, true]) {
+        const props = { variant, buttons: ["First", "Second"] };
+        const result = render(props);
+        assert.equal(result.earlier.onContextMenu, undefined);
+        result.buttons.forEach((button: { onContextMenu: () => { props: unknown; index: number; }; }, index: number) => {
+            assert.equal(button.onContextMenu().props, props);
+            assert.equal(button.onContextMenu().index, index);
+        });
+    }
+});
+
 test("status URL copying waits for clipboard completion and catches rejection", async () => {
     for (const fail of [false, true]) {
         let resolveCopy: () => void = () => {};

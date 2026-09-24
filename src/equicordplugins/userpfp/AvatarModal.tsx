@@ -66,6 +66,10 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
     }
 
     async function saveUserAvatar(value: string) {
+        if (readerRef.current) {
+            Toasts.show({ message: "Wait for the image to finish loading before saving.", type: Toasts.Type.FAILURE, id: Toasts.genId() });
+            return;
+        }
         try {
             let saved: Record<string, string> = {};
             await update<unknown>(KEY_DATASTORE, stored => {
@@ -94,7 +98,7 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
         actions.unshift({
             text: "Delete",
             variant: "dangerPrimary",
-            onClick: () => saveUserAvatar("")
+            onClick: () => { cancelRead(); return saveUserAvatar(""); }
         });
     }
 

@@ -1640,6 +1640,39 @@ test("avatar file reads stop on replacement, typed URLs, and unmount", () => {
     assert.deepEqual(urls, ["new", "typed"]);
 });
 
+test("UserPFP does not save the old avatar while a selected file is loading", async () => {
+    let reader: { aborted: boolean; onload?: () => void; } | undefined;
+    let writes = 0;
+    let closed = 0;
+    let urlChanges = 0;
+    const messages: string[] = [];
+    const data = { avatars: { user: "https://fixture.invalid/old.png" } };
+    const { SetAvatarModal } = loadSource("src/equicordplugins/userpfp/AvatarModal.tsx", {
+        "@api/DataStore": { update: async (_key: string, update: (value: object) => object) => { writes++; update(data.avatars); } },
+        "@components/Heading": {}, "@components/margins": { Margins: {} },
+        "@utils/css": { classNameFactory: () => () => "" }, ".": { data, KEY_DATASTORE: "avatars", isAvatarMap: () => true },
+        "@webpack/common": {
+            React: { createElement: (type: unknown, props: unknown, ...children: unknown[]) => ({ type, props, children }), useRef: (current: unknown) => ({ current }) },
+            useEffect() {}, useState: (value: unknown) => [value, () => { urlChanges++; }],
+            UserStore: { getUser: () => ({}) }, IconUtils: { getUserAvatarURL: () => "" },
+            Toasts: { show: ({ message }: { message: string; }) => messages.push(message), Type: { FAILURE: "failure" }, genId: () => "toast" },
+        }
+    }, { FileReader: class { aborted = false; constructor() { reader = this; } abort() { this.aborted = true; } readAsDataURL() {} } });
+    const tree = SetAvatarModal({ userId: "user", modalProps: { onClose: () => { closed++; } } });
+    tree.children[0].children[2].children[1].props.onChange({ currentTarget: { files: [{ type: "image/png" }], value: "" } });
+    await tree.props.actions.find((action: { text: string; }) => action.text === "Save").onClick();
+    assert.equal(writes, 0);
+    assert.equal(closed, 0);
+    assert.deepEqual(messages, ["Wait for the image to finish loading before saving."]);
+    await tree.props.actions.find((action: { text: string; }) => action.text === "Delete").onClick();
+    assert.equal(reader?.aborted, true);
+    reader?.onload?.();
+    assert.equal(urlChanges, 0);
+    assert.equal(writes, 1);
+    assert.equal(closed, 1);
+    assert.equal(Object.hasOwn(data.avatars, "user"), false);
+});
+
 test("UserPFP avatar edits commit before publishing and preserve newer stored entries", async () => {
     for (const action of ["Save", "Delete"]) for (const failure of ["none", "write", "invalid"]) {
         const fail = failure !== "none";

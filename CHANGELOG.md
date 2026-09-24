@@ -25,6 +25,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep the UserPFP avatar editor open when Save is pressed while a selected image is still loading. Delete cancels the pending read.
+
 - Reject malformed USRBG feed records and unsupported image endpoints, cancel stopped, superseded, or timed-out loads, and prevent older responses from replacing current data. Keep feed URLs inside a single quoted voice-background image. Honor the voice-background setting for tile styling, remove the CSS-name heuristic, and preserve incoming tile props. Update the current video-background patch so Discord profile-theme backgrounds do not cover USRBG banners.
 
 - Attach CopyStatusUrls to both current status-button layouts without targeting earlier unrelated buttons.

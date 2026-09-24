@@ -4729,6 +4729,40 @@ test("BannersEverywhere preserves the original URL when conversion fails", async
     }
 });
 
+test("BannersEverywhere retries failed conversions and retains successful ones", async () => {
+    const images: { onload?: () => void; onerror?: () => void; }[] = [];
+    const { default: plugin } = loadSource("src/equicordplugins/bannersEverywhere/index.tsx", {
+        "@api/PluginManager": {}, "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@plugins/usrbg": {}, "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": {}, "./style.css?managed": {}
+    }, {
+        Image: class { constructor() { images.push(this); } onload?: () => void; onerror?: () => void; },
+        document: { createElement: () => ({ getContext: () => ({ drawImage() {} }), toDataURL: () => "converted" }) }
+    });
+    const url = "https://fixture.invalid/banner.gif";
+    const failed = plugin.gifToPng(url);
+    images[0].onerror?.();
+    assert.equal(await failed, url);
+    const retry = plugin.gifToPng(url);
+    assert.equal(images.length, 2);
+    images[1].onload?.();
+    assert.equal(await retry, "converted");
+    assert.equal(await plugin.gifToPng(url), "converted");
+    assert.equal(images.length, 2);
+    plugin.stop();
+    const old = plugin.gifToPng(url);
+    plugin.stop();
+    const current = plugin.gifToPng(url);
+    images[2].onerror?.();
+    await old;
+    const joined = plugin.gifToPng(url);
+    assert.equal(images.length, 4);
+    images[3].onload?.();
+    assert.equal(await current, "converted");
+    assert.equal(await joined, "converted");
+});
+
 test("TidalEmbeds only hides URLs its player can render", () => {
     const { default: plugin } = loadSource("src/equicordplugins/tidalEmbeds/index.tsx", {
         "@utils/constants": { EquicordDevs: {} },

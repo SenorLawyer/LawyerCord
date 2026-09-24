@@ -4,7 +4,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ## 3.0.0.0 - Unreleased
 
-- Keep the original member-list banner when image conversion fails.
+- Keep the original member-list banner when image conversion fails and allow later renders to retry.
 
 - Keep unsupported TIDAL URLs visible and render every supported player when a message contains multiple TIDAL embeds.
 

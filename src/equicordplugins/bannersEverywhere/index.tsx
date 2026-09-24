@@ -135,7 +135,9 @@ export default definePlugin({
             if (oldestKey) this.pngCache.delete(oldestKey);
         }
 
-        return promise;
+        const converted = await promise;
+        if (converted === url && this.pngCache.get(url) === promise) this.pngCache.delete(url);
+        return converted;
     },
 
     getBanner(userId: string): string | undefined {

@@ -5,6 +5,7 @@
  */
 
 import { update } from "@api/DataStore";
+import { Button } from "@components/Button";
 import { Heading } from "@components/Heading";
 import { Margins } from "@components/margins";
 import { classNameFactory } from "@utils/css";
@@ -109,7 +110,7 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
             title="Custom Avatar"
             actions={actions}
         >
-            <div onKeyDown={handleKey}>
+            <div>
                 {/* Preview */}
                 <div className={cl("preview-row")}>
                     <div className={cl("preview-box")}>
@@ -134,6 +135,7 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
                         placeholder="https://example.com/image.png"
                         value={url.startsWith("data:") ? "(uploaded file)" : url}
                         onChange={value => { cancelRead(); setUrl(value); }}
+                        onKeyDown={handleKey}
                         autoFocus
                     />
                 </section>
@@ -149,9 +151,10 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
                         const file = e.dataTransfer.files?.[0];
                         if (file) handleFile(file);
                     }}
-                    onClick={() => fileInputRef.current?.click()}
                 >
-                    {isDragging ? "Drop here!" : "⬆ Drag an image or click to upload (for GIFs or WebP use a URL instead)"}
+                    <Button variant="none" size="min" type="button" onClick={() => fileInputRef.current?.click()}>
+                        {isDragging ? "Drop here!" : "Choose an image or drop it here. For GIFs or WebP, use a URL."}
+                    </Button>
                     <input
                         ref={fileInputRef}
                         type="file"

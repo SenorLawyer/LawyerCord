@@ -1611,7 +1611,7 @@ test("avatar file reads stop on replacement, typed URLs, and unmount", () => {
     let cleanup: () => void = () => {};
     let stateIndex = 0;
     const { SetAvatarModal } = loadSource("src/equicordplugins/userpfp/AvatarModal.tsx", {
-        "@api/DataStore": {}, "@components/Heading": {}, "@components/margins": { Margins: {} },
+        "@api/DataStore": {}, "@components/Button": {}, "@components/Heading": {}, "@components/margins": { Margins: {} },
         "@utils/css": { classNameFactory: () => () => "" }, ".": { data: { avatars: {} } },
         "@webpack/common": {
             React: { createElement: (type: unknown, props: unknown, ...children: unknown[]) => ({ type, props, children }), useRef: (current: unknown) => ({ current }) },
@@ -1649,7 +1649,7 @@ test("UserPFP does not save the old avatar while a selected file is loading", as
     const data = { avatars: { user: "https://fixture.invalid/old.png" } };
     const { SetAvatarModal } = loadSource("src/equicordplugins/userpfp/AvatarModal.tsx", {
         "@api/DataStore": { update: async (_key: string, update: (value: object) => object) => { writes++; update(data.avatars); } },
-        "@components/Heading": {}, "@components/margins": { Margins: {} },
+        "@components/Button": {}, "@components/Heading": {}, "@components/margins": { Margins: {} },
         "@utils/css": { classNameFactory: () => () => "" }, ".": { data, KEY_DATASTORE: "avatars", isAvatarMap: () => true },
         "@webpack/common": {
             React: { createElement: (type: unknown, props: unknown, ...children: unknown[]) => ({ type, props, children }), useRef: (current: unknown) => ({ current }) },
@@ -1688,7 +1688,7 @@ test("UserPFP avatar edits commit before publishing and preserve newer stored en
                 if (fail) throw new Error("storage failed");
                 persisted = next;
             } },
-            "@components/Heading": {}, "@components/margins": { Margins: {} },
+            "@components/Button": {}, "@components/Heading": {}, "@components/margins": { Margins: {} },
             "@utils/css": { classNameFactory: () => () => "" }, ".": { data, KEY_DATASTORE: "avatars", isAvatarMap: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) && Object.values(value).every(url => typeof url === "string") },
             "@webpack/common": {
                 React: { createElement: (type: unknown, props: unknown) => ({ type, props }), useRef: () => ({ current: null }) },

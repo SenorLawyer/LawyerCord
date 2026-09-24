@@ -348,3 +348,6 @@ ProfileSets now creates storage and action instances per mounted account/section
 
 
 ProfileSets load and export callbacks now check the storage instance against the currently signed-in account and requested section. Saving reuses the same check. Retained callbacks can no longer apply an old-account preset or export an old-account/wrong-section list before React effect cleanup. Existing regressions now cover a retained preset object with an invalid scope, export after account switch and logout, and wrong-section export. All 22 focused tests and source lint pass. This does not establish live account-switch timing or resolve legacy ownerless migration.
+
+
+ProfileSets save completion now checks that its storage instance still owns the panel and matches the active account/section before updating draft text, pagination, save state or failure feedback. Guild changes create a new instance; loading a new scope resets its saving state. Saves cannot start from an unloaded scope. The delayed-save regression covers success/failure after replacement or cleanup, plus a retained closed-panel save callback. All 23 focused profile tests pass; TypeScript and component lint also pass on the final source. Live rendering remains unverified.

@@ -40,13 +40,16 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
         () => SelectedGuildStore.getLastSelectedGuildId() ?? SelectedGuildStore.getGuildId()
     );
     const resolvedGuildId = isServerSection ? (guildId ?? lastSelectedGuildId ?? undefined) : undefined;
-    const storage = React.useMemo(() => createPresetStorage(), [resolvedSection, userId]);
+    const storage = React.useMemo(() => createPresetStorage(), [resolvedSection, resolvedGuildId, userId]);
+    const activeStorage = React.useRef(storage);
+    activeStorage.current = storage;
     const actions = React.useMemo(() => createPresetActions(storage), [storage]);
     const { presets } = storage;
     const canUseGuild = !isServerSection || Boolean(resolvedGuildId);
 
     React.useEffect(() => {
         let isActive = true;
+        setIsSaving(false);
         (async () => {
             try {
                 await storage.loadPresets(resolvedSection);
@@ -89,21 +92,23 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
     };
 
     const handleSavePreset = async () => {
-        if (!canUseGuild) return;
+        if (!canUseGuild || !storage.isCurrentScope(resolvedSection)) return;
         const trimmedName = presetName.trim();
         if (!trimmedName) return;
         setIsSaving(true);
         try {
             await actions.savePreset(trimmedName, resolvedSection, resolvedGuildId);
+            if (activeStorage.current !== storage || !storage.isCurrentScope(resolvedSection)) return;
             setPresetName("");
             const newTotalPages = Math.ceil(storage.presets.length / PRESETS_PER_PAGE);
             setCurrentPage(newTotalPages);
             setPageInput(String(newTotalPages));
             forceUpdate();
         } catch {
-            showToast("Could not save the profile preset.", Toasts.Type.FAILURE);
+            if (activeStorage.current === storage && storage.isCurrentScope(resolvedSection))
+                showToast("Could not save the profile preset.", Toasts.Type.FAILURE);
         } finally {
-            setIsSaving(false);
+            if (activeStorage.current === storage && storage.isCurrentScope(resolvedSection)) setIsSaving(false);
         }
     };
 

@@ -4597,6 +4597,59 @@ test("profile preset pagination recovers when the visible list shrinks", () => {
     }
 });
 
+test("profile preset save completion cannot update a replaced or closed panel", async () => {
+    for (const change of ["replace", "close"]) for (const failure of [false, true]) {
+        const pending = Promise.withResolvers<void>();
+        const updates: unknown[] = [];
+        const errors: string[] = [];
+        const refs: { current: unknown; }[] = [];
+        let refIndex = 0;
+        let stateIndex = 0;
+        let save: () => Promise<void> = async () => assert.fail("Missing save action");
+        const effects: (() => (() => void) | void)[] = [];
+        const React = {
+            useState: (value: unknown) => [stateIndex++ === 0 ? "Draft" : value, (next: unknown) => updates.push(next)],
+            useReducer: () => [0, () => updates.push("render")],
+            useRef: (value: unknown) => { const index = refIndex++; return refs[index] ??= { current: value }; },
+            useMemo: (factory: () => unknown) => factory(),
+            useEffect: (effect: () => (() => void) | void) => effects.push(effect),
+            createElement: (_type: unknown, props: { onClick?: typeof save; } | null, ...children: unknown[]) => {
+                if (children.includes("Save Profile") && props?.onClick) save = props.onClick;
+                return null;
+            }
+        };
+        const api = loadSource("src/equicordplugins/profileSets/components/presetManager.tsx", {
+            "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
+            "@webpack/common": { React, useStateFromStores: () => null, showToast: (message: string) => errors.push(message), Toasts: { Type: { FAILURE: "failure" } } },
+            "../index": { cl: () => "", settings: { store: {} } },
+            "../utils/actions": { createPresetActions: () => ({ savePreset: () => pending.promise }) },
+            "../utils/profile": {}, "./confirmModal": {}, "./presetList": {},
+            "../utils/storage": { createPresetStorage: () => {
+                let active = true;
+                return { presets: [], loadPresets: async () => {}, unloadPresets: () => { active = false; }, isCurrentScope: () => active };
+            } }
+        });
+        api.PresetManager({});
+        const cleanup = effects[0]();
+        await setImmediate();
+        const saving = save();
+        if (change === "replace") {
+            stateIndex = refIndex = 0;
+            api.PresetManager({ section: "server", guildId: "new-guild" });
+        } else cleanup?.();
+        updates.length = 0;
+        if (failure) pending.reject(new Error("Old save failed"));
+        else pending.resolve();
+        await saving;
+        assert.deepEqual(updates, [], `${change}/${failure}`);
+        assert.deepEqual(errors, []);
+        if (change === "close") {
+            await save();
+            assert.deepEqual(updates, []);
+        }
+    }
+});
+
 test("profile preset saves navigate using the new list length", async () => {
     for (const count of [0, 4, 5, 10]) {
         const storage = { presets: Array.from({ length: count }, (_, i) => ({ name: String(i) })) };

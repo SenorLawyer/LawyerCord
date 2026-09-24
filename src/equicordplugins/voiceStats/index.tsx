@@ -169,6 +169,7 @@ export default definePlugin({
         priority: 0,
     },
     flux: {
+        LOGOUT: stopTrackingChannel,
         VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceState[]; }) {
             if (!pluginStarted) return;
 

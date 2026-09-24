@@ -2711,9 +2711,10 @@ test("voice statistics discard stored totals from a stopped generation", async (
     api.plugin.stop();
 });
 
-test("voice statistics keep sessions intact when tracking the same channel twice", () => {
+test("voice statistics preserve repeated channel tracking and stop counting on logout", () => {
     let now = 1000;
     let saves = 0;
+    let clearedIntervals = 0;
     const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {
         "@utils/Logger": { Logger: class { error() {} } },
         "@api/DataStore": { set: async () => { saves++; } }, "@components/BaseText": {},
@@ -2722,7 +2723,7 @@ test("voice statistics keep sessions intact when tracking the same channel twice
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
         "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
         "@webpack/common": { VoiceStateStore: { getVoiceStatesForChannel: () => ({ friend: { userId: "friend" } }) } }
-    }, { Date: { now: () => now }, setInterval: () => 1, clearInterval() {} }, "({ startTrackingChannel, stopTrackingChannel, sessionStarts, getLiveSeconds })");
+    }, { Date: { now: () => now }, setInterval: () => 1, clearInterval() { clearedIntervals++; } }, "({ plugin: exports.default, startTrackingChannel, stopTrackingChannel, sessionStarts, getLiveSeconds })");
     api.startTrackingChannel("voice", "me");
     now = 2600;
     api.startTrackingChannel("voice", "me");
@@ -2730,6 +2731,14 @@ test("voice statistics keep sessions intact when tracking the same channel twice
     assert.equal(saves, 0);
     now = 3100;
     assert.equal(api.getLiveSeconds("friend"), 2);
+    api.plugin.flux.LOGOUT?.();
+    assert.equal(api.sessionStarts.size, 0);
+    assert.equal(clearedIntervals, 1);
+    now = 61_000;
+    assert.equal(api.getLiveSeconds("friend"), 2);
+    api.startTrackingChannel("voice", "me");
+    now = 63_000;
+    assert.equal(api.getLiveSeconds("friend"), 4);
     api.stopTrackingChannel();
 });
 

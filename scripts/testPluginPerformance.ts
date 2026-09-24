@@ -4834,6 +4834,26 @@ test("profile appearance removals survive apply and snapshot without clearing om
     assert.equal(dispatched.length, 0);
 });
 
+test("profile text snapshots preserve pending clears for global and server profiles", async () => {
+    for (const guildId of [undefined, "guild"]) for (const value of [undefined, null, "", "New"]) {
+        const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null }) },
+            "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({ pendingBio: value, pendingPronouns: value,
+                pendingGlobalName: value, pendingNickname: value }) }) },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: "me", globalName: "Current" }) },
+                UserProfileStore: { getUserProfile: () => ({ bio: "Current", pronouns: "Current" }),
+                    getGuildMemberProfile: () => ({ bio: "Current", pronouns: "Current" }) },
+                GuildMemberStore: { getMember: () => ({ nick: "Current" }) },
+                IconUtils: { getUserAvatarURL: () => null, getDefaultAvatarURL: () => "default" }
+            }
+        });
+        const profile = await api.getCurrentProfile(guildId);
+        for (const field of ["bio", "pronouns", "globalName"])
+            assert.equal(profile[field], value === undefined ? "Current" : value, `${guildId}/${field}`);
+    }
+});
+
 test("profile snapshots preserve pending accent removal and black", async () => {
     for (const pendingAccentColor of [undefined, null, 0, 456]) {
         const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {

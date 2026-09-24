@@ -286,13 +286,13 @@ export async function getCurrentProfile(guildId?: string, options: CurrentProfil
     return {
         avatarDataUrl: resolvedAvatarDataUrl,
         bannerDataUrl,
-        bio: pendingChanges.pendingBio ?? userProfile?.bio ?? null,
+        bio: pendingChanges.pendingBio !== undefined ? pendingChanges.pendingBio : userProfile?.bio ?? null,
         accentColor: pendingChanges.pendingAccentColor !== undefined ? pendingChanges.pendingAccentColor : userProfile?.accentColor ?? null,
         themeColors: pendingChanges.pendingThemeColors !== undefined ? pendingChanges.pendingThemeColors : userProfile?.themeColors ?? null,
         globalName: isGuildProfile
-            ? (pendingChanges.pendingNickname ?? guildMember?.nick ?? null)
-            : (pendingChanges.pendingGlobalName ?? currentUser.globalName ?? null),
-        pronouns: pendingChanges.pendingPronouns ?? userProfile?.pronouns ?? null,
+            ? (pendingChanges.pendingNickname !== undefined ? pendingChanges.pendingNickname : guildMember?.nick ?? null)
+            : (pendingChanges.pendingGlobalName !== undefined ? pendingChanges.pendingGlobalName : currentUser.globalName ?? null),
+        pronouns: pendingChanges.pendingPronouns !== undefined ? pendingChanges.pendingPronouns : userProfile?.pronouns ?? null,
         avatarDecoration,
         profileEffect,
         nameplate,

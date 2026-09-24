@@ -42,6 +42,10 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
     function handleFile(file: File) {
         cancelRead();
         if (!file.type.startsWith("image/")) return;
+        if (file.size > 10 * 1024 * 1024) {
+            Toasts.show({ message: "The image exceeds 10 MiB.", type: Toasts.Type.FAILURE, id: Toasts.genId() });
+            return;
+        }
 
         const reader = readerRef.current = new FileReader();
         reader.onload = () => {

@@ -26,7 +26,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ### Fixed
 
 - Preserve UserPFP folder names and non-GIF filenames when requesting static avatars.
-- Allow local GIF and WebP avatars through the existing file-upload path without requiring an external image host.
+- Allow local GIF and WebP avatars through the existing file-upload path without requiring an external image host. Reject newly selected files above 10 MiB before reading them.
 - Keep the UserPFP avatar editor open when Save is pressed while a selected image is still loading. Delete cancels the pending read. The upload control is keyboard accessible, and Enter saves only from the URL field.
 
 - Reject malformed USRBG feed records and unsupported image endpoints, cancel stopped, superseded, or timed-out loads, and prevent older responses from replacing current data. Keep feed URLs inside a single quoted voice-background image. Honor the voice-background setting for tile styling, remove the CSS-name heuristic, and preserve incoming tile props. Update the current video-background patch so Discord profile-theme backgrounds do not cover USRBG banners.

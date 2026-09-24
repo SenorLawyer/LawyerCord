@@ -1642,6 +1642,28 @@ test("avatar file reads stop on replacement, typed URLs, and unmount", () => {
     }
 });
 
+test("UserPFP rejects oversized selected files before allocating a reader", () => {
+    for (const size of [10 * 1024 * 1024, 10 * 1024 * 1024 + 1]) {
+        let readers = 0;
+        const messages: string[] = [];
+        const { SetAvatarModal } = loadSource("src/equicordplugins/userpfp/AvatarModal.tsx", {
+            "@api/DataStore": {}, "@components/Button": {}, "@components/Heading": {}, "@components/margins": { Margins: {} },
+            "@utils/css": { classNameFactory: () => () => "" }, ".": { data: { avatars: {} } },
+            "@webpack/common": {
+                React: { createElement: (type: unknown, props: unknown, ...children: unknown[]) => ({ type, props, children }), useRef: (current: unknown) => ({ current }) },
+                useEffect() {}, useState: (value: unknown) => [value, () => assert.fail("Must not replace the selected avatar")],
+                UserStore: { getUser: () => ({}) }, IconUtils: { getUserAvatarURL: () => "" },
+                Toasts: { show: ({ message }: { message: string; }) => messages.push(message), Type: { FAILURE: "failure" }, genId: () => "toast" },
+            }
+        }, { FileReader: class { constructor() { readers++; } readAsDataURL() {} } });
+        const tree = SetAvatarModal({ userId: "user", modalProps: {} });
+        tree.children[0].children[2].children[1].props.onChange({ currentTarget: { files: [{ type: "image/png", size }], value: "" } });
+        const oversized = size > 10 * 1024 * 1024;
+        assert.equal(readers, oversized ? 0 : 1);
+        assert.deepEqual(messages, oversized ? ["The image exceeds 10 MiB."] : []);
+    }
+});
+
 test("UserPFP does not save the old avatar while a selected file is loading", async () => {
     let reader: { aborted: boolean; onload?: () => void; } | undefined;
     let writes = 0;

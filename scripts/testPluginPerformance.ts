@@ -4461,6 +4461,40 @@ test("profile preset search resets pagination even after no matches", () => {
     assert.equal(updates.get(3), "1");
 });
 
+test("profile preset saves navigate using the new list length", async () => {
+    for (const count of [0, 4, 5, 10]) {
+        const storage = { presets: Array.from({ length: count }, (_, i) => ({ name: String(i) })) };
+        const states: unknown[] = [];
+        let stateIndex = 0;
+        let save: () => Promise<void> = async () => assert.fail("Missing save button");
+        const React = {
+            useState: (value: unknown) => {
+                const index = stateIndex++;
+                states[index] = index === 0 ? "New profile" : value;
+                return [states[index], (next: unknown) => { states[index] = next; }];
+            },
+            useReducer: () => [0, () => {}], useRef: (value: unknown) => ({ current: value }), useEffect() {},
+            createElement: (_type: unknown, props: { onClick?: () => Promise<void>; } | null, ...children: unknown[]) => {
+                if (children.includes("Save Profile") && props?.onClick) save = props.onClick;
+                return null;
+            }
+        };
+        const api = loadSource("src/equicordplugins/profileSets/components/presetManager.tsx", {
+            "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
+            "@webpack/common": { React, useStateFromStores: () => null, showToast: () => assert.fail("Save failed") },
+            "../index": { cl: () => "", settings: { store: {} } },
+            "../utils/actions": { savePreset: async () => { storage.presets = [...storage.presets, { name: "New profile" }]; } },
+            "../utils/profile": {}, "../utils/storage": storage, "./confirmModal": {}, "./presetList": {}
+        });
+        api.PresetManager({});
+        await save();
+        assert.equal(states[2], Math.ceil((count + 1) / 5));
+        assert.equal(states[3], String(Math.ceil((count + 1) / 5)));
+        assert.equal(states[0], "");
+        assert.equal(states[1], false);
+    }
+});
+
 test("profile preset controls recover failed preparation and avoid random repeats", async () => {
     const presets = [{ name: "First" }, { name: "Second" }, { name: "Third" }];
     const selected: number[] = [];

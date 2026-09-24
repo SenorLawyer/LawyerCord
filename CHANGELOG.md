@@ -4,6 +4,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ## 3.0.0.0 - Unreleased
 
+- Show the new ProfileSets page when saving a preset crosses a page boundary.
+
 - Reject outdated ProfileSets menu changes and keep renaming attached to its original preset.
 
 - Reject stale ProfileSets saves when another client has changed the stored list. Preserve newer destinations during legacy migration and retain the legacy backup.

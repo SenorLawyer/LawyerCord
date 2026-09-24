@@ -85,7 +85,8 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
             await savePreset(trimmedName, resolvedSection, resolvedGuildId);
             setPresetName("");
             const newTotalPages = Math.ceil(presets.length / PRESETS_PER_PAGE);
-            handlePageChange(newTotalPages);
+            setCurrentPage(newTotalPages);
+            setPageInput(String(newTotalPages));
             forceUpdate();
         } catch {
             showToast("Could not save the profile preset.", Toasts.Type.FAILURE);

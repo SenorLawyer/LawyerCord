@@ -84,9 +84,9 @@ export default definePlugin({
 
     managedStyle: style,
     pngCache: new Map<string, Promise<string>>(),
-    pendingConversions: new Set<() => void>(),
+    pendingConversions: new Map<string, () => void>(),
     stop() {
-        for (const cancel of this.pendingConversions) cancel();
+        for (const cancel of this.pendingConversions.values()) cancel();
         this.pngCache.clear();
     },
 
@@ -114,10 +114,11 @@ export default definePlugin({
             const img = new Image();
             img.crossOrigin = "anonymous";
             const finish = (value: string) => {
+                if (this.pendingConversions.get(url) !== cancel) return;
                 clearTimeout(timeout);
                 img.onload = null;
                 img.onerror = null;
-                this.pendingConversions.delete(cancel);
+                this.pendingConversions.delete(url);
                 resolve(value);
             };
             const cancel = () => {
@@ -125,9 +126,9 @@ export default definePlugin({
                 img.removeAttribute("src");
             };
             const timeout = setTimeout(cancel, 30_000);
-            this.pendingConversions.add(cancel);
+            this.pendingConversions.set(url, cancel);
             img.onload = () => {
-                if (!this.pendingConversions.has(cancel)) return;
+                if (this.pendingConversions.get(url) !== cancel) return;
                 try {
                     const canvas = document.createElement("canvas");
                     const scale = Math.min(1, 1024 / img.width, 1024 / img.height);
@@ -151,7 +152,10 @@ export default definePlugin({
 
         if (this.pngCache.size > MAX_PNG_CACHE_SIZE) {
             const oldestKey = this.pngCache.keys().next().value;
-            if (oldestKey) this.pngCache.delete(oldestKey);
+            if (oldestKey) {
+                this.pendingConversions.get(oldestKey)?.();
+                this.pngCache.delete(oldestKey);
+            }
         }
 
         const converted = await promise;

@@ -4906,6 +4906,41 @@ test("BannersEverywhere limits conversion canvas dimensions without upscaling", 
     }
 });
 
+test("BannersEverywhere evicts pending image work with its cache entry", async () => {
+    const images: { onerror?: (() => void) | null; }[] = [];
+    let removed = 0;
+    const { default: plugin } = loadSource("src/equicordplugins/bannersEverywhere/index.tsx", {
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/react": {}, "@api/PluginManager": {},
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@plugins/usrbg": {}, "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": {}, "./style.css?managed": {}
+    }, {
+        setTimeout, clearTimeout,
+        Image: class {
+            constructor() { images.push(this); }
+            onerror?: (() => void) | null;
+            removeAttribute() { removed++; }
+        }
+    });
+    const first = plugin.gifToPng("0");
+    const oldError = images[0].onerror;
+    const pending = Array.from({ length: 100 }, (_, index) => plugin.gifToPng(String(index + 1)));
+    assert.equal(removed, 1);
+    assert.equal(plugin.pendingConversions.size, 100);
+    assert.equal(plugin.pngCache.size, 100);
+    assert.equal(await first, "0");
+    const retry = plugin.gifToPng("0");
+    oldError?.();
+    assert.equal(plugin.pendingConversions.has("0"), true);
+    assert.equal(plugin.pendingConversions.size, 100);
+    plugin.stop();
+    await Promise.all([...pending, retry]);
+    assert.equal(plugin.pendingConversions.size, 0);
+    assert.equal(plugin.pngCache.size, 0);
+});
+
 test("TidalEmbeds only hides URLs its player can render", () => {
     const { default: plugin } = loadSource("src/equicordplugins/tidalEmbeds/index.tsx", {
         "@utils/constants": { EquicordDevs: {} },

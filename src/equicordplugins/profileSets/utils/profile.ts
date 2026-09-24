@@ -146,38 +146,31 @@ export async function imageUrlToBase64(url: string): Promise<string | null> {
 }
 
 async function processImage(imageData: ImageInput, userId: string, type: "avatar" | "banner", guildId?: string, useGuildPath?: boolean): Promise<string | null> {
+    if (typeof imageData === "object" && imageData) imageData = imageData.imageUri;
     if (!imageData) return null;
 
-    if (typeof imageData === "object" && isNonEmptyString(imageData?.imageUri)) {
-        return imageData.imageUri;
-    }
-
-    if (typeof imageData === "string") {
-        if (imageData.startsWith("data:")) return imageData;
-        if (/^https?:\/\//.test(imageData)) {
-            const image = await imageUrlToBase64(imageData);
-            if (!image) throw new Error("Could not download the profile image.");
-            return image;
-        }
-
-        let url: string | undefined;
-        if (type === "banner") {
-            const data = { id: userId, banner: imageData, canAnimate: true, size: 1024 };
-            url = useGuildPath && guildId
-                ? IconUtils.getGuildMemberBannerURL({ ...data, guildId })
-                : IconUtils.getUserBannerURL(data);
-        } else if (useGuildPath && guildId) {
-            url = IconUtils.getGuildMemberAvatarURLSimple({ userId, guildId, avatar: imageData, canAnimate: true, size: 512 });
-        } else {
-            url = `https://cdn.discordapp.com/avatars/${userId}/${imageData}.${imageData.startsWith("a_") ? "gif" : "png"}?size=512`;
-        }
-        if (!url) throw new Error("Could not resolve the profile image.");
-        const image = await imageUrlToBase64(url);
+    if (imageData.startsWith("data:")) return imageData;
+    if (/^(?:https?:\/\/|blob:)/.test(imageData)) {
+        const image = await imageUrlToBase64(imageData);
         if (!image) throw new Error("Could not download the profile image.");
         return image;
     }
 
-    return null;
+    let url: string | undefined;
+    if (type === "banner") {
+        const data = { id: userId, banner: imageData, canAnimate: true, size: 1024 };
+        url = useGuildPath && guildId
+            ? IconUtils.getGuildMemberBannerURL({ ...data, guildId })
+            : IconUtils.getUserBannerURL(data);
+    } else if (useGuildPath && guildId) {
+        url = IconUtils.getGuildMemberAvatarURLSimple({ userId, guildId, avatar: imageData, canAnimate: true, size: 512 });
+    } else {
+        url = `https://cdn.discordapp.com/avatars/${userId}/${imageData}.${imageData.startsWith("a_") ? "gif" : "png"}?size=512`;
+    }
+    if (!url) throw new Error("Could not resolve the profile image.");
+    const image = await imageUrlToBase64(url);
+    if (!image) throw new Error("Could not download the profile image.");
+    return image;
 }
 
 export async function getCurrentProfile(guildId?: string, options: CurrentProfileOptions = {}): Promise<Omit<ProfilePreset, "name" | "timestamp">> {

@@ -3945,14 +3945,17 @@ test("profile image downloads enforce their byte limit before conversion", async
 });
 
 test("profile image preparation distinguishes download failure from no image", async () => {
+    const urls: string[] = [];
     const processImage = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
         "@api/UserSettings": { getUserSettingLazy: () => ({}) },
         "@webpack": { findStoreLazy: () => ({}) }, "@webpack/common": { IconUtils: { getGuildMemberBannerURL: () => "https://fixture.invalid/banner" } }
-    }, { AbortSignal, fetch: async () => ({ ok: false }) }, "processImage");
-    for (const input of ["https://cdn.discordapp.com/example.png", "avatar_hash"]) {
+    }, { AbortSignal, fetch: async (url: string) => { urls.push(url); return { ok: false }; } }, "processImage");
+    for (const value of ["https://cdn.discordapp.com/example.png", "blob:https://discord.com/fixture", "avatar_hash"]) for (const input of [value, { imageUri: value }]) {
         await assert.rejects(processImage(input, "user", "avatar"), /download/);
         await assert.rejects(processImage(input, "user", "banner", "guild", true), /download/);
+        if (value.includes(":")) assert.deepEqual(urls.slice(-2), [value, value]);
     }
+    assert.equal(await processImage({ imageUri: "data:image/png;base64,fixture" }, "user", "avatar"), "data:image/png;base64,fixture");
     assert.equal(await processImage(null, "user", "banner"), null);
     assert.equal(await processImage("data:image/png;base64,fixture", "user", "avatar"), "data:image/png;base64,fixture");
 });

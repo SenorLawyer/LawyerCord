@@ -5462,11 +5462,33 @@ test("USRBG voice backgrounds keep feed URLs inside one quoted image", () => {
     plugin.data = { endpoint: "https://usrbg.is-hardly.online", bucket: "banners", prefix: "v2/", users: {} };
     for (const etag of ["ordinary", 'tag),url(https://other.invalid/image)', 'tag"),url("https://other.invalid/image)', 'fragment#"),url("https://other.invalid/image)', "space and\nnewline"]) {
         plugin.data.users.user = etag;
-        const styles = plugin.getVoiceBackgroundStyles({ className: "tile", participantUserId: "user" });
+        const styles = plugin.getVoiceBackgroundStyles({ className: "_a12bc", participantUserId: "user" });
         assert.equal(styles.backgroundImage, `url(${JSON.stringify(new URL(plugin.getImageUrl("user")).href)})`);
     }
     assert.equal(plugin.getVoiceBackgroundStyles({ className: "tile", participantUserId: "missing" }), undefined);
-    assert.equal(plugin.getVoiceBackgroundStyles({ className: "other", participantUserId: "user" }), undefined);
+    assert.equal(plugin.getVoiceBackgroundStyles({}), undefined);
+    assert.ok(plugin.getVoiceBackgroundStyles({ participantUserId: "user" }));
+    for (const enabled of [false, true]) {
+        plugin.settings.store.voiceBackground = enabled;
+        assert.equal(plugin.patches[1].predicate(), enabled);
+        assert.equal(plugin.patches[2].predicate(), enabled);
+    }
+    const { canonicalizeMatch } = loadSource("src/utils/patches.ts", { "./intlHash": {} });
+    const replacement = plugin.patches[1].replacement;
+    const source = 'function tile(props,ref){let{style:original,participantUserId:id}=props;return {style:original,ref:ref,"data-selenium-video-tile":id}}';
+    const patched = source.replace(canonicalizeMatch(replacement.match), replacement.replace.replaceAll("$self", "plugin"));
+    assert.notEqual(patched, source);
+    const renderTile = new Function("plugin", `return (${patched})`)(plugin);
+    const original = Object.freeze({ opacity: 0.5 });
+    for (const participantUserId of ["user", "missing"]) {
+        const props = Object.freeze({ style: original, participantUserId });
+        const rendered = renderTile(props, "ref");
+        assert.equal(rendered.style.opacity, 0.5);
+        assert.equal(rendered.ref, "ref");
+        assert.equal(!!rendered.style.backgroundImage, participantUserId === "user");
+        assert.deepEqual(original, { opacity: 0.5 });
+    }
+
 });
 
 test("USRBG rejects malformed feed data before publishing it", async () => {

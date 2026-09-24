@@ -68,12 +68,11 @@ export default definePlugin({
         },
         {
             find: "\"data-selenium-video-tile\":",
-            replacement: [
-                {
-                    match: /(?<=function\((\i),\i\)\{)(?=let.{20,40},style:)/,
-                    replace: "Object.assign($1.style=$1.style||{},$self.getVoiceBackgroundStyles($1));"
-                }
-            ]
+            predicate: () => settings.store.voiceBackground,
+            replacement: {
+                match: /(?<=style:)\i(?=,ref:\i,"data-selenium-video-tile":)/,
+                replace: "{...$&,...$self.getVoiceBackgroundStyles(arguments[0])}"
+            }
         },
         {
             find: '"VideoBackground-web"',
@@ -98,8 +97,8 @@ export default definePlugin({
         </Button>
     ),
 
-    getVoiceBackgroundStyles({ className, participantUserId }: { className: string; participantUserId: string; }) {
-        if (!className.includes("tile")) return;
+    getVoiceBackgroundStyles({ participantUserId }: { participantUserId?: string; }) {
+        if (!participantUserId) return;
         const imageUrl = this.getImageUrl(participantUserId);
         if (!imageUrl) return;
         return {

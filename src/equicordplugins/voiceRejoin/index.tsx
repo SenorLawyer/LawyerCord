@@ -11,7 +11,7 @@ import { Logger } from "@utils/Logger";
 import { sleep } from "@utils/misc";
 import definePlugin, { makeRange, OptionType } from "@utils/types";
 import { VoiceState } from "@vencord/discord-types";
-import { ChannelStore, FluxDispatcher, UserStore, VoiceStateStore } from "@webpack/common";
+import { ChannelActions, ChannelStore, UserStore, VoiceStateStore } from "@webpack/common";
 
 const DATASTORE_KEY = "VCLastVoiceChannel";
 const DATASTORE_SESSION_KEY = "VCLastVoiceChannelSession";
@@ -233,11 +233,7 @@ export default definePlugin({
                         if (shouldPrevent && !hasOtherUsersInChannel(saved.channelId, myUserId)) return;
                     }
 
-                    FluxDispatcher.dispatch({
-                        type: "VOICE_CHANNEL_SELECT",
-                        guildId: saved.guildId,
-                        channelId: saved.channelId,
-                    });
+                    ChannelActions.selectVoiceChannel(saved.channelId);
                 } catch (err) {
                     logger.error("Failed to run voice rejoin", err);
                 }

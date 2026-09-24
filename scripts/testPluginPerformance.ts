@@ -2429,6 +2429,28 @@ test("voice rejoin rejects malformed saved channels before looking them up", asy
     }
 });
 
+test("voice rejoin uses the normal channel action for join eligibility", async () => {
+    let reconnect: () => Promise<void> = async () => assert.fail("Missing reconnect");
+    const selected: string[] = [];
+    const api = loadSource("src/equicordplugins/voiceRejoin/index.tsx", {
+        "@utils/misc": {},
+        "@api/DataStore": { getMany: async () => [{ userId: "me", channelId: "voice", guildId: "stale-guild", timestamp: 1000 }, true] },
+        "@api/Settings": { definePluginSettings: () => ({ store: { rejoinDelay: 2, rejoinTimeout: 30, preventReconnectIfCallEnded: "none" } }) },
+        "@utils/constants": { EquicordDevs: {} }, "@utils/Logger": { Logger: class { error(error: unknown) { assert.fail(String(error)); } } },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, makeRange: () => [], OptionType: {} },
+        "@webpack/common": {
+            ChannelStore: { getChannel: () => ({ isDM: () => false, isGroupDM: () => false, isMultiUserDM: () => false }) },
+            UserStore: { getCurrentUser: () => ({ id: "me" }) }, VoiceStateStore: { getVoiceStateForUser: () => undefined },
+            ChannelActions: { selectVoiceChannel: (id: string) => selected.push(id) },
+            FluxDispatcher: { dispatch: () => assert.fail("Must not bypass the normal join action") }
+        }
+    }, { Date: { now: () => 2000 }, setTimeout: (callback: typeof reconnect) => { reconnect = callback; return 1; }, clearTimeout() {} });
+    api.default.flux.CONNECTION_OPEN();
+    await reconnect();
+    assert.deepEqual(selected, ["voice"]);
+    api.default.stop();
+});
+
 test("voice rejoin waits for voice state confirmation before persisting success", async () => {
     let reconnect: () => Promise<void> = async () => assert.fail("Missing reconnect");
     let dispatched = 0;
@@ -2443,7 +2465,7 @@ test("voice rejoin waits for voice state confirmation before persisting success"
             ChannelStore: { getChannel: () => ({ isDM: () => false, isGroupDM: () => false, isMultiUserDM: () => false }) },
             UserStore: { getCurrentUser: () => ({ id: "me" }) },
             VoiceStateStore: { getVoiceStateForUser: () => undefined },
-            FluxDispatcher: { dispatch: (event: { type: string; channelId: string; }) => { assert.equal(event.type, "VOICE_CHANNEL_SELECT"); assert.equal(event.channelId, "previous"); dispatched++; } }
+            ChannelActions: { selectVoiceChannel: (channelId: string) => { assert.equal(channelId, "previous"); dispatched++; } }
         }
     }, { Date: { now: () => 2000 }, setTimeout: (callback: typeof reconnect) => { reconnect = callback; return 1; }, clearTimeout() {} });
     await api.default.flux.CONNECTION_OPEN();
@@ -2483,7 +2505,7 @@ test("voice rejoin skipped attempts preserve a newer saved session", async () =>
                 } },
                 UserStore: { getCurrentUser: () => ({ id: "me" }) },
                 VoiceStateStore: { getVoiceStateForUser: () => undefined, getVoiceStatesForChannel: () => ({}) },
-                FluxDispatcher: { dispatch: () => assert.fail("Must not reconnect") }
+                ChannelActions: { selectVoiceChannel: () => assert.fail("Must not reconnect") }
             }
         }, { Date: { now: () => reason === "expired" ? 32000 : 2000 }, setTimeout: (callback: typeof reconnect) => { reconnect = callback; return 1; }, clearTimeout() {} });
         api.default.flux.CONNECTION_OPEN();
@@ -2509,7 +2531,7 @@ test("voice rejoin only accepts saved timestamps inside its reconnect window", a
                 ChannelStore: { getChannel: () => ({ isDM: () => false, isGroupDM: () => false, isMultiUserDM: () => false }) },
                 UserStore: { getCurrentUser: () => ({ id: "me" }) },
                 VoiceStateStore: { getVoiceStateForUser: () => undefined },
-                FluxDispatcher: { dispatch: (event: { type: string; channelId: string; }) => { assert.equal(event.type, "VOICE_CHANNEL_SELECT"); assert.equal(event.channelId, "previous"); dispatched++; } }
+                ChannelActions: { selectVoiceChannel: (channelId: string) => { assert.equal(channelId, "previous"); dispatched++; } }
             }
         }, { Date: { now: () => now }, setTimeout: (callback: typeof reconnect) => { reconnect = callback; return 1; }, clearTimeout() {} });
         await api.default.flux.CONNECTION_OPEN();
@@ -2658,7 +2680,7 @@ test("voice rejoin leaves an existing voice connection active", async () => {
             ChannelStore: { getChannel: () => available ? ({ isDM: () => false, isGroupDM: () => false, isMultiUserDM: () => false }) : undefined },
             UserStore: { getCurrentUser: () => ({ id: "me" }) },
             VoiceStateStore: { getVoiceStateForUser: () => ({ channelId: "current" }) },
-            FluxDispatcher: { dispatch: () => assert.fail("Must not replace the active connection") }
+            ChannelActions: { selectVoiceChannel: () => assert.fail("Must not replace the active connection") }
         }
     }, { Date: { now: () => 2000 }, setTimeout: (callback: typeof reconnect) => { reconnect = callback; return 1; }, clearTimeout() {} });
     await api.default.flux.CONNECTION_OPEN();

@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Compatibility
 
+- ProfileSets no longer assigns ownerless legacy profiles automatically. Use Recover Old Profiles in the main profile panel to import them explicitly; the original records remain saved.
+
 - VoiceRejoin ignores older saved channels without an account owner. Joining a call records a new reconnect target for that account.
 - Older scheduled messages without an account remain saved but paused. Recreate them under the intended account before sending.
 - Older versions do not enforce saved account ownership or attempted-send markers. Downgrading with saved scheduled messages can send them from the wrong account or repeat a previous attempt.

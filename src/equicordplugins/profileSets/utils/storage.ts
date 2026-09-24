@@ -30,6 +30,7 @@ export function createPresetStorage() {
     let activeScopeKey: string | null = null;
     let loadGeneration = 0;
     let pendingSave: Promise<void> | undefined;
+    let hasLegacyPresets = false;
 
     function resetPresets(nextPresets?: ProfilePresetEx[]) {
         savedPresets = nextPresets;
@@ -55,6 +56,7 @@ export function createPresetStorage() {
 
     function unloadPresets() {
         activeScopeKey = null;
+        hasLegacyPresets = false;
         loadGeneration++;
         resetPresets();
     }
@@ -69,13 +71,18 @@ export function createPresetStorage() {
         const key = getPresetsKey(section, userId);
         const generation = ++loadGeneration;
         activeScopeKey = null;
+        hasLegacyPresets = false;
         resetPresets();
 
         try {
             if (pendingSave) await pendingSave;
             if (!isCurrentLoad(generation, userId)) return;
-            const stored = await DataStore.get(key);
+            const [stored, unowned] = await Promise.all([
+                DataStore.get(key),
+                section === "main" ? DataStore.get(LEGACY_PRESETS_KEY) : undefined
+            ]);
             if (!isCurrentLoad(generation, userId)) return;
+            hasLegacyPresets = unowned !== undefined;
 
             if (stored !== undefined) {
                 if (!isPresetList(stored)) throw new Error("The saved profile preset list is invalid.");
@@ -86,13 +93,9 @@ export function createPresetStorage() {
 
             if (section === "main") {
                 const legacyKey = getLegacyKey(userId);
-                const [legacyStored, legacyBaseStored] = await Promise.all([
-                    DataStore.get(legacyKey),
-                    DataStore.get(LEGACY_PRESETS_KEY)
-                ]);
+                const legacyToUse = await DataStore.get(legacyKey);
                 if (!isCurrentLoad(generation, userId)) return;
 
-                const legacyToUse = legacyStored !== undefined ? legacyStored : legacyBaseStored;
                 if (legacyToUse !== undefined) {
                     if (!isPresetList(legacyToUse)) throw new Error("The legacy profile preset list is invalid.");
                     let migrated = legacyToUse;
@@ -149,5 +152,10 @@ export function createPresetStorage() {
         }
     }
 
-    return { get presets() { return presets; }, loadPresets, unloadPresets, savePresetsData, isCurrentScope };
+    return {
+        get presets() { return presets; },
+        get hasLegacyPresets() { return hasLegacyPresets; },
+        readLegacyPresets: () => DataStore.get(LEGACY_PRESETS_KEY),
+        loadPresets, unloadPresets, savePresetsData, isCurrentScope
+    };
 }

@@ -81,8 +81,9 @@ export function createPresetActions(storage: PresetStorage) {
 
     async function importPresets(
         forceUpdate: () => void,
-        onImportPrompt: (existingCount: number) => Promise<ImportDecision>,
-        section: PresetSection
+        onImportPrompt: (existingCount: number, recoverLegacy?: boolean) => Promise<ImportDecision>,
+        section: PresetSection,
+        recoverLegacy = false
     ) {
         const userId = UserStore.getCurrentUser()?.id;
         if (!userId) return;
@@ -92,16 +93,20 @@ export function createPresetActions(storage: PresetStorage) {
                 throw new Error("The account or preset list changed during import.");
         };
         try {
-            const file = await chooseFile("application/json");
-            if (!file) return;
-
-            const text = await file.text();
+            let importedPresets: unknown;
+            if (recoverLegacy) {
+                if (section !== "main") return;
+                importedPresets = await storage.readLegacyPresets();
+            } else {
+                const file = await chooseFile("application/json");
+                if (!file) return;
+                importedPresets = JSON.parse(await file.text());
+            }
             checkScope();
-            const importedPresets: unknown = JSON.parse(text);
 
             if (!isPresetList(importedPresets)) throw new Error("Invalid profile preset list.");
 
-            const decision = storage.presets.length > 0 ? await onImportPrompt(storage.presets.length) : "override";
+            const decision = recoverLegacy || storage.presets.length > 0 ? await onImportPrompt(storage.presets.length, recoverLegacy) : "override";
             if (decision === "cancel") return;
             checkScope();
             await storage.savePresetsData(section, decision === "merge" ? [...storage.presets, ...importedPresets] : importedPresets);

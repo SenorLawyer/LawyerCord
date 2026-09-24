@@ -4154,7 +4154,7 @@ test("profile preset reloads wait for pending writes before reading", async () =
         const write = Promise.withResolvers<void>();
         const storage = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
             "@api/index": { DataStore: {
-                get: async () => { reads++; return persisted; },
+                get: async (key: string) => { if (key === "ProfileDataset") return undefined; reads++; return persisted; },
                 update: async (_key: string, change: (old: typeof next) => typeof next) => { await write.promise; persisted = change(persisted); }
             } },
             "@utils/Logger": { Logger: class { error() {} } },
@@ -4217,7 +4217,7 @@ test("profile preset panels keep simultaneous section loads and exports separate
         showToast: () => { errors++; }, Toasts: { Type: { FAILURE: "failure" } } };
     const module = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
         "@api/index": { DataStore: {
-            get: (key: string) => { const read = Promise.withResolvers<unknown>(); reads.set(key, read); return read.promise; },
+            get: (key: string) => { if (key === "ProfileDataset") return Promise.resolve(undefined); const read = Promise.withResolvers<unknown>(); reads.set(key, read); return read.promise; },
             update: async (key: string, change: (value: unknown) => unknown) => { records.set(key, change(records.get(key))); }
         } },
         "@utils/Logger": { Logger: class { error() {} } }, "@webpack/common": common,
@@ -4384,6 +4384,50 @@ test("profile preset migration preserves a destination created after its first r
     }
 });
 
+test("profile legacy recovery requires a choice and preserves the ownerless source", async () => {
+    for (const decision of ["merge", "override", "cancel", "switch", "invalid"] as const) for (const existing of [false, true]) {
+        let userId = "user";
+        const original = existing ? [{ name: "Current", timestamp: 0 }] : undefined;
+        const legacy = decision === "invalid" ? { broken: true } : [{ name: "Legacy", timestamp: 1 }];
+        const key = "ProfilePresets_v2_Main:user";
+        const data = new Map<string, unknown>([["ProfileDataset", legacy]]);
+        if (original) data.set(key, original);
+        let writes = 0, prompts = 0, refreshes = 0, failures = 0;
+        const common = { UserStore: { getCurrentUser: () => ({ id: userId }) }, lodash: { isEqual: isDeepStrictEqual },
+            showToast: () => { failures++; }, Toasts: { Type: { FAILURE: "failure" } } };
+        const storage = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
+            "@api/index": { DataStore: { get: async (key: string) => data.get(key), update: async (key: string, change: (old: unknown) => unknown) => {
+                data.set(key, change(data.get(key))); writes++;
+            } } }, "@utils/Logger": { Logger: class { error() {} } }, "@webpack/common": common
+        }).createPresetStorage();
+        await storage.loadPresets("main");
+        assert.equal(storage.hasLegacyPresets, true);
+        assert.equal(storage.presets.length, existing ? 1 : 0);
+        assert.equal(writes, 0);
+        const actions = loadSource("src/equicordplugins/profileSets/utils/actions.ts", {
+            "@utils/guards": {}, "@utils/web": { chooseFile: () => assert.fail("Recovery opened a file picker") },
+            "@webpack/common": common, "./profile": {}
+        }).createPresetActions(storage);
+        await actions.importPresets(() => { refreshes++; }, async (count: number, recovery: boolean) => {
+            prompts++;
+            assert.equal(count, existing ? 1 : 0);
+            assert.equal(recovery, true);
+            if (decision === "switch") userId = "other";
+            return decision === "switch" ? "merge" : decision;
+        }, "main", true);
+        const saved = decision === "merge" || decision === "override";
+        assert.equal(prompts, decision === "invalid" ? 0 : 1);
+        assert.equal(writes, saved ? 1 : 0);
+        assert.equal(refreshes, saved ? 1 : 0);
+        assert.equal(failures, decision === "switch" || decision === "invalid" ? 1 : 0);
+        assert.equal(data.get("ProfileDataset"), legacy);
+        if (saved) assert.equal((data.get(key) as unknown[]).length, decision === "merge" && existing ? 2 : 1);
+        else assert.equal(data.get(key), original);
+        storage.unloadPresets();
+        assert.equal(storage.hasLegacyPresets, false);
+    }
+});
+
 test("profile preset migration retains legacy records after successful and failed copies", async () => {
     for (const failedWrite of [false, true]) {
         const scoped = [{ name: "Scoped", timestamp: 0 }];
@@ -4418,7 +4462,7 @@ test("profile preset storage rejects stale account reads and foreign-scope saves
     const writes: string[] = [];
     const api = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
         "@api/index": { DataStore: {
-            get: () => { const pending = Promise.withResolvers<unknown>(); reads.push(pending); return pending.promise; },
+            get: (key: string) => { if (key === "ProfileDataset") return Promise.resolve(undefined); const pending = Promise.withResolvers<unknown>(); reads.push(pending); return pending.promise; },
             update: async (key: string) => { writes.push(key); }
         } },
         "@utils/Logger": { Logger: class { error() {} } },

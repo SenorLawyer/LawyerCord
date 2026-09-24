@@ -139,13 +139,13 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
         applyPreset(presets[nextIndex]);
     };
 
-    const showImportPrompt = (existingCount: number): Promise<ImportDecision> => {
+    const showImportPrompt = (existingCount: number, recoverLegacy = false): Promise<ImportDecision> => {
         return new Promise(resolve => {
             openModal(props => (
                 <ImportProfilesModal
                     {...props}
-                    title="Import Profiles"
-                    message={`You have ${existingCount} existing profiles in this section. Do you want to override them or merge with imported profiles?`}
+                    title={recoverLegacy ? "Recover Old Profiles" : "Import Profiles"}
+                    message={`${recoverLegacy ? "These old profiles have no recorded account owner. Import them into the account currently signed in? The original data will be retained. " : ""}You have ${existingCount} existing profiles in this section. Do you want to override them or merge with imported profiles?`}
                     onOverride={() => resolve("override")}
                     onMerge={() => resolve("merge")}
                     onCancel={() => resolve("cancel")}
@@ -224,6 +224,16 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
                 >
                     Export All
                 </Button>
+                {resolvedSection === "main" && storage.hasLegacyPresets && (
+                    <Button
+                        size="small"
+                        variant="secondary"
+                        onClick={() => actions.importPresets(forceUpdate, showImportPrompt, resolvedSection, true)}
+                        disabled={!canUseGuild}
+                    >
+                        Recover Old Profiles
+                    </Button>
+                )}
             </div>
 
             {hasPresets && (

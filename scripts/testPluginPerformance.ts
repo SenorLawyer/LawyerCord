@@ -4953,7 +4953,7 @@ test("USRBG rejects malformed feed data before publishing it", async () => {
             "@utils/Logger": { Logger: class { warn() { warnings++; } } },
             "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
             "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} }
-        }, { AbortController, fetch: async () => ({ ok: true, json: async () => data }) });
+        }, { AbortController, setTimeout, clearTimeout, fetch: async () => ({ ok: true, json: async () => data }) });
         await plugin.start();
         assert.equal(plugin.data, data === valid ? valid : null);
         assert.equal(plugin.userHasBackground("user"), data === valid);
@@ -4972,7 +4972,7 @@ test("USRBG ignores stopped and superseded startup responses", async () => {
             "@utils/Logger": { Logger: class { warn() { assert.fail("Cancelled work warned"); } } },
             "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
             "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} }
-        }, { AbortController, fetch: async (_url: string, options: { signal: AbortSignal; }) => {
+        }, { AbortController, setTimeout, clearTimeout, fetch: async (_url: string, options: { signal: AbortSignal; }) => {
             signals.push(options.signal);
             const read = Promise.withResolvers<unknown>();
             reads.push(read);
@@ -4994,6 +4994,34 @@ test("USRBG ignores stopped and superseded startup responses", async () => {
         assert.equal(plugin.data, stop ? null : latest);
         assert.equal(plugin.request, undefined);
     }
+});
+
+test("USRBG expires stalled feed requests and clears the timeout", async () => {
+    let expire: () => void = () => assert.fail("Missing timeout");
+    let cleared = 0;
+    let signal: AbortSignal | undefined;
+    const { default: plugin } = loadSource("src/plugins/usrbg/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@components/Button": {}, "@utils/constants": { Devs: {} },
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/Logger": { Logger: class { warn() {} } },
+        "@utils/misc": {}, "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} }
+    }, {
+        AbortController,
+        setTimeout: (callback: () => void, delay: number) => { assert.equal(delay, 30_000); expire = callback; return 1; },
+        clearTimeout: (id: number) => { assert.equal(id, 1); cleared++; },
+        fetch: (_url: string, options: { signal: AbortSignal; }) => new Promise((_resolve, reject) => {
+            signal = options.signal;
+            signal.addEventListener("abort", () => reject(new Error("Aborted")), { once: true });
+        })
+    });
+    const pending = plugin.start();
+    expire();
+    await pending;
+    assert.equal(signal?.aborted, true);
+    assert.equal(plugin.request, undefined);
+    assert.equal(plugin.data, null);
+    assert.equal(cleared, 1);
 });
 
 test("TidalEmbeds only hides URLs its player can render", () => {

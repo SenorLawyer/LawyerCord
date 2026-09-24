@@ -134,6 +134,7 @@ export default definePlugin({
     async start() {
         this.request?.abort();
         const request = this.request = new AbortController();
+        const timeout = setTimeout(() => request.abort(), 30_000);
         try {
             const res = await fetch(API_URL, { signal: request.signal });
             if (!res.ok || request.signal.aborted) return;
@@ -152,6 +153,7 @@ export default definePlugin({
         } catch {
             if (!request.signal.aborted) logger.warn("Could not load the banner feed.");
         } finally {
+            clearTimeout(timeout);
             if (this.request === request) this.request = undefined;
         }
     },

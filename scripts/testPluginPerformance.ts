@@ -4874,6 +4874,38 @@ test("BannersEverywhere stop and timeout settle pending images and clear handler
     }
 });
 
+test("BannersEverywhere limits conversion canvas dimensions without upscaling", async () => {
+    for (const [width, height, expectedWidth, expectedHeight] of [[8192, 4096, 1024, 512], [200, 400, 200, 400], [2048, 8192, 256, 1024]]) {
+        let loaded = () => {};
+        let drawn: number[] = [];
+        const canvas = { width: 0, height: 0, getContext: () => ({
+            drawImage: (_image: unknown, x: number, y: number, drawWidth: number, drawHeight: number) => {
+                drawn = [x, y, drawWidth, drawHeight];
+            }
+        }), toDataURL: () => "converted" };
+        const { default: plugin } = loadSource("src/equicordplugins/bannersEverywhere/index.tsx", {
+            "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+            "@utils/react": {}, "@api/PluginManager": {},
+            "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+            "@plugins/usrbg": {}, "@utils/constants": { Devs: {} },
+            "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+            "@webpack/common": {}, "./style.css?managed": {}
+        }, {
+            setTimeout, clearTimeout,
+            Image: class {
+                width = width; height = height;
+                set onload(value: (() => void) | null) { if (value) loaded = value; }
+            },
+            document: { createElement: () => canvas }
+        });
+        const result = plugin.gifToPng("url");
+        loaded();
+        assert.equal(await result, "converted");
+        assert.deepEqual([canvas.width, canvas.height], [expectedWidth, expectedHeight]);
+        assert.deepEqual(drawn, [0, 0, expectedWidth, expectedHeight]);
+    }
+});
+
 test("TidalEmbeds only hides URLs its player can render", () => {
     const { default: plugin } = loadSource("src/equicordplugins/tidalEmbeds/index.tsx", {
         "@utils/constants": { EquicordDevs: {} },

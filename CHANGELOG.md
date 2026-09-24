@@ -4,6 +4,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ## 3.0.0.0 - Unreleased
 
+- Limit static member-list banner conversion to 1,024 pixels per dimension while preserving aspect ratio.
+
 - Preserve third-party banner URLs when converting them to static images.
 
 - Keep banner conversion results attached to their original image instead of updating elements by user ID.

@@ -130,14 +130,15 @@ export default definePlugin({
                 if (!this.pendingConversions.has(cancel)) return;
                 try {
                     const canvas = document.createElement("canvas");
-                    canvas.width = img.width;
-                    canvas.height = img.height;
+                    const scale = Math.min(1, 1024 / img.width, 1024 / img.height);
+                    canvas.width = Math.max(1, Math.round(img.width * scale));
+                    canvas.height = Math.max(1, Math.round(img.height * scale));
                     const ctx = canvas.getContext("2d");
                     if (!ctx) {
                         finish(url);
                         return;
                     }
-                    ctx.drawImage(img, 0, 0);
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                     finish(canvas.toDataURL("image/png"));
                 } catch {
                     finish(url);

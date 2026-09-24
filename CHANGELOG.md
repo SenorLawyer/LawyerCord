@@ -12,6 +12,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Remove unused ProfileSets selection state from storage.
+
 - Replace the custom ProfileSets import picker with the shared file utility.
 
 - Replace the custom ProfileSets download lifecycle with the shared file utility.

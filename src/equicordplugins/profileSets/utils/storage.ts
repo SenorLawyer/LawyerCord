@@ -21,13 +21,11 @@ export type ProfilePresetEx = ProfilePreset & {
 };
 
 export let presets: ProfilePresetEx[] = [];
-export let currentPresetIndex = -1;
 let activeScopeKey: string | null = null;
 let loadGeneration = 0;
 
 function resetPresets(nextPresets: ProfilePresetEx[] = []) {
     presets = nextPresets;
-    currentPresetIndex = -1;
 }
 
 function getPresetsKey(section: PresetSection, userId: string) {
@@ -115,10 +113,6 @@ export async function savePresetsData(section: PresetSection) {
     }
 }
 
-export function setCurrentPresetIndex(index: number) {
-    currentPresetIndex = index;
-}
-
 export function addPreset(preset: ProfilePresetEx) {
     presets.push(preset);
 }
@@ -132,11 +126,6 @@ export function updatePreset(index: number, preset: ProfilePresetEx) {
 export function removePreset(index: number) {
     if (index >= 0 && index < presets.length) {
         presets.splice(index, 1);
-        if (currentPresetIndex === index) {
-            currentPresetIndex = -1;
-        } else if (currentPresetIndex > index) {
-            currentPresetIndex--;
-        }
     }
 }
 

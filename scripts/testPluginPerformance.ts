@@ -4115,8 +4115,8 @@ test("profile preset controls recover failed preparation and avoid random repeat
         "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
         "@webpack/common": { React, useStateFromStores: () => null, showToast: (message: string) => errors.push(message), Toasts: { Type: { FAILURE: "failure" } } },
         "../index": { cl: () => "", settings: { store: {} } },
-        "../utils/actions": { savePreset: async () => { if (saveFails) throw new Error("Profile preparation failed"); } }, "../utils/profile": { loadPresetAsPending: async () => {} },
-        "../utils/storage": { presets, setCurrentPresetIndex: (index: number) => selected.push(index) },
+        "../utils/actions": { savePreset: async () => { if (saveFails) throw new Error("Profile preparation failed"); } }, "../utils/profile": { loadPresetAsPending: async (preset: { name: string; }) => { selected.push(presets.indexOf(preset)); } },
+        "../utils/storage": { presets },
         "./confirmModal": {}, "./presetList": {}
     }, { Math: { ...Math, ceil: Math.ceil, floor: Math.floor, random: () => { draws++; return 0.5; } } });
     api.PresetManager({});

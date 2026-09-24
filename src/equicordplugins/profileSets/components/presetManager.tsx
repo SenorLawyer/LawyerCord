@@ -12,7 +12,7 @@ import { openModal, React, SelectedGuildStore, showToast, TextInput, Toasts, use
 import { cl, settings } from "../index";
 import { exportPresets, ImportDecision, importPresets, savePreset } from "../utils/actions";
 import { loadPresetAsPending } from "../utils/profile";
-import { loadPresets, presets, PresetSection, setCurrentPresetIndex } from "../utils/storage";
+import { loadPresets, presets, PresetSection } from "../utils/storage";
 import { ImportProfilesModal } from "./confirmModal";
 import { PresetList } from "./presetList";
 
@@ -91,7 +91,6 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
 
     const applyPreset = (index: number) => {
         setSelectedPreset(index);
-        setCurrentPresetIndex(index);
         loadPresetAsPending(presets[index], resolvedGuildId, {
             isGuildProfile: resolvedSection === "server"
         }).catch(() => showToast("Could not load the profile preset.", Toasts.Type.FAILURE));

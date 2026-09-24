@@ -12,6 +12,7 @@ import { ChannelStore, closeModal, Modal, openModal, showToast, Toasts, UserStor
 
 import { clearAllScheduledMessages, getChannelDisplayInfo, getScheduledMessages, removeScheduledMessage, sendScheduledMessageNow } from "../utils";
 import { CalendarIcon, TimerIcon } from "./Icons";
+import { openScheduleTimeModal } from "./ScheduleTimeModal";
 
 const cl = classNameFactory("vc-scheduled-msg-");
 
@@ -98,7 +99,7 @@ function ViewScheduledModalInner({ rootProps, close }: ViewScheduledModalProps) 
                                     </div>
                                     <div className={cl("message-time")}>
                                         <TimerIcon width={14} height={14} />
-                                        <span>{!msg.userId ? "Paused. This older message has no saved account. Recreate it before sending." : msg.attemptedAt === undefined ? new Date(msg.scheduledTime).toLocaleString() : "Send attempted. Check the channel before retrying."}</span>
+                                        <span>{!msg.userId ? "Paused. This older message has no saved account. Recreate it to choose an account and a new time. The original stays paused." : msg.attemptedAt === undefined ? new Date(msg.scheduledTime).toLocaleString() : "Send attempted. Check the channel before retrying."}</span>
                                     </div>
                                     <div className={cl("message-content")}>{displayContent}</div>
                                 </div>
@@ -110,6 +111,18 @@ function ViewScheduledModalInner({ rootProps, close }: ViewScheduledModalProps) 
                                             onClick={() => handleRetry(msg.id)}
                                         >
                                             Retry
+                                        </Button>
+                                    )}
+                                    {!msg.userId && (
+                                        <Button
+                                            size="small"
+                                            variant="secondary"
+                                            onClick={() => {
+                                                if (UserStore.getCurrentUser()?.id !== userId) return;
+                                                openScheduleTimeModal(msg.channelId, msg.content, msg.attachments);
+                                            }}
+                                        >
+                                            Recreate
                                         </Button>
                                     )}
                                     <Button

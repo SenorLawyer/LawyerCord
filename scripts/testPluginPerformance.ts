@@ -8761,7 +8761,7 @@ test("scheduled interval changes only replace an active timer", async () => {
 });
 
 test("scheduling dialogs preserve drafts after account changes or closing", async () => {
-    for (const scenario of ["before", "during", "unchanged", "edited", "new-upload", "replaced-upload", "removed-upload", "failed", "failed-after-account", "closed-before", "closed-during", "failed-after-close"]) {
+    for (const scenario of ["before", "during", "unchanged", "edited", "new-upload", "replaced-upload", "removed-upload", "failed", "failed-after-account", "closed-before", "closed-during", "failed-after-close", "recovery"]) {
         const before = scenario === "before";
         const closed = scenario === "closed-before" || scenario === "closed-during" || scenario === "failed-after-close";
         const blocked = before || scenario === "closed-before";
@@ -8796,7 +8796,7 @@ test("scheduling dialogs preserve drafts after account changes or closing", asyn
                 return { success: true };
             } }, "./Icons": {}
         }, { React }, "ScheduleTimeModalInner");
-        component({ userId: "first", uploadIds: ["original"], channelId: "channel", content: "Text", close: () => { assert.equal(stale || failed, false); } });
+        component({ userId: "first", uploadIds: scenario === "recovery" ? undefined : ["original"], channelId: "channel", content: "Text", close: () => { assert.equal(stale || failed, false); } });
         if (before) userId = "second";
         if (scenario === "closed-before") cleanup();
         const pending = schedule();
@@ -8809,7 +8809,7 @@ test("scheduling dialogs preserve drafts after account changes or closing", asyn
         }
         await pending;
         assert.equal(writes, blocked ? 0 : 1);
-        assert.deepEqual(cleared, !stale && !failed && scenario !== "edited" ? ["channel"] : []);
+        assert.deepEqual(cleared, !stale && !failed && scenario !== "edited" && scenario !== "recovery" ? ["channel"] : []);
         if (failed) assert.deepEqual(errors, stale ? [] : ["Could not save the scheduled message. Try again."]);
         assert.deepEqual(clearedUploads, scenario === "unchanged" || scenario === "edited" ? ["channel"] : []);
         if (closed) {
@@ -9996,6 +9996,7 @@ test("scheduled message lists only render the current account and legacy entries
         const rendered: string[] = [];
         const entries = [{ id: "mine", userId: "account" }, { id: "theirs", userId: "other" }, { id: "legacy" }].map(entry => ({ ...entry, channelId: entry.id, content: "Text", scheduledTime: 0 }));
         const component = loadSource("src/equicordplugins/scheduledMessages/components/ViewScheduledModal.tsx", {
+            "./ScheduleTimeModal": {},
             "@components/Button": {}, "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
             "@utils/css": { classNameFactory: () => () => "" },
             "@webpack/common": { useState: (value: unknown) => [value, () => {}], useStateFromStores: (_stores: unknown, selector: () => unknown) => selector(),
@@ -10095,6 +10096,7 @@ test("scheduled queue controls report failures without stale account feedback", 
         const Modal = Symbol("Modal");
         const write = () => { writes++; return new Promise<void>((_resolve, fail) => { reject = fail; }); };
         const component = loadSource("src/equicordplugins/scheduledMessages/components/ViewScheduledModal.tsx", {
+            "./ScheduleTimeModal": {},
             "@components/Button": { Button }, "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
             "@utils/css": { classNameFactory: () => () => "" },
             "@webpack/common": { Modal, useState: (value: unknown) => [value, () => assert.fail("Failed saves must not replace the list")],
@@ -10120,6 +10122,33 @@ test("scheduled queue controls report failures without stale account feedback", 
 });
 
 
+test("scheduled legacy recovery retains full content and attachments without sending", () => {
+    let userId = "account";
+    const message = { id: "legacy", channelId: "channel", content: "x".repeat(300), attachments: [{ filename: "file.txt", type: "text/plain", data: "data:text/plain,kept" }] };
+    const opened: unknown[][] = [];
+    let recreate = () => assert.fail("Missing recovery action");
+    const Button = Symbol("Button");
+    const component = loadSource("src/equicordplugins/scheduledMessages/components/ViewScheduledModal.tsx", {
+        "./ScheduleTimeModal": { openScheduleTimeModal: (...args: unknown[]) => opened.push(args) },
+        "@components/Button": { Button }, "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@webpack/common": { useState: (value: unknown) => [value, () => assert.fail("No list mutation")],
+            useStateFromStores: (_stores: unknown, selector: () => unknown) => selector(),
+            UserStore: { getCurrentUser: () => ({ id: userId }) }, ChannelStore: { getChannel: () => undefined } },
+        "../utils": { getScheduledMessages: () => [message], getChannelDisplayInfo: () => ({ name: "Channel" }),
+            sendScheduledMessageNow: () => assert.fail("No send"), removeScheduledMessage: () => assert.fail("Keep original") }, "./Icons": {}
+    }, { React: { createElement: (type: unknown, props: { onClick: () => never; }, ...children: unknown[]) => {
+        if (type === Button && children[0] === "Recreate") recreate = props.onClick;
+        return null;
+    } } }, "ViewScheduledModalInner");
+    component({});
+    recreate();
+    assert.deepEqual(opened, [[message.channelId, message.content, message.attachments]]);
+    userId = "other";
+    recreate();
+    assert.equal(opened.length, 1);
+});
+
 test("scheduled attempted messages can be retried without stale account feedback", async () => {
     for (const outcome of ["success", "failure"] as const) for (const timing of ["current", "before", "during"] as const) {
         let userId = "account";
@@ -10131,6 +10160,7 @@ test("scheduled attempted messages can be retried without stale account feedback
         let retry: () => Promise<void> = async () => assert.fail("Missing retry action");
         const Button = Symbol("Button");
         const component = loadSource("src/equicordplugins/scheduledMessages/components/ViewScheduledModal.tsx", {
+            "./ScheduleTimeModal": {},
             "@components/Button": { Button }, "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
             "@utils/css": { classNameFactory: () => () => "" },
             "@webpack/common": { Modal: Symbol("Modal"), useState: (value: unknown) => [value, () => listWrites++],

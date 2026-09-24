@@ -31,6 +31,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Reset profile preset pagination when changing a search, including after an empty result.
+
 - Cancel pending profile imports when their confirmation modal is dismissed.
 
 - Reload open ProfileSets panels when the signed-in account changes.

@@ -66,7 +66,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
     const currentPresets = filteredPresets.slice(startIndex, startIndex + PRESETS_PER_PAGE);
 
     const handlePageChange = (newPage: number) => {
-        if (newPage >= 1 && newPage <= totalPages) {
+        if (newPage >= 1 && newPage <= Math.max(1, totalPages)) {
             setCurrentPage(newPage);
             setPageInput(String(newPage));
         }
@@ -142,7 +142,10 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
                 <TextInput
                     placeholder={searchMode ? "Search profiles..." : "Profile Name"}
                     value={presetName}
-                    onChange={setPresetName}
+                    onChange={value => {
+                        setPresetName(value);
+                        if (searchMode) handlePageChange(1);
+                    }}
                     className={cl("text-input")}
                 />
             </div>

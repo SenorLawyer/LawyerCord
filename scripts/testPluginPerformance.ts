@@ -4092,6 +4092,36 @@ test("profile preset storage rejects stale account reads and foreign-scope saves
     assert.equal(writes.length, 1);
 });
 
+test("profile preset search resets pagination even after no matches", () => {
+    const updates = new Map<number, unknown>();
+    let stateIndex = 0;
+    let search = (_value: string) => {};
+    const React = {
+        useState: () => {
+            const index = stateIndex++;
+            return [["missing", false, 3, "3", -1, true][index], (value: unknown) => updates.set(index, value)];
+        },
+        useReducer: () => [0, () => {}], useRef: () => ({ current: -1 }), useEffect() {},
+        createElement: (_type: unknown, props: { placeholder?: string; onChange?: (value: string) => void; } | null) => {
+            if (props?.placeholder === "Search profiles..." && props.onChange) search = props.onChange;
+            return null;
+        }
+    };
+    const api = loadSource("src/equicordplugins/profileSets/components/presetManager.tsx", {
+        "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
+        "@webpack/common": { React, useStateFromStores: () => null },
+        "../index": { cl: () => "", settings: { store: {} } },
+        "../utils/actions": {}, "../utils/profile": {},
+        "../utils/storage": { presets: [{ name: "Match" }] },
+        "./confirmModal": {}, "./presetList": {}
+    });
+    api.PresetManager({});
+    search("Match");
+    assert.equal(updates.get(0), "Match");
+    assert.equal(updates.get(2), 1);
+    assert.equal(updates.get(3), "1");
+});
+
 test("profile preset controls recover failed preparation and avoid random repeats", async () => {
     const presets = [{ name: "First" }, { name: "Second" }, { name: "Third" }];
     const selected: number[] = [];
@@ -4124,7 +4154,7 @@ test("profile preset controls recover failed preparation and avoid random repeat
         "../utils/actions": { importPresets: async (_update: unknown, prompt: (count: number) => Promise<string>) => { decisions.push(await prompt(2)); }, savePreset: async () => { if (saveFails) throw new Error("Profile preparation failed"); } }, "../utils/profile": { loadPresetAsPending: async (preset: { name: string; }) => { selected.push(presets.indexOf(preset)); } },
         "../utils/storage": { presets },
         "./confirmModal": {}, "./presetList": {}
-    }, { Math: { ...Math, ceil: Math.ceil, floor: Math.floor, random: () => { draws++; return 0.5; } } });
+    }, { Math: { ...Math, max: Math.max, ceil: Math.ceil, floor: Math.floor, random: () => { draws++; return 0.5; } } });
     api.PresetManager({});
     await importAction();
     assert.deepEqual(decisions, ["cancel"]);

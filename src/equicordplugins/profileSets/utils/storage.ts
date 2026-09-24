@@ -43,8 +43,8 @@ function getCurrentUserId() {
     return UserStore.getCurrentUser()?.id ?? null;
 }
 
-function isCurrentLoad(generation: number, key: string) {
-    return generation === loadGeneration && activeScopeKey === key;
+function isCurrentLoad(generation: number, userId: string) {
+    return generation === loadGeneration && getCurrentUserId() === userId;
 }
 
 export async function loadPresets(section: PresetSection) {
@@ -58,13 +58,15 @@ export async function loadPresets(section: PresetSection) {
 
     const key = getPresetsKey(section, userId);
     const generation = ++loadGeneration;
-    activeScopeKey = key;
+    activeScopeKey = null;
+    resetPresets();
 
     try {
         const stored = await DataStore.get(key);
-        if (!isCurrentLoad(generation, key)) return;
+        if (!isCurrentLoad(generation, userId)) return;
 
         if (stored && Array.isArray(stored)) {
+            activeScopeKey = key;
             resetPresets(stored);
             return;
         }
@@ -75,35 +77,38 @@ export async function loadPresets(section: PresetSection) {
                 DataStore.get(legacyKey),
                 DataStore.get(LEGACY_PRESETS_KEY)
             ]);
-            if (!isCurrentLoad(generation, key)) return;
+            if (!isCurrentLoad(generation, userId)) return;
 
             const legacyToUse = Array.isArray(legacyStored)
                 ? legacyStored
                 : (Array.isArray(legacyBaseStored) ? legacyBaseStored : null);
             if (legacyToUse) {
-                resetPresets(legacyToUse);
                 await DataStore.set(key, legacyToUse);
                 await DataStore.del(legacyKey);
                 await DataStore.del(LEGACY_PRESETS_KEY);
+                if (!isCurrentLoad(generation, userId)) return;
+                activeScopeKey = key;
+                resetPresets(legacyToUse);
                 return;
             }
         }
+        activeScopeKey = key;
         resetPresets();
     } catch (err) {
-        if (!isCurrentLoad(generation, key)) return;
+        if (!isCurrentLoad(generation, userId)) return;
 
         logger.error("Failed to load presets", err);
         resetPresets();
     }
 }
 
-export async function savePresetsData(section?: PresetSection) {
+export async function savePresetsData(section: PresetSection) {
     try {
-        if (!activeScopeKey && !section) return;
         const userId = getCurrentUserId();
         if (!userId) return;
 
-        const key = section ? getPresetsKey(section, userId) : activeScopeKey!;
+        const key = getPresetsKey(section, userId);
+        if (key !== activeScopeKey) return;
         await DataStore.set(key, presets);
     } catch (err) {
         logger.error("Failed to save presets", err);

@@ -3888,6 +3888,38 @@ test("profile images fall back after failed guild downloads", async () => {
     assert.equal(blobReads, 1);
 });
 
+test("profile preset storage rejects stale account reads and foreign-scope saves", async () => {
+    let currentId: string | undefined = "first";
+    const reads: ReturnType<typeof Promise.withResolvers<unknown>>[] = [];
+    const writes: string[] = [];
+    const api = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
+        "@api/index": { DataStore: {
+            get: () => { const pending = Promise.withResolvers<unknown>(); reads.push(pending); return pending.promise; },
+            set: async (key: string) => { writes.push(key); }
+        } },
+        "@utils/Logger": { Logger: class { error() {} } },
+        "@webpack/common": { UserStore: { getCurrentUser: () => currentId ? { id: currentId } : undefined } }
+    });
+    const loading = api.loadPresets("main");
+    currentId = "second";
+    reads[0].resolve([{ name: "First account" }]);
+    await loading;
+    assert.equal(api.presets.length, 0);
+    await api.savePresetsData("main");
+    assert.deepEqual(writes, []);
+    const current = api.loadPresets("main");
+    await api.savePresetsData("main");
+    assert.deepEqual(writes, []);
+    reads[1].resolve([{ name: "Second account" }]);
+    await current;
+    await api.savePresetsData("main");
+    assert.deepEqual(writes, ["ProfilePresets_v2_Main:second"]);
+    await api.savePresetsData("server");
+    currentId = "first";
+    await api.savePresetsData("main");
+    assert.equal(writes.length, 1);
+});
+
 test("profile preset controls recover failed preparation and avoid random repeats", async () => {
     const presets = [{ name: "First" }, { name: "Second" }, { name: "Third" }];
     const selected: number[] = [];

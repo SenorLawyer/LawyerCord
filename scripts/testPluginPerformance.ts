@@ -7800,6 +7800,28 @@ test("source fixtures reject recoverable syntax errors before execution", () => 
 });
 
 function loadSource(path: string, mocks: Record<string, object>, globals: Record<string, unknown> = {}, result = "exports") {
+    if (path.endsWith("scheduledMessages/utils.ts")) {
+        const store = mocks["@api/DataStore"] as {
+            get?: (key: string) => Promise<unknown>;
+            set?: (key: string, value: unknown) => Promise<void>;
+            update?: (key: string, updater: (value: unknown) => unknown) => Promise<void>;
+        } | undefined;
+        if (store?.get && store.set && !store.update) {
+            const get = store.get;
+            const set = store.set;
+            let stored: unknown;
+            mocks = { ...mocks, "@api/DataStore": {
+                ...store,
+                get: async (key: string) => { stored = await get(key); return structuredClone(stored); },
+                update: async (key: string, updater: (value: unknown) => unknown) => {
+                    const next = updater(structuredClone(stored));
+                    await set(key, next);
+                    stored = structuredClone(next);
+                }
+            } };
+        }
+        mocks = { ...mocks, "@webpack/common": { lodash: { isEqual: (a: unknown, b: unknown) => isDeepStrictEqual(structuredClone(a), structuredClone(b)) }, ...mocks["@webpack/common"] } };
+    }
     if (path.endsWith("profileSets/utils/storage.ts"))
         mocks = { ...mocks, "@webpack/common": { lodash: { isEqual: (a: unknown, b: unknown) => isDeepStrictEqual(structuredClone(a), structuredClone(b)) }, ...mocks["@webpack/common"] } };
     if (/profileSets\/utils\/(actions|storage)\.ts$/.test(path))
@@ -9793,6 +9815,33 @@ test("SongSpotlight requires write acknowledgement before changing local state",
     assert.deepEqual(changes, ["save", "delete", "logout"]);
 });
 
+
+test("scheduled clients reject stale queue writes and preserve messages after reload", async () => {
+    let saved: unknown;
+    const store = {
+        get: async () => structuredClone(saved),
+        update: async (_key: string, updater: (value: unknown) => unknown) => { saved = structuredClone(updater(structuredClone(saved))); }
+    };
+    const load = () => loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+        "@api/DataStore": store, "@utils/Logger": { Logger: class {} },
+        "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+        "@vencord/discord-types/enums": {},
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) } },
+        ".": { settings: { store: { maxMessagesPerMinute: 5, showPhantomMessages: false } } }
+    });
+    const first = load(), second = load();
+    await Promise.all([first.loadScheduledMessages(), second.loadScheduledMessages()]);
+    await first.addScheduledMessage("channel", "First", Date.now() + 60000);
+    const winner = structuredClone(saved);
+    await assert.rejects(second.addScheduledMessage("channel", "Second", Date.now() + 120000), /another client/);
+    assert.deepEqual(saved, winner);
+    assert.equal(second.getScheduledMessages().length, 0);
+    await second.loadScheduledMessages();
+    await second.addScheduledMessage("channel", "Second", Date.now() + 120000);
+    assert.deepEqual((saved as { content: string; }[]).map(entry => entry.content), ["First", "Second"]);
+    await assert.rejects(first.clearAllScheduledMessages(), /another client/);
+    assert.equal((saved as unknown[]).length, 2);
+});
 
 test("new scheduled entries retain their initiating account across persistence", async () => {
     for (const scenario of ["signed-out", "same", "switched", "stopped"]) {

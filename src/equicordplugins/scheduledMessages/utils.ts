@@ -8,7 +8,7 @@ import * as DataStore from "@api/DataStore";
 import { Logger } from "@utils/Logger";
 import { isObject } from "@utils/misc";
 import { CloudUploadPlatform } from "@vencord/discord-types/enums";
-import { ChannelStore, CloudUploader, Constants, FluxDispatcher, GuildStore, IconUtils, MessageActions, MessageStore, RestAPI, showToast, SnowflakeUtils, Toasts, UserStore } from "@webpack/common";
+import { ChannelStore, CloudUploader, Constants, FluxDispatcher, GuildStore, IconUtils, lodash, MessageActions, MessageStore, RestAPI, showToast, SnowflakeUtils, Toasts, UserStore } from "@webpack/common";
 
 import { settings } from ".";
 import { PhantomMessageData, ScheduledAttachment, ScheduledMessage, ScheduledReaction } from "./types";
@@ -17,6 +17,7 @@ const logger = new Logger("ScheduledMessages");
 const STORAGE_KEY = "ScheduledMessages_queue";
 
 let scheduledMessages: ScheduledMessage[] = [];
+let savedMessages: ScheduledMessage[] | undefined;
 let queueLoaded = false;
 let invalidStoredQueue = false;
 let queueOperation: Promise<void> = Promise.resolve();
@@ -78,8 +79,8 @@ async function readStoredQueue(): Promise<void> {
     }
     queueLoaded = true;
     invalidStoredQueue = false;
-    scheduledMessages = saved ?? [];
-    scheduledMessages.sort((a, b) => a.scheduledTime - b.scheduledTime);
+    savedMessages = saved;
+    scheduledMessages = [...saved ?? []].sort((a, b) => a.scheduledTime - b.scheduledTime);
 }
 
 function runQueueOperation<T>(operation: () => Promise<T>, loading = false): Promise<T> {
@@ -95,7 +96,12 @@ function runQueueOperation<T>(operation: () => Promise<T>, loading = false): Pro
 }
 
 async function saveScheduledMessages(messages: ScheduledMessage[]): Promise<void> {
-    await DataStore.set(STORAGE_KEY, messages);
+    await DataStore.update<ScheduledMessage[]>(STORAGE_KEY, stored => {
+        if (!lodash.isEqual(stored, savedMessages))
+            throw new Error("Scheduled messages changed in another client. Reload the queue before trying again.");
+        return messages;
+    });
+    savedMessages = messages;
     scheduledMessages = messages;
 }
 

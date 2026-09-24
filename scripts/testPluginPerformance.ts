@@ -4861,7 +4861,7 @@ test("profile preset controls recover failed preparation and avoid random repeat
     assert.deepEqual(decisions, ["cancel"]);
     await assert.doesNotReject(async () => saveAction());
     assert.deepEqual(stateChanges, [true, false]);
-    assert.deepEqual(errors, ["Could not save the profile preset."]);
+    assert.deepEqual(errors, ["Could not save the profile preset. Reopen this panel before trying again."]);
     saveFails = false;
     stateChanges.length = 0;
     await saveAction();

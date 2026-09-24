@@ -460,3 +460,5 @@ Executed the current DataStore and ProfileSets storage source in two isolated Ch
 
 This closes the previously mock-only transaction check for simple preset records. The browser used a fixture account and a simple-record equality substitute; all network requests were fulfilled locally. It does not establish Discord UI behavior, conflict feedback, or equivalence for every preset field. Reproduction: `.git/audit/profile-browser-storage.cjs`.
 
+
+Preset mutation failure toasts now tell users to reopen the panel before retrying. This exposes the recovery step needed after a cross-client conflict through the existing save, row-change, refresh and import handlers, without exposing raw storage errors or introducing a new error abstraction. Updated the existing save-failure assertion; all 43 profile-filtered tests and source lint pass. Reopening is a retry instruction, not a guarantee that persistent storage or invalid-import errors will disappear. Signed-in toast presentation remains unverified.

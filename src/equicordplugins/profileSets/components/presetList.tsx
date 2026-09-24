@@ -53,7 +53,7 @@ export function PresetList({
             await change();
             onUpdate();
         } catch {
-            showToast("Could not save the profile preset change.", Toasts.Type.FAILURE);
+            showToast("Could not save the profile preset change. Reopen this panel before trying again.", Toasts.Type.FAILURE);
         }
     };
 
@@ -169,7 +169,7 @@ export function PresetList({
                                                         await actions.refreshPreset(preset, section, guildId);
                                                         onUpdate();
                                                     } catch {
-                                                        showToast("Could not update the profile preset.", Toasts.Type.FAILURE);
+                                                        showToast("Could not update the profile preset. Reopen this panel before trying again.", Toasts.Type.FAILURE);
                                                     }
                                                 }}
                                             />

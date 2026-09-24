@@ -112,7 +112,7 @@ export function createPresetActions(storage: PresetStorage) {
             await storage.savePresetsData(section, decision === "merge" ? [...storage.presets, ...importedPresets] : importedPresets);
             forceUpdate();
         } catch {
-            showToast("Could not import the profile presets.", Toasts.Type.FAILURE);
+            showToast("Could not import the profile presets. Reopen this panel before trying again.", Toasts.Type.FAILURE);
         }
     }
 

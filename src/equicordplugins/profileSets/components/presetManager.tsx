@@ -106,7 +106,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
             forceUpdate();
         } catch {
             if (activeStorage.current === storage && storage.isCurrentScope(resolvedSection))
-                showToast("Could not save the profile preset.", Toasts.Type.FAILURE);
+                showToast("Could not save the profile preset. Reopen this panel before trying again.", Toasts.Type.FAILURE);
         } finally {
             if (activeStorage.current === storage && storage.isCurrentScope(resolvedSection)) setIsSaving(false);
         }

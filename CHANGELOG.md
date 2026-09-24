@@ -4,6 +4,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ## 3.0.0.0 - Unreleased
 
+- Keep the original member-list banner when image conversion fails.
+
 - Keep unsupported TIDAL URLs visible and render every supported player when a message contains multiple TIDAL embeds.
 
 - Show the new ProfileSets page when saving a preset crosses a page boundary, and return to an existing page when imports or filtered lists shrink.

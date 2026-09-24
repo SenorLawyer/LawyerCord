@@ -94,8 +94,7 @@ export default definePlugin({
                     if (imgElement) {
                         imgElement.src = pngUrl;
                     }
-                })
-                .catch();
+                });
         }
 
         return (
@@ -107,22 +106,26 @@ export default definePlugin({
         const cached = this.pngCache.get(url);
         if (cached) return cached;
 
-        const promise = new Promise<string>((resolve, reject) => {
+        const promise = new Promise<string>(resolve => {
             const img = new Image();
             img.crossOrigin = "anonymous";
             img.onload = () => {
-                const canvas = document.createElement("canvas");
-                canvas.width = img.width;
-                canvas.height = img.height;
-                const ctx = canvas.getContext("2d");
-                if (ctx) {
+                try {
+                    const canvas = document.createElement("canvas");
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext("2d");
+                    if (!ctx) {
+                        resolve(url);
+                        return;
+                    }
                     ctx.drawImage(img, 0, 0);
                     resolve(canvas.toDataURL("image/png"));
-                } else {
-                    reject(new Error("Failed to get canvas context."));
+                } catch {
+                    resolve(url);
                 }
             };
-            img.onerror = () => resolve("");
+            img.onerror = () => resolve(url);
             img.src = url;
         });
         this.pngCache.set(url, promise);

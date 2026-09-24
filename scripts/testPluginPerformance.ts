@@ -4706,6 +4706,29 @@ test("BannersEverywhere stops displaying a banner removed from the profile store
     assert.equal(plugin.getBanner("user"), undefined);
 });
 
+test("BannersEverywhere preserves the original URL when conversion fails", async () => {
+    for (const failure of ["load", "context", "draw", "encode", "none"]) {
+        let image: { onload?: () => void; onerror?: () => void; } = {};
+        const { default: plugin } = loadSource("src/equicordplugins/bannersEverywhere/index.tsx", {
+            "@api/PluginManager": {}, "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+            "@plugins/usrbg": {}, "@utils/constants": { Devs: {} },
+            "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+            "@webpack/common": {}, "./style.css?managed": {}
+        }, {
+            Image: class { constructor() { image = this; } onload?: () => void; onerror?: () => void; },
+            document: { createElement: () => ({
+                getContext: () => failure === "context" ? null : { drawImage() { if (failure === "draw") throw new Error("Draw failed"); } },
+                toDataURL() { if (failure === "encode") throw new Error("Canvas is tainted"); return "converted"; }
+            }) }
+        });
+        const url = "https://fixture.invalid/banner.gif";
+        const pending = plugin.gifToPng(url);
+        if (failure === "load") image.onerror?.();
+        else assert.doesNotThrow(() => image.onload?.());
+        assert.equal(await pending, failure === "none" ? "converted" : url);
+    }
+});
+
 test("TidalEmbeds only hides URLs its player can render", () => {
     const { default: plugin } = loadSource("src/equicordplugins/tidalEmbeds/index.tsx", {
         "@utils/constants": { EquicordDevs: {} },

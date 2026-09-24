@@ -5402,6 +5402,25 @@ test("BannersEverywhere evicts pending image work with its cache entry", async (
     assert.equal(plugin.pngCache.size, 0);
 });
 
+test("USRBG voice backgrounds keep feed URLs inside one quoted image", () => {
+    const { default: plugin } = loadSource("src/plugins/usrbg/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@components/Button": {}, "@utils/constants": { Devs: {} },
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/Logger": { Logger: class {} },
+        "@utils/misc": {},
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} }
+    }, { URL });
+    plugin.data = { endpoint: "https://usrbg.is-hardly.online", bucket: "banners", prefix: "v2/", users: {} };
+    for (const etag of ["ordinary", 'tag),url(https://other.invalid/image)', 'tag"),url("https://other.invalid/image)', 'fragment#"),url("https://other.invalid/image)', "space and\nnewline"]) {
+        plugin.data.users.user = etag;
+        const styles = plugin.getVoiceBackgroundStyles({ className: "tile", participantUserId: "user" });
+        assert.equal(styles.backgroundImage, `url(${JSON.stringify(new URL(plugin.getImageUrl("user")).href)})`);
+    }
+    assert.equal(plugin.getVoiceBackgroundStyles({ className: "tile", participantUserId: "missing" }), undefined);
+    assert.equal(plugin.getVoiceBackgroundStyles({ className: "other", participantUserId: "user" }), undefined);
+});
+
 test("USRBG rejects malformed feed data before publishing it", async () => {
     const valid = { endpoint: "https://usrbg.is-hardly.online", bucket: "banners", prefix: "v2/", users: { user: "etag" } };
     for (const data of [null, [], {}, { ...valid, users: null }, { ...valid, users: [] },

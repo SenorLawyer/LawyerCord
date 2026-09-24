@@ -98,17 +98,16 @@ export default definePlugin({
         </Button>
     ),
 
-    getVoiceBackgroundStyles({ className, participantUserId }: any) {
-        if (className.includes("tile")) {
-            if (this.userHasBackground(participantUserId)) {
-                return {
-                    backgroundImage: `url(${this.getImageUrl(participantUserId)})`,
-                    backgroundSize: "cover",
-                    backgroundPosition: "center",
-                    backgroundRepeat: "no-repeat"
-                };
-            }
-        }
+    getVoiceBackgroundStyles({ className, participantUserId }: { className: string; participantUserId: string; }) {
+        if (!className.includes("tile")) return;
+        const imageUrl = this.getImageUrl(participantUserId);
+        if (!imageUrl) return;
+        return {
+            backgroundImage: `url(${JSON.stringify(new URL(imageUrl).href)})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat"
+        };
     },
 
     patchBannerUrl({ displayProfile }: any) {

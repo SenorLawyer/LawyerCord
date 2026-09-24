@@ -21,7 +21,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
-- Reject malformed USRBG feed records and unsupported image endpoints, cancel stopped, superseded, or timed-out loads, and prevent older responses from replacing current data.
+- Reject malformed USRBG feed records and unsupported image endpoints, cancel stopped, superseded, or timed-out loads, and prevent older responses from replacing current data. Keep feed URLs inside a single quoted voice-background image.
 
 - Keep banner conversion results attached to their source image. Preserve third-party URLs and the original image on failure, and allow failed conversions to retry.
 - Clean up pending banner conversions on stop, cache eviction, or a 30-second timeout. Limit conversion canvases to 1,024 pixels per dimension while preserving aspect ratio.

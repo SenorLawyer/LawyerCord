@@ -4273,7 +4273,36 @@ test("profile preset migration does not bypass malformed account records", async
     }
 });
 
-test("profile preset migration preserves legacy data it did not copy", async () => {
+test("profile preset migration preserves a destination created after its first read", async () => {
+    for (const destination of [[{ name: "Newer", timestamp: 1 }], null]) {
+        const legacy = [{ name: "Legacy", timestamp: 0 }];
+        const key = "ProfilePresets_v2_Main:user";
+        const data = new Map<string, unknown>([["ProfileDataset:user:main", legacy]]);
+        const api = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
+            "@api/index": { DataStore: {
+                get: async (readKey: string) => {
+                    const value = data.get(readKey);
+                    if (readKey === "ProfileDataset:user:main") data.set(key, destination);
+                    return value;
+                },
+                set: async (key: string, value: unknown) => { data.set(key, value); },
+                update: async (key: string, change: (value: unknown) => unknown) => { data.set(key, change(data.get(key))); },
+                del: async (key: string) => { data.delete(key); }
+            } },
+            "@utils/Logger": { Logger: class { error() {} } },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "user" }) } }
+        });
+        if (destination === null) await assert.rejects(api.loadPresets("main"), /invalid/);
+        else {
+            await api.loadPresets("main");
+            assert.equal(api.presets, destination);
+        }
+        assert.equal(data.get(key), destination);
+        assert.equal(data.get("ProfileDataset:user:main"), legacy);
+    }
+});
+
+test("profile preset migration retains legacy records after successful and failed copies", async () => {
     for (const failedWrite of [false, true]) {
         const scoped = [{ name: "Scoped", timestamp: 0 }];
         const unowned = [{ name: "Unowned", timestamp: 0 }];
@@ -4283,9 +4312,9 @@ test("profile preset migration preserves legacy data it did not copy", async () 
         const api = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
             "@api/index": { DataStore: {
                 get: async (key: string) => data.get(key),
-                set: async (key: string, value: unknown) => {
+                update: async (key: string, change: (value: unknown) => unknown) => {
                     if (failedWrite) throw new Error("Storage unavailable");
-                    data.set(key, value);
+                    data.set(key, change(data.get(key)));
                 },
                 del: async (key: string) => { data.delete(key); }
             } },
@@ -4295,7 +4324,7 @@ test("profile preset migration preserves legacy data it did not copy", async () 
         if (failedWrite) await assert.rejects(api.loadPresets("main"), /Storage unavailable/);
         else await api.loadPresets("main");
         assert.equal(data.get("ProfileDataset"), unowned);
-        assert.equal(data.has("ProfileDataset:user:main"), failedWrite);
+        assert.equal(data.get("ProfileDataset:user:main"), scoped);
         assert.equal(data.get("ProfilePresets_v2_Main:user"), failedWrite ? undefined : scoped);
         assert.equal(api.presets.length, failedWrite ? 0 : 1);
     }

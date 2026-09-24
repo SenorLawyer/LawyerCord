@@ -4,7 +4,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ## 3.0.0.0 - Unreleased
 
-- Reject stale ProfileSets saves when another client has changed the stored list.
+- Reject stale ProfileSets saves when another client has changed the stored list. Preserve newer destinations during legacy migration and retain the legacy backup.
 
 ### Compatibility
 

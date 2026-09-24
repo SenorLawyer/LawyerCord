@@ -25,6 +25,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Preserve UserPFP folder names and non-GIF filenames when requesting static avatars.
 - Allow local GIF and WebP avatars through the existing file-upload path without requiring an external image host.
 - Keep the UserPFP avatar editor open when Save is pressed while a selected image is still loading. Delete cancels the pending read. The upload control is keyboard accessible, and Enter saves only from the URL field.
 

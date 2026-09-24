@@ -1766,6 +1766,11 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
         assert.equal(avatar({ id: "shared" }, false, 128), data.avatars.shared);
         data.avatars.shared = "https://raw.githubusercontent.com/UserPFP/img/main/avatar.gif";
         assert.equal(avatar({ id: "shared" }, false, 128), "https://raw.githubusercontent.com/UserPFP/img/main/avatar.png?animated=false");
+        for (const [path, expected] of [["folder.gif/avatar.gif", "folder.gif/avatar.png"], ["avatar.gif.png", "avatar.gif.png"], ["avatar.gifv", "avatar.png"]]) {
+            data.avatars.shared = `https://raw.githubusercontent.com/UserPFP/img/main/${path}`;
+            assert.equal(new URL(avatar({ id: "shared" }, false, 128)).pathname, `/UserPFP/img/main/${expected}`);
+            assert.equal(new URL(avatar({ id: "shared" }, true, 128)).pathname, `/UserPFP/img/main/${path}`);
+        }
         assert.equal(signals[0].aborted, mode === "remote-stop" || mode === "restart");
         assert.equal(errors.length, mode in invalidResponses ? 1 : 0);
         assert.deepEqual(warnings, mode === "invalid-local" ? ["Stored custom avatars are invalid."] : []);

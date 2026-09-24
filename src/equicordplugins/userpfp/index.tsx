@@ -142,7 +142,7 @@ export default definePlugin({
             if (avatarUrl.startsWith(USERPFP_IMG_URL)) {
                 res.searchParams.set("animated", animated ? "true" : "false");
                 if (!animated) {
-                    res.pathname = res.pathname.replaceAll(/\.gifv?/g, ".png");
+                    res.pathname = res.pathname.replace(/\.gifv?$/, ".png");
                 }
             }
             return res.toString();

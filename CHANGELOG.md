@@ -20,6 +20,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Remove BannersEverywhere's persistent Discord banner cache. Banners now follow the currently loaded profile data.
+
 - Remove duplicate error-toast construction in CopyStatusUrls.
 
 - Remove TidalEmbeds' redundant MessageAccessoriesAPI dependency declaration.

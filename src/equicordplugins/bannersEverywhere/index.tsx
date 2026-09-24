@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import * as DataStore from "@api/DataStore";
 import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
 import usrbg from "@plugins/usrbg";
@@ -38,7 +37,6 @@ const settings = definePluginSettings({
     },
 });
 
-const DATASTORE_KEY = "bannersEverywhere";
 const MAX_PNG_CACHE_SIZE = 100;
 
 export default definePlugin({
@@ -72,31 +70,10 @@ export default definePlugin({
         }
     ],
 
-    data: {},
     managedStyle: style,
     pngCache: new Map<string, Promise<string>>(),
-    persistTimeout: undefined as ReturnType<typeof setTimeout> | undefined,
-
-    async start() {
-        this.data = await DataStore.get(DATASTORE_KEY) || {};
-    },
-
     stop() {
-        if (this.persistTimeout) {
-            clearTimeout(this.persistTimeout);
-            this.persistTimeout = undefined;
-        }
         this.pngCache.clear();
-        void DataStore.set(DATASTORE_KEY, this.data);
-    },
-
-    queuePersist() {
-        if (this.persistTimeout) return;
-
-        this.persistTimeout = setTimeout(() => {
-            this.persistTimeout = undefined;
-            void DataStore.set(DATASTORE_KEY, this.data);
-        }, 2_000);
     },
 
     nameplate(nameplate: Nameplate | undefined) {
@@ -165,13 +142,7 @@ export default definePlugin({
             return banner;
         }
         const userProfile = UserProfileStore.getUserProfile(userId);
-        if (userProfile?.banner) {
-            const banner = `https://cdn.discordapp.com/banners/${userId}/${userProfile.banner}.${userProfile.banner.startsWith("a_") ? "gif" : "png"}`;
-            if (this.data[userId] !== banner) {
-                this.data[userId] = banner;
-                this.queuePersist();
-            }
-        }
-        return this.data[userId];
+        if (userProfile?.banner)
+            return `https://cdn.discordapp.com/banners/${userId}/${userProfile.banner}.${userProfile.banner.startsWith("a_") ? "gif" : "png"}`;
     },
 });

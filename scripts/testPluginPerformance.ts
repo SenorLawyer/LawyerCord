@@ -4687,6 +4687,25 @@ test("new plugin notifications return failures to the flux dispatcher", async ()
     await assert.rejects(plugin.flux.POST_CONNECTION_OPEN(), /Storage unavailable/);
 });
 
+test("BannersEverywhere stops displaying a banner removed from the profile store", () => {
+    let banner: string | undefined = "original";
+    const { default: plugin } = loadSource("src/equicordplugins/bannersEverywhere/index.tsx", {
+        "@api/DataStore": {},
+        "@api/PluginManager": { isPluginEnabled: () => false },
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@plugins/usrbg": { __esModule: true, default: { name: "USRBG" } },
+        "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": { UserProfileStore: { getUserProfile: () => banner === undefined ? undefined : { banner } } },
+        "./style.css?managed": {}
+    }, { setTimeout: () => 1 });
+    assert.match(plugin.getBanner("user"), /original/);
+    banner = "";
+    assert.equal(plugin.getBanner("user"), undefined);
+    banner = undefined;
+    assert.equal(plugin.getBanner("user"), undefined);
+});
+
 test("TidalEmbeds only hides URLs its player can render", () => {
     const { default: plugin } = loadSource("src/equicordplugins/tidalEmbeds/index.tsx", {
         "@utils/constants": { EquicordDevs: {} },

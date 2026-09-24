@@ -4,106 +4,31 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ## 3.0.0.0 - Unreleased
 
-- Cancel pending banner conversion work when its cache entry is evicted.
-
-- Limit static member-list banner conversion to 1,024 pixels per dimension while preserving aspect ratio.
-
-- Preserve third-party banner URLs when converting them to static images.
-
-- Keep banner conversion results attached to their original image instead of updating elements by user ID.
-
-- Keep the original member-list banner when image conversion fails, allow later renders to retry, and clean up pending conversions on stop or after a 30-second timeout.
-
-- Keep unsupported TIDAL URLs visible and render every supported player when a message contains multiple TIDAL embeds.
-
-- Show the new ProfileSets page when saving a preset crosses a page boundary, and return to an existing page when imports or filtered lists shrink.
-
-- Reject outdated ProfileSets menu changes and keep renaming attached to its original preset.
-
-- Reject stale ProfileSets saves when another client has changed the stored list. Preserve newer destinations during legacy migration and retain the legacy backup.
-
 ### Compatibility
 
 - VoiceRejoin ignores older saved channels without an account owner. Joining a call records a new reconnect target for that account.
 - Older scheduled messages without an account remain saved but paused. Recreate them under the intended account before sending.
 - Older versions do not enforce saved account ownership or attempted-send markers. Downgrading with saved scheduled messages can send them from the wrong account or repeat a previous attempt.
+- BannersEverywhere now follows currently loaded Discord profile data instead of retaining historical banner URLs.
 
 ### Removed
 
-- Replace BannersEverywhere's hardcoded Discord CDN URL with the shared banner helper.
-
-- Remove BannersEverywhere's persistent Discord banner cache. Banners now follow the currently loaded profile data.
-
-- Remove duplicate error-toast construction in CopyStatusUrls.
-
-- Remove TidalEmbeds' redundant MessageAccessoriesAPI dependency declaration.
-
-- Remove the single-use pending-avatar validator and temporary search array.
-
-- Remove duplicate ProfileSets separators and a redundant width rule.
-
-- Remove the redundant ProfileSets startup storage load.
-
-- Remove unused ProfileSets selection state from storage.
-
-- Replace the custom ProfileSets import picker with the shared file utility.
-
-- Replace the custom ProfileSets download lifecycle with the shared file utility.
-
-- Remove duplicate ProfileSets collectible comparison code and unused action arguments.
-
-- Remove the unused FriendTags stylesheet.
-
+- Remove duplicate ProfileSets storage state, startup loading, comparison code, unused arguments, separators, and styles. Use the shared file utilities for import and export.
+- Remove redundant banner URL and status-error toast construction, the unused FriendTags stylesheet, and TidalEmbeds' duplicate accessory dependency.
 - Remove the unused SVGO development dependency and its release-age exception.
 - Remove TriviaAI, which required a user-supplied API key and arbitrary AI endpoint. Its Answer With AI actions are no longer available.
 
 ### Fixed
 
-- Stop legacy preset migration on malformed account records instead of falling back to unrelated global data.
-
-- Validate stored and imported profile preset fields before rendering, migration, or replacement; preserve invalid stored records.
-
-- Report profile preset load failures in open panels without notifying after they close.
-
-- Limit remote profile images to 10 MiB while downloading, before base64 conversion.
-
-- Apply a 30-second timeout to profile image downloads.
-
-- Abort profile preset preparation when an image download fails instead of treating the image as absent.
-
-- Wait for pending profile preset writes before reloading their stored list.
-
-- Publish profile preset changes only after storage succeeds, report failures, and reject overlapping writes.
-
-- Reset profile preset pagination when changing a search, including after an empty result.
-
-- Cancel pending profile imports when their confirmation modal is dismissed.
-
-- Reload open ProfileSets panels when the signed-in account changes.
-
-- Contain ProfileSets rendering failures within its injected settings section.
-
-- Preserve malformed saved profile preset lists instead of overwriting them during migration or saving.
-
-- Preserve separate legacy profile datasets when migrating account-specific presets.
-
-- Update profile presets with one storage write and retain the original target across asynchronous preparation.
-
-- Reject profile preset imports with invalid entries, names, or timestamps before replacing the current list.
-
-- Cancel ProfileSets imports if the account or preset list changes while reading or confirming the file.
-
-- Cancel ProfileSets saves when their account or preset list changes during preparation.
-
-- Keep ProfileSets storage reads and saves within the loaded account and section.
-
-- Keep ProfileSets save controls usable after profile preparation fails.
-
-- Avoid repeating the previous random profile preset without a retry loop.
-
-- Cancel pending ProfileSets loads when the signed-in account changes.
-
-- Report failed ProfileSets loads and wait for their custom-status updates to finish.
+- Keep banner conversion results attached to their source image. Preserve third-party URLs and the original image on failure, and allow failed conversions to retry.
+- Clean up pending banner conversions on stop, cache eviction, or a 30-second timeout. Limit conversion canvases to 1,024 pixels per dimension while preserving aspect ratio.
+- Keep unsupported TIDAL URLs visible and render every supported player in messages containing multiple TIDAL embeds.
+- Validate stored and imported ProfileSets fields before use, retain invalid records, and stop migration on malformed account records. Preserve newer migration destinations and legacy backups.
+- Publish ProfileSets changes only after storage succeeds. Reject overlapping or stale-client writes, wait for pending writes before reload, and retain the original update target during preparation.
+- Keep ProfileSets reads, saves, imports, and pending loads within their originating account, section, and list. Reload open panels on account changes, cancel dismissed imports, and reject outdated menu actions.
+- Report ProfileSets failures, recover save controls after preparation errors, contain rendering failures, and wait for custom-status updates. Closed panels no longer show load-failure notifications.
+- Reject failed profile-image downloads, apply a 30-second request timeout, and enforce a 10 MiB streaming limit before conversion.
+- Keep ProfileSets pagination aligned with searches, saves, imports, and shrinking lists. Keep renaming attached to its preset and avoid repeating the previous random selection.
 
 - Reject future-dated VoiceRejoin records after a backward system clock adjustment.
 

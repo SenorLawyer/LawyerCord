@@ -4719,7 +4719,7 @@ test("BannersEverywhere preserves the original URL when conversion fails", async
             "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
             "@webpack/common": {}, "./style.css?managed": {}
         }, {
-            Image: class { constructor() { image = this; } onload?: () => void; onerror?: () => void; },
+            Image: class { constructor() { image = this; } onload?: () => void; onerror?: () => void; removeAttribute() {} },
             document: { createElement: () => ({
                 getContext: () => failure === "context" ? null : { drawImage() { if (failure === "draw") throw new Error("Draw failed"); } },
                 toDataURL() { if (failure === "encode") throw new Error("Canvas is tainted"); return "converted"; }
@@ -4743,7 +4743,7 @@ test("BannersEverywhere retries failed conversions and retains successful ones",
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
         "@webpack/common": {}, "./style.css?managed": {}
     }, {
-        Image: class { constructor() { images.push(this); } onload?: () => void; onerror?: () => void; },
+        Image: class { constructor() { images.push(this); } onload?: () => void; onerror?: () => void; removeAttribute() {} },
         document: { createElement: () => ({ getContext: () => ({ drawImage() {} }), toDataURL: () => "converted" }) }
     });
     const url = "https://fixture.invalid/banner.gif";
@@ -4807,6 +4807,44 @@ test("BannersEverywhere conversion results belong to their mounted URL", async (
     await setImmediate();
     assert.equal(updates, 1);
     cleanup();
+});
+
+test("BannersEverywhere stop settles pending images and clears their handlers", async () => {
+    const images: { onload?: (() => void) | null; onerror?: (() => void) | null; removeAttribute(name: string): void; }[] = [];
+    let removed = 0;
+    let canvases = 0;
+    const { default: plugin } = loadSource("src/equicordplugins/bannersEverywhere/index.tsx", {
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/react": {},
+        "@api/PluginManager": {}, "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@plugins/usrbg": {}, "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": {}, "./style.css?managed": {}
+    }, {
+        Image: class {
+            constructor() { images.push(this); }
+            onload?: (() => void) | null;
+            onerror?: (() => void) | null;
+            removeAttribute(name: string) { assert.equal(name, "src"); removed++; }
+        },
+        document: { createElement: () => { canvases++; throw new Error("Cancelled conversion rendered"); } }
+    });
+    const first = plugin.gifToPng("first");
+    const second = plugin.gifToPng("second");
+    const lateLoad = images[0].onload;
+    plugin.stop();
+    assert.equal(removed, 2);
+    assert.equal(plugin.pendingConversions.size, 0);
+    assert.equal(plugin.pngCache.size, 0);
+    for (const image of images) {
+        assert.equal(image.onload, null);
+        assert.equal(image.onerror, null);
+    }
+    lateLoad?.();
+    assert.equal(canvases, 0);
+    assert.deepEqual(await Promise.all([first, second]), ["first", "second"]);
+    plugin.stop();
+    assert.equal(removed, 2);
 });
 
 test("TidalEmbeds only hides URLs its player can render", () => {

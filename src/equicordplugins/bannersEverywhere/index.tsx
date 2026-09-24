@@ -84,7 +84,9 @@ export default definePlugin({
 
     managedStyle: style,
     pngCache: new Map<string, Promise<string>>(),
+    pendingConversions: new Set<() => void>(),
     stop() {
+        for (const cancel of this.pendingConversions) cancel();
         this.pngCache.clear();
     },
 
@@ -113,23 +115,35 @@ export default definePlugin({
         const promise = new Promise<string>(resolve => {
             const img = new Image();
             img.crossOrigin = "anonymous";
+            const finish = (value: string) => {
+                img.onload = null;
+                img.onerror = null;
+                this.pendingConversions.delete(cancel);
+                resolve(value);
+            };
+            const cancel = () => {
+                finish(url);
+                img.removeAttribute("src");
+            };
+            this.pendingConversions.add(cancel);
             img.onload = () => {
+                if (!this.pendingConversions.has(cancel)) return;
                 try {
                     const canvas = document.createElement("canvas");
                     canvas.width = img.width;
                     canvas.height = img.height;
                     const ctx = canvas.getContext("2d");
                     if (!ctx) {
-                        resolve(url);
+                        finish(url);
                         return;
                     }
                     ctx.drawImage(img, 0, 0);
-                    resolve(canvas.toDataURL("image/png"));
+                    finish(canvas.toDataURL("image/png"));
                 } catch {
-                    resolve(url);
+                    finish(url);
                 }
             };
-            img.onerror = () => resolve(url);
+            img.onerror = () => finish(url);
             img.src = url;
         });
         this.pngCache.set(url, promise);

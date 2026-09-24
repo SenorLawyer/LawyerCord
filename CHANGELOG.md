@@ -6,7 +6,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Keep banner conversion results attached to their original image instead of updating elements by user ID.
 
-- Keep the original member-list banner when image conversion fails and allow later renders to retry.
+- Keep the original member-list banner when image conversion fails, allow later renders to retry, and clean up pending conversions when the plugin stops.
 
 - Keep unsupported TIDAL URLs visible and render every supported player when a message contains multiple TIDAL embeds.
 

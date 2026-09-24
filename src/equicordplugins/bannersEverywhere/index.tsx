@@ -51,14 +51,15 @@ const StaticBanner = ErrorBoundary.wrap(({ url, convert }: StaticBannerProps) =>
 
 interface MemberListBannerProps {
     userId: string;
+    preferNameplate: boolean;
     nameplate?: Nameplate;
     getBanner: (userId: string) => string | undefined;
     convert: (url: string) => Promise<string>;
 }
 
-const BANNER_SETTINGS: ("animate" | "preferNameplate")[] = ["animate", "preferNameplate"];
-const MemberListBanner = ErrorBoundary.wrap(({ userId, nameplate, getBanner, convert }: MemberListBannerProps) => {
-    const { animate, preferNameplate } = settings.use(BANNER_SETTINGS);
+const BANNER_SETTINGS: "animate"[] = ["animate"];
+const MemberListBanner = ErrorBoundary.wrap(({ userId, nameplate, preferNameplate, getBanner, convert }: MemberListBannerProps) => {
+    const { animate } = settings.use(BANNER_SETTINGS);
     const url = useStateFromStores([UserProfileStore], () => getBanner(userId), [userId, animate]);
     if (!url || (preferNameplate && nameplate)) return null;
     if (!animate) return <StaticBanner key={url} url={url} convert={convert} />;
@@ -111,7 +112,7 @@ export default definePlugin({
     },
 
     memberListBannerHook(user: User, nameplate: Nameplate | undefined) {
-        return <MemberListBanner userId={user.id} nameplate={nameplate} getBanner={this.getBanner} convert={this.gifToPng} />;
+        return <MemberListBanner userId={user.id} nameplate={nameplate} preferNameplate={settings.store.preferNameplate} getBanner={this.getBanner} convert={this.gifToPng} />;
     },
 
     async gifToPng(url: string): Promise<string> {

@@ -5257,7 +5257,7 @@ test("BannersEverywhere subscribes its banner to profile and setting changes", (
         "@api/Settings": { definePluginSettings: () => ({ store: values, use: (currentKeys: unknown) => {
             if (keys) assert.equal(currentKeys, keys);
             keys = currentKeys;
-            assert.deepEqual(Array.from(currentKeys as string[]), ["animate", "preferNameplate"]);
+            assert.deepEqual(Array.from(currentKeys as string[]), ["animate"]);
             return values;
         } }) },
         "@plugins/usrbg": {}, "@utils/constants": { Devs: {} },
@@ -5280,12 +5280,14 @@ test("BannersEverywhere subscribes its banner to profile and setting changes", (
     expectedUser = "second";
     url = "replacement";
     assert.equal(render().props.src, "replacement");
+    const retained = plugin.memberListBannerHook({ id: expectedUser }, { src: "nameplate" });
     values.preferNameplate = true;
+    assert.equal(retained.type(retained.props).props.src, "replacement");
     assert.equal(render(), null);
     values.preferNameplate = false;
     url = undefined;
     assert.equal(render(), null);
-    assert.equal(subscriptions, 5);
+    assert.equal(subscriptions, 6);
 });
 
 test("BannersEverywhere conversion results belong to their mounted URL", async () => {

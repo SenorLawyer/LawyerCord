@@ -4404,6 +4404,41 @@ test("profile preset menus reject mutations after their rendered list is replace
     assert.equal(changes, 1);
 });
 
+test("profile preset loading follows the rendered object and rejects replaced lists", () => {
+    const original = { name: "Original", timestamp: 0 };
+    const other = { name: "Other", timestamp: 1 };
+    const storage = { presets: [original, other] };
+    const loaded: unknown[] = [];
+    const selected: unknown[] = [];
+    let errors = 0;
+    let load: (preset: typeof original) => void = () => assert.fail("Missing list callback");
+    const React = {
+        useState: (value: unknown) => [value, (next: unknown) => selected.push(next)],
+        useReducer: () => [0, () => {}], useRef: () => ({ current: -1 }), useEffect() {},
+        createElement: (_type: unknown, props: { onLoad?: typeof load; } | null) => {
+            if (props?.onLoad) load = props.onLoad;
+            return null;
+        }
+    };
+    const api = loadSource("src/equicordplugins/profileSets/components/presetManager.tsx", {
+        "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
+        "@webpack/common": { React, useStateFromStores: () => null, showToast: () => { errors++; }, Toasts: { Type: { FAILURE: "failure" } } },
+        "../index": { cl: () => "", settings: { store: {} } },
+        "../utils/actions": {}, "../utils/profile": { loadPresetAsPending: async (preset: unknown) => { loaded.push(preset); } },
+        "../utils/storage": storage, "./confirmModal": {}, "./presetList": {}
+    });
+    api.PresetManager({});
+    storage.presets = [other, original];
+    load(original);
+    assert.deepEqual(loaded, [original]);
+    assert.deepEqual(selected, [original]);
+    storage.presets = [{ name: "Replacement", timestamp: 2 }];
+    load(original);
+    assert.deepEqual(loaded, [original]);
+    assert.deepEqual(selected, [original]);
+    assert.equal(errors, 1);
+});
+
 test("profile preset load failures notify mounted panels only", async () => {
     for (const closed of [false, true]) {
         const load = Promise.withResolvers<void>();

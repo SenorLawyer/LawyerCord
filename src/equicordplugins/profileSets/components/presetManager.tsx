@@ -12,7 +12,7 @@ import { openModal, React, SelectedGuildStore, showToast, TextInput, Toasts, Use
 import { cl, settings } from "../index";
 import { exportPresets, ImportDecision, importPresets, savePreset } from "../utils/actions";
 import { loadPresetAsPending } from "../utils/profile";
-import { loadPresets, presets, PresetSection } from "../utils/storage";
+import { loadPresets, presets, PresetSection,ProfilePresetEx } from "../utils/storage";
 import { ImportProfilesModal } from "./confirmModal";
 import { PresetList } from "./presetList";
 
@@ -29,7 +29,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
     const [isSaving, setIsSaving] = React.useState(false);
     const [currentPage, setCurrentPage] = React.useState(1);
     const [pageInput, setPageInput] = React.useState("1");
-    const [selectedPreset, setSelectedPreset] = React.useState<number>(-1);
+    const [selectedPreset, setSelectedPreset] = React.useState<ProfilePresetEx | null>(null);
     const [searchMode, setSearchMode] = React.useState(false);
     const lastRandomIndexRef = React.useRef<number>(-1);
     const resolvedSection: PresetSection = section ?? "main";
@@ -51,7 +51,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
                 if (isActive) showToast("Could not load the saved profile presets.", Toasts.Type.FAILURE);
             }
             if (!isActive) return;
-            setSelectedPreset(-1);
+            setSelectedPreset(null);
             setCurrentPage(1);
             setPageInput("1");
             forceUpdate();
@@ -103,17 +103,21 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
         }
     };
 
-    const applyPreset = (index: number) => {
-        setSelectedPreset(index);
-        loadPresetAsPending(presets[index], resolvedGuildId, {
+    const applyPreset = (preset: ProfilePresetEx) => {
+        if (!presets.includes(preset)) {
+            showToast("The profile preset list changed. Reopen this panel before trying again.", Toasts.Type.FAILURE);
+            return;
+        }
+        setSelectedPreset(preset);
+        loadPresetAsPending(preset, resolvedGuildId, {
             isGuildProfile: resolvedSection === "server"
         }).catch(() => showToast("Could not load the profile preset.", Toasts.Type.FAILURE));
         forceUpdate();
     };
 
-    const handleLoadPreset = (index: number) => {
+    const handleLoadPreset = (preset: ProfilePresetEx) => {
         if (!canUseGuild) return;
-        applyPreset(index);
+        applyPreset(preset);
     };
 
     const handleRandomPreset = () => {
@@ -123,7 +127,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
         let nextIndex = Math.floor(Math.random() * (presets.length - Number(skipPrevious)));
         if (skipPrevious && nextIndex >= previousIndex) nextIndex++;
         lastRandomIndexRef.current = nextIndex;
-        applyPreset(nextIndex);
+        applyPreset(presets[nextIndex]);
     };
 
     const showImportPrompt = (existingCount: number): Promise<ImportDecision> => {

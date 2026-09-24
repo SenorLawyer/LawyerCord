@@ -15,8 +15,8 @@ interface PresetListProps {
     presets: ProfilePresetEx[];
     allPresets: ProfilePresetEx[];
     avatarSize: number;
-    selectedPreset: number;
-    onLoad: (index: number) => void;
+    selectedPreset: ProfilePresetEx | null;
+    onLoad: (preset: ProfilePresetEx) => void;
     onUpdate: () => void;
     guildId?: string;
     section: PresetSection;
@@ -54,7 +54,7 @@ export function PresetList({
             {presets.map(preset => {
                 const actualIndex = allPresets.indexOf(preset);
                 const isRenaming = renaming === preset;
-                const isSelected = !isRenaming && selectedPreset === actualIndex;
+                const isSelected = !isRenaming && selectedPreset === preset;
                 const date = new Date(preset.timestamp);
                 const formattedDate = date.toLocaleDateString(undefined, {
                     month: "short",
@@ -81,13 +81,13 @@ export function PresetList({
                         role="button"
                         onClick={() => {
                             if (!isRenaming) {
-                                onLoad(actualIndex);
+                                onLoad(preset);
                             }
                         }}
                         onKeyDown={e => {
                             if (!isRenaming && (e.key === "Enter" || e.key === " ")) {
                                 e.preventDefault();
-                                onLoad(actualIndex);
+                                onLoad(preset);
                             }
                         }}
                         className={classes(cl("row"), isSelected ? "selected" : "")}

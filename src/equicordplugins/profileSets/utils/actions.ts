@@ -10,7 +10,7 @@ import { findStoreLazy } from "@webpack";
 import { showToast, Toasts, UserStore } from "@webpack/common";
 
 import { getCurrentProfile } from "./profile";
-import { addPreset, movePresetInArray, presets, PresetSection, type ProfilePresetEx, removePreset, replaceAllPresets, savePresetsData, updatePreset } from "./storage";
+import { presets, PresetSection, type ProfilePresetEx, savePresetsData } from "./storage";
 
 const UserProfileSettingsStore = findStoreLazy("UserProfileSettingsStore");
 
@@ -45,8 +45,7 @@ export async function savePreset(name: string, section: PresetSection, guildId?:
         ...profile,
         avatarDataUrl: effectiveAvatar,
     };
-    addPreset(newPreset);
-    await savePresetsData(section);
+    await savePresetsData(section, [...presets, newPreset]);
 }
 
 export async function refreshPreset(preset: ProfilePresetEx, section: PresetSection, guildId?: string) {
@@ -57,34 +56,34 @@ export async function refreshPreset(preset: ProfilePresetEx, section: PresetSect
     const index = presets.indexOf(preset);
     if (UserStore.getCurrentUser()?.id !== userId || presets !== originalPresets || index < 0)
         throw new Error("The account or preset list changed while preparing the profile.");
-    updatePreset(index, {
+    const updatedPreset = {
         ...preset,
         ...Object.fromEntries(Object.entries(profile).filter(([, value]) => isNonNullish(value))),
         timestamp: Date.now()
-    });
-    await savePresetsData(section);
+    };
+    await savePresetsData(section, presets.map((entry, i) => i === index ? updatedPreset : entry));
 }
 
 export async function deletePreset(index: number, section: PresetSection) {
     if (index < 0 || index >= presets.length) return;
 
-    removePreset(index);
-    await savePresetsData(section);
+    await savePresetsData(section, presets.filter((_, i) => i !== index));
 }
 
 export async function movePreset(fromIndex: number, toIndex: number, section: PresetSection) {
     if (fromIndex < 0 || fromIndex >= presets.length || toIndex < 0 || toIndex >= presets.length) return;
 
-    movePresetInArray(fromIndex, toIndex);
-    await savePresetsData(section);
+    const reordered = [...presets];
+    const [preset] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, preset);
+    await savePresetsData(section, reordered);
 }
 
 export async function renamePreset(index: number, newName: string, section: PresetSection) {
     if (index < 0 || index >= presets.length || !newName.trim()) return;
 
     const updatedPreset = { ...presets[index], name: newName.trim() };
-    updatePreset(index, updatedPreset);
-    await savePresetsData(section);
+    await savePresetsData(section, presets.map((entry, i) => i === index ? updatedPreset : entry));
 }
 
 export function exportPresets(section: PresetSection) {
@@ -121,21 +120,10 @@ export async function importPresets(
             && Number.isFinite(new Date(preset.timestamp).getTime())
         )) throw new Error("Invalid profile preset list.");
 
-        if (presets.length > 0) {
-            const decision = await onImportPrompt(presets.length);
-            if (decision === "cancel") return;
-            checkScope();
-            if (decision === "override") {
-                replaceAllPresets(importedPresets);
-            } else {
-                const combined = [...presets, ...importedPresets];
-                replaceAllPresets(combined);
-            }
-        } else {
-            replaceAllPresets(importedPresets);
-        }
-
-        await savePresetsData(section);
+        const decision = presets.length > 0 ? await onImportPrompt(presets.length) : "override";
+        if (decision === "cancel") return;
+        checkScope();
+        await savePresetsData(section, decision === "merge" ? [...presets, ...importedPresets] : importedPresets);
         forceUpdate();
     } catch {
         showToast("Could not import the profile presets.", Toasts.Type.FAILURE);

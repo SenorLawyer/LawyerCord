@@ -23,6 +23,7 @@ export type ProfilePresetEx = ProfilePreset & {
 export let presets: ProfilePresetEx[] = [];
 let activeScopeKey: string | null = null;
 let loadGeneration = 0;
+let saveInProgress = false;
 
 function resetPresets(nextPresets: ProfilePresetEx[] = []) {
     presets = nextPresets;
@@ -100,41 +101,20 @@ export async function loadPresets(section: PresetSection) {
     }
 }
 
-export async function savePresetsData(section: PresetSection) {
+export async function savePresetsData(section: PresetSection, nextPresets: ProfilePresetEx[] = presets) {
+    const userId = getCurrentUserId();
+    if (!userId) throw new Error("No account is signed in.");
+    const key = getPresetsKey(section, userId);
+    if (key !== activeScopeKey) throw new Error("The preset list has not finished loading.");
+    if (saveInProgress) throw new Error("A preset change is still being saved.");
+    const generation = loadGeneration;
+    saveInProgress = true;
     try {
-        const userId = getCurrentUserId();
-        if (!userId) return;
-
-        const key = getPresetsKey(section, userId);
-        if (key !== activeScopeKey) return;
-        await DataStore.set(key, presets);
-    } catch (err) {
-        logger.error("Failed to save presets", err);
+        await DataStore.set(key, nextPresets);
+        if (!isCurrentLoad(generation, userId) || activeScopeKey !== key)
+            throw new Error("The account or preset list changed while saving.");
+        presets = nextPresets;
+    } finally {
+        saveInProgress = false;
     }
-}
-
-export function addPreset(preset: ProfilePresetEx) {
-    presets.push(preset);
-}
-
-export function updatePreset(index: number, preset: ProfilePresetEx) {
-    if (index >= 0 && index < presets.length) {
-        presets[index] = preset;
-    }
-}
-
-export function removePreset(index: number) {
-    if (index >= 0 && index < presets.length) {
-        presets.splice(index, 1);
-    }
-}
-
-export function movePresetInArray(fromIndex: number, toIndex: number) {
-    if (fromIndex < 0 || fromIndex >= presets.length || toIndex < 0 || toIndex >= presets.length) return;
-    const [preset] = presets.splice(fromIndex, 1);
-    presets.splice(toIndex, 0, preset);
-}
-
-export function replaceAllPresets(newPresets: ProfilePresetEx[]) {
-    presets = newPresets;
 }

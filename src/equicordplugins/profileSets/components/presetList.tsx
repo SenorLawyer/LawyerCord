@@ -39,6 +39,15 @@ export function PresetList({
     const [renaming, setRenaming] = React.useState<number>(-1);
     const [renameText, setRenameText] = React.useState("");
 
+    const runChange = async (change: () => Promise<void>) => {
+        try {
+            await change();
+            onUpdate();
+        } catch {
+            showToast("Could not save the profile preset change.", Toasts.Type.FAILURE);
+        }
+    };
+
     return (
         <div className={cl("list-container")}>
             {presets.map(preset => {
@@ -59,8 +68,7 @@ export function PresetList({
                 const commitRename = () => {
                     const nextName = renameText.trim();
                     if (!nextName) return;
-                    renamePreset(actualIndex, nextName, section);
-                    onUpdate();
+                    void runChange(() => renamePreset(actualIndex, nextName, section));
                 };
 
                 const showMoveOptions = actualIndex > 0 || actualIndex < allPresets.length - 1 || currentPage > 1;
@@ -160,31 +168,24 @@ export function PresetList({
                                                 <Menu.MenuItem
                                                     id="move-up"
                                                     label="Move Up"
-                                                    action={() => {
-                                                        movePreset(actualIndex, actualIndex - 1, section);
-                                                        onUpdate();
-                                                    }}
+                                                    action={() => runChange(() => movePreset(actualIndex, actualIndex - 1, section))}
                                                 />
                                             )}
                                             {actualIndex < allPresets.length - 1 && (
                                                 <Menu.MenuItem
                                                     id="move-down"
                                                     label="Move Down"
-                                                    action={() => {
-                                                        movePreset(actualIndex, actualIndex + 1, section);
-                                                        onUpdate();
-                                                    }}
+                                                    action={() => runChange(() => movePreset(actualIndex, actualIndex + 1, section))}
                                                 />
                                             )}
                                             {currentPage > 1 && (
                                                 <Menu.MenuItem
                                                     id="move-to-page-1"
                                                     label="Move to Page 1"
-                                                    action={() => {
-                                                        movePreset(actualIndex, 0, section);
+                                                    action={() => runChange(async () => {
+                                                        await movePreset(actualIndex, 0, section);
                                                         onPageChange(1);
-                                                        onUpdate();
-                                                    }}
+                                                    })}
                                                 />
                                             )}
                                             {showMoveOptions && <Menu.MenuSeparator />}
@@ -192,10 +193,7 @@ export function PresetList({
                                                 id="delete"
                                                 label="Delete"
                                                 color="danger"
-                                                action={async () => {
-                                                    await deletePreset(actualIndex, section);
-                                                    onUpdate();
-                                                }}
+                                                action={() => runChange(() => deletePreset(actualIndex, section))}
                                             />
                                         </Menu.Menu>
                                     ));

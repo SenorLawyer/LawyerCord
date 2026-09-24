@@ -3897,8 +3897,7 @@ test("profile preset refresh writes once and retains its original target", async
         const other = { name: "Other", bio: "Other", pronouns: "Other", timestamp: 0 };
         const storage = {
             presets: [target, other],
-            updatePreset: (index: number, value: typeof target) => { storage.presets[index] = value; },
-            savePresetsData: async () => { writes++; }
+            savePresetsData: async (_section: string, next: typeof storage.presets) => { writes++; storage.presets = next; }
         };
         const api = loadSource("src/equicordplugins/profileSets/utils/actions.ts", {
             "@utils/web": {},
@@ -3940,8 +3939,7 @@ test("profile preset imports keep their initiating account and list", async () =
         const prompted = Promise.withResolvers<void>();
         const storage = {
             presets: [{ name: "Existing" }],
-            replaceAllPresets: (value: { name: string; }[]) => { storage.presets = value; },
-            savePresetsData: async () => { writes++; }
+            savePresetsData: async (_section: string, next: typeof storage.presets) => { writes++; storage.presets = next; }
         };
         const api = loadSource("src/equicordplugins/profileSets/utils/actions.ts", {
             "@utils/web": { chooseFile: async () => stage === "cancel" ? null : { text: () => read.promise } },
@@ -3980,8 +3978,7 @@ test("profile preset saves reject account and list changes during preparation", 
     let writes = 0;
     const storage = {
         presets: [] as object[],
-        addPreset: (preset: object) => storage.presets.push(preset),
-        savePresetsData: async () => { writes++; }
+        savePresetsData: async (_section: string, next: typeof storage.presets) => { writes++; storage.presets = next; }
     };
     const api = loadSource("src/equicordplugins/profileSets/utils/actions.ts", {
         "@utils/web": {},
@@ -4010,6 +4007,72 @@ test("profile preset saves reject account and list changes during preparation", 
     assert.equal(writes, 1);
 });
 
+test("profile preset mutations preserve the visible list when persistence fails", async () => {
+    for (const operation of ["save", "refresh", "delete", "move", "rename", "import"]) {
+        const original = [{ name: "First", timestamp: 0 }, { name: "Second", timestamp: 0 }];
+        let writes = 0;
+        const errors: string[] = [];
+        const UserStore = { getCurrentUser: () => ({ id: "user" }) };
+        const storage = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
+            "@api/index": { DataStore: { get: async () => original, set: async () => { writes++; throw new Error("Write failed"); } } },
+            "@utils/Logger": { Logger: class { error() {} } }, "@webpack/common": { UserStore }
+        });
+        await storage.loadPresets("main");
+        const actions = loadSource("src/equicordplugins/profileSets/utils/actions.ts", {
+            "@utils/web": { chooseFile: async () => ({ text: async () => '[{"name":"Imported","timestamp":0}]' }) },
+            "@utils/guards": { isNonNullish: (value: unknown) => value != null },
+            "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
+            "@webpack/common": { UserStore, showToast: (message: string) => errors.push(message), Toasts: { Type: { FAILURE: "failure" } } },
+            "./profile": { getCurrentProfile: async () => ({ bio: "Updated" }) }, "./storage": storage
+        });
+        if (operation === "import") {
+            await actions.importPresets(() => assert.fail("Failed import refreshed the UI"), async () => "override", "main");
+            assert.equal(errors.length, 1);
+        } else {
+            const pending = operation === "save" ? actions.savePreset("New", "main")
+                : operation === "refresh" ? actions.refreshPreset(original[0], "main")
+                    : operation === "delete" ? actions.deletePreset(0, "main")
+                        : operation === "move" ? actions.movePreset(0, 1, "main")
+                            : actions.renamePreset(0, "Renamed", "main");
+            await assert.rejects(pending, /Write failed/);
+        }
+        assert.equal(writes, 1);
+        assert.equal(storage.presets, original);
+        assert.equal(JSON.stringify(original), '[{"name":"First","timestamp":0},{"name":"Second","timestamp":0}]');
+    }
+});
+
+test("profile preset writes publish only on success and reject overlapping writes", async () => {
+    const original = [{ name: "Original", timestamp: 0 }];
+    const next = [{ name: "Next", timestamp: 1 }];
+    let write = Promise.withResolvers<void>();
+    let userId = "user";
+    const storage = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
+        "@api/index": { DataStore: { get: async () => original, set: () => write.promise } },
+        "@utils/Logger": { Logger: class { error() {} } },
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } }
+    });
+    await storage.loadPresets("main");
+    const first = storage.savePresetsData("main", next);
+    assert.equal(storage.presets, original);
+    await assert.rejects(storage.savePresetsData("main", []), /still being saved/);
+    const failed = assert.rejects(first, /Write failed/);
+    write.reject(new Error("Write failed"));
+    await failed;
+    assert.equal(storage.presets, original);
+    write = Promise.withResolvers<void>();
+    const retry = storage.savePresetsData("main", next);
+    write.resolve();
+    await retry;
+    assert.equal(storage.presets, next);
+    write = Promise.withResolvers<void>();
+    const switched = storage.savePresetsData("main", []);
+    userId = "other";
+    write.resolve();
+    await assert.rejects(switched, /changed while saving/);
+    assert.equal(storage.presets, next);
+});
+
 test("profile preset loading preserves malformed destination records", async () => {
     for (const section of ["main", "server"]) {
         for (const stored of [null, false, 0, "invalid", { presets: [] }]) {
@@ -4025,7 +4088,7 @@ test("profile preset loading preserves malformed destination records", async () 
                 "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "user" }) } }
             });
             await api.loadPresets(section);
-            await api.savePresetsData(section);
+            await assert.rejects(api.savePresetsData(section));
             assert.equal(writes.length, 0);
             assert.equal(errors, 1);
             assert.equal(api.presets.length, 0);
@@ -4077,18 +4140,18 @@ test("profile preset storage rejects stale account reads and foreign-scope saves
     reads[0].resolve([{ name: "First account" }]);
     await loading;
     assert.equal(api.presets.length, 0);
-    await api.savePresetsData("main");
+    await assert.rejects(api.savePresetsData("main"));
     assert.deepEqual(writes, []);
     const current = api.loadPresets("main");
-    await api.savePresetsData("main");
+    await assert.rejects(api.savePresetsData("main"));
     assert.deepEqual(writes, []);
     reads[1].resolve([{ name: "Second account" }]);
     await current;
     await api.savePresetsData("main");
     assert.deepEqual(writes, ["ProfilePresets_v2_Main:second"]);
-    await api.savePresetsData("server");
+    await assert.rejects(api.savePresetsData("server"));
     currentId = "first";
-    await api.savePresetsData("main");
+    await assert.rejects(api.savePresetsData("main"));
     assert.equal(writes.length, 1);
 });
 

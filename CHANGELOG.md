@@ -31,6 +31,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Publish profile preset changes only after storage succeeds, report failures, and reject overlapping writes.
+
 - Reset profile preset pagination when changing a search, including after an empty result.
 
 - Cancel pending profile imports when their confirmation modal is dismissed.

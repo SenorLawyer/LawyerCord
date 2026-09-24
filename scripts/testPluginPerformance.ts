@@ -3889,7 +3889,7 @@ test("profile images fall back after failed guild downloads", async () => {
 });
 
 test("profile preset imports keep their initiating account and list", async () => {
-    for (const stage of ["read", "prompt", "list", "success"]) {
+    for (const stage of ["read", "prompt", "list", "success", "null", "name", "timestamp", "object"]) {
         let userId = "first";
         let writes = 0;
         let updates = 0;
@@ -3915,8 +3915,12 @@ test("profile preset imports keep their initiating account and list", async () =
         await api.importPresets(() => { updates++; }, () => { prompted.resolve(); return decision.promise; }, "main");
         const importing = input.onchange({ currentTarget: { files: [{ text: () => read.promise }] } });
         if (stage === "read") userId = "second";
-        read.resolve('[{"name":"Imported"}]');
-        if (stage !== "read") {
+        const invalidFiles: Record<string, string> = {
+            null: "[null]", name: '[{"name":42,"timestamp":0}]',
+            timestamp: '[{"name":"Imported","timestamp":"invalid"}]', object: "{}"
+        };
+        read.resolve(invalidFiles[stage] ?? '[{"name":"Imported","timestamp":0}]');
+        if (stage !== "read" && !(stage in invalidFiles)) {
             await prompted.promise;
             if (stage === "prompt") userId = "second";
             if (stage === "list") storage.presets = [{ name: "Replacement" }];

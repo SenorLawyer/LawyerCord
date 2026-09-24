@@ -124,11 +124,14 @@ export async function importPresets(
 
             const text = await file.text();
             checkScope();
-            const importedPresets = JSON.parse(text);
+            const importedPresets: unknown = JSON.parse(text);
 
-            if (!Array.isArray(importedPresets)) {
-                return;
-            }
+            if (!Array.isArray(importedPresets) || !importedPresets.every((preset: unknown) =>
+                typeof preset === "object" && preset !== null
+                && "name" in preset && typeof preset.name === "string"
+                && "timestamp" in preset && typeof preset.timestamp === "number"
+                && Number.isFinite(new Date(preset.timestamp).getTime())
+            )) throw new Error("Invalid profile preset list.");
 
             if (presets.length > 0) {
                 const decision = await onImportPrompt(presets.length);

@@ -184,7 +184,7 @@ async function run(workflow: Automation, variables: Record<string, unknown>, env
                 let result: BlockResult;
                 if (context.dryRun) {
                     if (!Object.hasOwn(c, "sample")) throw new Error("Add a sample result to test this external block.");
-                    result = { value: structuredClone(c.sample), port: c.sample === null && ["wait-reply", "wait-dm", "wait-reaction"].includes(block.type) ? "alternate" : "next" };
+                    result = { value: structuredClone(c.sample), port: c.sample === null && ["wait-presence", "wait-client-event", "wait-reply", "wait-dm", "wait-reaction"].includes(block.type) ? "alternate" : "next" };
                 } else {
                     let attempt = 0;
                     while (true) {

@@ -187,6 +187,13 @@ function channelChoices(guildId: string): Choice[] {
         });
 }
 
+export function GuildField({ value, onChange }: { value: string; onChange(value: string): void; }) {
+    const [manual, setManual] = React.useState(() => isTemplate(value));
+    const toggle = <ManualToggle manual={manual} onToggle={() => setManual(!manual)} />;
+    if (manual) return <Field label="Server" description="A server ID or a reference such as {{triggerEvent.guildId}}." hint={toggle}><TextInput aria-label="Server" value={value} onChange={onChange} /></Field>;
+    return <SearchField label="Server" value={value} options={guildChoices().filter(guild => guild.value !== DM_GUILD_ID)} placeholder="Choose a server" prefix={GuildPrefix} onChange={onChange} hint={toggle} />;
+}
+
 export function ChannelField({ label = "Channel", description, guildId, channelId, onChange }: { label?: string; description?: string; guildId: string; channelId: string; onChange(patch: { guildId?: string; channelId?: string; }): void; }) {
     const [manual, setManual] = React.useState(() => isTemplate(channelId));
     const known = channelId ? ChannelStore.getChannel(channelId) : undefined;

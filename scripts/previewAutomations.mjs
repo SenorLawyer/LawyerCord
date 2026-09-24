@@ -49,7 +49,7 @@ let modalRoot;
 const openModal=render=>{modalRoot??=createRoot(document.getElementById("app"));modalRoot.render(h(React.Profiler,{id:"Editor",onRender:(_id,phase,actualDuration)=>{window.editorRenders??=[];window.editorRenders.push({phase,actualDuration});}},render({transitionState:1,onClose:()=>modalRoot.render(null)})));};
 const fallback=()=>null;
 fallback.wrap=C=>C;
-const implementations={Button,TextInput,TextArea,Checkbox,Select,SearchableSelect,Heading,Modal,openModal,showToast:message=>{document.getElementById("toast").textContent=message;},Toasts:{Type:{SUCCESS:1,FAILURE:2}},Parser:{parse:value=>value},useStateFromStores:(_stores,select)=>select(),IconUtils:{getGuildIconURL:()=>null},ChannelType:{GUILD_VOICE:2,GUILD_STAGE_VOICE:13,PUBLIC_THREAD:11,PRIVATE_THREAD:12,ANNOUNCEMENT_THREAD:10},Margins:{},SettingsTab:({children})=>h("div",null,children),Paragraph:({children})=>h("p",null,children),wrapTab:C=>C};
+const implementations={copyWithToast:value=>{window.copiedReference=value;},Button,TextInput,TextArea,Checkbox,Select,SearchableSelect,Heading,Modal,openModal,showToast:message=>{document.getElementById("toast").textContent=message;},Toasts:{Type:{SUCCESS:1,FAILURE:2}},Parser:{parse:value=>value},useStateFromStores:(_stores,select)=>select(),IconUtils:{getGuildIconURL:()=>null},ChannelType:{GUILD_VOICE:2,GUILD_STAGE_VOICE:13,PUBLIC_THREAD:11,PRIVATE_THREAD:12,ANNOUNCEMENT_THREAD:10},Margins:{},SettingsTab:({children})=>h("div",null,children),Paragraph:({children})=>h("p",null,children),wrapTab:C=>C};
 ${[...names].filter(name => name !== "React").map(name => ["Button","TextInput","TextArea","Checkbox","Select","SearchableSelect","Heading","Modal","openModal"].includes(name) ? `export { ${name} };` : `export const ${name}=implementations[${JSON.stringify(name)}] || ${name.endsWith("Store") || name === "FluxDispatcher" ? "store" : name.endsWith("Icon") ? "Icon" : "fallback"};`).join("\n")}
 export default fallback;
 `;
@@ -73,7 +73,7 @@ const openRouter = `export const formatModelPrice=()=>"";export const getCachedM
 const output = resolve("dist/automation-review");
 await mkdir(output, { recursive: true });
 const result = await build({
-    stdin: { contents: `import {openAutomationBuilder} from ${JSON.stringify(join(directory,"BuilderModal.tsx"))};import {createTemplate} from ${JSON.stringify(join(directory,"templates.ts"))};import {createAutomation,createAutomationBlock} from ${JSON.stringify(join(directory,"model.ts"))};window.previewOpen=(large=false)=>{const a=large?createAutomation():createTemplate("Process a list");if(large){a.blocks=Array.from({length:100},()=>createAutomationBlock("note"));a.blocks.forEach((b,i)=>b.next=a.blocks[i+1]?.id);a.entryId=a.blocks[0].id;}window.previewWorkflow=a;openAutomationBuilder(a);};window.previewOpen(${benchmark});`, resolveDir: root, loader: "tsx" },
+    stdin: { contents: `import {openAutomationBuilder} from ${JSON.stringify(join(directory,"BuilderModal.tsx"))};import {createTemplate} from ${JSON.stringify(join(directory,"templates.ts"))};import {createAutomation,createAutomationBlock} from ${JSON.stringify(join(directory,"model.ts"))};window.previewOpen=(large=false)=>{const a=large?createAutomation():createTemplate("Process a list");if(large){a.blocks=Array.from({length:100},()=>createAutomationBlock("note"));a.blocks.forEach((b,i)=>b.next=a.blocks[i+1]?.id);a.entryId=a.blocks[0].id;}window.previewWorkflow=a;openAutomationBuilder(a);};window.previewOpenTemplate=name=>openAutomationBuilder(createTemplate(name));window.previewOpenBlock=type=>{const a=createAutomation();a.trigger={type:"startup"};a.blocks=[createAutomationBlock(type)];a.entryId=a.blocks[0].id;openAutomationBuilder(a);};window.previewOpen(${benchmark});`, resolveDir: root, loader: "tsx" },
     bundle: true, write: false, format: "iife", jsx: "transform", jsxFactory: "React.createElement", jsxFragment: "React.Fragment",
     define: { "process.env.NODE_ENV": '"development"', IS_DISCORD_DESKTOP: "false", IS_WEB: "true" },
     plugins: [{ name: "isolated-preview", setup(build) {
@@ -154,11 +154,37 @@ else {
         await click("List");
         await page.screenshot({ path: join(output, "small-window.png"), fullPage: true });
         await page.setViewport({ width: 1440, height: 1000 });
+        await page.evaluate(() => window.previewOpenTemplate("User presence"));
+        await page.waitForFunction(() => document.querySelector(".vc-ab-inspector-body")?.textContent.includes("Status after update"));
+        assert.ok(await page.$$eval(".vc-ab-output-field", fields => fields.some(field => field.textContent.includes("trigger") || field.textContent.includes("status"))));
+        await page.screenshot({ path: join(output, "presence-trigger.png"), fullPage: true });
+        await page.click(".vc-ab-node");
+        await page.waitForFunction(() => document.querySelector(".vc-ab-output")?.textContent.includes("displayName"));
+        assert.ok(await page.$eval(".vc-ab-output", element => element.textContent.includes("activities.0.name") && element.textContent.includes("Display name with username")));
+        await page.screenshot({ path: join(output, "user-output.png"), fullPage: true });
+        await click("displayName");
+        assert.equal(await page.evaluate(() => window.copiedReference), "{{user.displayName}}");
+        await page.type(".vc-ab-output input", "activities");
+        assert.ok(await page.$$eval(".vc-ab-output-field", fields => fields.every(field => field.textContent.includes("activities"))));
+        await click("activities.0.name");
+        assert.equal(await page.evaluate(() => window.copiedReference), "{{user.activities.0.name}}");
+        await page.screenshot({ path: join(output, "output-field-search.png"), fullPage: true });
+        await page.evaluate(() => window.previewOpenBlock("search-messages"));
+        await page.waitForSelector(".vc-ab-node");
+        await page.click(".vc-ab-node");
+        await page.waitForFunction(() => document.querySelector(".vc-ab-inspector-body")?.textContent.includes("Messages by"));
+        await page.screenshot({ path: join(output, "author-search.png"), fullPage: true });
+        await page.evaluate(() => window.previewOpenBlock("wait-client-event"));
+        await page.waitForSelector(".vc-ab-node");
+        await page.click(".vc-ab-node");
+        await page.waitForFunction(() => document.querySelector(".vc-ab-inspector-body")?.textContent.includes("Discord event"));
+        assert.ok(await page.$eval(".vc-ab-inspector-body", element => element.textContent.includes("Timed out")));
+        await page.screenshot({ path: join(output, "wait-event.png"), fullPage: true });
         await page.evaluate(() => window.previewOpen(true));
         await page.waitForFunction(() => document.querySelectorAll(".vc-ab-node").length === 100);
         await page.screenshot({ path: join(output, "large-graph.png"), fullPage: true });
         assert.deepEqual(errors, []);
-        await writeFile(join(output, "ui-checks.json"), JSON.stringify({ graph: true, steps: true, linkedSteps: true, dryRun: true, undoRedo: true, smallWindow: true, hundredBlocks: true, errors, liveDiscord: false }, null, 2));
+        await writeFile(join(output, "ui-checks.json"), JSON.stringify({ graph: true, steps: true, linkedSteps: true, dryRun: true, undoRedo: true, smallWindow: true, hundredBlocks: true, presenceTrigger: true, typedUserOutput: true, authorSearch: true, waitEvent: true, errors, liveDiscord: false }, null, 2));
         console.log("Isolated editor checks passed.");
     } finally { await browser.close(); server.close(); }
 }

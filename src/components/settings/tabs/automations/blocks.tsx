@@ -62,6 +62,13 @@ export const CATEGORY_LABELS: Record<AutomationBlockCategory, string> = {
 };
 
 export const TRIGGER_LABELS: Record<AutomationTriggerType, string> = {
+    "presence-update": "When presence is updated",
+    "typing-start": "When someone starts typing",
+    "channel-select": "When I open a channel",
+    "user-update": "When a user is updated",
+    "member-update": "When a server member is updated",
+    "relationship-add": "When a relationship is added or changed",
+    "relationship-remove": "When a relationship is removed",
     schedule: "On a schedule",
     mention: "When someone mentions me",
     message: "When a message is posted",

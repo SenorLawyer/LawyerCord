@@ -20,7 +20,9 @@ export function RunHistory({ current, compact }: { current: AutomationSnapshot; 
     const runs = new Map<string, AutomationSnapshot["logs"]>();
     for (const log of current.logs) {
         const id = log.runId ?? "legacy";
-        runs.set(id, [...runs.get(id) ?? [], log]);
+        const entries = runs.get(id);
+        if (entries) entries.push(log);
+        else runs.set(id, [log]);
     }
     return <div className={`vc-automations-runs${compact ? " compact" : ""}`}>
         {current.runs.map(run => <div className="vc-automations-run-live" key={run.id}>

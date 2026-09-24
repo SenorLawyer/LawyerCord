@@ -14,12 +14,16 @@ import { ChannelStore, IconUtils, Parser, React, UserStore } from "@webpack/comm
 
 import { BlockAdvanced, ExtendedFields, WorkflowAdvanced } from "./AdvancedInspector";
 import { BLOCK_ICONS, blockDefinition, TRIGGER_LABELS } from "./blocks";
+import { outputKind } from "./catalog";
+import { ClientEventFields } from "./ClientEventFields";
+import { CLIENT_EVENTS, isClientEventType } from "./clientEvents";
 import { getAvailableCommands, requestCommandIndex } from "./engine";
 import {
     AreaField,
     ChannelField,
     CheckField,
     DateField,
+    GuildField,
     ModelField,
     NumberField,
     SelectField,
@@ -49,6 +53,8 @@ import {
     removeEdgeTarget,
     toDateTimeLocal,
 } from "./model";
+import { OutputFields } from "./OutputFields";
+import { eventOutputFields, outputFields } from "./outputs";
 import { WorkflowRunHistory } from "./RunHistory";
 import { schedulePreview, validateSchedule } from "./scheduling";
 import { SYSTEM_TRIGGER_TYPES } from "./system";
@@ -408,7 +414,7 @@ export function BlockInspector({ block, automation, setAutomation, onSelect, onI
             {block.type === "send-message" && <>{channel}<MessageBody block={block} onChange={patch} /><MessagePreview block={block} /></>}
             {block.type === "send-embed" && <div className="vc-ab-warning">Discord only lets apps send embeds. Replace this block with Send message.</div>}
             {block.type === "send-components" && <div className="vc-ab-warning">Discord only lets apps send Components V2. Replace this block with Send message.</div>}
-            {block.type === "send-dm" && <>{userField("Who", config.userId ?? "", userId => patch({ userId }))}<MessageBody block={block} onChange={patch} /><MessagePreview block={block} /></>}
+            {block.type === "send-dm" && <>{userField("Who", config.userId ?? "", userId => patch({ userId }), "Leave empty to use the person from the trigger or an earlier block.")}<MessageBody block={block} onChange={patch} /><MessagePreview block={block} /></>}
             {(block.type === "reply-message" || block.type === "edit-message") && <>{source}<MessageBody block={block} onChange={patch} label={block.type === "reply-message" ? "Reply" : "New message text"} /><MessagePreview block={block} /></>}
             {(block.type === "delete-message" || block.type === "pin-message" || block.type === "unpin-message" || block.type === "mark-read") && source}
             {(block.type === "react-message" || block.type === "remove-reaction") && <>{source}<TextField label="Emoji" value={config.emoji ?? ""} description="A normal emoji, or a custom one such as <:name:id>." onChange={emoji => patch({ emoji })} /></>}
@@ -417,8 +423,10 @@ export function BlockInspector({ block, automation, setAutomation, onSelect, onI
             {block.type === "typing-indicator" && <>{channel}<NumberField label="Seconds" value={config.durationSeconds ?? 3} min={0} max={60} onChange={durationSeconds => patch({ durationSeconds })} /></>}
             {block.type === "open-channel" && channel}
             {block.type === "crosspost-message" && source}
-            {block.type === "search-messages" && <>{channel}<TextField label="Search for" value={config.matchText ?? ""} onChange={matchText => patch({ matchText })} /><NumberField label="Maximum results" value={config.limit ?? 25} min={1} max={100} onChange={limit => patch({ limit })} /></>}
-            {block.type === "get-user" && userField("Who", config.userId ?? "", userId => patch({ userId }))}
+            {block.type === "search-messages" && <><ChannelField guildId={config.guildId ?? ""} channelId={config.channelId ?? ""} description="Choose a server to search all its channels, or a DM to search that conversation." onChange={patch} /><UserField label="Messages by" value={config.authorId ?? ""} guildId={config.guildId} description="Leave empty for any author. Text is optional when searching one person." onChange={authorId => patch({ authorId })} /><TextField label="Search for" value={config.matchText ?? ""} onChange={matchText => patch({ matchText })} /><NumberField label="Maximum results" value={config.limit ?? 25} min={1} max={100} onChange={limit => patch({ limit })} /></>}
+            {["get-user", "get-presence", "get-member"].includes(block.type) && userField("Who", config.userId ?? "", userId => patch({ userId }), "Leave empty to use the person from the trigger or an earlier block.")}
+            {block.type === "get-member" && <GuildField value={config.guildId ?? ""} onChange={guildId => patch({ guildId })} />}
+            {["wait-presence", "wait-client-event"].includes(block.type) && <ClientEventFields type={block.type === "wait-presence" ? "presence-update" : config.eventType ?? "presence-update"} filter={config} choose={block.type === "wait-client-event"} onTypeChange={eventType => patch({ eventType, authorId: "", channelId: "", guildId: "", status: "" })} onChange={patch} wait /> }
             {block.type === "list-connections" && <span className="vc-ab-field-description">Saves what is linked in Discord's Connections settings. Only Spotify comes with a usable token, so other services are read-only here.</span>}
             {block.type === "notify" && <><TextField label="Title" value={config.name ?? ""} onChange={name => patch({ name })} /><AreaField label="Message" value={config.content ?? ""} rows={3} onChange={content => patch({ content })} /></>}
             {block.type === "spotify-seek" && <NumberField label="Seconds into the track" value={config.durationSeconds ?? 30} min={0} onChange={durationSeconds => patch({ durationSeconds })} />}
@@ -452,7 +460,7 @@ export function BlockInspector({ block, automation, setAutomation, onSelect, onI
             {block.type === "wait-until" && <TextField label="Date or timestamp" value={config.value ?? ""} description="A date like 2026-12-24T18:00, a millisecond timestamp, or a saved value." onChange={value => patch({ value })} />}
             {block.type === "delay" && <NumberField label="Seconds to wait" value={config.durationSeconds ?? 1} min={0} onChange={durationSeconds => patch({ durationSeconds })} />}
 
-            {block.type === "fetch-dm" && <>{userField("Who", config.userId ?? "", userId => patch({ userId }))}<NumberField label="Messages to read" value={config.limit ?? 10} min={1} max={100} onChange={limit => patch({ limit })} /></>}
+            {block.type === "fetch-dm" && <>{userField("Who", config.userId ?? "", userId => patch({ userId }), "Leave empty to use the person from the trigger or an earlier block.")}<NumberField label="Messages to read" value={config.limit ?? 10} min={1} max={100} onChange={limit => patch({ limit })} /></>}
             {(block.type === "fetch-messages" || block.type === "fetch-unread") && <>{channel}
                 <div className="vc-ab-grid">
                     <NumberField label="Messages to read" value={config.limit ?? 25} min={1} max={100} onChange={limit => patch({ limit })} />
@@ -545,8 +553,16 @@ export function BlockInspector({ block, automation, setAutomation, onSelect, onI
             {showsSaveAs && saveAs}
         </section>
 
+        {block.type !== "note" && <section className="vc-ab-section vc-ab-output">
+            <span className="vc-ab-panel-label">Output · {outputKind(block.type)}</span>
+            {!showsSaveAs && !block.type.startsWith("ai-") && saveAs}
+            <span className="vc-ab-field-description">Copy a field into a later block, or choose it under A saved value. List positions start at 0. Missing optional fields resolve to no value.</span>
+            {["wait-presence", "wait-client-event", "get-member", "get-selected-channel"].includes(block.type) && <span className="vc-ab-field-description">The result is null when the wait times out or the requested data is not available in this client.</span>}
+            <Button size="small" variant="secondary" onClick={() => copyWithToast(`{{blocks.${block.id}.value}}`, "Copied result reference.")}>Copy whole result</Button>
+            <OutputFields key={block.id} fields={outputFields(block.type, block.config.eventType)} prefix={config.variable?.trim() || `blocks.${block.id}.value`} />
+        </section>}
         <ConnectionsPanel automation={automation} block={block} onChange={setAutomation} onSelect={onSelect} onInsert={onInsert} />
-        {block.type !== "note" && <BlockAdvanced automation={automation} block={block} onChange={patch} showVariable={!showsSaveAs && !block.type.startsWith("ai-")} />}
+        {block.type !== "note" && <BlockAdvanced automation={automation} block={block} onChange={patch} showVariable={false} />}
         <VariablesPanel automation={automation} beforeBlockId={block.id} />
     </div>;
 }
@@ -572,7 +588,8 @@ export function AutomationInspector({ automation, setAutomation }: { automation:
     const updateTrigger = (patch: Partial<Automation["trigger"]>) => setAutomation({ ...automation, trigger: { ...trigger, ...patch } });
     const changeSchedule = (values: Partial<Automation["schedule"]>) => setAutomation({ ...automation, schedule: { ...schedule, ...values } });
     const system = SYSTEM_TRIGGER_TYPES.some(type => type === trigger.type);
-    const live = trigger.type !== "schedule" && trigger.type !== "startup" && !system;
+    const client = isClientEventType(trigger.type) ? trigger.type : undefined;
+    const live = trigger.type !== "schedule" && trigger.type !== "startup" && !system && !client;
     const mode = schedule.mode ?? "interval";
     const weekdays = schedule.weekdays ?? [1, 2, 3, 4, 5];
 
@@ -589,7 +606,7 @@ export function AutomationInspector({ automation, setAutomation }: { automation:
 
         <section className="vc-ab-section">
             <span className="vc-ab-panel-label">When does it start?</span>
-            <SelectField value={trigger.type} options={AUTOMATION_TRIGGER_TYPES.map(value => ({ label: TRIGGER_LABELS[value], value }))} onChange={type => isTriggerType(type) && updateTrigger({ type })} />
+            <SelectField value={trigger.type} options={AUTOMATION_TRIGGER_TYPES.map(value => ({ label: TRIGGER_LABELS[value], value }))} onChange={type => isTriggerType(type) && updateTrigger({ type, authorId: "", channelId: "", guildId: "", matchText: "", emoji: "", status: "", includeSelf: type === "channel-select" })} />
             {trigger.type === "schedule" && <>
                 <SelectField label="How often" value={mode} options={[{ label: "Every so often", value: "interval" }, { label: "On certain days at a set time", value: "calendar" }, { label: "Cron expression (advanced)", value: "cron" }]} onChange={next => { if (next === "interval" || next === "calendar" || next === "cron") changeSchedule({ mode: next }); }} />
                 {mode === "interval" && <>
@@ -616,6 +633,10 @@ export function AutomationInspector({ automation, setAutomation }: { automation:
                 <TextField label="Only this project" description="Part of the project folder's name or path. Leave empty for every project." value={trigger.matchText ?? ""} onChange={matchText => updateTrigger({ matchText })} />
                 <CheckField label="Include helper agents" description="Codex spawns helper agents for side tasks. Off means only the main conversation counts." value={trigger.includeSubagents === true} onChange={includeSubagents => updateTrigger({ includeSubagents })} />
             </>}
+            {client && <>
+                <ClientEventFields type={client} filter={trigger} onChange={updateTrigger} />
+                {CLIENT_EVENTS[client].user && <CheckField label="Include my own updates" value={trigger.includeSelf === true} onChange={includeSelf => updateTrigger({ includeSelf })} />}
+            </>}
             {live && <>
                 <ChannelField label="Only in this channel" description="Leave empty to listen everywhere." guildId={trigger.guildId ?? ""} channelId={trigger.channelId ?? ""} onChange={updateTrigger} />
                 <UserField label="Only from this person" description="Optional. Leave empty to accept anyone." value={trigger.authorId ?? ""} onChange={authorId => updateTrigger({ authorId })} />
@@ -634,6 +655,11 @@ export function AutomationInspector({ automation, setAutomation }: { automation:
             </>}
         </section>
 
+        {client && <section className="vc-ab-section vc-ab-output">
+            <span className="vc-ab-panel-label">Trigger output</span>
+            <span className="vc-ab-field-description">These fields are available as soon as the automation starts. Copy one into a block or choose it under A saved value.</span>
+            <OutputFields fields={eventOutputFields(client)} prefix="triggerEvent" />
+        </section>}
         <WorkflowAdvanced automation={automation} onChange={setAutomation} />
         <details className="vc-ab-more"><summary>Recent runs</summary><WorkflowRunHistory workflowId={automation.id} /></details>
         <VariablesPanel automation={automation} />

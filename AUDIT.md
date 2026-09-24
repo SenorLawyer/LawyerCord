@@ -9,9 +9,9 @@ This audit is still in progress. File coverage records review work; it does not 
 - At `e4b83b8c1`, the branch contains 1,650 tracked files: this report and five added test files, with seventeen removals relative to the baseline.
 - The five added tests cover startup flags, CRX conversion, extension installation, file selection, and settings synchronization. Their file hashes were rechecked against the reviewed versions at `480d81f23`.
 - The generated internationalization mapping was checked semantically against the runtime hash function across 19,440 pairs. That is generated-data validation, not manual review of each pair.
-- Main at `8fc182ba7` was reviewed separately. A fresh fetch and release lookup on September 12 confirmed that main and the published nightly remain unchanged. The nightly tag still resolves to the baseline commit. Main changes have not been integrated into this branch.
+- Main at `8fc182ba7` was reviewed separately. A fresh fetch and release lookup on September 12 confirmed that main and the published nightly remain unchanged. The nightly tag still resolves to the baseline commit. Main changes were integrated on September 24, preserving the audit version and main release history.
 
-Changes are accumulated in [PR #47](https://github.com/SenorLawyer/LawyerCord/pull/47). The PR remains a draft with `release:nightly`; merge and auto-merge are paused. It still conflicts with main.
+Changes are accumulated in [PR #47](https://github.com/SenorLawyer/LawyerCord/pull/47). The PR remains a draft with `release:nightly`; merge and auto-merge are paused. The September 24 integration resolves the conflicts with main.
 
 ## Approach and changes
 
@@ -193,7 +193,7 @@ The full finding ledger is still being worked through. This list identifies majo
 - Remaining plugin account, cancellation, network-response, storage, and resource-lifecycle findings across the broader codebase.
 - Runtime validation of patch anchors. The current patch validator reports 187 warnings; those warnings have not all been resolved or justified against current Discord modules. The latest source passes removed the sole replacement-level try/catch warning and refreshed FriendCodes, MoreUserTags, FakeNitro, RPCEditor, NewGuildSettings, OnePingPerDM, Timezones, ClientSideBlock, StatusPresets, and MessageLoggerEnhanced against current upstream module shapes. Broader behavioral rewrites remain separate review work. Remaining regex warnings are being reviewed against current code rather than mechanically bounded.
 - Native and provider behavior that mocked tests cannot establish, including target-platform installer and live-client acceptance.
-- Integration of separately reviewed main changes, preservation of main's release history, and final checks against the combined source.
+- Final release checks and live acceptance against the combined source. Main at `8fc182ba7` has been integrated and its release history preserved.
 - A final finding-by-finding disposition, current-head CI, and final audit report before removing draft status.
 
 The audit must not be described as a clean-codebase or release-readiness certification while these items remain unresolved.
@@ -205,3 +205,7 @@ PR #49 was reviewed in full. It upgrades SVGO and its lockfile dependencies; #47
 IgnoreActivities now uses the Registered Games overflow context menu from upstream commit `09d9f16f9`, removing the obsolete row patch and renderer. The existing toggle path still refreshes the ID cache and activities. It does not change Discord game-detection preferences. BetterFolders already has a deterministic expand/close implementation, so the upstream pre-toggle-state change was not imported. Live Discord menu compatibility remains unverified.
 
 Validation for the IgnoreActivities change: full TypeScript, focused ESLint, and `git diff --check` passed. Patch lint reports zero errors and 187 warnings.
+
+Main integration on September 24 preserved the audit changes while bringing in main at `8fc182ba7`. Only version and changelog conflicts required manual resolution. Automation tests, full TypeScript, and the standalone build pass on the combined source. These checks do not establish live Discord behavior.
+
+The combined-source performance suite passes all 520 tests and timezone correctness checks. Focused automation ESLint, repository CSS lint, and staged/working-tree whitespace checks pass.

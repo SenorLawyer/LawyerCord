@@ -6,9 +6,14 @@
 
 import type { AutomationBlockConfig, AutomationBlockType, BlockDefinition } from "./model";
 
-export const EXTENDED_TYPES = ["for-each", "switch", "call-workflow", "return", "stop-run", "create-object", "parse-json", "stringify-json", "map-fields", "sort-array", "unique-array", "slice-array", "combine-arrays", "read-value", "write-value", "delete-value", "increment-value", "wait-reaction", "fetch-message", "list-reactions", "get-channel", "spotify-shuffle", "spotify-repeat", "unsupported"] as const;
+export const EXTENDED_TYPES = ["get-presence", "get-member", "get-selected-channel", "wait-presence", "wait-client-event", "for-each", "switch", "call-workflow", "return", "stop-run", "create-object", "parse-json", "stringify-json", "map-fields", "sort-array", "unique-array", "slice-array", "combine-arrays", "read-value", "write-value", "delete-value", "increment-value", "wait-reaction", "fetch-message", "list-reactions", "get-channel", "spotify-shuffle", "spotify-repeat", "unsupported"] as const;
 
 export const EXTENDED_BLOCKS: readonly BlockDefinition[] = [
+    { type: "get-presence", label: "Read user presence", description: "Read a user's current status, activities, and connected devices.", category: "data" },
+    { type: "get-member", label: "Read server member", description: "Read a member's nickname and role IDs from this client.", category: "data" },
+    { type: "get-selected-channel", label: "Read open channel", description: "Read the channel currently open in Discord.", category: "client" },
+    { type: "wait-presence", label: "Wait for presence update", description: "Wait for a user's status or activities to update.", category: "waits" },
+    { type: "wait-client-event", label: "Wait for Discord event", description: "Wait for typing, presence, profile, member, relationship, or channel events.", category: "waits" },
     { type: "for-each", label: "For each item", description: "Run the body for each item in a list.", category: "flow" },
     { type: "switch", label: "Switch", description: "Choose a route by matching a value.", category: "flow" },
     { type: "call-workflow", label: "Call workflow", description: "Pass input to another workflow and collect its result.", category: "flow" },
@@ -36,22 +41,23 @@ export const EXTENDED_BLOCKS: readonly BlockDefinition[] = [
 ];
 
 export const EXTENDED_DEFAULTS: Partial<Record<AutomationBlockType, AutomationBlockConfig>> = Object.fromEntries(EXTENDED_TYPES.map(type => [type, {
-    variable: type === "for-each" ? "item" : "result",
+    variable: type === "for-each" ? "item" : type === "get-presence" ? "presence" : type === "get-member" ? "member" : type === "get-selected-channel" ? "channel" : type === "wait-presence" || type === "wait-client-event" ? "event" : "result",
     ...(type === "create-object" ? { value: "{}" } : {}),
     ...(type === "switch" ? { cases: [] } : {}),
     ...(type.endsWith("-value") ? { persistentKey: "value", amount: 1 } : {}),
+    ...(["wait-presence", "wait-client-event"].includes(type) ? { eventType: "presence-update", timeoutSeconds: 60 } : {}),
     ...(type === "wait-reaction" ? { timeoutSeconds: 60 } : {}),
     ...(type === "spotify-shuffle" ? { value: "true" } : {}),
     ...(type === "spotify-repeat" ? { value: "off" } : {}),
 }]));
 
-export const SAFE_RETRY_TYPES = new Set<AutomationBlockType>(["fetch-message", "list-reactions", "get-channel", "fetch-messages", "fetch-unread", "fetch-mentions", "get-user", "read-value"]);
+export const SAFE_RETRY_TYPES = new Set<AutomationBlockType>(["get-presence", "get-member", "get-selected-channel", "search-messages", "fetch-message", "list-reactions", "get-channel", "fetch-messages", "fetch-unread", "fetch-mentions", "get-user", "read-value"]);
 
 export function outputKind(type: AutomationBlockType): string {
     if (["for-each", "return", "call-workflow", "read-value", "json-value", "set-variable"].includes(type)) return "value";
     if (["array-length", "math-variable", "random-number", "increment-value"].includes(type)) return "number";
-    if (["create-object", "parse-json", "ai-extract-json", "get-user", "get-channel", "spotify-now-playing", "roblox-current-game", "roblox-game-info", "codex-last-turn", "run-program"].includes(type)) return "object";
-    if (["fetch-messages", "fetch-mentions", "fetch-unread", "fetch-dm", "search-messages", "filter-array", "split-text", "map-fields", "sort-array", "unique-array", "slice-array", "combine-arrays", "list-reactions", "read-components", "list-processes", "codex-sessions"].includes(type)) return "list";
+    if (["get-presence", "get-member", "get-selected-channel", "wait-presence", "wait-client-event", "create-object", "parse-json", "ai-extract-json", "get-user", "get-channel", "read-embed", "spotify-now-playing", "roblox-current-game", "roblox-game-info", "codex-last-turn", "run-program"].includes(type)) return "object";
+    if (["list-connections", "fetch-messages", "fetch-mentions", "fetch-unread", "fetch-dm", "search-messages", "filter-array", "split-text", "map-fields", "sort-array", "unique-array", "slice-array", "combine-arrays", "list-reactions", "read-components", "list-processes", "codex-sessions"].includes(type)) return "list";
     if (["send-message", "send-dm", "reply-message", "edit-message", "wait-reply", "wait-dm", "fetch-message"].includes(type)) return "message";
     return "text";
 }

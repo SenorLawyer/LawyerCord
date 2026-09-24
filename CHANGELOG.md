@@ -9,7 +9,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - ProfileSets no longer assigns ownerless legacy profiles automatically. Use Recover Old Profiles in the main profile panel to import them explicitly; the original records remain saved.
 
 - VoiceRejoin ignores older saved channels without an account owner. Joining a call records a new reconnect target for that account.
-- Older scheduled messages without an account remain saved but paused. Recreate them under the intended account before sending.
+- Older scheduled messages without an account remain saved but paused. Use Recreate to schedule a copy under the current account with its full text and attachments. The original stays paused and composer drafts remain untouched.
 - Older versions do not enforce saved account ownership or attempted-send markers. Downgrading with saved scheduled messages can send them from the wrong account or repeat a previous attempt.
 - BannersEverywhere now follows currently loaded Discord profile data instead of retaining historical banner URLs.
 
@@ -31,6 +31,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Keep banner conversion results attached to their source image. Preserve third-party URLs and the original image on failure, and allow failed conversions to retry.
 - Clean up pending banner conversions on stop, cache eviction, or a 30-second timeout. Limit conversion canvases to 1,024 pixels per dimension while preserving aspect ratio.
 - Keep unsupported TIDAL URLs visible and render every supported player in messages containing multiple TIDAL embeds.
+- Limit embedded ProfileSets images to 10 MiB before preparing snapshots or applying presets. Preserve explicit field removals when updating saved profiles.
 - Validate stored and imported ProfileSets fields before use, retain invalid records, and stop migration on malformed account records. Preserve newer migration destinations and legacy backups.
 - Publish ProfileSets changes only after storage succeeds. Reject overlapping or stale-client writes, wait for pending writes before reload, and retain the original update target during preparation.
 - Keep ProfileSets reads, saves, imports, and pending loads within their originating account, section, and list. Give each panel its own list so main and server loads cannot replace each other or export the wrong section. Reload on account changes, reject stale load and export callbacks, cancel dismissed imports, and reject outdated menu actions.
@@ -56,7 +57,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Update stale RPCEditor, NewGuildSettings, and OnePingPerDM patches to the current upstream Discord module shapes.
 
-- Allow retained attempted scheduled messages to be retried explicitly from the queue without showing stale results after an account switch.
+- Allow retained attempted scheduled messages to be retried explicitly from the queue without showing stale results after an account switch. Reject stale cross-client writes before overwriting messages or marking a send attempt, and provide Reload to refresh the queue before retrying.
 
 - Update stale FriendCodes, MoreUserTags, and FakeNitro patch anchors and remove InvisibleChat's silent patch exception.
 

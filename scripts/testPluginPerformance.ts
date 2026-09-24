@@ -1476,9 +1476,11 @@ test("status preset menus subscribe and delete the actual saved key", () => {
         } },
     }, { React: { createElement: (type: unknown, props: unknown, ...children: unknown[]) => ({ type, props, children }) } }, "({ StatusSubMenuComponent })");
     const menu = StatusSubMenuComponent();
-    assert.equal(menu.children[0][0].props.disabled, true);
+    assert.equal(menu.children[0][0].props.disabled, undefined);
+    assert.equal(menu.children[0][0].props.action(), false);
     premiumTypeActual = 2;
-    assert.equal(StatusSubMenuComponent().children[0][0].props.disabled, false);
+    assert.equal(StatusSubMenuComponent().children[0][0].props.disabled, undefined);
+    premiumTypeActual = 0;
     menu.children[0][0].children[0].props.action();
     assert.deepEqual(Object.keys(store.StatusPresets), []);
     assert.equal(StatusSubMenuComponent().children[0].length, 0);

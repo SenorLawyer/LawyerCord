@@ -99,7 +99,6 @@ const StatusSubMenuComponent = () => {
                             ? () => <EmojiComponent emoji={status.emojiInfo} animate={false} hideTooltip={false} />
                             : undefined
                         }
-                        disabled={status.emojiInfo?.id != null && premiumType === 0}
                     >
                         <Menu.MenuItem
                             id={"status-presets-delete-" + index}

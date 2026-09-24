@@ -43,15 +43,6 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
         cancelRead();
         if (!file.type.startsWith("image/")) return;
 
-        if (file.type === "image/gif" || file.type === "image/webp") {
-            Toasts.show({
-                message: "GIFs/WebP must be added via URL. Upload your GIF/WebP to a image hosting service and paste the link.",
-                type: Toasts.Type.FAILURE,
-                id: Toasts.genId(),
-            });
-            return;
-        }
-
         const reader = readerRef.current = new FileReader();
         reader.onload = () => {
             if (readerRef.current !== reader) return;
@@ -130,7 +121,7 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
 
                 {/* URL input */}
                 <section className={Margins.bottom8}>
-                    <Heading tag="h3">Enter PNG/GIF URL</Heading>
+                    <Heading tag="h3">Enter an image URL</Heading>
                     <TextInput
                         placeholder="https://example.com/image.png"
                         value={url.startsWith("data:") ? "(uploaded file)" : url}
@@ -153,12 +144,12 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
                     }}
                 >
                     <Button variant="none" size="min" type="button" onClick={() => fileInputRef.current?.click()}>
-                        {isDragging ? "Drop here!" : "Choose an image or drop it here. For GIFs or WebP, use a URL."}
+                        {isDragging ? "Drop here!" : "Choose an image or drop it here."}
                     </Button>
                     <input
                         ref={fileInputRef}
                         type="file"
-                        accept="image/png,image/jpeg"
+                        accept="image/png,image/jpeg,image/gif,image/webp"
                         style={{ display: "none" }}
                         onChange={e => {
                             const file = e.currentTarget.files?.[0];

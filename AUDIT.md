@@ -191,9 +191,17 @@ The full finding ledger is still being worked through. This list identifies majo
 
 - Scheduled-message legacy recovery, remaining persisted-data constraints, media cancellation, and coordination between separate client contexts.
 - Remaining plugin account, cancellation, network-response, storage, and resource-lifecycle findings across the broader codebase.
-- Runtime validation of patch anchors. The current patch validator reports 188 warnings; those warnings have not all been resolved or justified against current Discord modules. The latest source passes removed the sole replacement-level try/catch warning and refreshed FriendCodes, MoreUserTags, FakeNitro, RPCEditor, NewGuildSettings, OnePingPerDM, Timezones, ClientSideBlock, StatusPresets, and MessageLoggerEnhanced against current upstream module shapes. Broader behavioral rewrites remain separate review work. Remaining regex warnings are being reviewed against current code rather than mechanically bounded.
+- Runtime validation of patch anchors. The current patch validator reports 187 warnings; those warnings have not all been resolved or justified against current Discord modules. The latest source passes removed the sole replacement-level try/catch warning and refreshed FriendCodes, MoreUserTags, FakeNitro, RPCEditor, NewGuildSettings, OnePingPerDM, Timezones, ClientSideBlock, StatusPresets, and MessageLoggerEnhanced against current upstream module shapes. Broader behavioral rewrites remain separate review work. Remaining regex warnings are being reviewed against current code rather than mechanically bounded.
 - Native and provider behavior that mocked tests cannot establish, including target-platform installer and live-client acceptance.
 - Integration of separately reviewed main changes, preservation of main's release history, and final checks against the combined source.
 - A final finding-by-finding disposition, current-head CI, and final audit report before removing draft status.
 
 The audit must not be described as a clean-codebase or release-readiness certification while these items remain unresolved.
+
+## September 24 continuation
+
+PR #49 was reviewed in full. It upgrades SVGO and its lockfile dependencies; #47 already removes unused SVGO in `1923b0120`, so no changes were imported. PR #49 was closed and its Dependabot branch deleted.
+
+IgnoreActivities now uses the Registered Games overflow context menu from upstream commit `09d9f16f9`, removing the obsolete row patch and renderer. The existing toggle path still refreshes the ID cache and activities. It does not change Discord game-detection preferences. BetterFolders already has a deterministic expand/close implementation, so the upstream pre-toggle-state change was not imported. Live Discord menu compatibility remains unverified.
+
+Validation for the IgnoreActivities change: full TypeScript, focused ESLint, and `git diff --check` passed. Patch lint reports zero errors and 187 warnings.

@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Restore IgnoreActivities controls in the Registered Games overflow menu and remove the obsolete game-row patch.
+
 - Refresh ClientSideBlock, StatusPresets, and MessageLoggerEnhanced patches for current Discord module shapes.
 
 - Update Timezones' profile patch to the current Discord profile module shape.

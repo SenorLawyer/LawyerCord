@@ -14,7 +14,7 @@ import definePlugin, { OptionType } from "@utils/types";
 import { React } from "@webpack/common";
 
 import { PresetManager } from "./components/presetManager";
-import { loadPresets, PresetSection } from "./utils/storage";
+import { PresetSection } from "./utils/storage";
 
 const SafePresetManager = ErrorBoundary.wrap(PresetManager, { noop: true });
 
@@ -52,9 +52,6 @@ export default definePlugin({
             }
         }
     ],
-    start() {
-        loadPresets("main");
-    },
     renderPresetSection(section: PresetSection, guildId?: string) {
         return <SafePresetManager section={section} guildId={guildId} />;
     }

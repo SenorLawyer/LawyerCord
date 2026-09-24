@@ -4009,6 +4009,29 @@ test("profile preset saves reject account and list changes during preparation", 
     assert.equal(writes, 1);
 });
 
+test("profile preset loading preserves malformed destination records", async () => {
+    for (const section of ["main", "server"]) {
+        for (const stored of [null, false, 0, "invalid", { presets: [] }]) {
+            const writes: string[] = [];
+            let errors = 0;
+            const api = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
+                "@api/index": { DataStore: {
+                    get: async (key: string) => key.startsWith("ProfilePresets_v2_") ? stored : [{ name: "Legacy" }],
+                    set: async (key: string) => { writes.push(key); },
+                    del: async (key: string) => { writes.push(key); }
+                } },
+                "@utils/Logger": { Logger: class { error() { errors++; } } },
+                "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "user" }) } }
+            });
+            await api.loadPresets(section);
+            await api.savePresetsData(section);
+            assert.equal(writes.length, 0);
+            assert.equal(errors, 1);
+            assert.equal(api.presets.length, 0);
+        }
+    }
+});
+
 test("profile preset migration preserves legacy data it did not copy", async () => {
     for (const failedWrite of [false, true]) {
         const scoped = [{ name: "Scoped", timestamp: 0 }];

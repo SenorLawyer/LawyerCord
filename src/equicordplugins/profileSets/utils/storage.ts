@@ -65,7 +65,8 @@ export async function loadPresets(section: PresetSection) {
         const stored = await DataStore.get(key);
         if (!isCurrentLoad(generation, userId)) return;
 
-        if (stored && Array.isArray(stored)) {
+        if (stored !== undefined) {
+            if (!Array.isArray(stored)) throw new Error("The saved profile preset list is invalid.");
             activeScopeKey = key;
             resetPresets(stored);
             return;

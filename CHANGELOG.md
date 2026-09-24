@@ -21,6 +21,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Preserve malformed saved profile preset lists instead of overwriting them during migration or saving.
+
 - Preserve separate legacy profile datasets when migrating account-specific presets.
 
 - Update profile presets with one storage write and retain the original target across asynchronous preparation.

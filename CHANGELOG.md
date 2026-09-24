@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep ProfileSets save controls usable after profile preparation fails.
+
 - Avoid repeating the previous random profile preset without a retry loop.
 
 - Cancel pending ProfileSets loads when the signed-in account changes.

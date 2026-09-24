@@ -76,12 +76,17 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
         const trimmedName = presetName.trim();
         if (!trimmedName) return;
         setIsSaving(true);
-        await savePreset(trimmedName, resolvedSection, resolvedGuildId);
-        setPresetName("");
-        setIsSaving(false);
-        const newTotalPages = Math.ceil(presets.length / PRESETS_PER_PAGE);
-        handlePageChange(newTotalPages);
-        forceUpdate();
+        try {
+            await savePreset(trimmedName, resolvedSection, resolvedGuildId);
+            setPresetName("");
+            const newTotalPages = Math.ceil(presets.length / PRESETS_PER_PAGE);
+            handlePageChange(newTotalPages);
+            forceUpdate();
+        } catch {
+            showToast("Could not save the profile preset.", Toasts.Type.FAILURE);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const applyPreset = (index: number) => {

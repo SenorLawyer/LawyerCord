@@ -3888,28 +3888,42 @@ test("profile images fall back after failed guild downloads", async () => {
     assert.equal(blobReads, 1);
 });
 
-test("profile preset random selection avoids repeats without retrying", async () => {
+test("profile preset controls recover failed preparation and avoid random repeats", async () => {
     const presets = [{ name: "First" }, { name: "Second" }, { name: "Third" }];
     const selected: number[] = [];
     let randomAction: () => void = () => assert.fail("Missing random button");
     let draws = 0;
+    let saveAction: () => unknown = () => assert.fail("Missing save button");
+    const stateChanges: unknown[] = [];
+    const errors: string[] = [];
+    let stateIndex = 0;
+    let saveFails = true;
     const React = {
-        useState: (value: unknown) => [value, () => {}],
+        useState: (value: unknown) => [stateIndex++ === 0 ? "Saved profile" : value, (next: unknown) => stateChanges.push(next)],
         useReducer: () => [0, () => {}], useRef: (value: unknown) => ({ current: value }), useEffect() {},
         createElement: (_type: unknown, props: { onClick?: () => void; } | null, ...children: unknown[]) => {
             if (children.includes("Random") && props?.onClick) randomAction = props.onClick;
+            if (children.includes("Save Profile") && props?.onClick) saveAction = props.onClick;
             return null;
         }
     };
     const api = loadSource("src/equicordplugins/profileSets/components/presetManager.tsx", {
         "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
-        "@webpack/common": { React, useStateFromStores: () => null },
+        "@webpack/common": { React, useStateFromStores: () => null, showToast: (message: string) => errors.push(message), Toasts: { Type: { FAILURE: "failure" } } },
         "../index": { cl: () => "", settings: { store: {} } },
-        "../utils/actions": {}, "../utils/profile": { loadPresetAsPending: async () => {} },
+        "../utils/actions": { savePreset: async () => { if (saveFails) throw new Error("Profile preparation failed"); } }, "../utils/profile": { loadPresetAsPending: async () => {} },
         "../utils/storage": { presets, setCurrentPresetIndex: (index: number) => selected.push(index) },
         "./confirmModal": {}, "./presetList": {}
     }, { Math: { ...Math, ceil: Math.ceil, floor: Math.floor, random: () => { draws++; return 0.5; } } });
     api.PresetManager({});
+    await assert.doesNotReject(async () => saveAction());
+    assert.deepEqual(stateChanges, [true, false]);
+    assert.deepEqual(errors, ["Could not save the profile preset."]);
+    saveFails = false;
+    stateChanges.length = 0;
+    await saveAction();
+    assert.equal(stateChanges[1], "");
+    assert.equal(stateChanges.at(-1), false);
     randomAction(); randomAction(); randomAction();
     assert.deepEqual(selected, [1, 2, 1]);
     assert.equal(draws, 3);

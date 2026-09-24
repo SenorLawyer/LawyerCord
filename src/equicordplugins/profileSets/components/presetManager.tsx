@@ -259,13 +259,9 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
                         </div>
                     )}
 
-                    <hr className={cl("block")} />
                 </>
             )}
             <hr className={cl("block")} />
-            {resolvedSection === "server" && (
-                <hr className={cl("block")} />
-            )}
         </div>
     );
 }

@@ -12,6 +12,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Remove duplicate ProfileSets separators and a redundant width rule.
+
 - Remove the redundant ProfileSets startup storage load.
 
 - Remove unused ProfileSets selection state from storage.

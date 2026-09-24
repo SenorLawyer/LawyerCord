@@ -1309,6 +1309,29 @@ test("BetterSessions returns its settings-close save to the flux error handler",
     await rejected;
 });
 
+test("status preset insertion preserves following items and property order", () => {
+    const { default: plugin } = loadSource("src/equicordplugins/statusPresets/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@api/UserSettings": { getUserSettingLazy: () => ({}) },
+        "@components/ErrorBoundary": {}, "@utils/constants": { EquicordDevs: {} },
+        "@utils/lazy": { proxyLazy: () => ({}) }, "@utils/react": {},
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {}, StartAt: {} },
+        "@webpack": { findComponentByCodeLazy: () => () => null, extractAndLoadChunksLazy: () => () => {} },
+        "@webpack/common": {}
+    });
+    const { canonicalizeMatch } = loadSource("src/utils/patches.ts", { "./intlHash": {} });
+    const { match, replace } = plugin.patches[1].replacement;
+    for (const props of ["onClose:n,popoutContainerRef:m", "popoutContainerRef:m,onClose:n"]) {
+        const source = `[(0,r.jsx)(other,{onClose:n}),(0,r.jsx)(other,{popoutContainerRef:m}),(0,r.jsx)(anchor,{${props}}),enabled&&(0,r.jsx)(other,{})]`;
+        const patched = source.replace(canonicalizeMatch(match), replace.replaceAll("$self", "plugin"));
+        const items = runInNewContext(patched, {
+            r: { jsx: (component: string) => component }, other: "other", anchor: "anchor", n() {}, m: {}, enabled: true,
+            plugin: { render: () => "presets" }
+        });
+        assert.deepEqual(Array.from(items), ["other", "other", "anchor", "presets", "other"]);
+    }
+});
+
 test("status preset application validates expiration and reports rejected updates once", async () => {
     const clock = runInNewContext(`(class extends Date {
         constructor(...args) { super(...(args.length ? args : [2026, 2, 29, 0, 30])); }

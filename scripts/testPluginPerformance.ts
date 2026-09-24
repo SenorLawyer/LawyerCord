@@ -4806,6 +4806,34 @@ test("profile preset controls recover failed preparation and avoid random repeat
     assert.ok(effects.some(deps => deps.includes("second")));
 });
 
+test("profile preset text fields distinguish omission from explicit clearing", async () => {
+    for (const mode of ["omit", "clear", "replace", "skip"]) {
+        const dispatched: Record<string, unknown>[] = [];
+        const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null }) },
+            "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: "me", globalName: "Current name" }) },
+                UserProfileStore: { getUserProfile: () => ({ bio: "Current bio", pronouns: "Current pronouns" }) },
+                IconUtils: { getUserAvatarURL: () => null, getDefaultAvatarURL: () => "default" },
+                FluxDispatcher: { dispatch: (event: Record<string, unknown>) => dispatched.push(event) }
+            }
+        });
+        const fields = mode === "omit" ? {} : mode === "replace"
+            ? { bio: "New bio", pronouns: "New pronouns", globalName: "New name" }
+            : { bio: null, pronouns: null, globalName: null };
+        await api.loadPresetAsPending({ name: "Example", timestamp: 0, ...fields }, undefined,
+            mode === "skip" ? { skipBio: true, skipPronouns: true, skipGlobalName: true } : {});
+        if (mode === "omit" || mode === "skip") assert.equal(dispatched.length, 0, mode);
+        else {
+            assert.equal(dispatched.length, 3);
+            assert.ok(dispatched.some(event => event.pendingBio === (mode === "clear" ? "" : "New bio")));
+            assert.ok(dispatched.some(event => event.pendingPronouns === (mode === "clear" ? "" : "New pronouns")));
+            assert.ok(dispatched.some(event => event.pendingGlobalName === (mode === "clear" ? null : "New name")));
+        }
+    }
+});
+
 test("profile preset image application preserves previews and explicit removals", async () => {
     for (const value of ["data:image/png;base64,new", "https://fixture.invalid/image.png", null]) {
         const dispatched: { type: string; image?: { imageUri: string; assetOrigin: string; }; pendingAvatar?: unknown; pendingBanner?: unknown; }[] = [];

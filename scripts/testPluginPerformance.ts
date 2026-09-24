@@ -4941,6 +4941,26 @@ test("BannersEverywhere evicts pending image work with its cache entry", async (
     assert.equal(plugin.pngCache.size, 0);
 });
 
+test("USRBG rejects malformed feed data before publishing it", async () => {
+    const valid = { endpoint: "https://fixture.invalid", bucket: "banners", prefix: "v2/", users: { user: "etag" } };
+    for (const data of [null, [], {}, { ...valid, users: null }, { ...valid, users: [] },
+        { ...valid, users: { user: 12 } }, { ...valid, endpoint: 3 }, valid]) {
+        let warnings = 0;
+        const { default: plugin } = loadSource("src/plugins/usrbg/index.tsx", {
+            "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+            "@components/Button": {}, "@utils/constants": { Devs: {} },
+            "@utils/css": { classNameFactory: () => () => "" },
+            "@utils/Logger": { Logger: class { warn() { warnings++; } } },
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+            "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} }
+        }, { fetch: async () => ({ ok: true, json: async () => data }) });
+        await plugin.start();
+        assert.equal(plugin.data, data === valid ? valid : null);
+        assert.equal(plugin.userHasBackground("user"), data === valid);
+        assert.equal(warnings, data === valid ? 0 : 1);
+    }
+});
+
 test("TidalEmbeds only hides URLs its player can render", () => {
     const { default: plugin } = loadSource("src/equicordplugins/tidalEmbeds/index.tsx", {
         "@utils/constants": { EquicordDevs: {} },

@@ -22,9 +22,12 @@ import { definePluginSettings } from "@api/Settings";
 import { Button } from "@components/Button";
 import { Devs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
+import { Logger } from "@utils/Logger";
+import { isObject } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 
 const cl = classNameFactory("vc-usrbg-");
+const logger = new Logger("USRBG");
 const API_URL = "https://usrbg.is-hardly.online/users";
 
 interface UsrbgApiReturn {
@@ -130,7 +133,17 @@ export default definePlugin({
     async start() {
         const res = await fetch(API_URL);
         if (res.ok) {
-            this.data = await res.json();
+            const data: unknown = await res.json();
+            if (!isObject(data)
+                || !("endpoint" in data) || typeof data.endpoint !== "string"
+                || !("bucket" in data) || typeof data.bucket !== "string"
+                || !("prefix" in data) || typeof data.prefix !== "string"
+                || !("users" in data) || !isObject(data.users)
+                || !Object.values(data.users).every(value => typeof value === "string")) {
+                logger.warn("The banner feed returned invalid data.");
+                return;
+            }
+            this.data = data as UsrbgApiReturn;
         }
     }
 });

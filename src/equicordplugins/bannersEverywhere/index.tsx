@@ -116,6 +116,7 @@ export default definePlugin({
             const img = new Image();
             img.crossOrigin = "anonymous";
             const finish = (value: string) => {
+                clearTimeout(timeout);
                 img.onload = null;
                 img.onerror = null;
                 this.pendingConversions.delete(cancel);
@@ -125,6 +126,7 @@ export default definePlugin({
                 finish(url);
                 img.removeAttribute("src");
             };
+            const timeout = setTimeout(cancel, 30_000);
             this.pendingConversions.add(cancel);
             img.onload = () => {
                 if (!this.pendingConversions.has(cancel)) return;

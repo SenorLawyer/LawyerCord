@@ -25,6 +25,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Reject malformed saved emoji values before applying a status preset, while retaining the saved record.
+
 - Preserve Discord's avatar format and WebP arguments when UserPFP falls back to the original avatar function or substitutes a global avatar for a server avatar.
 - Preserve UserPFP folder names and non-GIF filenames when requesting static avatars.
 - Allow local GIF and WebP avatars through the existing file-upload path without requiring an external image host. Reject newly selected files above 10 MiB before reading them.

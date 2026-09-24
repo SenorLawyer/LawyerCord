@@ -72,6 +72,11 @@ function getExpirationMs(expiration: "TODAY" | number) {
 
 async function setStatus(status: DiscordStatus) {
     try {
+        const emoji: unknown = status.emojiInfo;
+        if (emoji != null && (typeof emoji !== "object" || Array.isArray(emoji)
+            || ("id" in emoji && emoji.id != null && typeof emoji.id !== "string")
+            || ("name" in emoji && emoji.name != null && typeof emoji.name !== "string")))
+            throw new Error("Invalid preset emoji.");
         await CustomStatusSettings.updateSetting({
             text: status.text.trim(),
             expiresAtMs: status.clearAfter != null ? String(getExpirationMs(status.clearAfter)) : "0",

@@ -1314,7 +1314,7 @@ test("status preset application validates expiration and reports rejected update
         constructor(...args) { super(...(args.length ? args : [2026, 2, 29, 0, 30])); }
         static now() { return new this().getTime(); }
     })`);
-    const payloads: { expiresAtMs: string; createdAtMs: string; text: string; }[] = [];
+    const payloads: { expiresAtMs: string; createdAtMs: string; text: string; emojiId: string; emojiName: string; }[] = [];
     const pending = Promise.withResolvers<void>();
     let updates = 0;
     const toasts: { message: string; type: string; }[] = [];
@@ -1349,6 +1349,18 @@ test("status preset application validates expiration and reports rejected update
     }
     assert.equal(updates, 5);
     assert.equal(toasts.length, 7);
+    for (const emojiInfo of ["broken", [], { id: 42, name: "emoji" }, { id: "123", name: {} }])
+        await setStatus({ text: "Preset", clearAfter: null, emojiInfo });
+    assert.equal(updates, 5);
+    assert.equal(toasts.length, 11);
+    for (const emojiInfo of [{ id: "123", name: "custom" }, { id: null, name: "wave" }, { id: "123" }, { name: "wave" }]) {
+        await setStatus({ text: "Preset", clearAfter: null, emojiInfo });
+        const payload = payloads[payloads.length - 1];
+        assert.equal(payload.emojiId, emojiInfo.id ?? "0");
+        assert.equal(payload.emojiName, emojiInfo.name ?? "");
+    }
+    assert.equal(updates, 9);
+    assert.equal(toasts.length, 11);
 });
 
 test("status preset menus subscribe and delete the actual saved key", () => {

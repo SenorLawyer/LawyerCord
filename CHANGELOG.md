@@ -12,6 +12,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Replace the custom ProfileSets download lifecycle with the shared file utility.
+
 - Remove duplicate ProfileSets collectible comparison code and unused action arguments.
 
 - Remove the unused FriendTags stylesheet.

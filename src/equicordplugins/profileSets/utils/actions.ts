@@ -5,6 +5,7 @@
  */
 
 import { isNonNullish } from "@utils/guards";
+import { saveFile } from "@utils/web";
 import { findStoreLazy } from "@webpack";
 import { showToast, Toasts, UserStore } from "@webpack/common";
 
@@ -88,13 +89,7 @@ export async function renamePreset(index: number, newName: string, section: Pres
 
 export function exportPresets(section: PresetSection) {
     const dataStr = JSON.stringify(presets, null, 2);
-    const dataBlob = new Blob([dataStr], { type: "application/json" });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `profile-presets-${section}-${Date.now()}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+    saveFile(new File([dataStr], `profile-presets-${section}-${Date.now()}.json`, { type: "application/json" }));
 }
 
 export type ImportDecision = "override" | "merge" | "cancel";

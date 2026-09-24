@@ -3901,6 +3901,7 @@ test("profile preset refresh writes once and retains its original target", async
             savePresetsData: async () => { writes++; }
         };
         const api = loadSource("src/equicordplugins/profileSets/utils/actions.ts", {
+            "@utils/web": {},
             "@utils/guards": { isNonNullish: (value: unknown) => value != null },
             "@webpack": { findStoreLazy: () => ({}) },
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
@@ -3944,6 +3945,7 @@ test("profile preset imports keep their initiating account and list", async () =
             savePresetsData: async () => { writes++; }
         };
         const api = loadSource("src/equicordplugins/profileSets/utils/actions.ts", {
+            "@utils/web": {},
             "@utils/guards": {},
             "@webpack": { findStoreLazy: () => ({}) },
             "@webpack/common": {
@@ -3984,6 +3986,7 @@ test("profile preset saves reject account and list changes during preparation", 
         savePresetsData: async () => { writes++; }
     };
     const api = loadSource("src/equicordplugins/profileSets/utils/actions.ts", {
+        "@utils/web": {},
         "@utils/guards": { isNonNullish: (value: unknown) => value != null },
         "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
         "@webpack/common": { UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined } },

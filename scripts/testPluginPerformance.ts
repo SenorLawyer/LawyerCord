@@ -2736,6 +2736,12 @@ test("voice statistics discard stored totals from a stopped generation", async (
     await first;
     assert.equal(api.totalsByUser.get("friend"), 20);
     assert.equal(api.totalsByUser.has("stale"), false);
+    const signedOutRead = api.plugin.start();
+    api.plugin.flux.LOGOUT();
+    reads[2]({ stale: 99 });
+    await signedOutRead;
+    assert.equal(api.totalsByUser.get("friend"), 20);
+    assert.equal(api.totalsByUser.has("stale"), false);
     api.plugin.stop();
 });
 

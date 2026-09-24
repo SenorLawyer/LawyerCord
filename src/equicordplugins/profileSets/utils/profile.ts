@@ -417,7 +417,7 @@ export async function loadPresetAsPending(preset: ProfilePreset, guildId?: strin
         setPending({ pendingPrimaryGuildId: preset.primaryGuildId });
     }
 
-    if (preset.customStatus && !isGuild && !customStatusEq(preset.customStatus, current.customStatus)) {
+    if (preset.customStatus !== undefined && !isGuild && !customStatusEq(preset.customStatus, current.customStatus)) {
         return CustomStatusSettings.updateSetting({
             text: preset.customStatus?.text ?? "",
             expiresAtMs: preset.customStatus?.expiresAtMs ?? "0",

@@ -4903,6 +4903,26 @@ test("profile preset image application preserves previews and explicit removals"
     }
 });
 
+test("profile preset status clearing distinguishes null from omission", async () => {
+    for (const guildId of [undefined, "guild"]) for (const customStatus of [undefined, null, {}]) {
+        const updates: Record<string, string>[] = [];
+        const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => ({ text: "Busy", emojiId: "123" }), updateSetting: async (value: Record<string, string>) => updates.push(value) }) },
+            "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: "me" }) },
+                UserProfileStore: { getUserProfile: () => null, getGuildMemberProfile: () => null },
+                GuildMemberStore: { getMember: () => null },
+                IconUtils: { getUserAvatarURL: () => null, getDefaultAvatarURL: () => "default" },
+                FluxDispatcher: { dispatch: () => assert.fail("Unexpected profile mutation") }
+            }
+        });
+        await api.loadPresetAsPending({ name: "Example", timestamp: 0, customStatus }, guildId);
+        assert.equal(updates.length, customStatus !== undefined && !guildId ? 1 : 0);
+        if (updates.length) assert.deepEqual({ ...updates[0] }, { text: "", expiresAtMs: "0", emojiId: "0", emojiName: "" });
+    }
+});
+
 test("profile presets wait for custom status updates and propagate failure", async () => {
     const update = Promise.withResolvers<void>();
     let updates = 0;

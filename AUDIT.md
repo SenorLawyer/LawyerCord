@@ -384,3 +384,6 @@ ProfileSets now stages saved accentColor through pendingAccentColor, the same fi
 
 
 ProfileSets snapshot reading now preserves explicit pending accent-color removal: only undefined falls back to the stored color. The new regression reproduced pending null becoming the old numeric color, then passed after the precedence change. It also covers absent pending values, black (zero) and replacement colors. Both accent tests and source lint pass. This closes the source read/apply mismatch for accent color; other nullable fields and live Discord acceptance remain open.
+
+
+ProfileSets customStatus null now follows the existing empty-status update payload instead of being ignored by a truthiness check. The new regression failed before the change, then verified null and empty-object clearing, omission preservation and server-profile exclusion. The existing awaited-update/failure regression still passes. Both status-focused tests and source lint pass. This preserves the existing update payload format; live custom-status clearing remains unverified.

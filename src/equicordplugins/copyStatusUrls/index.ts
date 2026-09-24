@@ -11,7 +11,7 @@ import { isObject } from "@utils/misc";
 import definePlugin from "@utils/types";
 import { Activity, User } from "@vencord/discord-types";
 import { findByCodeLazy } from "@webpack";
-import { Toasts } from "@webpack/common";
+import { showToast, Toasts } from "@webpack/common";
 
 const logger = new Logger("CopyStatusUrls");
 
@@ -52,14 +52,7 @@ export default definePlugin({
                 await copyWithToast(url, "Copied URL");
             } catch (e) {
                 logger.error("Could not copy the status URL.", e);
-                Toasts.show({
-                    id: Toasts.genId(),
-                    message: "Could not copy the status URL.",
-                    type: Toasts.Type.FAILURE,
-                    options: {
-                        position: Toasts.Position.TOP
-                    }
-                });
+                showToast("Could not copy the status URL.", Toasts.Type.FAILURE, { position: Toasts.Position.TOP });
             }
         };
     }

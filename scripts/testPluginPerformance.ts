@@ -10921,7 +10921,7 @@ test("status URL copying waits for clipboard completion and catches rejection", 
             "@utils/Logger": { Logger: class { error() { logged++; } } },
             "@utils/types": { __esModule: true, default: (value: object) => value },
             "@webpack": { findByCodeLazy: () => async () => ({ button_urls: ["https://fixture.invalid/status"] }) },
-            "@webpack/common": { Toasts: { Type: { FAILURE: "failure" }, Position: { TOP: "top" }, genId: () => "id", show: ({ message }: { message: string; }) => feedback.push(message) } }
+            "@webpack/common": { Toasts: { Type: { FAILURE: "failure" }, Position: { TOP: "top" }, }, showToast: (message: string, type: string, options: { position: string; }) => { assert.equal(type, "failure"); assert.equal(options.position, "top"); feedback.push(message); } }
         });
         let settled = false;
         const pending = plugin.makeContextMenu({ user: { id: "user" }, activity: {} }, 0)().then(() => { settled = true; });
@@ -10947,7 +10947,7 @@ test("status URL copying rejects malformed metadata without changing the clipboa
             "@utils/Logger": { Logger: class { error() {} } },
             "@utils/types": { __esModule: true, default: (value: object) => value },
             "@webpack": { findByCodeLazy: () => async () => metadata },
-            "@webpack/common": { Toasts: { Type: { FAILURE: "failure" }, Position: { TOP: "top" }, genId: () => "id", show: () => failures++ } }
+            "@webpack/common": { Toasts: { Type: { FAILURE: "failure" }, Position: { TOP: "top" }, }, showToast: () => failures++ }
         });
         await plugin.makeContextMenu({ user: { id: "user" }, activity: {} }, 0)();
         const valid = Array.isArray(metadata?.button_urls) && metadata.button_urls[0] === "https://fixture.invalid";

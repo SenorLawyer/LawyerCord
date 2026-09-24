@@ -20,6 +20,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Remove duplicate error-toast construction in CopyStatusUrls.
+
 - Remove TidalEmbeds' redundant MessageAccessoriesAPI dependency declaration.
 
 - Remove the single-use pending-avatar validator and temporary search array.

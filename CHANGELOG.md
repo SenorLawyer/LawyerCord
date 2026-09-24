@@ -27,6 +27,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Reload open ProfileSets panels when the signed-in account changes.
+
 - Contain ProfileSets rendering failures within its injected settings section.
 
 - Preserve malformed saved profile preset lists instead of overwriting them during migration or saving.

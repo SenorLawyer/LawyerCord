@@ -7,7 +7,7 @@
 import { Button } from "@components/Button";
 import { Heading } from "@components/Heading";
 import { classes } from "@utils/misc";
-import { openModal, React, SelectedGuildStore, showToast, TextInput, Toasts, useStateFromStores } from "@webpack/common";
+import { openModal, React, SelectedGuildStore, showToast, TextInput, Toasts, UserStore, useStateFromStores } from "@webpack/common";
 
 import { cl, settings } from "../index";
 import { exportPresets, ImportDecision, importPresets, savePreset } from "../utils/actions";
@@ -34,6 +34,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
     const lastRandomIndexRef = React.useRef<number>(-1);
     const resolvedSection: PresetSection = section ?? "main";
     const isServerSection = resolvedSection === "server";
+    const userId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
     const lastSelectedGuildId = useStateFromStores(
         [SelectedGuildStore],
         () => SelectedGuildStore.getLastSelectedGuildId() ?? SelectedGuildStore.getGuildId()
@@ -54,7 +55,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
         return () => {
             isActive = false;
         };
-    }, [resolvedGuildId, resolvedSection]);
+    }, [resolvedGuildId, resolvedSection, userId]);
 
     const filteredPresets = !searchMode
         ? presets

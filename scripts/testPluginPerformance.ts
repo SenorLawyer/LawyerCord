@@ -4100,11 +4100,14 @@ test("profile preset controls recover failed preparation and avoid random repeat
     let saveAction: () => unknown = () => assert.fail("Missing save button");
     const stateChanges: unknown[] = [];
     const errors: string[] = [];
+    let userId = "first";
+    const effects: unknown[][] = [];
+    const UserStore = { getCurrentUser: () => ({ id: userId }) };
     let stateIndex = 0;
     let saveFails = true;
     const React = {
         useState: (value: unknown) => [stateIndex++ === 0 ? "Saved profile" : value, (next: unknown) => stateChanges.push(next)],
-        useReducer: () => [0, () => {}], useRef: (value: unknown) => ({ current: value }), useEffect() {},
+        useReducer: () => [0, () => {}], useRef: (value: unknown) => ({ current: value }), useEffect(_effect: unknown, deps: unknown[]) { effects.push(deps); },
         createElement: (_type: unknown, props: { onClick?: () => void; } | null, ...children: unknown[]) => {
             if (children.includes("Random") && props?.onClick) randomAction = props.onClick;
             if (children.includes("Save Profile") && props?.onClick) saveAction = props.onClick;
@@ -4113,7 +4116,7 @@ test("profile preset controls recover failed preparation and avoid random repeat
     };
     const api = loadSource("src/equicordplugins/profileSets/components/presetManager.tsx", {
         "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
-        "@webpack/common": { React, useStateFromStores: () => null, showToast: (message: string) => errors.push(message), Toasts: { Type: { FAILURE: "failure" } } },
+        "@webpack/common": { React, UserStore, useStateFromStores: (stores: unknown[], select: () => unknown) => stores.includes(UserStore) ? select() : null, showToast: (message: string) => errors.push(message), Toasts: { Type: { FAILURE: "failure" } } },
         "../index": { cl: () => "", settings: { store: {} } },
         "../utils/actions": { savePreset: async () => { if (saveFails) throw new Error("Profile preparation failed"); } }, "../utils/profile": { loadPresetAsPending: async (preset: { name: string; }) => { selected.push(presets.indexOf(preset)); } },
         "../utils/storage": { presets },
@@ -4137,6 +4140,10 @@ test("profile preset controls recover failed preparation and avoid random repeat
     presets.length = 0;
     randomAction();
     assert.equal(selected.length, 4);
+    assert.ok(effects[0].includes("first"));
+    userId = "second";
+    api.PresetManager({});
+    assert.ok(effects[1].includes("second"));
 });
 
 test("profile presets wait for custom status updates and propagate failure", async () => {

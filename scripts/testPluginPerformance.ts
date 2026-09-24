@@ -3891,14 +3891,16 @@ test("profile images fall back after failed guild downloads", async () => {
 test("profile presets wait for custom status updates and propagate failure", async () => {
     const update = Promise.withResolvers<void>();
     let updates = 0;
+    let currentId: string | undefined = "me";
+    let staged = 0;
     const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
         "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null, updateSetting: () => { updates++; return update.promise; } }) },
         "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
         "@webpack/common": {
-            UserStore: { getCurrentUser: () => ({ id: "me" }) },
+            UserStore: { getCurrentUser: () => currentId ? { id: currentId } : undefined },
             UserProfileStore: { getUserProfile: () => null },
             IconUtils: { getUserAvatarURL: () => null, getDefaultAvatarURL: () => "default" },
-            FluxDispatcher: { dispatch() {} }
+            FluxDispatcher: { dispatch() { staged++; } }
         }
     });
     let settled = false;
@@ -3910,6 +3912,15 @@ test("profile presets wait for custom status updates and propagate failure", asy
     const rejected = assert.rejects(applying, /status update failed/);
     update.reject(new Error("status update failed"));
     await rejected;
+    for (const nextAccount of ["other", undefined]) {
+        currentId = "me";
+        const previousStaged = staged;
+        const loading = api.loadPresetAsPending({ bio: "Saved bio" });
+        currentId = nextAccount;
+        await assert.rejects(loading, /account/i);
+        assert.equal(staged, previousStaged);
+        assert.equal(updates, 1);
+    }
 });
 
 test("primary stream audio reads stores initialized after module evaluation", () => {

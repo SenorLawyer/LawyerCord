@@ -328,9 +328,12 @@ function nameplateEq(a: { skuId?: string | number | null; asset?: string | null;
 export async function loadPresetAsPending(preset: ProfilePreset, guildId?: string, options: LoadPresetOptions = {}) {
     const isGuild = options.isGuildProfile ?? Boolean(guildId);
     if (isGuild && !guildId) return;
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) throw new Error("No account is signed in.");
     const current = await getCurrentProfile(guildId, {
         isGuildProfile: isGuild
     });
+    if (UserStore.getCurrentUser()?.id !== userId) throw new Error("The account changed while loading the profile preset.");
     const pendingChanges = (isGuild && guildId
         ? UserProfileSettingsStore.getPendingChanges(guildId)
         : UserProfileSettingsStore.getPendingChanges());

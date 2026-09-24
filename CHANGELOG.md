@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Cancel pending ProfileSets loads when the signed-in account changes.
+
 - Report failed ProfileSets loads and wait for their custom-status updates to finish.
 
 - Reject future-dated VoiceRejoin records after a backward system clock adjustment.

@@ -4691,6 +4691,8 @@ test("BannersEverywhere stops displaying a banner removed from the profile store
     let banner: string | undefined = "original";
     const { default: plugin } = loadSource("src/equicordplugins/bannersEverywhere/index.tsx", {
         "@api/DataStore": {},
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/react": {},
         "@api/PluginManager": { isPluginEnabled: () => false },
         "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
         "@plugins/usrbg": { __esModule: true, default: { name: "USRBG" } },
@@ -4710,7 +4712,9 @@ test("BannersEverywhere preserves the original URL when conversion fails", async
     for (const failure of ["load", "context", "draw", "encode", "none"]) {
         let image: { onload?: () => void; onerror?: () => void; } = {};
         const { default: plugin } = loadSource("src/equicordplugins/bannersEverywhere/index.tsx", {
-            "@api/PluginManager": {}, "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+            "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/react": {},
+        "@api/PluginManager": {}, "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
             "@plugins/usrbg": {}, "@utils/constants": { Devs: {} },
             "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
             "@webpack/common": {}, "./style.css?managed": {}
@@ -4732,6 +4736,8 @@ test("BannersEverywhere preserves the original URL when conversion fails", async
 test("BannersEverywhere retries failed conversions and retains successful ones", async () => {
     const images: { onload?: () => void; onerror?: () => void; }[] = [];
     const { default: plugin } = loadSource("src/equicordplugins/bannersEverywhere/index.tsx", {
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/react": {},
         "@api/PluginManager": {}, "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
         "@plugins/usrbg": {}, "@utils/constants": { Devs: {} },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
@@ -4761,6 +4767,46 @@ test("BannersEverywhere retries failed conversions and retains successful ones",
     images[3].onload?.();
     assert.equal(await current, "converted");
     assert.equal(await joined, "converted");
+});
+
+test("BannersEverywhere conversion results belong to their mounted URL", async () => {
+    let cleanup = () => {};
+    let updates = 0;
+    const hook = loadSource("src/utils/react.tsx", {
+        "@webpack/common": {
+            useState: (value: unknown) => [value, () => { updates++; }],
+            useEffect: (effect: () => () => void) => { cleanup = effect(); }
+        },
+        "./misc": {}, "./lazyReact": {}
+    });
+    const { default: plugin } = loadSource("src/equicordplugins/bannersEverywhere/index.tsx", {
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/react": hook,
+        "@api/PluginManager": {}, "@api/Settings": { definePluginSettings: () => ({ store: { animate: false } }) },
+        "@plugins/usrbg": {}, "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": {}, "./style.css?managed": {}
+    }, { React: { createElement: (type: unknown, props: object) => ({ type, props }) } });
+    const old = Promise.withResolvers<string>();
+    const current = Promise.withResolvers<string>();
+    let url = "old";
+    plugin.getBanner = () => url;
+    plugin.gifToPng = (value: string) => value === "old" ? old.promise : current.promise;
+    const first = plugin.memberListBannerHook({ id: "user" });
+    assert.equal(first.props.key, "old");
+    assert.equal(first.type(first.props).props.src, "old");
+    cleanup();
+    url = "new";
+    const second = plugin.memberListBannerHook({ id: "user" });
+    assert.equal(second.props.key, "new");
+    assert.equal(second.type(second.props).props.src, "new");
+    old.resolve("old-converted");
+    await setImmediate();
+    assert.equal(updates, 0);
+    current.resolve("new-converted");
+    await setImmediate();
+    assert.equal(updates, 1);
+    cleanup();
 });
 
 test("TidalEmbeds only hides URLs its player can render", () => {

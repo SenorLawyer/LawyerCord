@@ -6,8 +6,10 @@
 
 import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
+import ErrorBoundary from "@components/ErrorBoundary";
 import usrbg from "@plugins/usrbg";
 import { Devs } from "@utils/constants";
+import { useAwaiter } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
 import { User } from "@vencord/discord-types";
 import { UserProfileStore } from "@webpack/common";
@@ -36,6 +38,16 @@ const settings = definePluginSettings({
         default: false
     },
 });
+
+interface StaticBannerProps {
+    url: string;
+    convert: (url: string) => Promise<string>;
+}
+
+const StaticBanner = ErrorBoundary.wrap(({ url, convert }: StaticBannerProps) => {
+    const [converted] = useAwaiter(() => convert(url), { fallbackValue: url });
+    return <img alt="" src={converted ?? url} className="vc-banners-everywhere-memberlist" />;
+}, { noop: true });
 
 const MAX_PNG_CACHE_SIZE = 100;
 
@@ -82,24 +94,16 @@ export default definePlugin({
 
     memberListBannerHook(user: User, nameplate: Nameplate | undefined) {
         let url = this.getBanner(user.id);
-        if (!url) return;
-        if (settings.store.preferNameplate && nameplate) return;
+        if (!url) return null;
+        if (settings.store.preferNameplate && nameplate) return null;
         if (!settings.store.animate) {
             // Discord Banners
             url = url.replace(".gif", ".png");
             // Usrbg Banners
-            this.gifToPng(url)
-                .then(pngUrl => {
-                    const imgElement = document.getElementById(`vc-banners-everywhere-${user.id}`) as HTMLImageElement;
-                    if (imgElement) {
-                        imgElement.src = pngUrl;
-                    }
-                });
+            return <StaticBanner key={url} url={url} convert={this.gifToPng} />;
         }
 
-        return (
-            <img alt="" id={`vc-banners-everywhere-${user.id}`} src={url} className="vc-banners-everywhere-memberlist"></img>
-        );
+        return <img alt="" src={url} className="vc-banners-everywhere-memberlist" />;
     },
 
     async gifToPng(url: string): Promise<string> {

@@ -18,7 +18,7 @@ export default definePlugin({
         {
             find: "renderEmbeds(",
             replacement: {
-                match: /(?<=renderEmbeds\(\i\){.+?embeds\.map\(\((\i),\i\)?=>{)/,
+                match: /(?<=renderEmbeds\(\i\){.{0,200}?embeds\.map\(\((\i),\i\)?=>{)/,
                 replace: "$&if($self.isTidalEmbed($1))return null;"
             }
         }

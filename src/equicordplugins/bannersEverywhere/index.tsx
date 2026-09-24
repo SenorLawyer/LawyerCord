@@ -90,7 +90,7 @@ export default definePlugin({
             ]
         },
         {
-            find: "role:\"listitem\",innerRef",
+            find: ".MEMBER_LIST}),(0,",
             replacement: {
                 // We cant access the user id here, so we take the banner property we set earlier
                 match: /children:\[(?=.{0,100}\.MEMBER_LIST)/,

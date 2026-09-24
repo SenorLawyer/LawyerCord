@@ -315,12 +315,7 @@ function collectibleEqBySku(a: { skuId?: string | number | null; } | null | unde
     return String(a.skuId ?? "") === String(b.skuId ?? "");
 }
 
-function avatarDecorationEq(a: { skuId?: string | number | null; asset?: string | null; } | null | undefined, b: { skuId?: string | number | null; asset?: string | null; } | null | undefined): boolean {
-    if (a == null || b == null) return a == null && b == null;
-    return String(a.skuId ?? "") === String(b.skuId ?? "") && String(a.asset ?? "") === String(b.asset ?? "");
-}
-
-function nameplateEq(a: { skuId?: string | number | null; asset?: string | null; } | null | undefined, b: { skuId?: string | number | null; asset?: string | null; } | null | undefined): boolean {
+function collectibleEqByAsset(a: { skuId?: string | number | null; asset?: string | null; } | null | undefined, b: { skuId?: string | number | null; asset?: string | null; } | null | undefined): boolean {
     if (a == null || b == null) return a == null && b == null;
     return String(a.skuId ?? "") === String(b.skuId ?? "") && String(a.asset ?? "") === String(b.asset ?? "");
 }
@@ -399,7 +394,7 @@ export async function loadPresetAsPending(preset: ProfilePreset, guildId?: strin
         setPending(isGuild ? { pendingNickname: preset.globalName } : { pendingGlobalName: preset.globalName });
     }
 
-    if (preset.avatarDecoration !== undefined && !avatarDecorationEq(preset.avatarDecoration, current.avatarDecoration)) {
+    if (preset.avatarDecoration !== undefined && !collectibleEqByAsset(preset.avatarDecoration, current.avatarDecoration)) {
         setPending({
             pendingAvatarDecoration: preset.avatarDecoration
         });
@@ -411,7 +406,7 @@ export async function loadPresetAsPending(preset: ProfilePreset, guildId?: strin
         });
     }
 
-    if (preset.nameplate !== undefined && !nameplateEq(preset.nameplate, current.nameplate)) {
+    if (preset.nameplate !== undefined && !collectibleEqByAsset(preset.nameplate, current.nameplate)) {
         setPending({
             pendingNameplate: preset.nameplate
         });

@@ -183,7 +183,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
                 <Button
                     size="small"
                     variant="secondary"
-                    onClick={() => importPresets(forceUpdate, showImportPrompt, resolvedSection, resolvedGuildId)}
+                    onClick={() => importPresets(forceUpdate, showImportPrompt, resolvedSection)}
                     disabled={!canUseGuild}
                 >
                     Import

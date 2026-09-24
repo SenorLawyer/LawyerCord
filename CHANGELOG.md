@@ -12,6 +12,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Remove duplicate ProfileSets collectible comparison code and unused action arguments.
+
 - Remove the unused FriendTags stylesheet.
 
 - Remove the unused SVGO development dependency and its release-age exception.

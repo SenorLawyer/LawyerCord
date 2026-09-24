@@ -64,7 +64,7 @@ export function PresetList({
                 const commitRename = () => {
                     const nextName = renameText.trim();
                     if (!nextName) return;
-                    renamePreset(actualIndex, nextName, section, guildId);
+                    renamePreset(actualIndex, nextName, section);
                     onUpdate();
                 };
 
@@ -157,7 +157,7 @@ export function PresetList({
                                                     await Promise.all(
                                                         (Object.entries(profile) as [keyof EditableProfile, EditableProfile[keyof EditableProfile]][])
                                                             .filter(([, value]) => isNonNullish(value))
-                                                            .map(([key, value]) => updatePresetField(actualIndex, key, value, section, guildId))
+                                                            .map(([key, value]) => updatePresetField(actualIndex, key, value, section))
                                                     );
                                                     onUpdate();
                                                 }}
@@ -168,7 +168,7 @@ export function PresetList({
                                                     id="move-up"
                                                     label="Move Up"
                                                     action={() => {
-                                                        movePreset(actualIndex, actualIndex - 1, section, guildId);
+                                                        movePreset(actualIndex, actualIndex - 1, section);
                                                         onUpdate();
                                                     }}
                                                 />
@@ -178,7 +178,7 @@ export function PresetList({
                                                     id="move-down"
                                                     label="Move Down"
                                                     action={() => {
-                                                        movePreset(actualIndex, actualIndex + 1, section, guildId);
+                                                        movePreset(actualIndex, actualIndex + 1, section);
                                                         onUpdate();
                                                     }}
                                                 />
@@ -188,7 +188,7 @@ export function PresetList({
                                                     id="move-to-page-1"
                                                     label="Move to Page 1"
                                                     action={() => {
-                                                        movePreset(actualIndex, 0, section, guildId);
+                                                        movePreset(actualIndex, 0, section);
                                                         onPageChange(1);
                                                         onUpdate();
                                                     }}
@@ -200,7 +200,7 @@ export function PresetList({
                                                 label="Delete"
                                                 color="danger"
                                                 action={async () => {
-                                                    await deletePreset(actualIndex, section, guildId);
+                                                    await deletePreset(actualIndex, section);
                                                     onUpdate();
                                                 }}
                                             />

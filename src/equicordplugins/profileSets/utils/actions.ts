@@ -53,11 +53,9 @@ export async function updatePresetField<K extends keyof Omit<ProfilePreset, "nam
     index: number,
     field: K,
     value: Omit<ProfilePreset, "name" | "timestamp">[K],
-    section: PresetSection,
-    guildId?: string
+    section: PresetSection
 ) {
     if (index < 0 || index >= presets.length) return;
-    void guildId;
 
     const updatedPreset = {
         ...presets[index],
@@ -68,21 +66,21 @@ export async function updatePresetField<K extends keyof Omit<ProfilePreset, "nam
     await savePresetsData(section);
 }
 
-export async function deletePreset(index: number, section: PresetSection, guildId?: string) {
+export async function deletePreset(index: number, section: PresetSection) {
     if (index < 0 || index >= presets.length) return;
 
     removePreset(index);
     await savePresetsData(section);
 }
 
-export async function movePreset(fromIndex: number, toIndex: number, section: PresetSection, guildId?: string) {
+export async function movePreset(fromIndex: number, toIndex: number, section: PresetSection) {
     if (fromIndex < 0 || fromIndex >= presets.length || toIndex < 0 || toIndex >= presets.length) return;
 
     movePresetInArray(fromIndex, toIndex);
     await savePresetsData(section);
 }
 
-export async function renamePreset(index: number, newName: string, section: PresetSection, guildId?: string) {
+export async function renamePreset(index: number, newName: string, section: PresetSection) {
     if (index < 0 || index >= presets.length || !newName.trim()) return;
 
     const updatedPreset = { ...presets[index], name: newName.trim() };
@@ -106,8 +104,7 @@ export type ImportDecision = "override" | "merge" | "cancel";
 export async function importPresets(
     forceUpdate: () => void,
     onImportPrompt: (existingCount: number) => Promise<ImportDecision>,
-    section: PresetSection,
-    guildId?: string
+    section: PresetSection
 ) {
     const input = document.createElement("input");
     input.type = "file";

@@ -22,117 +22,127 @@ export type ProfilePresetEx = ProfilePreset & {
     avatarRaw?: string | null;
 };
 
-export let presets: ProfilePresetEx[] = [];
-let savedPresets: ProfilePresetEx[] | undefined;
-let activeScopeKey: string | null = null;
-let loadGeneration = 0;
-let pendingSave: Promise<void> | undefined;
+export type PresetStorage = ReturnType<typeof createPresetStorage>;
 
-function resetPresets(nextPresets?: ProfilePresetEx[]) {
-    savedPresets = nextPresets;
-    presets = nextPresets ?? [];
-}
+export function createPresetStorage() {
+    let presets: ProfilePresetEx[] = [];
+    let savedPresets: ProfilePresetEx[] | undefined;
+    let activeScopeKey: string | null = null;
+    let loadGeneration = 0;
+    let pendingSave: Promise<void> | undefined;
 
-function getPresetsKey(section: PresetSection, userId: string) {
-    const baseKey = section === "main" ? MAIN_PRESETS_KEY : SERVER_PRESETS_KEY;
-    return `${baseKey}:${userId}`;
-}
+    function resetPresets(nextPresets?: ProfilePresetEx[]) {
+        savedPresets = nextPresets;
+        presets = nextPresets ?? [];
+    }
 
-function getLegacyKey(userId: string) {
-    return `${LEGACY_PRESETS_KEY}:${userId}:main`;
-}
+    function getPresetsKey(section: PresetSection, userId: string) {
+        const baseKey = section === "main" ? MAIN_PRESETS_KEY : SERVER_PRESETS_KEY;
+        return `${baseKey}:${userId}`;
+    }
 
-function getCurrentUserId() {
-    return UserStore.getCurrentUser()?.id ?? null;
-}
+    function getLegacyKey(userId: string) {
+        return `${LEGACY_PRESETS_KEY}:${userId}:main`;
+    }
 
-function isCurrentLoad(generation: number, userId: string) {
-    return generation === loadGeneration && getCurrentUserId() === userId;
-}
+    function getCurrentUserId() {
+        return UserStore.getCurrentUser()?.id ?? null;
+    }
 
-export async function loadPresets(section: PresetSection) {
-    const userId = getCurrentUserId();
-    if (!userId) {
+    function isCurrentLoad(generation: number, userId: string) {
+        return generation === loadGeneration && getCurrentUserId() === userId;
+    }
+
+    function unloadPresets() {
         activeScopeKey = null;
         loadGeneration++;
         resetPresets();
-        return;
     }
 
-    const key = getPresetsKey(section, userId);
-    const generation = ++loadGeneration;
-    activeScopeKey = null;
-    resetPresets();
-
-    try {
-        if (pendingSave) await pendingSave;
-        if (!isCurrentLoad(generation, userId)) return;
-        const stored = await DataStore.get(key);
-        if (!isCurrentLoad(generation, userId)) return;
-
-        if (stored !== undefined) {
-            if (!isPresetList(stored)) throw new Error("The saved profile preset list is invalid.");
-            activeScopeKey = key;
-            resetPresets(stored);
+    async function loadPresets(section: PresetSection) {
+        const userId = getCurrentUserId();
+        if (!userId) {
+            unloadPresets();
             return;
         }
 
-        if (section === "main") {
-            const legacyKey = getLegacyKey(userId);
-            const [legacyStored, legacyBaseStored] = await Promise.all([
-                DataStore.get(legacyKey),
-                DataStore.get(LEGACY_PRESETS_KEY)
-            ]);
+        const key = getPresetsKey(section, userId);
+        const generation = ++loadGeneration;
+        activeScopeKey = null;
+        resetPresets();
+
+        try {
+            if (pendingSave) await pendingSave;
+            if (!isCurrentLoad(generation, userId)) return;
+            const stored = await DataStore.get(key);
             if (!isCurrentLoad(generation, userId)) return;
 
-            const legacyToUse = legacyStored !== undefined ? legacyStored : legacyBaseStored;
-            if (legacyToUse !== undefined) {
-                if (!isPresetList(legacyToUse)) throw new Error("The legacy profile preset list is invalid.");
-                let migrated = legacyToUse;
-                await DataStore.update<ProfilePresetEx[]>(key, current => {
-                    if (current !== undefined) {
-                        if (!isPresetList(current)) throw new Error("The saved profile preset list is invalid.");
-                        migrated = current;
-                    }
-                    return migrated;
-                });
-                if (!isCurrentLoad(generation, userId)) return;
+            if (stored !== undefined) {
+                if (!isPresetList(stored)) throw new Error("The saved profile preset list is invalid.");
                 activeScopeKey = key;
-                resetPresets(migrated);
+                resetPresets(stored);
                 return;
             }
+
+            if (section === "main") {
+                const legacyKey = getLegacyKey(userId);
+                const [legacyStored, legacyBaseStored] = await Promise.all([
+                    DataStore.get(legacyKey),
+                    DataStore.get(LEGACY_PRESETS_KEY)
+                ]);
+                if (!isCurrentLoad(generation, userId)) return;
+
+                const legacyToUse = legacyStored !== undefined ? legacyStored : legacyBaseStored;
+                if (legacyToUse !== undefined) {
+                    if (!isPresetList(legacyToUse)) throw new Error("The legacy profile preset list is invalid.");
+                    let migrated = legacyToUse;
+                    await DataStore.update<ProfilePresetEx[]>(key, current => {
+                        if (current !== undefined) {
+                            if (!isPresetList(current)) throw new Error("The saved profile preset list is invalid.");
+                            migrated = current;
+                        }
+                        return migrated;
+                    });
+                    if (!isCurrentLoad(generation, userId)) return;
+                    activeScopeKey = key;
+                    resetPresets(migrated);
+                    return;
+                }
+            }
+            activeScopeKey = key;
+            resetPresets();
+        } catch (err) {
+            if (!isCurrentLoad(generation, userId)) return;
+
+            logger.error("Failed to load presets", err);
+            resetPresets();
+            throw err;
         }
-        activeScopeKey = key;
-        resetPresets();
-    } catch (err) {
-        if (!isCurrentLoad(generation, userId)) return;
-
-        logger.error("Failed to load presets", err);
-        resetPresets();
-        throw err;
     }
-}
 
-export async function savePresetsData(section: PresetSection, nextPresets: ProfilePresetEx[] = presets) {
-    const userId = getCurrentUserId();
-    if (!userId) throw new Error("No account is signed in.");
-    const key = getPresetsKey(section, userId);
-    if (key !== activeScopeKey) throw new Error("The preset list has not finished loading.");
-    if (pendingSave) throw new Error("A preset change is still being saved.");
-    const generation = loadGeneration;
-    const expected = savedPresets;
-    try {
-        const write = DataStore.update<ProfilePresetEx[]>(key, stored => {
-            if (!lodash.isEqual(stored, expected))
-                throw new Error("The saved presets changed in another client. Reopen this panel before trying again.");
-            return nextPresets;
-        });
-        pendingSave = write.then(() => undefined, () => undefined);
-        await write;
-        if (!isCurrentLoad(generation, userId) || activeScopeKey !== key)
-            throw new Error("The account or preset list changed while saving.");
-        resetPresets(nextPresets);
-    } finally {
-        pendingSave = undefined;
+    async function savePresetsData(section: PresetSection, nextPresets: ProfilePresetEx[] = presets) {
+        const userId = getCurrentUserId();
+        if (!userId) throw new Error("No account is signed in.");
+        const key = getPresetsKey(section, userId);
+        if (key !== activeScopeKey) throw new Error("The preset list has not finished loading.");
+        if (pendingSave) throw new Error("A preset change is still being saved.");
+        const generation = loadGeneration;
+        const expected = savedPresets;
+        try {
+            const write = DataStore.update<ProfilePresetEx[]>(key, stored => {
+                if (!lodash.isEqual(stored, expected))
+                    throw new Error("The saved presets changed in another client. Reopen this panel before trying again.");
+                return nextPresets;
+            });
+            pendingSave = write.then(() => undefined, () => undefined);
+            await write;
+            if (!isCurrentLoad(generation, userId) || activeScopeKey !== key)
+                throw new Error("The account or preset list changed while saving.");
+            resetPresets(nextPresets);
+        } finally {
+            pendingSave = undefined;
+        }
     }
+
+    return { get presets() { return presets; }, loadPresets, unloadPresets, savePresetsData };
 }

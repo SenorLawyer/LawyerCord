@@ -3989,7 +3989,7 @@ test("profile preset refresh writes once and retains its original target", async
             "@webpack": { findStoreLazy: () => ({}) },
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
             "./profile": { getCurrentProfile: () => preparation.promise }, "./storage": storage
-        });
+        }).createPresetActions(storage);
         const refreshing = api.refreshPreset(target, "main");
         if (change === "account") userId = "second";
         if (change === "list") storage.presets = [other];
@@ -4034,7 +4034,7 @@ test("profile preset imports keep their initiating account and list", async () =
                 showToast: (message: string) => errors.push(message), Toasts: { Type: { FAILURE: "failure" } }
             },
             "./profile": {}, "./storage": storage
-        });
+        }).createPresetActions(storage);
         const importing = api.importPresets(() => { updates++; }, () => { prompted.resolve(); return decision.promise; }, "main");
         if (stage === "read") userId = "second";
         const invalidFiles: Record<string, string> = {
@@ -4071,7 +4071,7 @@ test("profile preset saves reject account and list changes during preparation", 
         "@webpack/common": { UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined } },
         "./profile": { getCurrentProfile: () => preparation.promise },
         "./storage": storage
-    });
+    }).createPresetActions(storage);
     for (const change of [() => { userId = "second"; }, () => { storage.presets = []; }, () => { userId = undefined; }]) {
         userId = "first";
         preparation = Promise.withResolvers<object>();
@@ -4100,7 +4100,7 @@ test("profile preset mutations preserve the visible list when persistence fails"
         const storage = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
             "@api/index": { DataStore: { get: async () => original, update: async () => { writes++; throw new Error("Write failed"); } } },
             "@utils/Logger": { Logger: class { error() {} } }, "@webpack/common": { UserStore }
-        });
+        }).createPresetStorage();
         await storage.loadPresets("main");
         const actions = loadSource("src/equicordplugins/profileSets/utils/actions.ts", {
             "@utils/web": { chooseFile: async () => ({ text: async () => '[{"name":"Imported","timestamp":0}]' }) },
@@ -4108,7 +4108,7 @@ test("profile preset mutations preserve the visible list when persistence fails"
             "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
             "@webpack/common": { UserStore, showToast: (message: string) => errors.push(message), Toasts: { Type: { FAILURE: "failure" } } },
             "./profile": { getCurrentProfile: async () => ({ bio: "Updated" }) }, "./storage": storage
-        });
+        }).createPresetActions(storage);
         if (operation === "import") {
             await actions.importPresets(() => assert.fail("Failed import refreshed the UI"), async () => "override", "main");
             assert.equal(errors.length, 1);
@@ -4140,7 +4140,7 @@ test("profile preset reloads wait for pending writes before reading", async () =
             } },
             "@utils/Logger": { Logger: class { error() {} } },
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "user" }) } }
-        });
+        }).createPresetStorage();
         await storage.loadPresets("main");
         const saving = storage.savePresetsData("main", next);
         const failure = assert.rejects(saving);
@@ -4165,7 +4165,7 @@ test("profile preset writes publish only on success and reject overlapping write
         "@api/index": { DataStore: { get: async () => original, update: () => write.promise } },
         "@utils/Logger": { Logger: class { error() {} } },
         "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } }
-    });
+    }).createPresetStorage();
     await storage.loadPresets("main");
     const first = storage.savePresetsData("main", next);
     assert.equal(storage.presets, original);
@@ -4185,6 +4185,56 @@ test("profile preset writes publish only on success and reject overlapping write
     write.resolve();
     await assert.rejects(switched, /changed while saving/);
     assert.equal(storage.presets, next);
+});
+
+test("profile preset panels keep simultaneous section loads and exports separate", async () => {
+    const main = [{ name: "Main", timestamp: 0 }];
+    const server = [{ name: "Server", timestamp: 1 }];
+    const records = new Map<string, unknown>([["ProfilePresets_v2_Main:me", main], ["ProfilePresets_v2_Server:me", server]]);
+    const reads = new Map<string, ReturnType<typeof Promise.withResolvers<unknown>>>();
+    const common = { UserStore: { getCurrentUser: () => ({ id: "me" }) }, lodash: { isEqual: isDeepStrictEqual } };
+    const module = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
+        "@api/index": { DataStore: {
+            get: (key: string) => { const read = Promise.withResolvers<unknown>(); reads.set(key, read); return read.promise; },
+            update: async (key: string, change: (value: unknown) => unknown) => { records.set(key, change(records.get(key))); }
+        } },
+        "@utils/Logger": { Logger: class { error() {} } }, "@webpack/common": common,
+        "./validation": { isPresetList: Array.isArray }
+    });
+    const first = module.createPresetStorage();
+    const second = module.createPresetStorage();
+    const loadingMain = first.loadPresets("main");
+    const loadingServer = second.loadPresets("server");
+    reads.get("ProfilePresets_v2_Server:me")?.resolve(server);
+    await loadingServer;
+    reads.get("ProfilePresets_v2_Main:me")?.resolve(main);
+    await loadingMain;
+    assert.equal(first.presets, main);
+    assert.equal(second.presets, server);
+    const files: File[] = [];
+    const actions = loadSource("src/equicordplugins/profileSets/utils/actions.ts", {
+        "@utils/guards": {}, "@utils/web": { saveFile: (file: File) => files.push(file) },
+        "@webpack": { findStoreLazy: () => ({}) }, "@webpack/common": common, "./profile": {}, "./validation": {}
+    }, { File });
+    actions.createPresetActions(first).exportPresets("main");
+    actions.createPresetActions(second).exportPresets("server");
+    assert.deepEqual(JSON.parse(await files[0].text()), main);
+    assert.deepEqual(JSON.parse(await files[1].text()), server);
+    assert.match(files[0].name, /profile-presets-main-/);
+    assert.match(files[1].name, /profile-presets-server-/);
+    const changed = [...main, { name: "New main", timestamp: 2 }];
+    await first.savePresetsData("main", changed);
+    assert.equal(first.presets, changed);
+    assert.equal(second.presets, server);
+    assert.equal(records.get("ProfilePresets_v2_Main:me"), changed);
+    assert.equal(records.get("ProfilePresets_v2_Server:me"), server);
+    const reload = first.loadPresets("main");
+    first.unloadPresets();
+    reads.get("ProfilePresets_v2_Main:me")?.resolve(changed);
+    await reload;
+    assert.equal(first.presets.length, 0);
+    assert.equal(second.presets, server);
+    await assert.rejects(first.savePresetsData("main", main));
 });
 
 test("profile preset clients reject stale writes and can save after reloading", async () => {
@@ -4209,8 +4259,8 @@ test("profile preset clients reject stale writes and can save after reloading", 
             "@utils/Logger": { Logger: class { error() {} } },
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "user" }) } }
         };
-        const first = loadSource("src/equicordplugins/profileSets/utils/storage.ts", mocks);
-        const second = loadSource("src/equicordplugins/profileSets/utils/storage.ts", mocks);
+        const first = loadSource("src/equicordplugins/profileSets/utils/storage.ts", mocks).createPresetStorage();
+        const second = loadSource("src/equicordplugins/profileSets/utils/storage.ts", mocks).createPresetStorage();
         await Promise.all([first.loadPresets("server"), second.loadPresets("server")]);
         const stale = second.presets;
         const firstNext = [...first.presets, { name: "First client", timestamp: 1 }];
@@ -4245,7 +4295,7 @@ test("profile preset loading preserves malformed destination records", async () 
                 } },
                 "@utils/Logger": { Logger: class { error() { errors++; } } },
                 "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "user" }) } }
-            });
+            }).createPresetStorage();
             await assert.rejects(api.loadPresets(section), /invalid/);
             await assert.rejects(api.savePresetsData(section));
             assert.equal(writes.length, 0);
@@ -4266,7 +4316,7 @@ test("profile preset migration does not bypass malformed account records", async
             } },
             "@utils/Logger": { Logger: class { error() {} } },
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "user" }) } }
-        });
+        }).createPresetStorage();
         await assert.rejects(api.loadPresets("main"), /legacy.*invalid/);
         assert.equal(changes, 0);
         await assert.rejects(api.savePresetsData("main"));
@@ -4291,7 +4341,7 @@ test("profile preset migration preserves a destination created after its first r
             } },
             "@utils/Logger": { Logger: class { error() {} } },
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "user" }) } }
-        });
+        }).createPresetStorage();
         if (destination === null) await assert.rejects(api.loadPresets("main"), /invalid/);
         else {
             await api.loadPresets("main");
@@ -4320,7 +4370,7 @@ test("profile preset migration retains legacy records after successful and faile
             } },
             "@utils/Logger": { Logger: class { error() {} } },
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "user" }) } }
-        });
+        }).createPresetStorage();
         if (failedWrite) await assert.rejects(api.loadPresets("main"), /Storage unavailable/);
         else await api.loadPresets("main");
         assert.equal(data.get("ProfileDataset"), unowned);
@@ -4341,7 +4391,7 @@ test("profile preset storage rejects stale account reads and foreign-scope saves
         } },
         "@utils/Logger": { Logger: class { error() {} } },
         "@webpack/common": { UserStore: { getCurrentUser: () => currentId ? { id: currentId } : undefined } }
-    });
+    }).createPresetStorage();
     const loading = api.loadPresets("main");
     currentId = "second";
     reads[0].resolve([{ name: "First account", timestamp: 0 }]);
@@ -4388,7 +4438,10 @@ test("profile preset menus reject mutations after their rendered list is replace
             refreshPreset: async () => {}, renamePreset: async () => { changes++; }
         }
     }, { React });
-    api.PresetList({ presets: [original[1]], allPresets: original, avatarSize: 20, selectedPreset: -1,
+    api.PresetList({ storage, actions: {
+        deletePreset: async () => { changes++; }, movePreset: async () => { changes++; },
+        refreshPreset: async () => {}, renamePreset: async () => { changes++; }
+    }, presets: [original[1]], allPresets: original, avatarSize: 20, selectedPreset: null,
         onLoad() {}, onUpdate() {}, section: "main", currentPage: 2, onPageChange() {} });
     (openMenu as (event: { stopPropagation(): void; }) => void)({ stopPropagation() {} });
     storage.presets = [{ name: "Replacement", timestamp: 2 }, { name: "Unrelated", timestamp: 3 }];
@@ -4422,10 +4475,10 @@ test("profile preset loading follows the rendered object and rejects replaced li
     };
     const api = loadSource("src/equicordplugins/profileSets/components/presetManager.tsx", {
         "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
-        "@webpack/common": { React, useStateFromStores: () => null, showToast: () => { errors++; }, Toasts: { Type: { FAILURE: "failure" } } },
+        "@webpack/common": { React: { ...React, useMemo: (factory: () => unknown) => factory() }, useStateFromStores: () => null, showToast: () => { errors++; }, Toasts: { Type: { FAILURE: "failure" } } },
         "../index": { cl: () => "", settings: { store: {} } },
-        "../utils/actions": {}, "../utils/profile": { loadPresetAsPending: async (preset: unknown) => { loaded.push(preset); } },
-        "../utils/storage": storage, "./confirmModal": {}, "./presetList": {}
+        "../utils/actions": { createPresetActions: () => ({}) }, "../utils/profile": { loadPresetAsPending: async (preset: unknown) => { loaded.push(preset); } },
+        "../utils/storage": { createPresetStorage: () => (storage) }, "./confirmModal": {}, "./presetList": {}
     });
     api.PresetManager({});
     storage.presets = [other, original];
@@ -4451,10 +4504,10 @@ test("profile preset load failures notify mounted panels only", async () => {
         };
         const api = loadSource("src/equicordplugins/profileSets/components/presetManager.tsx", {
             "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
-            "@webpack/common": { React, useStateFromStores: () => null, showToast: (text: string) => errors.push(text), Toasts: { Type: { FAILURE: "failure" } } },
+            "@webpack/common": { React: { ...React, useMemo: (factory: () => unknown) => factory() }, useStateFromStores: () => null, showToast: (text: string) => errors.push(text), Toasts: { Type: { FAILURE: "failure" } } },
             "../index": { cl: () => "", settings: { store: {} } },
-            "../utils/actions": {}, "../utils/profile": {},
-            "../utils/storage": { presets: [], loadPresets: () => load.promise }, "./confirmModal": {}, "./presetList": {}
+            "../utils/actions": { createPresetActions: () => ({}) }, "../utils/profile": {},
+            "../utils/storage": { createPresetStorage: () => ({ presets: [], loadPresets: () => load.promise, unloadPresets() {} }) }, "./confirmModal": {}, "./presetList": {}
         });
         api.PresetManager({});
         const cleanup = effect();
@@ -4483,10 +4536,10 @@ test("profile preset search resets pagination even after no matches", () => {
     };
     const api = loadSource("src/equicordplugins/profileSets/components/presetManager.tsx", {
         "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
-        "@webpack/common": { React, useStateFromStores: () => null },
+        "@webpack/common": { React: { ...React, useMemo: (factory: () => unknown) => factory() }, useStateFromStores: () => null },
         "../index": { cl: () => "", settings: { store: {} } },
-        "../utils/actions": {}, "../utils/profile": {},
-        "../utils/storage": { presets: [{ name: "Match" }] },
+        "../utils/actions": { createPresetActions: () => ({}) }, "../utils/profile": {},
+        "../utils/storage": { createPresetStorage: () => ({ presets: [{ name: "Match" }] }) },
         "./confirmModal": {}, "./presetList": {}
     });
     api.PresetManager({});
@@ -4512,10 +4565,10 @@ test("profile preset pagination recovers when the visible list shrinks", () => {
         };
         const api = loadSource("src/equicordplugins/profileSets/components/presetManager.tsx", {
             "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
-            "@webpack/common": { React, useStateFromStores: () => null },
+            "@webpack/common": { React: { ...React, useMemo: (factory: () => unknown) => factory() }, useStateFromStores: () => null },
             "../index": { cl: () => "", settings: { store: {} } },
-            "../utils/actions": {}, "../utils/profile": {},
-            "../utils/storage": { presets: [{ name: "Match" }, ...Array.from({ length: 9 }, () => ({ name: "Other" }))] },
+            "../utils/actions": { createPresetActions: () => ({}) }, "../utils/profile": {},
+            "../utils/storage": { createPresetStorage: () => ({ presets: [{ name: "Match" }, ...Array.from({ length: 9 }, () => ({ name: "Other" }))] }) },
             "./confirmModal": {}, "./presetList": {}
         });
         api.PresetManager({});
@@ -4545,10 +4598,10 @@ test("profile preset saves navigate using the new list length", async () => {
         };
         const api = loadSource("src/equicordplugins/profileSets/components/presetManager.tsx", {
             "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
-            "@webpack/common": { React, useStateFromStores: () => null, showToast: () => assert.fail("Save failed") },
+            "@webpack/common": { React: { ...React, useMemo: (factory: () => unknown) => factory() }, useStateFromStores: () => null, showToast: () => assert.fail("Save failed") },
             "../index": { cl: () => "", settings: { store: {} } },
-            "../utils/actions": { savePreset: async () => { storage.presets = [...storage.presets, { name: "New profile" }]; } },
-            "../utils/profile": {}, "../utils/storage": storage, "./confirmModal": {}, "./presetList": {}
+            "../utils/actions": { createPresetActions: () => ({ savePreset: async () => { storage.presets = [...storage.presets, { name: "New profile" }]; } }) },
+            "../utils/profile": {}, "../utils/storage": { createPresetStorage: () => (storage) }, "./confirmModal": {}, "./presetList": {}
         });
         api.PresetManager({});
         await save();
@@ -4586,10 +4639,10 @@ test("profile preset controls recover failed preparation and avoid random repeat
     };
     const api = loadSource("src/equicordplugins/profileSets/components/presetManager.tsx", {
         "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
-        "@webpack/common": { React, UserStore, openModal: (_render: unknown, options: { onCloseCallback: () => void; }) => options.onCloseCallback(), useStateFromStores: (stores: unknown[], select: () => unknown) => stores.includes(UserStore) ? select() : null, showToast: (message: string) => errors.push(message), Toasts: { Type: { FAILURE: "failure" } } },
+        "@webpack/common": { React: { ...React, useMemo: (factory: () => unknown) => factory() }, UserStore, openModal: (_render: unknown, options: { onCloseCallback: () => void; }) => options.onCloseCallback(), useStateFromStores: (stores: unknown[], select: () => unknown) => stores.includes(UserStore) ? select() : null, showToast: (message: string) => errors.push(message), Toasts: { Type: { FAILURE: "failure" } } },
         "../index": { cl: () => "", settings: { store: {} } },
-        "../utils/actions": { importPresets: async (_update: unknown, prompt: (count: number) => Promise<string>) => { decisions.push(await prompt(2)); }, savePreset: async () => { if (saveFails) throw new Error("Profile preparation failed"); } }, "../utils/profile": { loadPresetAsPending: async (preset: { name: string; }) => { selected.push(presets.indexOf(preset)); } },
-        "../utils/storage": { presets },
+        "../utils/actions": { createPresetActions: () => ({ importPresets: async (_update: unknown, prompt: (count: number) => Promise<string>) => { decisions.push(await prompt(2)); }, savePreset: async () => { if (saveFails) throw new Error("Profile preparation failed"); } }) }, "../utils/profile": { loadPresetAsPending: async (preset: { name: string; }) => { selected.push(presets.indexOf(preset)); } },
+        "../utils/storage": { createPresetStorage: () => ({ presets }) },
         "./confirmModal": {}, "./presetList": {}
     }, { Math: { ...Math, max: Math.max, ceil: Math.ceil, floor: Math.floor, random: () => { draws++; return 0.5; } } });
     api.PresetManager({});

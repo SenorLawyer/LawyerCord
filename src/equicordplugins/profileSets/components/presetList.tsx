@@ -8,10 +8,12 @@ import { classes } from "@utils/misc";
 import { ContextMenuApi, Menu, React, showToast, TextInput, Toasts } from "@webpack/common";
 
 import { cl } from "..";
-import { deletePreset, movePreset, refreshPreset, renamePreset } from "../utils/actions";
-import { presets as currentPresets, PresetSection, type ProfilePresetEx } from "../utils/storage";
+import { PresetActions } from "../utils/actions";
+import { PresetSection, type PresetStorage, type ProfilePresetEx } from "../utils/storage";
 
 interface PresetListProps {
+    storage: PresetStorage;
+    actions: PresetActions;
     presets: ProfilePresetEx[];
     allPresets: ProfilePresetEx[];
     avatarSize: number;
@@ -25,6 +27,8 @@ interface PresetListProps {
 }
 
 export function PresetList({
+    storage,
+    actions,
     presets,
     allPresets,
     avatarSize,
@@ -41,7 +45,7 @@ export function PresetList({
 
     const runChange = async (change: () => Promise<void>) => {
         try {
-            if (currentPresets !== allPresets) throw new Error("The profile preset list changed.");
+            if (storage.presets !== allPresets) throw new Error("The profile preset list changed.");
             await change();
             onUpdate();
         } catch {
@@ -69,7 +73,7 @@ export function PresetList({
                 const commitRename = () => {
                     const nextName = renameText.trim();
                     if (!nextName) return;
-                    void runChange(() => renamePreset(actualIndex, nextName, section));
+                    void runChange(() => actions.renamePreset(actualIndex, nextName, section));
                 };
 
                 const showMoveOptions = actualIndex > 0 || actualIndex < allPresets.length - 1 || currentPage > 1;
@@ -157,7 +161,7 @@ export function PresetList({
                                                 label="Update"
                                                 action={async () => {
                                                     try {
-                                                        await refreshPreset(preset, section, guildId);
+                                                        await actions.refreshPreset(preset, section, guildId);
                                                         onUpdate();
                                                     } catch {
                                                         showToast("Could not update the profile preset.", Toasts.Type.FAILURE);
@@ -169,14 +173,14 @@ export function PresetList({
                                                 <Menu.MenuItem
                                                     id="move-up"
                                                     label="Move Up"
-                                                    action={() => runChange(() => movePreset(actualIndex, actualIndex - 1, section))}
+                                                    action={() => runChange(() => actions.movePreset(actualIndex, actualIndex - 1, section))}
                                                 />
                                             )}
                                             {actualIndex < allPresets.length - 1 && (
                                                 <Menu.MenuItem
                                                     id="move-down"
                                                     label="Move Down"
-                                                    action={() => runChange(() => movePreset(actualIndex, actualIndex + 1, section))}
+                                                    action={() => runChange(() => actions.movePreset(actualIndex, actualIndex + 1, section))}
                                                 />
                                             )}
                                             {currentPage > 1 && (
@@ -184,7 +188,7 @@ export function PresetList({
                                                     id="move-to-page-1"
                                                     label="Move to Page 1"
                                                     action={() => runChange(async () => {
-                                                        await movePreset(actualIndex, 0, section);
+                                                        await actions.movePreset(actualIndex, 0, section);
                                                         onPageChange(1);
                                                     })}
                                                 />
@@ -194,7 +198,7 @@ export function PresetList({
                                                 id="delete"
                                                 label="Delete"
                                                 color="danger"
-                                                action={() => runChange(() => deletePreset(actualIndex, section))}
+                                                action={() => runChange(() => actions.deletePreset(actualIndex, section))}
                                             />
                                         </Menu.Menu>
                                     ));

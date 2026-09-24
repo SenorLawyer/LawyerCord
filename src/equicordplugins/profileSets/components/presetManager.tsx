@@ -10,9 +10,9 @@ import { classes } from "@utils/misc";
 import { openModal, React, SelectedGuildStore, showToast, TextInput, Toasts, UserStore, useStateFromStores } from "@webpack/common";
 
 import { cl, settings } from "../index";
-import { exportPresets, ImportDecision, importPresets, savePreset } from "../utils/actions";
+import { createPresetActions, ImportDecision } from "../utils/actions";
 import { loadPresetAsPending } from "../utils/profile";
-import { loadPresets, presets, PresetSection,ProfilePresetEx } from "../utils/storage";
+import { createPresetStorage, PresetSection, ProfilePresetEx } from "../utils/storage";
 import { ImportProfilesModal } from "./confirmModal";
 import { PresetList } from "./presetList";
 
@@ -40,13 +40,16 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
         () => SelectedGuildStore.getLastSelectedGuildId() ?? SelectedGuildStore.getGuildId()
     );
     const resolvedGuildId = isServerSection ? (guildId ?? lastSelectedGuildId ?? undefined) : undefined;
+    const storage = React.useMemo(() => createPresetStorage(), [resolvedSection, userId]);
+    const actions = React.useMemo(() => createPresetActions(storage), [storage]);
+    const { presets } = storage;
     const canUseGuild = !isServerSection || Boolean(resolvedGuildId);
 
     React.useEffect(() => {
         let isActive = true;
         (async () => {
             try {
-                await loadPresets(resolvedSection);
+                await storage.loadPresets(resolvedSection);
             } catch {
                 if (isActive) showToast("Could not load the saved profile presets.", Toasts.Type.FAILURE);
             }
@@ -58,8 +61,9 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
         })();
         return () => {
             isActive = false;
+            storage.unloadPresets();
         };
-    }, [resolvedGuildId, resolvedSection, userId]);
+    }, [resolvedGuildId, resolvedSection, userId, storage]);
 
     const filteredPresets = !searchMode
         ? presets
@@ -90,9 +94,9 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
         if (!trimmedName) return;
         setIsSaving(true);
         try {
-            await savePreset(trimmedName, resolvedSection, resolvedGuildId);
+            await actions.savePreset(trimmedName, resolvedSection, resolvedGuildId);
             setPresetName("");
-            const newTotalPages = Math.ceil(presets.length / PRESETS_PER_PAGE);
+            const newTotalPages = Math.ceil(storage.presets.length / PRESETS_PER_PAGE);
             setCurrentPage(newTotalPages);
             setPageInput(String(newTotalPages));
             forceUpdate();
@@ -104,7 +108,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
     };
 
     const applyPreset = (preset: ProfilePresetEx) => {
-        if (!presets.includes(preset)) {
+        if (!storage.presets.includes(preset)) {
             showToast("The profile preset list changed. Reopen this panel before trying again.", Toasts.Type.FAILURE);
             return;
         }
@@ -203,7 +207,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
                 <Button
                     size="small"
                     variant="secondary"
-                    onClick={() => importPresets(forceUpdate, showImportPrompt, resolvedSection)}
+                    onClick={() => actions.importPresets(forceUpdate, showImportPrompt, resolvedSection)}
                     disabled={!canUseGuild}
                 >
                     Import
@@ -211,7 +215,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
                 <Button
                     size="small"
                     variant="secondary"
-                    onClick={() => exportPresets(resolvedSection)}
+                    onClick={() => actions.exportPresets(resolvedSection)}
                 >
                     Export All
                 </Button>
@@ -220,6 +224,8 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
             {hasPresets && (
                 <>
                     <PresetList
+                        storage={storage}
+                        actions={actions}
                         presets={currentPresets}
                         allPresets={presets}
                         avatarSize={avatarSize}

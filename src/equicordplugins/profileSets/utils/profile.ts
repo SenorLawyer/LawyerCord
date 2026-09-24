@@ -163,14 +163,10 @@ async function processImage(imageData: ImageInput, userId: string, type: "avatar
         const isAnimated = imageData.startsWith("a_");
         const size = type === "banner" ? 1024 : 512;
         const urlPath = type === "banner" ? "banners" : "avatars";
-        const guildPath = guildId ? `guilds/${guildId}/users/${userId}/${type === "banner" ? "banners" : "avatars"}` : urlPath;
-        const guildUrl = `https://cdn.discordapp.com/${guildPath}/${imageData}.${isAnimated ? "gif" : "png"}?size=${size}`;
-        const globalUrl = `https://cdn.discordapp.com/${urlPath}/${userId}/${imageData}.${isAnimated ? "gif" : "png"}?size=${size}`;
-        if (useGuildPath && guildId) {
-            const guildResult = await imageUrlToBase64(guildUrl);
-            if (guildResult) return guildResult;
-        }
-        const image = await imageUrlToBase64(globalUrl);
+        const path = useGuildPath && guildId
+            ? `guilds/${guildId}/users/${userId}/${urlPath}`
+            : `${urlPath}/${userId}`;
+        const image = await imageUrlToBase64(`https://cdn.discordapp.com/${path}/${imageData}.${isAnimated ? "gif" : "png"}?size=${size}`);
         if (!image) throw new Error("Could not download the profile image.");
         return image;
     }

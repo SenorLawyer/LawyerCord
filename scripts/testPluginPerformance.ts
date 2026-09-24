@@ -3865,35 +3865,37 @@ test("quest names only remove a separate Quest suffix", () => {
     }
 });
 
-test("profile images fall back after failed guild downloads", async () => {
-    const urls: string[] = [];
-    let blobReads = 0;
-    const signal = new AbortController().signal;
-    const deadlines: number[] = [];
-    const processImage = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
-        "@api/UserSettings": { getUserSettingLazy: () => ({}) },
-        "@webpack": { findStoreLazy: () => ({}) },
-        "@webpack/common": {}
-    }, {
-        AbortSignal: { timeout: (ms: number) => { deadlines.push(ms); return signal; } },
-        fetch: async (url: string, options: { signal: AbortSignal; }) => {
-            assert.equal(options.signal, signal);
-            urls.push(url);
-            return new Response(new Uint8Array([1]), { status: url.includes("/guilds/") ? 404 : 200 });
-        },
-        Blob,
-        FileReader: class {
-            result = "data:image/png;base64,fixture";
-            onloadend = () => {};
-            readAsDataURL() { blobReads++; this.onloadend(); }
-        }
-    }, "processImage");
-    assert.equal(await processImage("avatar", "user", "avatar", "guild", true), "data:image/png;base64,fixture");
-    assert.equal(urls.length, 2);
-    assert.match(urls[0], /\/guilds\/guild\/users\/user\/avatars\//);
-    assert.match(urls[1], /\/avatars\/user\//);
-    assert.equal(blobReads, 1);
-    assert.deepEqual(deadlines, [30_000, 30_000]);
+test("profile images use only the selected guild or global resource", async () => {
+    for (const type of ["avatar", "banner"]) for (const guild of [false, true]) for (const failed of [false, true]) {
+        const urls: string[] = [];
+        let blobReads = 0;
+        const signal = new AbortController().signal;
+        const deadlines: number[] = [];
+        const processImage = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+            "@api/UserSettings": { getUserSettingLazy: () => ({}) },
+            "@webpack": { findStoreLazy: () => ({}) }, "@webpack/common": {}
+        }, {
+            AbortSignal: { timeout: (ms: number) => { deadlines.push(ms); return signal; } },
+            fetch: async (url: string, options: { signal: AbortSignal; }) => {
+                assert.equal(options.signal, signal);
+                urls.push(url);
+                return new Response(new Uint8Array([1]), { status: failed ? 404 : 200 });
+            },
+            Blob,
+            FileReader: class {
+                result = "data:image/png;base64,fixture";
+                onloadend = () => {};
+                readAsDataURL() { blobReads++; this.onloadend(); }
+            }
+        }, "processImage");
+        const result = processImage("a_selected", "user", type, "guild", guild);
+        if (failed) await assert.rejects(result, /Could not download/);
+        else assert.equal(await result, "data:image/png;base64,fixture");
+        const path = guild ? `guilds/guild/users/user/${type}s` : `${type}s/user`;
+        assert.deepEqual(urls, [`https://cdn.discordapp.com/${path}/a_selected.gif?size=${type === "avatar" ? 512 : 1024}`]);
+        assert.equal(blobReads, failed ? 0 : 1);
+        assert.deepEqual(deadlines, [30_000]);
+    }
 });
 
 test("profile image downloads enforce their byte limit before conversion", async () => {

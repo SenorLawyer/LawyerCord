@@ -118,12 +118,18 @@ async function persistActiveState(state: VoiceState) {
     if (generation === reconnectGeneration) cachePersistedState(saved, true);
 }
 
-async function persistInactiveState() {
-    if (lastPersistedSessionState === false) return;
+async function persistInactiveState(userId: string) {
     const generation = reconnectGeneration;
+    let owned = false;
 
-    await DataStore.set(DATASTORE_SESSION_KEY, false);
-    if (generation === reconnectGeneration) cachePersistedState(null, false);
+    await DataStore.updateMany<[unknown, unknown]>([
+        [DATASTORE_KEY, saved => {
+            owned = saved !== null && typeof saved === "object" && "userId" in saved && saved.userId === userId;
+            return saved;
+        }],
+        [DATASTORE_SESSION_KEY, active => owned ? false : active]
+    ]);
+    if (owned && generation === reconnectGeneration) cachePersistedState(null, false);
 }
 
 async function waitForChannel(channelId: string, generation: number) {
@@ -174,7 +180,7 @@ export default definePlugin({
                 void persistActiveState(myState)
                     .catch(err => logger.error("Failed to persist last voice channel", err));
             } else {
-                void persistInactiveState()
+                void persistInactiveState(myUserId)
                     .catch(err => logger.error("Failed to persist voice session state", err));
             }
         },

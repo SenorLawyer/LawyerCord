@@ -41,7 +41,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Reject failed profile-image downloads without retrying guild-specific hashes as global images, apply a 30-second request timeout, and enforce a 10 MiB streaming limit before conversion. Use shared URL helpers for banners and guild avatars, and preserve prepared avatar data when saving. Prepare wrapped image URLs and temporary blob URLs through the same bounded download path. Simplify image preview payloads and honor explicit avatar removal. Send prepared images through Discord's current pendingImage field and include their MIME type for animated-avatar checks. Preserve existing bio and pronouns when a preset omits those fields, and restore saved accent colors without losing pending removals. Honor explicit appearance and custom-status clearing while preserving omitted fields and server-profile isolation. Preserve pending text and image removals when saving global and server profiles. Read pending edits only from the selected profile scope.
 - Keep ProfileSets pagination aligned with searches, saves, imports, and shrinking lists. Keep row identity, loading, selection, and renaming attached to their preset, reject stale row loads, and avoid repeating the previous random selection.
 
-- Reject future-dated VoiceRejoin records after a backward system clock adjustment. Skipping an automatic reconnect no longer marks a newer saved session inactive.
+- Reject future-dated VoiceRejoin records after a backward system clock adjustment. Skipping an automatic reconnect no longer marks a newer saved session inactive. Disconnects only clear sessions saved for the same account.
 
 - Keep VoiceStats session durations independent of system clock adjustments.
 

@@ -2542,6 +2542,34 @@ test("voice rejoin stops channel polling after cancellation", async () => {
     assert.equal(reads, 1);
 });
 
+test("voice rejoin disconnects preserve another account's saved session", async () => {
+    const saved = { userId: "other", channelId: "voice", guildId: "guild", timestamp: 1000 };
+    let active = true;
+    const api = loadSource("src/equicordplugins/voiceRejoin/index.tsx", {
+        "@utils/misc": {},
+        "@api/DataStore": {
+            set: async (_key: string, value: boolean) => { active = value; },
+            updateMany: async (entries: [string, (value: unknown) => unknown][]) => {
+                for (const [key, update] of entries) {
+                    const value = update(key === "VCLastVoiceChannel" ? saved : active);
+                    if (key === "VCLastVoiceChannelSession") active = value as boolean;
+                }
+            }
+        },
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@utils/constants": { EquicordDevs: {} }, "@utils/Logger": { Logger: class {} },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, makeRange: () => [], OptionType: {} },
+        "@webpack/common": {}
+    }, {}, "({ persistInactiveState })");
+    await api.persistInactiveState("me");
+    assert.equal(active, true);
+    await api.persistInactiveState("other");
+    assert.equal(active, false);
+    active = true;
+    await api.persistInactiveState("other");
+    assert.equal(active, false, "A cached inactive state must not hide a later saved session");
+});
+
 test("voice rejoin ignores cache updates from saves completed after logout", async () => {
     for (const active of [true, false]) {
         let finish: () => void = () => assert.fail("Missing write");
@@ -2549,13 +2577,16 @@ test("voice rejoin ignores cache updates from saves completed after logout", asy
         const write = () => { writes++; return writes === 1 ? new Promise<void>(resolve => { finish = resolve; }) : Promise.resolve(); };
         const api = loadSource("src/equicordplugins/voiceRejoin/index.tsx", {
         "@utils/misc": {},
-            "@api/DataStore": { set: write, setMany: write },
+            "@api/DataStore": { setMany: write, updateMany: async (entries: [string, (value: unknown) => unknown][]) => {
+                for (const [key, update] of entries) update(key === "VCLastVoiceChannel" ? { userId: "me" } : true);
+                await write();
+            } },
             "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
             "@utils/constants": { EquicordDevs: {} }, "@utils/Logger": { Logger: class {} },
             "@utils/types": { __esModule: true, default: (plugin: object) => plugin, makeRange: () => [], OptionType: {} },
             "@webpack/common": {}
         }, {}, "({ plugin: exports.default, persistActiveState, persistInactiveState })");
-        const save = () => active ? api.persistActiveState({ channelId: "voice" }) : api.persistInactiveState();
+        const save = () => active ? api.persistActiveState({ channelId: "voice" }) : api.persistInactiveState("me");
         const pending = save();
         api.plugin.flux.LOGOUT();
         finish();
@@ -2596,7 +2627,7 @@ test("voice rejoin cancels pending attempts when the current user changes voice 
         let reads = 0;
         const api = loadSource("src/equicordplugins/voiceRejoin/index.tsx", {
         "@utils/misc": {},
-            "@api/DataStore": { get: async () => { reads++; return true; }, set: async () => {}, setMany: async () => {} },
+            "@api/DataStore": { get: async () => { reads++; return true; }, updateMany: async () => {}, setMany: async () => {} },
             "@api/Settings": { definePluginSettings: () => ({ store: { rejoinDelay: 2 } }) },
             "@utils/constants": { EquicordDevs: {} }, "@utils/Logger": { Logger: class { error(error: unknown) { assert.fail(String(error)); } } },
             "@utils/types": { __esModule: true, default: (plugin: object) => plugin, makeRange: () => [], OptionType: {} },

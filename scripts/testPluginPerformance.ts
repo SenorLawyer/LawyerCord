@@ -1309,6 +1309,44 @@ test("BetterSessions returns its settings-close save to the flux error handler",
     await rejected;
 });
 
+test("status presets find the modal component after its chunk loads", async () => {
+    const loaded = Promise.withResolvers<void>();
+    let ready = false;
+    let lookups = 0;
+    const Component = () => null;
+    const unrelated = () => null;
+    const { openCustomStatusModalLazy } = loadSource("src/equicordplugins/statusPresets/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@api/UserSettings": { getUserSettingLazy: () => ({}) },
+        "@components/ErrorBoundary": {}, "@utils/constants": { EquicordDevs: {} },
+        "@utils/lazy": { proxyLazy }, "@utils/react": {},
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {}, StartAt: {} },
+        "@webpack": {
+            findComponentByCodeLazy: () => () => null,
+            extractAndLoadChunksLazy: () => () => loaded.promise,
+            findModuleId: () => "123",
+            wreq: () => ({ unrelated, default: Component }),
+            findComponentByCode: (...code: string[]) => {
+                assert.equal(ready, true);
+                assert.ok(code.includes('"custom-status-input"'));
+                lookups++;
+                return Component;
+            }
+        },
+        "@webpack/common": { openModalLazy: (loader: () => Promise<unknown>) => loader() }
+    }, { React: { createElement: (type: unknown, props: unknown) => ({ type, props }) } }, "({ openCustomStatusModalLazy })");
+    const opening = openCustomStatusModalLazy();
+    assert.equal(lookups, 0);
+    ready = true;
+    loaded.resolve();
+    const render = await opening;
+    const props = { test: true };
+    const modal = render(props);
+    assert.equal(modal.type, Component);
+    assert.deepEqual({ ...modal.props }, props);
+    assert.equal(lookups, 1);
+});
+
 test("status preset insertion preserves following items and property order", () => {
     const { default: plugin } = loadSource("src/equicordplugins/statusPresets/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({ store: {} }) },

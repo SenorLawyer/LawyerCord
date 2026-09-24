@@ -22,10 +22,9 @@ import { definePluginSettings } from "@api/Settings";
 import { getUserSettingLazy } from "@api/UserSettings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { EquicordDevs } from "@utils/constants";
-import { proxyLazy } from "@utils/lazy";
 import { NoopComponent } from "@utils/react";
 import definePlugin, { OptionType, StartAt } from "@utils/types";
-import { extractAndLoadChunksLazy, findComponentByCodeLazy, findModuleId, wreq } from "@webpack";
+import { extractAndLoadChunksLazy, findComponentByCode, findComponentByCodeLazy } from "@webpack";
 import { Menu, openModalLazy, OverridePremiumTypeStore, Toasts, useStateFromStores } from "@webpack/common";
 
 interface Emoji {
@@ -45,17 +44,11 @@ const EmojiComponent = findComponentByCodeLazy(/\.translateSurrogatesToInlineEmo
 
 const CustomStatusSettings = getUserSettingLazy("status", "customStatus")!;
 const PRESET_SETTINGS: "StatusPresets"[] = ["StatusPresets"];
-const StatusModule = proxyLazy(() => {
-    const id = findModuleId("#{intl::SAVE}", '"custom-status-input"', '"Invalid custom status clear timeout"),');
-    return wreq(Number(id));
-});
-
 const requireCustomStatusModal = extractAndLoadChunksLazy(["action:\"PRESS_ADD_CUSTOM_STATUS\"", /\i\.\i\i\)/]);
 
 const openCustomStatusModalLazy = () => openModalLazy(async () => {
     await requireCustomStatusModal();
-    const key = Object.keys(StatusModule)[0];
-    const Component = StatusModule[key];
+    const Component = findComponentByCode("#{intl::SAVE}", '"custom-status-input"', '"Invalid custom status clear timeout"),');
     return props => <Component {...props} />;
 });
 

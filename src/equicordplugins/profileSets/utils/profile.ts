@@ -380,6 +380,10 @@ export async function loadPresetAsPending(preset: ProfilePreset, guildId?: strin
         setPending(isGuild ? { pendingNickname: preset.globalName } : { pendingGlobalName: preset.globalName });
     }
 
+    if (preset.accentColor !== undefined && preset.accentColor !== current.accentColor) {
+        setPending({ pendingAccentColor: preset.accentColor });
+    }
+
     if (preset.avatarDecoration !== undefined && !collectibleEqByAsset(preset.avatarDecoration, current.avatarDecoration)) {
         setPending({
             pendingAvatarDecoration: preset.avatarDecoration

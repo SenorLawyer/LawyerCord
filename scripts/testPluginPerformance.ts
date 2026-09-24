@@ -4806,6 +4806,30 @@ test("profile preset controls recover failed preparation and avoid random repeat
     assert.ok(effects.some(deps => deps.includes("second")));
 });
 
+test("profile presets restore accent colors without changing omitted values", async () => {
+    for (const guildId of [undefined, "guild"]) for (const accentColor of [undefined, null, 0, 123, 456]) {
+        const dispatched: Record<string, unknown>[] = [];
+        const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null }) },
+            "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: "me" }) },
+                UserProfileStore: { getUserProfile: () => ({ accentColor: 123 }), getGuildMemberProfile: () => ({ accentColor: 123 }) },
+                GuildMemberStore: { getMember: () => null },
+                IconUtils: { getUserAvatarURL: () => null, getDefaultAvatarURL: () => "default" },
+                FluxDispatcher: { dispatch: (event: Record<string, unknown>) => dispatched.push(event) }
+            }
+        });
+        await api.loadPresetAsPending({ name: "Example", timestamp: 0, accentColor }, guildId);
+        if (accentColor === undefined || accentColor === 123) assert.equal(dispatched.length, 0);
+        else {
+            assert.equal(dispatched.length, 1);
+            assert.equal(dispatched[0].pendingAccentColor, accentColor);
+            assert.equal(dispatched[0].guildId, guildId);
+        }
+    }
+});
+
 test("profile preset text fields distinguish omission from explicit clearing", async () => {
     for (const mode of ["omit", "clear", "replace", "skip"]) {
         const dispatched: Record<string, unknown>[] = [];

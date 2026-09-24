@@ -378,3 +378,6 @@ ProfileSets image application now branches directly on data URLs instead of cons
 
 
 ProfileSets text application now distinguishes omitted fields from explicit null/empty values. Previously a minimal valid preset dispatched empty bio and pronouns because undefined differed from the current strings; the new regression reproduced two unintended edits. Bio, pronouns and global-name branches now require a defined field and preserve skip options. The fixture covers omission, clearing, replacement and skipping. All 26 focused profile tests and source lint pass. Other nullable fields (theme colors, styles, primary guild and custom status) still need their own payload/clear semantics verified.
+
+
+ProfileSets now stages saved accentColor through pendingAccentColor, the same field already read by getCurrentProfile. The field was previously stored and schema-validated but never applied. A new regression failed before the change and now covers omitted/unchanged values, null clearing, black (zero), replacement colors, and both global/guild dispatch targeting. All 27 focused profile tests and source lint pass. This proves source payload routing; current Discord acceptance of accent-color changes remains a live check.

@@ -151,7 +151,7 @@ function checkEmbeddedImageSize(image: string | null | undefined) {
     if (separator < 0) throw new Error("The profile image is invalid.");
     const payload = image.slice(separator + 1);
     let size: number;
-    if (/;base64$/i.test(image.slice(0, separator))) {
+    if (/;base64$/i.test(image.slice(0, separator).trimEnd())) {
         const encoded = decodeURIComponent(payload).replace(/[\t\n\f\r ]/g, "");
         size = Math.floor(encoded.replace(/=+$/, "").length * 3 / 4);
     } else {

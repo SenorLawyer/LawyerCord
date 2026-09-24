@@ -3953,7 +3953,10 @@ test("profile embedded image limits count decoded payload bytes", () => {
     for (const size of [limit, limit + 1]) {
         const encoded = Buffer.alloc(size).toString("base64");
         for (const payload of [encoded, encoded.replace(/=/g, "%3D"), encoded + "\n"]) {
-            const run = () => check(`data:image/png;base64,${payload}`);
+            const run = () => {
+                check(`data:image/png;base64,${payload}`);
+                check(`data:image/png;base64 ,${payload}`);
+            };
             if (size > limit) assert.throws(run, /exceeds/);
             else assert.doesNotThrow(run);
         }

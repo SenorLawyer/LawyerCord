@@ -3873,7 +3873,20 @@ test("profile images use only the selected guild or global resource", async () =
         const deadlines: number[] = [];
         const processImage = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
             "@api/UserSettings": { getUserSettingLazy: () => ({}) },
-            "@webpack": { findStoreLazy: () => ({}) }, "@webpack/common": {}
+            "@webpack": { findStoreLazy: () => ({}) }, "@webpack/common": { IconUtils: {
+                getGuildMemberAvatarURLSimple: (data: object) => {
+                    assert.deepEqual(JSON.parse(JSON.stringify(data)), { userId: "user", guildId: "guild", avatar: "a_selected", canAnimate: true, size: 512 });
+                    return "https://cdn.discordapp.com/guilds/guild/users/user/avatars/a_selected.gif?size=512";
+                },
+                getGuildMemberBannerURL: (data: object) => {
+                    assert.deepEqual(JSON.parse(JSON.stringify(data)), { id: "user", banner: "a_selected", canAnimate: true, size: 1024, guildId: "guild" });
+                    return "https://cdn.discordapp.com/guilds/guild/users/user/banners/a_selected.gif?size=1024";
+                },
+                getUserBannerURL: (data: object) => {
+                    assert.deepEqual(JSON.parse(JSON.stringify(data)), { id: "user", banner: "a_selected", canAnimate: true, size: 1024 });
+                    return "https://cdn.discordapp.com/banners/user/a_selected.gif?size=1024";
+                }
+            } }
         }, {
             AbortSignal: { timeout: (ms: number) => { deadlines.push(ms); return signal; } },
             fetch: async (url: string, options: { signal: AbortSignal; }) => {
@@ -3934,7 +3947,7 @@ test("profile image downloads enforce their byte limit before conversion", async
 test("profile image preparation distinguishes download failure from no image", async () => {
     const processImage = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
         "@api/UserSettings": { getUserSettingLazy: () => ({}) },
-        "@webpack": { findStoreLazy: () => ({}) }, "@webpack/common": {}
+        "@webpack": { findStoreLazy: () => ({}) }, "@webpack/common": { IconUtils: { getGuildMemberBannerURL: () => "https://fixture.invalid/banner" } }
     }, { AbortSignal, fetch: async () => ({ ok: false }) }, "processImage");
     for (const input of ["https://cdn.discordapp.com/example.png", "avatar_hash"]) {
         await assert.rejects(processImage(input, "user", "avatar"), /download/);

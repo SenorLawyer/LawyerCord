@@ -160,13 +160,19 @@ async function processImage(imageData: ImageInput, userId: string, type: "avatar
             return image;
         }
 
-        const isAnimated = imageData.startsWith("a_");
-        const size = type === "banner" ? 1024 : 512;
-        const urlPath = type === "banner" ? "banners" : "avatars";
-        const path = useGuildPath && guildId
-            ? `guilds/${guildId}/users/${userId}/${urlPath}`
-            : `${urlPath}/${userId}`;
-        const image = await imageUrlToBase64(`https://cdn.discordapp.com/${path}/${imageData}.${isAnimated ? "gif" : "png"}?size=${size}`);
+        let url: string | undefined;
+        if (type === "banner") {
+            const data = { id: userId, banner: imageData, canAnimate: true, size: 1024 };
+            url = useGuildPath && guildId
+                ? IconUtils.getGuildMemberBannerURL({ ...data, guildId })
+                : IconUtils.getUserBannerURL(data);
+        } else if (useGuildPath && guildId) {
+            url = IconUtils.getGuildMemberAvatarURLSimple({ userId, guildId, avatar: imageData, canAnimate: true, size: 512 });
+        } else {
+            url = `https://cdn.discordapp.com/avatars/${userId}/${imageData}.${imageData.startsWith("a_") ? "gif" : "png"}?size=512`;
+        }
+        if (!url) throw new Error("Could not resolve the profile image.");
+        const image = await imageUrlToBase64(url);
         if (!image) throw new Error("Could not download the profile image.");
         return image;
     }

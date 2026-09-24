@@ -5244,6 +5244,50 @@ test("BannersEverywhere retries failed conversions and retains successful ones",
     assert.equal(await joined, "converted");
 });
 
+test("BannersEverywhere subscribes its banner to profile and setting changes", () => {
+    const store = {};
+    const values = { animate: false, preferNameplate: false };
+    let url: string | undefined = "banner";
+    let expectedUser = "first";
+    let subscriptions = 0;
+    let keys: unknown;
+    const { default: plugin } = loadSource("src/equicordplugins/bannersEverywhere/index.tsx", {
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/react": {}, "@api/PluginManager": {},
+        "@api/Settings": { definePluginSettings: () => ({ store: values, use: (currentKeys: unknown) => {
+            if (keys) assert.equal(currentKeys, keys);
+            keys = currentKeys;
+            assert.deepEqual(Array.from(currentKeys as string[]), ["animate", "preferNameplate"]);
+            return values;
+        } }) },
+        "@plugins/usrbg": {}, "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": { UserProfileStore: store, useStateFromStores: (stores: unknown[], select: () => unknown, deps: unknown[]) => {
+            assert.deepEqual(Array.from(stores), [store]);
+            assert.deepEqual(Array.from(deps), [expectedUser, values.animate]);
+            subscriptions++;
+            return select();
+        } }, "./style.css?managed": {}
+    }, { React: { createElement: (type: unknown, props: object) => ({ type, props }) } });
+    plugin.getBanner = (userId: string) => { assert.equal(userId, expectedUser); return url; };
+    const render = () => {
+        const wrapper = plugin.memberListBannerHook({ id: expectedUser }, { src: "nameplate" });
+        return wrapper.type(wrapper.props);
+    };
+    assert.equal(render().props.url, "banner");
+    values.animate = true;
+    assert.equal(render().type, "img");
+    expectedUser = "second";
+    url = "replacement";
+    assert.equal(render().props.src, "replacement");
+    values.preferNameplate = true;
+    assert.equal(render(), null);
+    values.preferNameplate = false;
+    url = undefined;
+    assert.equal(render(), null);
+    assert.equal(subscriptions, 5);
+});
+
 test("BannersEverywhere conversion results belong to their mounted URL", async () => {
     let cleanup = () => {};
     let updates = 0;
@@ -5257,22 +5301,24 @@ test("BannersEverywhere conversion results belong to their mounted URL", async (
     const { default: plugin } = loadSource("src/equicordplugins/bannersEverywhere/index.tsx", {
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@utils/react": hook,
-        "@api/PluginManager": {}, "@api/Settings": { definePluginSettings: () => ({ store: { animate: false } }) },
+        "@api/PluginManager": {}, "@api/Settings": { definePluginSettings: () => ({ store: { animate: false }, use: () => ({ animate: false }) }) },
         "@plugins/usrbg": {}, "@utils/constants": { Devs: {} },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
-        "@webpack/common": {}, "./style.css?managed": {}
+        "@webpack/common": { useStateFromStores: (_stores: unknown, select: () => unknown) => select() }, "./style.css?managed": {}
     }, { React: { createElement: (type: unknown, props: object) => ({ type, props }) } });
     const old = Promise.withResolvers<string>();
     const current = Promise.withResolvers<string>();
     let url = "https://fixture.invalid/old.gif";
     plugin.getBanner = () => url;
     plugin.gifToPng = (value: string) => value === "https://fixture.invalid/old.gif" ? old.promise : current.promise;
-    const first = plugin.memberListBannerHook({ id: "user" });
+    const firstWrapper = plugin.memberListBannerHook({ id: "user" });
+    const first = firstWrapper.type(firstWrapper.props);
     assert.equal(first.props.key, "https://fixture.invalid/old.gif");
     assert.equal(first.type(first.props).props.src, "https://fixture.invalid/old.gif");
     cleanup();
     url = "new";
-    const second = plugin.memberListBannerHook({ id: "user" });
+    const secondWrapper = plugin.memberListBannerHook({ id: "user" });
+    const second = secondWrapper.type(secondWrapper.props);
     assert.equal(second.props.key, "new");
     assert.equal(second.type(second.props).props.src, "new");
     old.resolve("old-converted");

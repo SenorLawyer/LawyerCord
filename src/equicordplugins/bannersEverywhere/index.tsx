@@ -12,7 +12,7 @@ import { Devs } from "@utils/constants";
 import { useAwaiter } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
 import { User } from "@vencord/discord-types";
-import { IconUtils, UserProfileStore } from "@webpack/common";
+import { IconUtils, UserProfileStore,useStateFromStores } from "@webpack/common";
 
 import style from "./style.css?managed";
 
@@ -47,6 +47,22 @@ interface StaticBannerProps {
 const StaticBanner = ErrorBoundary.wrap(({ url, convert }: StaticBannerProps) => {
     const [converted] = useAwaiter(() => convert(url), { fallbackValue: url });
     return <img alt="" src={converted ?? url} className="vc-banners-everywhere-memberlist" />;
+}, { noop: true });
+
+interface MemberListBannerProps {
+    userId: string;
+    nameplate?: Nameplate;
+    getBanner: (userId: string) => string | undefined;
+    convert: (url: string) => Promise<string>;
+}
+
+const BANNER_SETTINGS: ("animate" | "preferNameplate")[] = ["animate", "preferNameplate"];
+const MemberListBanner = ErrorBoundary.wrap(({ userId, nameplate, getBanner, convert }: MemberListBannerProps) => {
+    const { animate, preferNameplate } = settings.use(BANNER_SETTINGS);
+    const url = useStateFromStores([UserProfileStore], () => getBanner(userId), [userId, animate]);
+    if (!url || (preferNameplate && nameplate)) return null;
+    if (!animate) return <StaticBanner key={url} url={url} convert={convert} />;
+    return <img alt="" src={url} className="vc-banners-everywhere-memberlist" />;
 }, { noop: true });
 
 const MAX_PNG_CACHE_SIZE = 100;
@@ -95,15 +111,7 @@ export default definePlugin({
     },
 
     memberListBannerHook(user: User, nameplate: Nameplate | undefined) {
-        const url = this.getBanner(user.id);
-        if (!url) return null;
-        if (settings.store.preferNameplate && nameplate) return null;
-        if (!settings.store.animate) {
-            // Usrbg Banners
-            return <StaticBanner key={url} url={url} convert={this.gifToPng} />;
-        }
-
-        return <img alt="" src={url} className="vc-banners-everywhere-memberlist" />;
+        return <MemberListBanner userId={user.id} nameplate={nameplate} getBanner={this.getBanner} convert={this.gifToPng} />;
     },
 
     async gifToPng(url: string): Promise<string> {

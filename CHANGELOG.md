@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Compatibility
 
+- VoiceStats keeps new totals separately for each Discord account. Recover Old Voice Statistics adds ownerless old totals to the chosen account once and retains the original record. Older versions continue using the old record and do not read new account totals.
+
 - ProfileSets no longer assigns ownerless legacy profiles automatically. Use Recover Old Profiles in the main profile panel to import them explicitly; the original records remain saved.
 
 - VoiceRejoin ignores older saved channels without an account owner. Joining a call records a new reconnect target for that account.

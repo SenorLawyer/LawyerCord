@@ -2600,6 +2600,85 @@ test("voice rejoin leaves an existing voice connection active", async () => {
     api.default.stop();
 });
 
+test("voice statistics recover legacy totals once and preserve records on failure", async () => {
+    for (const scenario of ["success", "invalid", "overflow", "account-change", "transaction-failure"]) {
+        let userId = "me";
+        const legacy = scenario === "invalid" ? { friend: -1 } : { friend: 100 };
+        const current = { friend: scenario === "overflow" ? Number.MAX_SAFE_INTEGER : 5 };
+        const stored = new Map<string, unknown>([["VoiceStats_totals", legacy], ["VoiceStats_totals:me", current]]);
+        const toasts: string[] = [];
+        const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {
+            "@utils/Logger": { Logger: class { error() {} } },
+            "@api/DataStore": {
+                get: async (key: string) => stored.get(key),
+                updateMany: async (entries: [string, (value: unknown) => unknown][]) => {
+                    const next = new Map(stored);
+                    for (const [key, updater] of entries) {
+                        if (scenario === "account-change") userId = "other";
+                        next.set(key, updater(next.get(key)));
+                    }
+                    if (scenario === "transaction-failure") throw new Error("Transaction failed");
+                    for (const [key, value] of next) stored.set(key, value);
+                }
+            },
+            "@components/BaseText": {}, "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+            "@utils/constants": { EquicordDevs: {} }, "@utils/react": {}, "@utils/types": { __esModule: true, default: (value: unknown) => value },
+            "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: userId }) }, SelectedChannelStore: { getVoiceChannelId: () => null },
+                showToast: (message: string) => toasts.push(message), Toasts: { Type: { SUCCESS: 1, FAILURE: 2 } }
+            }
+        }, {}, "({ plugin: exports.default, recoverLegacyTotals, getLiveSeconds })");
+        await api.plugin.start();
+        await api.recoverLegacyTotals("me");
+        assert.deepEqual(stored.get("VoiceStats_totals"), legacy);
+        if (scenario === "success") {
+            assert.equal(api.getLiveSeconds("friend"), 105);
+            await api.recoverLegacyTotals("me");
+            assert.equal(api.getLiveSeconds("friend"), 105);
+            assert.equal(stored.get("VoiceStats_totals:recovered:me"), true);
+            assert.match(toasts[1], /already recovered/);
+        } else {
+            assert.deepEqual(stored.get("VoiceStats_totals:me"), current);
+            assert.equal(stored.has("VoiceStats_totals:recovered:me"), false);
+            assert.match(toasts[0], /Could not recover/);
+        }
+        api.plugin.stop();
+    }
+});
+
+test("voice statistics retain failed saves under their original account", async () => {
+    let userId = "first";
+    const saved = new Map<string, object>([["VoiceStats_totals", { legacy: 100 }], ["VoiceStats_totals:first", { friend: 20 }], ["VoiceStats_totals:second", { friend: 5 }]]);
+    const write = Promise.withResolvers<void>();
+    const keys: string[] = [];
+    const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {
+        "@utils/Logger": { Logger: class { error() {} } },
+        "@api/DataStore": { get: async (key: string) => { keys.push(key); return saved.get(key); }, set: async (key: string) => { assert.equal(key, "VoiceStats_totals:first"); await write.promise; } },
+        "@components/BaseText": {}, "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+        "@utils/constants": { EquicordDevs: {} }, "@utils/react": {}, "@utils/types": { __esModule: true, default: (value: unknown) => value },
+        "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) }, SelectedChannelStore: { getVoiceChannelId: () => null } }
+    }, { performance: { now: () => 11000 } }, "({ plugin: exports.default, sessionStarts, totalsByUser, flushActiveSessions, persistTotals, getLiveSeconds })");
+    await api.plugin.start();
+    api.sessionStarts.set("friend", 1000);
+    api.flushActiveSessions();
+    const pending = api.persistTotals();
+    api.plugin.flux.LOGOUT();
+    userId = "second";
+    await api.plugin.start();
+    write.reject(new Error("Storage unavailable"));
+    await pending;
+    assert.equal(api.getLiveSeconds("friend"), 5);
+    api.plugin.flux.LOGOUT();
+    userId = "first";
+    await api.plugin.start();
+    assert.equal(api.getLiveSeconds("friend"), 30);
+    assert.equal(keys.includes("VoiceStats_totals"), false);
+    assert.deepEqual(saved.get("VoiceStats_totals"), { legacy: 100 });
+    api.plugin.stop();
+});
+
 test("voice statistics replace clean cached totals when storage changes", async () => {
     let saved: Record<string, number> | undefined = { friend: 20, removed: 9 };
     const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {
@@ -2609,7 +2688,7 @@ test("voice statistics replace clean cached totals when storage changes", async 
         "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
         "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
-        "@webpack/common": { UserStore: { getCurrentUser: () => undefined } }
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "me" }) }, SelectedChannelStore: { getVoiceChannelId: () => null } }
     }, {}, "({ plugin: exports.default, totalsByUser })");
     await api.plugin.start();
     api.plugin.stop();
@@ -2634,7 +2713,7 @@ test("voice statistics preserve unsaved totals when restarted after a failed wri
         "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
         "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
-        "@webpack/common": { UserStore: { getCurrentUser: () => undefined } }
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "me" }) }, SelectedChannelStore: { getVoiceChannelId: () => null } }
     }, { performance: { now: () => 41000 } }, "({ plugin: exports.default, sessionStarts, totalsByUser, flushActiveSessions, persistTotals })");
     await api.plugin.start();
     api.sessionStarts.set("friend", 1000);
@@ -2659,7 +2738,7 @@ test("voice statistics reject malformed saved totals without starting or overwri
             "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
             "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
             "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
-            "@webpack/common": { UserStore: { getCurrentUser: () => assert.fail("Must not start tracking") } }
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "me" }) }, SelectedChannelStore: { getVoiceChannelId: () => assert.fail("Must not start tracking") } }
         }, {}, "({ plugin: exports.default, totalsByUser })");
         await api.plugin.start();
         assert.equal(api.totalsByUser.size, 0);
@@ -2678,8 +2757,8 @@ test("voice statistics retain failed saves for the next persistence attempt", as
         "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
         "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
-        "@webpack/common": {}
-    }, { performance: { now: () => 2000 } }, "({ sessionStarts, flushActiveSessions, persistTotals })");
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "me" }) } }
+    }, { performance: { now: () => 2000 } }, '(activeUserId = "me", { sessionStarts, flushActiveSessions, persistTotals })');
     api.sessionStarts.set("friend", 1000);
     api.flushActiveSessions();
     await assert.doesNotReject(api.persistTotals());
@@ -2725,7 +2804,7 @@ test("voice statistics discard stored totals from a stopped generation", async (
         "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
         "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
-        "@webpack/common": { UserStore: { getCurrentUser: () => undefined } }
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "me" }) }, SelectedChannelStore: { getVoiceChannelId: () => null } }
     }, {}, "({ plugin: exports.default, totalsByUser })");
     const first = api.plugin.start();
     api.plugin.stop();
@@ -2740,8 +2819,7 @@ test("voice statistics discard stored totals from a stopped generation", async (
     api.plugin.flux.LOGOUT();
     reads[2]({ stale: 99 });
     await signedOutRead;
-    assert.equal(api.totalsByUser.get("friend"), 20);
-    assert.equal(api.totalsByUser.has("stale"), false);
+    assert.equal(api.totalsByUser.size, 0);
     api.plugin.stop();
 });
 
@@ -2756,8 +2834,8 @@ test("voice statistics preserve repeated channel tracking and stop counting on l
         "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
         "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
-        "@webpack/common": { VoiceStateStore: { getVoiceStatesForChannel: () => ({ friend: { userId: "friend" } }) } }
-    }, { performance: { now: () => now }, setInterval: () => 1, clearInterval() { clearedIntervals++; } }, "({ plugin: exports.default, startTrackingChannel, stopTrackingChannel, sessionStarts, getLiveSeconds })");
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "me" }) }, VoiceStateStore: { getVoiceStatesForChannel: () => ({ friend: { userId: "friend" } }) } }
+    }, { performance: { now: () => now }, setInterval: () => 1, clearInterval() { clearedIntervals++; } }, '(activeUserId = "me", { plugin: exports.default, startTrackingChannel, stopTrackingChannel, sessionStarts, getLiveSeconds })');
     api.startTrackingChannel("voice", "me");
     now = 2600;
     api.startTrackingChannel("voice", "me");
@@ -2769,11 +2847,7 @@ test("voice statistics preserve repeated channel tracking and stop counting on l
     assert.equal(api.sessionStarts.size, 0);
     assert.equal(clearedIntervals, 1);
     now = 61_000;
-    assert.equal(api.getLiveSeconds("friend"), 2);
-    api.startTrackingChannel("voice", "me");
-    now = 63_000;
-    assert.equal(api.getLiveSeconds("friend"), 4);
-    api.stopTrackingChannel();
+    assert.equal(api.getLiveSeconds("friend"), 0);
 });
 
 test("voice statistics retain fractional seconds despite wall clock changes", () => {
@@ -2786,8 +2860,8 @@ test("voice statistics retain fractional seconds despite wall clock changes", ()
         "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
         "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
-        "@webpack/common": {},
-    }, { Date: { now: () => wallClock }, performance: { now: () => now } }, "({ sessionStarts, totalsByUser, flushActiveSessions, getLiveSeconds })");
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "me" }) } },
+    }, { Date: { now: () => wallClock }, performance: { now: () => now } }, '(activeUserId = "me", { sessionStarts, totalsByUser, flushActiveSessions, getLiveSeconds })');
     sessionStarts.set("friend", now);
     for (now of [31_400, 61_800, 92_200]) {
         wallClock += 3_600_000;

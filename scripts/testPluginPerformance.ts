@@ -4042,6 +4042,36 @@ test("profile preset mutations preserve the visible list when persistence fails"
     }
 });
 
+test("profile preset reloads wait for pending writes before reading", async () => {
+    for (const fails of [false, true]) {
+        const original = [{ name: "Original", timestamp: 0 }];
+        const next = [{ name: "Saved", timestamp: 1 }];
+        let persisted = original;
+        let reads = 0;
+        const write = Promise.withResolvers<void>();
+        const storage = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
+            "@api/index": { DataStore: {
+                get: async () => { reads++; return persisted; },
+                set: async (_key: string, value: typeof next) => { await write.promise; persisted = value; }
+            } },
+            "@utils/Logger": { Logger: class { error() {} } },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "user" }) } }
+        });
+        await storage.loadPresets("main");
+        const saving = storage.savePresetsData("main", next);
+        const failure = assert.rejects(saving);
+        const reload = storage.loadPresets("main");
+        await Promise.resolve();
+        assert.equal(reads, 1);
+        if (fails) write.reject(new Error("Write failed"));
+        else write.resolve();
+        await failure;
+        await reload;
+        assert.equal(reads, 2);
+        assert.equal(storage.presets, fails ? original : next);
+    }
+});
+
 test("profile preset writes publish only on success and reject overlapping writes", async () => {
     const original = [{ name: "Original", timestamp: 0 }];
     const next = [{ name: "Next", timestamp: 1 }];

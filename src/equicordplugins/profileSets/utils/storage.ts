@@ -23,7 +23,7 @@ export type ProfilePresetEx = ProfilePreset & {
 export let presets: ProfilePresetEx[] = [];
 let activeScopeKey: string | null = null;
 let loadGeneration = 0;
-let saveInProgress = false;
+let pendingSave: Promise<void> | undefined;
 
 function resetPresets(nextPresets: ProfilePresetEx[] = []) {
     presets = nextPresets;
@@ -61,6 +61,8 @@ export async function loadPresets(section: PresetSection) {
     resetPresets();
 
     try {
+        if (pendingSave) await pendingSave;
+        if (!isCurrentLoad(generation, userId)) return;
         const stored = await DataStore.get(key);
         if (!isCurrentLoad(generation, userId)) return;
 
@@ -106,15 +108,16 @@ export async function savePresetsData(section: PresetSection, nextPresets: Profi
     if (!userId) throw new Error("No account is signed in.");
     const key = getPresetsKey(section, userId);
     if (key !== activeScopeKey) throw new Error("The preset list has not finished loading.");
-    if (saveInProgress) throw new Error("A preset change is still being saved.");
+    if (pendingSave) throw new Error("A preset change is still being saved.");
     const generation = loadGeneration;
-    saveInProgress = true;
     try {
-        await DataStore.set(key, nextPresets);
+        const write = DataStore.set(key, nextPresets);
+        pendingSave = write.then(() => undefined, () => undefined);
+        await write;
         if (!isCurrentLoad(generation, userId) || activeScopeKey !== key)
             throw new Error("The account or preset list changed while saving.");
         presets = nextPresets;
     } finally {
-        saveInProgress = false;
+        pendingSave = undefined;
     }
 }

@@ -31,6 +31,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Wait for pending profile preset writes before reloading their stored list.
+
 - Publish profile preset changes only after storage succeeds, report failures, and reject overlapping writes.
 
 - Reset profile preset pagination when changing a search, including after an empty result.

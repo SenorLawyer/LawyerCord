@@ -381,3 +381,6 @@ ProfileSets text application now distinguishes omitted fields from explicit null
 
 
 ProfileSets now stages saved accentColor through pendingAccentColor, the same field already read by getCurrentProfile. The field was previously stored and schema-validated but never applied. A new regression failed before the change and now covers omitted/unchanged values, null clearing, black (zero), replacement colors, and both global/guild dispatch targeting. All 27 focused profile tests and source lint pass. This proves source payload routing; current Discord acceptance of accent-color changes remains a live check.
+
+
+ProfileSets snapshot reading now preserves explicit pending accent-color removal: only undefined falls back to the stored color. The new regression reproduced pending null becoming the old numeric color, then passed after the precedence change. It also covers absent pending values, black (zero) and replacement colors. Both accent tests and source lint pass. This closes the source read/apply mismatch for accent color; other nullable fields and live Discord acceptance remain open.

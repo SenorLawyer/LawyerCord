@@ -4806,6 +4806,22 @@ test("profile preset controls recover failed preparation and avoid random repeat
     assert.ok(effects.some(deps => deps.includes("second")));
 });
 
+test("profile snapshots preserve pending accent removal and black", async () => {
+    for (const pendingAccentColor of [undefined, null, 0, 456]) {
+        const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null }) },
+            "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({ pendingAccentColor }) }) },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: "me" }) },
+                UserProfileStore: { getUserProfile: () => ({ accentColor: 123 }) },
+                IconUtils: { getUserAvatarURL: () => null, getDefaultAvatarURL: () => "default" }
+            }
+        });
+        const profile = await api.getCurrentProfile();
+        assert.equal(profile.accentColor, pendingAccentColor === undefined ? 123 : pendingAccentColor);
+    }
+});
+
 test("profile presets restore accent colors without changing omitted values", async () => {
     for (const guildId of [undefined, "guild"]) for (const accentColor of [undefined, null, 0, 123, 456]) {
         const dispatched: Record<string, unknown>[] = [];

@@ -286,7 +286,7 @@ export async function getCurrentProfile(guildId?: string, options: CurrentProfil
         avatarDataUrl: resolvedAvatarDataUrl,
         bannerDataUrl,
         bio: pendingChanges.pendingBio ?? userProfile?.bio ?? null,
-        accentColor: pendingChanges.pendingAccentColor ?? userProfile?.accentColor ?? null,
+        accentColor: pendingChanges.pendingAccentColor !== undefined ? pendingChanges.pendingAccentColor : userProfile?.accentColor ?? null,
         themeColors: pendingChanges.pendingThemeColors ?? userProfile?.themeColors ?? null,
         globalName: isGuildProfile
             ? (pendingChanges.pendingNickname ?? guildMember?.nick ?? null)

@@ -83,13 +83,11 @@ export async function loadPresets(section: PresetSection) {
             ]);
             if (!isCurrentLoad(generation, userId)) return;
 
-            const legacyToUse = Array.isArray(legacyStored)
-                ? legacyStored
-                : (Array.isArray(legacyBaseStored) ? legacyBaseStored : null);
-            if (legacyToUse) {
+            const legacyToUse = legacyStored !== undefined ? legacyStored : legacyBaseStored;
+            if (legacyToUse !== undefined) {
                 if (!isPresetList(legacyToUse)) throw new Error("The legacy profile preset list is invalid.");
                 await DataStore.set(key, legacyToUse);
-                await DataStore.del(Array.isArray(legacyStored) ? legacyKey : LEGACY_PRESETS_KEY);
+                await DataStore.del(legacyStored !== undefined ? legacyKey : LEGACY_PRESETS_KEY);
                 if (!isCurrentLoad(generation, userId)) return;
                 activeScopeKey = key;
                 resetPresets(legacyToUse);

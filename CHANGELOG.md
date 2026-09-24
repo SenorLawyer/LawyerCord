@@ -31,6 +31,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Stop legacy preset migration on malformed account records instead of falling back to unrelated global data.
+
 - Validate stored and imported profile preset fields before rendering, migration, or replacement; preserve invalid stored records.
 
 - Report profile preset load failures in open panels without notifying after they close.

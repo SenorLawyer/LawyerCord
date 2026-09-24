@@ -4208,6 +4208,24 @@ test("profile preset loading preserves malformed destination records", async () 
     }
 });
 
+test("profile preset migration does not bypass malformed account records", async () => {
+    for (const malformed of [null, false, "invalid", { presets: [] }]) {
+        let changes = 0;
+        const api = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
+            "@api/index": { DataStore: {
+                get: async (key: string) => key === "ProfileDataset:user:main" ? malformed
+                    : key === "ProfileDataset" ? [{ name: "Unowned", timestamp: 0 }] : undefined,
+                set: async () => { changes++; }, del: async () => { changes++; }
+            } },
+            "@utils/Logger": { Logger: class { error() {} } },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "user" }) } }
+        });
+        await assert.rejects(api.loadPresets("main"), /legacy.*invalid/);
+        assert.equal(changes, 0);
+        await assert.rejects(api.savePresetsData("main"));
+    }
+});
+
 test("profile preset migration preserves legacy data it did not copy", async () => {
     for (const failedWrite of [false, true]) {
         const scoped = [{ name: "Scoped", timestamp: 0 }];

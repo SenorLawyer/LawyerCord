@@ -3877,12 +3877,13 @@ test("profile images fall back after failed guild downloads", async () => {
         fetch: async (url: string, options: { signal: AbortSignal; }) => {
             assert.equal(options.signal, signal);
             urls.push(url);
-            return { ok: !url.includes("/guilds/"), blob: async () => { blobReads++; return {}; } };
+            return new Response(new Uint8Array([1]), { status: url.includes("/guilds/") ? 404 : 200 });
         },
+        Blob,
         FileReader: class {
             result = "data:image/png;base64,fixture";
             onloadend = () => {};
-            readAsDataURL() { this.onloadend(); }
+            readAsDataURL() { blobReads++; this.onloadend(); }
         }
     }, "processImage");
     assert.equal(await processImage("avatar", "user", "avatar", "guild", true), "data:image/png;base64,fixture");
@@ -3891,6 +3892,39 @@ test("profile images fall back after failed guild downloads", async () => {
     assert.match(urls[1], /\/avatars\/user\//);
     assert.equal(blobReads, 1);
     assert.deepEqual(deadlines, [30_000, 30_000]);
+});
+
+test("profile image downloads enforce their byte limit before conversion", async () => {
+    const limit = 10 * 1024 * 1024;
+    for (const oversized of [false, true]) {
+        let cancelled = false;
+        let converted = 0;
+        let pulls = 0;
+        const stream = new ReadableStream<Uint8Array>({
+            pull(controller) {
+                if (pulls++ === 0) controller.enqueue(new Uint8Array(limit));
+                else if (oversized) controller.enqueue(new Uint8Array(1));
+                else controller.close();
+            },
+            cancel() { cancelled = true; }
+        });
+        const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+            "@api/UserSettings": { getUserSettingLazy: () => ({}) },
+            "@webpack": { findStoreLazy: () => ({}) }, "@webpack/common": {}
+        }, {
+            AbortSignal, Blob,
+            fetch: async () => new Response(stream, { headers: { "Content-Type": "image/png", "Content-Length": "1" } }),
+            FileReader: class {
+                result = "data:image/png;base64,fixture";
+                onloadend = () => {};
+                readAsDataURL(blob: Blob) { converted++; assert.equal(blob.size, limit); this.onloadend(); }
+            }
+        });
+        const result = await api.imageUrlToBase64("https://cdn.discordapp.com/example.png");
+        assert.equal(result, oversized ? null : "data:image/png;base64,fixture");
+        assert.equal(converted, oversized ? 0 : 1);
+        assert.equal(cancelled, oversized);
+    }
 });
 
 test("profile image preparation distinguishes download failure from no image", async () => {

@@ -10,6 +10,7 @@ import { findStoreLazy } from "@webpack";
 import { FluxDispatcher, GuildMemberStore, IconUtils, UserProfileStore, UserStore } from "@webpack/common";
 
 const UserProfileSettingsStore = findStoreLazy("UserProfileSettingsStore");
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const CustomStatusSettings = getUserSettingLazy("status", "customStatus")!;
 
 type PendingChanges = Record<string, unknown> & {
@@ -110,8 +111,29 @@ function normalizeDisplayNameStyles(value: DisplayNameStylesLike | null | undefi
 export async function imageUrlToBase64(url: string): Promise<string | null> {
     try {
         const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
-        if (!response.ok) return null;
-        const blob = await response.blob();
+        if (!response.ok) {
+            await response.body?.cancel();
+            return null;
+        }
+        if (!response.body) return null;
+        const reader = response.body.getReader();
+        const chunks: Uint8Array<ArrayBuffer>[] = [];
+        let size = 0;
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                size += value.byteLength;
+                if (size > MAX_IMAGE_BYTES) {
+                    await reader.cancel();
+                    return null;
+                }
+                chunks.push(new Uint8Array(value));
+            }
+        } finally {
+            reader.releaseLock();
+        }
+        const blob = new Blob(chunks, { type: response.headers.get("Content-Type") ?? "" });
         return await new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onloadend = () => resolve(reader.result as string);

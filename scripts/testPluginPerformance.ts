@@ -4428,6 +4428,38 @@ test("profile legacy recovery requires a choice and preserves the ownerless sour
     }
 });
 
+test("profile legacy recovery rejects stale reads and confirmations", async () => {
+    for (const phase of ["read", "confirmation"]) for (const change of ["account", "list"]) {
+        let userId = "user";
+        const legacy = [{ name: "Legacy", timestamp: 0 }];
+        const read = Promise.withResolvers<unknown>();
+        const confirmation = Promise.withResolvers<string>();
+        let prompts = 0, writes = 0, failures = 0, refreshes = 0;
+        const storage = { presets: [], readLegacyPresets: () => read.promise,
+            savePresetsData: async () => { writes++; } };
+        const actions = loadSource("src/equicordplugins/profileSets/utils/actions.ts", {
+            "@utils/guards": {}, "@utils/web": {}, "./profile": {},
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) },
+                showToast: () => { failures++; }, Toasts: { Type: { FAILURE: "failure" } } }
+        }).createPresetActions(storage);
+        const importing = actions.importPresets(() => { refreshes++; }, () => { prompts++; return confirmation.promise; }, "main", true);
+        if (phase === "confirmation") {
+            read.resolve(legacy);
+            await setImmediate();
+            assert.equal(prompts, 1);
+        }
+        if (change === "account") userId = "other";
+        else storage.presets = [];
+        if (phase === "read") read.resolve(legacy);
+        else confirmation.resolve("merge");
+        await importing;
+        assert.equal(prompts, phase === "confirmation" ? 1 : 0);
+        assert.equal(writes, 0);
+        assert.equal(refreshes, 0);
+        assert.equal(failures, 1);
+    }
+});
+
 test("profile preset migration retains legacy records after successful and failed copies", async () => {
     for (const failedWrite of [false, true]) {
         const scoped = [{ name: "Scoped", timestamp: 0 }];

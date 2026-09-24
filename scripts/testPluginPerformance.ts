@@ -1747,7 +1747,7 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
         const warnings: string[] = [];
         const { default: plugin, data } = loadSource("src/equicordplugins/userpfp/index.tsx", {
             "@api/DataStore": { get: () => ++reads === 1 ? local.promise : Promise.resolve({ newer: "local" }) },
-            "@api/Settings": { definePluginSettings: () => ({ store: { databaseSource: "https://fixture.invalid/data" } }) },
+            "@api/Settings": { definePluginSettings: () => ({ store: { databaseSource: "https://fixture.invalid/data", preferNitro: true } }) },
             "@components/Button": {}, "@components/Flex": {}, "@components/Heart": {}, "@components/Icons": {}, "@components/margins": {}, "@components/Notice": {},
             "@utils/constants": { Devs: {}, EquicordDevs: {} }, "@utils/css": { classNameFactory: () => () => "" }, "@utils/discord": {},
             "@utils/Logger": { Logger: class { error(_message: string, error: unknown) { errors.push(error); } warn(message: string) { warnings.push(message); } } },
@@ -1792,6 +1792,15 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
             data.avatars.shared = `https://raw.githubusercontent.com/UserPFP/img/main/${path}`;
             assert.equal(new URL(avatar({ id: "shared" }, false, 128)).pathname, `/UserPFP/img/main/${expected}`);
             assert.equal(new URL(avatar({ id: "shared" }, true, 128)).pathname, `/UserPFP/img/main/${path}`);
+        }
+        for (const fallbackMode of ["missing", "invalid", "nitro"]) {
+            if (fallbackMode === "missing") delete data.avatars.fallback;
+            else data.avatars.fallback = "not a valid URL";
+            const args = [{ id: "fallback", avatar: fallbackMode === "nitro" ? "a_hash" : null }, false, 128, "png", false];
+            let received: unknown[] = [];
+            const fallback = plugin.getAvatarHook((...values: unknown[]) => { received = values; return "original"; });
+            assert.equal(fallback(...args), "original");
+            assert.deepEqual(received, args);
         }
         assert.equal(signals[0].aborted, mode === "remote-stop" || mode === "restart");
         assert.equal(errors.length, mode in invalidResponses ? 1 : 0);

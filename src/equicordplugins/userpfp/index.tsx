@@ -130,10 +130,11 @@ export default definePlugin({
             );
         }
     },
-    getAvatarHook: (original: any) => (user: User, animated: boolean, size: number) => {
-        if (settings.store.preferNitro && user.avatar?.startsWith("a_")) return original(user, animated, size);
+    getAvatarHook: (original: (user: User, animated?: boolean, size?: number, ...options: unknown[]) => string) => (...args: Parameters<typeof original>) => {
+        const [user, animated] = args;
+        if (settings.store.preferNitro && user.avatar?.startsWith("a_")) return original(...args);
         const avatarUrl = data.avatars[user.id] || data.remoteAvatars[user.id];
-        if (!avatarUrl) return original(user, animated, size);
+        if (!avatarUrl) return original(...args);
 
         if (avatarUrl.startsWith("data:")) return avatarUrl;
 
@@ -147,7 +148,7 @@ export default definePlugin({
             }
             return res.toString();
         } catch {
-            return original(user, animated, size);
+            return original(...args);
         }
     },
     getAvatarServerHook: (original: any) => (config: any) => {

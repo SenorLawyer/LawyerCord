@@ -36,7 +36,7 @@ interface Emoji {
 interface DiscordStatus {
     emojiInfo: Emoji | null;
     text: string;
-    clearAfter: "TODAY" | number | null;
+    clearAfter: "TODAY" | "DONT_CLEAR" | number | null;
 }
 
 const PMenu = findComponentByCodeLazy("#{intl::MORE_OPTIONS}", ",renderSubmenu:");
@@ -72,7 +72,7 @@ async function setStatus(status: DiscordStatus) {
             throw new Error("Invalid preset emoji.");
         await CustomStatusSettings.updateSetting({
             text: status.text.trim(),
-            expiresAtMs: status.clearAfter != null ? String(getExpirationMs(status.clearAfter)) : "0",
+            expiresAtMs: status.clearAfter != null && status.clearAfter !== "DONT_CLEAR" ? String(getExpirationMs(status.clearAfter)) : "0",
             emojiId: status.emojiInfo?.id ?? "0",
             emojiName: status.emojiInfo?.name ?? "",
             createdAtMs: String(Date.now())

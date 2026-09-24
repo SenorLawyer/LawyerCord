@@ -1449,6 +1449,10 @@ test("status preset application validates expiration and reports rejected update
     }
     assert.equal(updates, 9);
     assert.equal(toasts.length, 11);
+    await setStatus({ text: "Permanent", clearAfter: "DONT_CLEAR", emojiInfo: null });
+    assert.equal(updates, 10);
+    assert.equal(payloads.at(-1)?.expiresAtMs, "0");
+    assert.equal(toasts.length, 11);
 });
 
 test("status preset menus subscribe and delete the actual saved key", () => {

@@ -7,7 +7,7 @@
 import { DataStore } from "@api/index";
 import { Logger } from "@utils/Logger";
 import { ProfilePreset } from "@vencord/discord-types";
-import { UserStore } from "@webpack/common";
+import { lodash, UserStore } from "@webpack/common";
 
 import { isPresetList } from "./validation";
 
@@ -23,12 +23,14 @@ export type ProfilePresetEx = ProfilePreset & {
 };
 
 export let presets: ProfilePresetEx[] = [];
+let savedPresets: ProfilePresetEx[] | undefined;
 let activeScopeKey: string | null = null;
 let loadGeneration = 0;
 let pendingSave: Promise<void> | undefined;
 
-function resetPresets(nextPresets: ProfilePresetEx[] = []) {
-    presets = nextPresets;
+function resetPresets(nextPresets?: ProfilePresetEx[]) {
+    savedPresets = nextPresets;
+    presets = nextPresets ?? [];
 }
 
 function getPresetsKey(section: PresetSection, userId: string) {
@@ -112,13 +114,18 @@ export async function savePresetsData(section: PresetSection, nextPresets: Profi
     if (key !== activeScopeKey) throw new Error("The preset list has not finished loading.");
     if (pendingSave) throw new Error("A preset change is still being saved.");
     const generation = loadGeneration;
+    const expected = savedPresets;
     try {
-        const write = DataStore.set(key, nextPresets);
+        const write = DataStore.update<ProfilePresetEx[]>(key, stored => {
+            if (!lodash.isEqual(stored, expected))
+                throw new Error("The saved presets changed in another client. Reopen this panel before trying again.");
+            return nextPresets;
+        });
         pendingSave = write.then(() => undefined, () => undefined);
         await write;
         if (!isCurrentLoad(generation, userId) || activeScopeKey !== key)
             throw new Error("The account or preset list changed while saving.");
-        presets = nextPresets;
+        resetPresets(nextPresets);
     } finally {
         pendingSave = undefined;
     }

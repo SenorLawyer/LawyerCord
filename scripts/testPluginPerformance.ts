@@ -16,6 +16,8 @@ import { buffer } from "node:stream/consumers";
 import { test } from "node:test";
 import { setImmediate } from "node:timers/promises";
 
+import { isDeepStrictEqual } from "node:util";
+
 import { runInNewContext } from "node:vm";
 
 import * as typescript from "typescript";
@@ -4096,7 +4098,7 @@ test("profile preset mutations preserve the visible list when persistence fails"
         const errors: string[] = [];
         const UserStore = { getCurrentUser: () => ({ id: "user" }) };
         const storage = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
-            "@api/index": { DataStore: { get: async () => original, set: async () => { writes++; throw new Error("Write failed"); } } },
+            "@api/index": { DataStore: { get: async () => original, update: async () => { writes++; throw new Error("Write failed"); } } },
             "@utils/Logger": { Logger: class { error() {} } }, "@webpack/common": { UserStore }
         });
         await storage.loadPresets("main");
@@ -4134,7 +4136,7 @@ test("profile preset reloads wait for pending writes before reading", async () =
         const storage = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
             "@api/index": { DataStore: {
                 get: async () => { reads++; return persisted; },
-                set: async (_key: string, value: typeof next) => { await write.promise; persisted = value; }
+                update: async (_key: string, change: (old: typeof next) => typeof next) => { await write.promise; persisted = change(persisted); }
             } },
             "@utils/Logger": { Logger: class { error() {} } },
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "user" }) } }
@@ -4160,7 +4162,7 @@ test("profile preset writes publish only on success and reject overlapping write
     let write = Promise.withResolvers<void>();
     let userId = "user";
     const storage = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
-        "@api/index": { DataStore: { get: async () => original, set: () => write.promise } },
+        "@api/index": { DataStore: { get: async () => original, update: () => write.promise } },
         "@utils/Logger": { Logger: class { error() {} } },
         "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } }
     });
@@ -4183,6 +4185,51 @@ test("profile preset writes publish only on success and reject overlapping write
     write.resolve();
     await assert.rejects(switched, /changed while saving/);
     assert.equal(storage.presets, next);
+});
+
+test("profile preset clients reject stale writes and can save after reloading", async () => {
+    for (const initial of [undefined, [], [{ name: "Original", timestamp: 0 }]]) {
+        let persisted = initial;
+        let queue = Promise.resolve();
+        let writes = 0;
+        const mocks = {
+            "@api/index": { DataStore: {
+                get: async () => structuredClone(persisted),
+                set: async (_key: string, next: typeof persisted) => { persisted = structuredClone(next); writes++; },
+                update: (_key: string, change: (old: typeof persisted) => NonNullable<typeof persisted>) => {
+                    const write = queue.then(() => {
+                        const next = change(structuredClone(persisted));
+                        persisted = structuredClone(next);
+                        writes++;
+                    });
+                    queue = write.catch(() => {});
+                    return write;
+                }
+            } },
+            "@utils/Logger": { Logger: class { error() {} } },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "user" }) } }
+        };
+        const first = loadSource("src/equicordplugins/profileSets/utils/storage.ts", mocks);
+        const second = loadSource("src/equicordplugins/profileSets/utils/storage.ts", mocks);
+        await Promise.all([first.loadPresets("server"), second.loadPresets("server")]);
+        const stale = second.presets;
+        const firstNext = [...first.presets, { name: "First client", timestamp: 1 }];
+        const secondNext = [...second.presets, { name: "Second client", timestamp: 2 }];
+        const saving = first.savePresetsData("server", firstNext);
+        await assert.rejects(second.savePresetsData("server", secondNext), /changed in another client/);
+        await saving;
+        assert.equal(writes, 1);
+        assert.deepEqual(persisted, structuredClone(firstNext));
+        assert.equal(second.presets, stale);
+        await second.loadPresets("server");
+        await second.savePresetsData("server", [...second.presets, { name: "Second client", timestamp: 2 }]);
+        assert.equal(writes, 2);
+        assert.deepEqual(persisted?.map(preset => preset.name), [...(initial ?? []).map(preset => preset.name), "First client", "Second client"]);
+        persisted = undefined;
+        await assert.rejects(second.savePresetsData("server", []), /changed in another client/);
+        assert.equal(persisted, undefined);
+        assert.equal(writes, 2);
+    }
 });
 
 test("profile preset loading preserves malformed destination records", async () => {
@@ -4261,7 +4308,7 @@ test("profile preset storage rejects stale account reads and foreign-scope saves
     const api = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
         "@api/index": { DataStore: {
             get: () => { const pending = Promise.withResolvers<unknown>(); reads.push(pending); return pending.promise; },
-            set: async (key: string) => { writes.push(key); }
+            update: async (key: string) => { writes.push(key); }
         } },
         "@utils/Logger": { Logger: class { error() {} } },
         "@webpack/common": { UserStore: { getCurrentUser: () => currentId ? { id: currentId } : undefined } }
@@ -6576,6 +6623,8 @@ test("source fixtures reject recoverable syntax errors before execution", () => 
 });
 
 function loadSource(path: string, mocks: Record<string, object>, globals: Record<string, unknown> = {}, result = "exports") {
+    if (path.endsWith("profileSets/utils/storage.ts"))
+        mocks = { ...mocks, "@webpack/common": { lodash: { isEqual: (a: unknown, b: unknown) => isDeepStrictEqual(structuredClone(a), structuredClone(b)) }, ...mocks["@webpack/common"] } };
     if (/profileSets\/utils\/(actions|storage)\.ts$/.test(path))
         mocks = { "./validation": loadSource("src/equicordplugins/profileSets/utils/validation.ts", {}), ...mocks };
     if (path === "src/equicordplugins/userpluginInstaller.dev/native.ts") {

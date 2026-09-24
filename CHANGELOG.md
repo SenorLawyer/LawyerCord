@@ -4,6 +4,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ## 3.0.0.0 - Unreleased
 
+- Reject stale ProfileSets saves when another client has changed the stored list.
+
 ### Compatibility
 
 - VoiceRejoin ignores older saved channels without an account owner. Joining a call records a new reconnect target for that account.

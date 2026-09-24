@@ -9817,24 +9817,29 @@ test("SongSpotlight requires write acknowledgement before changing local state",
 
 
 test("manual scheduled reload refreshes previews only in its running account", async () => {
-    for (const change of ["none", "account", "stop", "inactive"]) {
+    for (const change of ["none", "account", "stop", "inactive", "preview-failure"]) {
         let userId = "account";
         const read = Promise.withResolvers<unknown>();
         const previews: string[] = [];
+        let warnings = 0;
         const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
-            "@api/DataStore": { get: () => read.promise }, "@utils/Logger": { Logger: class {} },
+            "@api/DataStore": { get: () => read.promise }, "@utils/Logger": { Logger: class { warn() { warnings++; } } },
             "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
             "@vencord/discord-types/enums": {}, ".": { settings: { store: {} } },
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) }, FluxDispatcher: { dispatch() {} } }
         }, { clearTimeout() {} }, "({ ...exports, setRunning: value => { schedulerRunning = value; }, setPreview: callback => { createPhantomMessage = callback; } })");
         api.setRunning(change !== "inactive");
-        api.setPreview(async (message: { content: string; }) => previews.push(message.content));
+        api.setPreview(async (message: { content: string; }) => {
+            previews.push(message.content);
+            if (change === "preview-failure" && message.content === "Refreshed") throw new Error("History unavailable");
+        });
         const pending = api.loadScheduledMessages(true);
         if (change === "account") userId = "other";
         if (change === "stop") api.stopScheduler();
-        read.resolve([scheduledEntry({ content: "Refreshed" })]);
+        read.resolve([scheduledEntry({ id: "first", content: "Refreshed" }), ...(change === "preview-failure" ? [scheduledEntry({ id: "second", content: "Next" })] : [])]);
         await pending;
-        assert.deepEqual(previews, change === "none" ? ["Refreshed"] : []);
+        assert.deepEqual(previews, change === "preview-failure" ? ["Refreshed", "Next"] : change === "none" ? ["Refreshed"] : []);
+        assert.equal(warnings, change === "preview-failure" ? 1 : 0);
     }
 });
 
@@ -10505,7 +10510,7 @@ test("delayed scheduled reaction previews use committed entries and cannot reviv
         }, { setTimeout: (callback: () => void) => { timers.push(callback); return timers.length; } },
         "({ ...exports, doRecreatePhantomMessage, setPreview: callback => { createPhantomMessage = callback; } })");
         await api.loadScheduledMessages();
-        api.setPreview((entry: { reactions: { count: number; }[]; }) => counts.push(entry.reactions[0].count));
+        api.setPreview(async (entry: { reactions: { count: number; }[]; }) => counts.push(entry.reactions[0].count));
         api.phantomMessageMap.set("scheduled-saved", { messageId: "saved" });
         api.doRecreatePhantomMessage("scheduled-saved", "channel");
         assert.equal(timers.length, 1);

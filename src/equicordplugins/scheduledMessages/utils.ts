@@ -388,7 +388,7 @@ function doRecreatePhantomMessage(messageId: string, channelId: string): void {
 
         if (phantomMessageMap.get(messageId) !== phantomData) return;
         const current = scheduledMessages.find(entry => entry.id === phantomData.messageId);
-        if (current) createPhantomMessage(current);
+        if (current) createPhantomMessage(current).catch(() => logger.warn("Could not refresh a scheduled message preview."));
     }, 50);
 }
 
@@ -511,7 +511,8 @@ export async function addScheduledMessage(
             attachments
         };
         await saveScheduledMessages([...scheduledMessages, newMessage].sort((a, b) => a.scheduledTime - b.scheduledTime));
-        if (generation === schedulerGeneration && UserStore.getCurrentUser()?.id === userId) createPhantomMessage(newMessage);
+        if (generation === schedulerGeneration && UserStore.getCurrentUser()?.id === userId)
+            createPhantomMessage(newMessage).catch(() => logger.warn("Could not create a scheduled message preview."));
         scheduleNextCheck();
         return { success: true };
     });
@@ -628,7 +629,8 @@ export async function recreatePhantomMessages(): Promise<void> {
     const userId = UserStore.getCurrentUser()?.id;
     for (const msg of scheduledMessages) {
         if (generation !== phantomGeneration || UserStore.getCurrentUser()?.id !== userId) return;
-        if (scheduledMessages.includes(msg)) await createPhantomMessage(msg);
+        if (scheduledMessages.includes(msg))
+            await createPhantomMessage(msg).catch(() => logger.warn("Could not recreate a scheduled message preview."));
     }
 }
 

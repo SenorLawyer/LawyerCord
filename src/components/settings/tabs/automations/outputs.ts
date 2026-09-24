@@ -5,7 +5,7 @@
  */
 
 import { outputKind } from "./catalog";
-import { CLIENT_EVENTS, type ClientEventType } from "./clientEvents";
+import { CLIENT_EVENTS, type ClientEventType, isClientEventType } from "./clientEvents";
 import type { AutomationBlockType } from "./model";
 
 export interface OutputField {
@@ -63,6 +63,7 @@ export const CLIENT_EVENT_FIELDS: OutputField[] = [
 ];
 
 export function eventOutputFields(type: ClientEventType): OutputField[] {
+    if (!isClientEventType(type)) return [];
     const definition = CLIENT_EVENTS[type];
     if (type === "user-update") return [CLIENT_EVENT_FIELDS[0], CLIENT_EVENT_FIELDS[1], ...USER.filter(field => field.path !== "displayName").map(field => ({ ...field, path: `user.${field.path}`, type: `${field.type} or absent` }))];
     return CLIENT_EVENT_FIELDS.filter(field => field.path === "type"

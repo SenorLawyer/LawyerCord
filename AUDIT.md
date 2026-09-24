@@ -6,7 +6,7 @@ This audit is still in progress. File coverage records review work; it does not 
 
 - Baseline: `6e664e03ba3d0b7746ce34740ca444f5112b04bc`, published as `nightly-20260905-1918-6e664e03`.
 - The baseline inventory contains 1,661 tracked files, including source, tests, configuration, documentation, and assets. The review ledger records all baseline entries as reviewed.
-- At `e4b83b8c1`, the branch contains 1,650 tracked files: this report and five added test files, with seventeen removals relative to the baseline.
+- After integrating main at `a93bbb1f6`, the branch contains 1,656 tracked files, with twelve additions and seventeen removals relative to the baseline. Main contributes four automation modules, one test, and one benchmark; all six were re-read on September 24.
 - The five added tests cover startup flags, CRX conversion, extension installation, file selection, and settings synchronization. Their file hashes were rechecked against the reviewed versions at `480d81f23`.
 - The generated internationalization mapping was checked semantically against the runtime hash function across 19,440 pairs. That is generated-data validation, not manual review of each pair.
 - Main at `8fc182ba7` was reviewed separately. A fresh fetch and release lookup on September 12 confirmed that main and the published nightly remain unchanged. The nightly tag still resolves to the baseline commit. Main changes were integrated on September 24, preserving the audit version and main release history.
@@ -209,3 +209,5 @@ Validation for the IgnoreActivities change: full TypeScript, focused ESLint, and
 Main integration on September 24 preserved the audit changes while bringing in main at `8fc182ba7`. Only version and changelog conflicts required manual resolution. Automation tests, full TypeScript, and the standalone build pass on the combined source. These checks do not establish live Discord behavior.
 
 The combined-source performance suite passes all 520 tests and timezone correctness checks. Focused automation ESLint, repository CSS lint, and staged/working-tree whitespace checks pass.
+
+The integrated automation output lookup crashed on an unknown saved wait-event type before the editor could show its validation error. Output discovery now returns no fields for unsupported events, and the event form retains its selector with a correction prompt. A regression reproduced the exception before the fix and now verifies variable/output discovery and preservation of the saved value. No workflow was run against Discord.

@@ -3866,12 +3866,16 @@ test("quest names only remove a separate Quest suffix", () => {
 test("profile images fall back after failed guild downloads", async () => {
     const urls: string[] = [];
     let blobReads = 0;
+    const signal = new AbortController().signal;
+    const deadlines: number[] = [];
     const processImage = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
         "@api/UserSettings": { getUserSettingLazy: () => ({}) },
         "@webpack": { findStoreLazy: () => ({}) },
         "@webpack/common": {}
     }, {
-        fetch: async (url: string) => {
+        AbortSignal: { timeout: (ms: number) => { deadlines.push(ms); return signal; } },
+        fetch: async (url: string, options: { signal: AbortSignal; }) => {
+            assert.equal(options.signal, signal);
             urls.push(url);
             return { ok: !url.includes("/guilds/"), blob: async () => { blobReads++; return {}; } };
         },
@@ -3886,13 +3890,14 @@ test("profile images fall back after failed guild downloads", async () => {
     assert.match(urls[0], /\/guilds\/guild\/users\/user\/avatars\//);
     assert.match(urls[1], /\/avatars\/user\//);
     assert.equal(blobReads, 1);
+    assert.deepEqual(deadlines, [30_000, 30_000]);
 });
 
 test("profile image preparation distinguishes download failure from no image", async () => {
     const processImage = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
         "@api/UserSettings": { getUserSettingLazy: () => ({}) },
         "@webpack": { findStoreLazy: () => ({}) }, "@webpack/common": {}
-    }, { fetch: async () => ({ ok: false }) }, "processImage");
+    }, { AbortSignal, fetch: async () => ({ ok: false }) }, "processImage");
     for (const input of ["https://cdn.discordapp.com/example.png", "avatar_hash"]) {
         await assert.rejects(processImage(input, "user", "avatar"), /download/);
         await assert.rejects(processImage(input, "user", "banner", "guild", true), /download/);

@@ -109,7 +109,7 @@ function normalizeDisplayNameStyles(value: DisplayNameStylesLike | null | undefi
 
 export async function imageUrlToBase64(url: string): Promise<string | null> {
     try {
-        const response = await fetch(url);
+        const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
         if (!response.ok) return null;
         const blob = await response.blob();
         return await new Promise((resolve, reject) => {

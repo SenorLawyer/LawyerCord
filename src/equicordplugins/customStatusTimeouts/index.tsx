@@ -9,7 +9,6 @@ import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 
 const Millis = {
-    HALF_SECOND: 500,
     SECOND: 1e3,
     MINUTE: 6e4,
     HOUR: 36e5,
@@ -26,12 +25,9 @@ interface TimeoutOption {
 let cachedExtraTimeouts: TimeoutOption[] | null = null;
 
 function parseDurations(value: string): number[] {
-    return [...new Set(
-        value
-            .split(",")
-            .map(s => Number(s.trim()))
-            .filter(value => Number.isFinite(value) && value > 0)
-    )];
+    return value.split(",")
+        .map(s => Number(s.trim()))
+        .filter(value => Number.isFinite(value) && value > 0);
 }
 
 function invalidateTimeoutCache() {
@@ -115,7 +111,7 @@ export default definePlugin({
     buildTimeouts(existing: TimeoutOption[]) {
         const extra = getExtraTimeouts();
 
-        return [...existing, ...extra].sort((a, b) => {
+        return [...existing, ...extra].filter((option, index, options) => options.findIndex(other => other.duration === option.duration) === index).sort((a, b) => {
             if (a.duration === undefined) return settings.store.showForeverOnTop ? -1 : 1;
             if (b.duration === undefined) return settings.store.showForeverOnTop ? 1 : -1;
             return a.duration - b.duration;

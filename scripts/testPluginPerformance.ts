@@ -1309,6 +1309,27 @@ test("BetterSessions returns its settings-close save to the flux error handler",
     await rejected;
 });
 
+test("custom status timeouts retain one choice per duration without mutating Discord options", () => {
+    const store = { extraSeconds: "60, 60", extraMinutes: "1", extraHours: "", extraDays: "", showForeverOnTop: true };
+    const { default: plugin } = loadSource("src/equicordplugins/customStatusTimeouts/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store }) },
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} }
+    });
+    const minute = { duration: 60_000, label: () => "Discord minute" };
+    const forever = { duration: undefined, label: () => "Forever" };
+    const existing = Object.freeze([minute, forever]);
+    for (const onTop of [true, false]) {
+        store.showForeverOnTop = onTop;
+        const choices: { duration?: number; label: () => string; }[] = plugin.buildTimeouts(existing);
+        assert.equal(choices.filter(choice => choice.duration === 60_000).length, 1);
+        assert.equal(choices.find(choice => choice.duration === 60_000), minute);
+        assert.equal(choices[onTop ? 0 : choices.length - 1], forever);
+        assert.equal(new Set(choices.map(choice => choice.duration)).size, choices.length);
+        assert.deepEqual(existing, [minute, forever]);
+    }
+});
+
 test("custom status timeout patch leaves neighboring duration arrays intact", () => {
     const { default: plugin } = loadSource("src/equicordplugins/customStatusTimeouts/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({ store: {} }) },

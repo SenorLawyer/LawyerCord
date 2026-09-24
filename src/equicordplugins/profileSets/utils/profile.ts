@@ -145,11 +145,29 @@ export async function imageUrlToBase64(url: string): Promise<string | null> {
     }
 }
 
+function checkEmbeddedImageSize(image: string | null | undefined) {
+    if (!image?.startsWith("data:")) return;
+    const separator = image.indexOf(",");
+    if (separator < 0) throw new Error("The profile image is invalid.");
+    const payload = image.slice(separator + 1);
+    let size: number;
+    if (/;base64$/i.test(image.slice(0, separator))) {
+        const encoded = decodeURIComponent(payload).replace(/[\t\n\f\r ]/g, "");
+        size = Math.floor(encoded.replace(/=+$/, "").length * 3 / 4);
+    } else {
+        size = encodeURI(payload).replace(/%25(?=[\da-f]{2})/gi, "%").replace(/%[\da-f]{2}/gi, "x").length;
+    }
+    if (size > MAX_IMAGE_BYTES) throw new Error("The profile image exceeds 10 MiB.");
+}
+
 async function processImage(imageData: ImageInput, userId: string, type: "avatar" | "banner", guildId?: string, useGuildPath?: boolean): Promise<string | null> {
     if (typeof imageData === "object" && imageData) imageData = imageData.imageUri;
     if (!imageData) return null;
 
-    if (imageData.startsWith("data:")) return imageData;
+    if (imageData.startsWith("data:")) {
+        checkEmbeddedImageSize(imageData);
+        return imageData;
+    }
     if (/^(?:https?:\/\/|blob:)/.test(imageData)) {
         const image = await imageUrlToBase64(imageData);
         if (!image) throw new Error("Could not download the profile image.");
@@ -308,6 +326,8 @@ export async function loadPresetAsPending(preset: ProfilePreset, guildId?: strin
     if (isGuild && !guildId) return;
     const userId = UserStore.getCurrentUser()?.id;
     if (!userId) throw new Error("No account is signed in.");
+    checkEmbeddedImageSize(preset.avatarDataUrl);
+    checkEmbeddedImageSize(preset.bannerDataUrl);
     const current = await getCurrentProfile(guildId, {
         isGuildProfile: isGuild
     });

@@ -3944,6 +3944,25 @@ test("profile image downloads enforce their byte limit before conversion", async
     }
 });
 
+test("profile embedded image limits count decoded payload bytes", () => {
+    const check = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+        "@api/UserSettings": { getUserSettingLazy: () => ({}) },
+        "@webpack": { findStoreLazy: () => ({}) }, "@webpack/common": {}
+    }, {}, "checkEmbeddedImageSize");
+    const limit = 10 * 1024 * 1024;
+    for (const size of [limit, limit + 1]) {
+        const encoded = Buffer.alloc(size).toString("base64");
+        for (const payload of [encoded, encoded.replace(/=/g, "%3D"), encoded + "\n"]) {
+            const run = () => check(`data:image/png;base64,${payload}`);
+            if (size > limit) assert.throws(run, /exceeds/);
+            else assert.doesNotThrow(run);
+        }
+    }
+    assert.doesNotThrow(() => check("data:image/svg+xml,%FF%C3%A9"));
+    assert.doesNotThrow(() => check("https://fixture.invalid/avatar.png"));
+    assert.doesNotThrow(() => check(null));
+});
+
 test("profile image preparation distinguishes download failure from no image", async () => {
     const urls: string[] = [];
     const processImage = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {

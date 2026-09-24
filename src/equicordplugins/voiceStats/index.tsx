@@ -46,7 +46,7 @@ async function persistTotals() {
 }
 
 function flushActiveSessions() {
-    const now = Date.now();
+    const now = performance.now();
     for (const [userId, startedAt] of sessionStarts) {
         const accrued = Math.floor((now - startedAt) / 1000);
         if (accrued <= 0) continue;
@@ -81,7 +81,7 @@ function startTrackingChannel(channelId: string, myId: string) {
     sessionStarts.clear();
 
     const states = VoiceStateStore.getVoiceStatesForChannel(channelId) ?? {};
-    const now = Date.now();
+    const now = performance.now();
     for (const state of Object.values(states) as VoiceState[]) {
         if (state.userId !== myId) sessionStarts.set(state.userId, now);
     }
@@ -100,7 +100,7 @@ function stopTrackingChannel() {
 function getLiveSeconds(userId: string): number {
     const stored = totalsByUser.get(userId) ?? 0;
     const startedAt = sessionStarts.get(userId);
-    return startedAt ? stored + Math.floor((Date.now() - startedAt) / 1000) : stored;
+    return startedAt !== undefined ? stored + Math.floor((performance.now() - startedAt) / 1000) : stored;
 }
 
 function formatDuration(seconds: number): string {
@@ -193,12 +193,12 @@ export default definePlugin({
 
                 if (joinedMyChannel) {
                     if (!sessionStarts.has(userId)) {
-                        sessionStarts.set(userId, Date.now());
+                        sessionStarts.set(userId, performance.now());
                         startSaveInterval();
                     }
                 } else if (leftMyChannel && sessionStarts.has(userId)) {
                     const startedAt = sessionStarts.get(userId)!;
-                    const accrued = Math.floor((Date.now() - startedAt) / 1000);
+                    const accrued = Math.floor((performance.now() - startedAt) / 1000);
                     if (accrued > 0) {
                         totalsByUser.set(userId, (totalsByUser.get(userId) ?? 0) + accrued);
                         totalsDirty = true;

@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep VoiceStats session durations independent of system clock adjustments.
+
 - Stop VoiceStats timers and session counting on logout.
 
 - Restore the current custom-status emoji in the StatusPresets menu.

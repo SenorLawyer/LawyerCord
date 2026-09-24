@@ -2607,7 +2607,7 @@ test("voice statistics preserve unsaved totals when restarted after a failed wri
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
         "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
         "@webpack/common": { UserStore: { getCurrentUser: () => undefined } }
-    }, { Date: { now: () => 41000 } }, "({ plugin: exports.default, sessionStarts, totalsByUser, flushActiveSessions, persistTotals })");
+    }, { performance: { now: () => 41000 } }, "({ plugin: exports.default, sessionStarts, totalsByUser, flushActiveSessions, persistTotals })");
     await api.plugin.start();
     api.sessionStarts.set("friend", 1000);
     api.flushActiveSessions();
@@ -2651,7 +2651,7 @@ test("voice statistics retain failed saves for the next persistence attempt", as
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
         "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
         "@webpack/common": {}
-    }, { Date: { now: () => 2000 } }, "({ sessionStarts, flushActiveSessions, persistTotals })");
+    }, { performance: { now: () => 2000 } }, "({ sessionStarts, flushActiveSessions, persistTotals })");
     api.sessionStarts.set("friend", 1000);
     api.flushActiveSessions();
     await assert.doesNotReject(api.persistTotals());
@@ -2676,7 +2676,7 @@ test("voice statistics wait for stored totals before starting tracking", async (
             SelectedChannelStore: { getVoiceChannelId: () => channelId },
             VoiceStateStore: { getVoiceStatesForChannel: () => ({ friend: { userId: "friend" } }) }
         }
-    }, { setInterval: () => 1, clearInterval() {} }, "({ plugin: exports.default, sessionStarts, totalsByUser })");
+    }, { performance: { now: () => 1000 }, setInterval: () => 1, clearInterval() {} }, "({ plugin: exports.default, sessionStarts, totalsByUser })");
     const starting = api.plugin.start();
     api.plugin.flux.VOICE_STATE_UPDATES({ voiceStates: [{ userId: "me", channelId }] });
     assert.equal(api.sessionStarts.size, 0);
@@ -2723,7 +2723,7 @@ test("voice statistics preserve repeated channel tracking and stop counting on l
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
         "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
         "@webpack/common": { VoiceStateStore: { getVoiceStatesForChannel: () => ({ friend: { userId: "friend" } }) } }
-    }, { Date: { now: () => now }, setInterval: () => 1, clearInterval() { clearedIntervals++; } }, "({ plugin: exports.default, startTrackingChannel, stopTrackingChannel, sessionStarts, getLiveSeconds })");
+    }, { performance: { now: () => now }, setInterval: () => 1, clearInterval() { clearedIntervals++; } }, "({ plugin: exports.default, startTrackingChannel, stopTrackingChannel, sessionStarts, getLiveSeconds })");
     api.startTrackingChannel("voice", "me");
     now = 2600;
     api.startTrackingChannel("voice", "me");
@@ -2742,8 +2742,9 @@ test("voice statistics preserve repeated channel tracking and stop counting on l
     api.stopTrackingChannel();
 });
 
-test("voice statistics retain fractional seconds across periodic saves", () => {
+test("voice statistics retain fractional seconds despite wall clock changes", () => {
     let now = 1000;
+    let wallClock = 1000;
     const { sessionStarts, totalsByUser, flushActiveSessions, getLiveSeconds } = loadSource("src/equicordplugins/voiceStats/index.tsx", {
         "@utils/Logger": { Logger: class { error() {} } },
         "@api/DataStore": {}, "@components/BaseText": {},
@@ -2752,13 +2753,19 @@ test("voice statistics retain fractional seconds across periodic saves", () => {
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
         "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
         "@webpack/common": {},
-    }, { Date: { now: () => now } }, "({ sessionStarts, totalsByUser, flushActiveSessions, getLiveSeconds })");
+    }, { Date: { now: () => wallClock }, performance: { now: () => now } }, "({ sessionStarts, totalsByUser, flushActiveSessions, getLiveSeconds })");
     sessionStarts.set("friend", now);
-    for (now of [31_400, 61_800, 92_200]) flushActiveSessions();
+    for (now of [31_400, 61_800, 92_200]) {
+        wallClock += 3_600_000;
+        flushActiveSessions();
+    }
     assert.equal(totalsByUser.get("friend"), 91);
     assert.equal(sessionStarts.get("friend"), 92_000);
     now = 93_000;
+    wallClock = -3_600_000;
     assert.equal(getLiveSeconds("friend"), 92);
+    sessionStarts.set("zero", 0);
+    assert.equal(getLiveSeconds("zero"), 93);
 });
 
 test("transcription worker cancellation aborts model downloads and startup failures settle", async () => {

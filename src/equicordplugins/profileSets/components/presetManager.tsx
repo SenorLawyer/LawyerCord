@@ -7,7 +7,7 @@
 import { Button } from "@components/Button";
 import { Heading } from "@components/Heading";
 import { classes } from "@utils/misc";
-import { openModal, React, SelectedGuildStore, TextInput, useStateFromStores } from "@webpack/common";
+import { openModal, React, SelectedGuildStore, showToast, TextInput, Toasts, useStateFromStores } from "@webpack/common";
 
 import { cl, settings } from "../index";
 import { exportPresets, ImportDecision, importPresets, savePreset } from "../utils/actions";
@@ -89,7 +89,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
         setCurrentPresetIndex(index);
         loadPresetAsPending(presets[index], resolvedGuildId, {
             isGuildProfile: resolvedSection === "server"
-        });
+        }).catch(() => showToast("Could not load the profile preset.", Toasts.Type.FAILURE));
         forceUpdate();
     };
 

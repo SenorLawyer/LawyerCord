@@ -3888,6 +3888,30 @@ test("profile images fall back after failed guild downloads", async () => {
     assert.equal(blobReads, 1);
 });
 
+test("profile presets wait for custom status updates and propagate failure", async () => {
+    const update = Promise.withResolvers<void>();
+    let updates = 0;
+    const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+        "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null, updateSetting: () => { updates++; return update.promise; } }) },
+        "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
+        "@webpack/common": {
+            UserStore: { getCurrentUser: () => ({ id: "me" }) },
+            UserProfileStore: { getUserProfile: () => null },
+            IconUtils: { getUserAvatarURL: () => null, getDefaultAvatarURL: () => "default" },
+            FluxDispatcher: { dispatch() {} }
+        }
+    });
+    let settled = false;
+    const applying = api.loadPresetAsPending({ customStatus: { text: "Preset" } });
+    applying.then(() => { settled = true; }, () => { settled = true; });
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    assert.equal(updates, 1);
+    assert.equal(settled, false);
+    const rejected = assert.rejects(applying, /status update failed/);
+    update.reject(new Error("status update failed"));
+    await rejected;
+});
+
 test("primary stream audio reads stores initialized after module evaluation", () => {
     const common: Record<string, unknown> = {};
     const logic = loadSource("src/equicordplugins/primaryStreamAudio/logic.ts", {});

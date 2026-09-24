@@ -64,8 +64,8 @@ function openProfileImagePreview(
     guildId?: string
 ) {
     dispatch("PROFILE_CUSTOMIZATION_OPEN_PREVIEW_MODAL", {
-        image,
-        file: {},
+        pendingImage: image,
+        file: { type: /^data:([^;,]+)/i.exec(image.imageUri)?.[1].toLowerCase() ?? "" },
         uploadType,
         guildId,
         analyticsSource: guildId ? "user settings guild profile" : "user settings user profile",

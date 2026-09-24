@@ -4996,8 +4996,8 @@ test("profile preset text fields distinguish omission from explicit clearing", a
 });
 
 test("profile preset image application preserves previews and explicit removals", async () => {
-    for (const value of ["data:image/png;base64,new", "https://fixture.invalid/image.png", null]) {
-        const dispatched: { type: string; image?: { imageUri: string; assetOrigin: string; }; pendingAvatar?: unknown; pendingBanner?: unknown; }[] = [];
+    for (const value of ["data:image/png;base64,new", "data:image/gif;base64,new", "https://fixture.invalid/image.png", null]) {
+        const dispatched: { type: string; pendingImage?: { imageUri: string; assetOrigin: string; }; file?: { type: string; }; pendingAvatar?: unknown; pendingBanner?: unknown; }[] = [];
         const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
             "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null }) },
             "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
@@ -5013,8 +5013,9 @@ test("profile preset image application preserves previews and explicit removals"
         if (value?.startsWith("data:")) {
             assert.equal(previews.length, 2);
             for (const preview of previews) {
-                assert.equal(preview.image?.imageUri, value);
-                assert.equal(preview.image?.assetOrigin, "NEW_ASSET");
+                assert.equal(preview.pendingImage?.imageUri, value);
+                assert.equal(preview.pendingImage?.assetOrigin, "NEW_ASSET");
+                assert.equal(preview.file?.type, value.includes("image/gif") ? "image/gif" : "image/png");
             }
         } else {
             assert.equal(previews.length, 0);

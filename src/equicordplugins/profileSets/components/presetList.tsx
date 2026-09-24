@@ -4,14 +4,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { isNonNullish } from "@utils/guards";
 import { classes } from "@utils/misc";
-import { ProfilePreset } from "@vencord/discord-types";
-import { ContextMenuApi, Menu, React, TextInput } from "@webpack/common";
+import { ContextMenuApi, Menu, React, showToast, TextInput, Toasts } from "@webpack/common";
 
 import { cl } from "..";
-import { deletePreset, movePreset, renamePreset, updatePresetField } from "../utils/actions";
-import { getCurrentProfile } from "../utils/profile";
+import { deletePreset, movePreset, refreshPreset, renamePreset } from "../utils/actions";
 import { PresetSection, type ProfilePresetEx } from "../utils/storage";
 
 interface PresetListProps {
@@ -39,10 +36,8 @@ export function PresetList({
     currentPage,
     onPageChange
 }: PresetListProps) {
-    type EditableProfile = Omit<ProfilePreset, "name" | "timestamp">;
     const [renaming, setRenaming] = React.useState<number>(-1);
     const [renameText, setRenameText] = React.useState("");
-    const isGuildProfile = section === "server";
 
     return (
         <div className={cl("list-container")}>
@@ -138,7 +133,6 @@ export function PresetList({
                                 className={cl("menu-icon")}
                                 onClick={e => {
                                     e.stopPropagation();
-                                    const target = e.currentTarget;
                                     ContextMenuApi.openContextMenu(e, () => (
                                         <Menu.Menu navId="preset-options" onClose={ContextMenuApi.closeContextMenu}>
                                             <Menu.MenuItem
@@ -153,13 +147,12 @@ export function PresetList({
                                                 id="update"
                                                 label="Update"
                                                 action={async () => {
-                                                    const profile = await getCurrentProfile(guildId, { isGuildProfile });
-                                                    await Promise.all(
-                                                        (Object.entries(profile) as [keyof EditableProfile, EditableProfile[keyof EditableProfile]][])
-                                                            .filter(([, value]) => isNonNullish(value))
-                                                            .map(([key, value]) => updatePresetField(actualIndex, key, value, section))
-                                                    );
-                                                    onUpdate();
+                                                    try {
+                                                        await refreshPreset(preset, section, guildId);
+                                                        onUpdate();
+                                                    } catch {
+                                                        showToast("Could not update the profile preset.", Toasts.Type.FAILURE);
+                                                    }
                                                 }}
                                             />
                                             <Menu.MenuSeparator />

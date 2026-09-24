@@ -3888,6 +3888,46 @@ test("profile images fall back after failed guild downloads", async () => {
     assert.equal(blobReads, 1);
 });
 
+test("profile preset refresh writes once and retains its original target", async () => {
+    for (const change of ["none", "account", "list", "removed", "moved"]) {
+        let userId = "first";
+        let writes = 0;
+        const preparation = Promise.withResolvers<object>();
+        const target = { name: "Target", bio: "Old", pronouns: "Retained", timestamp: 0 };
+        const other = { name: "Other", bio: "Other", pronouns: "Other", timestamp: 0 };
+        const storage = {
+            presets: [target, other],
+            updatePreset: (index: number, value: typeof target) => { storage.presets[index] = value; },
+            savePresetsData: async () => { writes++; }
+        };
+        const api = loadSource("src/equicordplugins/profileSets/utils/actions.ts", {
+            "@utils/guards": { isNonNullish: (value: unknown) => value != null },
+            "@webpack": { findStoreLazy: () => ({}) },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
+            "./profile": { getCurrentProfile: () => preparation.promise }, "./storage": storage
+        });
+        const refreshing = api.refreshPreset(target, "main");
+        if (change === "account") userId = "second";
+        if (change === "list") storage.presets = [other];
+        if (change === "removed") storage.presets.splice(0, 1);
+        if (change === "moved") storage.presets.reverse();
+        preparation.resolve({ bio: "Updated", pronouns: null });
+        if (change === "none" || change === "moved") {
+            await refreshing;
+            const updated = storage.presets[change === "moved" ? 1 : 0];
+            assert.equal(updated.name, "Target");
+            assert.equal(updated.bio, "Updated");
+            assert.equal(updated.pronouns, "Retained");
+            assert.equal(writes, 1);
+        } else {
+            await assert.rejects(refreshing);
+            assert.equal(writes, 0);
+            assert.equal(target.bio, "Old");
+        }
+        assert.equal(other.bio, "Other");
+    }
+});
+
 test("profile preset imports keep their initiating account and list", async () => {
     for (const stage of ["read", "prompt", "list", "success", "null", "name", "timestamp", "object"]) {
         let userId = "first";

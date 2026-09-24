@@ -21,6 +21,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Update profile presets with one storage write and retain the original target across asynchronous preparation.
+
 - Reject profile preset imports with invalid entries, names, or timestamps before replacing the current list.
 
 - Cancel ProfileSets imports if the account or preset list changes while reading or confirming the file.

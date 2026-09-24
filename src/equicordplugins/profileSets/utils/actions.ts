@@ -5,7 +5,6 @@
  */
 
 import { isNonNullish } from "@utils/guards";
-import { ProfilePreset } from "@vencord/discord-types";
 import { findStoreLazy } from "@webpack";
 import { showToast, Toasts, UserStore } from "@webpack/common";
 
@@ -49,20 +48,19 @@ export async function savePreset(name: string, section: PresetSection, guildId?:
     await savePresetsData(section);
 }
 
-export async function updatePresetField<K extends keyof Omit<ProfilePreset, "name" | "timestamp">>(
-    index: number,
-    field: K,
-    value: Omit<ProfilePreset, "name" | "timestamp">[K],
-    section: PresetSection
-) {
-    if (index < 0 || index >= presets.length) return;
-
-    const updatedPreset = {
-        ...presets[index],
-        [field]: value,
+export async function refreshPreset(preset: ProfilePresetEx, section: PresetSection, guildId?: string) {
+    const userId = UserStore.getCurrentUser()?.id;
+    const originalPresets = presets;
+    if (!userId || !presets.includes(preset)) throw new Error("The profile preset is no longer available.");
+    const profile = await getCurrentProfile(guildId, { isGuildProfile: section === "server" });
+    const index = presets.indexOf(preset);
+    if (UserStore.getCurrentUser()?.id !== userId || presets !== originalPresets || index < 0)
+        throw new Error("The account or preset list changed while preparing the profile.");
+    updatePreset(index, {
+        ...preset,
+        ...Object.fromEntries(Object.entries(profile).filter(([, value]) => isNonNullish(value))),
         timestamp: Date.now()
-    };
-    updatePreset(index, updatedPreset);
+    });
     await savePresetsData(section);
 }
 

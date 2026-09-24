@@ -7,7 +7,7 @@
 import { isNonNullish } from "@utils/guards";
 import { ProfilePreset } from "@vencord/discord-types";
 import { findStoreLazy } from "@webpack";
-import { showToast, Toasts } from "@webpack/common";
+import { showToast, Toasts, UserStore } from "@webpack/common";
 
 import { getCurrentProfile } from "./profile";
 import { addPreset, movePresetInArray, presets, PresetSection, type ProfilePresetEx, removePreset, replaceAllPresets, savePresetsData, updatePreset } from "./storage";
@@ -30,7 +30,12 @@ function getFreshPendingAvatar(section: PresetSection, guildId?: string): string
 }
 
 export async function savePreset(name: string, section: PresetSection, guildId?: string) {
+    const userId = UserStore.getCurrentUser()?.id;
+    const originalPresets = presets;
+    if (!userId) throw new Error("Sign in before saving a profile preset.");
     const profile = await getCurrentProfile(guildId, { isGuildProfile: section === "server" });
+    if (UserStore.getCurrentUser()?.id !== userId || presets !== originalPresets)
+        throw new Error("The account or preset list changed while preparing the profile.");
     const freshPendingAvatar = getFreshPendingAvatar(section, guildId);
     const effectiveAvatar = freshPendingAvatar ?? profile.avatarDataUrl ?? null;
 

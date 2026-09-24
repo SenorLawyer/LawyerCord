@@ -3888,6 +3888,41 @@ test("profile images fall back after failed guild downloads", async () => {
     assert.equal(blobReads, 1);
 });
 
+test("profile preset saves reject account and list changes during preparation", async () => {
+    let userId: string | undefined = "first";
+    let preparation = Promise.withResolvers<object>();
+    let writes = 0;
+    const storage = {
+        presets: [] as object[],
+        addPreset: (preset: object) => storage.presets.push(preset),
+        savePresetsData: async () => { writes++; }
+    };
+    const api = loadSource("src/equicordplugins/profileSets/utils/actions.ts", {
+        "@utils/guards": { isNonNullish: (value: unknown) => value != null },
+        "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
+        "@webpack/common": { UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined } },
+        "./profile": { getCurrentProfile: () => preparation.promise },
+        "./storage": storage
+    });
+    for (const change of [() => { userId = "second"; }, () => { storage.presets = []; }, () => { userId = undefined; }]) {
+        userId = "first";
+        preparation = Promise.withResolvers<object>();
+        const saving = api.savePreset("Example", "main");
+        change();
+        preparation.resolve({});
+        await assert.rejects(saving);
+        assert.equal(storage.presets.length, 0);
+        assert.equal(writes, 0);
+    }
+    userId = "first";
+    preparation = Promise.withResolvers<object>();
+    const saving = api.savePreset("Example", "main");
+    preparation.resolve({});
+    await saving;
+    assert.equal(storage.presets.length, 1);
+    assert.equal(writes, 1);
+});
+
 test("profile preset storage rejects stale account reads and foreign-scope saves", async () => {
     let currentId: string | undefined = "first";
     const reads: ReturnType<typeof Promise.withResolvers<unknown>>[] = [];

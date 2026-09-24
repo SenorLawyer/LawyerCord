@@ -178,6 +178,10 @@ export const ScheduleTimeModal = ErrorBoundary.wrap(ScheduleTimeModalInner, { no
 export function openScheduleTimeModal(channelId: string, content: string, attachments?: ScheduledAttachment[], uploadIds?: string[]): void {
     const userId = UserStore.getCurrentUser()?.id;
     if (!userId) return;
+    if (!ChannelStore.getChannel(channelId)) {
+        showToast("This channel is unavailable. Switch to an account that can access it before scheduling.", Toasts.Type.FAILURE);
+        return;
+    }
     const key = openModal(props => (
         <ScheduleTimeModal
             uploadIds={uploadIds}

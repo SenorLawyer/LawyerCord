@@ -10122,6 +10122,26 @@ test("scheduled queue controls report failures without stale account feedback", 
 });
 
 
+test("scheduling an unavailable channel explains the failure without opening an empty modal", () => {
+    for (const state of ["available", "missing", "signed-out"]) {
+        let opened = 0;
+        const notices: string[] = [];
+        const api = loadSource("src/equicordplugins/scheduledMessages/components/ScheduleTimeModal.tsx", {
+            "@components/Button": {}, "@components/Heading": {},
+            "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+            "@utils/css": { classNameFactory: () => () => "" }, "./Icons": {}, "../utils": {},
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => state === "signed-out" ? undefined : { id: "account" } },
+                ChannelStore: { getChannel: () => state === "available" ? {} : undefined },
+                openModal: () => { opened++; }, showToast: (text: string) => notices.push(text), Toasts: { Type: { FAILURE: "failure" } }
+            }
+        });
+        api.openScheduleTimeModal("channel", "Preserved content");
+        assert.equal(opened, state === "available" ? 1 : 0);
+        assert.deepEqual(notices, state === "missing" ? ["This channel is unavailable. Switch to an account that can access it before scheduling."] : []);
+    }
+});
+
 test("scheduled legacy recovery retains full content and attachments without sending", () => {
     let userId = "account";
     const message = { id: "legacy", channelId: "channel", content: "x".repeat(300), attachments: [{ filename: "file.txt", type: "text/plain", data: "data:text/plain,kept" }] };

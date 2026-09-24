@@ -5,7 +5,7 @@
  */
 
 import { isNonNullish } from "@utils/guards";
-import { saveFile } from "@utils/web";
+import { chooseFile, saveFile } from "@utils/web";
 import { findStoreLazy } from "@webpack";
 import { showToast, Toasts, UserStore } from "@webpack/common";
 
@@ -106,45 +106,38 @@ export async function importPresets(
         if (UserStore.getCurrentUser()?.id !== userId || presets !== originalPresets)
             throw new Error("The account or preset list changed during import.");
     };
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "application/json";
-    input.onchange = async (event: Event) => {
-        try {
-            const target = event.currentTarget as HTMLInputElement | null;
-            const file = target?.files?.[0];
-            if (!file) return;
+    try {
+        const file = await chooseFile("application/json");
+        if (!file) return;
 
-            const text = await file.text();
+        const text = await file.text();
+        checkScope();
+        const importedPresets: unknown = JSON.parse(text);
+
+        if (!Array.isArray(importedPresets) || !importedPresets.every((preset: unknown) =>
+            typeof preset === "object" && preset !== null
+            && "name" in preset && typeof preset.name === "string"
+            && "timestamp" in preset && typeof preset.timestamp === "number"
+            && Number.isFinite(new Date(preset.timestamp).getTime())
+        )) throw new Error("Invalid profile preset list.");
+
+        if (presets.length > 0) {
+            const decision = await onImportPrompt(presets.length);
+            if (decision === "cancel") return;
             checkScope();
-            const importedPresets: unknown = JSON.parse(text);
-
-            if (!Array.isArray(importedPresets) || !importedPresets.every((preset: unknown) =>
-                typeof preset === "object" && preset !== null
-                && "name" in preset && typeof preset.name === "string"
-                && "timestamp" in preset && typeof preset.timestamp === "number"
-                && Number.isFinite(new Date(preset.timestamp).getTime())
-            )) throw new Error("Invalid profile preset list.");
-
-            if (presets.length > 0) {
-                const decision = await onImportPrompt(presets.length);
-                if (decision === "cancel") return;
-                checkScope();
-                if (decision === "override") {
-                    replaceAllPresets(importedPresets);
-                } else {
-                    const combined = [...presets, ...importedPresets];
-                    replaceAllPresets(combined);
-                }
-            } else {
+            if (decision === "override") {
                 replaceAllPresets(importedPresets);
+            } else {
+                const combined = [...presets, ...importedPresets];
+                replaceAllPresets(combined);
             }
-
-            await savePresetsData(section);
-            forceUpdate();
-        } catch {
-            showToast("Could not import the profile presets.", Toasts.Type.FAILURE);
+        } else {
+            replaceAllPresets(importedPresets);
         }
-    };
-    input.click();
+
+        await savePresetsData(section);
+        forceUpdate();
+    } catch {
+        showToast("Could not import the profile presets.", Toasts.Type.FAILURE);
+    }
 }

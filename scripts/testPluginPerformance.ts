@@ -3930,7 +3930,7 @@ test("profile preset refresh writes once and retains its original target", async
 });
 
 test("profile preset imports keep their initiating account and list", async () => {
-    for (const stage of ["read", "prompt", "list", "success", "null", "name", "timestamp", "object"]) {
+    for (const stage of ["read", "prompt", "list", "success", "null", "name", "timestamp", "object", "cancel"]) {
         let userId = "first";
         let writes = 0;
         let updates = 0;
@@ -3938,14 +3938,13 @@ test("profile preset imports keep their initiating account and list", async () =
         const read = Promise.withResolvers<string>();
         const decision = Promise.withResolvers<string>();
         const prompted = Promise.withResolvers<void>();
-        const input = { onchange: async (_event: object) => {}, click() {} };
         const storage = {
             presets: [{ name: "Existing" }],
             replaceAllPresets: (value: { name: string; }[]) => { storage.presets = value; },
             savePresetsData: async () => { writes++; }
         };
         const api = loadSource("src/equicordplugins/profileSets/utils/actions.ts", {
-            "@utils/web": {},
+            "@utils/web": { chooseFile: async () => stage === "cancel" ? null : { text: () => read.promise } },
             "@utils/guards": {},
             "@webpack": { findStoreLazy: () => ({}) },
             "@webpack/common": {
@@ -3953,16 +3952,15 @@ test("profile preset imports keep their initiating account and list", async () =
                 showToast: (message: string) => errors.push(message), Toasts: { Type: { FAILURE: "failure" } }
             },
             "./profile": {}, "./storage": storage
-        }, { document: { createElement: () => input } });
-        await api.importPresets(() => { updates++; }, () => { prompted.resolve(); return decision.promise; }, "main");
-        const importing = input.onchange({ currentTarget: { files: [{ text: () => read.promise }] } });
+        });
+        const importing = api.importPresets(() => { updates++; }, () => { prompted.resolve(); return decision.promise; }, "main");
         if (stage === "read") userId = "second";
         const invalidFiles: Record<string, string> = {
             null: "[null]", name: '[{"name":42,"timestamp":0}]',
             timestamp: '[{"name":"Imported","timestamp":"invalid"}]', object: "{}"
         };
         read.resolve(invalidFiles[stage] ?? '[{"name":"Imported","timestamp":0}]');
-        if (stage !== "read" && !(stage in invalidFiles)) {
+        if (stage !== "read" && stage !== "cancel" && !(stage in invalidFiles)) {
             await prompted.promise;
             if (stage === "prompt") userId = "second";
             if (stage === "list") storage.presets = [{ name: "Replacement" }];
@@ -3971,7 +3969,7 @@ test("profile preset imports keep their initiating account and list", async () =
         await importing;
         assert.equal(writes, Number(stage === "success"));
         assert.equal(updates, Number(stage === "success"));
-        assert.equal(errors.length, Number(stage !== "success"));
+        assert.equal(errors.length, Number(stage !== "success" && stage !== "cancel"));
         assert.equal(storage.presets[0].name, stage === "success" ? "Imported" : stage === "list" ? "Replacement" : "Existing");
     }
 });

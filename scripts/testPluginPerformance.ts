@@ -3888,6 +3888,39 @@ test("profile images fall back after failed guild downloads", async () => {
     assert.equal(blobReads, 1);
 });
 
+test("profile preset random selection avoids repeats without retrying", async () => {
+    const presets = [{ name: "First" }, { name: "Second" }, { name: "Third" }];
+    const selected: number[] = [];
+    let randomAction: () => void = () => assert.fail("Missing random button");
+    let draws = 0;
+    const React = {
+        useState: (value: unknown) => [value, () => {}],
+        useReducer: () => [0, () => {}], useRef: (value: unknown) => ({ current: value }), useEffect() {},
+        createElement: (_type: unknown, props: { onClick?: () => void; } | null, ...children: unknown[]) => {
+            if (children.includes("Random") && props?.onClick) randomAction = props.onClick;
+            return null;
+        }
+    };
+    const api = loadSource("src/equicordplugins/profileSets/components/presetManager.tsx", {
+        "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
+        "@webpack/common": { React, useStateFromStores: () => null },
+        "../index": { cl: () => "", settings: { store: {} } },
+        "../utils/actions": {}, "../utils/profile": { loadPresetAsPending: async () => {} },
+        "../utils/storage": { presets, setCurrentPresetIndex: (index: number) => selected.push(index) },
+        "./confirmModal": {}, "./presetList": {}
+    }, { Math: { ...Math, ceil: Math.ceil, floor: Math.floor, random: () => { draws++; return 0.5; } } });
+    api.PresetManager({});
+    randomAction(); randomAction(); randomAction();
+    assert.deepEqual(selected, [1, 2, 1]);
+    assert.equal(draws, 3);
+    presets.splice(1);
+    randomAction();
+    assert.equal(selected.at(-1), 0);
+    presets.length = 0;
+    randomAction();
+    assert.equal(selected.length, 4);
+});
+
 test("profile presets wait for custom status updates and propagate failure", async () => {
     const update = Promise.withResolvers<void>();
     let updates = 0;

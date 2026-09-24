@@ -98,25 +98,12 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
         applyPreset(index);
     };
 
-    const selectRandomPreset = (sectionType: PresetSection) => {
-        const availablePresets = presets;
-        if (!availablePresets.length) return null;
-        const randomIndex = Math.floor(Math.random() * availablePresets.length);
-        return { preset: availablePresets[randomIndex], index: randomIndex, section: sectionType };
-    };
-
     const handleRandomPreset = () => {
-        if (!canUseGuild) return;
-        const selection = selectRandomPreset(resolvedSection);
-        if (!selection) return;
-        let nextIndex = selection.index;
-        if (presets.length > 1 && nextIndex === lastRandomIndexRef.current) {
-            let attempts = 0;
-            while (attempts < 5 && nextIndex === lastRandomIndexRef.current) {
-                nextIndex = Math.floor(Math.random() * presets.length);
-                attempts++;
-            }
-        }
+        if (!canUseGuild || !presets.length) return;
+        const previousIndex = lastRandomIndexRef.current;
+        const skipPrevious = presets.length > 1 && previousIndex >= 0 && previousIndex < presets.length;
+        let nextIndex = Math.floor(Math.random() * (presets.length - Number(skipPrevious)));
+        if (skipPrevious && nextIndex >= previousIndex) nextIndex++;
         lastRandomIndexRef.current = nextIndex;
         applyPreset(nextIndex);
     };

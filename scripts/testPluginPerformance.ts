@@ -4942,9 +4942,11 @@ test("BannersEverywhere evicts pending image work with its cache entry", async (
 });
 
 test("USRBG rejects malformed feed data before publishing it", async () => {
-    const valid = { endpoint: "https://fixture.invalid", bucket: "banners", prefix: "v2/", users: { user: "etag" } };
+    const valid = { endpoint: "https://usrbg.is-hardly.online", bucket: "banners", prefix: "v2/", users: { user: "etag" } };
     for (const data of [null, [], {}, { ...valid, users: null }, { ...valid, users: [] },
-        { ...valid, users: { user: 12 } }, { ...valid, endpoint: 3 }, valid]) {
+        { ...valid, users: { user: 12 } }, { ...valid, endpoint: 3 }, ...["http://usrbg.is-hardly.online", "https://other.invalid",
+            "https://usrbg.is-hardly.online.other.invalid", "https://usrbg.is-hardly.online@other.invalid",
+            "data:image/png;base64,AA", "https://usrbg.is-hardly.online?redirect=other"].map(endpoint => ({ ...valid, endpoint })), valid]) {
         let warnings = 0;
         const { default: plugin } = loadSource("src/plugins/usrbg/index.tsx", {
             "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
@@ -4957,7 +4959,7 @@ test("USRBG rejects malformed feed data before publishing it", async () => {
         await plugin.start();
         assert.equal(plugin.data, data === valid ? valid : null);
         assert.equal(plugin.userHasBackground("user"), data === valid);
-        assert.equal(plugin.getImageUrl("user"), data === valid ? "https://fixture.invalid/banners/v2/user?etag" : null);
+        assert.equal(plugin.getImageUrl("user"), data === valid ? "https://usrbg.is-hardly.online/banners/v2/user?etag" : null);
         assert.equal(plugin.getImageUrl("missing"), null);
         assert.equal(warnings, data === valid ? 0 : 1);
     }
@@ -4982,7 +4984,7 @@ test("USRBG ignores stopped and superseded startup responses", async () => {
         } });
         const first = plugin.start();
         await setImmediate();
-        const latest = { endpoint: "https://fixture.invalid", bucket: "banners", prefix: "", users: { user: "new" } };
+        const latest = { endpoint: "https://usrbg.is-hardly.online", bucket: "banners", prefix: "", users: { user: "new" } };
         if (stop) plugin.stop();
         else {
             const second = plugin.start();

@@ -28,7 +28,7 @@ import definePlugin, { OptionType } from "@utils/types";
 
 const cl = classNameFactory("vc-usrbg-");
 const logger = new Logger("USRBG");
-const API_URL = "https://usrbg.is-hardly.online/users";
+const API_ORIGIN = "https://usrbg.is-hardly.online";
 
 interface UsrbgApiReturn {
     endpoint: string;
@@ -136,12 +136,12 @@ export default definePlugin({
         const request = this.request = new AbortController();
         const timeout = setTimeout(() => request.abort(), 30_000);
         try {
-            const res = await fetch(API_URL, { signal: request.signal });
+            const res = await fetch(`${API_ORIGIN}/users`, { signal: request.signal });
             if (!res.ok || request.signal.aborted) return;
             const data: unknown = await res.json();
             if (request.signal.aborted) return;
             if (!isObject(data)
-                || !("endpoint" in data) || typeof data.endpoint !== "string"
+                || !("endpoint" in data) || data.endpoint !== API_ORIGIN
                 || !("bucket" in data) || typeof data.bucket !== "string"
                 || !("prefix" in data) || typeof data.prefix !== "string"
                 || !("users" in data) || !isObject(data.users)

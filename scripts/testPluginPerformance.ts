@@ -4019,7 +4019,7 @@ test("profile preset refresh writes once and retains its original target", async
             const updated = storage.presets[change === "moved" ? 1 : 0];
             assert.equal(updated.name, "Target");
             assert.equal(updated.bio, "Updated");
-            assert.equal(updated.pronouns, "Retained");
+            assert.equal(updated.pronouns, null);
             assert.equal(writes, 1);
         } else {
             await assert.rejects(refreshing);

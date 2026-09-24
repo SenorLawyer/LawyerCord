@@ -462,3 +462,5 @@ This closes the previously mock-only transaction check for simple preset records
 
 
 Preset mutation failure toasts now tell users to reopen the panel before retrying. This exposes the recovery step needed after a cross-client conflict through the existing save, row-change, refresh and import handlers, without exposing raw storage errors or introducing a new error abstraction. Updated the existing save-failure assertion; all 43 profile-filtered tests and source lint pass. Reopening is a retry instruction, not a guarantee that persistent storage or invalid-import errors will disappear. Signed-in toast presentation remains unverified.
+
+ProfileSets refresh discarded explicit null snapshot fields and retained the prior saved value. Changed the merge filter to omit only undefined and removed the unused guard import. Corrected the existing refresh regression, which previously required stale pronouns to survive a null snapshot. It fails against the prior code and passes after the fix, including a moved target; all 43 profile-filtered tests and source lint pass. Null now preserves the same removal meaning through both snapshot creation and preset refresh.

@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { isNonNullish } from "@utils/guards";
 import { chooseFile, saveFile } from "@utils/web";
 import { showToast, Toasts, UserStore } from "@webpack/common";
 
@@ -42,7 +41,7 @@ export function createPresetActions(storage: PresetStorage) {
             throw new Error("The account or preset list changed while preparing the profile.");
         const updatedPreset = {
             ...preset,
-            ...Object.fromEntries(Object.entries(profile).filter(([, value]) => isNonNullish(value))),
+            ...Object.fromEntries(Object.entries(profile).filter(([, value]) => value !== undefined)),
             timestamp: Date.now()
         };
         await storage.savePresetsData(section, storage.presets.map((entry, i) => i === index ? updatedPreset : entry));

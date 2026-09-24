@@ -27,6 +27,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Contain ProfileSets rendering failures within its injected settings section.
+
 - Preserve malformed saved profile preset lists instead of overwriting them during migration or saving.
 
 - Preserve separate legacy profile datasets when migrating account-specific presets.

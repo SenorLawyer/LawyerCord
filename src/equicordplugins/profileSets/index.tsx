@@ -7,6 +7,7 @@
 import "./styles.css";
 
 import { definePluginSettings } from "@api/Settings";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
@@ -14,6 +15,8 @@ import { React } from "@webpack/common";
 
 import { PresetManager } from "./components/presetManager";
 import { loadPresets, PresetSection } from "./utils/storage";
+
+const SafePresetManager = ErrorBoundary.wrap(PresetManager, { noop: true });
 
 export const cl = classNameFactory("vc-profile-presets-");
 export const settings = definePluginSettings({
@@ -53,6 +56,6 @@ export default definePlugin({
         loadPresets("main");
     },
     renderPresetSection(section: PresetSection, guildId?: string) {
-        return <PresetManager section={section} guildId={guildId} />;
+        return <SafePresetManager section={section} guildId={guildId} />;
     }
 });

@@ -4425,6 +4425,45 @@ test("profile preset storage rejects stale account reads and foreign-scope saves
     assert.equal(writes.length, 1);
 });
 
+test("profile preset row keys follow objects through reorder and removal", () => {
+    const first = { name: "Duplicate", timestamp: 0 };
+    const second = { ...first };
+    const storage = { presets: [first, second] };
+    const rows: { key: number; onClick: () => void; className: string; }[] = [];
+    const loaded: unknown[] = [];
+    const React = {
+        useState: (value: unknown) => [value, () => {}],
+        createElement: (_type: unknown, props: { role?: string; key: number; onClick: () => void; className: string; } | null) => {
+            if (props?.role === "button") rows.push(props);
+            return null;
+        }
+    };
+    const api = loadSource("src/equicordplugins/profileSets/components/presetList.tsx", {
+        "@utils/misc": { classes: (...values: string[]) => values.join(" ") },
+        "@webpack/common": { React }, "..": { cl: (value: string) => value }
+    }, { React });
+    const render = () => {
+        rows.length = 0;
+        api.PresetList({ storage, actions: {}, presets: storage.presets, allPresets: storage.presets,
+            avatarSize: 20, selectedPreset: first, onLoad: (preset: unknown) => loaded.push(preset),
+            onUpdate() {}, section: "main", currentPage: 1, onPageChange() {} });
+        return rows.map(row => row.key);
+    };
+    const original = render();
+    assert.notEqual(original[0], original[1]);
+    storage.presets = [second, first];
+    assert.deepEqual(render(), [original[1], original[0]]);
+    assert.match(rows[1].className, /selected/);
+    rows[1].onClick();
+    assert.equal(loaded[0], first);
+    storage.presets = [first];
+    assert.deepEqual(render(), [original[0]]);
+    storage.presets = [first, { ...first }];
+    const replaced = render();
+    assert.equal(replaced[0], original[0]);
+    assert.notEqual(replaced[1], original[1]);
+});
+
 test("profile preset menus reject mutations after their rendered list is replaced", async () => {
     const original = [{ name: "Original", timestamp: 0 }, { name: "Other", timestamp: 1 }];
     const storage = { presets: original };

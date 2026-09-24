@@ -354,3 +354,6 @@ ProfileSets save completion now checks that its storage instance still owns the 
 
 
 ProfileSets pagination now uses the already-imported shared TextInput with an accessible Page label and its value-based change callback. Removed bespoke page input colors/border/padding and duplicate name/search input overrides that suppressed component borders, outlines and shadows; only layout widths remain. TypeScript, component ESLint and focused stylelint pass. No new regression test was added for this component substitution. Current live theme/focus/width appearance still requires visual acceptance.
+
+
+ProfileSets row keys now follow preset object identity through a WeakMap instead of array positions. Keys survive reordering and removal without changing stored data or adding identifiers to imported/exported presets. Distinct records with identical names and timestamps receive different keys; replaced objects receive new keys. The source-render regression covers those cases and confirms selection/click targeting remains attached to the original object. All 24 focused profile tests and component lint pass. Browser reconciliation/focus still needs live visual acceptance.

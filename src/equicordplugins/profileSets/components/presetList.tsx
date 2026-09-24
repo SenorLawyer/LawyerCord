@@ -11,6 +11,9 @@ import { cl } from "..";
 import { PresetActions } from "../utils/actions";
 import { PresetSection, type PresetStorage, type ProfilePresetEx } from "../utils/storage";
 
+const presetKeys = new WeakMap<ProfilePresetEx, number>();
+let nextPresetKey = 0;
+
 interface PresetListProps {
     storage: PresetStorage;
     actions: PresetActions;
@@ -56,6 +59,11 @@ export function PresetList({
     return (
         <div className={cl("list-container")}>
             {presets.map(preset => {
+                let key = presetKeys.get(preset);
+                if (key === undefined) {
+                    key = nextPresetKey++;
+                    presetKeys.set(preset, key);
+                }
                 const actualIndex = allPresets.indexOf(preset);
                 const isRenaming = renaming === preset;
                 const isSelected = !isRenaming && selectedPreset === preset;
@@ -80,7 +88,7 @@ export function PresetList({
 
                 return (
                     <div
-                        key={actualIndex}
+                        key={key}
                         tabIndex={isRenaming ? -1 : 0}
                         role="button"
                         onClick={() => {

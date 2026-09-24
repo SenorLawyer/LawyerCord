@@ -30,7 +30,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Keep ProfileSets reads, saves, imports, and pending loads within their originating account, section, and list. Give each panel its own list so main and server loads cannot replace each other or export the wrong section. Reload on account changes, reject stale load and export callbacks, cancel dismissed imports, and reject outdated menu actions.
 - Report ProfileSets failures, recover save controls after preparation errors, contain rendering failures, and wait for custom-status updates. Closed panels no longer show load-failure notifications, and late saves cannot alter a replacement panel.
 - Reject failed profile-image downloads, apply a 30-second request timeout, and enforce a 10 MiB streaming limit before conversion.
-- Keep ProfileSets pagination aligned with searches, saves, imports, and shrinking lists. Keep loading, selection, and renaming attached to their preset, reject stale row loads, and avoid repeating the previous random selection.
+- Keep ProfileSets pagination aligned with searches, saves, imports, and shrinking lists. Keep row identity, loading, selection, and renaming attached to their preset, reject stale row loads, and avoid repeating the previous random selection.
 
 - Reject future-dated VoiceRejoin records after a backward system clock adjustment.
 

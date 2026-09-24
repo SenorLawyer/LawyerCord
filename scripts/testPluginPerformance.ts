@@ -5105,7 +5105,7 @@ test("profile preset status clearing distinguishes null from omission", async ()
     for (const guildId of [undefined, "guild"]) for (const customStatus of [undefined, null, {}]) {
         const updates: Record<string, string>[] = [];
         const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
-            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => ({ text: "Busy", emojiId: "123" }), updateSetting: async (value: Record<string, string>) => updates.push(value) }) },
+            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => { assert.equal(guildId, undefined, "Server snapshots must not read global status"); return { text: "Busy", emojiId: "123" }; }, updateSetting: async (value: Record<string, string>) => updates.push(value) }) },
             "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
             "@webpack/common": {
                 UserStore: { getCurrentUser: () => ({ id: "me" }) },

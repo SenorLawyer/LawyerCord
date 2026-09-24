@@ -183,7 +183,7 @@ export async function getCurrentProfile(guildId?: string, options: CurrentProfil
     const guildMember = effectiveGuildId ? GuildMemberStore.getMember(effectiveGuildId, currentUser.id) : null;
 
     const pendingChanges: PendingChanges = UserProfileSettingsStore.getPendingChanges(effectiveGuildId) ?? {};
-    const customStatusSetting = CustomStatusSettings.getSetting();
+    const customStatusSetting = isGuildProfile ? null : CustomStatusSettings.getSetting();
     const customStatus = isGuildProfile
         ? null
         : {

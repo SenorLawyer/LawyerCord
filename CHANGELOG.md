@@ -18,6 +18,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Remove the single-use pending-avatar validator and temporary search array.
+
 - Remove duplicate ProfileSets separators and a redundant width rule.
 
 - Remove the redundant ProfileSets startup storage load.

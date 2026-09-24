@@ -2201,7 +2201,7 @@ test("theme validation belongs to the current URL and cancels obsolete requests"
         "@webpack/common": {
             React: { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props, children }) },
             useState: () => [state, (value: unknown) => { state = value; }],
-            useEffect: (callback: typeof effect, deps: unknown[]) => { if (deps.includes("main")) effect = callback; },
+            useEffect: (callback: typeof effect) => { effect = callback; },
         },
     }, { AbortController, fetch: (_url: string, options: { signal: AbortSignal; }) => new Promise(resolve => pending.push({ signal: options.signal, resolve })) });
     const render = (link: string) => OnlineThemesSection({ currentThemeLink: link, enableOnlineThemes: true });
@@ -10476,7 +10476,7 @@ test("narrator voice picker observes voice loading and releases its listener", (
         "@components/Heading": {}, "@components/Paragraph": {},
         "@webpack/common": {
             useState: (initial: () => unknown) => { value ??= initial(); return [value, (next: unknown) => { value = next; }]; },
-            useEffect: (callback: typeof effect, deps: unknown[]) => { if (deps.includes("main")) effect = callback; }
+            useEffect: (callback: typeof effect) => { effect = callback; }
         },
         "./settings": { settings: { use: () => ({ voice: "preferred" }) } }
     }, { window: { speechSynthesis: synthesis }, React: { createElement: (type: unknown, props: object) => ({ type, props }) }, Intl }, "({ VoiceSetting })");

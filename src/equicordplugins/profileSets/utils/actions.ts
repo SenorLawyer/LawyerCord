@@ -15,19 +15,16 @@ import { isPresetList } from "./validation";
 
 const UserProfileSettingsStore = findStoreLazy("UserProfileSettingsStore");
 
-function isImageInput(value: unknown): value is string | { imageUri: string; } {
-    if (typeof value === "string") return value.length > 0;
-    return typeof value === "object" && isNonNullish(value) && "imageUri" in value && typeof (value as { imageUri: unknown }).imageUri === "string";
-}
-
 function getFreshPendingAvatar(section: PresetSection, guildId?: string): string | null {
     const pending = (section === "server" && guildId
         ? UserProfileSettingsStore.getPendingChanges?.(guildId)
         : UserProfileSettingsStore.getPendingChanges?.()) ?? {};
-    const pendingObj = pending as Record<string, unknown>;
-    const selected = [pendingObj.pendingAvatar].find(isImageInput);
-    if (!selected) return null;
-    return typeof selected === "string" ? selected : selected.imageUri;
+    const { pendingAvatar } = pending as Record<string, unknown>;
+    if (typeof pendingAvatar === "string") return pendingAvatar || null;
+    if (typeof pendingAvatar === "object" && isNonNullish(pendingAvatar)
+        && "imageUri" in pendingAvatar && typeof pendingAvatar.imageUri === "string")
+        return pendingAvatar.imageUri;
+    return null;
 }
 
 export async function savePreset(name: string, section: PresetSection, guildId?: string) {

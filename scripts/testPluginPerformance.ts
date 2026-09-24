@@ -4806,6 +4806,35 @@ test("profile preset controls recover failed preparation and avoid random repeat
     assert.ok(effects.some(deps => deps.includes("second")));
 });
 
+test("profile preset image application preserves previews and explicit removals", async () => {
+    for (const value of ["data:image/png;base64,new", "https://fixture.invalid/image.png", null]) {
+        const dispatched: { type: string; image?: { imageUri: string; assetOrigin: string; }; pendingAvatar?: unknown; pendingBanner?: unknown; }[] = [];
+        const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null }) },
+            "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: "me" }) },
+                UserProfileStore: { getUserProfile: () => ({ banner: "data:image/png;base64,current" }) },
+                IconUtils: { getUserAvatarURL: () => null, getDefaultAvatarURL: () => "default" },
+                FluxDispatcher: { dispatch: (event: typeof dispatched[number]) => dispatched.push(event) }
+            }
+        });
+        await api.loadPresetAsPending({ name: "Example", timestamp: 0, avatarDataUrl: value, bannerDataUrl: value });
+        const previews = dispatched.filter(event => event.type === "PROFILE_CUSTOMIZATION_OPEN_PREVIEW_MODAL");
+        if (value?.startsWith("data:")) {
+            assert.equal(previews.length, 2);
+            for (const preview of previews) {
+                assert.equal(preview.image?.imageUri, value);
+                assert.equal(preview.image?.assetOrigin, "NEW_ASSET");
+            }
+        } else {
+            assert.equal(previews.length, 0);
+            assert.ok(dispatched.some(event => "pendingAvatar" in event && event.pendingAvatar === value));
+            assert.ok(dispatched.some(event => "pendingBanner" in event && event.pendingBanner === value));
+        }
+    }
+});
+
 test("profile presets wait for custom status updates and propagate failure", async () => {
     const update = Promise.withResolvers<void>();
     let updates = 0;

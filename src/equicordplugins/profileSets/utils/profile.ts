@@ -316,21 +316,6 @@ function customStatusEq(a: CustomStatus | null | undefined, b: CustomStatus | nu
         && String(a.expiresAtMs ?? "0") === String(b.expiresAtMs ?? "0");
 }
 
-function resolvePendingAvatar(pendingChanges: PendingChanges | null): ImageInput {
-    if (!pendingChanges) return null;
-
-    return hasImageInput(pendingChanges.pendingAvatar) ? pendingChanges.pendingAvatar : null;
-}
-
-function normalizeImageValue(value: unknown): string | null {
-    if (typeof value === "string") return value;
-    if (value && typeof value === "object" && "imageUri" in value) {
-        const { imageUri } = value as { imageUri: unknown; };
-        return typeof imageUri === "string" ? imageUri : null;
-    }
-    return null;
-}
-
 function collectibleEqBySku(a: { skuId?: string | number | null; } | null | undefined, b: { skuId?: string | number | null; } | null | undefined): boolean {
     if (a == null || b == null) return a == null && b == null;
     return String(a.skuId ?? "") === String(b.skuId ?? "");
@@ -350,9 +335,6 @@ export async function loadPresetAsPending(preset: ProfilePreset, guildId?: strin
         isGuildProfile: isGuild
     });
     if (UserStore.getCurrentUser()?.id !== userId) throw new Error("The account changed while loading the profile preset.");
-    const pendingChanges = (isGuild && guildId
-        ? UserProfileSettingsStore.getPendingChanges(guildId)
-        : UserProfileSettingsStore.getPendingChanges());
     const setPending = (payload: Record<string, unknown>) => {
         const cleanPayload = Object.fromEntries(Object.entries(payload).filter(([, v]) => v !== undefined));
         if (!Object.keys(cleanPayload).length) return;
@@ -361,45 +343,28 @@ export async function loadPresetAsPending(preset: ProfilePreset, guildId?: strin
 
     if ("avatarDataUrl" in preset) {
         const avatarValue = preset.avatarDataUrl;
-        const presetAvatar = normalizeImageValue(avatarValue);
-        const currentAvatar = normalizeImageValue(current.avatarDataUrl);
-        const pendingAvatar = normalizeImageValue(resolvePendingAvatar(pendingChanges));
-        if (presetAvatar !== currentAvatar && presetAvatar !== pendingAvatar) {
-            const avatarPayload =
-                avatarValue?.startsWith?.("data:")
-                    ? {
-                        assetOrigin: "NEW_ASSET",
-                        imageUri: avatarValue,
-                        description: `profilesets-${preset.name ?? "preset"}`
-                    }
-                    : avatarValue;
-            const avatarImageUri = avatarPayload != null && "imageUri" in Object(avatarPayload)
-                ? (avatarPayload as { imageUri?: unknown; }).imageUri
-                : null;
-            if (isNonEmptyString(avatarImageUri)) {
-                openProfileImagePreview("AVATAR", { ...Object(avatarPayload), imageUri: avatarImageUri }, guildId);
+        if ((avatarValue ?? null) !== (current.avatarDataUrl ?? null)) {
+            if (avatarValue?.startsWith("data:")) {
+                openProfileImagePreview("AVATAR", {
+                    assetOrigin: "NEW_ASSET",
+                    imageUri: avatarValue,
+                    description: `profilesets-${preset.name ?? "preset"}`
+                }, guildId);
             } else {
-                setPending({ pendingAvatar: avatarPayload });
+                setPending({ pendingAvatar: avatarValue });
             }
         }
     }
 
     if ("bannerDataUrl" in preset && preset.bannerDataUrl !== current.bannerDataUrl) {
-        const bannerPayload = preset.bannerDataUrl?.startsWith?.("data:")
-            ? {
+        if (preset.bannerDataUrl?.startsWith("data:")) {
+            openProfileImagePreview("BANNER", {
                 assetOrigin: "NEW_ASSET",
                 imageUri: preset.bannerDataUrl,
                 description: `profilesets-${preset.name ?? "preset"}`
-            }
-            : preset.bannerDataUrl;
-
-        const bannerImageUri = bannerPayload != null && "imageUri" in Object(bannerPayload)
-            ? (bannerPayload as { imageUri?: unknown; }).imageUri
-            : null;
-        if (isNonEmptyString(bannerImageUri)) {
-            openProfileImagePreview("BANNER", { ...Object(bannerPayload), imageUri: bannerImageUri }, guildId);
+            }, guildId);
         } else {
-            setPending({ pendingBanner: bannerPayload });
+            setPending({ pendingBanner: preset.bannerDataUrl });
         }
     }
 

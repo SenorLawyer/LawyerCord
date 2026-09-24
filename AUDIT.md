@@ -6,7 +6,7 @@ This audit is still in progress. File coverage records review work; it does not 
 
 - Baseline: `6e664e03ba3d0b7746ce34740ca444f5112b04bc`, published as `nightly-20260905-1918-6e664e03`.
 - The baseline inventory contains 1,661 tracked files, including source, tests, configuration, documentation, and assets. The review ledger records all baseline entries as reviewed.
-- At `7903874ef`, the branch contains 1,657 tracked files, with thirteen additions, seventeen removals, and 511 modifications relative to the baseline. Main contributes four automation modules, one test, and one benchmark; all six were re-read on September 24. The additional shared preset validator was reviewed with its import and storage callers.
+- At `d065a9793`, the branch contains 1,657 tracked files, with thirteen additions, seventeen removals, and 512 modifications relative to the baseline. Main contributes four automation modules, one test, and one benchmark; all six were re-read on September 24. The additional shared preset validator was reviewed with its import and storage callers.
 - The five added tests cover startup flags, CRX conversion, extension installation, file selection, and settings synchronization. Their file hashes were rechecked against the reviewed versions at `480d81f23`.
 - The generated internationalization mapping was checked semantically against the runtime hash function across 19,440 pairs. That is generated-data validation, not manual review of each pair.
 - Main at `8fc182ba7` was reviewed separately. A fresh fetch and release lookup on September 24 confirmed that main and the published nightly remain unchanged. The nightly tag still resolves to the baseline commit. Main changes were integrated on September 24, preserving the audit version and main release history.
@@ -15,7 +15,9 @@ Changes are accumulated in [PR #47](https://github.com/SenorLawyer/LawyerCord/pu
 
 ## Latest local verification
 
-At `11b438b17`, all 584 regression tests and timezone checks, TypeScript, desktop and web standalone builds, and the release credential scan pass. Logs are under `.git/audit/voice-current-*.log`. Later VoiceRejoin changes through `7903874ef` pass twelve focused regressions, TypeScript and source lint. Repository-wide ESLint last passed at `c74416c4c`; patch lint at that checkpoint reported 184 warnings and no errors. Those results must not be treated as current full-branch validation. The captured runtime and all 5,198 referenced chunks were checked for four focused plugins, including the previously missing TIDAL and USRBG targets. Local checks and controlled module execution do not establish signed-in acceptance or closure of the remaining repository findings.
+At `4a4b71183`, all 591 regression tests and timezone checks, desktop and web standalone builds, and the release credential scan pass. Logs are under `.git/audit/status-current-*.log`. GitHub run `36074031182` at that commit passed both Linux Build and test and Windows smoke. Later StatusPresets changes through `d065a9793` pass seven focused tests, TypeScript and source lint. Repository-wide ESLint last passed locally at `4b50760de`; patch lint at `d065a9793` reports 183 warnings and no errors. These dated results must not be treated as current full-branch validation. At the latest PR check, `d065a9793` is mergeable, draft, labeled `release:nightly`, and has no auto-merge request; its CI is still running. A fresh fetch and release listing on September 25 confirm main `8fc182ba7` and the published nightly baseline are unchanged.
+
+The captured runtime and all 5,198 referenced chunks support focused patch checks, including the previously missing TIDAL and USRBG targets. StatusPresets checks verify modal selection, saved-state bindings, action-array insertion and menu export scope against captured modules. Local checks and controlled module execution do not establish signed-in acceptance or closure of the remaining repository findings.
 
 ## Approach and changes
 
@@ -187,7 +189,7 @@ Evidence applies to the recorded commit and scope, not to a future merge with ma
 | Uninstall button browser checks | `d4efc449d` | Actual shared component props and styles in isolated Chrome verified the accessible name, keyboard focus indicator, and consistent 32px sizing in both stylesheet orders. Full Discord layout was not exercised. |
 | Other isolated browser checks | Earlier audit commits | Specific sticker-storage transactions, codec conversion, and CSS behavior were exercised. These are not general live-client acceptance. |
 
-Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. At `68f966486`, GitHub reported an empty check rollup for the open draft PR, no auto-merge request, and conflicts with main. Current-head CI success has not been established.
+Mocked Discord requests do not establish live account-switch, message-send, or plugin-patch compatibility. No real Discord messages were sent by these regression fixtures. The earlier conflicts with main have been resolved. See Latest local verification for the dated CI results; current-head CI success has not yet been established.
 
 ## Remaining work
 
@@ -195,7 +197,7 @@ The full finding ledger is still being worked through. This list identifies majo
 
 - Scheduled-message legacy recovery, remaining persisted-data constraints, media cancellation, and coordination between separate client contexts.
 - Remaining plugin account, cancellation, network-response, storage, and resource-lifecycle findings across the broader codebase.
-- Runtime validation of patch anchors. The current patch validator reports 187 warnings; those warnings have not all been resolved or justified against current Discord modules. The latest source passes removed the sole replacement-level try/catch warning and refreshed FriendCodes, MoreUserTags, FakeNitro, RPCEditor, NewGuildSettings, OnePingPerDM, Timezones, ClientSideBlock, StatusPresets, and MessageLoggerEnhanced against current upstream module shapes. Broader behavioral rewrites remain separate review work. Remaining regex warnings are being reviewed against current code rather than mechanically bounded.
+- Runtime validation of patch anchors. At `d065a9793`, the patch validator reports 183 warnings; those warnings have not all been resolved or justified against current Discord modules. The latest source passes removed the sole replacement-level try/catch warning and refreshed FriendCodes, MoreUserTags, FakeNitro, RPCEditor, NewGuildSettings, OnePingPerDM, Timezones, ClientSideBlock, StatusPresets, and MessageLoggerEnhanced against current upstream module shapes. Broader behavioral rewrites remain separate review work. Remaining regex warnings are being reviewed against current code rather than mechanically bounded.
 - Native and provider behavior that mocked tests cannot establish, including target-platform installer and live-client acceptance.
 - Final release checks and live acceptance against the combined source. Main at `8fc182ba7` has been integrated and its release history preserved.
 - A final finding-by-finding disposition, current-head CI, and final audit report before removing draft status.

@@ -9818,6 +9818,7 @@ test("SongSpotlight requires write acknowledgement before changing local state",
 
 test("scheduled clients reject stale queue writes and preserve messages after reload", async () => {
     let saved: unknown;
+    let sends = 0;
     const store = {
         get: async () => structuredClone(saved),
         update: async (_key: string, updater: (value: unknown) => unknown) => { saved = structuredClone(updater(structuredClone(saved))); }
@@ -9826,7 +9827,7 @@ test("scheduled clients reject stale queue writes and preserve messages after re
         "@api/DataStore": store, "@utils/Logger": { Logger: class {} },
         "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
         "@vencord/discord-types/enums": {},
-        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) } },
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, RestAPI: { post: () => { sends++; } } },
         ".": { settings: { store: { maxMessagesPerMinute: 5, showPhantomMessages: false } } }
     });
     const first = load(), second = load();
@@ -9841,6 +9842,11 @@ test("scheduled clients reject stale queue writes and preserve messages after re
     assert.deepEqual((saved as { content: string; }[]).map(entry => entry.content), ["First", "Second"]);
     await assert.rejects(first.clearAllScheduledMessages(), /another client/);
     assert.equal((saved as unknown[]).length, 2);
+    const beforeSend = structuredClone(saved);
+    const result = await first.sendScheduledMessageNow(first.getScheduledMessages()[0].id);
+    assert.equal(result.success, false);
+    assert.equal(sends, 0);
+    assert.deepEqual(saved, beforeSend);
 });
 
 test("new scheduled entries retain their initiating account across persistence", async () => {

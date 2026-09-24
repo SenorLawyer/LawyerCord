@@ -454,3 +454,9 @@ The full regression suite passes 573 tests plus timezone checks (.git/audit/lega
 
 
 Additional legacy recovery race checks cover account/list replacement while the source read is pending and while the decision dialog is pending. All four deferred cases reject without writes or UI refresh; both recovery tests pass. No further production edit was needed. The ownerless automatic-assignment finding is resolved in source with explicit recovery; recovery UI acceptance and cross-client conflict feedback remain separately open.
+### Browser IndexedDB conflict verification, September 24
+
+Executed the current DataStore and ProfileSets storage source in two isolated Chrome tabs sharing one origin and real IndexedDB. Concurrent saves from the same initially empty list allowed exactly one writer. The other writer rejected with the existing conflict error, and the persisted record retained the winner. Reloading the losing panel and retrying preserved both entries. No production change was needed.
+
+This closes the previously mock-only transaction check for simple preset records. The browser used a fixture account and a simple-record equality substitute; all network requests were fulfilled locally. It does not establish Discord UI behavior, conflict feedback, or equivalence for every preset field. Reproduction: `.git/audit/profile-browser-storage.cjs`.
+

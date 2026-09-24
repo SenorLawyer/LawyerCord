@@ -211,3 +211,5 @@ Main integration on September 24 preserved the audit changes while bringing in m
 The combined-source performance suite passes all 520 tests and timezone correctness checks. Focused automation ESLint, repository CSS lint, and staged/working-tree whitespace checks pass.
 
 The integrated automation output lookup crashed on an unknown saved wait-event type before the editor could show its validation error. Output discovery now returns no fields for unsupported events, and the event form retains its selector with a correction prompt. A regression reproduced the exception before the fix and now verifies variable/output discovery and preservation of the saved value. No workflow was run against Discord.
+
+StatusPresets current-status icon now reads `emojiId` and `emojiName`, matching its settings write path and ProfileSets, rather than the unrelated `emoji` object shape. Actual render-prop fixtures reproduced the missing icon and verify Unicode, custom, and absent emoji cases after correction. This checks payload handling, not a live Discord menu.

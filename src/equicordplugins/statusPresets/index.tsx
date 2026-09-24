@@ -168,8 +168,8 @@ export default definePlugin({
                     id={status == null ? "sp-custom/presets-status" : "sp-edit/presets-status"}
                     action={status == null ? "PRESS_SET_STATUS" : "PRESS_EDIT_CUSTOM_STATUS"}
                     onClick={openCustomStatusModalLazy}
-                    icon={() => status == null ? <div /> : status.emoji != null ? (
-                        <EmojiComponent emoji={status.emoji} animate={false} hideTooltip={false} />
+                    icon={() => status == null ? <div /> : status.emojiName ? (
+                        <EmojiComponent emoji={{ id: status.emojiId === "0" ? null : status.emojiId, name: status.emojiName }} animate={false} hideTooltip={false} />
                     ) : null}
                     label={status == null ? "Set Custom Status" : "Edit Custom Status"}
                     renderSubmenu={StatusSubMenuComponent}

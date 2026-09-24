@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Restore the current custom-status emoji in the StatusPresets menu.
+
 - Keep automation blocks with unknown saved event types editable instead of crashing their output-field lookup.
 
 - Restore IgnoreActivities controls in the Registered Games overflow menu and remove the obsolete game-row patch.

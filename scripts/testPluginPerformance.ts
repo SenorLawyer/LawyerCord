@@ -1384,24 +1384,32 @@ test("status preset menus subscribe and delete the actual saved key", () => {
 test("status presets save object-property names as ordinary entries", () => {
     const settingsStore = new SettingsStore({ StatusPresets: {} as Record<string, object> });
     const store = settingsStore.store;
+    let currentStatus: { emojiId: string; emojiName: string; } | null = null;
     const changes: string[] = [];
     settingsStore.addGlobalChangeListener((_data, path) => changes.push(path));
     const { default: plugin } = loadSource("src/equicordplugins/statusPresets/index.tsx", {
         "./style.css": {},
         "@api/Settings": { definePluginSettings: () => ({ store }) },
-        "@api/UserSettings": { getUserSettingLazy: () => ({}) },
+        "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => currentStatus }) },
         "@components/ErrorBoundary": {}, "@utils/constants": { EquicordDevs: {} },
         "@utils/lazy": { proxyLazy: () => ({}) }, "@utils/react": { NoopComponent: () => null },
         "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {}, StartAt: {} },
         "@webpack": { findComponentByCodeLazy: () => () => null, extractAndLoadChunksLazy: () => () => {} },
         "@webpack/common": { Toasts: { show() {}, Type: {}, genId: () => "toast" } },
-    });
+    }, { React: { createElement: (type: unknown, props: unknown, ...children: unknown[]) => ({ type, props, children }) } });
     for (const text of ["existing", "__proto__", "constructor"]) {
         const status = { text, emojiInfo: null, clearAfter: null };
         plugin.renderRememberButton(status).onClick();
         assert.equal(Object.hasOwn(store.StatusPresets, text), true);
         assert.equal(settingsStore.plain.StatusPresets[text], status);
     }
+    currentStatus = { emojiId: "0", emojiName: "unicode" };
+    assert.equal(plugin.render().children[1].props.icon().props.emoji.name, "unicode");
+    assert.equal(plugin.render().children[1].props.icon().props.emoji.id, null);
+    currentStatus = { emojiId: "123456789012345678", emojiName: "custom" };
+    assert.equal(plugin.render().children[1].props.icon().props.emoji.id, currentStatus.emojiId);
+    currentStatus = { emojiId: "0", emojiName: "" };
+    assert.equal(plugin.render().children[1].props.icon(), null);
     assert.equal(Object.keys(store.StatusPresets).length, 3);
     const reloaded = new SettingsStore(JSON.parse(JSON.stringify(settingsStore.plain)));
     assert.deepEqual(Object.keys(reloaded.store.StatusPresets), ["existing", "__proto__", "constructor"]);

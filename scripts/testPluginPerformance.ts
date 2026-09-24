@@ -4362,6 +4362,48 @@ test("profile preset storage rejects stale account reads and foreign-scope saves
     assert.equal(writes.length, 1);
 });
 
+test("profile preset menus reject mutations after their rendered list is replaced", async () => {
+    const original = [{ name: "Original", timestamp: 0 }, { name: "Other", timestamp: 1 }];
+    const storage = { presets: original };
+    let openMenu = () => {};
+    let changes = 0;
+    let errors = 0;
+    const actions = new Map<string, () => Promise<void>>();
+    const React = {
+        useState: (value: unknown) => [value, () => {}],
+        createElement: (type: unknown, props: { onClick?: () => void; id?: string; action?: () => Promise<void>; } | null) => {
+            if (type === "svg" && props?.onClick) openMenu = props.onClick;
+            if (props?.id && props.action) actions.set(props.id, props.action);
+            return null;
+        }
+    };
+    const api = loadSource("src/equicordplugins/profileSets/components/presetList.tsx", {
+        "@utils/misc": { classes: () => "" },
+        "@webpack/common": { React, Menu: {}, ContextMenuApi: { openContextMenu: (_event: unknown, render: () => void) => render() },
+            showToast: () => { errors++; }, Toasts: { Type: { FAILURE: "failure" } } },
+        "..": { cl: () => "" },
+        "../utils/storage": storage,
+        "../utils/actions": {
+            deletePreset: async () => { changes++; }, movePreset: async () => { changes++; },
+            refreshPreset: async () => {}, renamePreset: async () => { changes++; }
+        }
+    }, { React });
+    api.PresetList({ presets: [original[1]], allPresets: original, avatarSize: 20, selectedPreset: -1,
+        onLoad() {}, onUpdate() {}, section: "main", currentPage: 2, onPageChange() {} });
+    (openMenu as (event: { stopPropagation(): void; }) => void)({ stopPropagation() {} });
+    storage.presets = [{ name: "Replacement", timestamp: 2 }, { name: "Unrelated", timestamp: 3 }];
+    for (const id of ["delete", "move-up", "move-to-page-1"]) {
+        const action = actions.get(id);
+        assert.ok(action, id);
+        await action();
+    }
+    assert.equal(changes, 0);
+    assert.equal(errors, 3);
+    storage.presets = original;
+    await actions.get("delete")?.();
+    assert.equal(changes, 1);
+});
+
 test("profile preset load failures notify mounted panels only", async () => {
     for (const closed of [false, true]) {
         const load = Promise.withResolvers<void>();

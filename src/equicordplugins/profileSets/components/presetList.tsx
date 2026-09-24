@@ -9,7 +9,7 @@ import { ContextMenuApi, Menu, React, showToast, TextInput, Toasts } from "@webp
 
 import { cl } from "..";
 import { deletePreset, movePreset, refreshPreset, renamePreset } from "../utils/actions";
-import { PresetSection, type ProfilePresetEx } from "../utils/storage";
+import { presets as currentPresets, PresetSection, type ProfilePresetEx } from "../utils/storage";
 
 interface PresetListProps {
     presets: ProfilePresetEx[];
@@ -36,11 +36,12 @@ export function PresetList({
     currentPage,
     onPageChange
 }: PresetListProps) {
-    const [renaming, setRenaming] = React.useState<number>(-1);
+    const [renaming, setRenaming] = React.useState<ProfilePresetEx | null>(null);
     const [renameText, setRenameText] = React.useState("");
 
     const runChange = async (change: () => Promise<void>) => {
         try {
+            if (currentPresets !== allPresets) throw new Error("The profile preset list changed.");
             await change();
             onUpdate();
         } catch {
@@ -52,7 +53,7 @@ export function PresetList({
         <div className={cl("list-container")}>
             {presets.map(preset => {
                 const actualIndex = allPresets.indexOf(preset);
-                const isRenaming = renaming === actualIndex;
+                const isRenaming = renaming === preset;
                 const isSelected = !isRenaming && selectedPreset === actualIndex;
                 const date = new Date(preset.timestamp);
                 const formattedDate = date.toLocaleDateString(undefined, {
@@ -107,14 +108,14 @@ export function PresetList({
                                         onChange={setRenameText}
                                         onBlur={() => {
                                             commitRename();
-                                            setRenaming(-1);
+                                            setRenaming(null);
                                         }}
                                         onKeyDown={e => {
                                             if (e.key === "Enter") {
                                                 commitRename();
-                                                setRenaming(-1);
+                                                setRenaming(null);
                                             } else if (e.key === "Escape") {
-                                                setRenaming(-1);
+                                                setRenaming(null);
                                             }
                                             e.stopPropagation();
                                         }}
@@ -147,7 +148,7 @@ export function PresetList({
                                                 id="rename"
                                                 label="Rename"
                                                 action={() => {
-                                                    setRenaming(actualIndex);
+                                                    setRenaming(preset);
                                                     setRenameText(preset.name);
                                                 }}
                                             />

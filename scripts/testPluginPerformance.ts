@@ -4701,6 +4701,31 @@ test("TidalEmbeds only hides URLs its player can render", () => {
             assert.equal(plugin.isTidalEmbed({ url: "https://tidal.com/" + path + suffix }), true);
 });
 
+test("TidalEmbeds renders every recognized embed in a message", () => {
+    const players: string[] = [];
+    const keys: string[] = [];
+    const { default: plugin } = loadSource("src/equicordplugins/tidalEmbeds/index.tsx", {
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value }
+    }, { React: { createElement: (type: string, props: { src?: string; key?: string; }) => {
+        if (type === "iframe" && props.src) players.push(props.src);
+        if (props.key) keys.push(props.key);
+        return {};
+    } } });
+    plugin.renderMessageAccessory({ message: { embeds: [
+        { id: "track", url: "https://tidal.com/track/123" },
+        { id: "other", url: "https://example.com/" },
+        { id: "album", url: "https://tidal.com/browse/album/456" }
+    ] } });
+    assert.deepEqual(players, [
+        "https://embed.tidal.com/tracks/123?disableAnalytics=true",
+        "https://embed.tidal.com/albums/456?disableAnalytics=true"
+    ]);
+    assert.deepEqual(keys, ["track", "album"]);
+    assert.equal(plugin.renderMessageAccessory({ message: { embeds: [] } }), null);
+    assert.equal(plugin.renderMessageAccessory({}), null);
+});
+
 test("Tidal clears the previous track and position on an empty playback update", () => {
     let changes = 0;
     const { TidalStore: store } = loadSource("src/equicordplugins/musicControls/tidal/TidalStore.ts", {

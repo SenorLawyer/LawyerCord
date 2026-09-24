@@ -6,6 +6,7 @@
 
 import { EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
+import { Message } from "@vencord/discord-types";
 
 export default definePlugin({
     name: "TidalEmbeds",
@@ -28,30 +29,32 @@ export default definePlugin({
             && /^https:\/\/tidal\.com\/(?:browse\/)?(?:album|track)\/\d+(?:[/?#]|$)/.test(embed.url);
     },
 
-    renderMessageAccessory({ message }) {
-        const tidalEmbed = message.embeds?.find(embed => this.isTidalEmbed(embed));
-        if (!tidalEmbed) return null;
+    renderMessageAccessory({ message }: { message?: Message; }) {
+        if (!message) return null;
+        const tidalEmbeds = message.embeds.filter(embed => this.isTidalEmbed(embed));
+        if (!tidalEmbeds.length) return null;
 
-        const { url } = tidalEmbed;
-        const match = url.match(/\/(album|track)\/([0-9]+)/);
-        if (!match || !match[2]) return null;
+        return tidalEmbeds.map(({ id: embedId, url }) => {
+            const match = url.match(/\/(album|track)\/([0-9]+)/);
+            if (!match || !match[2]) return null;
 
-        const isAlbum = match[1] === "album";
-        const id = match[2];
-        const width = isAlbum ? 700 : 400;
-        const height = isAlbum ? 300 : 100;
-        const src = `https://embed.tidal.com/${isAlbum ? "albums" : "tracks"}/${id}?disableAnalytics=true`;
-        return (
-            <div className="tidal-embed">
-                <iframe
-                    src={src}
-                    width={width}
-                    height={height}
-                    allow="encrypted-media"
-                    sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-                    title="TIDAL Embed Player"
-                />
-            </div>
-        );
+            const isAlbum = match[1] === "album";
+            const id = match[2];
+            const width = isAlbum ? 700 : 400;
+            const height = isAlbum ? 300 : 100;
+            const src = `https://embed.tidal.com/${isAlbum ? "albums" : "tracks"}/${id}?disableAnalytics=true`;
+            return (
+                <div key={embedId} className="tidal-embed">
+                    <iframe
+                        src={src}
+                        width={width}
+                        height={height}
+                        allow="encrypted-media"
+                        sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                        title="TIDAL Embed Player"
+                    />
+                </div>
+            );
+        });
     }
 });

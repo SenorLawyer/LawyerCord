@@ -124,7 +124,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
                     onMerge={() => resolve("merge")}
                     onCancel={() => resolve("cancel")}
                 />
-            ));
+            ), { onCloseCallback: () => resolve("cancel") });
         });
     };
 

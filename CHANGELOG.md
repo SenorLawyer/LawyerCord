@@ -29,6 +29,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Cancel pending profile imports when their confirmation modal is dismissed.
+
 - Reload open ProfileSets panels when the signed-in account changes.
 
 - Contain ProfileSets rendering failures within its injected settings section.

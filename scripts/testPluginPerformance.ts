@@ -4100,6 +4100,8 @@ test("profile preset controls recover failed preparation and avoid random repeat
     let saveAction: () => unknown = () => assert.fail("Missing save button");
     const stateChanges: unknown[] = [];
     const errors: string[] = [];
+    const decisions: string[] = [];
+    let importAction = () => {};
     let userId = "first";
     const effects: unknown[][] = [];
     const UserStore = { getCurrentUser: () => ({ id: userId }) };
@@ -4109,6 +4111,7 @@ test("profile preset controls recover failed preparation and avoid random repeat
         useState: (value: unknown) => [stateIndex++ === 0 ? "Saved profile" : value, (next: unknown) => stateChanges.push(next)],
         useReducer: () => [0, () => {}], useRef: (value: unknown) => ({ current: value }), useEffect(_effect: unknown, deps: unknown[]) { effects.push(deps); },
         createElement: (_type: unknown, props: { onClick?: () => void; } | null, ...children: unknown[]) => {
+            if (children.includes("Import") && props?.onClick) importAction = props.onClick;
             if (children.includes("Random") && props?.onClick) randomAction = props.onClick;
             if (children.includes("Save Profile") && props?.onClick) saveAction = props.onClick;
             return null;
@@ -4116,13 +4119,15 @@ test("profile preset controls recover failed preparation and avoid random repeat
     };
     const api = loadSource("src/equicordplugins/profileSets/components/presetManager.tsx", {
         "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
-        "@webpack/common": { React, UserStore, useStateFromStores: (stores: unknown[], select: () => unknown) => stores.includes(UserStore) ? select() : null, showToast: (message: string) => errors.push(message), Toasts: { Type: { FAILURE: "failure" } } },
+        "@webpack/common": { React, UserStore, openModal: (_render: unknown, options: { onCloseCallback: () => void; }) => options.onCloseCallback(), useStateFromStores: (stores: unknown[], select: () => unknown) => stores.includes(UserStore) ? select() : null, showToast: (message: string) => errors.push(message), Toasts: { Type: { FAILURE: "failure" } } },
         "../index": { cl: () => "", settings: { store: {} } },
-        "../utils/actions": { savePreset: async () => { if (saveFails) throw new Error("Profile preparation failed"); } }, "../utils/profile": { loadPresetAsPending: async (preset: { name: string; }) => { selected.push(presets.indexOf(preset)); } },
+        "../utils/actions": { importPresets: async (_update: unknown, prompt: (count: number) => Promise<string>) => { decisions.push(await prompt(2)); }, savePreset: async () => { if (saveFails) throw new Error("Profile preparation failed"); } }, "../utils/profile": { loadPresetAsPending: async (preset: { name: string; }) => { selected.push(presets.indexOf(preset)); } },
         "../utils/storage": { presets },
         "./confirmModal": {}, "./presetList": {}
     }, { Math: { ...Math, ceil: Math.ceil, floor: Math.floor, random: () => { draws++; return 0.5; } } });
     api.PresetManager({});
+    await importAction();
+    assert.deepEqual(decisions, ["cancel"]);
     await assert.doesNotReject(async () => saveAction());
     assert.deepEqual(stateChanges, [true, false]);
     assert.deepEqual(errors, ["Could not save the profile preset."]);

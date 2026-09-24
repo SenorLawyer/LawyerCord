@@ -259,20 +259,20 @@ export async function getCurrentProfile(guildId?: string, options: CurrentProfil
     const displayNameStyles = normalizeDisplayNameStyles(displayNameStylesToUse);
 
     const { pendingAvatar } = pendingChanges;
-    const avatarToUse: ImageInput = hasImageInput(pendingAvatar)
+    const avatarToUse: ImageInput = pendingAvatar !== undefined
         ? pendingAvatar
         : (isGuildProfile ? (guildMember?.avatar ?? currentUser.avatar ?? null) : (currentUser.avatar ?? null));
 
     const useGuildAvatar = !!(effectiveGuildId && isGuildProfile && guildMember?.avatar && avatarToUse === guildMember.avatar);
 
-    const avatarInput: ImageInput = hasImageInput(avatarToUse)
+    const avatarInput: ImageInput = pendingAvatar === null || hasImageInput(avatarToUse)
         ? avatarToUse
         : IconUtils.getUserAvatarURL(currentUser, true, 512);
     const avatarDataUrl = await processImage(avatarInput, currentUser.id, "avatar", effectiveGuildId, useGuildAvatar);
-    const resolvedAvatarDataUrl = avatarDataUrl ?? IconUtils.getDefaultAvatarURL(currentUser.id);
+    const resolvedAvatarDataUrl = pendingAvatar === null ? null : avatarDataUrl ?? IconUtils.getDefaultAvatarURL(currentUser.id);
 
     const { pendingBanner } = pendingChanges;
-    const bannerToUse: ImageInput = hasImageInput(pendingBanner)
+    const bannerToUse: ImageInput = pendingBanner !== undefined
         ? pendingBanner
         : (isGuildProfile ? (guildProfile?.banner ?? baseProfile?.banner) : baseProfile?.banner);
     const useGuildBanner = !!(effectiveGuildId && isGuildProfile && guildProfile?.banner && bannerToUse === guildProfile?.banner);

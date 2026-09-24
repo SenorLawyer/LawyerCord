@@ -398,3 +398,7 @@ ProfileSets text snapshots now fall back to saved bio, pronouns, global name and
 
 ProfileSets snapshot reads now use only the effective profile scope. Removed the second store read and fallback that copied global pending edits whenever the server pending record was empty or absent. The regression reproduced a global bio replacing the saved server bio, then verifies absent, empty and populated server edits plus explicit global mode with a guild argument. All 38 profile-related tests and source lint pass. This verifies source scope selection; live store semantics remain part of runtime acceptance.
 TypeScript also passes for the scoped snapshot change.
+
+
+ProfileSets image snapshots now preserve explicit pending null avatar and banner removals, including bypassing default-avatar substitution for a pending removal. The regression reproduced a saved image replacing null and covers both global/server snapshots with absent, cleared and replacement images. All 39 profile-related tests pass. This does not establish live preview behavior or settle inherited/default image representation when no edit is pending.
+The full regression suite passes 568 tests plus timezone checks (.git/audit/profile-snapshots-full.log); source lint and TypeScript also pass.

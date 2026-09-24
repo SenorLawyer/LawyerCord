@@ -4834,6 +4834,25 @@ test("profile appearance removals survive apply and snapshot without clearing om
     assert.equal(dispatched.length, 0);
 });
 
+test("profile image snapshots preserve explicit pending removals", async () => {
+    for (const guildId of [undefined, "guild"]) for (const pending of [undefined, null, "data:image/png;base64,bmV3"]) {
+        const saved = "data:image/png;base64,c2F2ZWQ=";
+        const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null }) },
+            "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({ pendingAvatar: pending, pendingBanner: pending }) }) },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: "me", avatar: saved }) },
+                UserProfileStore: { getUserProfile: () => ({ banner: saved }), getGuildMemberProfile: () => ({ banner: saved }) },
+                GuildMemberStore: { getMember: () => ({ avatar: saved }) },
+                IconUtils: { getUserAvatarURL: () => saved, getDefaultAvatarURL: () => "default" }
+            }
+        });
+        const profile = await api.getCurrentProfile(guildId);
+        assert.equal(profile.avatarDataUrl, pending === undefined ? saved : pending);
+        assert.equal(profile.bannerDataUrl, pending === undefined ? saved : pending);
+    }
+});
+
 test("profile snapshots read pending edits only from the selected scope", async () => {
     for (const guildChanges of [undefined, {}, { pendingBio: "Guild edit" }]) {
         const calls: (string | undefined)[] = [];

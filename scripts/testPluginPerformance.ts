@@ -4806,6 +4806,34 @@ test("profile preset controls recover failed preparation and avoid random repeat
     assert.ok(effects.some(deps => deps.includes("second")));
 });
 
+test("profile appearance removals survive apply and snapshot without clearing omitted fields", async () => {
+    const fields = ["avatarDecoration", "profileEffect", "nameplate", "displayNameStyles", "themeColors", "primaryGuildId"];
+    let pending: Record<string, unknown> = {};
+    const dispatched: Record<string, unknown>[] = [];
+    const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+        "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null }) },
+        "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => pending }) },
+        "@webpack/common": {
+            UserStore: { getCurrentUser: () => ({ id: "me", avatarDecorationData: { asset: "decoration", skuId: "1" },
+                collectibles: { nameplate: { asset: "plate", skuId: "2" } },
+                displayNameStyles: { font_id: 1, effect_id: 2, colors: [3] }, primaryGuild: { identityGuildId: "guild" } }) },
+            UserProfileStore: { getUserProfile: () => ({ profileEffect: { skuId: "3", effects: [] }, themeColors: [4, 5] }) },
+            IconUtils: { getUserAvatarURL: () => null, getDefaultAvatarURL: () => "default" },
+            FluxDispatcher: { dispatch: (event: Record<string, unknown>) => { dispatched.push(event); Object.assign(pending, event); } }
+        }
+    });
+    const before = await api.getCurrentProfile();
+    for (const field of fields) assert.notEqual(before[field], null, field);
+    await api.loadPresetAsPending({ name: "Clear", timestamp: 0, ...Object.fromEntries(fields.map(field => [field, null])) });
+    assert.equal(dispatched.length, fields.length);
+    const after = await api.getCurrentProfile();
+    for (const field of fields) assert.equal(after[field], null, field);
+    pending = {};
+    dispatched.length = 0;
+    await api.loadPresetAsPending({ name: "Partial", timestamp: 0 });
+    assert.equal(dispatched.length, 0);
+});
+
 test("profile snapshots preserve pending accent removal and black", async () => {
     for (const pendingAccentColor of [undefined, null, 0, 456]) {
         const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {

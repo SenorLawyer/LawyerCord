@@ -387,3 +387,7 @@ ProfileSets snapshot reading now preserves explicit pending accent-color removal
 
 
 ProfileSets customStatus null now follows the existing empty-status update payload instead of being ignored by a truthiness check. The new regression failed before the change, then verified null and empty-object clearing, omission preservation and server-profile exclusion. The existing awaited-update/failure regression still passes. Both status-focused tests and source lint pass. This preserves the existing update payload format; live custom-status clearing remains unverified.
+
+
+ProfileSets now preserves explicit null for decoration, effect, nameplate, display-name styles, theme colors and primary-guild pending values instead of restoring stored appearance through nullish fallback. Styles, theme colors and primary guild also apply explicit clearing rather than skipping falsy values. A global-profile source regression first reproduced only three of six clear dispatches, then verifies all six and a subsequent snapshot retaining null, plus no edits for omitted fields. Removed the redundant userAny alias. Source lint and TypeScript pass before that equivalent alias deletion. This is controlled store/payload evidence; actual Discord clear semantics and guild-specific rendering still require runtime acceptance.
+The full regression run for this appearance change passed 565 tests plus timezone checks (.git/audit/profile-appearance-full.log), before the equivalent userAny alias deletion.

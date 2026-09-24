@@ -4082,7 +4082,7 @@ test("profile preset saves reject account and list changes during preparation", 
     const api = loadSource("src/equicordplugins/profileSets/utils/actions.ts", {
         "@utils/web": {},
         "@utils/guards": { isNonNullish: (value: unknown) => value != null },
-        "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
+        "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({ pendingAvatar: "https://fixture.invalid/raw-avatar.png" }) }) },
         "@webpack/common": { UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined } },
         "./profile": { getCurrentProfile: () => preparation.promise },
         "./storage": storage
@@ -4100,10 +4100,11 @@ test("profile preset saves reject account and list changes during preparation", 
     userId = "first";
     preparation = Promise.withResolvers<object>();
     const saving = api.savePreset("Example", "main");
-    preparation.resolve({});
+    preparation.resolve({ avatarDataUrl: "data:image/png;base64,prepared" });
     await saving;
     assert.equal(storage.presets.length, 1);
     assert.equal(writes, 1);
+    assert.equal(Reflect.get(storage.presets[0], "avatarDataUrl"), "data:image/png;base64,prepared");
 });
 
 test("profile preset mutations preserve the visible list when persistence fails", async () => {

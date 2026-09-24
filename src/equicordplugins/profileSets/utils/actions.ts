@@ -6,26 +6,11 @@
 
 import { isNonNullish } from "@utils/guards";
 import { chooseFile, saveFile } from "@utils/web";
-import { findStoreLazy } from "@webpack";
 import { showToast, Toasts, UserStore } from "@webpack/common";
 
 import { getCurrentProfile } from "./profile";
 import { PresetSection, type PresetStorage, type ProfilePresetEx } from "./storage";
 import { isPresetList } from "./validation";
-
-const UserProfileSettingsStore = findStoreLazy("UserProfileSettingsStore");
-
-function getFreshPendingAvatar(section: PresetSection, guildId?: string): string | null {
-    const pending = (section === "server" && guildId
-        ? UserProfileSettingsStore.getPendingChanges?.(guildId)
-        : UserProfileSettingsStore.getPendingChanges?.()) ?? {};
-    const { pendingAvatar } = pending as Record<string, unknown>;
-    if (typeof pendingAvatar === "string") return pendingAvatar || null;
-    if (typeof pendingAvatar === "object" && isNonNullish(pendingAvatar)
-        && "imageUri" in pendingAvatar && typeof pendingAvatar.imageUri === "string")
-        return pendingAvatar.imageUri;
-    return null;
-}
 
 export type ImportDecision = "override" | "merge" | "cancel";
 export type PresetActions = ReturnType<typeof createPresetActions>;
@@ -38,14 +23,11 @@ export function createPresetActions(storage: PresetStorage) {
         const profile = await getCurrentProfile(guildId, { isGuildProfile: section === "server" });
         if (UserStore.getCurrentUser()?.id !== userId || storage.presets !== originalPresets)
             throw new Error("The account or preset list changed while preparing the profile.");
-        const freshPendingAvatar = getFreshPendingAvatar(section, guildId);
-        const effectiveAvatar = freshPendingAvatar ?? profile.avatarDataUrl ?? null;
 
         const newPreset: ProfilePresetEx = {
             name,
             timestamp: Date.now(),
             ...profile,
-            avatarDataUrl: effectiveAvatar,
         };
         await storage.savePresetsData(section, [...storage.presets, newPreset]);
     }

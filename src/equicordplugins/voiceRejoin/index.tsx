@@ -216,7 +216,8 @@ export default definePlugin({
                     const preventionMode = settings.store.preventReconnectIfCallEnded;
                     const timeoutMs = settings.store.rejoinTimeout * 1000;
 
-                    if (Date.now() - saved.timestamp > timeoutMs) {
+                    const elapsedMs = Date.now() - saved.timestamp;
+                    if (elapsedMs < 0 || elapsedMs > timeoutMs) {
                         await persistInactiveState();
                         return;
                     }

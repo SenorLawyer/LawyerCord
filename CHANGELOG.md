@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Reject future-dated VoiceRejoin records after a backward system clock adjustment.
+
 - Keep VoiceStats session durations independent of system clock adjustments.
 
 - Stop VoiceStats timers and session counting on logout.

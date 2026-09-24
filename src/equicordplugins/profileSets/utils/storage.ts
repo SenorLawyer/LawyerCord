@@ -9,6 +9,8 @@ import { Logger } from "@utils/Logger";
 import { ProfilePreset } from "@vencord/discord-types";
 import { UserStore } from "@webpack/common";
 
+import { isPresetList } from "./validation";
+
 const logger = new Logger("ProfilePresets");
 const LEGACY_PRESETS_KEY = "ProfileDataset";
 const MAIN_PRESETS_KEY = "ProfilePresets_v2_Main";
@@ -67,7 +69,7 @@ export async function loadPresets(section: PresetSection) {
         if (!isCurrentLoad(generation, userId)) return;
 
         if (stored !== undefined) {
-            if (!Array.isArray(stored)) throw new Error("The saved profile preset list is invalid.");
+            if (!isPresetList(stored)) throw new Error("The saved profile preset list is invalid.");
             activeScopeKey = key;
             resetPresets(stored);
             return;
@@ -85,6 +87,7 @@ export async function loadPresets(section: PresetSection) {
                 ? legacyStored
                 : (Array.isArray(legacyBaseStored) ? legacyBaseStored : null);
             if (legacyToUse) {
+                if (!isPresetList(legacyToUse)) throw new Error("The legacy profile preset list is invalid.");
                 await DataStore.set(key, legacyToUse);
                 await DataStore.del(Array.isArray(legacyStored) ? legacyKey : LEGACY_PRESETS_KEY);
                 if (!isCurrentLoad(generation, userId)) return;

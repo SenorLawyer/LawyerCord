@@ -3940,6 +3940,36 @@ test("profile image preparation distinguishes download failure from no image", a
     assert.equal(await processImage("data:image/png;base64,fixture", "user", "avatar"), "data:image/png;base64,fixture");
 });
 
+test("profile preset validation rejects malformed nested fields without changing input", () => {
+    const { isPresetList } = loadSource("src/equicordplugins/profileSets/utils/validation.ts", {});
+    const valid = {
+        name: "Example", timestamp: 0, avatarDataUrl: null, bannerDataUrl: "data:image/png;base64,fixture",
+        bio: "Bio", accentColor: 0, themeColors: [0, 1], globalName: "Name", pronouns: null,
+        avatarDecoration: { skuId: "1", asset: "asset" }, profileEffect: { skuId: "2", effects: [], type: 1 },
+        nameplate: { skuId: "3", asset: "asset", label: "Label", palette: "blue", type: 2 },
+        primaryGuildId: "4", customStatus: { text: "Status", emojiId: "0", emojiName: "", expiresAtMs: "0" },
+        displayNameStyles: { colors: [1], font_id: 0, effect_id: 0, fontId: 0, effectId: 0 }
+    };
+    assert.equal(isPresetList([valid]), true);
+    assert.equal(isPresetList([{ name: "Minimal", timestamp: 0 }]), true);
+    const invalid = [
+        { name: 2 }, { timestamp: Infinity }, { avatarDataUrl: {} }, { avatarRaw: 1 }, { bannerDataUrl: [] },
+        { bio: false }, { accentColor: NaN }, { themeColors: ["red"] }, { globalName: 1 }, { pronouns: {} },
+        { primaryGuildId: 1 }, { avatarDecoration: { skuId: 1, asset: "a" } }, { profileEffect: [] },
+        { profileEffect: { skuId: "1", effects: {} } }, { profileEffect: { skuId: "1", type: "1" } },
+        { nameplate: { skuId: "1", asset: "a", palette: [] } }, { customStatus: "text" },
+        { customStatus: { text: {} } }, { displayNameStyles: { colors: [], font_id: "0", effect_id: 0 } },
+        { displayNameStyles: { colors: [], font_id: 0, effect_id: 0, fontId: "invalid" } }
+    ];
+    for (const fields of invalid) {
+        const preset = { ...valid, ...fields };
+        const before = JSON.stringify(preset);
+        assert.equal(isPresetList([preset]), false, JSON.stringify(fields));
+        assert.equal(JSON.stringify(preset), before);
+    }
+    for (const value of [null, {}, [null], [[]]]) assert.equal(isPresetList(value), false);
+});
+
 test("profile preset refresh writes once and retains its original target", async () => {
     for (const change of ["none", "account", "list", "removed", "moved"]) {
         let userId = "first";
@@ -4157,7 +4187,7 @@ test("profile preset writes publish only on success and reject overlapping write
 
 test("profile preset loading preserves malformed destination records", async () => {
     for (const section of ["main", "server"]) {
-        for (const stored of [null, false, 0, "invalid", { presets: [] }]) {
+        for (const stored of [null, false, 0, "invalid", { presets: [] }, [null], [{ name: "Bad", timestamp: 0, customStatus: 1 }]]) {
             const writes: string[] = [];
             let errors = 0;
             const api = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
@@ -4220,7 +4250,7 @@ test("profile preset storage rejects stale account reads and foreign-scope saves
     });
     const loading = api.loadPresets("main");
     currentId = "second";
-    reads[0].resolve([{ name: "First account" }]);
+    reads[0].resolve([{ name: "First account", timestamp: 0 }]);
     await loading;
     assert.equal(api.presets.length, 0);
     await assert.rejects(api.savePresetsData("main"));
@@ -4228,7 +4258,7 @@ test("profile preset storage rejects stale account reads and foreign-scope saves
     const current = api.loadPresets("main");
     await assert.rejects(api.savePresetsData("main"));
     assert.deepEqual(writes, []);
-    reads[1].resolve([{ name: "Second account" }]);
+    reads[1].resolve([{ name: "Second account", timestamp: 0 }]);
     await current;
     await api.savePresetsData("main");
     assert.deepEqual(writes, ["ProfilePresets_v2_Main:second"]);
@@ -6528,6 +6558,8 @@ test("source fixtures reject recoverable syntax errors before execution", () => 
 });
 
 function loadSource(path: string, mocks: Record<string, object>, globals: Record<string, unknown> = {}, result = "exports") {
+    if (/profileSets\/utils\/(actions|storage)\.ts$/.test(path))
+        mocks = { "./validation": loadSource("src/equicordplugins/profileSets/utils/validation.ts", {}), ...mocks };
     if (path === "src/equicordplugins/userpluginInstaller.dev/native.ts") {
         mocks = { typescript, ...mocks };
         globals = { process: { env: {} }, ...globals };

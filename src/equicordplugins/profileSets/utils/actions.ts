@@ -11,6 +11,7 @@ import { showToast, Toasts, UserStore } from "@webpack/common";
 
 import { getCurrentProfile } from "./profile";
 import { presets, PresetSection, type ProfilePresetEx, savePresetsData } from "./storage";
+import { isPresetList } from "./validation";
 
 const UserProfileSettingsStore = findStoreLazy("UserProfileSettingsStore");
 
@@ -113,12 +114,7 @@ export async function importPresets(
         checkScope();
         const importedPresets: unknown = JSON.parse(text);
 
-        if (!Array.isArray(importedPresets) || !importedPresets.every((preset: unknown) =>
-            typeof preset === "object" && preset !== null
-            && "name" in preset && typeof preset.name === "string"
-            && "timestamp" in preset && typeof preset.timestamp === "number"
-            && Number.isFinite(new Date(preset.timestamp).getTime())
-        )) throw new Error("Invalid profile preset list.");
+        if (!isPresetList(importedPresets)) throw new Error("Invalid profile preset list.");
 
         const decision = presets.length > 0 ? await onImportPrompt(presets.length) : "override";
         if (decision === "cancel") return;

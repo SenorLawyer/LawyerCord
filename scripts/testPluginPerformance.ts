@@ -4687,6 +4687,20 @@ test("new plugin notifications return failures to the flux dispatcher", async ()
     await assert.rejects(plugin.flux.POST_CONNECTION_OPEN(), /Storage unavailable/);
 });
 
+test("TidalEmbeds only hides URLs its player can render", () => {
+    const { default: plugin } = loadSource("src/equicordplugins/tidalEmbeds/index.tsx", {
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value }
+    });
+    for (const url of ["https://tidal.com/album", "https://tidal.com/track/no-id",
+        "https://tidal.com/album-other/123", "https://tidal.com/browse/track/123invalid",
+        "https://tidal.com.evil.example/track/123", undefined])
+        assert.equal(plugin.isTidalEmbed({ url }), false, String(url));
+    for (const path of ["album/123", "track/456", "browse/album/123", "browse/track/456"])
+        for (const suffix of ["", "?source=share", "#player", "/"])
+            assert.equal(plugin.isTidalEmbed({ url: "https://tidal.com/" + path + suffix }), true);
+});
+
 test("Tidal clears the previous track and position on an empty playback update", () => {
     let changes = 0;
     const { TidalStore: store } = loadSource("src/equicordplugins/musicControls/tidal/TidalStore.ts", {

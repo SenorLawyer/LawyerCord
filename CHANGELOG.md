@@ -4,6 +4,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ## 3.0.0.0 - Unreleased
 
+- Keep unsupported TIDAL URLs visible instead of hiding their original embeds.
+
 - Show the new ProfileSets page when saving a preset crosses a page boundary, and return to an existing page when imports or filtered lists shrink.
 
 - Reject outdated ProfileSets menu changes and keep renaming attached to its original preset.

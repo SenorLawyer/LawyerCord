@@ -21,6 +21,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Cancel ProfileSets imports if the account or preset list changes while reading or confirming the file.
+
 - Cancel ProfileSets saves when their account or preset list changes during preparation.
 
 - Keep ProfileSets storage reads and saves within the loaded account and section.

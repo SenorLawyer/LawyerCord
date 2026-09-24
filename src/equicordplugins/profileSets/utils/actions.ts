@@ -106,6 +106,13 @@ export async function importPresets(
     onImportPrompt: (existingCount: number) => Promise<ImportDecision>,
     section: PresetSection
 ) {
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return;
+    const originalPresets = presets;
+    const checkScope = () => {
+        if (UserStore.getCurrentUser()?.id !== userId || presets !== originalPresets)
+            throw new Error("The account or preset list changed during import.");
+    };
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "application/json";
@@ -116,6 +123,7 @@ export async function importPresets(
             if (!file) return;
 
             const text = await file.text();
+            checkScope();
             const importedPresets = JSON.parse(text);
 
             if (!Array.isArray(importedPresets)) {
@@ -125,6 +133,7 @@ export async function importPresets(
             if (presets.length > 0) {
                 const decision = await onImportPrompt(presets.length);
                 if (decision === "cancel") return;
+                checkScope();
                 if (decision === "override") {
                     replaceAllPresets(importedPresets);
                 } else {
@@ -138,7 +147,7 @@ export async function importPresets(
             await savePresetsData(section);
             forceUpdate();
         } catch {
-            showToast("Failed to import presets. The file might be invalid.", Toasts.Type.FAILURE);
+            showToast("Could not import the profile presets.", Toasts.Type.FAILURE);
         }
     };
     input.click();

@@ -3888,6 +3888,48 @@ test("profile images fall back after failed guild downloads", async () => {
     assert.equal(blobReads, 1);
 });
 
+test("profile preset imports keep their initiating account and list", async () => {
+    for (const stage of ["read", "prompt", "list", "success"]) {
+        let userId = "first";
+        let writes = 0;
+        let updates = 0;
+        const errors: string[] = [];
+        const read = Promise.withResolvers<string>();
+        const decision = Promise.withResolvers<string>();
+        const prompted = Promise.withResolvers<void>();
+        const input = { onchange: async (_event: object) => {}, click() {} };
+        const storage = {
+            presets: [{ name: "Existing" }],
+            replaceAllPresets: (value: { name: string; }[]) => { storage.presets = value; },
+            savePresetsData: async () => { writes++; }
+        };
+        const api = loadSource("src/equicordplugins/profileSets/utils/actions.ts", {
+            "@utils/guards": {},
+            "@webpack": { findStoreLazy: () => ({}) },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: userId }) },
+                showToast: (message: string) => errors.push(message), Toasts: { Type: { FAILURE: "failure" } }
+            },
+            "./profile": {}, "./storage": storage
+        }, { document: { createElement: () => input } });
+        await api.importPresets(() => { updates++; }, () => { prompted.resolve(); return decision.promise; }, "main");
+        const importing = input.onchange({ currentTarget: { files: [{ text: () => read.promise }] } });
+        if (stage === "read") userId = "second";
+        read.resolve('[{"name":"Imported"}]');
+        if (stage !== "read") {
+            await prompted.promise;
+            if (stage === "prompt") userId = "second";
+            if (stage === "list") storage.presets = [{ name: "Replacement" }];
+        }
+        decision.resolve("override");
+        await importing;
+        assert.equal(writes, Number(stage === "success"));
+        assert.equal(updates, Number(stage === "success"));
+        assert.equal(errors.length, Number(stage !== "success"));
+        assert.equal(storage.presets[0].name, stage === "success" ? "Imported" : stage === "list" ? "Replacement" : "Existing");
+    }
+});
+
 test("profile preset saves reject account and list changes during preparation", async () => {
     let userId: string | undefined = "first";
     let preparation = Promise.withResolvers<object>();

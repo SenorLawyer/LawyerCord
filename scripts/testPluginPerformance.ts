@@ -4169,7 +4169,7 @@ test("profile preset loading preserves malformed destination records", async () 
                 "@utils/Logger": { Logger: class { error() { errors++; } } },
                 "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "user" }) } }
             });
-            await api.loadPresets(section);
+            await assert.rejects(api.loadPresets(section), /invalid/);
             await assert.rejects(api.savePresetsData(section));
             assert.equal(writes.length, 0);
             assert.equal(errors, 1);
@@ -4197,7 +4197,8 @@ test("profile preset migration preserves legacy data it did not copy", async () 
             "@utils/Logger": { Logger: class { error() {} } },
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "user" }) } }
         });
-        await api.loadPresets("main");
+        if (failedWrite) await assert.rejects(api.loadPresets("main"), /Storage unavailable/);
+        else await api.loadPresets("main");
         assert.equal(data.get("ProfileDataset"), unowned);
         assert.equal(data.has("ProfileDataset:user:main"), failedWrite);
         assert.equal(data.get("ProfilePresets_v2_Main:user"), failedWrite ? undefined : scoped);
@@ -4235,6 +4236,33 @@ test("profile preset storage rejects stale account reads and foreign-scope saves
     currentId = "first";
     await assert.rejects(api.savePresetsData("main"));
     assert.equal(writes.length, 1);
+});
+
+test("profile preset load failures notify mounted panels only", async () => {
+    for (const closed of [false, true]) {
+        const load = Promise.withResolvers<void>();
+        const errors: string[] = [];
+        let updated = 0;
+        let effect = () => () => {};
+        const React = {
+            useState: (value: unknown) => [value, () => {}], useReducer: () => [0, () => { updated++; }],
+            useRef: () => ({ current: -1 }), useEffect: (callback: typeof effect) => { effect = callback; }, createElement: () => null
+        };
+        const api = loadSource("src/equicordplugins/profileSets/components/presetManager.tsx", {
+            "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
+            "@webpack/common": { React, useStateFromStores: () => null, showToast: (text: string) => errors.push(text), Toasts: { Type: { FAILURE: "failure" } } },
+            "../index": { cl: () => "", settings: { store: {} } },
+            "../utils/actions": {}, "../utils/profile": {},
+            "../utils/storage": { presets: [], loadPresets: () => load.promise }, "./confirmModal": {}, "./presetList": {}
+        });
+        api.PresetManager({});
+        const cleanup = effect();
+        if (closed) cleanup();
+        load.reject(new Error("Read failed"));
+        await setImmediate();
+        assert.equal(errors.length, closed ? 0 : 1);
+        assert.equal(updated, closed ? 0 : 1);
+    }
 });
 
 test("profile preset search resets pagination even after no matches", () => {

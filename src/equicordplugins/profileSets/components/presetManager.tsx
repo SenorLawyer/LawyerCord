@@ -45,7 +45,11 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
     React.useEffect(() => {
         let isActive = true;
         (async () => {
-            await loadPresets(resolvedSection);
+            try {
+                await loadPresets(resolvedSection);
+            } catch {
+                if (isActive) showToast("Could not load the saved profile presets.", Toasts.Type.FAILURE);
+            }
             if (!isActive) return;
             setSelectedPreset(-1);
             setCurrentPage(1);

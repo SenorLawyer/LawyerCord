@@ -100,6 +100,7 @@ export async function loadPresets(section: PresetSection) {
 
         logger.error("Failed to load presets", err);
         resetPresets();
+        throw err;
     }
 }
 

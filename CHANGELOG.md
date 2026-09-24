@@ -31,6 +31,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Report profile preset load failures in open panels without notifying after they close.
+
 - Limit remote profile images to 10 MiB while downloading, before base64 conversion.
 
 - Apply a 30-second timeout to profile image downloads.

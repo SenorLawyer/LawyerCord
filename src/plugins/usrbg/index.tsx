@@ -89,6 +89,7 @@ export default definePlugin({
     ],
 
     data: null as UsrbgApiReturn | null,
+    request: undefined as AbortController | undefined,
 
     settingsAboutComponent: () => (
         <Button
@@ -131,9 +132,13 @@ export default definePlugin({
     },
 
     async start() {
-        const res = await fetch(API_URL);
-        if (res.ok) {
+        this.request?.abort();
+        const request = this.request = new AbortController();
+        try {
+            const res = await fetch(API_URL, { signal: request.signal });
+            if (!res.ok || request.signal.aborted) return;
             const data: unknown = await res.json();
+            if (request.signal.aborted) return;
             if (!isObject(data)
                 || !("endpoint" in data) || typeof data.endpoint !== "string"
                 || !("bucket" in data) || typeof data.bucket !== "string"
@@ -144,6 +149,17 @@ export default definePlugin({
                 return;
             }
             this.data = data as UsrbgApiReturn;
+        } catch {
+            if (!request.signal.aborted) logger.warn("Could not load the banner feed.");
+        } finally {
+            if (this.request === request) this.request = undefined;
         }
+    },
+
+    stop() {
+        this.request?.abort();
+        this.request = undefined;
+        this.data = null;
     }
+
 });

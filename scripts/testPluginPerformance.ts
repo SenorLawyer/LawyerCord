@@ -4953,11 +4953,46 @@ test("USRBG rejects malformed feed data before publishing it", async () => {
             "@utils/Logger": { Logger: class { warn() { warnings++; } } },
             "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
             "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} }
-        }, { fetch: async () => ({ ok: true, json: async () => data }) });
+        }, { AbortController, fetch: async () => ({ ok: true, json: async () => data }) });
         await plugin.start();
         assert.equal(plugin.data, data === valid ? valid : null);
         assert.equal(plugin.userHasBackground("user"), data === valid);
         assert.equal(warnings, data === valid ? 0 : 1);
+    }
+});
+
+test("USRBG ignores stopped and superseded startup responses", async () => {
+    for (const stop of [false, true]) {
+        const reads: ReturnType<typeof Promise.withResolvers<unknown>>[] = [];
+        const signals: AbortSignal[] = [];
+        const { default: plugin } = loadSource("src/plugins/usrbg/index.tsx", {
+            "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+            "@components/Button": {}, "@utils/constants": { Devs: {} },
+            "@utils/css": { classNameFactory: () => () => "" },
+            "@utils/Logger": { Logger: class { warn() { assert.fail("Cancelled work warned"); } } },
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+            "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} }
+        }, { AbortController, fetch: async (_url: string, options: { signal: AbortSignal; }) => {
+            signals.push(options.signal);
+            const read = Promise.withResolvers<unknown>();
+            reads.push(read);
+            return { ok: true, json: () => read.promise };
+        } });
+        const first = plugin.start();
+        await setImmediate();
+        const latest = { endpoint: "https://fixture.invalid", bucket: "banners", prefix: "", users: { user: "new" } };
+        if (stop) plugin.stop();
+        else {
+            const second = plugin.start();
+            await setImmediate();
+            reads[1].resolve(latest);
+            await second;
+        }
+        assert.equal(signals[0].aborted, true);
+        reads[0].resolve({ ...latest, users: { user: "old" } });
+        await first;
+        assert.equal(plugin.data, stop ? null : latest);
+        assert.equal(plugin.request, undefined);
     }
 });
 

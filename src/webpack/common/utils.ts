@@ -194,7 +194,10 @@ export const ChannelActions = findByPropsLazy("selectChannel", "selectVoiceChann
 export const DraftActions = findByPropsLazy("saveDraft", "changeDraft");
 export const PinActions = findByPropsLazy("pinMessage", "unpinMessage");
 
-export const IconUtils: t.IconUtils = findByPropsLazy("getGuildBannerURL", "getUserAvatarURL");
+export const IconUtils: t.IconUtils & {
+    getUserAvatarURL(user: t.User, canAnimate?: boolean, size?: number, format?: string | null, canWebP?: boolean): string;
+    getGuildMemberAvatarURLSimple(data: Parameters<t.IconUtils["getGuildMemberAvatarURLSimple"]>[0] & { canWebP?: boolean; }): string;
+} = findByPropsLazy("getGuildBannerURL", "getUserAvatarURL");
 
 export const ColorUtils = mapMangledModuleLazy("Invalid hex color format", {
     rgbToHex: filters.byCode(".toString(16).slice(1)"),

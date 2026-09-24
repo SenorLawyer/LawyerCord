@@ -20,7 +20,6 @@ import { openInviteModal } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import { isObject } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
-import { User } from "@vencord/discord-types";
 import { extractAndLoadChunksLazy } from "@webpack";
 import { IconUtils, Menu, openModal, UserStore } from "@webpack/common";
 
@@ -130,7 +129,7 @@ export default definePlugin({
             );
         }
     },
-    getAvatarHook: (original: (user: User, animated?: boolean, size?: number, ...options: unknown[]) => string) => (...args: Parameters<typeof original>) => {
+    getAvatarHook: (original: typeof IconUtils.getUserAvatarURL) => (...args: Parameters<typeof original>) => {
         const [user, animated] = args;
         if (settings.store.preferNitro && user.avatar?.startsWith("a_")) return original(...args);
         const avatarUrl = data.avatars[user.id] || data.remoteAvatars[user.id];
@@ -151,8 +150,8 @@ export default definePlugin({
             return original(...args);
         }
     },
-    getAvatarServerHook: (original: any) => (config: any) => {
-        const { userId, avatar, size, canAnimate } = config;
+    getAvatarServerHook: (original: typeof IconUtils.getGuildMemberAvatarURLSimple) => (config: Parameters<typeof original>[0]) => {
+        const { userId, avatar, size, canAnimate, canWebP } = config;
         const customUrl = data.avatars[userId] || data.remoteAvatars[userId];
 
         if (customUrl) return customUrl;
@@ -160,7 +159,7 @@ export default definePlugin({
         if (avatar) {
             const user = UserStore.getUser(userId);
             if (user?.avatar) {
-                return IconUtils.getUserAvatarURL(user, canAnimate, size);
+                return IconUtils.getUserAvatarURL(user, canAnimate, size, undefined, canWebP);
             }
         }
 

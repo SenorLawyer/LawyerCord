@@ -1745,6 +1745,7 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
         let reads = 0;
         const errors: unknown[] = [];
         const warnings: string[] = [];
+        const globalAvatarCalls: unknown[][] = [];
         const { default: plugin, data } = loadSource("src/equicordplugins/userpfp/index.tsx", {
             "@api/DataStore": { get: () => ++reads === 1 ? local.promise : Promise.resolve({ newer: "local" }) },
             "@api/Settings": { definePluginSettings: () => ({ store: { databaseSource: "https://fixture.invalid/data", preferNitro: true } }) },
@@ -1753,7 +1754,10 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
             "@utils/Logger": { Logger: class { error(_message: string, error: unknown) { errors.push(error); } warn(message: string) { warnings.push(message); } } },
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
             "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
-            "@webpack": { extractAndLoadChunksLazy: () => () => {} }, "@webpack/common": {}, "./AvatarModal": {},
+            "@webpack": { extractAndLoadChunksLazy: () => () => {} }, "@webpack/common": {
+                UserStore: { getUser: (id: string) => id === "global" ? { id, avatar: "global-hash" } : undefined },
+                IconUtils: { getUserAvatarURL: (...args: unknown[]) => { globalAvatarCalls.push(args); return "global-avatar"; } }
+            }, "./AvatarModal": {},
         }, { IS_DEV: false, AbortController, URL,
             fetch: async (_url: string, { signal }: { signal: AbortSignal; }) => { signals.push(signal); return { ok: true, json: () => signals.length === 1 ? remote.promise : Promise.resolve({ avatars: { newerRemote: "remote" } }) }; },
         });
@@ -1783,6 +1787,10 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
         for (const url of ["data:image/png;base64,iVBORw0KGgo=", "https://fixture.invalid/avatar?size=64&signature=a%20b"]) {
             data.avatars.shared = url;
             assert.equal(guildAvatar({ userId: "shared", size: 128, canAnimate: true }), url);
+        }
+        for (const canWebP of [true, false, undefined]) {
+            assert.equal(guildAvatar({ userId: "global", avatar: "guild-hash", size: 64, canAnimate: true, canWebP }), "global-avatar");
+            assert.deepEqual(globalAvatarCalls.at(-1), [{ id: "global", avatar: "global-hash" }, true, 64, undefined, canWebP]);
         }
         data.avatars.shared = "https://raw.githubusercontent.com/UserPFP/img-other/main/avatar.gif";
         assert.equal(avatar({ id: "shared" }, false, 128), data.avatars.shared);

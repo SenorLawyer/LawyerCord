@@ -4431,19 +4431,23 @@ test("profile preset row keys follow objects through reorder and removal", () =>
     const storage = { presets: [first, second] };
     const rows: { key: number; onClick: () => void; className: string; }[] = [];
     const loaded: unknown[] = [];
+    const loadButtons: (() => void)[] = [];
     const React = {
         useState: (value: unknown) => [value, () => {}],
         createElement: (_type: unknown, props: { role?: string; key: number; onClick: () => void; className: string; } | null) => {
-            if (props?.role === "button") rows.push(props);
+            if (props?.role === "group") rows.push(props);
+            if (props?.className === "avatar-url" && props.onClick) loadButtons.push(props.onClick);
             return null;
         }
     };
     const api = loadSource("src/equicordplugins/profileSets/components/presetList.tsx", {
+        "@components/Button": {},
         "@utils/misc": { classes: (...values: string[]) => values.join(" ") },
         "@webpack/common": { React }, "..": { cl: (value: string) => value }
     }, { React });
     const render = () => {
         rows.length = 0;
+        loadButtons.length = 0;
         api.PresetList({ storage, actions: {}, presets: storage.presets, allPresets: storage.presets,
             avatarSize: 20, selectedPreset: first, onLoad: (preset: unknown) => loaded.push(preset),
             onUpdate() {}, section: "main", currentPage: 1, onPageChange() {} });
@@ -4454,7 +4458,7 @@ test("profile preset row keys follow objects through reorder and removal", () =>
     storage.presets = [second, first];
     assert.deepEqual(render(), [original[1], original[0]]);
     assert.match(rows[1].className, /selected/);
-    rows[1].onClick();
+    loadButtons[1]();
     assert.equal(loaded[0], first);
     storage.presets = [first];
     assert.deepEqual(render(), [original[0]]);
@@ -4473,13 +4477,14 @@ test("profile preset menus reject mutations after their rendered list is replace
     const actions = new Map<string, () => Promise<void>>();
     const React = {
         useState: (value: unknown) => [value, () => {}],
-        createElement: (type: unknown, props: { onClick?: () => void; id?: string; action?: () => Promise<void>; } | null) => {
-            if (type === "svg" && props?.onClick) openMenu = props.onClick;
+        createElement: (type: unknown, props: { onClick?: () => void; "aria-haspopup"?: string; id?: string; action?: () => Promise<void>; } | null) => {
+            if (props?.["aria-haspopup"] === "menu" && props.onClick) openMenu = props.onClick;
             if (props?.id && props.action) actions.set(props.id, props.action);
             return null;
         }
     };
     const api = loadSource("src/equicordplugins/profileSets/components/presetList.tsx", {
+        "@components/Button": {},
         "@utils/misc": { classes: () => "" },
         "@webpack/common": { React, Menu: {}, ContextMenuApi: { openContextMenu: (_event: unknown, render: () => void) => render() },
             showToast: () => { errors++; }, Toasts: { Type: { FAILURE: "failure" } } },

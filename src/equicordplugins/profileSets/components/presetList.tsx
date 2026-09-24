@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { Button } from "@components/Button";
 import { classes } from "@utils/misc";
 import { ContextMenuApi, Menu, React, showToast, TextInput, Toasts } from "@webpack/common";
 
@@ -86,74 +87,70 @@ export function PresetList({
 
                 const showMoveOptions = actualIndex > 0 || actualIndex < allPresets.length - 1 || currentPage > 1;
 
+                const content = (
+                    <>
+                        {preset.avatarDataUrl && (
+                            <img
+                                src={preset.avatarDataUrl}
+                                alt=""
+                                className={cl("avatar")}
+                                style={{ width: `${avatarSize}px`, height: `${avatarSize}px` }}
+                            />
+                        )}
+                        <div className={cl("rename")}>
+                            {isRenaming ? (
+                                <TextInput
+                                    value={renameText}
+                                    onChange={setRenameText}
+                                    onBlur={() => {
+                                        commitRename();
+                                        setRenaming(null);
+                                    }}
+                                    onKeyDown={e => {
+                                        if (e.key === "Enter") {
+                                            commitRename();
+                                            setRenaming(null);
+                                        } else if (e.key === "Escape") {
+                                            setRenaming(null);
+                                        }
+                                    }}
+                                    autoFocus
+                                />
+                            ) : (
+                                <>
+                                    <div className={cl("name")}>
+                                        {preset.name}
+                                    </div>
+                                    <div className={cl("timestamp")}>
+                                        {formattedDate} at {formattedTime}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </>
+                );
+
                 return (
                     <div
                         key={key}
-                        tabIndex={isRenaming ? -1 : 0}
-                        role="button"
-                        onClick={() => {
-                            if (!isRenaming) {
-                                onLoad(preset);
-                            }
-                        }}
-                        onKeyDown={e => {
-                            if (!isRenaming && (e.key === "Enter" || e.key === " ")) {
-                                e.preventDefault();
-                                onLoad(preset);
-                            }
-                        }}
+                        role="group"
+                        aria-label={preset.name}
                         className={classes(cl("row"), isSelected ? "selected" : "")}
                     >
-                        <div className={cl("avatar-url")}>
-                            {preset.avatarDataUrl && (
-                                <img
-                                    src={preset.avatarDataUrl}
-                                    alt=""
-                                    className={cl("avatar")}
-                                    style={{ width: `${avatarSize}px`, height: `${avatarSize}px` }}
-                                />
-                            )}
-                            <div className={cl("rename")}>
-                                {isRenaming ? (
-                                    <TextInput
-                                        value={renameText}
-                                        onChange={setRenameText}
-                                        onBlur={() => {
-                                            commitRename();
-                                            setRenaming(null);
-                                        }}
-                                        onKeyDown={e => {
-                                            if (e.key === "Enter") {
-                                                commitRename();
-                                                setRenaming(null);
-                                            } else if (e.key === "Escape") {
-                                                setRenaming(null);
-                                            }
-                                            e.stopPropagation();
-                                        }}
-                                        onClick={e => e.stopPropagation()}
-                                        autoFocus
-                                    />
-                                ) : (
-                                    <>
-                                        <div className={cl("name")}>
-                                            {preset.name}
-                                        </div>
-                                        <div className={cl("timestamp")}>
-                                            {formattedDate} at {formattedTime}
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        </div>
+                        {isRenaming ? (
+                            <div className={cl("avatar-url")}>{content}</div>
+                        ) : (
+                            <Button variant="none" size="min" className={cl("avatar-url")} aria-label={`Load ${preset.name}`} onClick={() => onLoad(preset)}>
+                                {content}
+                            </Button>
+                        )}
                         <div className={cl("updated")}>
-                            <svg
-                                width="20"
-                                height="20"
-                                viewBox="0 0 20 20"
-                                className={cl("menu-icon")}
+                            <Button
+                                variant="none"
+                                size="iconOnly"
+                                aria-label={`Options for ${preset.name}`}
+                                aria-haspopup="menu"
                                 onClick={e => {
-                                    e.stopPropagation();
                                     ContextMenuApi.openContextMenu(e, () => (
                                         <Menu.Menu navId="preset-options" onClose={ContextMenuApi.closeContextMenu}>
                                             <Menu.MenuItem
@@ -212,11 +209,13 @@ export function PresetList({
                                     ));
                                 }}
                             >
-                                <path
-                                    fill="currentColor"
-                                    d="M10 3a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm0 5a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm0 5a1.5 1.5 0 110 3 1.5 1.5 0 010-3z"
-                                />
-                            </svg>
+                                <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path
+                                        fill="currentColor"
+                                        d="M10 3a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm0 5a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm0 5a1.5 1.5 0 110 3 1.5 1.5 0 010-3z"
+                                    />
+                                </svg>
+                            </Button>
                         </div>
                     </div>
                 );

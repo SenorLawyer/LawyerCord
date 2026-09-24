@@ -74,6 +74,7 @@
 }
 
 .vc-profile-presets-avatar-url {
+    text-align: left;
     display: flex;
     align-items: center;
     gap: 12px;
@@ -115,7 +116,6 @@
     padding: 10px 12px;
     background-color: var(--background-primary);
     border-radius: 6px;
-    cursor: pointer;
     transition: all 0.15s ease;
     border: 2px solid transparent;
     outline: none;
@@ -130,7 +130,7 @@
     border-color: var(--background-modifier-accent) !important;
 }
 
-.vc-profile-presets-row:focus-visible {
+.vc-profile-presets-row:focus-within {
     border-color: var(--brand-experiment) !important;
     box-shadow: 0 0 0 2px var(--brand-experiment-30a);
 }
@@ -160,16 +160,6 @@
     color: var(--text-default);
     font-weight: 500;
     opacity: 0.8;
-}
-
-.vc-profile-presets-menu-icon {
-    opacity: 0.7;
-    cursor: pointer;
-    transition: opacity 0.15s ease;
-}
-
-.vc-profile-presets-menu-icon:hover {
-    opacity: 1;
 }
 
 .vc-profile-presets-page-input {

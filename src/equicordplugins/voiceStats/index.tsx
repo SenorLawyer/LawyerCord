@@ -27,6 +27,7 @@ const logger = new Logger("VoiceStats");
 
 const sessionStarts = new Map<string, number>();
 const totalsByUser = new Map<string, number>();
+let recoveredTotals: Record<string, number> = {};
 let activeUserId: string | undefined;
 const pendingTotalsByAccount = new Map<string, Record<string, number>>();
 let trackedChannelId: string | null = null;
@@ -111,7 +112,7 @@ function stopTrackingChannel() {
 
 function getLiveSeconds(userId: string): number {
     if (!activeUserId || UserStore.getCurrentUser()?.id !== activeUserId) return 0;
-    const stored = totalsByUser.get(userId) ?? 0;
+    const stored = (totalsByUser.get(userId) ?? 0) + (recoveredTotals[userId] ?? 0);
     const startedAt = sessionStarts.get(userId);
     return startedAt !== undefined ? stored + Math.floor((performance.now() - startedAt) / 1000) : stored;
 }
@@ -189,27 +190,17 @@ async function recoverLegacyTotals(userId: string) {
         if (pendingTotalsByAccount.has(userId)) throw new Error("Save pending totals before recovering old statistics.");
         let recovered = false;
         let legacyTotals: Record<string, number> = {};
-        await updateMany<[unknown, unknown, Record<string, number>]>([
+        await updateMany<[unknown, Record<string, number>]>([
             [storageKey, legacy => {
                 if (!isTotals(legacy)) throw new Error("No valid old statistics were found.");
                 legacyTotals = legacy;
                 return legacy;
             }],
-            [`${storageKey}:recovered:${userId}`, marker => {
-                recovered = marker === true;
-                return true;
-            }],
-            [`${storageKey}:${userId}`, current => {
+            [`${storageKey}:recovered:${userId}`, current => {
                 if (generation !== startGeneration || UserStore.getCurrentUser()?.id !== userId) throw new Error("The account changed during recovery.");
-                if (current !== undefined && !isTotals(current)) throw new Error("Saved statistics are invalid.");
-                if (recovered) return current ?? {};
-                const totals = new Map(Object.entries(current ?? {}));
-                for (const [id, seconds] of Object.entries(legacyTotals)) {
-                    const total = (totals.get(id) ?? 0) + seconds;
-                    if (!Number.isSafeInteger(total)) throw new Error("Recovered statistics exceed the supported total.");
-                    totals.set(id, total);
-                }
-                return Object.fromEntries(totals);
+                if (current !== undefined && !isTotals(current)) throw new Error("Recovered statistics are invalid.");
+                recovered = current !== undefined;
+                return current ?? legacyTotals;
             }]
         ]);
         showToast(recovered ? "Old statistics were already recovered for this account." : "Old statistics recovered.", Toasts.Type.SUCCESS);
@@ -242,21 +233,24 @@ async function loadAccountTotals() {
     const userId = UserStore.getCurrentUser()?.id;
     activeUserId = userId;
     totalsByUser.clear();
+    recoveredTotals = {};
     totalsDirty = false;
     if (!userId) return;
 
     let saved: unknown;
+    let recovered: unknown;
     try {
-        saved = await get<unknown>(`${storageKey}:${userId}`);
+        [saved, recovered] = await Promise.all([get<unknown>(`${storageKey}:${userId}`), get<unknown>(`${storageKey}:recovered:${userId}`)]);
     } catch (error) {
         logger.error("Could not load voice statistics.", error);
         return;
     }
     if (generation !== startGeneration || UserStore.getCurrentUser()?.id !== userId) return;
-    if (saved !== undefined && !isTotals(saved)) {
+    if ((saved !== undefined && !isTotals(saved)) || (recovered !== undefined && !isTotals(recovered))) {
         logger.error("Saved voice statistics are invalid. Tracking has been paused to preserve them.");
         return;
     }
+    recoveredTotals = recovered ?? {};
     const pending = pendingTotalsByAccount.get(userId);
     totalsDirty = pending !== undefined;
     for (const [id, value] of Object.entries(pending ?? (saved ?? {}))) totalsByUser.set(id, value);
@@ -283,6 +277,7 @@ export default definePlugin({
             stopTrackingChannel();
             activeUserId = undefined;
             totalsByUser.clear();
+            recoveredTotals = {};
             totalsDirty = false;
         },
         CONNECTION_OPEN: loadAccountTotals,

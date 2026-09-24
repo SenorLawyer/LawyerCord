@@ -2601,16 +2601,17 @@ test("voice rejoin leaves an existing voice connection active", async () => {
 });
 
 test("voice statistics recover legacy totals once and preserve records on failure", async () => {
-    for (const scenario of ["success", "invalid", "overflow", "account-change", "transaction-failure"]) {
+    for (const scenario of ["success", "invalid", "account-change", "transaction-failure"]) {
         let userId = "me";
         const legacy = scenario === "invalid" ? { friend: -1 } : { friend: 100 };
-        const current = { friend: scenario === "overflow" ? Number.MAX_SAFE_INTEGER : 5 };
+        const current = { friend: 5 };
         const stored = new Map<string, unknown>([["VoiceStats_totals", legacy], ["VoiceStats_totals:me", current]]);
         const toasts: string[] = [];
-        const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {
+        const createClient = () => loadSource("src/equicordplugins/voiceStats/index.tsx", {
             "@utils/Logger": { Logger: class { error() {} } },
             "@api/DataStore": {
                 get: async (key: string) => stored.get(key),
+                set: async (key: string, value: unknown) => { stored.set(key, value); },
                 updateMany: async (entries: [string, (value: unknown) => unknown][]) => {
                     const next = new Map(stored);
                     for (const [key, updater] of entries) {
@@ -2628,7 +2629,10 @@ test("voice statistics recover legacy totals once and preserve records on failur
                 UserStore: { getCurrentUser: () => ({ id: userId }) }, SelectedChannelStore: { getVoiceChannelId: () => null },
                 showToast: (message: string) => toasts.push(message), Toasts: { Type: { SUCCESS: 1, FAILURE: 2 } }
             }
-        }, {}, "({ plugin: exports.default, recoverLegacyTotals, getLiveSeconds })");
+        }, { performance: { now: () => 11000 } }, "({ plugin: exports.default, recoverLegacyTotals, getLiveSeconds, sessionStarts, flushActiveSessions, persistTotals })");
+        const api = createClient();
+        const other = createClient();
+        if (scenario === "success") await other.plugin.start();
         await api.plugin.start();
         await api.recoverLegacyTotals("me");
         assert.deepEqual(stored.get("VoiceStats_totals"), legacy);
@@ -2636,8 +2640,17 @@ test("voice statistics recover legacy totals once and preserve records on failur
             assert.equal(api.getLiveSeconds("friend"), 105);
             await api.recoverLegacyTotals("me");
             assert.equal(api.getLiveSeconds("friend"), 105);
-            assert.equal(stored.get("VoiceStats_totals:recovered:me"), true);
+            assert.equal(JSON.stringify(stored.get("VoiceStats_totals:recovered:me")), JSON.stringify(legacy));
+            assert.deepEqual(stored.get("VoiceStats_totals:me"), current);
             assert.match(toasts[1], /already recovered/);
+            other.sessionStarts.set("friend", 1000);
+            other.flushActiveSessions();
+            other.sessionStarts.clear();
+            await other.persistTotals();
+            await api.plugin.start();
+            assert.equal(api.getLiveSeconds("friend"), 115);
+            assert.equal(JSON.stringify(stored.get("VoiceStats_totals:recovered:me")), JSON.stringify(legacy));
+            other.plugin.stop();
         } else {
             assert.deepEqual(stored.get("VoiceStats_totals:me"), current);
             assert.equal(stored.has("VoiceStats_totals:recovered:me"), false);
@@ -2683,7 +2696,7 @@ test("voice statistics replace clean cached totals when storage changes", async 
     let saved: Record<string, number> | undefined = { friend: 20, removed: 9 };
     const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {
         "@utils/Logger": { Logger: class { error() {} } },
-        "@api/DataStore": { get: async () => saved }, "@components/BaseText": {},
+        "@api/DataStore": { get: async (key: string) => key.includes(":recovered:") ? undefined : saved }, "@components/BaseText": {},
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
@@ -2708,7 +2721,7 @@ test("voice statistics preserve unsaved totals when restarted after a failed wri
     let stored = { friend: 20 };
     const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {
         "@utils/Logger": { Logger: class { error() {} } },
-        "@api/DataStore": { get: async () => stored, set: async (_key: string, value: typeof stored) => { if (fail) throw new Error("Failed"); stored = value; } },
+        "@api/DataStore": { get: async (key: string) => key.includes(":recovered:") ? undefined : stored, set: async (_key: string, value: typeof stored) => { if (fail) throw new Error("Failed"); stored = value; } },
         "@components/BaseText": {}, "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
@@ -2729,23 +2742,26 @@ test("voice statistics preserve unsaved totals when restarted after a failed wri
 });
 
 test("voice statistics reject malformed saved totals without starting or overwriting them", async () => {
-    for (const saved of [null, [], "bad", 5, { friend: "5" }, { friend: -1 }, { friend: NaN }, { friend: Infinity }, { friend: 1.5 }]) {
-        let errors = 0;
-        const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {
-            "@utils/Logger": { Logger: class { error() { errors++; } } },
-            "@api/DataStore": { get: async () => saved, set: () => assert.fail("Must preserve malformed data") }, "@components/BaseText": {},
-            "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
-            "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
-            "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
-            "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
-            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "me" }) }, SelectedChannelStore: { getVoiceChannelId: () => assert.fail("Must not start tracking") } }
-        }, {}, "({ plugin: exports.default, totalsByUser })");
-        await api.plugin.start();
-        assert.equal(api.totalsByUser.size, 0);
-        assert.equal(errors, 1);
-        api.plugin.stop();
+    for (const value of [null, [], "bad", true, 5, { friend: "5" }, { friend: -1 }, { friend: NaN }, { friend: Infinity }, { friend: 1.5 }]) {
+        for (const invalidKey of ["VoiceStats_totals:me", "VoiceStats_totals:recovered:me"]) {
+            let errors = 0;
+            const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {
+                "@utils/Logger": { Logger: class { error() { errors++; } } },
+                "@api/DataStore": { get: async (key: string) => key === invalidKey ? value : undefined, set: () => assert.fail("Must preserve malformed data") }, "@components/BaseText": {},
+                "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+                "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
+                "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+                "@webpack": { findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => ({}) },
+                "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "me" }) }, SelectedChannelStore: { getVoiceChannelId: () => assert.fail("Must not start tracking") } }
+            }, {}, "({ plugin: exports.default, totalsByUser })");
+            await api.plugin.start();
+            assert.equal(api.totalsByUser.size, 0);
+            assert.equal(errors, 1);
+            api.plugin.stop();
+        }
     }
 });
+
 
 test("voice statistics retain failed saves for the next persistence attempt", async () => {
     let attempts = 0;
@@ -2773,7 +2789,7 @@ test("voice statistics wait for stored totals before starting tracking", async (
     let channelId = "first";
     const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {
         "@utils/Logger": { Logger: class { error() {} } },
-        "@api/DataStore": { get: () => new Promise(resolve => { finish = resolve; }) }, "@components/BaseText": {},
+        "@api/DataStore": { get: (key: string) => key.includes(":recovered:") ? Promise.resolve(undefined) : new Promise(resolve => { finish = resolve; }) }, "@components/BaseText": {},
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
@@ -2799,7 +2815,7 @@ test("voice statistics discard stored totals from a stopped generation", async (
     const reads: ((value: object) => void)[] = [];
     const api = loadSource("src/equicordplugins/voiceStats/index.tsx", {
         "@utils/Logger": { Logger: class { error() {} } },
-        "@api/DataStore": { get: () => new Promise(resolve => reads.push(resolve)) }, "@components/BaseText": {},
+        "@api/DataStore": { get: (key: string) => key.includes(":recovered:") ? Promise.resolve(undefined) : new Promise(resolve => reads.push(resolve)) }, "@components/BaseText": {},
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin },

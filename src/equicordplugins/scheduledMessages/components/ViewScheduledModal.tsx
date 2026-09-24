@@ -52,7 +52,7 @@ function ViewScheduledModalInner({ rootProps, close }: ViewScheduledModalProps) 
 
     const handleReload = async () => {
         if (!userId || UserStore.getCurrentUser()?.id !== userId) return;
-        const loaded = await loadScheduledMessages().then(() => true, () => false);
+        const loaded = await loadScheduledMessages(true).then(() => true, () => false);
         if (UserStore.getCurrentUser()?.id !== userId) return;
         if (loaded) setMessages(getScheduledMessages());
         else showToast("Could not reload scheduled messages. The saved data has been kept.", Toasts.Type.FAILURE);

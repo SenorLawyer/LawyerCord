@@ -64,8 +64,14 @@ function isScheduledMessage(value: unknown): value is ScheduledMessage {
         }));
 }
 
-export function loadScheduledMessages(): Promise<void> {
-    return runQueueOperation(readStoredQueue, true);
+export async function loadScheduledMessages(refreshPreviews = false): Promise<void> {
+    const generation = schedulerGeneration;
+    const userId = refreshPreviews ? UserStore.getCurrentUser()?.id : undefined;
+    await runQueueOperation(readStoredQueue, true);
+    if (refreshPreviews && schedulerRunning && generation === schedulerGeneration && UserStore.getCurrentUser()?.id === userId) {
+        cleanupAllPhantomMessages();
+        await recreatePhantomMessages();
+    }
 }
 
 async function readStoredQueue(): Promise<void> {

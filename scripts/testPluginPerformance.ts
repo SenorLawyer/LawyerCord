@@ -9816,6 +9816,28 @@ test("SongSpotlight requires write acknowledgement before changing local state",
 });
 
 
+test("manual scheduled reload refreshes previews only in its running account", async () => {
+    for (const change of ["none", "account", "stop", "inactive"]) {
+        let userId = "account";
+        const read = Promise.withResolvers<unknown>();
+        const previews: string[] = [];
+        const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@api/DataStore": { get: () => read.promise }, "@utils/Logger": { Logger: class {} },
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+            "@vencord/discord-types/enums": {}, ".": { settings: { store: {} } },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) }, FluxDispatcher: { dispatch() {} } }
+        }, { clearTimeout() {} }, "({ ...exports, setRunning: value => { schedulerRunning = value; }, setPreview: callback => { createPhantomMessage = callback; } })");
+        api.setRunning(change !== "inactive");
+        api.setPreview(async (message: { content: string; }) => previews.push(message.content));
+        const pending = api.loadScheduledMessages(true);
+        if (change === "account") userId = "other";
+        if (change === "stop") api.stopScheduler();
+        read.resolve([scheduledEntry({ content: "Refreshed" })]);
+        await pending;
+        assert.deepEqual(previews, change === "none" ? ["Refreshed"] : []);
+    }
+});
+
 test("scheduled reload removes stale previews while retaining unchanged entries", async () => {
     for (const change of ["removed", "unchanged"]) {
         const original = scheduledEntry({ id: "old", content: "Old" });

@@ -120,11 +120,16 @@ export function createPresetStorage() {
         }
     }
 
+    function isCurrentScope(section: PresetSection) {
+        const userId = getCurrentUserId();
+        return userId !== null && activeScopeKey === getPresetsKey(section, userId);
+    }
+
     async function savePresetsData(section: PresetSection, nextPresets: ProfilePresetEx[] = presets) {
         const userId = getCurrentUserId();
         if (!userId) throw new Error("No account is signed in.");
         const key = getPresetsKey(section, userId);
-        if (key !== activeScopeKey) throw new Error("The preset list has not finished loading.");
+        if (!isCurrentScope(section)) throw new Error("The preset list has not finished loading.");
         if (pendingSave) throw new Error("A preset change is still being saved.");
         const generation = loadGeneration;
         const expected = savedPresets;
@@ -144,5 +149,5 @@ export function createPresetStorage() {
         }
     }
 
-    return { get presets() { return presets; }, loadPresets, unloadPresets, savePresetsData };
+    return { get presets() { return presets; }, loadPresets, unloadPresets, savePresetsData, isCurrentScope };
 }

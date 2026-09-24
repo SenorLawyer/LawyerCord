@@ -89,6 +89,10 @@ export function createPresetActions(storage: PresetStorage) {
     }
 
     function exportPresets(section: PresetSection) {
+        if (!storage.isCurrentScope(section)) {
+            showToast("Reopen this panel before exporting profile presets.", Toasts.Type.FAILURE);
+            return;
+        }
         const dataStr = JSON.stringify(storage.presets, null, 2);
         saveFile(new File([dataStr], `profile-presets-${section}-${Date.now()}.json`, { type: "application/json" }));
     }

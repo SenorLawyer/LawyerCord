@@ -108,7 +108,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
     };
 
     const applyPreset = (preset: ProfilePresetEx) => {
-        if (!storage.presets.includes(preset)) {
+        if (!storage.isCurrentScope(resolvedSection) || !storage.presets.includes(preset)) {
             showToast("The profile preset list changed. Reopen this panel before trying again.", Toasts.Type.FAILURE);
             return;
         }

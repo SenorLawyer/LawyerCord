@@ -4192,7 +4192,10 @@ test("profile preset panels keep simultaneous section loads and exports separate
     const server = [{ name: "Server", timestamp: 1 }];
     const records = new Map<string, unknown>([["ProfilePresets_v2_Main:me", main], ["ProfilePresets_v2_Server:me", server]]);
     const reads = new Map<string, ReturnType<typeof Promise.withResolvers<unknown>>>();
-    const common = { UserStore: { getCurrentUser: () => ({ id: "me" }) }, lodash: { isEqual: isDeepStrictEqual } };
+    let userId: string | undefined = "me";
+    let errors = 0;
+    const common = { UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined }, lodash: { isEqual: isDeepStrictEqual },
+        showToast: () => { errors++; }, Toasts: { Type: { FAILURE: "failure" } } };
     const module = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
         "@api/index": { DataStore: {
             get: (key: string) => { const read = Promise.withResolvers<unknown>(); reads.set(key, read); return read.promise; },
@@ -4222,6 +4225,16 @@ test("profile preset panels keep simultaneous section loads and exports separate
     assert.deepEqual(JSON.parse(await files[1].text()), server);
     assert.match(files[0].name, /profile-presets-main-/);
     assert.match(files[1].name, /profile-presets-server-/);
+    actions.createPresetActions(first).exportPresets("server");
+    for (const nextAccount of ["other", undefined]) {
+        userId = nextAccount;
+        assert.equal(first.isCurrentScope("main"), false);
+        actions.createPresetActions(first).exportPresets("main");
+    }
+    assert.equal(files.length, 2);
+    assert.equal(errors, 3);
+    userId = "me";
+    assert.equal(first.isCurrentScope("main"), true);
     const changed = [...main, { name: "New main", timestamp: 2 }];
     await first.savePresetsData("main", changed);
     assert.equal(first.presets, changed);
@@ -4478,7 +4491,7 @@ test("profile preset loading follows the rendered object and rejects replaced li
         "@webpack/common": { React: { ...React, useMemo: (factory: () => unknown) => factory() }, useStateFromStores: () => null, showToast: () => { errors++; }, Toasts: { Type: { FAILURE: "failure" } } },
         "../index": { cl: () => "", settings: { store: {} } },
         "../utils/actions": { createPresetActions: () => ({}) }, "../utils/profile": { loadPresetAsPending: async (preset: unknown) => { loaded.push(preset); } },
-        "../utils/storage": { createPresetStorage: () => (storage) }, "./confirmModal": {}, "./presetList": {}
+        "../utils/storage": { createPresetStorage: () => Object.assign((storage), { isCurrentScope: () => true }) }, "./confirmModal": {}, "./presetList": {}
     });
     api.PresetManager({});
     storage.presets = [other, original];
@@ -4490,6 +4503,12 @@ test("profile preset loading follows the rendered object and rejects replaced li
     assert.deepEqual(loaded, [original]);
     assert.deepEqual(selected, [original]);
     assert.equal(errors, 1);
+    storage.presets = [original, other];
+    Object.assign(storage, { isCurrentScope: () => false });
+    load(original);
+    assert.deepEqual(loaded, [original]);
+    assert.deepEqual(selected, [original]);
+    assert.equal(errors, 2);
 });
 
 test("profile preset load failures notify mounted panels only", async () => {
@@ -4507,7 +4526,7 @@ test("profile preset load failures notify mounted panels only", async () => {
             "@webpack/common": { React: { ...React, useMemo: (factory: () => unknown) => factory() }, useStateFromStores: () => null, showToast: (text: string) => errors.push(text), Toasts: { Type: { FAILURE: "failure" } } },
             "../index": { cl: () => "", settings: { store: {} } },
             "../utils/actions": { createPresetActions: () => ({}) }, "../utils/profile": {},
-            "../utils/storage": { createPresetStorage: () => ({ presets: [], loadPresets: () => load.promise, unloadPresets() {} }) }, "./confirmModal": {}, "./presetList": {}
+            "../utils/storage": { createPresetStorage: () => Object.assign(({ presets: [], loadPresets: () => load.promise, unloadPresets() {} }), { isCurrentScope: () => true }) }, "./confirmModal": {}, "./presetList": {}
         });
         api.PresetManager({});
         const cleanup = effect();
@@ -4539,7 +4558,7 @@ test("profile preset search resets pagination even after no matches", () => {
         "@webpack/common": { React: { ...React, useMemo: (factory: () => unknown) => factory() }, useStateFromStores: () => null },
         "../index": { cl: () => "", settings: { store: {} } },
         "../utils/actions": { createPresetActions: () => ({}) }, "../utils/profile": {},
-        "../utils/storage": { createPresetStorage: () => ({ presets: [{ name: "Match" }] }) },
+        "../utils/storage": { createPresetStorage: () => Object.assign(({ presets: [{ name: "Match" }] }), { isCurrentScope: () => true }) },
         "./confirmModal": {}, "./presetList": {}
     });
     api.PresetManager({});
@@ -4568,7 +4587,7 @@ test("profile preset pagination recovers when the visible list shrinks", () => {
             "@webpack/common": { React: { ...React, useMemo: (factory: () => unknown) => factory() }, useStateFromStores: () => null },
             "../index": { cl: () => "", settings: { store: {} } },
             "../utils/actions": { createPresetActions: () => ({}) }, "../utils/profile": {},
-            "../utils/storage": { createPresetStorage: () => ({ presets: [{ name: "Match" }, ...Array.from({ length: 9 }, () => ({ name: "Other" }))] }) },
+            "../utils/storage": { createPresetStorage: () => Object.assign(({ presets: [{ name: "Match" }, ...Array.from({ length: 9 }, () => ({ name: "Other" }))] }), { isCurrentScope: () => true }) },
             "./confirmModal": {}, "./presetList": {}
         });
         api.PresetManager({});
@@ -4601,7 +4620,7 @@ test("profile preset saves navigate using the new list length", async () => {
             "@webpack/common": { React: { ...React, useMemo: (factory: () => unknown) => factory() }, useStateFromStores: () => null, showToast: () => assert.fail("Save failed") },
             "../index": { cl: () => "", settings: { store: {} } },
             "../utils/actions": { createPresetActions: () => ({ savePreset: async () => { storage.presets = [...storage.presets, { name: "New profile" }]; } }) },
-            "../utils/profile": {}, "../utils/storage": { createPresetStorage: () => (storage) }, "./confirmModal": {}, "./presetList": {}
+            "../utils/profile": {}, "../utils/storage": { createPresetStorage: () => Object.assign((storage), { isCurrentScope: () => true }) }, "./confirmModal": {}, "./presetList": {}
         });
         api.PresetManager({});
         await save();
@@ -4642,7 +4661,7 @@ test("profile preset controls recover failed preparation and avoid random repeat
         "@webpack/common": { React: { ...React, useMemo: (factory: () => unknown) => factory() }, UserStore, openModal: (_render: unknown, options: { onCloseCallback: () => void; }) => options.onCloseCallback(), useStateFromStores: (stores: unknown[], select: () => unknown) => stores.includes(UserStore) ? select() : null, showToast: (message: string) => errors.push(message), Toasts: { Type: { FAILURE: "failure" } } },
         "../index": { cl: () => "", settings: { store: {} } },
         "../utils/actions": { createPresetActions: () => ({ importPresets: async (_update: unknown, prompt: (count: number) => Promise<string>) => { decisions.push(await prompt(2)); }, savePreset: async () => { if (saveFails) throw new Error("Profile preparation failed"); } }) }, "../utils/profile": { loadPresetAsPending: async (preset: { name: string; }) => { selected.push(presets.indexOf(preset)); } },
-        "../utils/storage": { createPresetStorage: () => ({ presets }) },
+        "../utils/storage": { createPresetStorage: () => Object.assign(({ presets }), { isCurrentScope: () => true }) },
         "./confirmModal": {}, "./presetList": {}
     }, { Math: { ...Math, max: Math.max, ceil: Math.ceil, floor: Math.floor, random: () => { draws++; return 0.5; } } });
     api.PresetManager({});

@@ -27,16 +27,23 @@ import definePlugin, { OptionType, StartAt } from "@utils/types";
 import { extractAndLoadChunksLazy, findComponentByCode, findComponentByCodeLazy } from "@webpack";
 import { Menu, openModalLazy, OverridePremiumTypeStore, Toasts, useStateFromStores } from "@webpack/common";
 
-interface Emoji {
-    animated: boolean;
-    id: string | null;
-    name: string;
+interface DiscordStatus {
+    emojiInfo?: { id?: string | null; name?: string | null; } | null;
+    text: string;
+    clearAfter?: "TODAY" | "DONT_CLEAR" | number | null;
 }
 
-interface DiscordStatus {
-    emojiInfo: Emoji | null;
-    text: string;
-    clearAfter: "TODAY" | "DONT_CLEAR" | number | null;
+function isPresetCollection(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isDiscordStatus(value: unknown): value is DiscordStatus {
+    if (!isPresetCollection(value) || typeof value.text !== "string") return false;
+    const { emojiInfo, clearAfter } = value;
+    return (clearAfter == null || clearAfter === "TODAY" || clearAfter === "DONT_CLEAR" || typeof clearAfter === "number")
+        && (emojiInfo == null || (isPresetCollection(emojiInfo)
+            && (emojiInfo.id == null || typeof emojiInfo.id === "string")
+            && (emojiInfo.name == null || typeof emojiInfo.name === "string")));
 }
 
 const PMenu = findComponentByCodeLazy("#{intl::MORE_OPTIONS}", ",renderSubmenu:");
@@ -63,13 +70,9 @@ function getExpirationMs(expiration: "TODAY" | number) {
     return expiresAt;
 }
 
-async function setStatus(status: DiscordStatus) {
+async function setStatus(status: unknown) {
     try {
-        const emoji: unknown = status.emojiInfo;
-        if (emoji != null && (typeof emoji !== "object" || Array.isArray(emoji)
-            || ("id" in emoji && emoji.id != null && typeof emoji.id !== "string")
-            || ("name" in emoji && emoji.name != null && typeof emoji.name !== "string")))
-            throw new Error("Invalid preset emoji.");
+        if (!isDiscordStatus(status)) throw new Error("Invalid status preset.");
         await CustomStatusSettings.updateSetting({
             text: status.text.trim(),
             expiresAtMs: status.clearAfter != null && status.clearAfter !== "DONT_CLEAR" ? String(getExpirationMs(status.clearAfter)) : "0",
@@ -88,14 +91,15 @@ const StatusSubMenuComponent = () => {
 
     return (
         <Menu.Menu navId="sp-custom-status-submenu" onClose={() => { }}>
-            {Object.entries((StatusPresets as { [k: string]: DiscordStatus | undefined; })).map(([index, status]) =>
-                status != null ? (
+            {isPresetCollection(StatusPresets) ? Object.entries(StatusPresets).map(([index, value]) => {
+                const status = isDiscordStatus(value) ? value : undefined;
+                return (
                     <Menu.MenuItem
                         key={"status-presets-" + index}
                         id={"status-presets-" + index}
-                        label={status.text}
-                        action={() => (status.emojiInfo?.id == null || premiumType > 0) && setStatus(status)}
-                        icon={status.emojiInfo != null
+                        label={status?.text ?? index}
+                        action={status ? () => (status.emojiInfo?.id == null || premiumType > 0) && setStatus(status) : undefined}
+                        icon={status?.emojiInfo != null
                             ? () => <EmojiComponent emoji={status.emojiInfo} animate={false} hideTooltip={false} />
                             : undefined
                         }
@@ -104,14 +108,15 @@ const StatusSubMenuComponent = () => {
                             id={"status-presets-delete-" + index}
                             label="Delete Preset"
                             action={() => {
+                                if (!isPresetCollection(settings.store.StatusPresets)) return;
                                 const newPresets = { ...settings.store.StatusPresets };
                                 delete newPresets[index];
                                 settings.store.StatusPresets = newPresets;
                             }}
                         />
                     </Menu.MenuItem>
-                ) : null
-            )}
+                );
+            }) : <Menu.MenuItem id="status-presets-invalid" label="Saved presets could not be read." disabled />}
         </Menu.Menu>
     );
 };
@@ -179,6 +184,10 @@ export default definePlugin({
             text: "Keep",
             style: { marginLeft: "20px" },
             onClick: () => {
+                if (!isPresetCollection(settings.store.StatusPresets)) {
+                    Toasts.show({ message: "Could not save the status preset. Existing presets could not be read.", type: Toasts.Type.FAILURE, id: Toasts.genId() });
+                    return;
+                }
                 settings.store.StatusPresets = { ...settings.store.StatusPresets, [status.text]: status };
                 Toasts.show({
                     message: "Successfully Saved Status",

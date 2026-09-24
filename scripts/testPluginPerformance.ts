@@ -1489,6 +1489,47 @@ test("status preset menus subscribe and delete the actual saved key", () => {
     assert.equal(subscriptions[0], subscriptions[1]);
 });
 
+test("status presets preserve malformed data and keep invalid entries deletable", () => {
+    const store: { StatusPresets: unknown; } = { StatusPresets: {} };
+    const toasts: object[] = [];
+    const { plugin, StatusSubMenuComponent } = loadSource("src/equicordplugins/statusPresets/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store, use: () => store }) },
+        "@api/UserSettings": { getUserSettingLazy: () => ({}) },
+        "@components/ErrorBoundary": {}, "@utils/constants": { EquicordDevs: {} }, "@utils/react": {},
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {}, StartAt: {} },
+        "@webpack": { findComponentByCodeLazy: () => () => null, extractAndLoadChunksLazy: () => () => {} },
+        "@webpack/common": {
+            Menu: {}, OverridePremiumTypeStore: { getState: () => ({}) }, useStateFromStores: (_stores: unknown[], selector: () => unknown) => selector(),
+            Toasts: { show: (toast: object) => toasts.push(toast), Type: { FAILURE: "failure" }, genId: () => "toast" }
+        }
+    }, { React: { createElement: (type: unknown, props: unknown, ...children: unknown[]) => ({ type, props, children }) } }, "({ plugin: exports.default, StatusSubMenuComponent })");
+    for (const invalid of [null, [], "broken", 42]) {
+        store.StatusPresets = invalid;
+        const menu = StatusSubMenuComponent();
+        assert.equal(menu.children[0].props.disabled, true);
+        plugin.renderRememberButton({ text: "New" }).onClick();
+        assert.equal(store.StatusPresets, invalid);
+    }
+    assert.equal(toasts.length, 4);
+    for (const invalid of [null, [], "broken", { text: {} }, { text: "Bad emoji", emojiInfo: { name: {} } }, { text: "Bad expiry", clearAfter: {} }]) {
+        const valid = { text: "Valid", emojiInfo: null };
+        const entries = { brokenKey: invalid, validKey: valid };
+        store.StatusPresets = entries;
+        const rows = StatusSubMenuComponent().children[0];
+        assert.equal(rows[0].props.label, "brokenKey");
+        assert.equal(rows[0].props.action, undefined);
+        assert.equal(rows[0].props.icon, undefined);
+        assert.equal(rows[0].props.disabled, undefined);
+        assert.equal(rows[1].props.label, "Valid");
+        assert.equal(store.StatusPresets, entries);
+        rows[0].children[0].props.action();
+        assert.deepEqual(Object.keys(store.StatusPresets as object), ["validKey"]);
+        store.StatusPresets = null;
+        rows[1].children[0].props.action();
+        assert.equal(store.StatusPresets, null);
+    }
+});
+
 test("status presets save object-property names as ordinary entries", () => {
     const settingsStore = new SettingsStore({ StatusPresets: {} as Record<string, object> });
     const store = settingsStore.store;

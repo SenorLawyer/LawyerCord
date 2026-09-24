@@ -84,8 +84,7 @@ export async function loadPresets(section: PresetSection) {
                 : (Array.isArray(legacyBaseStored) ? legacyBaseStored : null);
             if (legacyToUse) {
                 await DataStore.set(key, legacyToUse);
-                await DataStore.del(legacyKey);
-                await DataStore.del(LEGACY_PRESETS_KEY);
+                await DataStore.del(Array.isArray(legacyStored) ? legacyKey : LEGACY_PRESETS_KEY);
                 if (!isCurrentLoad(generation, userId)) return;
                 activeScopeKey = key;
                 resetPresets(legacyToUse);

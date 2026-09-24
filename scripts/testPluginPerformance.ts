@@ -4009,6 +4009,33 @@ test("profile preset saves reject account and list changes during preparation", 
     assert.equal(writes, 1);
 });
 
+test("profile preset migration preserves legacy data it did not copy", async () => {
+    for (const failedWrite of [false, true]) {
+        const scoped = [{ name: "Scoped", timestamp: 0 }];
+        const unowned = [{ name: "Unowned", timestamp: 0 }];
+        const data = new Map<string, unknown>([
+            ["ProfileDataset:user:main", scoped], ["ProfileDataset", unowned]
+        ]);
+        const api = loadSource("src/equicordplugins/profileSets/utils/storage.ts", {
+            "@api/index": { DataStore: {
+                get: async (key: string) => data.get(key),
+                set: async (key: string, value: unknown) => {
+                    if (failedWrite) throw new Error("Storage unavailable");
+                    data.set(key, value);
+                },
+                del: async (key: string) => { data.delete(key); }
+            } },
+            "@utils/Logger": { Logger: class { error() {} } },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "user" }) } }
+        });
+        await api.loadPresets("main");
+        assert.equal(data.get("ProfileDataset"), unowned);
+        assert.equal(data.has("ProfileDataset:user:main"), failedWrite);
+        assert.equal(data.get("ProfilePresets_v2_Main:user"), failedWrite ? undefined : scoped);
+        assert.equal(api.presets.length, failedWrite ? 0 : 1);
+    }
+});
+
 test("profile preset storage rejects stale account reads and foreign-scope saves", async () => {
     let currentId: string | undefined = "first";
     const reads: ReturnType<typeof Promise.withResolvers<unknown>>[] = [];

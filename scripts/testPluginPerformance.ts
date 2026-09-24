@@ -1330,6 +1330,23 @@ test("custom status timeouts retain one choice per duration without mutating Dis
     }
 });
 
+test("custom status timeouts exclude durations that cannot produce valid millisecond dates", () => {
+    const store = { extraSeconds: "1e308, 9000000000000, 0.0001, 0.5", extraMinutes: "", extraHours: "", extraDays: "1e305", showForeverOnTop: true };
+    const { default: plugin } = loadSource("src/equicordplugins/customStatusTimeouts/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store }) },
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} }
+    });
+    const choices: { duration: number; }[] = plugin.buildTimeouts([]);
+    assert.ok(choices.some(choice => choice.duration === 500));
+    for (const { duration } of choices) {
+        assert.ok(Number.isSafeInteger(duration) && duration > 0);
+        assert.ok(Number.isFinite(new Date(Date.now() + duration).getTime()));
+    }
+    assert.equal(store.extraSeconds, "1e308, 9000000000000, 0.0001, 0.5");
+    assert.equal(store.extraDays, "1e305");
+});
+
 test("custom status timeout patch leaves neighboring duration arrays intact", () => {
     const { default: plugin } = loadSource("src/equicordplugins/customStatusTimeouts/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({ store: {} }) },

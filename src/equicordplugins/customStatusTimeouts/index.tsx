@@ -34,7 +34,7 @@ function invalidateTimeoutCache() {
     cachedExtraTimeouts = null;
 }
 
-function makeTimeout(value: number, millis: number, singular: string): TimeoutOption {
+function makeTimeout(value: number, millis: number, singular: string): Required<TimeoutOption> {
     return {
         duration: value * millis,
         label: () => `For ${value} ${value === 1 ? singular : `${singular}s`}`
@@ -56,7 +56,7 @@ function getExtraTimeouts(): TimeoutOption[] {
         ...days.map(d => makeTimeout(d, Millis.DAY, "Day")),
         ...[1, 2, 3].map(w => makeTimeout(w, Millis.WEEK, "Week")),
         ...[2, 4].map(m => makeTimeout(m, Millis.DAYS_30, "Month")),
-    ];
+    ].filter(({ duration }) => Number.isSafeInteger(duration) && duration > 0 && Number.isFinite(new Date(Date.now() + duration).getTime()));
 
     return cachedExtraTimeouts;
 }

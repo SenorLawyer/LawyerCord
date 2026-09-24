@@ -4957,6 +4957,8 @@ test("USRBG rejects malformed feed data before publishing it", async () => {
         await plugin.start();
         assert.equal(plugin.data, data === valid ? valid : null);
         assert.equal(plugin.userHasBackground("user"), data === valid);
+        assert.equal(plugin.getImageUrl("user"), data === valid ? "https://fixture.invalid/banners/v2/user?etag" : null);
+        assert.equal(plugin.getImageUrl("missing"), null);
         assert.equal(warnings, data === valid ? 0 : 1);
     }
 });

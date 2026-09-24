@@ -124,10 +124,10 @@ export default definePlugin({
     },
 
     getImageUrl(userId: string): string | null {
-        if (!this.userHasBackground(userId)) return null;
-
-        // We can assert that data exists because userHasBackground returned true
-        const { endpoint, bucket, prefix, users: { [userId]: etag } } = this.data!;
+        const { data } = this;
+        if (!data) return null;
+        const { endpoint, bucket, prefix, users: { [userId]: etag } } = data;
+        if (!etag) return null;
         return `${endpoint}/${bucket}/${prefix}${userId}?${etag}`;
     },
 

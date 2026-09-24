@@ -10,7 +10,7 @@ import { classNameFactory } from "@utils/css";
 import { RenderModalProps } from "@vencord/discord-types";
 import { ChannelStore, closeModal, Modal, openModal, showToast, Toasts, UserStore, useState, useStateFromStores } from "@webpack/common";
 
-import { clearAllScheduledMessages, getChannelDisplayInfo, getScheduledMessages, removeScheduledMessage, sendScheduledMessageNow } from "../utils";
+import { clearAllScheduledMessages, getChannelDisplayInfo, getScheduledMessages, loadScheduledMessages, removeScheduledMessage, sendScheduledMessageNow } from "../utils";
 import { CalendarIcon, TimerIcon } from "./Icons";
 import { openScheduleTimeModal } from "./ScheduleTimeModal";
 
@@ -50,7 +50,20 @@ function ViewScheduledModalInner({ rootProps, close }: ViewScheduledModalProps) 
         showToast(result.success ? "Scheduled message sent" : result.error ?? "Could not send the scheduled message. Try again.", result.success ? Toasts.Type.SUCCESS : Toasts.Type.FAILURE);
     };
 
+    const handleReload = async () => {
+        if (!userId || UserStore.getCurrentUser()?.id !== userId) return;
+        const loaded = await loadScheduledMessages().then(() => true, () => false);
+        if (UserStore.getCurrentUser()?.id !== userId) return;
+        if (loaded) setMessages(getScheduledMessages());
+        else showToast("Could not reload scheduled messages. The saved data has been kept.", Toasts.Type.FAILURE);
+    };
+
     const actions = [
+        {
+            text: "Reload",
+            variant: "secondary",
+            onClick: handleReload
+        },
         {
             text: "Close",
             variant: "secondary",

@@ -10177,6 +10177,39 @@ test("scheduled queue controls report failures without stale account feedback", 
 });
 
 
+test("scheduled queue reload publishes only successful current-account reads", async () => {
+    for (const outcome of ["success", "failure", "switched", "before"]) {
+        let userId = "account";
+        let reads = 0, updates = 0;
+        const notices: string[] = [];
+        const pending = Promise.withResolvers<void>();
+        let reload: () => Promise<void> = async () => assert.fail("Missing reload action");
+        const Modal = Symbol("Modal");
+        const component = loadSource("src/equicordplugins/scheduledMessages/components/ViewScheduledModal.tsx", {
+            "./ScheduleTimeModal": {}, "./Icons": {},
+            "@components/Button": {}, "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+            "@utils/css": { classNameFactory: () => () => "" },
+            "@webpack/common": { Modal, UserStore: { getCurrentUser: () => ({ id: userId }) },
+                useState: (value: unknown) => [value, () => updates++], useStateFromStores: (_stores: unknown, selector: () => unknown) => selector(),
+                showToast: (text: string) => notices.push(text), Toasts: { Type: { FAILURE: "failure" } } },
+            "../utils": { getScheduledMessages: () => [], loadScheduledMessages: () => { reads++; return pending.promise; } }
+        }, { React: { createElement: (type: unknown, props: { actions: { text: string; onClick: () => Promise<void>; }[]; }) => {
+            if (type === Modal) reload = props.actions.find(action => action.text === "Reload")?.onClick ?? reload;
+            return null;
+        } } }, "ViewScheduledModalInner");
+        component({});
+        if (outcome === "before") userId = "other";
+        const result = reload();
+        if (outcome === "switched") userId = "other";
+        if (outcome === "failure") pending.reject(new Error("Storage failure"));
+        else pending.resolve();
+        await result;
+        assert.equal(reads, outcome === "before" ? 0 : 1);
+        assert.equal(updates, outcome === "success" ? 1 : 0);
+        assert.equal(notices.length, outcome === "failure" ? 1 : 0);
+    }
+});
+
 test("scheduling an unavailable channel explains the failure without opening an empty modal", () => {
     for (const state of ["available", "missing", "signed-out"]) {
         let opened = 0;

@@ -394,3 +394,7 @@ The full regression run for this appearance change passed 565 tests plus timezon
 
 
 ProfileSets text snapshots now fall back to saved bio, pronouns, global name and server nickname only when the pending field is undefined. A regression reproduced pending null being replaced by saved text; it now covers undefined, null, empty and replacement values in global and server profiles. Both focused text tests, source lint and TypeScript pass. Live Discord text-clearing behavior remains unverified.
+
+
+ProfileSets snapshot reads now use only the effective profile scope. Removed the second store read and fallback that copied global pending edits whenever the server pending record was empty or absent. The regression reproduced a global bio replacing the saved server bio, then verifies absent, empty and populated server edits plus explicit global mode with a guild argument. All 38 profile-related tests and source lint pass. This verifies source scope selection; live store semantics remain part of runtime acceptance.
+TypeScript also passes for the scoped snapshot change.

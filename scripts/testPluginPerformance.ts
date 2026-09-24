@@ -4834,6 +4834,34 @@ test("profile appearance removals survive apply and snapshot without clearing om
     assert.equal(dispatched.length, 0);
 });
 
+test("profile snapshots read pending edits only from the selected scope", async () => {
+    for (const guildChanges of [undefined, {}, { pendingBio: "Guild edit" }]) {
+        const calls: (string | undefined)[] = [];
+        const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null }) },
+            "@webpack": { findStoreLazy: () => ({ getPendingChanges: (guildId?: string) => {
+                calls.push(guildId);
+                return guildId ? guildChanges : { pendingBio: "Global edit", pendingPronouns: "Global pronouns" };
+            } }) },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: "me" }) },
+                UserProfileStore: { getUserProfile: () => ({ bio: "Global saved" }),
+                    getGuildMemberProfile: () => ({ bio: "Guild saved", pronouns: "Guild pronouns" }) },
+                GuildMemberStore: { getMember: () => null },
+                IconUtils: { getUserAvatarURL: () => null, getDefaultAvatarURL: () => "default" }
+            }
+        });
+        const guildProfile = await api.getCurrentProfile("guild");
+        assert.equal(guildProfile.bio, guildChanges?.pendingBio ?? "Guild saved");
+        assert.equal(guildProfile.pronouns, "Guild pronouns");
+        assert.deepEqual(calls, ["guild"]);
+        calls.length = 0;
+        const globalProfile = await api.getCurrentProfile("guild", { isGuildProfile: false });
+        assert.equal(globalProfile.bio, "Global edit");
+        assert.deepEqual(calls, [undefined]);
+    }
+});
+
 test("profile text snapshots preserve pending clears for global and server profiles", async () => {
     for (const guildId of [undefined, "guild"]) for (const value of [undefined, null, "", "New"]) {
         const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {

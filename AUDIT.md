@@ -402,3 +402,6 @@ TypeScript also passes for the scoped snapshot change.
 
 ProfileSets image snapshots now preserve explicit pending null avatar and banner removals, including bypassing default-avatar substitution for a pending removal. The regression reproduced a saved image replacing null and covers both global/server snapshots with absent, cleared and replacement images. All 39 profile-related tests pass. This does not establish live preview behavior or settle inherited/default image representation when no edit is pending.
 The full regression suite passes 568 tests plus timezone checks (.git/audit/profile-snapshots-full.log); source lint and TypeScript also pass.
+
+
+ProfileSets effect snapshot preparation now selects a direct effect or matching collectible before one field-copy block, deleting 20 net source lines without adding a helper. The new behavior fixture passes before and after the refactor and covers direct effects, collectible lookup, missing/empty SKU and explicit null, while preserving field filtering and the existing type fallback. Appearance-removal regression, source lint, TypeScript and desktop/web standalone builds pass (.git/audit/profile-snapshots-desktop.log and profile-snapshots-web.log). Live effect rendering remains unverified.

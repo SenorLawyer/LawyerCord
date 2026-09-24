@@ -4834,6 +4834,32 @@ test("profile appearance removals survive apply and snapshot without clearing om
     assert.equal(dispatched.length, 0);
 });
 
+test("profile effect snapshots preserve direct and collectible resolution", async () => {
+    const direct = { skuId: "effect", effects: [], title: "Direct", type: 0, extra: "omit" };
+    const collectible = { skuId: "effect", effects: [], title: "Collectible", type: 2, extra: "omit" };
+    for (const [pending, expected] of [[undefined, collectible], [direct, direct], [null, null],
+        [{ skuId: "missing" }, null], [{ skuId: "" }, null]] as const) {
+        const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null }) },
+            "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({ pendingProfileEffect: pending }) }) },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: "me" }) },
+                UserProfileStore: { getUserProfile: () => ({ profileEffect: { skuId: "effect" }, collectibles: [collectible] }) },
+                IconUtils: { getUserAvatarURL: () => null, getDefaultAvatarURL: () => "default" }
+            }
+        });
+        const { profileEffect } = await api.getCurrentProfile();
+        if (!expected) assert.equal(profileEffect, null);
+        else {
+            assert.equal(profileEffect.skuId, expected.skuId);
+            assert.equal(profileEffect.title, expected.title);
+            assert.equal(profileEffect.type, expected.type || 1);
+            assert.deepEqual(Array.from(profileEffect.effects), []);
+            assert.equal("extra" in profileEffect, false);
+        }
+    }
+});
+
 test("profile image snapshots preserve explicit pending removals", async () => {
     for (const guildId of [undefined, "guild"]) for (const pending of [undefined, null, "data:image/png;base64,bmV3"]) {
         const saved = "data:image/png;base64,c2F2ZWQ=";

@@ -204,42 +204,22 @@ export async function getCurrentProfile(guildId?: string, options: CurrentProfil
         }
         : null;
 
-    let profileEffect: ProfileEffect | null = null;
     const effectToUse = pendingChanges.pendingProfileEffect !== undefined ? pendingChanges.pendingProfileEffect : userProfile?.profileEffect;
-
-    if (effectToUse) {
-        if (effectToUse.skuId && effectToUse.effects) {
-            profileEffect = {
-                skuId: effectToUse.skuId,
-                title: effectToUse.title,
-                description: effectToUse.description,
-                accessibilityLabel: effectToUse.accessibilityLabel,
-                reducedMotionSrc: effectToUse.reducedMotionSrc,
-                thumbnailPreviewSrc: effectToUse.thumbnailPreviewSrc,
-                effects: effectToUse.effects,
-                animationType: effectToUse.animationType,
-                staticFrameSrc: effectToUse.staticFrameSrc,
-                type: effectToUse.type || 1
-            };
-        } else if (effectToUse.skuId) {
-            const collectibles = userProfile?.collectibles;
-            const collectible = collectibles?.find(c => c?.skuId === effectToUse.skuId);
-            if (collectible) {
-                profileEffect = {
-                    skuId: collectible.skuId,
-                    title: collectible.title,
-                    description: collectible.description,
-                    accessibilityLabel: collectible.accessibilityLabel,
-                    reducedMotionSrc: collectible.reducedMotionSrc,
-                    thumbnailPreviewSrc: collectible.thumbnailPreviewSrc,
-                    effects: collectible.effects,
-                    animationType: collectible.animationType,
-                    staticFrameSrc: collectible.staticFrameSrc,
-                    type: collectible.type || 1
-                };
-            }
-        }
-    }
+    const resolvedEffect = effectToUse?.skuId
+        ? (effectToUse.effects ? effectToUse : userProfile?.collectibles?.find(c => c?.skuId === effectToUse.skuId))
+        : null;
+    const profileEffect: ProfileEffect | null = resolvedEffect ? {
+        skuId: resolvedEffect.skuId,
+        title: resolvedEffect.title,
+        description: resolvedEffect.description,
+        accessibilityLabel: resolvedEffect.accessibilityLabel,
+        reducedMotionSrc: resolvedEffect.reducedMotionSrc,
+        thumbnailPreviewSrc: resolvedEffect.thumbnailPreviewSrc,
+        effects: resolvedEffect.effects,
+        animationType: resolvedEffect.animationType,
+        staticFrameSrc: resolvedEffect.staticFrameSrc,
+        type: resolvedEffect.type || 1
+    } : null;
 
     const nameplateToUse = pendingChanges.pendingNameplate !== undefined
         ? pendingChanges.pendingNameplate

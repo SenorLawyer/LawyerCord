@@ -254,11 +254,11 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
                                 ←
                             </Button>
                             <div className={cl("page")}>
-                                <input
+                                <TextInput
                                     type="text"
+                                    aria-label="Page"
                                     value={pageInput}
-                                    onChange={e => {
-                                        const { value } = e.target;
+                                    onChange={value => {
                                         setPageInput(value);
                                         const num = parseInt(value);
                                         if (!isNaN(num) && num >= 1 && num <= totalPages) {

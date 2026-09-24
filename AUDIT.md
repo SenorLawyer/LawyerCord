@@ -351,3 +351,6 @@ ProfileSets load and export callbacks now check the storage instance against the
 
 
 ProfileSets save completion now checks that its storage instance still owns the panel and matches the active account/section before updating draft text, pagination, save state or failure feedback. Guild changes create a new instance; loading a new scope resets its saving state. Saves cannot start from an unloaded scope. The delayed-save regression covers success/failure after replacement or cleanup, plus a retained closed-panel save callback. All 23 focused profile tests pass; TypeScript and component lint also pass on the final source. Live rendering remains unverified.
+
+
+ProfileSets pagination now uses the already-imported shared TextInput with an accessible Page label and its value-based change callback. Removed bespoke page input colors/border/padding and duplicate name/search input overrides that suppressed component borders, outlines and shadows; only layout widths remain. TypeScript, component ESLint and focused stylelint pass. No new regression test was added for this component substitution. Current live theme/focus/width appearance still requires visual acceptance.

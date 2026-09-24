@@ -12,7 +12,7 @@ export default definePlugin({
     description: "Embeds TIDAL songs to make them playable in Discord.",
     tags: ["Appearance", "Chat", "Media"],
     authors: [EquicordDevs.vmohammad],
-    dependencies: ["MessageUpdaterAPI", "MessageAccessoriesAPI"],
+    dependencies: ["MessageUpdaterAPI"],
     patches: [
         {
             find: "renderEmbeds(",

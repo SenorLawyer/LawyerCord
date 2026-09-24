@@ -15,7 +15,7 @@ Changes are accumulated in [PR #47](https://github.com/SenorLawyer/LawyerCord/pu
 
 ## Latest local verification
 
-At `b5f6eac77`, all 570 regression tests and timezone checks, TypeScript, repository-wide ESLint, desktop and web standalone builds, and the release credential scan pass. Logs are under `.git/audit/current-*.log`. A fresh fetch confirms main `8fc182ba7` and published nightly `nightly-20260905-1918-6e664e03` are unchanged; main is an ancestor of this branch. PR #47 is mergeable but remains draft with auto-merge disabled. Build, Windows smoke and CodeQL were still running at the status check; dependency review passed. Local checks do not establish live Discord acceptance or closure of the remaining findings.
+At `c74416c4c`, all 572 regression tests and timezone checks, TypeScript, repository-wide ESLint, desktop and web standalone builds, and the release credential scan pass. Logs are under `.git/audit/current-*.log`. Patch lint reports 184 warnings and no errors; warnings and actual client compatibility remain separate checks. The current captured runtime and all 5,198 referenced chunks were checked for the four focused plugins, including the previously missing TIDAL and USRBG targets. PR #47 remains draft, and CI was in progress when checked. Local checks and controlled module execution do not establish signed-in acceptance or closure of the remaining repository findings.
 
 ## Approach and changes
 

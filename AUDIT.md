@@ -405,3 +405,6 @@ The full regression suite passes 568 tests plus timezone checks (.git/audit/prof
 
 
 ProfileSets effect snapshot preparation now selects a direct effect or matching collectible before one field-copy block, deleting 20 net source lines without adding a helper. The new behavior fixture passes before and after the refactor and covers direct effects, collectible lookup, missing/empty SKU and explicit null, while preserving field filtering and the existing type fallback. Appearance-removal regression, source lint, TypeScript and desktop/web standalone builds pass (.git/audit/profile-snapshots-desktop.log and profile-snapshots-web.log). Live effect rendering remains unverified.
+
+
+USRBG banner priority now uses a BOOLEAN setting instead of a two-option SELECT. The nitroFirst key, boolean values and true default remain identical. Both shared setting renderers read saved values with nullish fallback, so an existing false preference remains false. Three existing USRBG regressions and source lint pass. No extra test was added for this reversible setting-control substitution. Feed resource bounds, URL component handling, live patches and refresh behavior remain open.

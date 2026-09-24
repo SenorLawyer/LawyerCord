@@ -14,6 +14,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ### Removed
 
 - Remove duplicate ProfileSets storage state, startup loading, comparison code, profile-effect copying, unused arguments, separators, and styles. Use the shared file utilities for import and export and shared TextInput for pagination. Remove redundant input theme and focus overrides. Use separate shared buttons for loading presets and opening their options.
+- Replace USRBG's two-choice banner-priority dropdown with a boolean toggle, preserving saved preferences.
 - Remove redundant banner URL and status-error toast construction, the unused FriendTags stylesheet, and TidalEmbeds' duplicate accessory dependency.
 - Remove the unused SVGO development dependency and its release-age exception.
 - Remove TriviaAI, which required a user-supplied API key and arbitrary AI endpoint. Its Answer With AI actions are no longer available.

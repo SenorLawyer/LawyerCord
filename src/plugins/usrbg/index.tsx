@@ -39,12 +39,9 @@ interface UsrbgApiReturn {
 
 const settings = definePluginSettings({
     nitroFirst: {
-        description: "Banner to use if both Nitro and USRBG banners are present",
-        type: OptionType.SELECT,
-        options: [
-            { label: "Nitro banner", value: true, default: true },
-            { label: "USRBG banner", value: false },
-        ]
+        description: "Prefer Discord banners when both Discord and USRBG banners are available.",
+        type: OptionType.BOOLEAN,
+        default: true
     },
     voiceBackground: {
         description: "Use USRBG banners as voice chat backgrounds",

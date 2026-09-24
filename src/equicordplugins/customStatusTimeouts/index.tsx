@@ -107,7 +107,7 @@ export default definePlugin({
         {
             find: "#{intl::DURATION_FOREVER}",
             replacement: {
-                match: /\[\{duration.*?#{intl::DURATION_FOREVER}\)\}\]/,
+                match: /\[(?:\{duration:[^{}]{0,150}\},){0,10}\{duration:[^{}]{0,150}#{intl::DURATION_FOREVER}\)\}\]/,
                 replace: "$self.buildTimeouts($&)"
             }
         }

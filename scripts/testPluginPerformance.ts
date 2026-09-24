@@ -1309,6 +1309,25 @@ test("BetterSessions returns its settings-close save to the flux error handler",
     await rejected;
 });
 
+test("custom status timeout patch leaves neighboring duration arrays intact", () => {
+    const { default: plugin } = loadSource("src/equicordplugins/customStatusTimeouts/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} }
+    });
+    const { canonicalizeMatch } = loadSource("src/utils/patches.ts", { "./intlHash": { runtimeHashMessageKey: () => "forever" } });
+    const { match, replace } = plugin.patches[0].replacement;
+    const source = '(()=>{const other=[{duration:1,label:()=>"other"}];const choices=[{duration:2,label:()=>"timed"},{duration:void 0,label:()=>i.string(i.t.forever)}];return {other,choices}})()';
+    const result = runInNewContext(source.replace(canonicalizeMatch(match), replace.replaceAll("$self", "plugin")), {
+        i: { string: (value: string) => value, t: { forever: "Forever" } },
+        plugin: { buildTimeouts: (choices: object[]) => [...choices, { duration: 3 }] }
+    });
+    assert.equal(result.other.length, 1);
+    assert.equal(result.other[0].label(), "other");
+    assert.equal(result.choices.length, 3);
+    assert.equal(result.choices[1].label(), "Forever");
+});
+
 test("status presets find the modal component after its chunk loads", async () => {
     const loaded = Promise.withResolvers<void>();
     let ready = false;

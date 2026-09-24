@@ -1370,6 +1370,33 @@ test("status preset insertion preserves following items and property order", () 
     }
 });
 
+test("status preset menu export tolerates reordered component props", () => {
+    const { default: plugin } = loadSource("src/equicordplugins/statusPresets/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@api/UserSettings": { getUserSettingLazy: () => ({}) },
+        "@components/ErrorBoundary": {}, "@utils/constants": { EquicordDevs: {} },
+        "@utils/react": {},
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {}, StartAt: {} },
+        "@webpack": { findComponentByCodeLazy: () => () => null, extractAndLoadChunksLazy: () => () => {} },
+        "@webpack/common": {}
+    });
+    const { canonicalizeMatch } = loadSource("src/utils/patches.ts", { "./intlHash": {} });
+    const { match, replace } = plugin.patches[2].replacement;
+    for (const props of ["renderSubmenu:r,ref:c", "ref:c,label:l,renderSubmenu:r"]) {
+        const source = `(function(module,exports,n){n.d(exports,{g:()=>unrelated,});function unrelated(){return "other"}function menu(e){let{${props}}=e;return r()}exports.existing=unrelated})`;
+        const patched = source.replace(canonicalizeMatch(match), replace);
+        const exports: { PMenu?: (props: object) => string; existing?: () => string; } = {};
+        runInNewContext(patched)({}, exports, {
+            d: (target: object, getters: Record<string, () => unknown>) => {
+                for (const [key, get] of Object.entries(getters)) Object.defineProperty(target, key, { get });
+            }
+        });
+        assert.equal(exports.existing?.(), "other");
+        assert.equal(typeof exports.PMenu, "function");
+        assert.equal(exports.PMenu?.({ renderSubmenu: () => "submenu" }), "submenu");
+    }
+});
+
 test("status preset application validates expiration and reports rejected updates once", async () => {
     const clock = runInNewContext(`(class extends Date {
         constructor(...args) { super(...(args.length ? args : [2026, 2, 29, 0, 30])); }

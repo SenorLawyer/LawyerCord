@@ -25,7 +25,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
-- Restore the StatusPresets menu insertion in the current account popout.
+- Restore the StatusPresets menu insertion in the current account popout and export its menu component without matching across neighboring functions.
 - Reject malformed saved emoji values before applying a status preset, while retaining the saved record.
 
 - Preserve Discord's avatar format and WebP arguments when UserPFP falls back to the original avatar function or substitutes a global avatar for a server avatar.

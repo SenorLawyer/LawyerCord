@@ -151,8 +151,8 @@ export default definePlugin({
         {
             find: "#{intl::MORE_OPTIONS}),...",
             replacement: {
-                match: /\i:\(\)=>\i,(?=.*?function (\i).{0,100}renderSubmenu:\i,ref:)/,
-                replace: "$&PMenu:()=>$1,"
+                match: /function (\i)\(\i\)\{(?=let\{[^{}]{0,150}\brenderSubmenu:)/,
+                replace: "arguments[1].PMenu=$1;$&"
             }
         },
     ],

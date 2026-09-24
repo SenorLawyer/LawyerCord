@@ -133,7 +133,9 @@ async function processImage(imageData: ImageInput, userId: string, type: "avatar
     if (typeof imageData === "string") {
         if (imageData.startsWith("data:")) return imageData;
         if (/^https?:\/\//.test(imageData)) {
-            return await imageUrlToBase64(imageData);
+            const image = await imageUrlToBase64(imageData);
+            if (!image) throw new Error("Could not download the profile image.");
+            return image;
         }
 
         const isAnimated = imageData.startsWith("a_");
@@ -146,7 +148,9 @@ async function processImage(imageData: ImageInput, userId: string, type: "avatar
             const guildResult = await imageUrlToBase64(guildUrl);
             if (guildResult) return guildResult;
         }
-        return await imageUrlToBase64(globalUrl);
+        const image = await imageUrlToBase64(globalUrl);
+        if (!image) throw new Error("Could not download the profile image.");
+        return image;
     }
 
     return null;

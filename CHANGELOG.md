@@ -31,6 +31,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Abort profile preset preparation when an image download fails instead of treating the image as absent.
+
 - Wait for pending profile preset writes before reloading their stored list.
 
 - Publish profile preset changes only after storage succeeds, report failures, and reject overlapping writes.

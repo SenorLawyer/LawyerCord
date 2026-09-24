@@ -3888,6 +3888,19 @@ test("profile images fall back after failed guild downloads", async () => {
     assert.equal(blobReads, 1);
 });
 
+test("profile image preparation distinguishes download failure from no image", async () => {
+    const processImage = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+        "@api/UserSettings": { getUserSettingLazy: () => ({}) },
+        "@webpack": { findStoreLazy: () => ({}) }, "@webpack/common": {}
+    }, { fetch: async () => ({ ok: false }) }, "processImage");
+    for (const input of ["https://cdn.discordapp.com/example.png", "avatar_hash"]) {
+        await assert.rejects(processImage(input, "user", "avatar"), /download/);
+        await assert.rejects(processImage(input, "user", "banner", "guild", true), /download/);
+    }
+    assert.equal(await processImage(null, "user", "banner"), null);
+    assert.equal(await processImage("data:image/png;base64,fixture", "user", "avatar"), "data:image/png;base64,fixture");
+});
+
 test("profile preset refresh writes once and retains its original target", async () => {
     for (const change of ["none", "account", "list", "removed", "moved"]) {
         let userId = "first";

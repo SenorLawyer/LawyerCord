@@ -13,6 +13,10 @@ This audit is still in progress. File coverage records review work; it does not 
 
 Changes are accumulated in [PR #47](https://github.com/SenorLawyer/LawyerCord/pull/47). The PR remains a draft with `release:nightly`; merge and auto-merge are paused. The September 24 integration resolves the conflicts with main.
 
+## Latest local verification
+
+At `b5f6eac77`, all 570 regression tests and timezone checks, TypeScript, repository-wide ESLint, desktop and web standalone builds, and the release credential scan pass. Logs are under `.git/audit/current-*.log`. A fresh fetch confirms main `8fc182ba7` and published nightly `nightly-20260905-1918-6e664e03` are unchanged; main is an ancestor of this branch. PR #47 is mergeable but remains draft with auto-merge disabled. Build, Windows smoke and CodeQL were still running at the status check; dependency review passed. Local checks do not establish live Discord acceptance or closure of the remaining findings.
+
 ## Approach and changes
 
 The audit prioritizes deletion, then simplification, then optimization. Code is left unchanged when a proposed improvement lacks a concrete justification. Relevant callers and history are checked before shared behavior changes.

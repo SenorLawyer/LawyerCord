@@ -95,12 +95,10 @@ export default definePlugin({
     },
 
     memberListBannerHook(user: User, nameplate: Nameplate | undefined) {
-        let url = this.getBanner(user.id);
+        const url = this.getBanner(user.id);
         if (!url) return null;
         if (settings.store.preferNameplate && nameplate) return null;
         if (!settings.store.animate) {
-            // Discord Banners
-            url = url.replace(".gif", ".png");
             // Usrbg Banners
             return <StaticBanner key={url} url={url} convert={this.gifToPng} />;
         }
@@ -166,8 +164,9 @@ export default definePlugin({
             if (banner === null) banner = "";
             return banner;
         }
+        // Discord Banners
         const userProfile = UserProfileStore.getUserProfile(userId);
         if (userProfile?.banner)
-            return IconUtils.getUserBannerURL({ id: userId, banner: userProfile.banner, canAnimate: true, size: 1024 });
+            return IconUtils.getUserBannerURL({ id: userId, banner: userProfile.banner, canAnimate: settings.store.animate, size: 1024 });
     },
 });

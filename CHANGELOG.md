@@ -4,6 +4,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ## 3.0.0.0 - Unreleased
 
+- Preserve third-party banner URLs when converting them to static images.
+
 - Keep banner conversion results attached to their original image instead of updating elements by user ID.
 
 - Keep the original member-list banner when image conversion fails, allow later renders to retry, and clean up pending conversions on stop or after a 30-second timeout.

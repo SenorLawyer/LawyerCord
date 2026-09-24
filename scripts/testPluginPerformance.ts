@@ -4688,13 +4688,14 @@ test("new plugin notifications return failures to the flux dispatcher", async ()
 });
 
 test("BannersEverywhere stops displaying a banner removed from the profile store", () => {
+    const settings = { store: { animate: false } };
     let banner: string | undefined = "original";
     const { default: plugin } = loadSource("src/equicordplugins/bannersEverywhere/index.tsx", {
         "@api/DataStore": {},
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@utils/react": {},
         "@api/PluginManager": { isPluginEnabled: () => false },
-        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@api/Settings": { definePluginSettings: () => settings },
         "@plugins/usrbg": { __esModule: true, default: { name: "USRBG" } },
         "@utils/constants": { Devs: {} },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
@@ -4703,13 +4704,15 @@ test("BannersEverywhere stops displaying a banner removed from the profile store
             IconUtils: { getUserBannerURL: (options: { id: string; banner: string; canAnimate: boolean; size: number; }) => {
                 assert.equal(options.id, "user");
                 assert.equal(options.banner, banner);
-                assert.equal(options.canAnimate, true);
+                assert.equal(options.canAnimate, settings.store.animate);
                 assert.equal(options.size, 1024);
                 return "resolved-original";
             } }
         },
         "./style.css?managed": {}
     }, { setTimeout: () => 1 });
+    assert.match(plugin.getBanner("user"), /original/);
+    settings.store.animate = true;
     assert.match(plugin.getBanner("user"), /original/);
     banner = "";
     assert.equal(plugin.getBanner("user"), undefined);
@@ -4800,12 +4803,12 @@ test("BannersEverywhere conversion results belong to their mounted URL", async (
     }, { React: { createElement: (type: unknown, props: object) => ({ type, props }) } });
     const old = Promise.withResolvers<string>();
     const current = Promise.withResolvers<string>();
-    let url = "old";
+    let url = "https://fixture.invalid/old.gif";
     plugin.getBanner = () => url;
-    plugin.gifToPng = (value: string) => value === "old" ? old.promise : current.promise;
+    plugin.gifToPng = (value: string) => value === "https://fixture.invalid/old.gif" ? old.promise : current.promise;
     const first = plugin.memberListBannerHook({ id: "user" });
-    assert.equal(first.props.key, "old");
-    assert.equal(first.type(first.props).props.src, "old");
+    assert.equal(first.props.key, "https://fixture.invalid/old.gif");
+    assert.equal(first.type(first.props).props.src, "https://fixture.invalid/old.gif");
     cleanup();
     url = "new";
     const second = plugin.memberListBannerHook({ id: "user" });

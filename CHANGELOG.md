@@ -24,6 +24,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Replace BannersEverywhere's hardcoded Discord CDN URL with the shared banner helper.
+
 - Remove BannersEverywhere's persistent Discord banner cache. Banners now follow the currently loaded profile data.
 
 - Remove duplicate error-toast construction in CopyStatusUrls.

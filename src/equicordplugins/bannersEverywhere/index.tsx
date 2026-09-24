@@ -12,7 +12,7 @@ import { Devs } from "@utils/constants";
 import { useAwaiter } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
 import { User } from "@vencord/discord-types";
-import { UserProfileStore } from "@webpack/common";
+import { IconUtils, UserProfileStore } from "@webpack/common";
 
 import style from "./style.css?managed";
 
@@ -168,6 +168,6 @@ export default definePlugin({
         }
         const userProfile = UserProfileStore.getUserProfile(userId);
         if (userProfile?.banner)
-            return `https://cdn.discordapp.com/banners/${userId}/${userProfile.banner}.${userProfile.banner.startsWith("a_") ? "gif" : "png"}`;
+            return IconUtils.getUserBannerURL({ id: userId, banner: userProfile.banner, canAnimate: true, size: 1024 });
     },
 });

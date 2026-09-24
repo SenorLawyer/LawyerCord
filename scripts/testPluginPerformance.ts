@@ -4698,7 +4698,16 @@ test("BannersEverywhere stops displaying a banner removed from the profile store
         "@plugins/usrbg": { __esModule: true, default: { name: "USRBG" } },
         "@utils/constants": { Devs: {} },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
-        "@webpack/common": { UserProfileStore: { getUserProfile: () => banner === undefined ? undefined : { banner } } },
+         "@webpack/common": {
+            UserProfileStore: { getUserProfile: () => banner === undefined ? undefined : { banner } },
+            IconUtils: { getUserBannerURL: (options: { id: string; banner: string; canAnimate: boolean; size: number; }) => {
+                assert.equal(options.id, "user");
+                assert.equal(options.banner, banner);
+                assert.equal(options.canAnimate, true);
+                assert.equal(options.size, 1024);
+                return "resolved-original";
+            } }
+        },
         "./style.css?managed": {}
     }, { setTimeout: () => 1 });
     assert.match(plugin.getBanner("user"), /original/);

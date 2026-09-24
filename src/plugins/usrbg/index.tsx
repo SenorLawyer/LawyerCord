@@ -75,12 +75,19 @@ export default definePlugin({
             }
         },
         {
-            find: '"VideoBackground-web"',
+            find: 'location:"VideoBackground"',
             predicate: () => settings.store.voiceBackground,
-            replacement: {
-                match: /backgroundColor:.{0,25},\{style:(?=\i\?)/,
-                replace: "$&$self.userHasBackground(arguments[0]?.userId)?null:",
-            }
+            group: true,
+            replacement: [
+                {
+                    match: /(?<=\{style:)(?=\i\?\{)/,
+                    replace: "$self.userHasBackground(arguments[0].userId)?null:"
+                },
+                {
+                    match: /(?<=className:\i\(\)\(\i\.\i,\{\[\i\]:)\i(?=\}\))/,
+                    replace: "$&&&!$self.userHasBackground(arguments[0].userId)"
+                }
+            ]
         }
     ],
 

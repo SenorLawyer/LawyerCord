@@ -21,7 +21,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
-- Reject malformed USRBG feed records and unsupported image endpoints, cancel stopped, superseded, or timed-out loads, and prevent older responses from replacing current data. Keep feed URLs inside a single quoted voice-background image. Honor the voice-background setting for tile styling, remove the CSS-name heuristic, and preserve incoming tile props.
+- Reject malformed USRBG feed records and unsupported image endpoints, cancel stopped, superseded, or timed-out loads, and prevent older responses from replacing current data. Keep feed URLs inside a single quoted voice-background image. Honor the voice-background setting for tile styling, remove the CSS-name heuristic, and preserve incoming tile props. Update the current video-background patch so Discord profile-theme backgrounds do not cover USRBG banners.
 
 - Attach CopyStatusUrls to both current status-button layouts without targeting earlier unrelated buttons.
 - Narrow banner patch anchors and bound the TIDAL embed patch using current public Discord modules.

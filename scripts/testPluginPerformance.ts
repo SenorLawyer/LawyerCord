@@ -5489,6 +5489,20 @@ test("USRBG voice backgrounds keep feed URLs inside one quoted image", () => {
         assert.deepEqual(original, { opacity: 0.5 });
     }
 
+    let backgroundSource = 'function background(props){const theme=props.theme,original=props.style,colors={background:"gradient"},plain={...original,backgroundColor:"dominant"},classes={base:"base"},themeClass="theme",cls=()=>((base,flags)=>flags);return {style:theme?{...original,...colors}:{...plain},className:cls()(classes.base,{[themeClass]:theme})}}';
+    for (const replacement of plugin.patches[2].replacement)
+        backgroundSource = backgroundSource.replace(canonicalizeMatch(replacement.match), replacement.replace.replaceAll("$self", "plugin"));
+    const renderBackground = new Function("plugin", `return (${backgroundSource})`)(plugin);
+    for (const userId of ["user", "missing"]) for (const theme of [false, true]) {
+        const result = renderBackground({ userId, theme, style: { opacity: 0.5 } });
+        assert.equal(result.className.theme, userId === "missing" && theme);
+        if (userId === "user") assert.equal(result.style, null);
+        else {
+            assert.equal(result.style.opacity, 0.5);
+            assert.equal(theme ? result.style.background : result.style.backgroundColor, theme ? "gradient" : "dominant");
+        }
+    }
+
 });
 
 test("USRBG rejects malformed feed data before publishing it", async () => {

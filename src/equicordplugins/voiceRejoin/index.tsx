@@ -207,25 +207,16 @@ export default definePlugin({
                     const myVoiceState = VoiceStateStore.getVoiceStateForUser(myUserId);
                     if (myVoiceState?.channelId) return;
 
-                    if (!channel) {
-                        await persistInactiveState();
-                        return;
-                    }
+                    if (!channel) return;
 
                     const isDM = channel.isDM() || channel.isGroupDM() || channel.isMultiUserDM();
                     const preventionMode = settings.store.preventReconnectIfCallEnded;
                     const timeoutMs = settings.store.rejoinTimeout * 1000;
 
                     const elapsedMs = Date.now() - saved.timestamp;
-                    if (elapsedMs < 0 || elapsedMs > timeoutMs) {
-                        await persistInactiveState();
-                        return;
-                    }
+                    if (elapsedMs < 0 || elapsedMs > timeoutMs) return;
 
-                    if (settings.store.applyOnlyToDms && !isDM) {
-                        await persistInactiveState();
-                        return;
-                    }
+                    if (settings.store.applyOnlyToDms && !isDM) return;
 
                     if (preventionMode !== "none") {
                         const shouldPrevent =
@@ -233,10 +224,7 @@ export default definePlugin({
                             (preventionMode === "dms" && isDM) ||
                             (preventionMode === "servers" && !isDM);
 
-                        if (shouldPrevent && !hasOtherUsersInChannel(saved.channelId, myUserId)) {
-                            await persistInactiveState();
-                            return;
-                        }
+                        if (shouldPrevent && !hasOtherUsersInChannel(saved.channelId, myUserId)) return;
                     }
 
                     FluxDispatcher.dispatch({

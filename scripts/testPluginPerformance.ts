@@ -2456,6 +2456,44 @@ test("voice rejoin waits for voice state confirmation before persisting success"
     api.default.stop();
 });
 
+test("voice rejoin skipped attempts preserve a newer saved session", async () => {
+    for (const reason of ["missing", "expired", "server", "empty"]) {
+        let reconnect: () => Promise<void> = async () => assert.fail("Missing reconnect");
+        const previous = { userId: "me", channelId: "previous", guildId: "guild", timestamp: 1000 };
+        const newer = { ...previous, channelId: "newer", timestamp: 2000 };
+        let saved = previous;
+        let active = true;
+        const api = loadSource("src/equicordplugins/voiceRejoin/index.tsx", {
+            "@utils/misc": { sleep: async () => {} },
+            "@api/DataStore": {
+                getMany: async () => [saved, active],
+                set: async (_key: string, value: boolean) => { active = value; }
+            },
+            "@api/Settings": { definePluginSettings: () => ({ store: {
+                rejoinDelay: 2, rejoinTimeout: 30,
+                applyOnlyToDms: reason === "server",
+                preventReconnectIfCallEnded: reason === "empty" ? "both" : "none"
+            } }) },
+            "@utils/constants": { EquicordDevs: {} }, "@utils/Logger": { Logger: class { error(error: unknown) { assert.fail(String(error)); } } },
+            "@utils/types": { __esModule: true, default: (plugin: object) => plugin, makeRange: () => [], OptionType: {} },
+            "@webpack/common": {
+                ChannelStore: { getChannel: () => {
+                    saved = newer;
+                    return reason === "missing" ? undefined : { isDM: () => false, isGroupDM: () => false, isMultiUserDM: () => false };
+                } },
+                UserStore: { getCurrentUser: () => ({ id: "me" }) },
+                VoiceStateStore: { getVoiceStateForUser: () => undefined, getVoiceStatesForChannel: () => ({}) },
+                FluxDispatcher: { dispatch: () => assert.fail("Must not reconnect") }
+            }
+        }, { Date: { now: () => reason === "expired" ? 32000 : 2000 }, setTimeout: (callback: typeof reconnect) => { reconnect = callback; return 1; }, clearTimeout() {} });
+        api.default.flux.CONNECTION_OPEN();
+        await reconnect();
+        assert.equal(saved, newer);
+        assert.equal(active, true, reason);
+        api.default.stop();
+    }
+});
+
 test("voice rejoin only accepts saved timestamps inside its reconnect window", async () => {
     for (const [now, expected] of [[999, 0], [1000, 1], [31000, 1], [31001, 0]]) {
         let reconnect: () => Promise<void> = async () => assert.fail("Missing reconnect");
@@ -2477,7 +2515,7 @@ test("voice rejoin only accepts saved timestamps inside its reconnect window", a
         await api.default.flux.CONNECTION_OPEN();
         await reconnect();
         assert.equal(dispatched, expected);
-        assert.equal(active, expected === 1);
+        assert.equal(active, true);
         api.default.stop();
     }
 });

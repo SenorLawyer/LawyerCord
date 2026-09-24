@@ -77,6 +77,10 @@ async function readStoredQueue(): Promise<void> {
         scheduledMessages = [];
         throw new Error("Saved scheduled messages are invalid. The stored data has been preserved.");
     }
+    for (const message of scheduledMessages) {
+        if (phantomMessageMap.has(`scheduled-${message.id}`) && !saved?.some(entry => entry.id === message.id))
+            removePhantomMessage(message);
+    }
     queueLoaded = true;
     invalidStoredQueue = false;
     savedMessages = saved;

@@ -9816,6 +9816,27 @@ test("SongSpotlight requires write acknowledgement before changing local state",
 });
 
 
+test("scheduled reload removes stale previews while retaining unchanged entries", async () => {
+    for (const change of ["removed", "unchanged"]) {
+        const original = scheduledEntry({ id: "old", content: "Old" });
+        let saved = [original];
+        const events: { type: string; id: string; }[] = [];
+        const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+            "@api/DataStore": { get: async () => structuredClone(saved) }, "@utils/Logger": { Logger: class {} },
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+            "@vencord/discord-types/enums": {}, ".": { settings: { store: {} } },
+            "@webpack/common": { FluxDispatcher: { dispatch: (event: { type: string; id: string; }) => events.push(event) } }
+        });
+        await api.loadScheduledMessages();
+        api.phantomMessageMap.set("scheduled-old", { messageId: "old", channelId: original.channelId });
+        saved = change === "removed" ? [] : [{ ...original }];
+        await api.loadScheduledMessages();
+        assert.equal(api.phantomMessageMap.size, change === "unchanged" ? 1 : 0);
+        assert.deepEqual(events.map(event => [event.type, event.id]), change === "unchanged" ? [] : [["MESSAGE_DELETE", "scheduled-old"]]);
+        assert.deepEqual(structuredClone(api.getScheduledMessages()), saved);
+    }
+});
+
 test("scheduled clients reject stale queue writes and preserve messages after reload", async () => {
     let saved: unknown;
     let sends = 0;

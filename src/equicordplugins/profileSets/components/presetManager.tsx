@@ -66,6 +66,14 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
         : presets.filter(preset => preset.name.toLowerCase().includes(presetName.toLowerCase()));
 
     const totalPages = Math.ceil(filteredPresets.length / PRESETS_PER_PAGE);
+    React.useEffect(() => {
+        const lastPage = Math.max(1, totalPages);
+        if (currentPage > lastPage) {
+            setCurrentPage(lastPage);
+            setPageInput(String(lastPage));
+        }
+    }, [currentPage, totalPages]);
+
     const startIndex = (currentPage - 1) * PRESETS_PER_PAGE;
     const currentPresets = filteredPresets.slice(startIndex, startIndex + PRESETS_PER_PAGE);
 
@@ -213,15 +221,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
                         avatarSize={avatarSize}
                         selectedPreset={selectedPreset}
                         onLoad={handleLoadPreset}
-                        onUpdate={() => {
-                            const newTotal = Math.ceil(presets.length / PRESETS_PER_PAGE);
-                            if (newTotal === 0) {
-                                handlePageChange(1);
-                            } else if (currentPage > newTotal) {
-                                handlePageChange(newTotal);
-                            }
-                            forceUpdate();
-                        }}
+                        onUpdate={forceUpdate}
                         guildId={resolvedGuildId}
                         section={resolvedSection}
                         currentPage={currentPage}

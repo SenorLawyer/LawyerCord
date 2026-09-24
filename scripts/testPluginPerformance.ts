@@ -2201,7 +2201,7 @@ test("theme validation belongs to the current URL and cancels obsolete requests"
         "@webpack/common": {
             React: { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props, children }) },
             useState: () => [state, (value: unknown) => { state = value; }],
-            useEffect: (callback: typeof effect) => { effect = callback; },
+            useEffect: (callback: typeof effect, deps: unknown[]) => { if (deps.includes("main")) effect = callback; },
         },
     }, { AbortController, fetch: (_url: string, options: { signal: AbortSignal; }) => new Promise(resolve => pending.push({ signal: options.signal, resolve })) });
     const render = (link: string) => OnlineThemesSection({ currentThemeLink: link, enableOnlineThemes: true });
@@ -4412,7 +4412,7 @@ test("profile preset load failures notify mounted panels only", async () => {
         let effect = () => () => {};
         const React = {
             useState: (value: unknown) => [value, () => {}], useReducer: () => [0, () => { updated++; }],
-            useRef: () => ({ current: -1 }), useEffect: (callback: typeof effect) => { effect = callback; }, createElement: () => null
+            useRef: () => ({ current: -1 }), useEffect: (callback: typeof effect, deps: unknown[]) => { if (deps.includes("main")) effect = callback; }, createElement: () => null
         };
         const api = loadSource("src/equicordplugins/profileSets/components/presetManager.tsx", {
             "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
@@ -4459,6 +4459,35 @@ test("profile preset search resets pagination even after no matches", () => {
     assert.equal(updates.get(0), "Match");
     assert.equal(updates.get(2), 1);
     assert.equal(updates.get(3), "1");
+});
+
+test("profile preset pagination recovers when the visible list shrinks", () => {
+    for (const search of [false, true]) {
+        const states: unknown[] = [search ? "Match" : "", false, 3, "3", -1, search];
+        let stateIndex = 0;
+        const effects: (() => void)[] = [];
+        const React = {
+            useState: () => {
+                const index = stateIndex++;
+                return [states[index], (value: unknown) => { states[index] = value; }];
+            },
+            useReducer: () => [0, () => {}], useRef: () => ({ current: -1 }),
+            useEffect: (effect: () => void) => effects.push(effect),
+            createElement: () => null
+        };
+        const api = loadSource("src/equicordplugins/profileSets/components/presetManager.tsx", {
+            "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
+            "@webpack/common": { React, useStateFromStores: () => null },
+            "../index": { cl: () => "", settings: { store: {} } },
+            "../utils/actions": {}, "../utils/profile": {},
+            "../utils/storage": { presets: [{ name: "Match" }, ...Array.from({ length: 9 }, () => ({ name: "Other" }))] },
+            "./confirmModal": {}, "./presetList": {}
+        });
+        api.PresetManager({});
+        for (const effect of effects.slice(1)) effect();
+        assert.equal(states[2], search ? 1 : 2);
+        assert.equal(states[3], search ? "1" : "2");
+    }
 });
 
 test("profile preset saves navigate using the new list length", async () => {
@@ -4551,7 +4580,7 @@ test("profile preset controls recover failed preparation and avoid random repeat
     assert.ok(effects[0].includes("first"));
     userId = "second";
     api.PresetManager({});
-    assert.ok(effects[1].includes("second"));
+    assert.ok(effects.some(deps => deps.includes("second")));
 });
 
 test("profile presets wait for custom status updates and propagate failure", async () => {
@@ -10447,7 +10476,7 @@ test("narrator voice picker observes voice loading and releases its listener", (
         "@components/Heading": {}, "@components/Paragraph": {},
         "@webpack/common": {
             useState: (initial: () => unknown) => { value ??= initial(); return [value, (next: unknown) => { value = next; }]; },
-            useEffect: (callback: typeof effect) => { effect = callback; }
+            useEffect: (callback: typeof effect, deps: unknown[]) => { if (deps.includes("main")) effect = callback; }
         },
         "./settings": { settings: { use: () => ({ voice: "preferred" }) } }
     }, { window: { speechSynthesis: synthesis }, React: { createElement: (type: unknown, props: object) => ({ type, props }) }, Intl }, "({ VoiceSetting })");

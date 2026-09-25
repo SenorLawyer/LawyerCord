@@ -168,6 +168,7 @@ export default definePlugin({
     async start() {
         loadController?.abort();
         const controller = loadController = new AbortController();
+        let timeout: ReturnType<typeof setTimeout> | undefined;
         try {
             const local = await get<unknown>(KEY_DATASTORE);
             if (controller.signal.aborted) return;
@@ -176,6 +177,11 @@ export default definePlugin({
             else logger.warn("Stored custom avatars are invalid.");
             data.remoteAvatars = {};
 
+            timeout = setTimeout(() => {
+                if (controller.signal.aborted) return;
+                logger.error("Avatar database download timed out.");
+                controller.abort();
+            }, 30_000);
             const response = await fetch(settings.store.databaseSource, { signal: controller.signal });
             if (!response.ok) {
                 await response.body?.cancel();
@@ -208,6 +214,8 @@ export default definePlugin({
             data.remoteAvatars = remote.avatars;
         } catch {
             if (!controller.signal.aborted) logger.error("Could not load avatars.");
+        } finally {
+            clearTimeout(timeout);
         }
     },
     stop() {

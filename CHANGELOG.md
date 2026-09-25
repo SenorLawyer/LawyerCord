@@ -30,7 +30,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Restore the StatusPresets menu insertion in the current account popout and export its menu component without matching across neighboring functions. Keep custom-emoji presets deletable without Nitro.
 - Keep malformed status presets visible by saved name and deletable without rendering their invalid fields. Preserve unreadable preset collections and prevent saving over them. Reject malformed saved emoji values before applying a status preset, while retaining the saved record. Restore presets saved with Discord's Don't clear option.
 
-- Limit streamed UserPFP avatar databases to 5 MiB, release unread response bodies after HTTP failures, and keep raw response errors out of logs.
+- Limit UserPFP avatar database downloads to 30 seconds and streamed responses to 5 MiB, release unread response bodies after HTTP failures, and keep raw response errors out of logs.
 
 - Preserve Discord's avatar format and WebP arguments when UserPFP falls back to the original avatar function or substitutes a global avatar for a server avatar.
 - Preserve UserPFP folder names and non-GIF filenames when requesting static avatars.

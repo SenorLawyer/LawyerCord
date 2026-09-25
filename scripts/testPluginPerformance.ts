@@ -1952,7 +1952,7 @@ test("UserPFP avatar edits commit before publishing and preserve newer stored en
 test("UserPFP ignores stopped loads and rejects malformed remote maps", async () => {
     const invalidResponses: Record<string, unknown> = {
         "invalid-mixed": { avatars: { oldRemote: "remote", broken: 42 } },
-        "invalid-null": null, "invalid-array": [], "invalid-missing": {}, "invalid-map-array": { avatars: [] }, "http": null, "invalid-json": null, "oversized": null,
+        "invalid-null": null, "invalid-array": [], "invalid-missing": {}, "invalid-map-array": { avatars: [] }, "http": null, "invalid-json": null, "oversized": null, "timeout": null,
     };
     for (const mode of ["local-stop", "remote-stop", "restart", "current", "limit", "invalid-local", ...Object.keys(invalidResponses)]) {
         const local = Promise.withResolvers<unknown>();
@@ -1963,6 +1963,8 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
         const warnings: string[] = [];
         const globalAvatarCalls: unknown[][] = [];
         let canceledBodies = 0;
+        let timerId = 0;
+        const timers = new Map<number, () => void>();
         const { default: plugin, data } = loadSource("src/equicordplugins/userpfp/index.tsx", {
             "@api/DataStore": { get: () => ++reads === 1 ? local.promise : Promise.resolve({ newer: "local" }) },
             "@api/Settings": { definePluginSettings: () => ({ store: { databaseSource: "https://fixture.invalid/data", preferNitro: true } }) },
@@ -1976,8 +1978,11 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
                 IconUtils: { getUserAvatarURL: (...args: unknown[]) => { globalAvatarCalls.push(args); return "global-avatar"; } }
             }, "./AvatarModal": {},
         }, { IS_DEV: false, AbortController, URL, TextDecoder,
+            setTimeout: (callback: () => void, delay: number) => { assert.equal(delay, 30_000); timers.set(++timerId, callback); return timerId; },
+            clearTimeout: (id: number) => timers.delete(id),
             fetch: async (_url: string, { signal }: { signal: AbortSignal; }) => {
                 signals.push(signal);
+                if (mode === "timeout") return new Promise<Response>((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true }));
                 if (mode === "http") return new Response(new ReadableStream({ cancel() { canceledBodies++; } }), { status: 503 });
                 if (mode === "invalid-json") return new Response("private-avatar-fixture");
                 if (mode === "oversized") return new Response(new ReadableStream({
@@ -1998,6 +2003,7 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
             assert.equal(signals.length, 0);
             continue;
         }
+        if (mode === "timeout") timers.values().next().value?.();
         if (mode === "remote-stop") plugin.stop();
         if (mode === "restart") await plugin.start();
         remote.resolve(mode in invalidResponses ? invalidResponses[mode] : { avatars: { oldRemote: "remote" } });
@@ -2037,7 +2043,8 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
             assert.equal(fallback(...args), "original");
             assert.deepEqual(received, args);
         }
-        assert.equal(signals[0].aborted, mode === "remote-stop" || mode === "restart");
+        assert.equal(signals[0].aborted, mode === "remote-stop" || mode === "restart" || mode === "timeout");
+        assert.equal(timers.size, 0);
         assert.equal(errors.length, mode in invalidResponses ? 1 : 0);
         assert.equal(canceledBodies, mode === "http" || mode === "oversized" ? 1 : 0);
         if (mode === "invalid-json")

@@ -87,7 +87,7 @@ async function googleTranslate(text: string, sourceLang: string, targetLang: str
         "query.text": text,
     });
 
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
     if (!res.ok) {
         await res.body?.cancel();
         throw new Error(`Google Translate request failed (${res.status}).`);

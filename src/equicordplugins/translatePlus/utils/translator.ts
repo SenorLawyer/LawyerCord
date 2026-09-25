@@ -20,7 +20,7 @@ let shavianDictionaryPromise: Promise<Dictionary> | undefined;
 let sitelenDictionaryPromise: Promise<Dictionary> | undefined;
 
 function fetchDictionary(url: string): Promise<Dictionary> {
-    return fetch(url).then(async response => {
+    return fetch(url, { signal: AbortSignal.timeout(30_000) }).then(async response => {
         if (!response.ok) {
             await response.body?.cancel();
             throw new Error(`Request failed with status ${response.status}`);
@@ -117,7 +117,7 @@ async function translateSitelen(message: string) {
 
 async function google(target: string, text: string) {
     if (!text) return { src: "", text: "" };
-    const res = await fetch(`https://translate.googleapis.com/translate_a/single?${new URLSearchParams({ client: "gtx", sl: "auto", tl: target, dt: "t", dj: "1", source: "input", q: text })}`);
+    const res = await fetch(`https://translate.googleapis.com/translate_a/single?${new URLSearchParams({ client: "gtx", sl: "auto", tl: target, dt: "t", dj: "1", source: "input", q: text })}`, { signal: AbortSignal.timeout(30_000) });
     if (!res.ok) {
         await res.body?.cancel();
         throw new Error(`Request failed with status ${res.status}`);
@@ -147,6 +147,7 @@ export async function translate(text: string) {
         const response = await fetch("https://aiapi.serversmp.xyz/toki", {
             method: "POST",
             redirect: "error",
+            signal: AbortSignal.timeout(30_000),
             headers: {
                 "Accept": "application/json",
                 "Content-Type": "application/json"

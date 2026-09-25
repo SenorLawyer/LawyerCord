@@ -8483,7 +8483,7 @@ test("source fixtures reject recoverable syntax errors before execution", () => 
 });
 
 function loadSource(path: string, mocks: Record<string, object>, globals: Record<string, unknown> = {}, result = "exports") {
-    if (path.endsWith("plugins/translate/native.ts"))
+    if (path.endsWith("plugins/translate/native.ts") || path.endsWith("plugins/translate/utils.ts") || path.endsWith("translatePlus/utils/translator.ts"))
         globals = { AbortSignal, ...globals };
     if (path.endsWith("profileSets/components/presetManager.tsx"))
         globals = { AbortController, ...globals };
@@ -14864,6 +14864,39 @@ test("native DeepL requests enforce the UTF-8 body limit before fetching", async
     assert.equal(requests, 3);
 });
 
+
+test("TranslatePlus times out stalled dictionaries and allows retry", async () => {
+    for (const phase of ["headers", "body"]) {
+        const controller = new AbortController();
+        let deadline = 0;
+        let signal: AbortSignal | null | undefined;
+        let retry = false;
+        const started = Promise.withResolvers<void>();
+        const { translate } = loadSource("src/equicordplugins/translatePlus/utils/translator.ts", {
+            "@equicordplugins/translatePlus/settings": { settings: { store: { target: "en", shavian: true } } },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" }
+        }, {
+            AbortSignal: { timeout: (ms: number) => { deadline = ms; return retry ? new AbortController().signal : controller.signal; } },
+            fetch: async (_url: string, options?: RequestInit) => {
+                if (retry) return { ok: true, json: async () => ({ "𐑐": "word" }) };
+                signal = options?.signal;
+                const stall = () => {
+                    started.resolve();
+                    return new Promise((_resolve, reject) => signal?.addEventListener("abort", () => reject(signal?.reason), { once: true }));
+                };
+                return phase === "headers" ? stall() : { ok: true, json: stall };
+            }
+        });
+        const pending = translate("𐑐");
+        await started.promise;
+        assert.equal(deadline, 30_000);
+        assert.equal(signal, controller.signal);
+        controller.abort();
+        await assert.rejects(pending);
+        retry = true;
+        assert.equal((await translate("𐑐")).text, "word");
+    }
+});
 
 test("TranslatePlus Shavian translation preserves inherited dictionary names", async () => {
     const { translate } = loadSource("src/equicordplugins/translatePlus/utils/translator.ts", {

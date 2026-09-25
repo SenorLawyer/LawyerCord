@@ -186,8 +186,8 @@ export default definePlugin({
             if (!isObject(remote) || !("avatars" in remote) || !isAvatarMap(remote.avatars))
                 throw new Error("Invalid avatar database.");
             data.remoteAvatars = remote.avatars;
-        } catch (error) {
-            if (!controller.signal.aborted) logger.error("Could not load avatars.", error);
+        } catch {
+            if (!controller.signal.aborted) logger.error("Could not load avatars.");
         }
     },
     stop() {

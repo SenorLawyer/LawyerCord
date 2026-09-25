@@ -1952,7 +1952,7 @@ test("UserPFP avatar edits commit before publishing and preserve newer stored en
 test("UserPFP ignores stopped loads and rejects malformed remote maps", async () => {
     const invalidResponses: Record<string, unknown> = {
         "invalid-mixed": { avatars: { oldRemote: "remote", broken: 42 } },
-        "invalid-null": null, "invalid-array": [], "invalid-missing": {}, "invalid-map-array": { avatars: [] }, "http": null,
+        "invalid-null": null, "invalid-array": [], "invalid-missing": {}, "invalid-map-array": { avatars: [] }, "http": null, "invalid-json": null,
     };
     for (const mode of ["local-stop", "remote-stop", "restart", "current", "invalid-local", ...Object.keys(invalidResponses)]) {
         const local = Promise.withResolvers<unknown>();
@@ -1979,6 +1979,7 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
             fetch: async (_url: string, { signal }: { signal: AbortSignal; }) => {
                 signals.push(signal);
                 if (mode === "http") return new Response(new ReadableStream({ cancel() { canceledBodies++; } }), { status: 503 });
+                if (mode === "invalid-json") return new Response("private-avatar-fixture");
                 return { ok: true, json: () => signals.length === 1 ? remote.promise : Promise.resolve({ avatars: { newerRemote: "remote" } }) };
             },
         });
@@ -2034,6 +2035,8 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
         assert.equal(signals[0].aborted, mode === "remote-stop" || mode === "restart");
         assert.equal(errors.length, mode in invalidResponses ? 1 : 0);
         assert.equal(canceledBodies, mode === "http" ? 1 : 0);
+        if (mode === "invalid-json")
+            assert.ok(errors.every(error => error === undefined), "Avatar failures must not log raw response or storage errors");
         assert.deepEqual(warnings, mode === "invalid-local" ? ["Stored custom avatars are invalid."] : []);
     }
 });

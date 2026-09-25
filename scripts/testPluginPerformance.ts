@@ -1971,7 +1971,7 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
             "@components/Button": {}, "@components/Flex": {}, "@components/Heart": {}, "@components/Icons": {}, "@components/margins": {}, "@components/Notice": {},
             "@utils/constants": { Devs: {}, EquicordDevs: {} }, "@utils/css": { classNameFactory: () => () => "" }, "@utils/discord": {},
             "@utils/Logger": { Logger: class { error(_message: string, error: unknown) { errors.push(error); } warn(message: string) { warnings.push(message); } } },
-            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+            "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } }, isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
             "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
             "@webpack": { extractAndLoadChunksLazy: () => () => {} }, "@webpack/common": {
                 UserStore: { getUser: (id: string) => id === "global" ? { id, avatar: "global-hash" } : undefined },
@@ -2021,6 +2021,11 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
             data.avatars.shared = url;
             assert.equal(guildAvatar({ userId: "shared", size: 128, canAnimate: true }), url);
         }
+        data.avatars.shared = "not a valid URL";
+        assert.equal(guildAvatar({ userId: "shared", canAnimate: false }), "default");
+        data.avatars.shared = "https://raw.githubusercontent.com/UserPFP/img/main/avatar.gif";
+        assert.equal(guildAvatar({ userId: "shared", canAnimate: false }), "https://raw.githubusercontent.com/UserPFP/img/main/avatar.png?animated=false");
+        assert.equal(guildAvatar({ userId: "shared", canAnimate: true }), "https://raw.githubusercontent.com/UserPFP/img/main/avatar.gif?animated=true");
         for (const canWebP of [true, false, undefined]) {
             assert.equal(guildAvatar({ userId: "global", avatar: "guild-hash", size: 64, canAnimate: true, canWebP }), "global-avatar");
             assert.deepEqual(globalAvatarCalls.at(-1), [{ id: "global", avatar: "global-hash" }, true, 64, undefined, canWebP]);

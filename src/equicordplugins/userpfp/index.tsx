@@ -18,7 +18,7 @@ import { Devs, EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import { openInviteModal } from "@utils/discord";
 import { Logger } from "@utils/Logger";
-import { isObject } from "@utils/misc";
+import { isObject, parseUrl } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import { extractAndLoadChunksLazy } from "@webpack";
 import { IconUtils, Menu, openModal, UserStore } from "@webpack/common";
@@ -39,6 +39,19 @@ export const data = { avatars: {} as Record<string, string>, remoteAvatars: {} a
 
 export function isAvatarMap(value: unknown): value is Record<string, string> {
     return isObject(value) && Object.values(value).every(url => typeof url === "string");
+}
+
+function getCustomAvatar(userId: string, animated?: boolean) {
+    const avatarUrl = data.avatars[userId] || data.remoteAvatars[userId];
+    if (!avatarUrl) return;
+    if (avatarUrl.startsWith("data:")) return avatarUrl;
+    const url = parseUrl(avatarUrl);
+    if (!url) return;
+    if (avatarUrl.startsWith(USERPFP_IMG_URL)) {
+        url.searchParams.set("animated", animated ? "true" : "false");
+        if (!animated) url.pathname = url.pathname.replace(/\.gifv?$/, ".png");
+    }
+    return url.toString();
 }
 
 const settings = definePluginSettings({
@@ -132,27 +145,11 @@ export default definePlugin({
     getAvatarHook: (original: typeof IconUtils.getUserAvatarURL) => (...args: Parameters<typeof original>) => {
         const [user, animated] = args;
         if (settings.store.preferNitro && user.avatar?.startsWith("a_")) return original(...args);
-        const avatarUrl = data.avatars[user.id] || data.remoteAvatars[user.id];
-        if (!avatarUrl) return original(...args);
-
-        if (avatarUrl.startsWith("data:")) return avatarUrl;
-
-        try {
-            const res = new URL(avatarUrl);
-            if (avatarUrl.startsWith(USERPFP_IMG_URL)) {
-                res.searchParams.set("animated", animated ? "true" : "false");
-                if (!animated) {
-                    res.pathname = res.pathname.replace(/\.gifv?$/, ".png");
-                }
-            }
-            return res.toString();
-        } catch {
-            return original(...args);
-        }
+        return getCustomAvatar(user.id, animated) ?? original(...args);
     },
     getAvatarServerHook: (original: typeof IconUtils.getGuildMemberAvatarURLSimple) => (config: Parameters<typeof original>[0]) => {
         const { userId, avatar, size, canAnimate, canWebP } = config;
-        const customUrl = data.avatars[userId] || data.remoteAvatars[userId];
+        const customUrl = getCustomAvatar(userId, canAnimate);
 
         if (customUrl) return customUrl;
 

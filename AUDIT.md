@@ -558,3 +558,6 @@ Validation for the codec advertisement change: all 593 regression tests and time
 
 
 StatusPresets now uses two grouped replacements for the Remember action. A short state-binding match supplies a modal-local getter, and an action-array match inserts the button before Save. This removes the unbounded lookbehind spanning the modal body. A regression with a nested function containing similar state declarations verifies that the button uses the outer modal values across renders. The original patch captured truncated identifiers from the nested function in that fixture. Captured module 657977 has one match for each replacement, parses after both, and its actual action expression preserves text, emoji, expiry and the original Save callback. Eight focused tests, TypeScript and source lint pass. Patch lint reports 181 warnings and no errors. This does not establish live modal acceptance.
+
+
+The UserPFP editor labels its existing avatar preview Current instead of Original. It uses the patched IconUtils resolver, which can already return a local or remote override, so the old label was inaccurate. Resolution behavior is unchanged; no bypass or duplicate avatar resolver was added.

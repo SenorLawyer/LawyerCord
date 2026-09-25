@@ -19,7 +19,7 @@ const cl = classNameFactory("vc-userpfp-");
 export function SetAvatarModal({ userId, modalProps }: { userId: string; modalProps: RenderModalProps; }) {
     const { avatars } = data;
     const user = UserStore.getUser(userId);
-    const originalAvatar = IconUtils.getUserAvatarURL(user, true, 128) || "";
+    const currentAvatar = IconUtils.getUserAvatarURL(user, true, 128) || "";
 
     const [url, setUrl] = useState(avatars[userId] || "");
     const preview = url.trim();
@@ -109,14 +109,14 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
                 {/* Preview */}
                 <div className={cl("preview-row")}>
                     <div className={cl("preview-box")}>
-                        <span className={cl("preview-label")}>Original</span>
-                        <img src={originalAvatar} className={cl("avatar")} alt="original" />
+                        <span className={cl("preview-label")}>Current</span>
+                        <img src={currentAvatar} className={cl("avatar")} alt="Current avatar" />
                     </div>
                     <span className={cl("arrow")}>→</span>
                     <div className={cl("preview-box")}>
                         <span className={cl("preview-label")}>Local</span>
                         <img
-                            src={preview || originalAvatar}
+                            src={preview || currentAvatar}
                             className={`${cl("avatar")} ${preview ? cl("avatar-active") : ""}`}
                             alt="local"
                         />

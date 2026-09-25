@@ -222,8 +222,8 @@ export default definePlugin({
             find: "this.updateMaxContentFeedRowSeen()",
             replacement: [
                 {
-                    match: /(?<=user:(\i),guildId:\i,channel:(\i).*?)BOOST_GEM_ICON.{0,10}\);/,
-                    replace: "$&if($self.shouldHideUser($1.id, $2.id)) return null; "
+                    match: /BOOST_GEM_ICON.{0,10}\);/,
+                    replace: "$&if($self.shouldHideUser(arguments[0].user.id,arguments[0].channel.id)) return null;"
                 },
                 // stop the role header from displaying if all users with that role are hidden (wip sorta)
                 {

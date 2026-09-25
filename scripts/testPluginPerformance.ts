@@ -27,6 +27,36 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("block settings changes initialize all saved ID lists together", () => {
+    const user = "111111111111111111";
+    const guild = "333333333333333333";
+    const settings = new SettingsStore({ usersToBlock: user, guildBlackList: guild, guildWhiteList: "", hideBlockedUsers: true });
+    const { default: plugin } = loadSource("src/equicordplugins/clientSideBlock/index.tsx", {
+        "@api/Settings": { definePluginSettings: (def: Record<string, { onChange?: (value: string) => void; }>) => {
+            for (const key of ["usersToBlock", "guildBlackList", "guildWhiteList"] as const) {
+                const { onChange } = def[key];
+                if (onChange) settings.addChangeListener(key, onChange);
+            }
+            return { store: settings.store };
+        } },
+        "@components/Paragraph": {}, "@utils/constants": { Devs: {}, EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": {
+            RelationshipStore: { isBlocked: () => false },
+            ChannelStore: { getChannel: () => ({ guild_id: guild }) }
+        }
+    });
+    settings.store.usersToBlock = ` ${user} `;
+    assert.equal(plugin.shouldHideUser(user, "channel"), false);
+    plugin.stop();
+    settings.store.guildBlackList = "";
+    assert.equal(plugin.shouldHideUser(user, "channel"), true);
+    plugin.stop();
+    settings.store.guildWhiteList = "444444444444444444";
+    assert.equal(plugin.shouldHideUser(user), true);
+    assert.equal(plugin.shouldHideUser(user, "channel"), false);
+});
+
 test("active now filtering preserves party data and respects guild and voice settings", () => {
     const blocked = "111111111111111111";
     const visible = "222222222222222222";

@@ -25,6 +25,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- ClientSideBlock keeps saved user and guild ID lists consistent when a setting changes before initialization or after stopping.
+
 - ClientSideBlock filters current Active Now cards without changing shared party data. Cards containing locally hidden users are hidden as a whole, with voice settings and guild exceptions respected.
 
 - ClickableRoles member rows use Discord keyboard controls for opening profiles.

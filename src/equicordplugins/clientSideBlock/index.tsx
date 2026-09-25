@@ -62,10 +62,7 @@ const settings = definePluginSettings({
     usersToBlock: {
         type: OptionType.STRING,
         description: "User IDs separated by commas.",
-        onChange: value => {
-            userIdsToBlock = parseIdSet(value);
-            idCachesInitialized = true;
-        },
+        onChange: refreshIdCaches,
         isValid: validateIdList,
         default: ""
     },
@@ -99,20 +96,14 @@ const settings = definePluginSettings({
     guildBlackList: {
         type: OptionType.STRING,
         description: "Guild ids to disable functionality in",
-        onChange: value => {
-            guildBlacklistIds = parseIdSet(value);
-            idCachesInitialized = true;
-        },
+        onChange: refreshIdCaches,
         isValid: validateIdList,
         default: ""
     },
     guildWhiteList: {
         type: OptionType.STRING,
         description: "Guild ids to enable functionality in",
-        onChange: value => {
-            guildWhitelistIds = parseIdSet(value);
-            idCachesInitialized = true;
-        },
+        onChange: refreshIdCaches,
         isValid: validateIdList,
         default: ""
     }

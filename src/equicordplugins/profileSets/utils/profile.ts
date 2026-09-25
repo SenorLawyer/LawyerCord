@@ -7,7 +7,7 @@
 import { getUserSettingLazy } from "@api/UserSettings";
 import { AvatarDecorationData, CustomStatus, DisplayNameStyles, Nameplate, ProfileEffect, ProfilePreset } from "@vencord/discord-types";
 import { findStoreLazy } from "@webpack";
-import { FluxDispatcher, GuildMemberStore, IconUtils, UserProfileStore, UserStore } from "@webpack/common";
+import { FluxDispatcher, GuildMemberStore, IconUtils, ImageUtils, UserProfileStore, UserStore } from "@webpack/common";
 
 const UserProfileSettingsStore = findStoreLazy("UserProfileSettingsStore");
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -329,6 +329,10 @@ export async function loadPresetAsPending(preset: ProfilePreset, guildId?: strin
     if (!userId) throw new Error("No account is signed in.");
     checkEmbeddedImageSize(preset.avatarDataUrl);
     checkEmbeddedImageSize(preset.bannerDataUrl);
+    for (const image of [preset.avatarDataUrl, preset.bannerDataUrl]) {
+        if (image?.startsWith("data:") && !/^data:video\/mp4[;,]/i.test(image))
+            await ImageUtils.loadImage(image);
+    }
     const current = await getCurrentProfile(guildId, {
         isGuildProfile: isGuild
     });

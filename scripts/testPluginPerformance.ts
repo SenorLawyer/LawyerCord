@@ -5626,12 +5626,14 @@ test("profile preset text fields distinguish omission from explicit clearing", a
 });
 
 test("profile preset image application preserves previews and explicit removals", async () => {
-    for (const value of ["data:image/png;base64,new", "data:image/gif;base64,new", "https://fixture.invalid/image.png", null]) {
+    for (const value of ["data:image/png;base64,new", "data:image/gif;base64,new", "data:video/mp4;base64,new", "https://fixture.invalid/image.png", null]) {
         const dispatched: { type: string; pendingImage?: { imageUri: string; assetOrigin: string; }; file?: { type: string; }; pendingAvatar?: unknown; pendingBanner?: unknown; }[] = [];
+        const decoded: string[] = [];
         const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
             "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null }) },
             "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
             "@webpack/common": {
+                ImageUtils: { loadImage: async (url: string) => { decoded.push(url); } },
                 UserStore: { getCurrentUser: () => ({ id: "me" }) },
                 UserProfileStore: { getUserProfile: () => ({ banner: "data:image/png;base64,current" }) },
                 IconUtils: { getUserAvatarURL: () => null, getDefaultAvatarURL: () => "default" },
@@ -5639,19 +5641,55 @@ test("profile preset image application preserves previews and explicit removals"
             }
         });
         await api.loadPresetAsPending({ name: "Example", timestamp: 0, avatarDataUrl: value, bannerDataUrl: value });
+        assert.equal(decoded.length, value?.startsWith("data:image/") ? 2 : 0);
         const previews = dispatched.filter(event => event.type === "PROFILE_CUSTOMIZATION_OPEN_PREVIEW_MODAL");
         if (value?.startsWith("data:")) {
             assert.equal(previews.length, 2);
             for (const preview of previews) {
                 assert.equal(preview.pendingImage?.imageUri, value);
                 assert.equal(preview.pendingImage?.assetOrigin, "NEW_ASSET");
-                assert.equal(preview.file?.type, value.includes("image/gif") ? "image/gif" : "image/png");
+                assert.equal(preview.file?.type, value.slice(5, value.indexOf(";")));
             }
         } else {
             assert.equal(previews.length, 0);
             assert.ok(dispatched.some(event => "pendingAvatar" in event && event.pendingAvatar === value));
             assert.ok(dispatched.some(event => "pendingBanner" in event && event.pendingBanner === value));
         }
+    }
+});
+
+test("profile preset image validation finishes before any changes are applied", async () => {
+    for (const outcome of ["invalid", "account", "closed", "success"]) {
+        let userId = "me";
+        let current = true;
+        let changes = 0;
+        const started = Promise.withResolvers<void>();
+        const validation = Promise.withResolvers<void>();
+        const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null, updateSetting: () => { changes++; } }) },
+            "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
+            "@webpack/common": {
+                ImageUtils: { loadImage: async (url: string) => {
+                    if (url.endsWith("banner")) { started.resolve(); await validation.promise; }
+                } },
+                UserStore: { getCurrentUser: () => ({ id: userId }) },
+                UserProfileStore: { getUserProfile: () => ({}) },
+                IconUtils: { getUserAvatarURL: () => null, getDefaultAvatarURL: () => "default" },
+                FluxDispatcher: { dispatch: () => { changes++; } }
+            }
+        });
+        const applying = api.loadPresetAsPending({ avatarDataUrl: "data:image/png;base64,avatar",
+            bannerDataUrl: "data:image/png;base64,banner", bio: "New bio", customStatus: { text: "New status" } },
+        undefined, { isCurrent: () => current });
+        const result = applying.then(() => "applied", () => "rejected");
+        await started.promise;
+        assert.equal(changes, 0);
+        if (outcome === "account") userId = "other";
+        if (outcome === "closed") current = false;
+        if (outcome === "invalid") validation.reject(new Error("Invalid image"));
+        else validation.resolve();
+        assert.equal(await result, outcome === "invalid" || outcome === "account" ? "rejected" : "applied");
+        assert.equal(changes, outcome === "success" ? 4 : 0);
     }
 });
 

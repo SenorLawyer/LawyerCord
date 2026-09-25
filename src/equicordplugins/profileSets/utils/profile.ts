@@ -5,6 +5,7 @@
  */
 
 import { getUserSettingLazy } from "@api/UserSettings";
+import { parseUrl } from "@utils/misc";
 import { AvatarDecorationData, CustomStatus, DisplayNameStyles, Nameplate, ProfileEffect, ProfilePreset } from "@vencord/discord-types";
 import { findStoreLazy } from "@webpack";
 import { FluxDispatcher, GuildMemberStore, IconUtils, ImageUtils, UserProfileStore, UserStore } from "@webpack/common";
@@ -340,12 +341,22 @@ export async function loadPresetAsPending(preset: ProfilePreset, guildId?: strin
     if (isGuild && !guildId) return;
     const userId = UserStore.getCurrentUser()?.id;
     if (!userId) throw new Error("No account is signed in.");
-    checkEmbeddedImageSize(preset.avatarDataUrl);
-    checkEmbeddedImageSize(preset.bannerDataUrl);
-    for (const image of [preset.avatarDataUrl, preset.bannerDataUrl]) {
+    const images = [preset.avatarDataUrl, preset.bannerDataUrl];
+    for (let index = 0; index < images.length; index++) {
+        let image = images[index];
+        if (image && !image.startsWith("data:")) {
+            const url = parseUrl(image);
+            if (!url || !["https://cdn.discordapp.com", "https://media.discordapp.net"].includes(url.origin))
+                throw new Error("The saved profile image URL is not supported.");
+            image = await imageUrlToBase64(url.href, options.signal);
+            if (!image) throw new Error("Could not download the saved profile image.");
+            images[index] = image;
+        }
+        checkEmbeddedImageSize(image);
         if (image?.startsWith("data:") && !/^data:video\/mp4[;,]/i.test(image))
             await ImageUtils.loadImage(image);
     }
+    const [avatarValue, bannerValue] = images;
     const current = await getCurrentProfile(guildId, {
         isGuildProfile: isGuild,
         signal: options.signal
@@ -359,7 +370,6 @@ export async function loadPresetAsPending(preset: ProfilePreset, guildId?: strin
     };
 
     if ("avatarDataUrl" in preset) {
-        const avatarValue = preset.avatarDataUrl;
         if ((avatarValue ?? null) !== (current.avatarDataUrl ?? null)) {
             if (avatarValue?.startsWith("data:")) {
                 openProfileImagePreview("AVATAR", {
@@ -373,15 +383,15 @@ export async function loadPresetAsPending(preset: ProfilePreset, guildId?: strin
         }
     }
 
-    if ("bannerDataUrl" in preset && preset.bannerDataUrl !== current.bannerDataUrl) {
-        if (preset.bannerDataUrl?.startsWith("data:")) {
+    if ("bannerDataUrl" in preset && bannerValue !== current.bannerDataUrl) {
+        if (bannerValue?.startsWith("data:")) {
             openProfileImagePreview("BANNER", {
                 assetOrigin: "NEW_ASSET",
-                imageUri: preset.bannerDataUrl,
+                imageUri: bannerValue,
                 description: `profilesets-${preset.name ?? "preset"}`
             }, guildId);
         } else {
-            setPending({ pendingBanner: preset.bannerDataUrl });
+            setPending({ pendingBanner: bannerValue });
         }
     }
 

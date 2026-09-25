@@ -5758,7 +5758,7 @@ test("profile preset text fields distinguish omission from explicit clearing", a
 });
 
 test("profile preset image application preserves previews and explicit removals", async () => {
-    for (const value of ["data:image/png;base64,new", "data:image/gif;base64,new", "data:video/mp4;base64,new", "https://fixture.invalid/image.png", null]) {
+    for (const value of ["data:image/png;base64,new", "data:image/gif;base64,new", "data:video/mp4;base64,new", null]) {
         const dispatched: { type: string; pendingImage?: { imageUri: string; assetOrigin: string; }; file?: { type: string; }; pendingAvatar?: unknown; pendingBanner?: unknown; }[] = [];
         const decoded: string[] = [];
         const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
@@ -5786,6 +5786,52 @@ test("profile preset image application preserves previews and explicit removals"
             assert.equal(previews.length, 0);
             assert.ok(dispatched.some(event => "pendingAvatar" in event && event.pendingAvatar === value));
             assert.ok(dispatched.some(event => "pendingBanner" in event && event.pendingBanner === value));
+        }
+    }
+});
+
+test("profile presets prepare historical image URLs before applying changes", async () => {
+    for (const outcome of ["success", "download", "decode", "cancel", "host", "spoof", "http"]) {
+        const events: { type: string; pendingImage?: { imageUri: string; }; }[] = [];
+        const requests: string[] = [];
+        const controller = new AbortController();
+        const avatar = "https://cdn.discordapp.com/embed/avatars/0.png";
+        const banner = outcome === "host" ? "https://fixture.invalid/banner.png"
+            : outcome === "spoof" ? "https://cdn.discordapp.com.fixture.invalid/banner.png"
+                : outcome === "http" ? "http://cdn.discordapp.com/banner.png" : "https://media.discordapp.net/banner.png";
+        const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null }) },
+            "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
+            "@webpack/common": {
+                ImageUtils: { loadImage: async () => { if (outcome === "decode") throw new Error("Invalid image"); } },
+                UserStore: { getCurrentUser: () => ({ id: "me" }) }, UserProfileStore: { getUserProfile: () => ({}) },
+                IconUtils: { getUserAvatarURL: () => null, getDefaultAvatarURL: () => "default" },
+                FluxDispatcher: { dispatch: (event: typeof events[number]) => events.push(event) }
+            }
+        }, {
+            AbortSignal, Blob,
+            fetch: async (url: string, options: RequestInit) => {
+                requests.push(url);
+                if (outcome === "cancel") { controller.abort(); options.signal?.throwIfAborted(); }
+                return new Response(new Uint8Array([1]), { status: outcome === "download" && url === banner ? 500 : 200, headers: { "Content-Type": "image/png" } });
+            },
+            FileReader: class {
+                result = "data:image/png;base64,AQ==";
+                onload = () => {};
+                readAsDataURL() { this.onload(); }
+            }
+        });
+        const applying = api.loadPresetAsPending({ name: "Historical", timestamp: 0, avatarDataUrl: avatar, bannerDataUrl: banner, bio: "Saved bio" }, undefined, { signal: controller.signal });
+        if (outcome === "success") {
+            await applying;
+            const previews = events.filter(event => event.type === "PROFILE_CUSTOMIZATION_OPEN_PREVIEW_MODAL");
+            assert.equal(previews.length, 2);
+            assert.ok(previews.every(event => event.pendingImage?.imageUri === "data:image/png;base64,AQ=="));
+            assert.deepEqual(requests, [avatar, banner]);
+        } else {
+            await assert.rejects(applying);
+            assert.equal(events.length, 0, outcome);
+            if (["host", "spoof", "http"].includes(outcome)) assert.deepEqual(requests, [avatar]);
         }
     }
 });
@@ -8512,6 +8558,8 @@ test("source fixtures reject recoverable syntax errors before execution", () => 
 
 function loadSource(path: string, mocks: Record<string, object>, globals: Record<string, unknown> = {}, result = "exports") {
     mocks = { "@shared/readResponseText": { readResponseText }, ...mocks };
+    if (path.endsWith("profileSets/utils/profile.ts"))
+        mocks = { "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } }, ...mocks };
     if (path.endsWith("plugins/translate/native.ts") || path.endsWith("plugins/translate/utils.ts") || path.endsWith("translatePlus/utils/translator.ts"))
         globals = { AbortSignal, ...globals };
     if (path.endsWith("profileSets/components/presetManager.tsx"))

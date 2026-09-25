@@ -5177,6 +5177,7 @@ test("profile preset loading follows the rendered object and rejects replaced li
     assert.deepEqual(loaded, [original]);
     assert.deepEqual(selected, [original]);
     storage.presets = [{ name: "Replacement", timestamp: 2 }];
+    assert.equal(checks[0](), false);
     load(original);
     assert.deepEqual(loaded, [original]);
     assert.deepEqual(selected, [original]);
@@ -5194,6 +5195,11 @@ test("profile preset loading follows the rendered object and rejects replaced li
     load(other);
     assert.equal(checks[1](), false);
     assert.equal(checks[2](), true);
+    storage.presets = [other, original];
+    assert.equal(checks[2](), true);
+    storage.presets = [original, { ...other }];
+    assert.equal(checks[2](), false);
+    storage.presets = [original, other];
     Object.assign(storage, { isCurrentScope: () => false });
     assert.equal(checks[2](), false);
 });

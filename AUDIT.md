@@ -567,3 +567,6 @@ ProfileSets suppresses preset applications whose panel was closed or replaced, o
 
 
 ProfileSets now uses the shared ProfilePreset type directly. The removed ProfilePresetEx extension contained only avatarRaw, which has no runtime reader or writer. Validation no longer rejects a preset because of that unused field. Existing extra fields remain in the original objects and survive normal storage/export; this change does not migrate or strip saved records. Twenty-eight focused tests, TypeScript and plugin lint pass, including unchanged-input checks for legacy avatarRaw values.
+
+
+ProfileSets also rechecks that a pending selection still belongs to the current saved list. A failing-before regression showed a removed preset still qualified for application after preparation. The current-load callback now rejects deletion or replacement while allowing the same preset object to move within the list. Twenty-eight focused tests and source lint pass.

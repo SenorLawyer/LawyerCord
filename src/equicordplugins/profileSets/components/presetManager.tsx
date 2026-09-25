@@ -121,7 +121,8 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
         }
         const request = ++loadRequest.current;
         const isCurrent = () => request === loadRequest.current
-            && activeStorage.current === storage && storage.isCurrentScope(resolvedSection);
+            && activeStorage.current === storage && storage.isCurrentScope(resolvedSection)
+            && storage.presets.includes(preset);
         setSelectedPreset(preset);
         loadPresetAsPending(preset, resolvedGuildId, {
             isGuildProfile: resolvedSection === "server",

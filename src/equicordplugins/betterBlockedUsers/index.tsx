@@ -28,8 +28,8 @@ export default definePlugin({
                     replace: "$1==='blocked'?$self.renderSearchInput(vcSearch,vcSetSearch):null,"
                 },
                 {
-                    match: /(?<=\{userId:(\i).*?\.globalName.{0,25}\}\)\]\}\),)(\(.*?loading:\i\}\))/,
-                    replace: "$self.renderUser($1,$2)",
+                    match: /(?<=\.globalName\?\i\.username:null\}\)\]\}\)\]\}\),)\(0,\i\.jsx\)\(\i\.\i,\{.{0,150}?,loading:\i\}\)/,
+                    replace: "$self.renderUser(arguments[0].userId,$&)",
                 },
                 {
                     match: /(?<=userIds:(\i),listType:(\i)\}=\i,\[\i,\i\]=(\i)\.useState\(\d+\);)/,

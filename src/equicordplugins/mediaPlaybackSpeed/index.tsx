@@ -56,10 +56,17 @@ export default definePlugin({
         // replace voice message embed speed control because ours provides more speeds
         {
             find: "\"--:--\"",
-            replacement: {
-                match: /\(0,\i\.jsxs?\)\(.{0,50}\.\i,onClick:\(\).+?\}\)\}\)(?<=playbackCacheKey:\i\}=\i,(\i).+?)/,
-                replace: "$self.renderPlaybackSpeedComponent({mediaRef:$1,isVoiceMessage:true})"
-            }
+            group: true,
+            replacement: [
+                {
+                    match: /(?<=playbackCacheKey:\i\}=\i,)(\i)=\i\.useRef\(null\)/,
+                    replace: "$&,vcPlaybackMediaRef=$1"
+                },
+                {
+                    match: /\(0,\i\.jsxs?\)\(\i\.\i,\{className:\i\.\i,onClick:\(\)=>\{.{0,150}?type:"MEDIA_PLAYBACK_RATE_UPDATE".{0,150}?\}\)\}\)/,
+                    replace: "$self.renderPlaybackSpeedComponent({mediaRef:vcPlaybackMediaRef,isVoiceMessage:true})"
+                }
+            ]
         },
         // audio & video embeds
         {

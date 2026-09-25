@@ -181,7 +181,27 @@ export default definePlugin({
                 await response.body?.cancel();
                 throw new Error("Could not download the avatar database.");
             }
-            const remote: unknown = await response.json();
+            if (!response.body) throw new Error("Empty avatar database response.");
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let size = 0;
+            let text = "";
+            try {
+                for (;;) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    size += value.byteLength;
+                    if (size > 5 * 1024 * 1024) throw new Error("Avatar database exceeds 5 MiB.");
+                    text += decoder.decode(value, { stream: true });
+                }
+            } finally {
+                try {
+                    await reader.cancel();
+                } finally {
+                    reader.releaseLock();
+                }
+            }
+            const remote: unknown = JSON.parse(text + decoder.decode());
             if (controller.signal.aborted) return;
             if (!isObject(remote) || !("avatars" in remote) || !isAvatarMap(remote.avatars))
                 throw new Error("Invalid avatar database.");

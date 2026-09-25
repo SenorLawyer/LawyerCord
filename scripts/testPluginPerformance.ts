@@ -1952,9 +1952,9 @@ test("UserPFP avatar edits commit before publishing and preserve newer stored en
 test("UserPFP ignores stopped loads and rejects malformed remote maps", async () => {
     const invalidResponses: Record<string, unknown> = {
         "invalid-mixed": { avatars: { oldRemote: "remote", broken: 42 } },
-        "invalid-null": null, "invalid-array": [], "invalid-missing": {}, "invalid-map-array": { avatars: [] }, "http": null, "invalid-json": null,
+        "invalid-null": null, "invalid-array": [], "invalid-missing": {}, "invalid-map-array": { avatars: [] }, "http": null, "invalid-json": null, "oversized": null,
     };
-    for (const mode of ["local-stop", "remote-stop", "restart", "current", "invalid-local", ...Object.keys(invalidResponses)]) {
+    for (const mode of ["local-stop", "remote-stop", "restart", "current", "limit", "invalid-local", ...Object.keys(invalidResponses)]) {
         const local = Promise.withResolvers<unknown>();
         const remote = Promise.withResolvers<unknown>();
         const signals: AbortSignal[] = [];
@@ -1975,12 +1975,17 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
                 UserStore: { getUser: (id: string) => id === "global" ? { id, avatar: "global-hash" } : undefined },
                 IconUtils: { getUserAvatarURL: (...args: unknown[]) => { globalAvatarCalls.push(args); return "global-avatar"; } }
             }, "./AvatarModal": {},
-        }, { IS_DEV: false, AbortController, URL,
+        }, { IS_DEV: false, AbortController, URL, TextDecoder,
             fetch: async (_url: string, { signal }: { signal: AbortSignal; }) => {
                 signals.push(signal);
                 if (mode === "http") return new Response(new ReadableStream({ cancel() { canceledBodies++; } }), { status: 503 });
                 if (mode === "invalid-json") return new Response("private-avatar-fixture");
-                return { ok: true, json: () => signals.length === 1 ? remote.promise : Promise.resolve({ avatars: { newerRemote: "remote" } }) };
+                if (mode === "oversized") return new Response(new ReadableStream({
+                    start(controller) { controller.enqueue(new Uint8Array(5 * 1024 * 1024 + 1)); },
+                    cancel() { canceledBodies++; }
+                }));
+                if (mode === "limit") return new Response(JSON.stringify({ avatars: { oldRemote: "remote" } }).padEnd(5 * 1024 * 1024));
+                return new Response(JSON.stringify(await (signals.length === 1 ? remote.promise : Promise.resolve({ avatars: { newerRemote: "remote" } }))));
             },
         });
         const old = plugin.start();
@@ -1998,7 +2003,7 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
         remote.resolve(mode in invalidResponses ? invalidResponses[mode] : { avatars: { oldRemote: "remote" } });
         await old;
         assert.deepEqual(Object.keys(data.avatars), mode === "restart" ? ["newer"] : mode === "invalid-local" ? [] : ["original"]);
-        assert.deepEqual(Object.keys(data.remoteAvatars), mode === "restart" ? ["newerRemote"] : mode === "current" || mode === "invalid-local" ? ["oldRemote"] : []);
+        assert.deepEqual(Object.keys(data.remoteAvatars), mode === "restart" ? ["newerRemote"] : mode === "current" || mode === "limit" || mode === "invalid-local" ? ["oldRemote"] : []);
         data.avatars.shared = "https://fixture.invalid/local.png";
         data.remoteAvatars.shared = "https://fixture.invalid/remote.png";
         const avatar = plugin.getAvatarHook(() => "default");
@@ -2034,7 +2039,7 @@ test("UserPFP ignores stopped loads and rejects malformed remote maps", async ()
         }
         assert.equal(signals[0].aborted, mode === "remote-stop" || mode === "restart");
         assert.equal(errors.length, mode in invalidResponses ? 1 : 0);
-        assert.equal(canceledBodies, mode === "http" ? 1 : 0);
+        assert.equal(canceledBodies, mode === "http" || mode === "oversized" ? 1 : 0);
         if (mode === "invalid-json")
             assert.ok(errors.every(error => error === undefined), "Avatar failures must not log raw response or storage errors");
         assert.deepEqual(warnings, mode === "invalid-local" ? ["Stored custom avatars are invalid."] : []);

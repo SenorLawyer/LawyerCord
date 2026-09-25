@@ -291,7 +291,7 @@ function VoiceMessageTranscriptionAccessory({ userId, duration, cacheKey, needsP
         setTargetLanguageLabel(language.label);
 
         try {
-            const translated = await translateText(value.text, "auto", language.value);
+            const translated = await translateText(value.text, "auto", language.value, () => false);
             if (!isCurrentJob(jobId, generation)) return;
 
             setTranslation(translated);

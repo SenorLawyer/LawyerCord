@@ -47,7 +47,7 @@ export const getLanguages = () => {
     }
 };
 
-export async function translateText(text: string, sourceLang: string, targetLang: string): Promise<TranslationValue> {
+export async function translateText(text: string, sourceLang: string, targetLang: string, shouldNotify: () => boolean = () => true): Promise<TranslationValue> {
     const service = IS_WEB ? "google" : settings.store.service;
     const translateImpl = service === "google" ? googleTranslate : service === "kagi" ? kagiTranslate : deeplTranslate;
 
@@ -61,7 +61,7 @@ export async function translateText(text: string, sourceLang: string, targetLang
             ? e
             : "Something went wrong. If this issue persists, please check the console or ask for help in the support server.";
 
-        showToast(userMessage, Toasts.Type.FAILURE);
+        if (shouldNotify()) showToast(userMessage, Toasts.Type.FAILURE);
 
         throw e instanceof Error
             ? e
@@ -69,11 +69,12 @@ export async function translateText(text: string, sourceLang: string, targetLang
     }
 }
 
-export function translate(kind: "received" | "sent", text: string): Promise<TranslationValue> {
+export function translate(kind: "received" | "sent", text: string, shouldNotify?: () => boolean): Promise<TranslationValue> {
     return translateText(
         text,
         settings.store[`${kind}Input`],
-        settings.store[`${kind}Output`]
+        settings.store[`${kind}Output`],
+        shouldNotify
     );
 }
 

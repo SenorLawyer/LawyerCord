@@ -14284,7 +14284,7 @@ test("stopped transcription translations discard delayed success and failure", a
     const guardEnd = source.indexOf("const stopWorker = useCallback(", guardStart);
     assert.ok(guardStart >= 0 && guardEnd > guardStart);
     const code = transpileModule(source.slice(guardStart, guardEnd) + source.slice(start, end), { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
-    for (const phase of ["stopped-success", "stopped-failure", "account-before", "account-after", "logout-after", "current"]) {
+    for (const phase of ["stopped-success", "stopped-failure", "account-before", "account-after", "logout-after", "current", "current-failure"]) {
         let resolve: (value: object) => void = () => {};
         let reject: (error: Error) => void = () => {};
         const pending = new Promise<object>((yes, no) => { resolve = yes; reject = no; });
@@ -14292,12 +14292,23 @@ test("stopped transcription translations discard delayed success and failure", a
         let requests = 0;
         let updates = 0;
         let writes = 0;
+        let toasts = 0;
+        const errors: unknown[] = [];
+        const { translateText } = loadSource("src/plugins/translate/utils.ts", {
+            "@utils/css": { classNameFactory: () => () => "" },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
+            "@webpack/common": { showToast: () => toasts++, Toasts: { Type: { FAILURE: 1 } } },
+            "./settings": { settings: { store: { service: "google" } } }, "./languages": { GoogleLanguages: {} }
+        }, {
+            IS_WEB: true, VencordNative: { pluginHelpers: {} }, URLSearchParams,
+            fetch: () => { requests++; return pending; }
+        });
         const update = () => updates++;
         const context = {
             userId: "first", UserStore: { getCurrentUser: () => activeUser ? { id: activeUser } : undefined },
             cacheGeneration: 0, jobIdRef: { current: 1 }, cacheKey: "message",
-            useCallback: (fn: unknown) => fn, translateText: () => { requests++; return pending; },
-            setStatus: update, setError: update, setTargetLanguage: update, setTargetLanguageLabel: update, setTranslation: update,
+            useCallback: (fn: unknown) => fn, translateText,
+            setStatus: update, setError: (error: unknown) => { errors.push(error); update(); }, setTargetLanguage: update, setTargetLanguageLabel: update, setTranslation: update,
             cacheResult: () => writes++
         };
         const translate = runInNewContext(code + ";translateTranscript", context);
@@ -14306,11 +14317,13 @@ test("stopped transcription translations discard delayed success and failure", a
         if (phase.startsWith("stopped")) context.cacheGeneration++;
         if (phase === "account-after") activeUser = "second";
         if (phase === "logout-after") activeUser = undefined;
-        if (phase === "stopped-failure") reject(new Error("Failed")); else resolve({ text: "hello" });
+        if (phase.endsWith("failure")) reject(new Error("Failed")); else resolve(new Response(JSON.stringify({ sourceLanguage: "en", translation: "hello" })));
         await result;
-        assert.equal(updates, phase === "current" ? 2 : 0);
-        assert.equal(writes, phase === "current" ? 1 : 0);
+        assert.equal(updates, phase.startsWith("current") ? 2 : 0);
+        assert.equal(writes, phase.startsWith("current") ? 1 : 0);
         assert.equal(requests, phase === "account-before" ? 0 : 1);
+        assert.equal(toasts, 0, phase);
+        assert.equal(errors.filter(Boolean).length, phase === "current-failure" ? 1 : 0, phase);
     }
 });
 
@@ -14773,6 +14786,53 @@ test("received translation actions discard results from previous sessions", asyn
         await result;
         assert.equal(delivered.length, phase === "current" ? 1 : 0, surface + phase);
         assert.equal(requests, phase === "absent" ? 0 : 1);
+    }
+});
+
+test("translation failure toasts respect the requesting session and message", async () => {
+    for (const kind of ["received", "sent"]) for (const phase of ["current", "account", "logout", "stop", "replacement", "disabled", "edited"]) {
+        let userId = "owner";
+        const toasts: string[] = [];
+        const requests: ReturnType<typeof Promise.withResolvers<Response>>[] = [];
+        const settings = { store: { service: "google", autoTranslate: true, receivedInput: "auto", receivedOutput: "en", sentInput: "auto", sentOutput: "en" } };
+        const common = {
+            UserStore: { getCurrentUser: () => ({ id: userId }) }, ChannelStore: { getChannel: () => ({}) },
+            showToast: (text: string) => toasts.push(text), Toasts: { Type: { FAILURE: 1 } }
+        };
+        const utils = loadSource("src/plugins/translate/utils.ts", {
+            "@utils/css": { classNameFactory: () => () => "" },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
+            "@webpack/common": common, "./settings": { settings }, "./languages": { GoogleLanguages: {} }
+        }, {
+            IS_WEB: true, VencordNative: { pluginHelpers: {} }, URLSearchParams,
+            fetch: () => { const request = Promise.withResolvers<Response>(); requests.push(request); return request.promise; }
+        });
+        const { default: plugin } = loadSource("src/plugins/translate/index.tsx", {
+            "@api/ContextMenu": {}, "@utils/constants": { Devs: {} },
+            "@utils/types": { __esModule: true, default: (value: object) => value },
+            "@webpack/common": common, "./settings": { settings }, "./TranslateIcon": {},
+            "./TranslationAccessory": { handleTranslate() {} }, "./utils": utils
+        }, { setTimeout: () => 1, clearTimeout() {} });
+        const message = { id: "message", channel_id: "channel", content: "Original" };
+        const click = () => plugin.messagePopoverButton.render(message).onClick();
+        const pending = kind === "received" ? click() : plugin.onBeforeMessageSend("channel", message);
+        const settled = kind === "received" ? assert.rejects(pending) : pending;
+        let replacement: Promise<unknown> | undefined;
+        if (phase === "account") userId = "other";
+        if (phase === "logout") plugin.flux.LOGOUT();
+        if (phase === "stop") plugin.stop();
+        if (phase === "replacement" && kind === "received") replacement = click();
+        if (phase === "disabled") settings.store.autoTranslate = false;
+        if (phase === "edited") message.content = "Edited";
+        requests[0].reject(new Error("Provider failed"));
+        await settled;
+        const expected = phase === "current" || (kind === "received" && ["disabled", "edited"].includes(phase)) || (kind === "sent" && phase === "replacement");
+        assert.equal(toasts.length, expected ? 1 : 0, `${kind}: ${phase}`);
+        if (replacement) {
+            requests[1].resolve(new Response(JSON.stringify({ sourceLanguage: "en", translation: "Translated" })));
+            await replacement;
+            assert.equal(toasts.length, 0);
+        }
     }
 });
 

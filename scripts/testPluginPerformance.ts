@@ -4533,7 +4533,7 @@ test("profile preset cancellation reaches image preparation downloads", async ()
         started.resolve(signal);
         return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
     } });
-    const applying = api.loadPresetAsPending({ bio: "New bio" }, undefined, { signal: controller.signal });
+    const applying = api.loadPresetAsPending({ bio: "New bio", avatarDataUrl: "https://cdn.discordapp.com/embed/avatars/0.png" }, undefined, { signal: controller.signal });
     const result = assert.rejects(applying);
     const signal = await started.promise;
     assert.equal(signal.aborted, false);
@@ -5786,6 +5786,55 @@ test("profile preset image application preserves previews and explicit removals"
             assert.equal(previews.length, 0);
             assert.ok(dispatched.some(event => "pendingAvatar" in event && event.pendingAvatar === value));
             assert.ok(dispatched.some(event => "pendingBanner" in event && event.pendingBanner === value));
+        }
+    }
+});
+
+test("profile presets do not download images they omit or remove", async () => {
+    for (const kind of ["bio", "omitted", "clear", "avatar", "banner", "snapshot"]) {
+        const requests: string[] = [];
+        const events: Record<string, unknown>[] = [];
+        const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null }) },
+            "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
+            "@webpack/common": {
+                ImageUtils: { loadImage: async () => {} },
+                UserStore: { getCurrentUser: () => ({ id: "me", avatar: "current" }) },
+                UserProfileStore: { getUserProfile: () => ({ bio: "Current", banner: "current" }) },
+                IconUtils: { getUserBannerURL: () => "https://cdn.discordapp.com/banner.png" },
+                FluxDispatcher: { dispatch: (event: Record<string, unknown>) => events.push(event) }
+            }
+        }, {
+            AbortSignal, Blob,
+            fetch: async (url: string) => {
+                requests.push(url);
+                const wanted = kind === "snapshot" || (kind === "avatar" && url.includes("/avatars/")) || (kind === "banner" && url.endsWith("/banner.png"));
+                return new Response(new Uint8Array([2]), { status: wanted ? 200 : 503, headers: { "Content-Type": "image/png" } });
+            },
+            FileReader: class {
+                result = "data:image/png;base64,Ag==";
+                onload = () => {};
+                readAsDataURL() { this.onload(); }
+            }
+        });
+        if (kind === "snapshot") {
+            const result = await api.getCurrentProfile();
+            assert.equal(requests.length, 2);
+            assert.equal(result.avatarDataUrl, "data:image/png;base64,Ag==");
+            assert.equal(result.bannerDataUrl, "data:image/png;base64,Ag==");
+            continue;
+        }
+        const fields = kind === "clear" ? { avatarDataUrl: null, bannerDataUrl: null }
+            : kind === "avatar" ? { avatarDataUrl: "data:image/png;base64,AQ==" }
+                : kind === "banner" ? { bannerDataUrl: "data:image/png;base64,AQ==" }
+                    : kind === "bio" ? { bio: "Saved bio" } : {};
+        await api.loadPresetAsPending({ name: "Partial", timestamp: 0, ...fields });
+        assert.equal(requests.length, kind === "avatar" || kind === "banner" ? 1 : 0, kind);
+        if (kind === "bio") assert.ok(events.some(event => event.pendingBio === "Saved bio"));
+        if (kind === "omitted") assert.equal(events.length, 0);
+        if (kind === "clear") {
+            assert.ok(events.some(event => event.pendingAvatar === null));
+            assert.ok(events.some(event => event.pendingBanner === null));
         }
     }
 });

@@ -43,6 +43,8 @@ type DisplayNameStylesLike = DisplayNameStyles & {
 type CurrentProfileOptions = {
     signal?: AbortSignal;
     isGuildProfile?: boolean;
+    skipAvatar?: boolean;
+    skipBanner?: boolean;
 };
 
 type LoadPresetOptions = {
@@ -278,11 +280,11 @@ export async function getCurrentProfile(guildId?: string, options: CurrentProfil
 
     const useGuildAvatar = !!(effectiveGuildId && isGuildProfile && guildMember?.avatar && avatarToUse === guildMember.avatar);
 
-    const avatarInput: ImageInput = pendingAvatar === null || hasImageInput(avatarToUse)
+    const avatarInput: ImageInput = options.skipAvatar ? undefined : pendingAvatar === null || hasImageInput(avatarToUse)
         ? avatarToUse
         : IconUtils.getUserAvatarURL(currentUser, true, 512);
     const avatarDataUrl = await processImage(avatarInput, currentUser.id, "avatar", effectiveGuildId, useGuildAvatar, options.signal);
-    const resolvedAvatarDataUrl = pendingAvatar === null ? null : avatarDataUrl ?? IconUtils.getDefaultAvatarURL(currentUser.id);
+    const resolvedAvatarDataUrl = options.skipAvatar ? undefined : pendingAvatar === null ? null : avatarDataUrl ?? IconUtils.getDefaultAvatarURL(currentUser.id);
 
     const { pendingBanner } = pendingChanges;
     const bannerToUse: ImageInput = pendingBanner !== undefined
@@ -290,7 +292,7 @@ export async function getCurrentProfile(guildId?: string, options: CurrentProfil
         : (isGuildProfile ? (guildProfile?.banner ?? baseProfile?.banner) : baseProfile?.banner);
     const useGuildBanner = !!(effectiveGuildId && isGuildProfile && guildProfile?.banner && bannerToUse === guildProfile?.banner);
 
-    const bannerDataUrl = await processImage(bannerToUse, currentUser.id, "banner", effectiveGuildId, useGuildBanner, options.signal);
+    const bannerDataUrl = options.skipBanner ? undefined : await processImage(bannerToUse, currentUser.id, "banner", effectiveGuildId, useGuildBanner, options.signal);
 
     return {
         avatarDataUrl: resolvedAvatarDataUrl,
@@ -359,7 +361,9 @@ export async function loadPresetAsPending(preset: ProfilePreset, guildId?: strin
     const [avatarValue, bannerValue] = images;
     const current = await getCurrentProfile(guildId, {
         isGuildProfile: isGuild,
-        signal: options.signal
+        signal: options.signal,
+        skipAvatar: avatarValue == null,
+        skipBanner: bannerValue == null
     });
     if (options.isCurrent && !options.isCurrent()) return;
     if (UserStore.getCurrentUser()?.id !== userId) throw new Error("The account changed while loading the profile preset.");
@@ -370,7 +374,7 @@ export async function loadPresetAsPending(preset: ProfilePreset, guildId?: strin
     };
 
     if ("avatarDataUrl" in preset) {
-        if ((avatarValue ?? null) !== (current.avatarDataUrl ?? null)) {
+        if (avatarValue === null || (avatarValue ?? null) !== (current.avatarDataUrl ?? null)) {
             if (avatarValue?.startsWith("data:")) {
                 openProfileImagePreview("AVATAR", {
                     assetOrigin: "NEW_ASSET",

@@ -44,6 +44,7 @@ type CurrentProfileOptions = {
 };
 
 type LoadPresetOptions = {
+    isCurrent?: () => boolean;
     skipGlobalName?: boolean;
     skipBio?: boolean;
     skipPronouns?: boolean;
@@ -331,6 +332,7 @@ export async function loadPresetAsPending(preset: ProfilePreset, guildId?: strin
     const current = await getCurrentProfile(guildId, {
         isGuildProfile: isGuild
     });
+    if (options.isCurrent && !options.isCurrent()) return;
     if (UserStore.getCurrentUser()?.id !== userId) throw new Error("The account changed while loading the profile preset.");
     const setPending = (payload: Record<string, unknown>) => {
         const cleanPayload = Object.fromEntries(Object.entries(payload).filter(([, v]) => v !== undefined));

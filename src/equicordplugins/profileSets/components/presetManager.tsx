@@ -32,6 +32,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
     const [selectedPreset, setSelectedPreset] = React.useState<ProfilePresetEx | null>(null);
     const [searchMode, setSearchMode] = React.useState(false);
     const lastRandomIndexRef = React.useRef<number>(-1);
+    const loadRequest = React.useRef(0);
     const resolvedSection: PresetSection = section ?? "main";
     const isServerSection = resolvedSection === "server";
     const userId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
@@ -117,10 +118,16 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
             showToast("The profile preset list changed. Reopen this panel before trying again.", Toasts.Type.FAILURE);
             return;
         }
+        const request = ++loadRequest.current;
+        const isCurrent = () => request === loadRequest.current
+            && activeStorage.current === storage && storage.isCurrentScope(resolvedSection);
         setSelectedPreset(preset);
         loadPresetAsPending(preset, resolvedGuildId, {
-            isGuildProfile: resolvedSection === "server"
-        }).catch(() => showToast("Could not load the profile preset.", Toasts.Type.FAILURE));
+            isGuildProfile: resolvedSection === "server",
+            isCurrent
+        }).catch(() => {
+            if (isCurrent()) showToast("Could not load the profile preset.", Toasts.Type.FAILURE);
+        });
         forceUpdate();
     };
 

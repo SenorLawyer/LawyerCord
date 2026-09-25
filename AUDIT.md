@@ -561,3 +561,6 @@ StatusPresets now uses two grouped replacements for the Remember action. A short
 
 
 The UserPFP editor labels its existing avatar preview Current instead of Original. It uses the patched IconUtils resolver, which can already return a local or remote override, so the old label was inaccurate. Resolution behavior is unchanged; no bypass or duplicate avatar resolver was added.
+
+
+ProfileSets suppresses preset applications whose panel was closed or replaced, or whose selection was superseded while the current profile was being prepared. A production-function reproduction completed two same-account loads in reverse order and previously dispatched the older bio last. A panel-owned request counter and current-scope callback now gate application after preparation; the reproduction dispatches only the latest bio. Obsolete failures no longer show a toast in the replacement panel. Twenty-eight focused preset tests, TypeScript and source lint pass. This prevents stale application but does not abort the bounded image downloads; transport cancellation and live-client acceptance remain open.

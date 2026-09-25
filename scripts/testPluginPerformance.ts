@@ -5146,6 +5146,7 @@ test("profile preset loading follows the rendered object and rejects replaced li
     const other = { name: "Other", timestamp: 1 };
     const storage = { presets: [original, other] };
     const loaded: unknown[] = [];
+    const checks: (() => boolean)[] = [];
     const selected: unknown[] = [];
     let errors = 0;
     let load: (preset: typeof original) => void = () => assert.fail("Missing list callback");
@@ -5161,7 +5162,7 @@ test("profile preset loading follows the rendered object and rejects replaced li
         "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
         "@webpack/common": { React: { ...React, useMemo: (factory: () => unknown) => factory() }, useStateFromStores: () => null, showToast: () => { errors++; }, Toasts: { Type: { FAILURE: "failure" } } },
         "../index": { cl: () => "", settings: { store: {} } },
-        "../utils/actions": { createPresetActions: () => ({}) }, "../utils/profile": { loadPresetAsPending: async (preset: unknown) => { loaded.push(preset); } },
+        "../utils/actions": { createPresetActions: () => ({}) }, "../utils/profile": { loadPresetAsPending: async (preset: unknown, _guildId: unknown, options: { isCurrent: () => boolean; }) => { loaded.push(preset); checks.push(options.isCurrent); } },
         "../utils/storage": { createPresetStorage: () => Object.assign((storage), { isCurrentScope: () => true }) }, "./confirmModal": {}, "./presetList": {}
     });
     api.PresetManager({});
@@ -5180,6 +5181,15 @@ test("profile preset loading follows the rendered object and rejects replaced li
     assert.deepEqual(loaded, [original]);
     assert.deepEqual(selected, [original]);
     assert.equal(errors, 2);
+    assert.equal(checks[0](), false);
+    Object.assign(storage, { isCurrentScope: () => true });
+    load(original);
+    assert.equal(checks[1](), true);
+    load(other);
+    assert.equal(checks[1](), false);
+    assert.equal(checks[2](), true);
+    Object.assign(storage, { isCurrentScope: () => false });
+    assert.equal(checks[2](), false);
 });
 
 test("profile preset load failures notify mounted panels only", async () => {
@@ -5686,6 +5696,15 @@ test("profile presets wait for custom status updates and propagate failure", asy
         assert.equal(staged, previousStaged);
         assert.equal(updates, 1);
     }
+    currentId = "me";
+    let current = true;
+    const previousStaged = staged;
+    const stale = api.loadPresetAsPending({ bio: "Stale", customStatus: { text: "Stale" } }, undefined, { isCurrent: () => current });
+    current = false;
+    await stale;
+    assert.equal(staged, previousStaged);
+    assert.equal(updates, 1);
+
 });
 
 test("primary stream audio reads stores initialized after module evaluation", () => {

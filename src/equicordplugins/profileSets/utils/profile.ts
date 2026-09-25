@@ -138,12 +138,20 @@ export async function imageUrlToBase64(url: string, signal?: AbortSignal): Promi
             reader.releaseLock();
         }
         const blob = new Blob(chunks, { type: response.headers.get("Content-Type") ?? "" });
-        return await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
+        const fileReader = new FileReader();
+        const abort = () => fileReader.abort();
+        try {
+            return await new Promise<string>((resolve, reject) => {
+                fileReader.onload = () => resolve(fileReader.result as string);
+                fileReader.onerror = () => reject(fileReader.error);
+                fileReader.onabort = () => reject(new Error("The profile image conversion was cancelled."));
+                signal?.throwIfAborted();
+                signal?.addEventListener("abort", abort, { once: true });
+                fileReader.readAsDataURL(blob);
+            });
+        } finally {
+            signal?.removeEventListener("abort", abort);
+        }
     } catch {
         return null;
     }

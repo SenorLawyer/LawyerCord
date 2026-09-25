@@ -5,7 +5,7 @@
  */
 
 import assert from "node:assert/strict";
-import { EventEmitter } from "node:events";
+import { EventEmitter, getEventListeners } from "node:events";
 
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -4407,8 +4407,8 @@ test("profile images use only the selected guild or global resource", async () =
             Blob,
             FileReader: class {
                 result = "data:image/png;base64,fixture";
-                onloadend = () => {};
-                readAsDataURL() { blobReads++; this.onloadend(); }
+                onload = () => {};
+                readAsDataURL() { blobReads++; this.onload(); }
             }
         }, "processImage");
         const result = processImage("a_selected", "user", type, "guild", guild);
@@ -4443,14 +4443,49 @@ test("profile image downloads enforce their byte limit before conversion", async
             fetch: async () => new Response(stream, { headers: { "Content-Type": "image/png", "Content-Length": "1" } }),
             FileReader: class {
                 result = "data:image/png;base64,fixture";
-                onloadend = () => {};
-                readAsDataURL(blob: Blob) { converted++; assert.equal(blob.size, limit); this.onloadend(); }
+                onload = () => {};
+                readAsDataURL(blob: Blob) { converted++; assert.equal(blob.size, limit); this.onload(); }
             }
         });
         const result = await api.imageUrlToBase64("https://cdn.discordapp.com/example.png");
         assert.equal(result, oversized ? null : "data:image/png;base64,fixture");
         assert.equal(converted, oversized ? 0 : 1);
         assert.equal(cancelled, oversized);
+    }
+});
+
+test("profile image conversion cancels and releases its signal listener", async () => {
+    for (const outcome of ["success", "failure", "cancel"]) {
+        const controller = new AbortController();
+        const started = Promise.withResolvers<{ complete: () => void; fail: () => void; }>();
+        let aborted = 0;
+        const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+            "@api/UserSettings": { getUserSettingLazy: () => ({}) },
+            "@webpack": { findStoreLazy: () => ({}) }, "@webpack/common": {}
+        }, {
+            AbortSignal, Blob,
+            fetch: async () => new Response(new Uint8Array([1]), { headers: { "Content-Type": "image/png" } }),
+            FileReader: class {
+                result = "data:image/png;base64,fixture";
+                error = new Error("Conversion failed");
+                onload = () => {};
+                onerror = () => {};
+                onabort = () => {};
+                readAsDataURL() { started.resolve({ complete: () => this.onload(), fail: () => this.onerror() }); }
+                abort() { aborted++; this.onabort(); }
+            }
+        });
+        const converting = api.imageUrlToBase64("https://fixture.invalid/avatar.png", controller.signal);
+        const reader = await started.promise;
+        assert.equal(getEventListeners(controller.signal, "abort").length, 1);
+        if (outcome === "cancel") controller.abort();
+        else if (outcome === "failure") reader.fail();
+        else reader.complete();
+        assert.equal(await converting, outcome === "success" ? "data:image/png;base64,fixture" : null);
+        assert.equal(aborted, Number(outcome === "cancel"));
+        assert.equal(getEventListeners(controller.signal, "abort").length, 0);
+        controller.abort();
+        assert.equal(aborted, Number(outcome === "cancel"));
     }
 });
 

@@ -24,6 +24,14 @@ export default definePlugin({
             group: true,
             replacement: [
                 {
+                    match: /(?<=variant:"text-md\/semibold",color:"text-strong",)(?=children:\i\.globalName\?\?\i\.username)/,
+                    replace: 'className:"vc-bbu-name",'
+                },
+                {
+                    match: /(?<=variant:"text-sm\/medium",color:"text-default",)(?=children:null!=\i\.globalName\?\i\.username:null)/,
+                    replace: 'className:"vc-bbu-name",'
+                },
+                {
                     match: /(?<=\(0,\i\.jsx\)\(\i,\{listType:(\i),numberOfUsers:\i\.length\}\),)/,
                     replace: "$1==='blocked'?$self.renderSearchInput(vcSearch,vcSetSearch):null,"
                 },
@@ -42,7 +50,6 @@ export default definePlugin({
         return <ErrorBoundary noop><div className="vc-bbu-search">
             <TextInput
                 placeholder="Search users..."
-                style={{ width: "200px" }}
                 onChange={setValue}
                 value={value}
             />
@@ -50,12 +57,12 @@ export default definePlugin({
     },
     renderUser(userId: string, rest: ReactNode) {
         return (
-            <div style={{ display: "flex", gap: "8px" }}>
+            <ErrorBoundary noop><div className="vc-bbu-actions">
                 <Button color={Button.Colors.PRIMARY} onClick={() => openUserProfile(userId)}>
                     {getIntlMessage("SHOW_USER_PROFILE")}
                 </Button>
                 {rest}
-            </div>
+            </div></ErrorBoundary>
         );
     },
     getFilteredUsers(userIds: string[], listType: string, search: string) {

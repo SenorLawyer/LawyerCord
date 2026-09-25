@@ -1,8 +1,12 @@
-[class*="usersList"] [class*="text"] {
-    user-select: text !important;
+.vc-bbu-name {
+    user-select: text;
 }
 
-.vc-bbu-search,
-.vc-bbu-search * {
-    border-radius: 0 !important;
+.vc-bbu-search {
+    width: 200px;
+}
+
+.vc-bbu-actions {
+    display: flex;
+    gap: 8px;
 }

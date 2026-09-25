@@ -11,7 +11,7 @@ import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
 
 import { patchActivityList } from "./patch-helpers/activityList";
-import { showAllActivitiesComponent } from "./patch-helpers/popout";
+import { wrapActivityCards } from "./patch-helpers/popout";
 import { settings } from "./settings";
 import { clearFetchedApplications } from "./utils";
 
@@ -24,7 +24,7 @@ export default definePlugin({
     tags: ["Activity"],
     settings,
     patchActivityList,
-    showAllActivitiesComponent,
+    wrapActivityCards,
     patches: [
         {
             // Patch activity icons
@@ -44,10 +44,10 @@ export default definePlugin({
         },
         {
             // Show all activities in the user popout/sidebar
-            find: '"UserProfilePopout");',
+            find: 'action:"PRESS_SHOW_MORE_ACTIVITY",analyticsLocations:',
             replacement: {
-                match: /((\i)=.{0,10}(\i)\.id\).*?)\(0,\i\.jsxs?.{0,150}onClose:\i\}\)(?=.{0,30}userId:\i\.id)/,
-                replace: "$1$self.showAllActivitiesComponent({ activity: $2, user: $3 })"
+                match: /(?<=renderCards:)\i(?=,heading:)/,
+                replace: "$self.wrapActivityCards($&)"
             },
             predicate: () => settings.store.userPopout
         },

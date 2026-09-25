@@ -53,17 +53,6 @@ export function clearFetchedApplications() {
     fetchedApplications.clear();
 }
 
-export function getActivityApplication(activity: Activity | null) {
-    if (!activity) return undefined;
-    const { application_id } = activity;
-    if (!application_id) return undefined;
-    let application = ApplicationStore.getApplication(application_id);
-    if (!application && fetchedApplications.has(application_id)) {
-        application = getFetchedApplication(application_id) ?? null;
-    }
-    return application ?? undefined;
-}
-
 export function getApplicationIcons(activities: Activity[], preferSmall = false): ApplicationIcon[] {
     const applicationIcons: ApplicationIcon[] = [];
     const applications = activities.filter(activity => activity != null && (activity.application_id || activity.platform || activity.id?.startsWith("spotify:")));

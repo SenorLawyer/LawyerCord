@@ -46,17 +46,3 @@ export interface ActivityTooltipProps {
     application?: Application;
     user: User;
 }
-
-export interface AllActivitiesProps {
-    activity: Activity;
-    user: User;
-    application: Application;
-    type: string;
-    [key: string]: any;
-}
-
-export interface CarouselControlsProps {
-    activities: Activity[];
-    currentActivity: Activity;
-    onActivityChange: (activity: Activity) => void;
-}

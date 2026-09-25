@@ -6,13 +6,12 @@
 
 import "./styles.css";
 
+import ErrorBoundary from "@components/ErrorBoundary";
 import { EquicordDevs } from "@utils/constants";
 import { getIntlMessage, openUserProfile } from "@utils/discord";
 import definePlugin from "@utils/types";
-import { Button, React, RelationshipStore, TextInput, UserStore } from "@webpack/common";
-
-let lastSearch = "";
-let updateFunc = (v: any) => { };
+import { Button, React, TextInput, UserStore } from "@webpack/common";
+import type { ReactNode } from "react";
 
 export default definePlugin({
     name: "BetterBlockedUsers",
@@ -26,46 +25,30 @@ export default definePlugin({
             replacement: [
                 {
                     match: /(?<=\(0,\i\.jsx\)\(\i,\{listType:(\i),numberOfUsers:\i\.length\}\),)/,
-                    replace: "$1==='blocked'?$self.renderSearchInput():null,"
+                    replace: "$1==='blocked'?$self.renderSearchInput(vcSearch,vcSetSearch):null,"
                 },
                 {
                     match: /(?<=\{userId:(\i).*?\.globalName.{0,25}\}\)\]\}\),)(\(.*?loading:\i\}\))/,
                     replace: "$self.renderUser($1,$2)",
                 },
                 {
-                    match: /(?<=userIds:\i,listType:\i\}=(\i).{0,30}(\i)\.useState\(\d+\);)/,
-                    replace: "let [searchResults,setSearchResults]=$2.useState([]);$self.setUpdateFunc($1,setSearchResults);"
-                },
-                {
-                    match: /(?<=\i,children:)(\i)(?=\.slice)/,
-                    replace: "(searchResults.length?searchResults:$1)"
+                    match: /(?<=userIds:(\i),listType:(\i)\}=\i,\[\i,\i\]=(\i)\.useState\(\d+\);)/,
+                    replace: "let[vcSearch,vcSetSearch]=$3.useState(\"\");$1=$self.getFilteredUsers($1,$2,vcSearch);"
                 },
             ]
         }
     ],
-    renderSearchInput() {
-        const [value, setValue] = React.useState(lastSearch);
-
-        React.useEffect(() => {
-            const searchResults = this.getFilteredUsers(lastSearch);
-            updateFunc(searchResults);
-        }, []);
-
-        return <div className="vc-bbu-search">
+    renderSearchInput(value: string, setValue: (value: string) => void) {
+        return <ErrorBoundary noop><div className="vc-bbu-search">
             <TextInput
                 placeholder="Search users..."
                 style={{ width: "200px" }}
-                onInput={e => {
-                    const search = (e.target as HTMLInputElement).value.toLowerCase().trim();
-                    setValue(search);
-                    lastSearch = search;
-                    const searchResults = this.getFilteredUsers(search);
-                    updateFunc(searchResults);
-                }} value={value}
+                onChange={setValue}
+                value={value}
             />
-        </div>;
+        </div></ErrorBoundary>;
     },
-    renderUser(userId: string, rest: any) {
+    renderUser(userId: string, rest: ReactNode) {
         return (
             <div style={{ display: "flex", gap: "8px" }}>
                 <Button color={Button.Colors.PRIMARY} onClick={() => openUserProfile(userId)}>
@@ -75,20 +58,13 @@ export default definePlugin({
             </div>
         );
     },
-    getSearchResults() {
-        return !!lastSearch;
-    },
-    setUpdateFunc(e, setResults) {
-        if (e.listType !== "blocked") return;
-        updateFunc = setResults;
-        return true;
-    },
-    getFilteredUsers(search: string) {
-        search = search.toLowerCase();
-        return (RelationshipStore as any).getBlockedIDs().filter(id => {
-            const user = UserStore.getUser(id) as any;
+    getFilteredUsers(userIds: string[], listType: string, search: string) {
+        search = search.toLowerCase().trim();
+        if (listType !== "blocked" || !search) return userIds;
+        return userIds.filter(id => {
+            const user = UserStore.getUser(id);
             if (!user) return id === search;
-            return id === search || user?.username?.toLowerCase()?.includes(search) || user?.globalName?.toLowerCase()?.includes(search);
-        }) as string[];
+            return id === search || user.username.toLowerCase().includes(search) || user.globalName?.toLowerCase().includes(search);
+        });
     }
 });

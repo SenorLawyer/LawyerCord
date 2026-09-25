@@ -27,6 +27,25 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("blocked user search filters the current panel IDs and preserves empty results", () => {
+    const users = new Map([
+        ["1", { username: "Alice", globalName: "First User" }],
+        ["2", { username: "Bob", globalName: null }],
+        ["3", { username: "Alice elsewhere", globalName: null }]
+    ]);
+    const { default: plugin } = loadSource("src/equicordplugins/betterBlockedUsers/index.tsx", {
+        "@components/ErrorBoundary": {}, "@utils/constants": { EquicordDevs: {} }, "@utils/discord": {},
+        "@utils/types": { __esModule: true, default: (value: unknown) => value },
+        "@webpack/common": { UserStore: { getUser: (id: string) => users.get(id) } }
+    });
+    const ids = ["1", "2", "unknown"];
+    assert.equal(plugin.getFilteredUsers(ids, "blocked", "  "), ids);
+    assert.equal(plugin.getFilteredUsers(ids, "ignored", "missing"), ids);
+    for (const [search, expected] of [["missing", []], [" ALICE ", ["1"]], ["first", ["1"]], ["2", ["2"]], ["unknown", ["unknown"]]])
+        assert.deepEqual(plugin.getFilteredUsers(ids, "blocked", search), expected);
+    assert.deepEqual(plugin.getFilteredUsers(["2"], "blocked", "Alice"), []);
+});
+
 test("bounded response text preserves split UTF-8 and cancels oversized streams", async () => {
     const encoded = new TextEncoder().encode("Hello € 🦊");
     for (const limit of [encoded.length, encoded.length - 1]) {

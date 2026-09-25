@@ -25,6 +25,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- ClientSideBlock filters current Active Now cards without changing shared party data. Cards containing locally hidden users are hidden as a whole, with voice settings and guild exceptions respected.
+
 - ClickableRoles member rows use Discord keyboard controls for opening profiles.
 
 - ClickableRoles refreshes membership when opened, ignores replies from an earlier account or stopped plugin, and distinguishes lookup failures from empty roles.

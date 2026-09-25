@@ -171,34 +171,21 @@ function hiddenReplyComponent() {
     }
 }
 
-function activeNowView(cards) {
-    if (!Array.isArray(cards)) return cards;
+interface NowPlayingCard {
+    party: {
+        id: string;
+        partiedMembers: { id: string; }[];
+        guildContext?: { id: string; } | null;
+    };
+}
 
-    return cards.filter(card => {
-        if (!card?.key) return false;
-
-        const newKey = card.key.match(/(?:user-|party-spotify:)(.+)/)?.[1];
-        if (newKey) return !shouldHideUser(newKey);
-
-        if (card.key.startsWith("channel-") && settings.store.hideVc) {
-            const { party } = card.props;
-            if (!party) return true;
-
-            const { applicationStreams, partiedMembers, priorityMembers, voiceChannels } = party;
-            voiceChannels?.forEach(vc => vc.members = vc.members?.filter(m => !shouldHideUser(m.id)) ?? []);
-            party.applicationStreams = (applicationStreams ?? []).filter(applicationStream => !shouldHideUser(applicationStream.streamUser.id));
-            party.priorityMembers = priorityMembers?.filter(m => !shouldHideUser(m.user.id)) ?? [];
-            party.partiedMembers = partiedMembers?.filter(m => !shouldHideUser(m.id)) ?? [];
-
-            const hasMembers = (voiceChannels?.some(vc => vc.members?.length) ?? false) ||
-                (party.partiedMembers?.length ?? 0) ||
-                (party.priorityMembers?.length ?? 0) ||
-                (party.applicationStreams?.length ?? 0);
-
-            return hasMembers;
-        }
-
-        return true;
+function filterActiveNowCards<T extends NowPlayingCard>(cards: T[]): T[] {
+    const { hideVc } = settings.store;
+    return cards.filter(({ party }) => {
+        const channelId = party.id.startsWith("channel-") ? party.id.slice(8) : undefined;
+        if (channelId && !hideVc) return true;
+        if (isPluginDisabledForGuild(party.guildContext?.id, true)) return true;
+        return !party.partiedMembers.some(member => shouldHideUser(member.id, channelId));
     });
 }
 
@@ -218,7 +205,7 @@ export default definePlugin({
         guildWhitelistIds = new Set();
         idCachesInitialized = false;
     },
-    activeNowView,
+    filterActiveNowCards,
     shouldHideUser,
     hiddenReplyComponent,
     isRoleAllBlockedMembers,
@@ -297,8 +284,8 @@ export default definePlugin({
         {
             find: "ACTIVE_NOW_COLUMN)",
             replacement: {
-                match: /(__invalid_consentCard.{0,40}\()(\i),\{/,
-                replace: '$1"div",{children:$self.activeNowView($2())'
+                match: /(\i)\.map(?=\(\i=>\{let\{party:\i\}=\i;return)/,
+                replace: "$self.filterActiveNowCards($1).map"
             }
         },
         // mutual friends list in user profile

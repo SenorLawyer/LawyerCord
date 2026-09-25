@@ -27,6 +27,41 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("active now filtering preserves party data and respects guild and voice settings", () => {
+    const blocked = "111111111111111111";
+    const visible = "222222222222222222";
+    const guild = "333333333333333333";
+    const store = { usersToBlock: blocked, guildBlackList: "", guildWhiteList: "", hideVc: false, hideBlockedUsers: true };
+    const { default: plugin } = loadSource("src/equicordplugins/clientSideBlock/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store }) }, "@components/Paragraph": {},
+        "@utils/constants": { Devs: {}, EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": {
+            RelationshipStore: { isBlocked: () => false },
+            ChannelStore: { getChannel: () => ({ guild_id: guild }) }
+        }
+    });
+    const cards = [
+        { party: { id: `user-${blocked}`, partiedMembers: [{ id: blocked }] } },
+        { party: { id: "channel-fixture", partiedMembers: [{ id: blocked }, { id: visible }] } },
+        { party: { id: `user-${visible}`, partiedMembers: [{ id: visible }] } },
+        { party: { id: "party-fixture", partiedMembers: [{ id: blocked }, { id: visible }] } }
+    ];
+    const before = structuredClone(cards);
+    const filter = () => { plugin.start(); return plugin.filterActiveNowCards(cards); };
+    assert.deepEqual(filter(), [cards[1], cards[2]]);
+    store.hideVc = true;
+    assert.deepEqual(filter(), [cards[2]]);
+    store.guildBlackList = guild;
+    assert.deepEqual(filter(), [cards[1], cards[2]]);
+    store.guildBlackList = "";
+    store.guildWhiteList = "444444444444444444";
+    assert.deepEqual(filter(), [cards[1], cards[2]]);
+    store.usersToBlock = "";
+    assert.deepEqual(filter(), cards);
+    assert.deepEqual(cards, before);
+});
+
 test("role member lookups refresh on opening and discard stale replies", async () => {
     let account = "first";
     let effect: () => (() => void) | undefined;

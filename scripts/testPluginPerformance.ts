@@ -27,6 +27,53 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("role member lookups refresh on opening and discard stale replies", async () => {
+    let account = "first";
+    let effect: () => (() => void) | undefined;
+    const requests: { resolve(value: { body: unknown; }): void; reject(error: Error): void; }[] = [];
+    const hydrated: string[][] = [];
+    const state: unknown[] = [];
+    const { RoleMembersList, plugin } = loadSource("src/equicordplugins/clickableRoles/index.tsx", {
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+        "@utils/constants": { Devs: {} }, "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/discord": {}, "@utils/Logger": { Logger: class { error() { } } },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value },
+        "@webpack": { findByPropsLazy: () => ({ requestMembersById: (_guild: string, ids: string[]) => hydrated.push(ids) }) },
+        "@webpack/common": {
+            useState: (value: unknown) => [value, (next: unknown) => state.push(next)],
+            useEffect: (callback: typeof effect) => effect = callback,
+            useStateFromStores: (_stores: unknown, selector: () => unknown) => selector(),
+            GuildRoleStore: { getRole: () => ({ name: "Role" }) },
+            UserStore: { getCurrentUser: () => ({ id: account }) },
+            Constants: { Endpoints: { GUILD_ROLE_MEMBER_IDS: () => "/fixture" } },
+            RestAPI: { get: () => new Promise((resolve, reject) => requests.push({ resolve, reject })) }
+        }
+    }, { React: { createElement: () => null } }, "({ RoleMembersList, plugin: exports.default })");
+    const open = () => {
+        RoleMembersList({ roleId: "role", guildId: "guild", closePopout() { }, setPopoutRef() { } });
+        assert.ok(effect);
+        return effect();
+    };
+    const close = open();
+    requests[0].resolve({ body: ["old"] });
+    await setImmediate();
+    close?.();
+    open();
+    assert.equal(requests.length, 2);
+    requests[1].resolve({ body: ["new"] });
+    await setImmediate();
+    assert.deepEqual(hydrated, [["old"], ["new"]]);
+    for (const invalidate of [() => { account = "second"; }, () => plugin.stop()]) {
+        open();
+        invalidate();
+        const before = state.length;
+        requests.at(-1)?.resolve({ body: ["stale"] });
+        await setImmediate();
+        assert.equal(state.length, before);
+        assert.equal(hydrated.length, 2);
+    }
+});
+
 test("ban reason defaults and durations preserve native values and modal ownership", () => {
     const store = { isTextInputDefault: false, reasons: ["Legacy", { text: "Keep", deleteSeconds: 0 }, { text: "Delete", deleteSeconds: 86400 }] };
     const { default: plugin } = loadSource("src/equicordplugins/betterBanReasons/index.tsx", {

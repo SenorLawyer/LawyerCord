@@ -4674,6 +4674,31 @@ test("profile preset imports keep their initiating account and list", async () =
     }
 });
 
+test("profile preset save and refresh preparation use panel cancellation", async () => {
+    for (const operation of ["save", "refresh"]) {
+        const controller = new AbortController();
+        const preset = { name: "Existing", timestamp: 0 };
+        let writes = 0;
+        let preparationSignal: AbortSignal | undefined;
+        const storage = { presets: [preset], savePresetsData: async () => { writes++; } };
+        const actions = loadSource("src/equicordplugins/profileSets/utils/actions.ts", {
+            "@utils/web": {},
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "owner" }) } },
+            "./profile": { getCurrentProfile: (_guildId: string, options: { signal?: AbortSignal; }) => {
+                preparationSignal = options.signal;
+                return new Promise((_resolve, reject) => options.signal?.addEventListener("abort", () => reject(options.signal?.reason), { once: true }));
+            } },
+            "./storage": {}
+        }).createPresetActions(storage, controller.signal);
+        const pending = operation === "save" ? actions.savePreset("New", "main") : actions.refreshPreset(preset, "main");
+        assert.equal(preparationSignal, controller.signal);
+        controller.abort();
+        await assert.rejects(pending, { name: "AbortError" });
+        assert.equal(writes, 0);
+        assert.equal(storage.presets[0], preset);
+    }
+});
+
 test("profile preset saves reject account and list changes during preparation", async () => {
     let userId: string | undefined = "first";
     let preparation = Promise.withResolvers<object>();
@@ -5368,6 +5393,7 @@ test("profile preset pagination recovers when the visible list shrinks", () => {
 test("profile preset save completion cannot update a replaced or closed panel", async () => {
     for (const change of ["replace", "close"]) for (const failure of [false, true]) {
         const pending = Promise.withResolvers<void>();
+        const preparationSignals: AbortSignal[] = [];
         const updates: unknown[] = [];
         const errors: string[] = [];
         const refs: { current: unknown; }[] = [];
@@ -5390,7 +5416,7 @@ test("profile preset save completion cannot update a replaced or closed panel", 
             "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
             "@webpack/common": { React, useStateFromStores: () => null, showToast: (message: string) => errors.push(message), Toasts: { Type: { FAILURE: "failure" } } },
             "../index": { cl: () => "", settings: { store: {} } },
-            "../utils/actions": { createPresetActions: () => ({ savePreset: () => pending.promise }) },
+            "../utils/actions": { createPresetActions: (_storage: unknown, signal: AbortSignal) => { preparationSignals.push(signal); return { savePreset: () => pending.promise }; } },
             "../utils/profile": {}, "./confirmModal": {}, "./presetList": {},
             "../utils/storage": { createPresetStorage: () => {
                 let active = true;
@@ -5404,7 +5430,10 @@ test("profile preset save completion cannot update a replaced or closed panel", 
         if (change === "replace") {
             stateIndex = refIndex = 0;
             api.PresetManager({ section: "server", guildId: "new-guild" });
-        } else cleanup?.();
+        }
+        cleanup?.();
+        assert.equal(preparationSignals[0].aborted, true);
+        if (change === "replace") assert.equal(preparationSignals[1].aborted, false);
         updates.length = 0;
         if (failure) pending.reject(new Error("Old save failed"));
         else pending.resolve();

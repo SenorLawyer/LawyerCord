@@ -45,7 +45,8 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
     const storage = React.useMemo(() => createPresetStorage(), [resolvedSection, resolvedGuildId, userId]);
     const activeStorage = React.useRef(storage);
     activeStorage.current = storage;
-    const actions = React.useMemo(() => createPresetActions(storage), [storage]);
+    const preparationController = React.useMemo(() => new AbortController(), [storage]);
+    const actions = React.useMemo(() => createPresetActions(storage, preparationController.signal), [storage, preparationController]);
     const { presets } = storage;
     const canUseGuild = !isServerSection || Boolean(resolvedGuildId);
 
@@ -67,9 +68,10 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
         return () => {
             isActive = false;
             loadController.current?.abort();
+            preparationController.abort();
             storage.unloadPresets();
         };
-    }, [resolvedGuildId, resolvedSection, userId, storage]);
+    }, [resolvedGuildId, resolvedSection, userId, storage, preparationController]);
 
     const filteredPresets = !searchMode
         ? presets

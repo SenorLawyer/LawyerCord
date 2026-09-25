@@ -15,12 +15,12 @@ import { isPresetList } from "./validation";
 export type ImportDecision = "override" | "merge" | "cancel";
 export type PresetActions = ReturnType<typeof createPresetActions>;
 
-export function createPresetActions(storage: PresetStorage) {
+export function createPresetActions(storage: PresetStorage, signal?: AbortSignal) {
     async function savePreset(name: string, section: PresetSection, guildId?: string) {
         const userId = UserStore.getCurrentUser()?.id;
         const originalPresets = storage.presets;
         if (!userId) throw new Error("Sign in before saving a profile preset.");
-        const profile = await getCurrentProfile(guildId, { isGuildProfile: section === "server" });
+        const profile = await getCurrentProfile(guildId, { isGuildProfile: section === "server", signal });
         if (UserStore.getCurrentUser()?.id !== userId || storage.presets !== originalPresets)
             throw new Error("The account or preset list changed while preparing the profile.");
 
@@ -36,7 +36,7 @@ export function createPresetActions(storage: PresetStorage) {
         const userId = UserStore.getCurrentUser()?.id;
         const originalPresets = storage.presets;
         if (!userId || !storage.presets.includes(preset)) throw new Error("The profile preset is no longer available.");
-        const profile = await getCurrentProfile(guildId, { isGuildProfile: section === "server" });
+        const profile = await getCurrentProfile(guildId, { isGuildProfile: section === "server", signal });
         const index = storage.presets.indexOf(preset);
         if (UserStore.getCurrentUser()?.id !== userId || storage.presets !== originalPresets || index < 0)
             throw new Error("The account or preset list changed while preparing the profile.");

@@ -564,3 +564,6 @@ The UserPFP editor labels its existing avatar preview Current instead of Origina
 
 
 ProfileSets suppresses preset applications whose panel was closed or replaced, or whose selection was superseded while the current profile was being prepared. A production-function reproduction completed two same-account loads in reverse order and previously dispatched the older bio last. A panel-owned request counter and current-scope callback now gate application after preparation; the reproduction dispatches only the latest bio. Obsolete failures no longer show a toast in the replacement panel. Twenty-eight focused preset tests, TypeScript and source lint pass. This prevents stale application but does not abort the bounded image downloads; transport cancellation and live-client acceptance remain open.
+
+
+ProfileSets now uses the shared ProfilePreset type directly. The removed ProfilePresetEx extension contained only avatarRaw, which has no runtime reader or writer. Validation no longer rejects a preset because of that unused field. Existing extra fields remain in the original objects and survive normal storage/export; this change does not migrate or strip saved records. Twenty-eight focused tests, TypeScript and plugin lint pass, including unchanged-input checks for legacy avatarRaw values.

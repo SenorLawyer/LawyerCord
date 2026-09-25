@@ -22,7 +22,7 @@ export function isPresetList(value: unknown): value is ProfilePreset[] {
     return Array.isArray(value) && value.every((preset: unknown) => {
         if (!isRecord(preset) || typeof preset.name !== "string" || !isNumber(preset.timestamp)
             || !Number.isFinite(new Date(preset.timestamp).getTime())) return false;
-        for (const key of ["avatarDataUrl", "avatarRaw", "bannerDataUrl", "bio", "globalName", "pronouns", "primaryGuildId"])
+        for (const key of ["avatarDataUrl", "bannerDataUrl", "bio", "globalName", "pronouns", "primaryGuildId"])
             if (preset[key] != null && typeof preset[key] !== "string") return false;
         if (preset.accentColor != null && !isNumber(preset.accentColor)) return false;
         if (preset.themeColors != null && !isNumbers(preset.themeColors)) return false;

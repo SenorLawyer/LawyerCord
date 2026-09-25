@@ -18,21 +18,17 @@ const SERVER_PRESETS_KEY = "ProfilePresets_v2_Server";
 
 export type PresetSection = "main" | "server";
 
-export type ProfilePresetEx = ProfilePreset & {
-    avatarRaw?: string | null;
-};
-
 export type PresetStorage = ReturnType<typeof createPresetStorage>;
 
 export function createPresetStorage() {
-    let presets: ProfilePresetEx[] = [];
-    let savedPresets: ProfilePresetEx[] | undefined;
+    let presets: ProfilePreset[] = [];
+    let savedPresets: ProfilePreset[] | undefined;
     let activeScopeKey: string | null = null;
     let loadGeneration = 0;
     let pendingSave: Promise<void> | undefined;
     let hasLegacyPresets = false;
 
-    function resetPresets(nextPresets?: ProfilePresetEx[]) {
+    function resetPresets(nextPresets?: ProfilePreset[]) {
         savedPresets = nextPresets;
         presets = nextPresets ?? [];
     }
@@ -99,7 +95,7 @@ export function createPresetStorage() {
                 if (legacyToUse !== undefined) {
                     if (!isPresetList(legacyToUse)) throw new Error("The legacy profile preset list is invalid.");
                     let migrated = legacyToUse;
-                    await DataStore.update<ProfilePresetEx[]>(key, current => {
+                    await DataStore.update<ProfilePreset[]>(key, current => {
                         if (current !== undefined) {
                             if (!isPresetList(current)) throw new Error("The saved profile preset list is invalid.");
                             migrated = current;
@@ -128,7 +124,7 @@ export function createPresetStorage() {
         return userId !== null && activeScopeKey === getPresetsKey(section, userId);
     }
 
-    async function savePresetsData(section: PresetSection, nextPresets: ProfilePresetEx[] = presets) {
+    async function savePresetsData(section: PresetSection, nextPresets: ProfilePreset[] = presets) {
         const userId = getCurrentUserId();
         if (!userId) throw new Error("No account is signed in.");
         const key = getPresetsKey(section, userId);
@@ -137,7 +133,7 @@ export function createPresetStorage() {
         const generation = loadGeneration;
         const expected = savedPresets;
         try {
-            const write = DataStore.update<ProfilePresetEx[]>(key, stored => {
+            const write = DataStore.update<ProfilePreset[]>(key, stored => {
                 if (!lodash.isEqual(stored, expected))
                     throw new Error("The saved presets changed in another client. Reopen this panel before trying again.");
                 return nextPresets;

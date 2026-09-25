@@ -5,10 +5,11 @@
  */
 
 import { chooseFile, saveFile } from "@utils/web";
+import { ProfilePreset } from "@vencord/discord-types";
 import { showToast, Toasts, UserStore } from "@webpack/common";
 
 import { getCurrentProfile } from "./profile";
-import { PresetSection, type PresetStorage, type ProfilePresetEx } from "./storage";
+import { PresetSection, type PresetStorage } from "./storage";
 import { isPresetList } from "./validation";
 
 export type ImportDecision = "override" | "merge" | "cancel";
@@ -23,7 +24,7 @@ export function createPresetActions(storage: PresetStorage) {
         if (UserStore.getCurrentUser()?.id !== userId || storage.presets !== originalPresets)
             throw new Error("The account or preset list changed while preparing the profile.");
 
-        const newPreset: ProfilePresetEx = {
+        const newPreset: ProfilePreset = {
             name,
             timestamp: Date.now(),
             ...profile,
@@ -31,7 +32,7 @@ export function createPresetActions(storage: PresetStorage) {
         await storage.savePresetsData(section, [...storage.presets, newPreset]);
     }
 
-    async function refreshPreset(preset: ProfilePresetEx, section: PresetSection, guildId?: string) {
+    async function refreshPreset(preset: ProfilePreset, section: PresetSection, guildId?: string) {
         const userId = UserStore.getCurrentUser()?.id;
         const originalPresets = storage.presets;
         if (!userId || !storage.presets.includes(preset)) throw new Error("The profile preset is no longer available.");

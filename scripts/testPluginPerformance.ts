@@ -4504,8 +4504,14 @@ test("profile preset validation rejects malformed nested fields without changing
     };
     assert.equal(isPresetList([valid]), true);
     assert.equal(isPresetList([{ name: "Minimal", timestamp: 0 }]), true);
+    for (const avatarRaw of [null, "legacy", 1, { legacy: true }]) {
+        const preset = { ...valid, avatarRaw };
+        const before = JSON.stringify(preset);
+        assert.equal(isPresetList([preset]), true);
+        assert.equal(JSON.stringify(preset), before);
+    }
     const invalid = [
-        { name: 2 }, { timestamp: Infinity }, { avatarDataUrl: {} }, { avatarRaw: 1 }, { bannerDataUrl: [] },
+        { name: 2 }, { timestamp: Infinity }, { avatarDataUrl: {} }, { bannerDataUrl: [] },
         { bio: false }, { accentColor: NaN }, { themeColors: ["red"] }, { globalName: 1 }, { pronouns: {} },
         { primaryGuildId: 1 }, { avatarDecoration: { skuId: 1, asset: "a" } }, { profileEffect: [] },
         { profileEffect: { skuId: "1", effects: {} } }, { profileEffect: { skuId: "1", type: "1" } },

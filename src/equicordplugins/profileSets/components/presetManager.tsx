@@ -7,12 +7,13 @@
 import { Button } from "@components/Button";
 import { Heading } from "@components/Heading";
 import { classes } from "@utils/misc";
+import { ProfilePreset } from "@vencord/discord-types";
 import { openModal, React, SelectedGuildStore, showToast, TextInput, Toasts, UserStore, useStateFromStores } from "@webpack/common";
 
 import { cl, settings } from "../index";
 import { createPresetActions, ImportDecision } from "../utils/actions";
 import { loadPresetAsPending } from "../utils/profile";
-import { createPresetStorage, PresetSection, ProfilePresetEx } from "../utils/storage";
+import { createPresetStorage, PresetSection } from "../utils/storage";
 import { ImportProfilesModal } from "./confirmModal";
 import { PresetList } from "./presetList";
 
@@ -29,7 +30,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
     const [isSaving, setIsSaving] = React.useState(false);
     const [currentPage, setCurrentPage] = React.useState(1);
     const [pageInput, setPageInput] = React.useState("1");
-    const [selectedPreset, setSelectedPreset] = React.useState<ProfilePresetEx | null>(null);
+    const [selectedPreset, setSelectedPreset] = React.useState<ProfilePreset | null>(null);
     const [searchMode, setSearchMode] = React.useState(false);
     const lastRandomIndexRef = React.useRef<number>(-1);
     const loadRequest = React.useRef(0);
@@ -113,7 +114,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
         }
     };
 
-    const applyPreset = (preset: ProfilePresetEx) => {
+    const applyPreset = (preset: ProfilePreset) => {
         if (!storage.isCurrentScope(resolvedSection) || !storage.presets.includes(preset)) {
             showToast("The profile preset list changed. Reopen this panel before trying again.", Toasts.Type.FAILURE);
             return;
@@ -131,7 +132,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
         forceUpdate();
     };
 
-    const handleLoadPreset = (preset: ProfilePresetEx) => {
+    const handleLoadPreset = (preset: ProfilePreset) => {
         if (!canUseGuild) return;
         applyPreset(preset);
     };

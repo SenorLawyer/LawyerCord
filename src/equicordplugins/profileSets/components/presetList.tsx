@@ -6,23 +6,24 @@
 
 import { Button } from "@components/Button";
 import { classes } from "@utils/misc";
+import { ProfilePreset } from "@vencord/discord-types";
 import { ContextMenuApi, Menu, React, showToast, TextInput, Toasts } from "@webpack/common";
 
 import { cl } from "..";
 import { PresetActions } from "../utils/actions";
-import { PresetSection, type PresetStorage, type ProfilePresetEx } from "../utils/storage";
+import { PresetSection, type PresetStorage } from "../utils/storage";
 
-const presetKeys = new WeakMap<ProfilePresetEx, number>();
+const presetKeys = new WeakMap<ProfilePreset, number>();
 let nextPresetKey = 0;
 
 interface PresetListProps {
     storage: PresetStorage;
     actions: PresetActions;
-    presets: ProfilePresetEx[];
-    allPresets: ProfilePresetEx[];
+    presets: ProfilePreset[];
+    allPresets: ProfilePreset[];
     avatarSize: number;
-    selectedPreset: ProfilePresetEx | null;
-    onLoad: (preset: ProfilePresetEx) => void;
+    selectedPreset: ProfilePreset | null;
+    onLoad: (preset: ProfilePreset) => void;
     onUpdate: () => void;
     guildId?: string;
     section: PresetSection;
@@ -44,7 +45,7 @@ export function PresetList({
     currentPage,
     onPageChange
 }: PresetListProps) {
-    const [renaming, setRenaming] = React.useState<ProfilePresetEx | null>(null);
+    const [renaming, setRenaming] = React.useState<ProfilePreset | null>(null);
     const [renameText, setRenameText] = React.useState("");
 
     const runChange = async (change: () => Promise<void>) => {

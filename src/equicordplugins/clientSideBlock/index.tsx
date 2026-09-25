@@ -8,8 +8,7 @@ import { definePluginSettings } from "@api/Settings";
 import { Paragraph } from "@components/Paragraph";
 import { Devs, EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { GuildMember } from "@vencord/discord-types";
-import { ChannelStore, GuildMemberStore, GuildRoleStore, React, RelationshipStore, UserStore } from "@webpack/common";
+import { ChannelStore, GuildRoleStore, React, RelationshipStore } from "@webpack/common";
 
 const ID_REGEX = /^\d{17,20}$/;
 
@@ -132,21 +131,22 @@ function shouldHideUser(userId: string, channelId?: string) {
     return userIdsToBlock.has(userId);
 }
 
-function isRoleAllBlockedMembers(roleId, guildId) {
-    const role = GuildRoleStore.getRole(guildId, roleId);
-    if (!role) return false;
-    if (isPluginDisabledForGuild(guildId, true)) return false;
+interface MemberListProps {
+    channel: { id: string; guild_id: string; };
+    groups: { id: string; index?: number; count: number; }[];
+    rows: ({ user?: { id: string; }; } | null | undefined)[];
+}
 
-    let hasMembersWithRole = false;
-    for (const member of GuildMemberStore.getMembers(guildId) as GuildMember[]) {
-        if (!member.roles.includes(roleId)) continue;
+function isRoleGroupHidden({ channel, groups, rows }: MemberListProps, section: number) {
+    const group = groups[section];
+    if (!group || group.index === undefined || group.count <= 0) return false;
+    if (!GuildRoleStore.getRole(channel.guild_id, group.id)) return false;
 
-        hasMembersWithRole = true;
-        const user = UserStore.getUser(member.userId);
-        if (!shouldHideUser(member.userId) || user?.desktop || user?.mobile) return false;
+    for (let index = group.index + 1; index <= group.index + group.count; index++) {
+        const user = rows[index]?.user;
+        if (!user || !shouldHideUser(user.id, channel.id)) return false;
     }
-
-    return hasMembersWithRole;
+    return true;
 }
 
 function hiddenReplyComponent() {
@@ -199,7 +199,7 @@ export default definePlugin({
     filterActiveNowCards,
     shouldHideUser,
     hiddenReplyComponent,
-    isRoleAllBlockedMembers,
+    isRoleGroupHidden,
     patches: [
         // message
         {
@@ -227,8 +227,8 @@ export default definePlugin({
                 },
                 // stop the role header from displaying if all users with that role are hidden (wip sorta)
                 {
-                    match: /\i.memo\(function\(\i\){/,
-                    replace: "$&if($self.isRoleAllBlockedMembers(arguments[0].id, arguments[0].guildId)) return null;",
+                    match: /renderSection=(\i)=>\{/,
+                    replace: "$&if($self.isRoleGroupHidden(this.props,$1.section)) return null;",
                     predicate: () => settings.store.hideEmptyRoles
                 },
             ]

@@ -27,6 +27,33 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("role headers hide only when every displayed member row is known and hidden", () => {
+    const user = "111111111111111111";
+    const guild = "333333333333333333";
+    const store = { usersToBlock: user, guildBlackList: "", guildWhiteList: "", hideBlockedUsers: true };
+    const { default: plugin } = loadSource("src/equicordplugins/clientSideBlock/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store }) }, "@components/Paragraph": {},
+        "@utils/constants": { Devs: {}, EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": {
+            RelationshipStore: { isBlocked: () => false },
+            ChannelStore: { getChannel: () => ({ guild_id: guild }) },
+            GuildRoleStore: { getRole: (_guild: string, role: string) => role === "role" ? { id: role } : undefined }
+        }
+    });
+    const hidden = { user: { id: user } };
+    const visible = { user: { id: "222222222222222222" } };
+    const props = { channel: { id: "channel", guild_id: guild }, groups: [{ id: "role", index: 1, count: 2 }], rows: [visible, null, hidden, hidden] };
+    assert.equal(plugin.isRoleGroupHidden(props, 0), true);
+    for (const rows of [[visible, null, hidden], [visible, null, hidden, null], [visible, null, hidden, visible]])
+        assert.equal(plugin.isRoleGroupHidden({ ...props, rows }, 0), false);
+    for (const group of [{ id: "role", count: 2 }, { id: "role", index: 1, count: 0 }, { id: "online", index: 1, count: 2 }])
+        assert.equal(plugin.isRoleGroupHidden({ ...props, groups: [group] }, 0), false);
+    store.guildBlackList = guild;
+    plugin.start();
+    assert.equal(plugin.isRoleGroupHidden(props, 0), false);
+});
+
 test("block settings changes initialize all saved ID lists together", () => {
     const user = "111111111111111111";
     const guild = "333333333333333333";

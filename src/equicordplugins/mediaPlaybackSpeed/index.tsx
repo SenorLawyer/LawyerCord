@@ -80,7 +80,7 @@ export default definePlugin({
         {
             find: "AUDIO:\"AUDIO\"",
             replacement: {
-                match: /sliderWrapperClassName:\i.\i\}\)\}\),/,
+                match: /sliderWrapperClassName:\i\.\i\}\)\}\),/,
                 replace: "$&$self.renderPlaybackSpeedComponent({mediaRef:this?.props?.mediaRef}),"
             }
         }

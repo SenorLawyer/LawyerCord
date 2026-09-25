@@ -177,7 +177,10 @@ export default definePlugin({
             data.remoteAvatars = {};
 
             const response = await fetch(settings.store.databaseSource, { signal: controller.signal });
-            if (!response.ok) throw new Error("Could not download the avatar database.");
+            if (!response.ok) {
+                await response.body?.cancel();
+                throw new Error("Could not download the avatar database.");
+            }
             const remote: unknown = await response.json();
             if (controller.signal.aborted) return;
             if (!isObject(remote) || !("avatars" in remote) || !isAvatarMap(remote.avatars))

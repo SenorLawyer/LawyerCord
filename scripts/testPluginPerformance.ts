@@ -15096,6 +15096,15 @@ test("TranslatePlus delivers to surviving views and rejects detached requests", 
     await detached;
     assert.deepEqual(deliveries, [[result], [result, result], []]);
     cleanups[2]();
+    accessory.Accessory({ message });
+    accessory.Accessory({ message: { ...message, content: "Edited" } });
+    const oldContent = accessory.handleTranslate(message);
+    finish(result);
+    await oldContent;
+    assert.deepEqual(deliveries[3], [result]);
+    assert.deepEqual(deliveries[4], []);
+    cleanups[3]();
+    cleanups[4]();
 });
 
 test("TranslatePlus language labels ignore inherited properties", () => {

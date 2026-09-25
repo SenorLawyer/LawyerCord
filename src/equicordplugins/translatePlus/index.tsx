@@ -55,7 +55,7 @@ export default definePlugin({
     },
     renderMessageAccessory: props => {
         const userId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
-        return userId ? <Accessory key={`${userId}:${props.message.id}`} message={props.message} /> : null;
+        return userId ? <Accessory key={`${userId}:${props.message.id}:${props.message.content}`} message={props.message} /> : null;
     },
     messagePopoverButton: {
         icon: Icon,

@@ -18,20 +18,21 @@ const languages = { ...GoogleLanguages, tp: "Toki Pona", sh: "Shavian" };
 const setters = new Map<string, { listeners: Set<(translation: Translation | undefined) => void>; request?: symbol; }>();
 
 export function Accessory({ message }: { message: Message & { vencordEmbeddedBy?: string[]; }; }) {
+    const key = `${message.id}:${message.content}`;
     const [translation, setTranslation] = useState<Translation | undefined>(undefined);
 
     useEffect(() => {
         if (message.vencordEmbeddedBy) return;
 
-        const entry = setters.get(message.id) ?? { listeners: new Set<(translation: Translation | undefined) => void>() };
+        const entry = setters.get(key) ?? { listeners: new Set<(translation: Translation | undefined) => void>() };
         entry.listeners.add(setTranslation);
-        setters.set(message.id, entry);
+        setters.set(key, entry);
 
         return () => {
             entry.listeners.delete(setTranslation);
-            if (!entry.listeners.size) setters.delete(message.id);
+            if (!entry.listeners.size) setters.delete(key);
         };
-    }, [message.id]);
+    }, [key]);
 
     if (!translation) return null;
 
@@ -48,7 +49,8 @@ export function Accessory({ message }: { message: Message & { vencordEmbeddedBy?
 export async function handleTranslate(message: Message) {
     if (!message.content) return;
 
-    const entry = setters.get(message.id);
+    const key = `${message.id}:${message.content}`;
+    const entry = setters.get(key);
     if (!entry) return;
     const userId = UserStore.getCurrentUser()?.id;
     if (!userId) return;
@@ -56,10 +58,10 @@ export async function handleTranslate(message: Message) {
 
     try {
         const translation = await translate(message.content);
-        if (setters.get(message.id) === entry && entry.request === request && UserStore.getCurrentUser()?.id === userId)
+        if (setters.get(key) === entry && entry.request === request && UserStore.getCurrentUser()?.id === userId)
             for (const setter of entry.listeners) setter(translation);
     } catch {
-        if (setters.get(message.id) === entry && entry.request === request && UserStore.getCurrentUser()?.id === userId)
+        if (setters.get(key) === entry && entry.request === request && UserStore.getCurrentUser()?.id === userId)
             showToast("Could not translate this message.", Toasts.Type.FAILURE);
     }
 }

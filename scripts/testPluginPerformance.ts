@@ -5791,12 +5791,12 @@ test("profile preset image application preserves previews and explicit removals"
 });
 
 test("profile presets prepare historical image URLs before applying changes", async () => {
-    for (const outcome of ["success", "download", "decode", "cancel", "host", "spoof", "http"]) {
+    for (const outcome of ["success", "download", "decode", "cancel", "host", "spoof", "http", "empty"]) {
         const events: { type: string; pendingImage?: { imageUri: string; }; }[] = [];
         const requests: string[] = [];
         const controller = new AbortController();
         const avatar = "https://cdn.discordapp.com/embed/avatars/0.png";
-        const banner = outcome === "host" ? "https://fixture.invalid/banner.png"
+        const banner = outcome === "empty" ? "" : outcome === "host" ? "https://fixture.invalid/banner.png"
             : outcome === "spoof" ? "https://cdn.discordapp.com.fixture.invalid/banner.png"
                 : outcome === "http" ? "http://cdn.discordapp.com/banner.png" : "https://media.discordapp.net/banner.png";
         const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
@@ -5831,7 +5831,7 @@ test("profile presets prepare historical image URLs before applying changes", as
         } else {
             await assert.rejects(applying);
             assert.equal(events.length, 0, outcome);
-            if (["host", "spoof", "http"].includes(outcome)) assert.deepEqual(requests, [avatar]);
+            if (["host", "spoof", "http", "empty"].includes(outcome)) assert.deepEqual(requests, [avatar]);
         }
     }
 });

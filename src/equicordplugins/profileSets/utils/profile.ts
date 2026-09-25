@@ -344,7 +344,7 @@ export async function loadPresetAsPending(preset: ProfilePreset, guildId?: strin
     const images = [preset.avatarDataUrl, preset.bannerDataUrl];
     for (let index = 0; index < images.length; index++) {
         let image = images[index];
-        if (image && !image.startsWith("data:")) {
+        if (image != null && !image.startsWith("data:")) {
             const url = parseUrl(image);
             if (!url || !["https://cdn.discordapp.com", "https://media.discordapp.net"].includes(url.origin))
                 throw new Error("The saved profile image URL is not supported.");

@@ -14598,24 +14598,30 @@ test("translation delivery tolerates unmounted messages and preserves newer hand
         "./utils": {}
     });
     const translation = { text: "Bonjour", sourceLanguage: "English" };
-    assert.doesNotThrow(() => accessory.handleTranslate("absent", translation));
-    accessory.TranslationAccessory({ message: { id: "message" } });
-    accessory.TranslationAccessory({ message: { id: "message" } });
+    assert.doesNotThrow(() => accessory.handleTranslate("absent", translation, "Original"));
+    accessory.TranslationAccessory({ message: { id: "message" }, content: "Original" });
+    accessory.TranslationAccessory({ message: { id: "message" }, content: "Original" });
     const embedded = new Proxy({ id: "message" }, {
         get(target, property, receiver) {
             return property === "vencordEmbeddedBy" ? ["parent"] : Reflect.get(target, property, receiver);
         }
     });
     assert.equal("vencordEmbeddedBy" in embedded, false);
-    accessory.TranslationAccessory({ message: embedded });
+    accessory.TranslationAccessory({ message: embedded, content: "Original" });
     assert.equal(cleanups.length, 2);
     cleanups[0]();
-    accessory.handleTranslate("message", translation);
+    accessory.handleTranslate("message", translation, "Original");
     assert.equal(deliveries[0].length, 0);
     assert.deepEqual(deliveries[1], [translation]);
     cleanups[1]();
-    assert.doesNotThrow(() => accessory.handleTranslate("message", translation));
+    assert.doesNotThrow(() => accessory.handleTranslate("message", translation, "Original"));
     assert.equal(deliveries[1].length, 1);
+    accessory.TranslationAccessory({ message: { id: "message" }, content: "Edited" });
+    accessory.handleTranslate("message", translation, "Original");
+    assert.deepEqual(deliveries[3], []);
+    accessory.handleTranslate("message", translation, "Edited");
+    assert.deepEqual(deliveries[3], [translation]);
+    cleanups[2]();
 });
 
 
@@ -14788,13 +14794,13 @@ test("received translations keep the latest request per message", async () => {
     await old;
     requests[2].resolve({ text: "Other" });
     await other;
-    assert.deepEqual(delivered, [["first", { text: "Latest" }], ["second", { text: "Other" }]]);
+    assert.deepEqual(delivered, [["first", { text: "Latest" }, "Original"], ["second", { text: "Other" }, "Original"]]);
     const failing = click("first"), replacement = click("first");
     requests[3].reject(new Error("Failed request"));
     await assert.rejects(failing);
     requests[4].resolve({ text: "Replacement" });
     await replacement;
-    assert.deepEqual(delivered.at(-1), ["first", { text: "Replacement" }]);
+    assert.deepEqual(delivered.at(-1), ["first", { text: "Replacement" }, "Original"]);
 });
 
 test("translation language labels ignore inherited dictionary properties", async () => {

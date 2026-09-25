@@ -25,28 +25,29 @@ import { cl, TranslationValue } from "./utils";
 
 const TranslationSetters = new Map<string, Set<(v: TranslationValue) => void>>();
 
-export function handleTranslate(messageId: string, data: TranslationValue) {
-    for (const setter of TranslationSetters.get(messageId) ?? [])
+export function handleTranslate(messageId: string, data: TranslationValue, content: string) {
+    for (const setter of TranslationSetters.get(`${messageId}:${content}`) ?? [])
         setter(data);
 }
 
-export function TranslationAccessory({ message }: { message: Message & { vencordEmbeddedBy?: string[]; }; }) {
+export function TranslationAccessory({ message, content }: { message: Message & { vencordEmbeddedBy?: string[]; }; content: string; }) {
+    const key = `${message.id}:${content}`;
     const [translation, setTranslation] = useState<TranslationValue>();
 
     useEffect(() => {
         // Ignore MessageLinkEmbeds messages
         if (message.vencordEmbeddedBy) return;
 
-        const setters = TranslationSetters.get(message.id) ?? new Set<(value: TranslationValue) => void>();
+        const setters = TranslationSetters.get(key) ?? new Set<(value: TranslationValue) => void>();
         setters.add(setTranslation);
-        TranslationSetters.set(message.id, setters);
+        TranslationSetters.set(key, setters);
 
         return () => {
             setters.delete(setTranslation);
             if (!setters.size)
-                TranslationSetters.delete(message.id);
+                TranslationSetters.delete(key);
         };
-    }, []);
+    }, [key]);
 
     if (!translation) return null;
 

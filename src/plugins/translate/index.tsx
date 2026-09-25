@@ -68,7 +68,7 @@ async function translateReceivedMessage(messageId: string, content: string) {
     try {
         const trans = await request;
         if (pendingTranslations.get(messageId) === request && generation === translationGeneration && UserStore.getCurrentUser()?.id === userId)
-            handleTranslate(messageId, trans);
+            handleTranslate(messageId, trans, content);
     } finally {
         if (pendingTranslations.get(messageId) === request) pendingTranslations.delete(messageId);
     }
@@ -94,7 +94,8 @@ export default definePlugin({
 
     renderMessageAccessory: props => {
         const userId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
-        return userId ? <TranslationAccessory key={`${userId}:${props.message.id}`} message={props.message} /> : null;
+        const content = getMessageContent(props.message);
+        return userId ? <TranslationAccessory key={`${userId}:${props.message.id}:${content}`} message={props.message} content={content} /> : null;
     },
 
     chatBarButton: {

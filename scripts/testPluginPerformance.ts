@@ -1347,23 +1347,35 @@ test("custom status timeouts exclude durations that cannot produce valid millise
     assert.equal(store.extraDays, "1e305");
 });
 
-test("custom status timeout patch leaves neighboring duration arrays intact", () => {
+test("custom status timeout menus read changed settings without altering shared options", () => {
+    const store = { extraSeconds: "15", extraMinutes: "", extraHours: "", extraDays: "", showForeverOnTop: true };
     const { default: plugin } = loadSource("src/equicordplugins/customStatusTimeouts/index.tsx", {
-        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@api/Settings": { definePluginSettings: (def: object) => ({ store, def }) },
         "@utils/constants": { EquicordDevs: {} },
         "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} }
     });
     const { canonicalizeMatch } = loadSource("src/utils/patches.ts", { "./intlHash": { runtimeHashMessageKey: () => "forever" } });
     const { match, replace } = plugin.patches[0].replacement;
-    const source = '(()=>{const other=[{duration:1,label:()=>"other"}];const choices=[{duration:2,label:()=>"timed"},{duration:void 0,label:()=>i.string(i.t.forever)}];return {other,choices}})()';
+    const source = '(()=>{const other=[{duration:1,label:()=>"other"}];const choices=[{duration:2,label:()=>"timed"},{duration:void 0,label:()=>i.string(i.t.forever)}];function status(){return choices.map(e=>{let{duration:r,label:a}=e;return [r,a()]})}function quiet(){return choices.map(e=>{let{duration:n,label:r}=e;return [n,r()]})}return {other,choices,status,quiet}})()';
     const result = runInNewContext(source.replace(canonicalizeMatch(match), replace.replaceAll("$self", "plugin")), {
-        i: { string: (value: string) => value, t: { forever: "Forever" } },
-        plugin: { buildTimeouts: (choices: object[]) => [...choices, { duration: 3 }] }
+        i: { string: (value: string) => value, t: { forever: "Forever" } }, plugin
     });
+    for (const render of [result.status, result.quiet]) {
+        assert.ok(render().some(([duration]: [number]) => duration === 15_000));
+        assert.equal(render()[0][1], "Forever");
+    }
+    store.extraSeconds = "30";
+    store.showForeverOnTop = false;
+    plugin.settings.def.extraSeconds.onChange?.();
+    for (const render of [result.status, result.quiet]) {
+        const choices = render();
+        assert.ok(choices.some(([duration]: [number]) => duration === 30_000));
+        assert.ok(!choices.some(([duration]: [number]) => duration === 15_000));
+        assert.equal(choices.at(-1)[1], "Forever");
+    }
     assert.equal(result.other.length, 1);
     assert.equal(result.other[0].label(), "other");
-    assert.equal(result.choices.length, 3);
-    assert.equal(result.choices[1].label(), "Forever");
+    assert.equal(result.choices.length, 2);
 });
 
 test("status presets find the modal component after its chunk loads", async () => {

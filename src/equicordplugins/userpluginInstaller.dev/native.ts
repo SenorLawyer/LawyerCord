@@ -193,10 +193,10 @@ export async function initPluginInstall(_, link: string, source: string, owner: 
                             decided = true;
                             win.close();
                             try {
+                                const destination = join(vencordPath, "..", "src", "userplugins", repo);
+                                const backup = `${stagingPath}.previous`;
+                                const replacing = existsSync(destination);
                                 try {
-                                    const destination = join(vencordPath, "..", "src", "userplugins", repo);
-                                    const backup = `${stagingPath}.previous`;
-                                    const replacing = existsSync(destination);
                                     if (replacing) {
                                         const confirmation = await dialog.showMessageBox({
                                             title: "Replace plugin",
@@ -217,11 +217,34 @@ export async function initPluginInstall(_, link: string, source: string, owner: 
                                         throw new Error("Could not install the staged plugin.");
                                     }
                                     approved = true;
-                                    if (replacing) await rm(getPluginDirectory(basename(backup)), { recursive: true });
                                 } catch {
                                     throw new Error("Could not install the staged plugin.");
                                 }
-                                await build();
+                                try {
+                                    await build();
+                                } catch {
+                                    try {
+                                        if (existsSync(stagingPath)) throw new Error("Staging directory already exists.");
+                                        await rename(getPluginDirectory(repo), stagingPath);
+                                        if (replacing) await rename(getPluginDirectory(basename(backup)), destination);
+                                    } catch {
+                                        throw new Error("The build failed and the plugin source could not be restored. Retained copies need manual recovery.");
+                                    }
+                                    approved = false;
+                                    try {
+                                        await build();
+                                    } catch {
+                                        throw new Error("The installation was rolled back, but LawyerCord could not be rebuilt. Try building from the terminal.");
+                                    }
+                                    throw new Error("Could not build the plugin. The installation was rolled back.");
+                                }
+                                if (replacing) {
+                                    try {
+                                        await rm(getPluginDirectory(basename(backup)), { recursive: true });
+                                    } catch {
+                                        throw new Error("The plugin was installed, but its previous source backup could not be removed.");
+                                    }
+                                }
                             }
                             catch (e) {
                                 return reject(e);

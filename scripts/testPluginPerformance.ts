@@ -11896,6 +11896,103 @@ test("update link completion cannot become an install action or read a closed wi
     }
 });
 
+test("plugin installation retains recovery copies until builds and rollback complete", async () => {
+    const fs = await import("node:fs");
+    const fsp = await import("node:fs/promises");
+    for (const mode of ["fresh", "replace", "fresh-build-fail", "replace-build-fail", "rollback-rename-fail", "rollback-build-fail", "backup-cleanup-fail", "promotion-fail"]) {
+        const root = mkdtempSync(path.join(tmpdir(), "plugin-build-rollback-"));
+        const plugins = path.join(root, "src", "userplugins");
+        const destination = path.join(plugins, "repo");
+        const replacing = !mode.startsWith("fresh");
+        mkdirSync(plugins, { recursive: true });
+        if (replacing) {
+            mkdirSync(destination);
+            writeFileSync(path.join(destination, "value"), "old");
+            writeFileSync(path.join(destination, "native.ts"), "old native source");
+        }
+        let stage = "";
+        let builds = 0;
+        let output = "old";
+        class Window extends EventEmitter {
+            static getAllWindows() { return []; }
+            webContents = { getTitle: () => "install" };
+            async loadURL() {}
+            close() { this.emit("closed"); }
+            show() { queueMicrotask(() => this.emit("page-title-updated")); }
+        }
+        const safe = (target: string) => assert.equal(path.dirname(path.resolve(target)), path.resolve(plugins));
+        const mocks: Record<string, object> = {
+            child_process: {}, electron: { BrowserWindow: Window, dialog: { showMessageBox: async () => ({ response: 1 }) } },
+            fs, path, "yaml-js": {},
+            "fs/promises": { ...fsp,
+                rename: async (from: string, to: string) => {
+                    safe(from); safe(to);
+                    if (mode === "promotion-fail" && from === stage && to === destination
+                        || mode === "rollback-rename-fail" && from === `${stage}.previous`)
+                        throw new Error("Private filesystem path");
+                    await fsp.rename(from, to);
+                },
+                rm: async (target: string, options: object) => {
+                    safe(target);
+                    if (mode === "backup-cleanup-fail" && target === `${stage}.previous`) throw new Error("Private backup path");
+                    await fsp.rm(target, options);
+                }
+            }
+        };
+        for (const name of ["pluginValidate", "updateValidate"])
+            mocks[`file://misc/${name}.txt?trim=false`] = { __esModule: true, default: "" };
+        const api = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, {
+            __dirname: path.join(root, "dist"), Buffer,
+            clone: async (_link: string, name: string) => { stage = path.join(plugins, name); writeFileSync(path.join(stage, "value"), "new"); },
+            metadata: async () => ({ name: "Fixture", description: "Fixture", usesNative: false }),
+            buildFixture: async () => {
+                builds++;
+                output = fs.existsSync(destination) ? readFileSync(path.join(destination, "value"), "utf8") : "absent";
+                if (builds === 1) {
+                    assert.equal(output, "new");
+                    if (replacing) assert.equal(readFileSync(path.join(`${stage}.previous`, "value"), "utf8"), "old");
+                    if (!["fresh", "replace", "backup-cleanup-fail"].includes(mode)) throw new Error("Build failed");
+                } else if (mode === "rollback-build-fail") throw new Error("Rollback build failed");
+            }
+        }, "({ ...exports, setup() { cloneRepo = clone; getPluginMeta = metadata; build = buildFixture; } })");
+        try {
+            api.setup();
+            const installing = api.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "owner", "repo");
+            if (mode === "fresh" || mode === "replace") {
+                const result = await installing;
+                assert.equal(result.native, replacing);
+                assert.equal(output, "new");
+                assert.equal(builds, 1);
+                assert.deepEqual(fs.readdirSync(plugins), ["repo"]);
+            } else {
+                const messages: Record<string, RegExp> = {
+                    "rollback-rename-fail": /source could not be restored/,
+                    "rollback-build-fail": /rolled back, but LawyerCord could not be rebuilt/,
+                    "backup-cleanup-fail": /installed, but its previous source backup/,
+                    "promotion-fail": /Could not install the staged plugin/
+                };
+                await assert.rejects(installing, messages[mode] ?? /installation was rolled back/);
+                if (mode === "rollback-rename-fail") {
+                    assert.equal(readFileSync(path.join(stage, "value"), "utf8"), "new");
+                    assert.equal(readFileSync(path.join(`${stage}.previous`, "value"), "utf8"), "old");
+                    assert.equal(fs.existsSync(destination), false);
+                } else if (mode === "backup-cleanup-fail") {
+                    assert.equal(readFileSync(path.join(destination, "value"), "utf8"), "new");
+                    assert.equal(readFileSync(path.join(`${stage}.previous`, "value"), "utf8"), "old");
+                } else {
+                    assert.deepEqual(fs.readdirSync(plugins), replacing ? ["repo"] : []);
+                    if (replacing) assert.equal(readFileSync(path.join(destination, "value"), "utf8"), "old");
+                    assert.equal(builds, mode === "promotion-fail" ? 0 : 2);
+                    if (mode !== "promotion-fail") assert.equal(output, replacing ? "old" : "absent");
+                }
+            }
+        } finally {
+            assert.equal(path.dirname(path.resolve(root)), path.resolve(tmpdir()));
+            rmSync(root, { recursive: true, force: true });
+        }
+    }
+});
+
 test("plugin metadata does not trust literals overwritten by dynamic properties", async () => {
     for (const override of ['name: getName()', 'get name() { throw new Error("Do not execute"); }', '...other', '[key]: "other"', 'description: `Value ${getValue()}`']) {
         const mocks: Record<string, object> = {
@@ -11982,6 +12079,7 @@ test("installer mutation guard remains held through review closure and build set
         const pendingBuild = new Promise<void>((resolve, reject) => {
             finishBuild = () => failBuild ? reject(new Error("Build failed")) : resolve();
         });
+        const rollback = Promise.withResolvers<void>();
         let builds = 0;
         let clones = 0;
         class ReviewWindow extends EventEmitter {
@@ -12001,7 +12099,7 @@ test("installer mutation guard remains held through review closure and build set
         const native = loadSource("src/equicordplugins/userpluginInstaller.dev/native.ts", mocks, {
             __dirname: path.resolve("fixture/dist"), Buffer,
             onClone: async () => { clones++; },
-            onBuild: () => { builds++; return pendingBuild; },
+            onBuild: () => { builds++; return builds === 1 ? pendingBuild : rollback.promise; },
         }, "({ ...exports, setup() { getPluginDirectory = () => 'fixture'; cloneRepo = onClone; build = onBuild; getPluginMeta = async () => ({ name: 'Fixture', description: 'Fixture', usesNative: false }); } })");
         native.setup();
         const installation = native.initPluginInstall(null, "https://github.com/owner/repo", "github.com", "owner", "repo");
@@ -12018,8 +12116,14 @@ test("installer mutation guard remains held through review closure and build set
         await assert.rejects(native.rmPlugin(null, "repo"), /Another plugin operation/);
         assert.equal(clones, 1);
         finishBuild();
+        if (failBuild) {
+            await setImmediate();
+            assert.equal(builds, 2);
+            await assert.rejects(native.rmPlugin(null, "repo"), /Another plugin operation/);
+            rollback.resolve();
+        }
         const result = await settled;
-        if (failBuild) assert.match(String(result.error), /Build failed/);
+        if (failBuild) assert.match(String(result.error), /installation was rolled back/);
         else assert.deepEqual({ ...result.value }, { name: "Fixture", native: previousNative });
         await assert.rejects(native.initPluginInstall(null, "invalid", "", "", ""), /Invalid link/);
     }

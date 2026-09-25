@@ -27,6 +27,27 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("ban reason defaults and durations preserve native values and modal ownership", () => {
+    const store = { isTextInputDefault: false, reasons: ["Legacy", { text: "Keep", deleteSeconds: 0 }, { text: "Delete", deleteSeconds: 86400 }] };
+    const { default: plugin } = loadSource("src/equicordplugins/betterBanReasons/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store }) },
+        "@components/Heading": {}, "@components/Icons": {},
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/constants": { Devs: {}, EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": {}
+    });
+    assert.equal(plugin.getDefaultState(), "");
+    store.isTextInputDefault = true;
+    assert.equal(plugin.getDefaultState(), "other");
+    const durations = [3600, 3600];
+    plugin.onReasonSelect("Delete", (value: number) => durations[0] = value);
+    plugin.onReasonSelect("Keep", (value: number) => durations[1] = value);
+    plugin.onReasonSelect("Legacy", (value: number) => durations[0] = value);
+    plugin.onReasonSelect("Unknown", (value: number) => durations[1] = value);
+    assert.deepEqual(durations, [86400, 0]);
+});
+
 test("blocked user search filters the current panel IDs and preserves empty results", () => {
     const users = new Map([
         ["1", { username: "Alice", globalName: "First User" }],

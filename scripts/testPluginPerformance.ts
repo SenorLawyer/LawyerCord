@@ -27,6 +27,26 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("local DM hiding leaves group and system conversations alone", () => {
+    const user = "111111111111111111";
+    const store = { usersToBlock: user, guildBlackList: "", guildWhiteList: "", hideBlockedUsers: true };
+    const { default: plugin } = loadSource("src/equicordplugins/clientSideBlock/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store }) }, "@components/Paragraph": {},
+        "@utils/constants": { Devs: {}, EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": { RelationshipStore: { isBlocked: () => false } }
+    });
+    const channel = { isDM: () => true, isSystemDM: () => false, getRecipientId: () => user };
+    assert.equal(plugin.shouldHideDm(channel), true);
+    assert.equal(plugin.shouldHideDm({ ...channel, isDM: () => false }), false);
+    assert.equal(plugin.shouldHideDm({ ...channel, isSystemDM: () => true }), false);
+    assert.equal(plugin.shouldHideDm({ ...channel, getRecipientId: () => undefined }), false);
+    assert.equal(plugin.shouldHideDm({ ...channel, getRecipientId: () => "222222222222222222" }), false);
+    store.usersToBlock = "";
+    plugin.start();
+    assert.equal(plugin.shouldHideDm(channel), false);
+});
+
 test("role headers hide only when every displayed member row is known and hidden", () => {
     const user = "111111111111111111";
     const guild = "333333333333333333";

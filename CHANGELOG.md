@@ -25,6 +25,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- ClientSideBlock restores hiding for current direct-message rows while preserving group and system conversations.
+
 - ClientSideBlock hides role headers only when every displayed member is loaded and hidden, preserving headers for incomplete groups.
 
 - ClientSideBlock keeps saved user and guild ID lists consistent when a setting changes before initialization or after stopping.

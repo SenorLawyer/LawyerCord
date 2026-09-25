@@ -8,6 +8,7 @@ import { definePluginSettings } from "@api/Settings";
 import { Paragraph } from "@components/Paragraph";
 import { Devs, EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
+import type { Channel } from "@vencord/discord-types";
 import { ChannelStore, GuildRoleStore, React, RelationshipStore } from "@webpack/common";
 
 const ID_REGEX = /^\d{17,20}$/;
@@ -198,6 +199,10 @@ export default definePlugin({
     },
     filterActiveNowCards,
     shouldHideUser,
+    shouldHideDm(channel: Channel) {
+        const userId = channel.getRecipientId();
+        return channel.isDM() && !channel.isSystemDM() && userId !== undefined && shouldHideUser(userId);
+    },
     hiddenReplyComponent,
     isRoleGroupHidden,
     patches: [
@@ -256,9 +261,8 @@ export default definePlugin({
         {
             find: "PrivateChannel.renderAvatar",
             replacement: {
-                // horror but it works
-                match: /(return \i\.isMultiUserDM\(\))(?<=function\(\i,(\i),\i\){.*)/,
-                replace: "if($2.rawRecipients[0] && $2.rawRecipients[0]?.id){if($self.shouldHideUser($2.rawRecipients[0].id)) return null;}$1"
+                match: /return \i\.isMultiUserDM\(\)\?/,
+                replace: "if($self.shouldHideDm(arguments[0].channel)) return null;$&"
             }
         },
         // thank nick (644298972420374528) for these patches :3

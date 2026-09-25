@@ -36,8 +36,8 @@ export default definePlugin({
                     predicate: () => settings.store.removeGameActivityStatus,
                 },
                 {
-                    match: /(?<=hideTooltip:.{0,4}}=(\i).*?{}\))\]/g,
-                    replace: ",$self.patchActivityList($1)]",
+                    match: /(?<=,\i&&\(0,\i\.jsx\)\(\i,\{\}\))(?=\]\})/g,
+                    replace: ",$self.patchActivityList(arguments[0])",
                     predicate: () => settings.store.memberList,
                 }
             ],

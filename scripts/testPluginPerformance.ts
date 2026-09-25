@@ -8483,6 +8483,8 @@ test("source fixtures reject recoverable syntax errors before execution", () => 
 });
 
 function loadSource(path: string, mocks: Record<string, object>, globals: Record<string, unknown> = {}, result = "exports") {
+    if (path.endsWith("plugins/translate/native.ts"))
+        globals = { AbortSignal, ...globals };
     if (path.endsWith("profileSets/components/presetManager.tsx"))
         globals = { AbortController, ...globals };
     if (path.endsWith("scheduledMessages/utils.ts")) {
@@ -14409,6 +14411,37 @@ test("translation provider errors omit source text and response bodies", async (
             assert.equal(error.message.includes("private-response"), false, service);
             return true;
         });
+    }
+});
+
+test("native translation deadlines cover headers and response bodies", async () => {
+    for (const provider of ["makeDeeplTranslateRequest", "makeKagiTranslateRequest"]) {
+        for (const phase of ["headers", "body"]) {
+            const controller = new AbortController();
+            let deadline = 0;
+            let requestSignal: AbortSignal | null | undefined;
+            const reading = Promise.withResolvers<void>();
+            const native = loadSource("src/plugins/translate/native.ts", {}, {
+                Buffer,
+                AbortSignal: { timeout: (ms: number) => { deadline = ms; return controller.signal; } },
+                fetch: async (_url: string, options: RequestInit) => {
+                    requestSignal = options.signal;
+                    const stalled = () => {
+                        reading.resolve();
+                        return new Promise((_resolve, reject) => options.signal?.addEventListener("abort", () => reject(options.signal?.reason), { once: true }));
+                    };
+                    return phase === "headers" ? stalled() : { status: 200, text: stalled, json: stalled };
+                }
+            });
+            const request = native[provider]({}, ...(provider === "makeDeeplTranslateRequest" ? [false, "fixture", "{}"] : ["fixture", "text", "auto", "en"]));
+            await reading.promise;
+            assert.equal(deadline, 30_000);
+            assert.equal(requestSignal, controller.signal);
+            controller.abort();
+            const result = await request;
+            assert.equal(result.status, -1);
+            assert.equal(result.data, provider === "makeDeeplTranslateRequest" ? "" : null);
+        }
     }
 });
 

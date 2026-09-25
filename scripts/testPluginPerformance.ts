@@ -14770,6 +14770,33 @@ test("received translation actions discard results from previous sessions", asyn
     }
 });
 
+test("received translations keep the latest request per message", async () => {
+    const requests: ReturnType<typeof Promise.withResolvers<{ text: string; }>>[] = [];
+    const delivered: unknown[] = [];
+    const { default: plugin } = loadSource("src/plugins/translate/index.tsx", {
+        "@api/ContextMenu": {}, "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value },
+        "@webpack/common": { ChannelStore: { getChannel: () => ({}) }, UserStore: { getCurrentUser: () => ({ id: "owner" }) } },
+        "./settings": {}, "./TranslateIcon": {}, "./TranslationAccessory": { handleTranslate: (...args: unknown[]) => delivered.push(args) },
+        "./utils": { translate: () => { const request = Promise.withResolvers<{ text: string; }>(); requests.push(request); return request.promise; } }
+    });
+    const click = (id: string) => plugin.messagePopoverButton.render({ id, channel_id: "channel", content: "Original" }).onClick();
+    const old = click("first"), latest = click("first"), other = click("second");
+    requests[1].resolve({ text: "Latest" });
+    await latest;
+    requests[0].resolve({ text: "Old" });
+    await old;
+    requests[2].resolve({ text: "Other" });
+    await other;
+    assert.deepEqual(delivered, [["first", { text: "Latest" }], ["second", { text: "Other" }]]);
+    const failing = click("first"), replacement = click("first");
+    requests[3].reject(new Error("Failed request"));
+    await assert.rejects(failing);
+    requests[4].resolve({ text: "Replacement" });
+    await replacement;
+    assert.deepEqual(delivered.at(-1), ["first", { text: "Replacement" }]);
+});
+
 test("translation language labels ignore inherited dictionary properties", async () => {
     for (const service of ["google", "deepl"]) for (const language of ["en", "EN", "DE", "PT", "unknown", "constructor", "__proto__", "toString"]) {
         const payload = service === "google" ? { translation: "bonjour", sourceLanguage: language }

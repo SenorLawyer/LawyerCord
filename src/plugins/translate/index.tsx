@@ -56,15 +56,22 @@ function getMessageContent(message: Message) {
 }
 
 let translationGeneration = 0;
+const pendingTranslations = new Map<string, ReturnType<typeof translate>>();
 let tooltipTimeout: ReturnType<typeof setTimeout> | undefined;
 
 async function translateReceivedMessage(messageId: string, content: string) {
     const userId = UserStore.getCurrentUser()?.id;
     if (!userId) return;
     const generation = translationGeneration;
-    const trans = await translate("received", content);
-    if (generation === translationGeneration && UserStore.getCurrentUser()?.id === userId)
-        handleTranslate(messageId, trans);
+    const request = translate("received", content);
+    pendingTranslations.set(messageId, request);
+    try {
+        const trans = await request;
+        if (pendingTranslations.get(messageId) === request && generation === translationGeneration && UserStore.getCurrentUser()?.id === userId)
+            handleTranslate(messageId, trans);
+    } finally {
+        if (pendingTranslations.get(messageId) === request) pendingTranslations.delete(messageId);
+    }
 }
 
 function clearTranslateTooltipTimeout() {
@@ -114,6 +121,7 @@ export default definePlugin({
     flux: {
         LOGOUT() {
             translationGeneration++;
+            pendingTranslations.clear();
         }
     },
 
@@ -146,6 +154,7 @@ export default definePlugin({
 
     stop() {
         translationGeneration++;
+        pendingTranslations.clear();
         clearTranslateTooltipTimeout();
         setShouldShowTranslateEnabledTooltip?.(false);
     }

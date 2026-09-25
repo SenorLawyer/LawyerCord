@@ -155,17 +155,31 @@ export default definePlugin({
     patches: [
         {
             find: "#{intl::zr0Y5R::raw}",
-            replacement: {
-                match: /(\.colorString\?\?\i;)return(.*?enableTooltip:!1\}\)\}\):null,\i\]\}\))/,
-                replace: "$1return $self.wrapRolePill(arguments[0],()=>$2)",
-            },
+            group: true,
+            replacement: [
+                {
+                    match: /(?<=\.colorString\?\?\i;)return/,
+                    replace: "return $self.wrapRolePill(arguments[0],",
+                },
+                {
+                    match: /(?<=enableTooltip:!1\}\)\}\):null,\i\]\}\))\}/,
+                    replace: ")}",
+                }
+            ],
         },
         {
             find: 'tutorialId:"whos-online"',
-            replacement: {
-                match: /\((function\(\i\)\{let\{id:.*?#{intl::CHANNEL_MEMBERS_A11Y_LABEL}.*?\}\))\}\);/,
-                replace: "($self.wrapRoleGroup($1}));",
-            },
+            group: true,
+            replacement: [
+                {
+                    match: /(?<=\.memo\()function\(\i\)\{(?=let\{[^}]{0,100}\bid:)(?=let\{[^}]{0,100}\bcount:)(?=let\{[^}]{0,100}\bguildId:)/,
+                    replace: "$self.wrapRoleGroup($&",
+                },
+                {
+                    match: /(?<=children:\["\\xa0\\u2014 ",\i\]\}\)\]\}\)\]\}\)\})(?=\);)/,
+                    replace: ")",
+                }
+            ],
         },
     ],
 
@@ -181,10 +195,10 @@ export default definePlugin({
         };
     },
 
-    wrapRolePill(props: { role: Role; guildId: string; }, renderOriginal: () => React.ReactNode) {
+    wrapRolePill(props: { role: Role; guildId: string; }, original: React.ReactNode) {
         return (
             <WrappedClickableRole roleId={props.role.id} guildId={props.guildId}>
-                {renderOriginal()}
+                {original}
             </WrappedClickableRole>
         );
     },

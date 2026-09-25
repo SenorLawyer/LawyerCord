@@ -5,6 +5,7 @@
  */
 
 import { settings } from "@equicordplugins/translatePlus/settings";
+import { readResponseText } from "@shared/readResponseText";
 import { isObject } from "@utils/misc";
 
 type Dictionary = Record<string, string>;
@@ -25,7 +26,7 @@ function fetchDictionary(url: string): Promise<Dictionary> {
             await response.body?.cancel();
             throw new Error(`Request failed with status ${response.status}`);
         }
-        const dictionary: unknown = await response.json().catch(() => null);
+        const dictionary: unknown = await readResponseText(response, 16 * 1024 * 1024).then(JSON.parse).catch(() => null);
         if (!isObject(dictionary) || Array.isArray(dictionary))
             throw new Error("TranslatePlus received an invalid dictionary.");
         const entries = Object.entries(dictionary);
@@ -122,7 +123,7 @@ async function google(target: string, text: string) {
         await res.body?.cancel();
         throw new Error(`Request failed with status ${res.status}`);
     }
-    const translate: unknown = await res.json().catch(() => null);
+    const translate: unknown = await readResponseText(res, 8 * 1024 * 1024).then(JSON.parse).catch(() => null);
     if (!isObject(translate) || !("src" in translate) || typeof translate.src !== "string"
         || !("sentences" in translate) || !Array.isArray(translate.sentences))
         throw new Error("Google Translate returned an invalid response.");
@@ -162,7 +163,7 @@ export async function translate(text: string) {
             await response.body?.cancel();
             throw new Error(`Toki Pona translation request failed (${response.status}).`);
         }
-        const translate: unknown = await response.json().catch(() => null);
+        const translate: unknown = await readResponseText(response, 8 * 1024 * 1024).then(JSON.parse).catch(() => null);
         if (!isObject(translate) || !("translation" in translate) || !Array.isArray(translate.translation)
             || typeof translate.translation[0] !== "string")
             throw new Error("Toki Pona provider returned an invalid response.");

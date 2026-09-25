@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { readResponseText } from "@shared/readResponseText";
 import { classNameFactory } from "@utils/css";
 import { isObject, tryOrElse } from "@utils/misc";
 import { PluginNative } from "@utils/types";
@@ -94,7 +95,7 @@ async function googleTranslate(text: string, sourceLang: string, targetLang: str
         throw new Error(`Google Translate request failed (${res.status}).`);
     }
 
-    const response: unknown = await res.json().catch(() => null);
+    const response: unknown = await readResponseText(res, 8 * 1024 * 1024).then(JSON.parse).catch(() => null);
     if (!isObject(response) || !("sourceLanguage" in response) || typeof response.sourceLanguage !== "string"
         || !("translation" in response) || typeof response.translation !== "string")
         throw new Error("Google Translate returned an invalid response.");

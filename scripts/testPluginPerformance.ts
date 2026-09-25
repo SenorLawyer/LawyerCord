@@ -24,7 +24,35 @@ import * as typescript from "typescript";
 import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
+import { readResponseText } from "../src/shared/readResponseText";
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
+
+test("bounded response text preserves split UTF-8 and cancels oversized streams", async () => {
+    const encoded = new TextEncoder().encode("Hello € 🦊");
+    for (const limit of [encoded.length, encoded.length - 1]) {
+        let offset = 0;
+        let cancelled = 0;
+        const response = new Response(new ReadableStream<Uint8Array>({
+            pull(controller) {
+                if (offset === encoded.length) controller.close();
+                else controller.enqueue(encoded.slice(offset, ++offset));
+            },
+            cancel() { cancelled++; }
+        }, { highWaterMark: 0 }));
+        if (limit === encoded.length) {
+            assert.equal(await readResponseText(response, limit), "Hello € 🦊");
+            assert.equal(cancelled, 0);
+        } else {
+            await assert.rejects(readResponseText(response, limit), /size limit/);
+            assert.equal(cancelled, 1);
+        }
+        assert.equal(response.body?.locked, false);
+    }
+    assert.equal(await readResponseText(new Response(null), 10), "");
+    const broken = new Response(new ReadableStream({ start(controller) { controller.error(new Error("Interrupted")); } }));
+    await assert.rejects(readResponseText(broken, 10), /Interrupted/);
+    assert.equal(broken.body?.locked, false);
+});
 
 test("Streaks badges only display the current account's conversation", () => {
     let currentId: string | undefined = "first";
@@ -8483,6 +8511,7 @@ test("source fixtures reject recoverable syntax errors before execution", () => 
 });
 
 function loadSource(path: string, mocks: Record<string, object>, globals: Record<string, unknown> = {}, result = "exports") {
+    mocks = { "@shared/readResponseText": { readResponseText }, ...mocks };
     if (path.endsWith("plugins/translate/native.ts") || path.endsWith("plugins/translate/utils.ts") || path.endsWith("translatePlus/utils/translator.ts"))
         globals = { AbortSignal, ...globals };
     if (path.endsWith("profileSets/components/presetManager.tsx"))
@@ -14443,7 +14472,12 @@ test("native translation deadlines cover headers and response bodies", async () 
                         reading.resolve();
                         return new Promise((_resolve, reject) => options.signal?.addEventListener("abort", () => reject(options.signal?.reason), { once: true }));
                     };
-                    return phase === "headers" ? stalled() : { status: 200, text: stalled, json: stalled };
+                    return phase === "headers" ? stalled() : new Response(new ReadableStream({
+                        start(body) {
+                            reading.resolve();
+                            options.signal?.addEventListener("abort", () => body.error(options.signal?.reason), { once: true });
+                        }
+                    }));
                 }
             });
             const request = native[provider]({}, ...(provider === "makeDeeplTranslateRequest" ? [false, "fixture", "{}"] : ["fixture", "text", "auto", "en"]));
@@ -14530,7 +14564,7 @@ test("translation validates successful provider payloads before returning text",
                 "./languages": { GoogleLanguages: { en: "English" }, DeeplLanguages: { en: "English" } },
                 "./settings": { settings: { store: { service, deeplApiKey: "fixture", kagiSession: "fixture" } } }
             }, {
-                IS_WEB: false, URLSearchParams, fetch: async () => ({ ok: true, json: async () => payload }),
+                IS_WEB: false, URLSearchParams, fetch: async () => new Response(JSON.stringify(payload)),
                 VencordNative: { pluginHelpers: { Translate: {
                     makeDeeplTranslateRequest: async () => ({ status: 200, data: JSON.stringify(payload) }),
                     makeKagiTranslateRequest: async () => ({ status: 200, data: payload })
@@ -14700,7 +14734,7 @@ test("native translation failures omit exception details from IPC responses", as
             const fail = () => { throw new Error("private native path or response snippet"); };
             const native = loadSource("src/plugins/translate/native.ts", {}, {
                 Buffer,
-                fetch: async () => phase === "fetch" ? fail() : { status: 200, text: fail, json: fail }
+                fetch: async () => phase === "fetch" ? fail() : new Response(new ReadableStream({ start(body) { body.error(new Error("private native path or response snippet")); } }))
             });
             const result = await native[provider]({}, ...(provider === "makeDeeplTranslateRequest" ? [false, "fixture", "fixture"] : ["fixture", "fixture", "auto", "en"]));
             assert.equal(result.status, -1);
@@ -14715,7 +14749,7 @@ test("native translation rejects invalid IPC argument types before fetching", as
         let requests = 0;
         const native = loadSource("src/plugins/translate/native.ts", {}, {
                 Buffer,
-            fetch: async () => { requests++; return { status: 200, text: async () => "{}", json: async () => ({}) }; }
+            fetch: async () => { requests++; return new Response("{}"); }
         });
         const valid: unknown[] = provider === "makeDeeplTranslateRequest" ? [false, "key", "{}"] : ["session", "text", "auto", "en"];
         for (let index = 0; index < valid.length; index++) {
@@ -14786,6 +14820,57 @@ test("received translation actions discard results from previous sessions", asyn
         await result;
         assert.equal(delivered.length, phase === "current" ? 1 : 0, surface + phase);
         assert.equal(requests, phase === "absent" ? 0 : 1);
+    }
+});
+
+test("translation readers accept their byte limit and cancel oversized bodies", async () => {
+    for (const route of ["deepl", "kagi", "google", "plus-google", "plus-toki", "dictionary"]) for (const excess of [0, 1]) {
+        const limit = (route === "dictionary" ? 16 : 8) * 1024 * 1024;
+        const payload = route === "dictionary" ? { "𐑐": "word" }
+            : route === "plus-toki" ? { translation: ["word"] }
+                : route === "plus-google" ? { src: "en", sentences: [{ trans: "word" }] }
+                    : { sourceLanguage: "en", translation: "word" };
+        const prefix = new TextEncoder().encode(JSON.stringify(payload));
+        let remaining = limit + excess;
+        let cancelled = 0;
+        let first = true;
+        const fetch = async () => new Response(new ReadableStream<Uint8Array>({
+            pull(body) {
+                if (!remaining) { body.close(); return; }
+                const chunk = first ? prefix : new Uint8Array(Math.min(64 * 1024, remaining)).fill(32);
+                first = false;
+                remaining -= chunk.byteLength;
+                body.enqueue(chunk);
+            },
+            cancel() { cancelled++; }
+        }, { highWaterMark: 0 }));
+        let request: Promise<unknown>;
+        if (route === "deepl" || route === "kagi") {
+            const native = loadSource("src/plugins/translate/native.ts", {}, { Buffer, fetch });
+            request = route === "deepl" ? native.makeDeeplTranslateRequest({}, false, "key", "{}")
+                : native.makeKagiTranslateRequest({}, "token", "hello", "en", "fr");
+            const result = await request as { status: number; };
+            assert.equal(result.status, excess ? -1 : 200, route);
+        } else {
+            const misc = { isObject: (value: unknown) => value !== null && typeof value === "object" };
+            if (route === "google") {
+                const { translateText } = loadSource("src/plugins/translate/utils.ts", {
+                    "@utils/css": { classNameFactory: () => () => "" }, "@utils/misc": misc,
+                    "@webpack/common": { showToast() {}, Toasts: { Type: { FAILURE: 1 } } },
+                    "./languages": { GoogleLanguages: {} }, "./settings": { settings: { store: {} } }
+                }, { IS_WEB: true, VencordNative: { pluginHelpers: {} }, URLSearchParams, fetch });
+                request = translateText("hello", "en", "fr");
+            } else {
+                const { translate } = loadSource("src/equicordplugins/translatePlus/utils/translator.ts", {
+                    "@equicordplugins/translatePlus/settings": { settings: { store: { target: "en", toki: route === "plus-toki", shavian: route === "dictionary" } } },
+                    "@utils/misc": misc
+                }, { URLSearchParams, fetch });
+                request = translate(route === "dictionary" ? "𐑐" : route === "plus-toki" ? "toki pona" : "hello");
+            }
+            if (excess) await assert.rejects(request, /invalid (response|dictionary)/);
+            else assert.equal((await request as { text: string; }).text, "word", route);
+        }
+        assert.equal(cancelled, excess, route);
     }
 });
 
@@ -14874,7 +14959,7 @@ test("translation language labels ignore inherited dictionary properties", async
             "./languages": loadSource("src/plugins/translate/languages.ts", {}),
             "./settings": { settings: { store: { service, deeplApiKey: "fixture" } } }
         }, {
-            IS_WEB: false, URLSearchParams, fetch: async () => ({ ok: true, json: async () => payload }),
+            IS_WEB: false, URLSearchParams, fetch: async () => new Response(JSON.stringify(payload)),
             VencordNative: { pluginHelpers: { Translate: {
                 makeDeeplTranslateRequest: async () => ({ status: 200, data: JSON.stringify(payload) })
             } } }
@@ -14971,13 +15056,13 @@ test("TranslatePlus times out stalled dictionaries and allows retry", async () =
         }, {
             AbortSignal: { timeout: (ms: number) => { deadline = ms; return retry ? new AbortController().signal : controller.signal; } },
             fetch: async (_url: string, options?: RequestInit) => {
-                if (retry) return { ok: true, json: async () => ({ "𐑐": "word" }) };
+                if (retry) return new Response(JSON.stringify({ "𐑐": "word" }));
                 signal = options?.signal;
                 const stall = () => {
                     started.resolve();
                     return new Promise((_resolve, reject) => signal?.addEventListener("abort", () => reject(signal?.reason), { once: true }));
                 };
-                return phase === "headers" ? stall() : { ok: true, json: stall };
+                return phase === "headers" ? stall() : new Response(new ReadableStream({ start(body) { started.resolve(); signal?.addEventListener("abort", () => body.error(signal?.reason), { once: true }); } }));
             }
         });
         const pending = translate("𐑐");
@@ -14996,7 +15081,7 @@ test("TranslatePlus Shavian translation preserves inherited dictionary names", a
         "@equicordplugins/translatePlus/settings": { settings: { store: { target: "en", shavian: true, toki: false, sitelen: false } } },
         "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
         "@utils/text": { escapeRegExp: (text: string) => text }
-    }, { fetch: async () => ({ ok: true, json: async () => ({ "𐑐": "word" }) }) });
+    }, { fetch: async () => new Response(JSON.stringify({ "𐑐": "word" })) });
     for (const word of ["constructor", "__proto__", "toString", "ordinary"]) {
         const result = await translate(`𐑐 ${word}`);
         assert.equal(result.text, `word ${word}`);
@@ -15013,7 +15098,7 @@ test("TranslatePlus propagates Google failures instead of returning error text a
         "@utils/text": { escapeRegExp: (text: string) => text }
     }, {
         URLSearchParams,
-        fetch: async () => ({ ok: !fail, status: fail ? 500 : 200, json: async () => ({ src: "en", sentences: [{ trans: "Bonjour" }] }) })
+        fetch: async () => new Response(JSON.stringify({ src: "en", sentences: [{ trans: "Bonjour" }] }), { status: fail ? 500 : 200 })
     });
     await assert.rejects(translate("Hello"), /500/);
     fail = false;
@@ -15029,7 +15114,7 @@ test("TranslatePlus validates Google source and sentence fields", async () => {
         "@equicordplugins/translatePlus/settings": { settings: { store: { target: "fr", shavian: false, toki: false, sitelen: false } } },
         "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
         "@utils/text": { escapeRegExp: (text: string) => text }
-    }, { URLSearchParams, fetch: async () => ({ ok: true, json: async () => payload }) });
+    }, { URLSearchParams, fetch: async () => new Response(JSON.stringify(payload)) });
     for (payload of [null, {}, { src: 1, sentences: [] }, { src: "en", sentences: {} }, { src: "en", sentences: [null] }, { src: "en", sentences: [{ trans: 42 }] }])
         await assert.rejects(translate("Hello"), /invalid response/);
     payload = { src: "en", sentences: [{ trans: "Bonjour" }, { trans: "" }, { trans: "Monde" }] };
@@ -15046,7 +15131,7 @@ test("TranslatePlus rejects malformed dictionaries and retries failed loads", as
         "@equicordplugins/translatePlus/settings": { settings: { store: { target: "en", shavian: true, toki: false, sitelen: false } } },
         "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
         "@utils/text": { escapeRegExp: (text: string) => text }
-    }, { fetch: async () => { requests++; return { ok: true, json: async () => payload }; } });
+    }, { fetch: async () => { requests++; return new Response(JSON.stringify(payload)); } });
     for (payload of [null, [], {}, "invalid", { "": "empty key" }, { "𐑐": 7 }])
         await assert.rejects(translate("𐑐"), /invalid dictionary/);
     payload = { "𐑐": "word" };
@@ -15068,7 +15153,14 @@ test("TranslatePlus checks Toki provider status and payload before using text", 
         "@utils/text": { escapeRegExp: (text: string) => text }
     }, { fetch: async (_url: string, options: RequestInit) => {
         assert.equal(options.redirect, "error");
-        return { ok: status === 200, status, body: { cancel: async () => { cancelled++; } }, json: async () => { parsed++; return payload; } };
+        return new Response(new ReadableStream({
+            pull(body) {
+                parsed++;
+                body.enqueue(new TextEncoder().encode(JSON.stringify(payload)));
+                body.close();
+            },
+            cancel() { cancelled++; }
+        }, { highWaterMark: 0 }), { status });
     } });
     await assert.rejects(translate("toki pona"), /500/);
     assert.equal(parsed, 0);
@@ -15094,9 +15186,9 @@ test("TranslatePlus respects independent Toki and Sitelen settings", async () =>
                     "@utils/text": { escapeRegExp: (value: string) => value }
                 }, { URLSearchParams, fetch: async (url: string) => {
                     requests.push(url);
-                    return { ok: true, json: async () => url.includes("raw.githubusercontent.com")
+                    return new Response(JSON.stringify(url.includes("raw.githubusercontent.com")
                         ? { "󱤀": "word" }
-                        : url.includes("aiapi.serversmp.xyz") ? { translation: ["Custom"] } : { src: "en", sentences: [{ trans: "Google" }] } };
+                        : url.includes("aiapi.serversmp.xyz") ? { translation: ["Custom"] } : { src: "en", sentences: [{ trans: "Google" }] }));
                 } });
                 const custom = text === "toki pona" ? toki : sitelen;
                 assert.equal((await translate(text)).text, custom ? "Custom" : "Google", `${text}: toki=${toki}, sitelen=${sitelen}`);

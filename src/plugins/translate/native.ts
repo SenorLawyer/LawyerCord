@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { readResponseText } from "@shared/readResponseText";
 import { IpcMainInvokeEvent } from "electron";
 
 export async function makeDeeplTranslateRequest(_: IpcMainInvokeEvent, pro: unknown, apiKey: unknown, payload: unknown) {
@@ -34,7 +35,7 @@ export async function makeDeeplTranslateRequest(_: IpcMainInvokeEvent, pro: unkn
             return { status: res.status, data: "" };
         }
 
-        const data = await res.text();
+        const data = await readResponseText(res, 8 * 1024 * 1024);
         return { status: res.status, data };
     } catch {
         return { status: -1, data: "" };
@@ -69,7 +70,7 @@ export async function makeKagiTranslateRequest(_: IpcMainInvokeEvent, token: unk
             return { status: res.status, data: null };
         }
 
-        const data = await res.json();
+        const data: unknown = JSON.parse(await readResponseText(res, 8 * 1024 * 1024));
         return { status: res.status, data };
     } catch {
         return { status: -1, data: null };

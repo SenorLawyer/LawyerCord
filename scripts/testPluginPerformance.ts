@@ -1416,6 +1416,42 @@ test("status presets find the modal component after its chunk loads", async () =
     assert.equal(lookups, 1);
 });
 
+test("status preset Remember action reads current modal state without crossing functions", () => {
+    const { default: plugin } = loadSource("src/equicordplugins/statusPresets/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@api/UserSettings": { getUserSettingLazy: () => ({}) },
+        "@components/ErrorBoundary": {}, "@utils/constants": { EquicordDevs: {} },
+        "@utils/react": {},
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {}, StartAt: {} },
+        "@webpack": { findComponentByCodeLazy: () => () => null, extractAndLoadChunksLazy: () => () => {} },
+        "@webpack/common": {}
+    });
+    const { canonicalizeMatch } = loadSource("src/utils/patches.ts", { "./intlHash": { runtimeHashMessageKey: () => "SAVE" } });
+    const source = `(function modal(f){let [T,y]=r.useState(f?.state??""),[A,S]=r.useState(f?.emoji??null),[v,j]=r.useState(f.timeout);function unrelated(f){let [other,a]=r.useState(f?.state??""),[emoji,b]=r.useState(f?.emoji??null),[expiry,c]=r.useState(0);return other}return {actions:[{text:x.intl.string(x.t.SAVE),onClick:save}]}})`;
+    const patch = plugin.patches[0];
+    assert.equal(patch.group, true);
+    let patched = source;
+    for (const [index, replacement] of patch.replacement.entries()) {
+        const match = canonicalizeMatch(replacement.match);
+        assert.equal(Array.from(patched.matchAll(new RegExp(match.source, "g"))).length, index === 0 ? 2 : 1);
+        patched = patched.replace(match, replacement.replace.replaceAll("$self", "plugin"));
+    }
+    const save = () => {};
+    const render = runInNewContext(patched, {
+        r: { useState: (value: unknown) => [value, () => {}] },
+        x: { intl: { string: (value: string) => value }, t: { SAVE: "Save" } },
+        plugin: { renderRememberButton: (status: unknown) => ({ status }) }, save
+    });
+    for (const timeout of [60_000, "DONT_CLEAR"]) {
+        const emoji = { id: "123", name: "custom" };
+        const { actions } = render({ state: "Current", emoji, timeout });
+        assert.equal(actions.length, 2);
+        assert.deepEqual({ ...actions[0].status }, { text: "Current", emojiInfo: emoji, clearAfter: timeout });
+        assert.equal(actions[1].text, "Save");
+        assert.equal(actions[1].onClick, save);
+    }
+});
+
 test("status preset insertion preserves following items and property order", () => {
     const { default: plugin } = loadSource("src/equicordplugins/statusPresets/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({ store: {} }) },

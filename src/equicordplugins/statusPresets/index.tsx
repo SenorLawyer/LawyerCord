@@ -140,10 +140,17 @@ export default definePlugin({
     patches: [
         {
             find: '="custom-status-input";',
-            replacement: {
-                match: /(?<=\[(\i).{0,6}\.useState\(\i\?\.state\?\?""\),\[(\i).{0,25}\?\?null\),\[(\i).*?)\{text:\i\.\i\.\i\(\i\.\i#{intl::SAVE}\)/,
-                replace: "$self.renderRememberButton({text:$1,emojiInfo:$2,clearAfter:$3}),$&"
-            }
+            group: true,
+            replacement: [
+                {
+                    match: /\[(\i),\i\]=\i\.useState\(\i\?\.state\?\?""\),\[(\i),\i\]=\i\.useState\(\i\?\.emoji\?\?null\),\[(\i),/,
+                    replace: "vcStatusPreset=()=>({text:$1,emojiInfo:$2,clearAfter:$3}),$&"
+                },
+                {
+                    match: /(?<=actions:\[)(?=\{text:\i\.\i\.\i\(\i\.\i#{intl::SAVE}\))/,
+                    replace: "$self.renderRememberButton(vcStatusPreset()),"
+                }
+            ]
         },
         {
             find: "#{intl::STATUS_MENU_LABEL}",

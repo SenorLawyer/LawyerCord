@@ -25,6 +25,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- ChannelBadges shows thread badges even when the thread has no mentions or voice participants.
+
 - BetterBanReasons opens the custom input correctly and keeps preset message deletion durations local to each ban dialog.
 
 - Apply StreamingCodecDisabler choices to outgoing-stream codec advertisements instead of calling unavailable engine setters. Preserve decoding, watched streams, camera calls, and original engine capabilities.

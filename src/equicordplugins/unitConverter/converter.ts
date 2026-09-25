@@ -145,6 +145,9 @@ export function convert(message: string): string {
     let newMessage = message;
     const units = settings.store.myUnits === "imperial" ? regexes.metric : regexes.imperial;
     for (const unit of Object.values(units))
-        newMessage = newMessage.replaceAll(unit.regex, unit.convert);
+        newMessage = newMessage.replaceAll(unit.regex, (...groups: string[]) => {
+            const converted = unit.convert(...groups);
+            return Number.isFinite(parseFloat(converted)) ? converted : groups[0];
+        });
     return newMessage;
 }

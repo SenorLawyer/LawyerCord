@@ -15153,6 +15153,28 @@ test("UnitConverter handles metric speeds before distance units", () => {
     assert.equal(convert("100 kilometers"), "62.14mi");
 });
 
+test("UnitConverter preserves measurements whose conversions overflow", () => {
+    const settings = { store: { myUnits: "metric" } };
+    const { convert } = loadSource("src/equicordplugins/unitConverter/converter.ts", { ".": { settings } });
+    const huge = "9".repeat(309);
+    const finite = "9".repeat(308);
+    for (const [target, units] of [
+        ["metric", ["F", "ft", "in", "lb", "oz", "mph"]],
+        ["imperial", ["C", "cm", "m", "km", "km/h", "g", "kg"]]
+    ] as const) {
+        settings.store.myUnits = target;
+        for (const unit of units) assert.equal(convert(`${huge}${unit}`), `${huge}${unit}`);
+    }
+    settings.store.myUnits = "imperial";
+    assert.equal(convert(`${finite}C and 0C`), `${finite}C and 32.00°F`);
+    assert.equal(convert(`${finite}m`), `${finite}m`);
+    assert.equal(convert("NaN and Infinity and 0C"), "NaN and Infinity and 32.00°F");
+    settings.store.myUnits = "metric";
+    assert.equal(convert(`${huge}ft 2in`), `${huge}ft 5.08cm`);
+    assert.equal(convert(`2ft ${huge}in`), `0.61m ${huge}in`);
+    assert.equal(convert(`${huge}lb 2oz`), `${huge}lb 56.70g`);
+});
+
 test("UnitConverter converts compound measurements before their components", () => {
     const { convert } = loadSource("src/equicordplugins/unitConverter/converter.ts", {
         ".": { settings: { store: { myUnits: "metric" } } }

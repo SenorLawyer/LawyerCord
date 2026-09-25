@@ -4454,6 +4454,33 @@ test("profile image downloads enforce their byte limit before conversion", async
     }
 });
 
+test("profile preset cancellation reaches image preparation downloads", async () => {
+    const controller = new AbortController();
+    const started = Promise.withResolvers<AbortSignal>();
+    let changes = 0;
+    const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+        "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null }) },
+        "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({ pendingAvatar: "https://fixture.invalid/avatar.png" }) }) },
+        "@webpack/common": {
+            UserStore: { getCurrentUser: () => ({ id: "me" }) },
+            UserProfileStore: { getUserProfile: () => ({}) },
+            FluxDispatcher: { dispatch: () => { changes++; } }
+        }
+    }, { AbortSignal, fetch: (_url: string, { signal }: { signal: AbortSignal; }) => {
+        started.resolve(signal);
+        return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
+    } });
+    const applying = api.loadPresetAsPending({ bio: "New bio" }, undefined, { signal: controller.signal });
+    const result = assert.rejects(applying);
+    const signal = await started.promise;
+    assert.equal(signal.aborted, false);
+    controller.abort();
+    assert.equal(signal.aborted, true);
+    await result;
+    assert.equal(changes, 0);
+    await assert.rejects(api.getCurrentProfile(undefined, { signal: controller.signal }));
+});
+
 test("profile embedded image limits count decoded payload bytes", () => {
     const check = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
         "@api/UserSettings": { getUserSettingLazy: () => ({}) },
@@ -5153,12 +5180,15 @@ test("profile preset loading follows the rendered object and rejects replaced li
     const storage = { presets: [original, other] };
     const loaded: unknown[] = [];
     const checks: (() => boolean)[] = [];
+    const signals: AbortSignal[] = [];
     const selected: unknown[] = [];
     let errors = 0;
+    let effect = () => () => {};
     let load: (preset: typeof original) => void = () => assert.fail("Missing list callback");
     const React = {
         useState: (value: unknown) => [value, (next: unknown) => selected.push(next)],
-        useReducer: () => [0, () => {}], useRef: () => ({ current: -1 }), useEffect() {},
+        useReducer: () => [0, () => {}], useRef: (value: unknown) => ({ current: value }),
+        useEffect: (callback: typeof effect, deps: unknown[]) => { if (deps.includes("main")) effect = callback; },
         createElement: (_type: unknown, props: { onLoad?: typeof load; } | null) => {
             if (props?.onLoad) load = props.onLoad;
             return null;
@@ -5168,8 +5198,8 @@ test("profile preset loading follows the rendered object and rejects replaced li
         "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
         "@webpack/common": { React: { ...React, useMemo: (factory: () => unknown) => factory() }, useStateFromStores: () => null, showToast: () => { errors++; }, Toasts: { Type: { FAILURE: "failure" } } },
         "../index": { cl: () => "", settings: { store: {} } },
-        "../utils/actions": { createPresetActions: () => ({}) }, "../utils/profile": { loadPresetAsPending: async (preset: unknown, _guildId: unknown, options: { isCurrent: () => boolean; }) => { loaded.push(preset); checks.push(options.isCurrent); } },
-        "../utils/storage": { createPresetStorage: () => Object.assign((storage), { isCurrentScope: () => true }) }, "./confirmModal": {}, "./presetList": {}
+        "../utils/actions": { createPresetActions: () => ({}) }, "../utils/profile": { loadPresetAsPending: async (preset: unknown, _guildId: unknown, options: { isCurrent: () => boolean; signal: AbortSignal; }) => { loaded.push(preset); checks.push(options.isCurrent); signals.push(options.signal); } },
+        "../utils/storage": { createPresetStorage: () => Object.assign((storage), { isCurrentScope: () => true, loadPresets: async () => {}, unloadPresets() {} }) }, "./confirmModal": {}, "./presetList": {}
     });
     api.PresetManager({});
     storage.presets = [other, original];
@@ -5194,6 +5224,8 @@ test("profile preset loading follows the rendered object and rejects replaced li
     assert.equal(checks[1](), true);
     load(other);
     assert.equal(checks[1](), false);
+    assert.equal(signals[1].aborted, true);
+    assert.equal(signals[2].aborted, false);
     assert.equal(checks[2](), true);
     storage.presets = [other, original];
     assert.equal(checks[2](), true);
@@ -5202,6 +5234,14 @@ test("profile preset loading follows the rendered object and rejects replaced li
     storage.presets = [original, other];
     Object.assign(storage, { isCurrentScope: () => false });
     assert.equal(checks[2](), false);
+    Object.assign(storage, { isCurrentScope: () => true });
+    load(other);
+    assert.equal(signals.at(-1)?.aborted, false);
+    const cleanup = effect();
+    cleanup();
+    assert.equal(signals.at(-1)?.aborted, true);
+    assert.equal(checks.at(-1)?.(), false);
+
 });
 
 test("profile preset load failures notify mounted panels only", async () => {
@@ -5212,7 +5252,7 @@ test("profile preset load failures notify mounted panels only", async () => {
         let effect = () => () => {};
         const React = {
             useState: (value: unknown) => [value, () => {}], useReducer: () => [0, () => { updated++; }],
-            useRef: () => ({ current: -1 }), useEffect: (callback: typeof effect, deps: unknown[]) => { if (deps.includes("main")) effect = callback; }, createElement: () => null
+            useRef: (value: unknown) => ({ current: value }), useEffect: (callback: typeof effect, deps: unknown[]) => { if (deps.includes("main")) effect = callback; }, createElement: () => null
         };
         const api = loadSource("src/equicordplugins/profileSets/components/presetManager.tsx", {
             "@components/Button": {}, "@components/Heading": {}, "@utils/misc": { classes: () => "" },
@@ -5240,7 +5280,7 @@ test("profile preset search resets pagination even after no matches", () => {
             const index = stateIndex++;
             return [["missing", false, 3, "3", -1, true][index], (value: unknown) => updates.set(index, value)];
         },
-        useReducer: () => [0, () => {}], useRef: () => ({ current: -1 }), useEffect() {},
+        useReducer: () => [0, () => {}], useRef: (value: unknown) => ({ current: value }), useEffect() {},
         createElement: (_type: unknown, props: { placeholder?: string; onChange?: (value: string) => void; } | null) => {
             if (props?.placeholder === "Search profiles..." && props.onChange) search = props.onChange;
             return null;
@@ -5271,7 +5311,7 @@ test("profile preset pagination recovers when the visible list shrinks", () => {
                 const index = stateIndex++;
                 return [states[index], (value: unknown) => { states[index] = value; }];
             },
-            useReducer: () => [0, () => {}], useRef: () => ({ current: -1 }),
+            useReducer: () => [0, () => {}], useRef: (value: unknown) => ({ current: value }),
             useEffect: (effect: () => void) => effects.push(effect),
             createElement: () => null
         };
@@ -8379,6 +8419,8 @@ test("source fixtures reject recoverable syntax errors before execution", () => 
 });
 
 function loadSource(path: string, mocks: Record<string, object>, globals: Record<string, unknown> = {}, result = "exports") {
+    if (path.endsWith("profileSets/components/presetManager.tsx"))
+        globals = { AbortController, ...globals };
     if (path.endsWith("scheduledMessages/utils.ts")) {
         const store = mocks["@api/DataStore"] as {
             get?: (key: string) => Promise<unknown>;

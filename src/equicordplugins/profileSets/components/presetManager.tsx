@@ -33,7 +33,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
     const [selectedPreset, setSelectedPreset] = React.useState<ProfilePreset | null>(null);
     const [searchMode, setSearchMode] = React.useState(false);
     const lastRandomIndexRef = React.useRef<number>(-1);
-    const loadRequest = React.useRef(0);
+    const loadController = React.useRef<AbortController | null>(null);
     const resolvedSection: PresetSection = section ?? "main";
     const isServerSection = resolvedSection === "server";
     const userId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
@@ -66,6 +66,7 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
         })();
         return () => {
             isActive = false;
+            loadController.current?.abort();
             storage.unloadPresets();
         };
     }, [resolvedGuildId, resolvedSection, userId, storage]);
@@ -119,13 +120,15 @@ export function PresetManager({ section, guildId }: PresetManagerProps) {
             showToast("The profile preset list changed. Reopen this panel before trying again.", Toasts.Type.FAILURE);
             return;
         }
-        const request = ++loadRequest.current;
-        const isCurrent = () => request === loadRequest.current
+        loadController.current?.abort();
+        const controller = loadController.current = new AbortController();
+        const isCurrent = () => !controller.signal.aborted
             && activeStorage.current === storage && storage.isCurrentScope(resolvedSection)
             && storage.presets.includes(preset);
         setSelectedPreset(preset);
         loadPresetAsPending(preset, resolvedGuildId, {
             isGuildProfile: resolvedSection === "server",
+            signal: controller.signal,
             isCurrent
         }).catch(() => {
             if (isCurrent()) showToast("Could not load the profile preset.", Toasts.Type.FAILURE);

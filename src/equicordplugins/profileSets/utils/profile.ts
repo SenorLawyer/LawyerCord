@@ -40,10 +40,12 @@ type DisplayNameStylesLike = DisplayNameStyles & {
 };
 
 type CurrentProfileOptions = {
+    signal?: AbortSignal;
     isGuildProfile?: boolean;
 };
 
 type LoadPresetOptions = {
+    signal?: AbortSignal;
     isCurrent?: () => boolean;
     skipGlobalName?: boolean;
     skipBio?: boolean;
@@ -109,9 +111,10 @@ function normalizeDisplayNameStyles(value: DisplayNameStylesLike | null | undefi
     };
 }
 
-export async function imageUrlToBase64(url: string): Promise<string | null> {
+export async function imageUrlToBase64(url: string, signal?: AbortSignal): Promise<string | null> {
     try {
-        const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+        const timeout = AbortSignal.timeout(30_000);
+        const response = await fetch(url, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
         if (!response.ok) {
             await response.body?.cancel();
             return null;
@@ -161,7 +164,8 @@ function checkEmbeddedImageSize(image: string | null | undefined) {
     if (size > MAX_IMAGE_BYTES) throw new Error("The profile image exceeds 10 MiB.");
 }
 
-async function processImage(imageData: ImageInput, userId: string, type: "avatar" | "banner", guildId?: string, useGuildPath?: boolean): Promise<string | null> {
+async function processImage(imageData: ImageInput, userId: string, type: "avatar" | "banner", guildId?: string, useGuildPath?: boolean, signal?: AbortSignal): Promise<string | null> {
+    signal?.throwIfAborted();
     if (typeof imageData === "object" && imageData) imageData = imageData.imageUri;
     if (!imageData) return null;
 
@@ -170,7 +174,7 @@ async function processImage(imageData: ImageInput, userId: string, type: "avatar
         return imageData;
     }
     if (/^(?:https?:\/\/|blob:)/.test(imageData)) {
-        const image = await imageUrlToBase64(imageData);
+        const image = await imageUrlToBase64(imageData, signal);
         if (!image) throw new Error("Could not download the profile image.");
         return image;
     }
@@ -187,12 +191,13 @@ async function processImage(imageData: ImageInput, userId: string, type: "avatar
         url = `https://cdn.discordapp.com/avatars/${userId}/${imageData}.${imageData.startsWith("a_") ? "gif" : "png"}?size=512`;
     }
     if (!url) throw new Error("Could not resolve the profile image.");
-    const image = await imageUrlToBase64(url);
+    const image = await imageUrlToBase64(url, signal);
     if (!image) throw new Error("Could not download the profile image.");
     return image;
 }
 
 export async function getCurrentProfile(guildId?: string, options: CurrentProfileOptions = {}): Promise<Omit<ProfilePreset, "name" | "timestamp">> {
+    options.signal?.throwIfAborted();
     const currentUser = UserStore.getCurrentUser();
     const baseProfile = UserProfileStore.getUserProfile(currentUser.id);
     const isGuildProfile = options.isGuildProfile ?? Boolean(guildId);
@@ -267,7 +272,7 @@ export async function getCurrentProfile(guildId?: string, options: CurrentProfil
     const avatarInput: ImageInput = pendingAvatar === null || hasImageInput(avatarToUse)
         ? avatarToUse
         : IconUtils.getUserAvatarURL(currentUser, true, 512);
-    const avatarDataUrl = await processImage(avatarInput, currentUser.id, "avatar", effectiveGuildId, useGuildAvatar);
+    const avatarDataUrl = await processImage(avatarInput, currentUser.id, "avatar", effectiveGuildId, useGuildAvatar, options.signal);
     const resolvedAvatarDataUrl = pendingAvatar === null ? null : avatarDataUrl ?? IconUtils.getDefaultAvatarURL(currentUser.id);
 
     const { pendingBanner } = pendingChanges;
@@ -276,7 +281,7 @@ export async function getCurrentProfile(guildId?: string, options: CurrentProfil
         : (isGuildProfile ? (guildProfile?.banner ?? baseProfile?.banner) : baseProfile?.banner);
     const useGuildBanner = !!(effectiveGuildId && isGuildProfile && guildProfile?.banner && bannerToUse === guildProfile?.banner);
 
-    const bannerDataUrl = await processImage(bannerToUse, currentUser.id, "banner", effectiveGuildId, useGuildBanner);
+    const bannerDataUrl = await processImage(bannerToUse, currentUser.id, "banner", effectiveGuildId, useGuildBanner, options.signal);
 
     return {
         avatarDataUrl: resolvedAvatarDataUrl,
@@ -334,7 +339,8 @@ export async function loadPresetAsPending(preset: ProfilePreset, guildId?: strin
             await ImageUtils.loadImage(image);
     }
     const current = await getCurrentProfile(guildId, {
-        isGuildProfile: isGuild
+        isGuildProfile: isGuild,
+        signal: options.signal
     });
     if (options.isCurrent && !options.isCurrent()) return;
     if (UserStore.getCurrentUser()?.id !== userId) throw new Error("The account changed while loading the profile preset.");

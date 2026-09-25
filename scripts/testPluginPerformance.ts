@@ -1635,77 +1635,43 @@ test("status presets save object-property names as ordinary entries", () => {
     assert.deepEqual(changes, ["StatusPresets", "StatusPresets", "StatusPresets"]);
 });
 
-test("invalid codec responses never partially change the engine", async () => {
-    let response = "";
-    let writes = 0;
-    let errors = 0;
+test("codec disabling changes only outgoing stream encoding and preserves native capabilities", () => {
+    const store = { disableAv1Codec: true, disableH265Codec: true, disableH264Codec: false };
     const { default: plugin } = loadSource("src/equicordplugins/streamingCodecDisabler/index.ts", {
-        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
-        "@utils/Logger": { Logger: class { error() { errors++; } } },
+        "@api/Settings": { definePluginSettings: () => ({ store }) },
         "@utils/constants": { EquicordDevs: {} },
-        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
-        "@webpack/common": { MediaEngineStore: { getMediaEngine: () => ({
-            getCodecCapabilities: (callback: (value: string) => void) => { if (response === "throw") throw new Error("native failure"); callback(response); },
-            setAv1Enabled: () => { writes++; },
-        }) } },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} }
     });
+    const codecs: { type: string; name: string; encode: boolean; decode?: boolean; payloadType: number; }[] = [
+        { type: "audio", name: "opus", encode: true, payloadType: 120 },
+        ...["AV1", "H265", "H264", "VP8", "VP9"].map(name => ({ type: "video", name, encode: true, decode: true, payloadType: 101 })),
+        { type: "video", name: "H264", encode: false, decode: true, payloadType: 103 }
+    ];
+    codecs.forEach(Object.freeze);
+    Object.freeze(codecs);
+    const ownStream = { context: "stream", userId: "self", streamUserId: "self" };
+    assert.equal(plugin.filterCodecs(codecs, ownStream), codecs);
     plugin.start();
-    for (const value of ["throw", "invalid", "null", "{}", '[{"codec":"AV1","encode":true},{"codec":"H264","encode":"false"}]']) {
-        response = value;
-        await assert.doesNotReject(plugin.updateDisabledCodecs());
+    for (const connection of [
+        { ...ownStream, context: "default" },
+        { ...ownStream, streamUserId: "other" },
+        { context: "stream", userId: "self" }
+    ]) assert.equal(plugin.filterCodecs(codecs, connection), codecs);
+    const filtered = plugin.filterCodecs(codecs, ownStream);
+    assert.deepEqual(Array.from(filtered, (codec: { encode: boolean; }) => codec.encode), [true, false, false, true, true, true, false]);
+    for (let i = 0; i < codecs.length; i++) {
+        assert.equal(filtered[i].decode, codecs[i].decode);
+        assert.equal(filtered[i].payloadType, codecs[i].payloadType);
     }
-    assert.equal(errors, 5);
-    assert.equal(writes, 0);
-});
-
-test("codec disabling only updates capabilities reported by the current engine", async () => {
-    let capabilities = [{ codec: "AV1", encode: true }];
-    const calls: unknown[] = [];
-    const { default: plugin } = loadSource("src/equicordplugins/streamingCodecDisabler/index.ts", {
-        "@api/Settings": { definePluginSettings: () => ({ store: { disableAv1Codec: true } }) },
-        "@utils/Logger": { Logger: class { error() {} } },
-        "@utils/constants": { EquicordDevs: {} },
-        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
-        "@webpack/common": { MediaEngineStore: { getMediaEngine: () => ({
-            getCodecCapabilities: (callback: (value: string) => void) => callback(JSON.stringify(capabilities)),
-            setAv1Enabled: (value: boolean) => calls.push(["AV1", value]),
-            setH265Enabled: (value: boolean) => calls.push(["H265", value]),
-            setH264Enabled: (value: boolean) => calls.push(["H264", value]),
-        }) } },
-    });
-    plugin.start();
-    await plugin.updateDisabledCodecs();
-    capabilities = [{ codec: "H264", encode: false }, { codec: "VP8", encode: true }];
-    await plugin.updateDisabledCodecs();
-    assert.deepEqual(calls, [["AV1", false], ["H264", false]]);
-});
-
-test("codec callbacks from stopped runs cannot update the media engine", async () => {
-    const callbacks: ((value: string) => void)[] = [];
-    const calls: boolean[] = [];
-    const { default: plugin } = loadSource("src/equicordplugins/streamingCodecDisabler/index.ts", {
-        "@api/Settings": { definePluginSettings: () => ({ store: { disableAv1Codec: true } }) },
-        "@utils/Logger": { Logger: class { error() {} } },
-        "@utils/constants": { EquicordDevs: {} },
-        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
-        "@webpack/common": { MediaEngineStore: { getMediaEngine: () => ({
-            getCodecCapabilities: (callback: (value: string) => void) => callbacks.push(callback),
-            setAv1Enabled: (value: boolean) => calls.push(value),
-        }) } },
-    });
-    plugin.start();
-    const old = plugin.updateDisabledCodecs();
+    assert.equal(filtered[0], codecs[0]);
+    store.disableAv1Codec = false;
+    store.disableH264Codec = true;
+    const next = plugin.filterCodecs(codecs, ownStream);
+    assert.equal(next[1], codecs[1]);
+    assert.equal(next[3].encode, false);
+    assert.equal(next[6], codecs[6]);
     plugin.stop();
-    await plugin.updateDisabledCodecs();
-    assert.equal(callbacks.length, 1);
-    plugin.start();
-    const current = plugin.updateDisabledCodecs();
-    callbacks[0]('[{"codec":"AV1","encode":true}]');
-    await old;
-    assert.deepEqual(calls, []);
-    callbacks[1]('[{"codec":"AV1","encode":true}]');
-    await current;
-    assert.deepEqual(calls, [false]);
+    assert.equal(plugin.filterCodecs(codecs, ownStream), codecs);
 });
 
 test("TalkInReverse uses one send hook and preserves grapheme clusters", () => {

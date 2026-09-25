@@ -25,6 +25,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- ClickableRoles member rows use Discord keyboard controls for opening profiles.
+
 - ClickableRoles refreshes membership when opened, ignores replies from an earlier account or stopped plugin, and distinguishes lookup failures from empty roles.
 
 - ChannelBadges shows thread badges even when the thread has no mentions or voice participants.

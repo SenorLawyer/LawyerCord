@@ -14,7 +14,7 @@ import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import type { Role, User } from "@vencord/discord-types";
 import { findByPropsLazy } from "@webpack";
-import { Constants, GuildRoleStore, IconUtils, Popout, RestAPI, ScrollerThin, useEffect, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
+import { Clickable, Constants, GuildRoleStore, IconUtils, Popout, RestAPI, ScrollerThin, useEffect, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
 
 const logger = new Logger("ClickableRoles");
 
@@ -101,7 +101,7 @@ function RoleMembersList({ roleId, guildId, closePopout, setPopoutRef }: { roleI
                 ) : users.length === 0 ? (
                     <div className={cl("empty")}>No members found.</div>
                 ) : users.map(user => (
-                    <div
+                    <Clickable
                         key={user.id}
                         className={cl("user")}
                         onClick={() => {
@@ -111,7 +111,7 @@ function RoleMembersList({ roleId, guildId, closePopout, setPopoutRef }: { roleI
                     >
                         <img src={IconUtils.getUserAvatarURL(user)} alt="" className={cl("avatar")} />
                         <span>{user.globalName ?? user.username}</span>
-                    </div>
+                    </Clickable>
                 ))}
                 {totalCount > MAX_VISIBLE_MEMBERS && (
                     <div className={cl("overflow")}>and {totalCount - MAX_VISIBLE_MEMBERS} more</div>

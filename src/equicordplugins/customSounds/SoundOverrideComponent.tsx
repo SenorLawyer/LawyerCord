@@ -17,7 +17,7 @@ import { chooseFile } from "@utils/web";
 import { React, Select, showToast, Slider } from "@webpack/common";
 
 import { saveAudio } from "./audioStore";
-import { deleteCustomAudio, ensureDataURICached } from "./index";
+import { deleteCustomAudio, ensureDataURICached, logger } from "./index";
 import { SoundOverride, SoundType } from "./types";
 
 const AUDIO_EXTENSIONS = ["mp3", "wav", "ogg", "m4a", "aac", "flac", "webm", "wma", "mp4"];
@@ -75,13 +75,13 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
                 sound.current = playAudio(dataUri, {
                     volume: override.volume, onError: e => {
                         if (version !== previewVersion.current) return;
-                        console.error("[CustomSounds] Error playing custom audio:", e);
+                        logger.error("Could not play the custom sound.", e);
                         showToast("Error playing custom sound. File may be corrupted.");
                     }
                 });
             } catch (error) {
                 if (version !== previewVersion.current) return;
-                console.error("[CustomSounds] Error in previewSound:", error);
+                logger.error("Could not preview the sound.", error);
                 showToast("Error playing sound.");
             }
         } else {
@@ -114,7 +114,7 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
 
             showToast(`File uploaded successfully: ${file.name}`);
         } catch (error) {
-            console.error("[CustomSounds] Error uploading file:", error);
+            logger.error("Could not upload the sound file.", error);
             showToast(`Error uploading file: ${error}`);
         }
     };
@@ -133,12 +133,13 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
             await refreshFiles();
             showToast("File deleted successfully");
         } catch (error) {
-            console.error("[CustomSounds] Error deleting file:", error);
+            logger.error("Could not delete the sound file.", error);
             showToast("Error deleting file.");
         }
     };
 
     const customFileOptions = Object.entries(files).map(([value, label]) => ({ value, label }));
+    const { selectedFileId } = override;
 
     return (
         <Card className={cl("card")}>
@@ -182,7 +183,6 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
                                 saveAndNotify();
                                 if (sound.current) sound.current.volume = val;
                             }}
-                            disabled={!override.enabled}
                         />
                     </div>
 
@@ -236,10 +236,10 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
                                     Upload New
                                 </Button>
 
-                                {override.selectedFileId && files[override.selectedFileId] && (
+                                {selectedFileId && files[selectedFileId] && (
                                     <Button
                                         variant="dangerPrimary"
-                                        onClick={() => deleteFile(override.selectedFileId!)}
+                                        onClick={() => deleteFile(selectedFileId)}
                                     >
                                         Delete Selected File
                                     </Button>

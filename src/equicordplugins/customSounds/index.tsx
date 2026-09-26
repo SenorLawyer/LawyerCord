@@ -26,7 +26,7 @@ const cl = classNameFactory("vc-custom-sounds-");
 
 const dataUriCache = new Map<string, string>();
 const pendingDataUris = new Map<string, Promise<string | null>>();
-const logger = new Logger("CustomSounds");
+export const logger = new Logger("CustomSounds");
 let cacheVersion = 0;
 
 function clearAudioCache() {

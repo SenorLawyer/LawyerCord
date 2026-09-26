@@ -208,6 +208,51 @@ test("backups read only requested sections and never omit failed required data",
     assert.deepEqual(reads, ["plugins", "css"]);
 });
 
+test("cloud data round trips the aggregate DataStore record and empty CSS", async () => {
+    const records: [string, unknown][] = [["CustomSounds", { saved: true }], ["VoiceStats", { seconds: 42 }]];
+    const writes: unknown[] = [];
+    const css: string[] = [];
+    const modules: Record<string, unknown> = {
+        "@api/DataStore": { entries: async () => records, set: async (key: string, value: unknown) => writes.push([key, value]) },
+        "@api/Notifications": {},
+        "@api/Settings": { PlainSettings: {} },
+        "@utils/localStorage": {},
+        "@utils/Logger": { Logger: class {} },
+        "@utils/native": {},
+        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+        "@utils/web": {},
+        "@webpack/common": {},
+        fflate: {},
+        "./cloudSetup": {},
+        "..": { DataStore: { setMany: async (entries: unknown) => writes.push(entries) } }
+    };
+    const globals = {
+        require: (name: string) => modules[name], TextEncoder, TextDecoder, Uint8Array, atob,
+        VencordNative: { settings: { get: () => ({}) }, quickCss: { get: async () => "", set: async (value: string) => css.push(value) } }
+    };
+    modules["./offline"] = runInNewContext(`${outputText}\nexports;`, { ...globals, exports: {} });
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    const { buildLocalData, applyDownloads } = runInNewContext(`${compiled}\n({ buildLocalData, applyDownloads });`, { ...globals, exports: {} });
+    const local = await buildLocalData();
+    assert.equal(local.has("quickCss"), true, "Cleared CSS must replace an older cloud value");
+    assert.equal(new TextDecoder().decode(local.get("quickCss")), "");
+    assert.deepEqual(JSON.parse(new TextDecoder().decode(local.get("dataStore"))), records);
+    const download = (key: string, value: string) => ({ key, value: Buffer.from(value).toString("base64") });
+    assert.equal(await applyDownloads([
+        download("dataStore", new TextDecoder().decode(local.get("dataStore"))),
+        download("quickCss", "")
+    ]), true);
+    assert.deepEqual(JSON.parse(JSON.stringify(writes)), [records]);
+    assert.deepEqual(css, [""]);
+    await applyDownloads([download("dataStore/legacy", '{"kept":true}')]);
+    assert.deepEqual(JSON.parse(JSON.stringify(writes.at(-1))), ["legacy", { kept: true }]);
+    const count = writes.length;
+    await assert.rejects(applyDownloads([download("dataStore", '[[null,1]]')]));
+    assert.equal(writes.length, count);
+});
+
 test("legacy cloud sync waits for local settings persistence before reporting success", async () => {
     const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }

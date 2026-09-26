@@ -85,10 +85,10 @@ async function buildLocalData(): Promise<Map<string, Uint8Array>> {
     data.set("settings", encoder.encode(JSON.stringify(VencordNative.settings.get())));
 
     const quickCss = await VencordNative.quickCss.get();
-    if (quickCss) data.set("quickCss", encoder.encode(quickCss));
+    data.set("quickCss", encoder.encode(quickCss));
 
     const dataStoreEntries = await DataStore.entries();
-    if (dataStoreEntries) data.set("dataStore", encoder.encode(JSON.stringify(dataStoreEntries)));
+    data.set("dataStore", encoder.encode(JSON.stringify(dataStoreEntries)));
 
     return data;
 }
@@ -107,6 +107,9 @@ async function applyDownloads(downloads: SyncResponse["downloads"]) {
             settingsChanged = true;
         } else if (dl.key === "quickCss") {
             await VencordNative.quickCss.set(text);
+            settingsChanged = true;
+        } else if (dl.key === "dataStore") {
+            await importSettings(JSON.stringify({ dataStore: JSON.parse(text) }), "datastore", true);
             settingsChanged = true;
         } else if (dl.key.startsWith("dataStore/")) {
             const dsKey = dl.key.slice("dataStore/".length);

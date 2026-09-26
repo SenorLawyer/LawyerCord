@@ -74,7 +74,9 @@ export async function authorizeCloud() {
             Settings.cloud.authenticated = true;
             return;
         }
-        const oauthConfiguration = await fetch(new URL("/v1/oauth/settings", getCloudUrl()));
+        const oauthConfiguration = await fetch(new URL("/v1/oauth/settings", getCloudUrl()), {
+            signal: AbortSignal.timeout(30_000)
+        });
         if (!oauthConfiguration.ok) throw new Error("Cloud configuration request failed.");
         const configuration: unknown = await oauthConfiguration.json();
         if (!isCurrent()) return;
@@ -119,6 +121,7 @@ export async function authorizeCloud() {
                 if (!callbackUrl || callbackUrl.origin !== redirect.origin || callbackUrl.pathname !== redirect.pathname || callbackUrl.username || callbackUrl.password)
                     throw new Error("Unexpected cloud authorization callback.");
                 const res = await fetch(callbackUrl, {
+                    signal: AbortSignal.timeout(30_000),
                     headers: { Accept: "application/json" }
                 });
                 if (!res.ok) throw new Error("Cloud authorization request failed.");

@@ -91,11 +91,12 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
     const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSetup.tsx", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022, jsx: JsxEmit.React }, fileName: "cloudSetup.tsx"
     }).outputText;
-    for (const change of ["storage", "config-status", "config-shape", "config-protocol", "callback-origin", "callback-path", "callback-status", "read", "configuration", "account", "service", "deauthorize", "newer", "invalid", "none"]) {
+    for (const change of ["storage", "config-timeout", "callback-timeout", "config-status", "config-shape", "config-protocol", "callback-origin", "callback-path", "callback-status", "read", "configuration", "account", "service", "deauthorize", "newer", "invalid", "none"]) {
         let userId = "first";
         const settings = { cloud: { url: "https://first.invalid", authenticated: false } };
         const requests: ((value: unknown) => void)[] = [];
         const notifications: unknown[] = [];
+        const controllers: AbortController[] = [];
         let modal: { callback: (value: { location: string }) => Promise<void> } | undefined;
         let records: Record<string, string> = {};
         const modules: Record<string, unknown> = {
@@ -108,8 +109,9 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
         };
         const { authorizeCloud, deauthorizeCloud } = runInNewContext(`${compiled}\nexports;`, {
             exports: {}, require: (name: string) => modules[name] ?? {}, URL,
+            AbortSignal: { timeout: (ms: number) => { assert.equal(ms, 30_000); const controller = new AbortController(); controllers.push(controller); return controller.signal; } },
             React: { createElement: (_type: unknown, props: unknown) => props },
-            fetch: () => new Promise(resolve => requests.push(resolve))
+            fetch: (_url: URL, options?: RequestInit) => new Promise((resolve, reject) => { requests.push(resolve); options?.signal?.addEventListener("abort", () => reject(new Error("Synthetic timeout")), { once: true }); })
         });
         const configuration = { ok: change !== "config-status", status: 500, json: async () => change === "config-shape" ? null : ({ clientId: "test", redirectUri: change === "config-protocol" ? "javascript:alert(1)" : "https://first.invalid/callback" }) };
         const begin = authorizeCloud().catch((error: unknown) => error);
@@ -125,6 +127,15 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
             await begin;
             assert.equal(requests.length, 0);
             assert.equal(modal, undefined);
+            continue;
+        }
+        if (change === "config-timeout") {
+            assert.ok(controllers[0]);
+            controllers[0].abort();
+            await begin;
+            assert.equal(modal, undefined);
+            assert.equal(settings.cloud.authenticated, false);
+            assert.equal(notifications.length, 1);
             continue;
         }
         if (change === "configuration") userId = "second";
@@ -151,6 +162,16 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
         }
         const finishResponse = requests.shift();
         assert.ok(finishResponse);
+        if (change === "callback-timeout") {
+            const controller = controllers.at(-1);
+            assert.ok(controller);
+            controller.abort();
+            await pending;
+            assert.deepEqual(records, {});
+            assert.equal(settings.cloud.authenticated, false);
+            assert.equal(notifications.length, 1);
+            continue;
+        }
         let newer: Promise<void> | undefined;
         if (change === "account") userId = "second";
         if (change === "service") settings.cloud.url = "https://second.invalid";

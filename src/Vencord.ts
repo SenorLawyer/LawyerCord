@@ -35,13 +35,13 @@ import { debounce } from "@shared/debounce";
 import { IS_WINDOWS } from "@utils/constants";
 import { createAndAppendStyle } from "@utils/css";
 import { StartAt } from "@utils/types";
-import { SettingsRouter } from "@webpack/common";
+import { SettingsRouter, UserStore } from "@webpack/common";
 
-import { get as dsGet } from "./api/DataStore";
 import { popNotice, showNotice } from "./api/Notices";
 import { showNotification } from "./api/Notifications";
 import { initPluginManager, PMLogger, startAllPlugins } from "./api/PluginManager";
 import { PlainSettings, Settings, SettingsStore } from "./api/Settings";
+import { getAuthorization } from "./api/SettingsSync/cloudSetup";
 import { areLocalSettingsDirty, getCloudSettings, getCloudSyncDirection, markLocalSettingsDirty, putCloudSettings, shouldCloudSync } from "./api/SettingsSync/cloudSync";
 import { relaunch } from "./utils/native";
 import { checkForUpdates, isOutdated as getIsOutdated, update, UpdateLogger } from "./utils/updater";
@@ -65,8 +65,12 @@ async function syncSettings() {
         saveSettingsOnFrequentAction();
     });
 
-    const hasCloudAuth = await dsGet("Vencord_cloudSecret");
-    if (!hasCloudAuth) {
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return;
+    const service = Settings.cloud.url;
+    const authorization = await getAuthorization();
+    if (UserStore.getCurrentUser()?.id !== userId || Settings.cloud.url !== service) return;
+    if (typeof authorization !== "string" || !authorization) {
         if (Settings.cloud.authenticated) {
             // User switched to an account that isn't connected to cloud
             showNotification({

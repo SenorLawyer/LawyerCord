@@ -314,6 +314,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Reject invalid legacy cloud timestamps before applying settings or saving checkpoints, and omit cache validation on forced downloads.
 - Save cloud connection preferences locally without treating them as synchronized-content edits or scheduling uploads for them.
 - Start tracking settings edits before cloud startup awaits so disconnected or failed initialization does not disable later automatic uploads.
+- Check the current account's cloud credential at startup and discard stale authorization results after account or service changes.
 - Explain that runtime backup import failures can leave some changes applied, while retaining the underlying error for diagnosis.
 
 - Honor the default two-way cloud sync direction and remove unreachable startup warnings and unused notification code.

@@ -634,7 +634,8 @@ test("startup tracks edits before credential lookup and after initially disconne
         const syncSettings = runInNewContext(`${compiled}\nsyncSettings;`, {
             Settings: settings,
             SettingsStore: { addGlobalChangeListener: (callback: (data: unknown, path: string) => void) => listeners.push(callback) },
-            dsGet: () => new Promise((resolve, reject) => { finishRead = resolve; rejectRead = reject; }),
+            UserStore: { getCurrentUser: () => ({ id: "first" }) },
+            getAuthorization: () => new Promise((resolve, reject) => { finishRead = resolve; rejectRead = reject; }),
             debounce: (callback: () => Promise<void>) => { scheduled = callback; return () => queued++; },
             markLocalSettingsDirty: () => dirty++, shouldCloudSync: () => true,
             putCloudSettings: async () => uploads++
@@ -663,6 +664,40 @@ test("startup tracks edits before credential lookup and after initially disconne
         assert.equal(dirty, 2);
         assert.equal(uploads, 1, "Connecting later must not require restarting to track subsequent edits");
         assert.equal(listeners.length, 1);
+    }
+});
+
+test("startup uses the current account credential and discards lookup results after owner changes", async () => {
+    const source = createSourceFile("Vencord.ts", readFileSync("src/Vencord.ts", "utf8"), ScriptTarget.Latest, true);
+    const declaration = source.statements.find(node => isFunctionDeclaration(node) && node.name?.text === "syncSettings");
+    assert.ok(declaration);
+    const compiled = transpileModule(declaration.getText(source), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const secret of [undefined, "", 17, "synthetic"]) for (const change of ["none", "account", "service", "logged-out"]) {
+        let userId = change === "logged-out" ? undefined : "first";
+        let pulls = 0;
+        let notifications = 0;
+        const settings = { cloud: { authenticated: true, settingsSync: true, url: "https://first.invalid" } };
+        const lookup = async () => {
+            if (change === "account") userId = "second";
+            if (change === "service") settings.cloud.url = "https://second.invalid";
+            return secret;
+        };
+        const syncSettings = runInNewContext(`${compiled}\nsyncSettings;`, {
+            Settings: settings, SettingsStore: { addGlobalChangeListener: () => {} },
+            UserStore: { getCurrentUser: () => ({ id: userId }) },
+            dsGet: async () => { await lookup(); return { "https://other.invalid:other": "unrelated" }; },
+            getAuthorization: lookup,
+            debounce: () => () => {}, getCloudSyncDirection: () => "both", shouldCloudSync: () => true,
+            areLocalSettingsDirty: () => false, getCloudSettings: async () => { pulls++; return false; },
+            showNotification: () => notifications++, SettingsRouter: {}
+        });
+        await syncSettings();
+        const valid = secret === "synthetic";
+        assert.equal(pulls, valid && change === "none" ? 1 : 0);
+        assert.equal(notifications, !valid && change === "none" ? 1 : 0);
+        assert.equal(settings.cloud.authenticated, valid || change !== "none");
     }
 });
 

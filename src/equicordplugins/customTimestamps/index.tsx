@@ -213,7 +213,7 @@ export default definePlugin({
             ]
         },
         {
-            find: /.full,.{0,15}children:/,
+            find: /__unsupportedReactNodeAsText:\i\.full/,
             replacement: {
                 // Tooltips for timestamp markdown (e.g. <t:1234567890>)
                 match: /(__unsupportedReactNodeAsText:)\i.full/,

@@ -20,6 +20,7 @@ import "./styles.css";
 
 import { definePluginSettings } from "@api/Settings";
 import { Button } from "@components/Button";
+import { readResponseText } from "@shared/readResponseText";
 import { Devs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import { Logger } from "@utils/Logger";
@@ -140,7 +141,7 @@ export default definePlugin({
         try {
             const res = await fetch(`${API_ORIGIN}/users`, { signal: request.signal });
             if (!res.ok || request.signal.aborted) return;
-            const data: unknown = await res.json();
+            const data: unknown = JSON.parse(await readResponseText(res, 16 * 1024 * 1024));
             if (request.signal.aborted) return;
             if (!isObject(data)
                 || !("endpoint" in data) || data.endpoint !== API_ORIGIN

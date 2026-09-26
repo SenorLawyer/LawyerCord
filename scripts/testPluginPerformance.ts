@@ -6610,6 +6610,45 @@ test("USRBG voice backgrounds keep feed URLs inside one quoted image", () => {
 
 });
 
+test("USRBG bounds decoded feed bytes and cancels oversized streams", async () => {
+    const limit = 16 * 1024 * 1024;
+    const valid = { endpoint: "https://usrbg.is-hardly.online", bucket: "banners", prefix: "", users: { user: "etag" } };
+    for (const extra of [0, 1]) for (const header of [undefined, "1"]) {
+        let warnings = 0;
+        let cancelled = false;
+        let position = 0;
+        const prefix = new TextEncoder().encode(JSON.stringify(valid));
+        const padding = new Uint8Array(65536).fill(32);
+        const response = new Response(new ReadableStream<Uint8Array>({
+            pull(controller) {
+                if (position === 0) { controller.enqueue(prefix); position += prefix.length; return; }
+                if (position === limit + extra) { controller.close(); return; }
+                const count = Math.min(padding.length, limit + extra - position);
+                controller.enqueue(padding.subarray(0, count));
+                position += count;
+            },
+            cancel() { cancelled = true; }
+        }, { highWaterMark: 0 }), { headers: header === undefined ? {} : { "Content-Length": header } });
+        const { default: plugin } = loadSource("src/plugins/usrbg/index.tsx", {
+            "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+            "@components/Button": {}, "@utils/constants": { Devs: {} },
+            "@utils/css": { classNameFactory: () => () => "" },
+            "@utils/Logger": { Logger: class { warn() { warnings++; } } },
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+            "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} }
+        }, { AbortController, setTimeout, clearTimeout, fetch: async () => response });
+        await plugin.start();
+        assert.equal(plugin.userHasBackground("user"), extra === 0);
+        assert.equal(warnings, extra);
+        assert.equal(plugin.request, undefined);
+        if (extra) {
+            assert.equal(plugin.data, null);
+            assert.equal(cancelled, true);
+            assert.equal(response.body?.locked, false);
+        }
+    }
+});
+
 test("USRBG rejects malformed feed data before publishing it", async () => {
     const valid = { endpoint: "https://usrbg.is-hardly.online", bucket: "banners", prefix: "v2/", users: { user: "etag" } };
     for (const data of [null, [], {}, { ...valid, users: null }, { ...valid, users: [] },
@@ -6624,9 +6663,9 @@ test("USRBG rejects malformed feed data before publishing it", async () => {
             "@utils/Logger": { Logger: class { warn() { warnings++; } } },
             "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
             "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} }
-        }, { AbortController, setTimeout, clearTimeout, fetch: async () => ({ ok: true, json: async () => data }) });
+        }, { AbortController, setTimeout, clearTimeout, fetch: async () => Response.json(data) });
         await plugin.start();
-        assert.equal(plugin.data, data === valid ? valid : null);
+        assert.deepEqual(JSON.parse(JSON.stringify(plugin.data)), data === valid ? valid : null);
         assert.equal(plugin.userHasBackground("user"), data === valid);
         assert.equal(plugin.getImageUrl("user"), data === valid ? "https://usrbg.is-hardly.online/banners/v2/user?etag" : null);
         assert.equal(plugin.getImageUrl("missing"), null);
@@ -6649,7 +6688,12 @@ test("USRBG ignores stopped and superseded startup responses", async () => {
             signals.push(options.signal);
             const read = Promise.withResolvers<unknown>();
             reads.push(read);
-            return { ok: true, json: () => read.promise };
+            return new Response(new ReadableStream<Uint8Array>({
+                async pull(controller) {
+                    controller.enqueue(new TextEncoder().encode(JSON.stringify(await read.promise)));
+                    controller.close();
+                }
+            }, { highWaterMark: 0 }));
         } });
         const first = plugin.start();
         await setImmediate();
@@ -6664,7 +6708,7 @@ test("USRBG ignores stopped and superseded startup responses", async () => {
         assert.equal(signals[0].aborted, true);
         reads[0].resolve({ ...latest, users: { user: "old" } });
         await first;
-        assert.equal(plugin.data, stop ? null : latest);
+        assert.deepEqual(JSON.parse(JSON.stringify(plugin.data)), stop ? null : latest);
         assert.equal(plugin.request, undefined);
     }
 });

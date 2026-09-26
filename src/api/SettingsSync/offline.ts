@@ -102,12 +102,16 @@ export async function importSettings(data: string, type: BackupType = "all", clo
         }
     }
 
-    if (settings) {
-        deepMerge(PlainSettings, settings);
-        await VencordNative.settings.set(PlainSettings);
+    try {
+        if (settings) {
+            deepMerge(PlainSettings, settings);
+            await VencordNative.settings.set(PlainSettings);
+        }
+        if (quickCss !== undefined) await VencordNative.quickCss.set(quickCss);
+        if (dataStore) await DataStore.setMany(dataStore);
+    } catch (cause) {
+        throw new Error("Settings import did not finish. Some changes may already have been applied.", { cause });
     }
-    if (quickCss !== undefined) await VencordNative.quickCss.set(quickCss);
-    if (dataStore) await DataStore.setMany(dataStore);
 }
 
 export async function exportSettings({ syncDataStore = true, type = "all", minify }: { syncDataStore?: boolean; type?: BackupType; minify?: boolean; }) {

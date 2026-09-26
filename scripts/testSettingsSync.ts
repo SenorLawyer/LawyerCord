@@ -126,6 +126,45 @@ test("backup imports validate every selected section before changing settings or
     assert.deepEqual(Array.from(pairs[1][0]), []);
 });
 
+test("runtime import failures report partial application without undoing newer edits", async () => {
+    for (const failedSection of ["settings", "css", "datastore"]) {
+        const plain = { plugins: { Sound: { volume: 20 } } };
+        const writes: string[] = [];
+        const failure = new Error("Storage unavailable");
+        let rejectWrite: ((error: Error) => void) | undefined;
+        const write = async (section: string) => {
+            writes.push(section);
+            if (section === failedSection) await new Promise<void>((_resolve, reject) => { rejectWrite = reject; });
+        };
+        const modules: Record<string, unknown> = {
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+            "@api/Settings": { PlainSettings: plain },
+            "@utils/Logger": { Logger: class {} },
+            "@utils/web": {},
+            "@webpack/common": {},
+            "..": { DataStore: { setMany: () => write("datastore") } }
+        };
+        const { importSettings } = runInNewContext(`${outputText}\nexports;`, {
+            exports: {}, require: (name: string) => modules[name],
+            VencordNative: { settings: { set: () => write("settings") }, quickCss: { set: () => write("css") } }
+        });
+        const pending = importSettings('{"settings":{"plugins":{"Sound":{"volume":70}}},"quickCss":"new","dataStore":[["key",1]]}');
+        await new Promise<void>(resolve => setImmediate(resolve));
+        assert.ok(rejectWrite);
+        assert.equal(plain.plugins.Sound.volume, 70);
+        plain.plugins.Sound.volume = 90;
+        rejectWrite(failure);
+        await assert.rejects(pending, (error: unknown) => {
+            assert.ok(error !== null && typeof error === "object" && "message" in error && "cause" in error);
+            assert.match(String(error.message), /Some changes may already have been applied/);
+            assert.equal(error.cause, failure);
+            return true;
+        });
+        assert.equal(plain.plugins.Sound.volume, 90);
+        assert.deepEqual(writes, ["settings", "css", "datastore"].slice(0, ["settings", "css", "datastore"].indexOf(failedSection) + 1));
+    }
+});
+
 test("backups read only requested sections and never omit failed required data", async () => {
     const reads: string[] = [];
     const notifications: { type: string; }[] = [];

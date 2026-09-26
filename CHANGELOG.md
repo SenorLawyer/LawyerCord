@@ -33,6 +33,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - CustomSounds validates saved overrides before using them and falls back safely without rewriting malformed stored values.
 - CustomSounds ignores settings imports superseded by a reset, newer edit, another import or closing the editor.
 - CustomSounds exports all sound settings, preserving disabled overrides with saved volume or file choices.
+- CustomSounds previews require a selected custom file, resolve built-in overrides consistently and apply volume changes after saving them.
 - CustomSounds releases cached playback data on stop, reset and file deletion, and ignores stale loads that finish afterward.
 
 - CustomSounds stops previews when the editor closes and prevents pending loads from playing after Stop or a changed selection.

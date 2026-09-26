@@ -62,16 +62,9 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
         stopPreview();
         const version = previewVersion.current;
 
-        if (!override.enabled) {
-            sound.current = playAudio(type.id);
-            return;
-        }
-
-        const { selectedSound } = override;
-
-        if (selectedSound === "custom" && override.selectedFileId) {
+        if (override.enabled && override.selectedSound === "custom") {
             try {
-                const dataUri = await ensureDataURICached(override.selectedFileId);
+                const dataUri = override.selectedFileId ? await ensureDataURICached(override.selectedFileId) : null;
                 if (version !== previewVersion.current) return;
 
                 if (!dataUri || !dataUri.startsWith("data:audio/")) {
@@ -91,10 +84,8 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
                 console.error("[CustomSounds] Error in previewSound:", error);
                 showToast("Error playing sound.");
             }
-        } else if (selectedSound === "default") {
-            sound.current = playAudio(type.id);
         } else {
-            sound.current = playAudio(selectedSound);
+            sound.current = playAudio(type.id);
         }
     };
 
@@ -153,15 +144,12 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
         <Card className={cl("card")}>
             <FormSwitch
                 title={type.name}
-                value={override.enabled || false}
+                value={override.enabled}
                 onChange={async val => {
                     stopPreview();
-                    console.log(`[CustomSounds] Setting ${type.id} enabled to:`, val);
-
                     override.enabled = val;
 
                     await saveAndNotify();
-                    console.log("[CustomSounds] After setting enabled, override.enabled =", override.enabled);
                 }}
                 className={Margins.bottom16}
                 hideBorder
@@ -190,9 +178,9 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
                             markers={makeRange(0, 100, 10)}
                             initialValue={override.volume}
                             onValueChange={val => {
-                                sound.current && (sound.current.volume = val);
                                 override.volume = val;
                                 saveAndNotify();
+                                if (sound.current) sound.current.volume = val;
                             }}
                             disabled={!override.enabled}
                         />

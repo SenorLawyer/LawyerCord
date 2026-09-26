@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
-import { createSourceFile, isCallExpression, isPropertyAccessExpression, isVariableStatement, JsxEmit, ModuleKind, type Node, ScriptTarget, transpileModule } from "typescript";
+import { createSourceFile, isCallExpression, isFunctionDeclaration, isPropertyAccessExpression, isVariableStatement, JsxEmit, ModuleKind, type Node, ScriptTarget, transpileModule } from "typescript";
 
 const { outputText } = transpileModule(readFileSync("src/api/SettingsSync/offline.ts", "utf8"), {
     compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
@@ -612,6 +612,57 @@ test("cloud configuration changes persist locally without changing sync timestam
                 assert.equal(scheduled, dirty, path);
             }
         }
+    }
+});
+
+test("startup tracks edits before credential lookup and after initially disconnected or failed startup", async () => {
+    const source = createSourceFile("Vencord.ts", readFileSync("src/Vencord.ts", "utf8"), ScriptTarget.Latest, true);
+    const declaration = source.statements.find(node => isFunctionDeclaration(node) && node.name?.text === "syncSettings");
+    assert.ok(declaration);
+    const compiled = transpileModule(declaration.getText(source), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const fail of [false, true]) {
+        let finishRead: ((value: unknown) => void) | undefined;
+        let rejectRead: ((reason: Error) => void) | undefined;
+        let dirty = 0;
+        let queued = 0;
+        let uploads = 0;
+        let scheduled: (() => Promise<void>) | undefined;
+        const listeners: ((data: unknown, path: string) => void)[] = [];
+        const settings = { cloud: { authenticated: false, settingsSync: true } };
+        const syncSettings = runInNewContext(`${compiled}\nsyncSettings;`, {
+            Settings: settings,
+            SettingsStore: { addGlobalChangeListener: (callback: (data: unknown, path: string) => void) => listeners.push(callback) },
+            dsGet: () => new Promise((resolve, reject) => { finishRead = resolve; rejectRead = reject; }),
+            debounce: (callback: () => Promise<void>) => { scheduled = callback; return () => queued++; },
+            markLocalSettingsDirty: () => dirty++, shouldCloudSync: () => true,
+            putCloudSettings: async () => uploads++
+        });
+        const pending: Promise<void> = syncSettings();
+        assert.equal(listeners.length, 1, "Tracking must exist before the first startup await");
+        listeners[0](settings, "plugins.Sound.enabled");
+        assert.equal(dirty, 1);
+        assert.equal(queued, 1);
+        assert.ok(finishRead);
+        assert.ok(rejectRead);
+        if (fail) {
+            const rejected = assert.rejects(pending, /Synthetic read failure/);
+            rejectRead(new Error("Synthetic read failure"));
+            await rejected;
+        } else {
+            finishRead(undefined);
+            await pending;
+        }
+        assert.ok(scheduled);
+        await scheduled();
+        assert.equal(uploads, 0);
+        settings.cloud.authenticated = true;
+        listeners[0](settings, "plugins.Sound.enabled");
+        await scheduled();
+        assert.equal(dirty, 2);
+        assert.equal(uploads, 1, "Connecting later must not require restarting to track subsequent edits");
+        assert.equal(listeners.length, 1);
     }
 });
 

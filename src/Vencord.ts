@@ -53,6 +53,18 @@ if (IS_REPORTER) {
 }
 
 async function syncSettings() {
+    const saveSettingsOnFrequentAction = debounce(async () => {
+        if (Settings.cloud.settingsSync && Settings.cloud.authenticated && shouldCloudSync("push")) {
+            await putCloudSettings();
+        }
+    }, 60_000);
+
+    SettingsStore.addGlobalChangeListener((_, path) => {
+        if (path === "cloud" || path.startsWith("cloud.")) return;
+        markLocalSettingsDirty();
+        saveSettingsOnFrequentAction();
+    });
+
     const hasCloudAuth = await dsGet("Vencord_cloudSecret");
     if (!hasCloudAuth) {
         if (Settings.cloud.authenticated) {
@@ -89,18 +101,6 @@ async function syncSettings() {
             });
         }
     }
-
-    const saveSettingsOnFrequentAction = debounce(async () => {
-        if (Settings.cloud.settingsSync && Settings.cloud.authenticated && shouldCloudSync("push")) {
-            await putCloudSettings();
-        }
-    }, 60_000);
-
-    SettingsStore.addGlobalChangeListener((_, path) => {
-        if (path === "cloud" || path.startsWith("cloud.")) return;
-        markLocalSettingsDirty();
-        saveSettingsOnFrequentAction();
-    });
 }
 
 let notifiedForUpdatesThisSession = false;
@@ -179,7 +179,7 @@ async function init() {
     await onceReady;
     startAllPlugins(StartAt.WebpackReady);
 
-    syncSettings();
+    syncSettings().catch((error: unknown) => PMLogger.error("Failed to initialize cloud settings sync", error));
     initTrayIpc();
 
     if (!IS_DEV && !IS_WEB && !IS_UPDATER_DISABLED) {

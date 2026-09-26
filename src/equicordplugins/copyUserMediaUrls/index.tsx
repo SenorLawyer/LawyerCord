@@ -9,7 +9,7 @@ import { copyToClipboard } from "@utils/clipboard";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
 import type { User } from "@vencord/discord-types";
-import { IconUtils, Menu, SelectedGuildStore, Toasts, UserProfileStore } from "@webpack/common";
+import { IconUtils, Menu, Toasts, UserProfileStore } from "@webpack/common";
 
 interface UserContextProps {
     guildId?: string;
@@ -71,11 +71,10 @@ function getBannerUrl(userId: string, guildId?: string) {
 const userContextPatch: NavContextMenuPatchCallback = (children, { guildId, user }: UserContextProps) => {
     if (!user) return;
 
-    const effectiveGuildId = guildId ?? SelectedGuildStore.getGuildId();
     const avatarUrl = getAvatarUrl(user);
-    const serverAvatarUrl = effectiveGuildId ? getAvatarUrl(user, effectiveGuildId) : null;
+    const serverAvatarUrl = guildId ? getAvatarUrl(user, guildId) : null;
     const bannerUrl = getBannerUrl(user.id);
-    const serverBannerUrl = effectiveGuildId ? getBannerUrl(user.id, effectiveGuildId) : null;
+    const serverBannerUrl = guildId ? getBannerUrl(user.id, guildId) : null;
 
     children.push(
         <Menu.MenuItem id="vc-copy-user-media-urls" label="Copy User Media URL">

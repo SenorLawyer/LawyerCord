@@ -7879,6 +7879,34 @@ test("folder icon editing preserves saved size and resetting an unused folder is
     assert.equal(closes, 3);
 });
 
+test("profile copy menus use their own guild context instead of the selected server", () => {
+    for (const pluginName of ["copyProfileColors", "copyUserMediaUrls"]) {
+        for (const guildId of [undefined, "context-guild"]) {
+            const requestedGuilds: string[] = [];
+            const patch = loadSource(`src/equicordplugins/${pluginName}/index.tsx`, {
+                "@api/ContextMenu": {}, "@utils/clipboard": {},
+                "@utils/constants": { EquicordDevs: {} },
+                "@utils/Logger": { Logger: class { error() {} } },
+                "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+                "@webpack/common": {
+                    Menu: { MenuItem: "item" },
+                    SelectedGuildStore: { getGuildId: () => "unrelated-selected-guild" },
+                    UserProfileStore: {
+                        getUserProfile: () => ({ banner: "global" }),
+                        getGuildMemberProfile: (_user: string, guild: string) => {
+                            requestedGuilds.push(guild);
+                            return { banner: "guild", themeColors: [0x112233, 0x445566] };
+                        }
+                    },
+                    IconUtils: { getUserBannerURL: () => "https://example.com/global", getGuildMemberBannerURL: () => "https://example.com/guild" }
+                }
+            }, { React: { createElement: (type: unknown, props: object) => ({ type, props }) } }, "exports.default.contextMenus['user-context']");
+            patch([], { user: { id: "user", getAvatarURL: () => "https://example.com/avatar" }, guildId });
+            assert.deepEqual(requestedGuilds, guildId ? [guildId] : []);
+        }
+    }
+});
+
 test("copied media URLs retain maximum size without losing animation parameters", () => {
     const { getAvatarUrl, withCdnSize } = loadSource("src/equicordplugins/copyUserMediaUrls/index.tsx", {
         "@api/ContextMenu": {}, "@utils/clipboard": {},

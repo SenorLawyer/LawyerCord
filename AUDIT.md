@@ -223,6 +223,8 @@ Mocked Discord requests do not establish live account-switch, message-send, or p
 
 ## Remaining work
 
+Confirmed cloud conflict gap: `.git/audit/cloud-nonsettings-conflict.cjs` executes the actual v2 downloader and offline importer with controlled storage. QuickCSS and DataStore edits made while the response is pending are overwritten by that response, and the operation reports success. The revision guard only observes settings changes. Desktop QuickCSS notifications are debounced file-watch events; DataStore writes have no shared revision hook. A renderer-only revision increment would therefore be insufficient for cross-context protection. This remains unresolved and requires checking the native/web write boundaries and IndexedDB transaction behavior before choosing a fix.
+
 The full finding ledger is still being worked through. This list identifies major open areas and is not an assertion that other findings are closed:
 
 - Scheduled-message legacy recovery, remaining persisted-data constraints, media cancellation, and coordination between separate client contexts.

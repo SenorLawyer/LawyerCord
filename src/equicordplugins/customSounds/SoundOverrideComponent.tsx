@@ -47,9 +47,10 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
 
     React.useEffect(() => stopPreview, [override.enabled, override.selectedSound, override.selectedFileId]);
 
-    const saveAndNotify = async () => {
-        await onChange();
+    const saveAndNotify = () => {
+        const saved = onChange();
         update();
+        return saved;
     };
 
     const previewSound = async () => {
@@ -111,7 +112,6 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
             override.selectedFileId = id;
             override.selectedSound = "custom";
 
-            await ensureDataURICached(id);
             await saveAndNotify();
             await refreshFiles();
 
@@ -154,15 +154,6 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
                     console.log(`[CustomSounds] Setting ${type.id} enabled to:`, val);
 
                     override.enabled = val;
-
-                    if (val && override.selectedSound === "custom" && override.selectedFileId) {
-                        try {
-                            await ensureDataURICached(override.selectedFileId);
-                        } catch (error) {
-                            console.error(`[CustomSounds] Failed to cache data URI for ${type.id}:`, error);
-                            showToast("Error loading custom sound file");
-                        }
-                    }
 
                     await saveAndNotify();
                     console.log("[CustomSounds] After setting enabled, override.enabled =", override.enabled);
@@ -215,15 +206,6 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
                                 stopPreview();
                                 override.selectedSound = v;
 
-                                if (v === "custom" && override.selectedFileId) {
-                                    try {
-                                        await ensureDataURICached(override.selectedFileId);
-                                    } catch (error) {
-                                        console.error(`[CustomSounds] Failed to cache data URI for ${type.id}:`, error);
-                                        showToast("Error loading custom sound file");
-                                    }
-                                }
-
                                 await saveAndNotify();
                             }}
                             serialize={opt => opt.value}
@@ -246,7 +228,6 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
                                             override.selectedFileId = undefined;
                                         } else {
                                             override.selectedFileId = id;
-                                            await ensureDataURICached(id);
                                         }
 
                                         await saveAndNotify();

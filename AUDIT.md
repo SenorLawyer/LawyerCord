@@ -1027,3 +1027,11 @@ The MessagePopover patch now bounds each previously unbounded gap at 150 charact
 Controlled evaluation of the actual patched return expression covers eight combinations of expanded state, reaction availability and reply availability. Plugin buttons follow the quick-reaction controls and precede the emoji picker; they remain present when reactions are unavailable. Component implementations and surrounding state are mocked, so this does not establish live hover-menu or focus acceptance. Evidence is `.git/audit/message-popover-order.cjs --current` and `message-popover-order.json`.
 
 All 628 broader regressions and timezone checks, TypeScript, focused ESLint, both standalone builds and artifact scanning pass. Patch lint reports 161 warnings and no errors. Logs are `.git/audit/message-popover-bounds-{tests,desktop,web}.log`.
+
+## MessagePopover error-boundary identity
+
+The mapped popover list put its stable key on the inner button rather than the outer ErrorBoundary. Actual React execution reproduced a healthy button disappearing after a failed neighbor was disabled: the failed boundary was reused at the healthy button's new position. The key now belongs to the boundary; the redundant inner key was removed.
+
+The fixture uses React 18.3.1, the actual MessagePopover API and actual ErrorBoundary implementation. It verifies healthy-button visibility and retained component state while a failed neighbor is hidden, restored and removed, with no missing-key warning. Evidence is `.git/audit/message-popover-keys.cjs` and `message-popover-keys.log`. All 628 broader regressions and timezone checks, TypeScript, focused ESLint, desktop/web builds and artifact scanning pass. Logs are `.git/audit/message-popover-keys-{tests,desktop,web}.log`. Signed-in hover-menu and focus acceptance remain separate.
+
+A fresh September 27 fetch confirms that origin/main is already integrated. The latest published release remains nightly-20260905-1918-6e664e03.

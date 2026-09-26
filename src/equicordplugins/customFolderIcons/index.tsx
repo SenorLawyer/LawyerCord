@@ -6,6 +6,7 @@
 
 import ErrorBoundary from "@components/ErrorBoundary";
 import { EquicordDevs } from "@utils/constants";
+import { parseUrl } from "@utils/misc";
 import definePlugin from "@utils/types";
 import type { ReactNode } from "react";
 
@@ -44,7 +45,7 @@ export default definePlugin({
     replace: ErrorBoundary.wrap((props: FolderIconProps) => {
         const { folderIcons, solidIcon } = settings.use(SETTINGS);
         const data = folderIcons?.[props.folderNode.id];
-        if (!data?.url) return props.original;
+        if (!data || !parseUrl(data.url)) return props.original;
         return (
             <div
                 style={{

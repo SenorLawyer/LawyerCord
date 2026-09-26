@@ -5,6 +5,7 @@
  */
 
 import { Paragraph } from "@components/Paragraph";
+import { parseUrl } from "@utils/misc";
 import { makeRange } from "@utils/types";
 import { Button, closeModal, Menu, Modal, openModalLazy, Slider, TextInput, useState } from "@webpack/common";
 
@@ -15,12 +16,14 @@ export function ImageModal(folderProps: folderProp) {
     const saved = settings.store.folderIcons?.[folderProps.folderId];
     const [data, setData] = useState(saved?.url ?? "");
     const [size, setSize] = useState(saved?.size ?? 100);
+    const valid = data === "" || parseUrl(data) !== null;
     return (
         <>
             <TextInput
                 // this looks like a horrorshow
                 defaultValue={data}
                 onChange={setData}
+                error={valid ? undefined : "Enter a complete image URL."}
                 aria-label="Folder icon URL"
                 placeholder="https://example.com/image.png"
             >
@@ -40,7 +43,7 @@ export function ImageModal(folderProps: folderProp) {
                     keyboardStep={1}
                     renderMarker={() => null} />
             </>}
-            <Button onClick={() => {
+            <Button disabled={!valid} onClick={() => {
                 settings.store.folderIcons = {
                     ...settings.store.folderIcons,
                     [folderProps.folderId]: { url: data, size }
@@ -66,7 +69,7 @@ export function ImageModal(folderProps: folderProp) {
     );
 }
 export function RenderPreview({ folderProps, url, size }: { folderProps: folderProp; url: string; size: number; }) {
-    if (!url) return null;
+    if (!parseUrl(url)) return null;
     return (
         <div style={{
             width: "20vh",

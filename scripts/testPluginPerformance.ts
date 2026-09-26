@@ -7838,12 +7838,13 @@ test("folder icon rendering subscribes to changes and preserves the native fallb
         "@utils/constants": { EquicordDevs: {} },
         "@utils/types": { __esModule: true, default: (value: object) => value },
         "./components": {}, "./settings": { settings },
+        "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } },
         "./util": { int2rgba: (_color: number, alpha: number) => String(alpha) }
     });
     assert.equal((boundaryOptions as { noop: boolean }).noop, true);
     const original = { type: "native-folder-icon" };
     const props = { folderNode: { id: "folder", color: 0 }, original };
-    const unsetEntries: Array<typeof settings.store.folderIcons> = [undefined, {}, { folder: null }, { folder: { url: "" } }];
+    const unsetEntries: Array<typeof settings.store.folderIcons> = [undefined, {}, { folder: null }, { folder: { url: "" } }, { folder: { url: "relative.png" } }, { folder: { url: "https://" } }];
     for (const folderIcons of unsetEntries) {
         settings.store.folderIcons = folderIcons;
         assert.equal(plugin.replace(props), original);
@@ -7867,14 +7868,15 @@ test("folder icon editing preserves saved size and resetting an unused folder is
         store: { folderIcons: { folder: { url: "https://fixture.invalid/icon.png", size: 175 } } }
     };
     let closes = 0;
-    const { ImageModal } = loadComponent("src/equicordplugins/customFolderIcons/components.tsx", {
+    const { ImageModal, RenderPreview } = loadComponent("src/equicordplugins/customFolderIcons/components.tsx", {
         useState: (initial: unknown) => [initial, () => {}],
         Button: "button", Slider: "slider", closeModal: () => closes++
     }, {
         "@components/Paragraph": { Paragraph: "p" },
+        "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } },
         "./settings": { settings },
         "@utils/types": { makeRange: (start: number, end: number) => Array.from({ length: end - start + 1 }, (_, i) => start + i) },
-        "./util": {}
+        "./util": { int2rgba: () => "" }
     });
     const props = { folderId: "folder", folderColor: 0 };
     const tree = ImageModal(props);
@@ -7889,6 +7891,20 @@ test("folder icon editing preserves saved size and resetting an unused folder is
     const readFolderSize = () => settings.store.folderIcons?.folder.size;
     assert.equal(readFolderSize(), 100);
     assert.equal(closes, 3);
+    for (const url of ["relative.png", "/channels/icon.png", "https://"]) {
+        settings.store.folderIcons = { folder: { url, size: 100 } };
+        const editor = ImageModal(props);
+        assert.equal(editor.props.children[0].props.error, "Enter a complete image URL.");
+        assert.equal(editor.props.children.find((node: { type?: string }) => node?.type === "button").props.disabled, true);
+        assert.equal(RenderPreview({ folderProps: props, url, size: 100 }), null);
+        assert.equal(settings.store.folderIcons.folder.url, url);
+    }
+    for (const url of ["https://fixture.invalid/icon.png", "data:image/png;base64,aGVsbG8=", ""]) {
+        settings.store.folderIcons = { folder: { url, size: 100 } };
+        const editor = ImageModal(props);
+        assert.equal(editor.props.children[0].props.error, undefined);
+        assert.equal(editor.props.children.find((node: { type?: string }) => node?.type === "button").props.disabled, false);
+    }
 });
 
 test("profile copy menus use their own guild context instead of the selected server", () => {

@@ -31,6 +31,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - CustomSounds saves selections before loading playback data, so pending selection loads cannot undo Reset All.
 - CustomSounds keeps completed uploads available without letting late uploads or deletions overwrite resets or newer edits.
 - CustomSounds validates saved overrides before using them and falls back safely without rewriting malformed stored values.
+- CustomSounds ignores settings imports superseded by a reset, newer edit, another import or closing the editor.
 - CustomSounds releases cached playback data on stop, reset and file deletion, and ignores stale loads that finish afterward.
 
 - CustomSounds stops previews when the editor closes and prevents pending loads from playing after Stop or a changed selection.

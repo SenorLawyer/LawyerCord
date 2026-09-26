@@ -189,6 +189,7 @@ const settings = definePluginSettings({
             const [searchQuery, setSearchQuery] = React.useState("");
             const [files, setFiles] = React.useState<Record<string, string>>({});
             const fileInputRef = React.useRef<HTMLInputElement>(null);
+            const editVersion = React.useRef(0);
 
             const refreshFiles = async () => {
                 const stored = await getAllAudio();
@@ -204,9 +205,11 @@ const settings = definePluginSettings({
                         setOverride(type.id, makeEmptyOverride());
                     }
                 });
+                return () => { editVersion.current++; };
             }, []);
 
             const resetOverrides = () => {
+                editVersion.current++;
                 soundTypes.forEach(type => {
                     setOverride(type.id, makeEmptyOverride());
                 });
@@ -224,13 +227,18 @@ const settings = definePluginSettings({
                 event.target.value = "";
                 if (!file) return;
 
+                const version = ++editVersion.current;
                 try {
-                    importOverrides(await file.text());
-                    await preloadDataURIs();
+                    const text = await file.text();
+                    if (version !== editVersion.current) return;
+                    importOverrides(text);
                     setResetTrigger(prev => prev + 1);
+                    await preloadDataURIs();
+                    if (version !== editVersion.current) return;
                     showToast("Settings imported successfully!");
                 } catch (error) {
-                    console.error("Error importing settings:", error);
+                    if (version !== editVersion.current) return;
+                    logger.error("Could not import sound settings.", error);
                     showToast("Error importing settings. Check console for details.");
                 }
             };
@@ -304,19 +312,12 @@ const settings = definePluginSettings({
                                     files={files}
                                     refreshFiles={refreshFiles}
                                     onChange={async () => {
-
+                                        editVersion.current++;
                                         setOverride(type.id, currentOverride);
 
                                         if (currentOverride.enabled && currentOverride.selectedSound === "custom" && currentOverride.selectedFileId) {
-                                            try {
-                                                await ensureDataURICached(currentOverride.selectedFileId);
-                                            } catch (error) {
-                                                console.error(`[CustomSounds] Failed to cache data URI for ${type.id}:`, error);
-                                                showToast("Error loading custom sound file");
-                                            }
+                                            await ensureDataURICached(currentOverride.selectedFileId);
                                         }
-
-                                        console.log(`[CustomSounds] Settings saved for ${type.id}:`, currentOverride);
                                     }}
                                 />
                             );

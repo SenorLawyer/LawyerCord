@@ -13,6 +13,7 @@ import { classNameFactory } from "@utils/css";
 import { Margins } from "@utils/margins";
 import { useForceUpdater } from "@utils/react";
 import { makeRange } from "@utils/types";
+import { chooseFile } from "@utils/web";
 import { React, Select, showToast, Slider } from "@webpack/common";
 
 import { saveAudio } from "./audioStore";
@@ -34,7 +35,6 @@ interface SoundOverrideProps {
 }
 
 export function SoundOverrideComponent({ type, override, onChange, files, refreshFiles }: SoundOverrideProps) {
-    const fileInputRef = React.useRef<HTMLInputElement>(null);
     const update = useForceUpdater();
     const sound = React.useRef<AudioPlayerInterface | null>(null);
     const previewVersion = React.useRef(0);
@@ -98,19 +98,18 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
         }
     };
 
-    const uploadFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (!file) return;
-
-        const fileExtension = file.name.split(".").pop()?.toLowerCase();
-        if (!fileExtension || !AUDIO_EXTENSIONS.includes(fileExtension)) {
-            showToast("Invalid file type. Please upload an audio file.");
-            event.target.value = "";
-            return;
-        }
-
+    const uploadFile = async () => {
         const version = ++editVersion.current;
         try {
+            const file = await chooseFile(AUDIO_EXTENSIONS.map(extension => `.${extension}`).join(","));
+            if (!file || version !== editVersion.current) return;
+
+            const fileExtension = file.name.split(".").pop()?.toLowerCase();
+            if (!fileExtension || !AUDIO_EXTENSIONS.includes(fileExtension)) {
+                showToast("Invalid file type. Please upload an audio file.");
+                return;
+            }
+
             showToast("Uploading file...");
             const id = await saveAudio(file);
 
@@ -127,8 +126,6 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
             console.error("[CustomSounds] Error uploading file:", error);
             showToast(`Error uploading file: ${error}`);
         }
-
-        event.target.value = "";
     };
 
     const deleteFile = async (id: string) => {
@@ -243,17 +240,10 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
                                     serialize={opt => opt.value}
                                 />
                             </div>
-                            <input
-                                className={cl("file-input")}
-                                ref={fileInputRef}
-                                type="file"
-                                accept=".mp3,.wav,.ogg,.m4a,.flac,.aac,.webm,.wma,.mp4"
-                                onChange={uploadFile}
-                            />
                             <div className={cl("override-controls")}>
                                 <Button
                                     variant="primary"
-                                    onClick={() => fileInputRef.current?.click()}
+                                    onClick={uploadFile}
                                 >
                                     Upload New
                                 </Button>

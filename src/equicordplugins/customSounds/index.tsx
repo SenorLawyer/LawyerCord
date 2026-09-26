@@ -15,7 +15,7 @@ import { classNameFactory } from "@utils/css";
 import { Logger } from "@utils/Logger";
 import { isObject } from "@utils/misc";
 import definePlugin, { OptionType, StartAt } from "@utils/types";
-import { saveFile } from "@utils/web";
+import { chooseFile, saveFile } from "@utils/web";
 import { React, showToast, TextInput, Toasts } from "@webpack/common";
 
 import { deleteAudio, getAllAudio, getAudioDataURI } from "./audioStore";
@@ -189,7 +189,6 @@ const settings = definePluginSettings({
             const [resetTrigger, setResetTrigger] = React.useState(0);
             const [searchQuery, setSearchQuery] = React.useState("");
             const [files, setFiles] = React.useState<Record<string, string>>({});
-            const fileInputRef = React.useRef<HTMLInputElement>(null);
             const editVersion = React.useRef(0);
 
             const refreshFiles = async () => {
@@ -219,17 +218,11 @@ const settings = definePluginSettings({
                 showToast("All overrides reset successfully!");
             };
 
-            const triggerFileUpload = () => {
-                fileInputRef.current?.click();
-            };
-
-            const handleSettingsUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                if (!file) return;
-
+            const handleSettingsUpload = async () => {
                 const version = ++editVersion.current;
                 try {
+                    const file = await chooseFile(".json");
+                    if (!file || version !== editVersion.current) return;
                     const text = await file.text();
                     if (version !== editVersion.current) return;
                     importOverrides(text);
@@ -274,16 +267,9 @@ const settings = definePluginSettings({
             return (
                 <div>
                     <div className="vc-custom-sounds-buttons">
-                        <Button variant="primary" onClick={triggerFileUpload}>Import</Button>
+                        <Button variant="primary" onClick={handleSettingsUpload}>Import</Button>
                         <Button variant="secondary" onClick={downloadSettings}>Export</Button>
                         <Button variant="dangerPrimary" onClick={resetOverrides}>Reset All</Button>
-                        <input
-                            className={cl("file-input")}
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".json"
-                            onChange={handleSettingsUpload}
-                        />
                     </div>
 
                     <div className={cl("search")}>

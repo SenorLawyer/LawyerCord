@@ -20,6 +20,7 @@ export function ImageModal(folderProps: folderProp) {
                 // this looks like a horrorshow
                 defaultValue={data}
                 onChange={setData}
+                aria-label="Folder icon URL"
                 placeholder="https://example.com/image.png"
             >
             </TextInput>

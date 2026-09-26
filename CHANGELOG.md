@@ -293,6 +293,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Simplify extension extraction, reject paths outside the extension directory, and finish cleanup before reporting installation failures.
 - Await backup file imports, preserve empty QuickCSS backups, and remove backup-content logging and duplicate import handling.
 - Fail full backups when required data cannot be read, and read only the requested sections for partial backups.
+- Reject DataStore backups and cloud uploads when the JSON format would discard stored values, and show the export failure reason.
 - Await desktop backup saves so native save failures reach the export error handler.
 - Validate all selected backup sections before applying any settings, CSS or DataStore writes.
 - Preserve the previous desktop settings file and main-process settings when saving fails, and report the failure to the caller.

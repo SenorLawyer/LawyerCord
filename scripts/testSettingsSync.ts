@@ -208,6 +208,35 @@ test("backups read only requested sections and never omit failed required data",
     assert.deepEqual(reads, ["plugins", "css"]);
 });
 
+test("backups reject DataStore values that JSON would silently discard or change", async () => {
+    let entries: unknown = [];
+    let files = 0;
+    const modules: Record<string, unknown> = {
+        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+        "@api/Settings": { PlainSettings: {} },
+        "@utils/Logger": { Logger: class { error() {} } },
+        "@utils/web": { saveFile: () => { files++; } },
+        "@webpack/common": { Toasts: { show() {}, genId: () => "test", Type: { FAILURE: "failure" } } },
+        "..": { DataStore: { entries: async () => entries } }
+    };
+    const { exportSettings, downloadSettingsBackup } = runInNewContext(`${outputText}\nexports;`, {
+        exports: {}, require: (name: string) => modules[name], IS_DISCORD_DESKTOP: false,
+        VencordNative: { settings: { get: () => ({}) }, quickCss: { get: async () => "" } }
+    });
+    const cyclic: { self?: unknown } = {};
+    cyclic.self = cyclic;
+    for (const value of [new Uint8Array([1, 2]).buffer, new Uint8Array([1]), new Blob(["saved icon"]), new Date(0), new Map([["saved", 1]]), new Set([1]), Infinity, NaN, undefined, 1n, cyclic]) {
+        entries = [["saved", { nested: value }]];
+        await assert.rejects(exportSettings({ type: "datastore" }), /JSON backup format cannot preserve/);
+        await assert.rejects(downloadSettingsBackup("all"), /JSON backup format cannot preserve/);
+    }
+    entries = [[Infinity, "saved"]];
+    await assert.rejects(exportSettings({ type: "datastore" }), /JSON backup format cannot preserve/);
+    assert.equal(files, 0);
+    entries = [["saved", { list: [null, true, 2, "text"], empty: {} }]];
+    assert.deepEqual(JSON.parse(await exportSettings({ type: "datastore" })), { dataStore: entries });
+});
+
 test("cloud data round trips the aggregate DataStore record and empty CSS", async () => {
     const records: [string, unknown][] = [["CustomSounds", { saved: true }], ["VoiceStats", { seconds: 42 }]];
     const writes: unknown[] = [];
@@ -251,6 +280,8 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
     const count = writes.length;
     await assert.rejects(applyDownloads([download("dataStore", '[[null,1]]')]));
     assert.equal(writes.length, count);
+    records.push(["binary", new Uint8Array([1, 2]).buffer]);
+    await assert.rejects(buildLocalData(), /JSON backup format cannot preserve/);
 });
 
 test("legacy cloud sync waits for local settings persistence before reporting success", async () => {

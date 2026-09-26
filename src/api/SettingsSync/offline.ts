@@ -118,6 +118,7 @@ export async function exportSettings({ syncDataStore = true, type = "all", minif
     const settings = type === "all" || type === "plugins" ? VencordNative.settings.get() : undefined;
     const quickCss = type === "all" || type === "css" ? await VencordNative.quickCss.get() : undefined;
     const dataStore = syncDataStore && (type === "all" || type === "datastore") ? await DataStore.entries() : undefined;
+    if (dataStore) serializeDataStore(dataStore);
 
     switch (type) {
         case "all": {
@@ -135,6 +136,22 @@ export async function exportSettings({ syncDataStore = true, type = "all", minif
     }
 }
 
+export function serializeDataStore(entries: [IDBValidKey, unknown][]): string {
+    try {
+        return JSON.stringify(entries, function (this: Record<string, unknown>, key: string) {
+            const value = this[key];
+            if (value === null || typeof value === "string" || typeof value === "boolean"
+                || (typeof value === "number" && Number.isFinite(value))
+                || (typeof value === "object" && (Array.isArray(value) || Object.prototype.toString.call(value) === "[object Object]"))) {
+                return value;
+            }
+            throw new Error("Unsupported DataStore value.");
+        });
+    } catch {
+        throw new Error("DataStore contains values that this JSON backup format cannot preserve.");
+    }
+}
+
 export async function downloadSettingsBackup(type: BackupType = "all", { minify }: { minify?: boolean; } = {}) {
     try {
         const syncDataStore = type === "all" || type === "datastore";
@@ -149,7 +166,7 @@ export async function downloadSettingsBackup(type: BackupType = "all", { minify 
         }
     } catch (err) {
         logger.error("Failed to export settings:", err);
-        toast(Toasts.Type.FAILURE, "Failed to export settings, check console");
+        toast(Toasts.Type.FAILURE, `Failed to export settings: ${String(err)}`);
         throw err;
     }
 }

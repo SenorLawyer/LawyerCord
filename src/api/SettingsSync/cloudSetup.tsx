@@ -161,6 +161,7 @@ export async function authorizeCloud() {
                 }
             } catch (e: unknown) {
                 if (!isCurrent()) return;
+                if (e instanceof SyntaxError) e = new Error("The cloud server returned invalid JSON.");
                 logger.error("Failed to authorize", e);
                 showNotification({
                     title: "Cloud Integration",

@@ -178,11 +178,12 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
     const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSetup.tsx", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022, jsx: JsxEmit.React }, fileName: "cloudSetup.tsx"
     }).outputText;
-    for (const change of ["storage", "config-timeout", "callback-timeout", "config-status", "config-shape", "config-protocol", "callback-origin", "callback-path", "callback-status", "read", "configuration", "account", "service", "deauthorize", "cancel", "newer", "invalid", "none"]) {
+    for (const change of ["storage", "config-timeout", "callback-timeout", "config-status", "config-shape", "config-protocol", "callback-origin", "callback-path", "callback-status", "callback-json", "read", "configuration", "account", "service", "deauthorize", "cancel", "newer", "invalid", "none"]) {
         let userId = "first";
         const settings = { cloud: { url: "https://first.invalid", authenticated: false } };
         const requests: ((value: unknown) => void)[] = [];
         const notifications: unknown[] = [];
+        const logs: string[] = [];
         const controllers: AbortController[] = [];
         let modal: { callback: (value: { location: string }) => Promise<void> } | undefined;
         let records: Record<string, string> = {};
@@ -191,7 +192,7 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
             "@api/DataStore": { get: async () => { if (change === "storage") throw new Error("Storage unavailable"); return { ...records }; }, update: async (_key: string, fn: (value: Record<string, string>) => Record<string, string>) => { records = fn(records); } },
             "@api/Settings": { Settings: settings },
             "@api/Notifications": { showNotification: (value: unknown) => notifications.push(value) },
-            "@utils/Logger": { Logger: class { info() {} error() {} } },
+            "@utils/Logger": { Logger: class { info() {} error(...args: unknown[]) { logs.push(args.map(String).join(" ")); } } },
             "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } },
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) }, OAuth2AuthorizeModal: "modal", openModal: (render: (props: object) => typeof modal) => { modal = render({}); } }
         };
@@ -269,7 +270,7 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
             newer = authorizeCloud();
             await new Promise<void>(resolve => setImmediate(resolve));
         }
-        finishResponse(Response.json({ secret: change === "invalid" ? 17 : "synthetic" }, { status: change === "callback-status" ? 500 : 200 }));
+        finishResponse(change === "callback-json" ? new Response("SECRET_DO_NOT_LOG") : Response.json({ secret: change === "invalid" ? 17 : "synthetic" }, { status: change === "callback-status" ? 500 : 200 }));
         await pending;
         if (change === "none") {
             assert.deepEqual(records, { "https://first.invalid:first": "synthetic" });
@@ -277,7 +278,9 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
             assert.equal(notifications.length, 1);
             continue;
         }
-        if (change === "invalid" || change === "callback-status") {
+        if (change === "invalid" || change === "callback-status" || change === "callback-json") {
+            assert.doesNotMatch(logs.join(" ") + JSON.stringify(notifications), /SECRET/);
+            if (change === "callback-json") assert.match(JSON.stringify(notifications), /invalid JSON/);
             assert.deepEqual(records, {});
             assert.equal(settings.cloud.authenticated, false);
             assert.equal(notifications.length, 1);
@@ -664,6 +667,50 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
     assert.deepEqual(JSON.parse(JSON.stringify(writes.at(-1))), records, "Explicit offline restores retain their existing complete-record behavior");
     records.push(["binary", new Uint8Array([1, 2]).buffer]);
     await assert.rejects(buildLocalData(), /JSON backup format cannot preserve/);
+});
+
+test("cloud JSON failures do not copy response contents into logs or notifications", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const scenario of ["get", "put", "delete", "timestamp", "settings", "dataStore", "dataStore/legacy"]) {
+        const legacy = scenario === "timestamp";
+        const writes: string[] = [];
+        const logs: string[] = [];
+        const notifications: { body: string; color?: string }[] = [];
+        const plain = { cloud: { settingsSyncVersion: 1 } };
+        const storage = { Vencord_settingsDirty: "true" };
+        const modules: Record<string, unknown> = {
+            "@shared/readResponseText": { readResponseText },
+            "@api/DataStore": { get: async () => legacy ? { "https://first.invalid": "v1" } : undefined, entries: async () => [], set: async () => writes.push("manifest") },
+            "@api/Settings": { PlainSettings: plain, Settings: plain },
+            "@api/Notifications": { showNotification: (value: { body: string }) => notifications.push(value) },
+            "@utils/localStorage": { localStorage: storage },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+            "@utils/Logger": { Logger: class { info() {} error(...args: unknown[]) { logs.push(args.map(String).join(" ")); } } },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" },
+            "./offline": { exportSettings: async () => "{}", omitCloudSettings: () => ({}), serializeDataStore: JSON.stringify, isLocalDataStoreKey: () => false, importSettings: async () => writes.push("import") },
+            fflate: { deflateSync: (value: Uint8Array) => value }
+        };
+        const api = runInNewContext(`${compiled}\nexports;`, {
+            exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextEncoder, TextDecoder, Uint8Array, btoa, atob, crypto,
+            VencordNative: { settings: { get: () => plain, set: async () => writes.push("settings") }, quickCss: { get: async () => "" } },
+            fetch: async () => ["settings", "dataStore", "dataStore/legacy"].includes(scenario)
+                ? Response.json({ server_manifest: [], uploaded: [], errors: [], downloads: [{ key: scenario, version: 1, checksum: "test", value: btoa("SECRET_DO_NOT_LOG") }] })
+                : new Response("SECRET_DO_NOT_LOG")
+        });
+        if (scenario === "put" || legacy) await api.putCloudSettings(true);
+        else if (scenario === "delete") await api.deleteCloudSettings();
+        else assert.equal(await api.getCloudSettings(true), false);
+        assert.deepEqual(writes, [], scenario);
+        assert.equal(plain.cloud.settingsSyncVersion, 1);
+        assert.equal(storage.Vencord_settingsDirty, "true");
+        assert.equal(notifications[0]?.color, "var(--red-360)");
+        assert.equal(logs.length, 1);
+        assert.doesNotMatch(logs.join(" ") + JSON.stringify(notifications), /SECRET/, scenario);
+        assert.match(notifications[0].body, /invalid JSON/i);
+    }
 });
 
 test("cloud JSON responses stop oversized streams before writes and allow retry", async () => {

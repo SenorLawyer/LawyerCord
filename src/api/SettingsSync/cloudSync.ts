@@ -594,6 +594,7 @@ export async function putCloudSettings(manual?: boolean) {
         }
     } catch (e: unknown) {
         if (context && !context.isCurrent()) return;
+        if (e instanceof SyntaxError) e = new Error("The cloud server returned invalid JSON.");
         logger.error("Failed to sync up", e);
         showNotification({
             title: "Cloud Settings",
@@ -624,6 +625,7 @@ export async function getCloudSettings(shouldNotify = true, force = false) {
         return await getV1(context, shouldNotify, force);
     } catch (e: unknown) {
         if (context && !context.isCurrent()) return false;
+        if (e instanceof SyntaxError) e = new Error("The cloud server returned invalid JSON.");
         logger.error("Failed to sync down", e);
         showNotification({
             title: "Cloud Settings",
@@ -649,6 +651,7 @@ export async function deleteCloudSettings() {
             await deleteV1(context);
     } catch (e: unknown) {
         if (context && !context.isCurrent()) return;
+        if (e instanceof SyntaxError) e = new Error("The cloud server returned invalid JSON.");
         logger.error("Failed to delete", e);
         showNotification({
             title: "Cloud Settings",

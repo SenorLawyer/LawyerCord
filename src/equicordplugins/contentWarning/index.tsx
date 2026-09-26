@@ -18,7 +18,7 @@ import { Logger } from "@utils/Logger";
 import { useAwaiter, useForceUpdater } from "@utils/react";
 import { escapeRegExp } from "@utils/text";
 import definePlugin, { OptionType } from "@utils/types";
-import { Button, TextInput, useState } from "@webpack/common";
+import { Button, showToast, TextInput, Toasts, useState } from "@webpack/common";
 
 const cl = classNameFactory("vc-content-warning-");
 const logger = new Logger("ContentWarning");
@@ -60,7 +60,12 @@ function compileTriggerWords() {
 
 function saveTriggerWords() {
     compileTriggerWords();
-    void DataStore.set(WORDS_KEY, triggerWords);
+    const pending = wordsPromise;
+    void DataStore.set(WORDS_KEY, triggerWords).catch(() => {
+        if (wordsPromise !== pending) return;
+        logger.error("Could not save trigger words.");
+        showToast("Could not save words. Changes may be lost when Discord restarts.", Toasts.Type.FAILURE);
+    });
 }
 
 function hasTriggerWord(content: string) {

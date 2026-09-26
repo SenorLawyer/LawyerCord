@@ -7785,6 +7785,43 @@ test("custom user colors preserve black when reopening the picker", () => {
     assert.equal(initialColor, 372735);
 });
 
+test("custom sound storage keeps concurrent deletes and failed writes consistent", async () => {
+    interface AudioEntry { id: string; name: string; type: string; dataUri: string; }
+    let stored: Record<string, AudioEntry> = {};
+    let failWrite = false;
+    const reset = () => {
+        stored = Object.fromEntries(["one", "two"].map(id => [id, { id, name: id, type: "audio/ogg", dataUri: "data:audio/ogg;base64,AA==" }]));
+    };
+    const dataStore = {
+        get: async () => structuredClone(stored),
+        set: async (_key: string, value: Record<string, AudioEntry>) => {
+            if (failWrite) throw new Error("Storage failed");
+            stored = structuredClone(value);
+        },
+        update: async (_key: string, updater: (value: Record<string, AudioEntry>) => Record<string, AudioEntry>) => {
+            if (failWrite) throw new Error("Storage failed");
+            stored = structuredClone(updater(structuredClone(stored)));
+        }
+    };
+    const load = () => loadSource("src/equicordplugins/customSounds/audioStore.ts", { "@api/DataStore": dataStore });
+    reset();
+    const first = load();
+    const second = load();
+    await Promise.all([first.deleteAudio("one"), second.deleteAudio("two")]);
+    assert.deepEqual(Object.keys(stored), []);
+    reset();
+    const current = load();
+    failWrite = true;
+    await assert.rejects(current.deleteAudio("one"));
+    assert.deepEqual(Object.keys(await current.getAllAudio()), ["one", "two"]);
+    failWrite = false;
+    const files = await current.getAllAudio();
+    files.one.name = "Modified caller copy";
+    assert.equal((await current.getAllAudio()).one.name, "one");
+    stored.one.name = "Imported name";
+    assert.equal((await current.getAllAudio()).one.name, "Imported name");
+});
+
 test("custom sound conversion infers MIME types and rejects failed reads before saving", async () => {
     let mode = "success";
     let writes = 0;
@@ -7805,7 +7842,7 @@ test("custom sound conversion infers MIME types and rejects failed reads before 
         }
     }
     const { generateDataURI, saveAudio } = loadSource("src/equicordplugins/customSounds/audioStore.ts", {
-        "@api/DataStore": { get: async () => ({}), set: async () => { writes++; } }
+        "@api/DataStore": { get: async () => ({}), update: async () => { writes++; } }
     }, { Blob, FileReader: AudioReader, crypto: { randomUUID: () => "audio" } }, "({ generateDataURI, saveAudio })");
     const buffer = new Uint8Array([0, 1, 127, 128, 255]).buffer;
     for (const [type, name, expected] of [

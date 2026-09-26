@@ -25,6 +25,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
+
 - CustomSounds detects audio types when a file has no MIME type and rejects cancelled reads instead of saving an invalid sound.
 
 - Queued plugin setting edits no longer overwrite newer imported values, and repeated typing stays debounced across modal rerenders.
@@ -323,6 +325,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
+
 - CustomSounds detects audio types when a file has no MIME type and rejects cancelled reads instead of saving an invalid sound.
 
 - Queued plugin setting edits no longer overwrite newer imported values, and repeated typing stays debounced across modal rerenders.
@@ -339,6 +343,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed
+
+- CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
 
 - CustomSounds detects audio types when a file has no MIME type and rejects cancelled reads instead of saving an invalid sound.
 
@@ -376,6 +382,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
+
 - CustomSounds detects audio types when a file has no MIME type and rejects cancelled reads instead of saving an invalid sound.
 
 - Queued plugin setting edits no longer overwrite newer imported values, and repeated typing stays debounced across modal rerenders.
@@ -392,6 +400,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
+
 - CustomSounds detects audio types when a file has no MIME type and rejects cancelled reads instead of saving an invalid sound.
 
 - Queued plugin setting edits no longer overwrite newer imported values, and repeated typing stays debounced across modal rerenders.
@@ -407,6 +417,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ## 2.0.0.0 - 2026-08-29
 
 ### Fixed
+
+- CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
 
 - CustomSounds detects audio types when a file has no MIME type and rejects cancelled reads instead of saving an invalid sound.
 
@@ -437,6 +449,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
+
 - CustomSounds detects audio types when a file has no MIME type and rejects cancelled reads instead of saving an invalid sound.
 
 - Queued plugin setting edits no longer overwrite newer imported values, and repeated typing stays debounced across modal rerenders.
@@ -452,6 +466,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ## 1.16.1.0 - 2026-07-29
 
 ### Fixed
+
+- CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
 
 - CustomSounds detects audio types when a file has no MIME type and rejects cancelled reads instead of saving an invalid sound.
 

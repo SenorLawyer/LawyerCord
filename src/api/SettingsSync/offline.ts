@@ -86,9 +86,11 @@ function validateSettingTypes(settings: object, defaults: object) {
 }
 
 export async function captureCloudImportState() {
+    const settings = JSON.stringify(omitCloudSettings(VencordNative.settings.get()));
     const quickCss = await VencordNative.quickCss.get();
     const entries = await DataStore.entries<IDBValidKey, unknown>();
     return {
+        settings,
         quickCss,
         dataStore: new Map(entries.filter(([key]) => isDataStoreKey(key) && !isLocalDataStoreKey(key))
             .map(([key, value]) => [JSON.stringify(key), value] as const))
@@ -142,8 +144,12 @@ export async function importSettings(data: string, type: BackupType = "all", clo
     try {
         checkCurrent?.();
         if (settings) {
+            const next = expected ? { ...JSON.parse(expected.settings), cloud: PlainSettings.cloud } : structuredClone(PlainSettings);
+            deepMerge(next, settings);
+            await VencordNative.settings.set(next, undefined, expected?.settings);
+            checkCurrent?.();
             deepMerge(PlainSettings, settings);
-            await VencordNative.settings.set(PlainSettings);
+            if (expected) expected.settings = JSON.stringify(omitCloudSettings(next));
         }
         checkCurrent?.();
         if (quickCss !== undefined) await VencordNative.quickCss.set(quickCss, expected?.quickCss);

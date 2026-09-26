@@ -380,7 +380,7 @@ test("desktop settings saves preserve the previous file and store when disk writ
     const file = join(directory, "settings.json");
     const initial = { plugins: { Sound: { volume: 20 } } };
     fs.writeFileSync(file, JSON.stringify(initial));
-    const handlers = new Map<string, (event: unknown, value: unknown, path?: string) => void>();
+    const handlers = new Map<string, (event: unknown, value: unknown, path?: string, expected?: string) => void>();
     const errors: unknown[][] = [];
     let failure = "write";
     const evaluate = (path: string, modules: Record<string, unknown> = {}) => {
@@ -394,7 +394,7 @@ test("desktop settings saves preserve the previous file and store when disk writ
             "@shared/IpcEvents": { IpcEvents: { GET_SETTINGS_DIR: "directory", GET_SETTINGS: "get", SET_SETTINGS: "set" } },
             "@shared/SettingsStore": evaluate("src/shared/SettingsStore.ts"),
             "@utils/mergeDefaults": evaluate("src/utils/mergeDefaults.ts"),
-            electron: { ipcMain: { handle: (name: string, handler: (event: unknown, value: unknown, path?: string) => void) => handlers.set(name, handler), on() {} } },
+            electron: { ipcMain: { handle: (name: string, handler: (event: unknown, value: unknown, path?: string, expected?: string) => void) => handlers.set(name, handler), on() {} } },
             fs: {
                 ...fs,
                 writeFileSync: (path: string, data: string) => {
@@ -427,6 +427,15 @@ test("desktop settings saves preserve the previous file and store when disk writ
         assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), next);
         assert.equal(RendererSettings.plain.plugins.Sound.volume, 70);
         assert.deepEqual(changes, [70]);
+        assert.throws(() => save(undefined, initial, "plugins.Sound.volume", JSON.stringify(initial)), /Settings changed during sync/);
+        assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), next);
+        assert.equal(RendererSettings.plain.plugins.Sound.volume, 70);
+        assert.deepEqual(changes, [70]);
+        const checkpoint = { ...next, cloud: { settingsSyncVersion: 10 } };
+        save(undefined, checkpoint, undefined, JSON.stringify(next));
+        save(undefined, initial, "plugins.Sound.volume", JSON.stringify(next));
+        assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), initial);
+        assert.deepEqual(changes, [70, 20]);
         assert.equal(errors.length, 2);
     } finally {
         assert.equal(dirname(resolve(directory)), resolve(tmpdir()));
@@ -447,7 +456,7 @@ test("backup imports validate every selected section before changing settings or
         "..": { DataStore: { setMany: async (value: unknown) => { writes.push(value); } } }
     };
     const { importSettings } = runInNewContext(`${outputText}\nexports;`, {
-        exports: {}, require: (name: string) => modules[name],
+        exports: {}, structuredClone, require: (name: string) => modules[name],
         VencordNative: { settings: { set: async (value: unknown) => { writes.push(value); } }, quickCss: { set: async (value: unknown) => { writes.push(value); } } }
     });
     await assert.rejects(importSettings("private backup contents"), /Invalid settings backup JSON\./);
@@ -519,13 +528,13 @@ test("runtime import failures report partial application without undoing newer e
             "..": { DataStore: { setMany: () => write("datastore") } }
         };
         const { importSettings } = runInNewContext(`${outputText}\nexports;`, {
-            exports: {}, require: (name: string) => modules[name],
+            exports: {}, structuredClone, require: (name: string) => modules[name],
             VencordNative: { settings: { set: () => write("settings") }, quickCss: { set: () => write("css") } }
         });
         const pending = importSettings('{"settings":{"plugins":{"Sound":{"volume":70}}},"quickCss":"new","dataStore":[["key",1]]}');
         await new Promise<void>(resolve => setImmediate(resolve));
         assert.ok(rejectWrite);
-        assert.equal(plain.plugins.Sound.volume, 70);
+        assert.equal(plain.plugins.Sound.volume, failedSection === "settings" ? 20 : 70);
         plain.plugins.Sound.volume = 90;
         rejectWrite(failure);
         await assert.rejects(pending, (error: unknown) => {
@@ -536,6 +545,58 @@ test("runtime import failures report partial application without undoing newer e
         });
         assert.equal(plain.plugins.Sound.volume, 90);
         assert.deepEqual(writes, ["settings", "css", "datastore"].slice(0, ["settings", "css", "datastore"].indexOf(failedSection) + 1));
+    }
+});
+
+test("cloud settings imports stage changes and reject newer persisted settings", async () => {
+    for (const change of ["none", "persisted", "renderer"]) {
+        const plain = { cloud: { settingsSyncVersion: 1 }, plugins: { Sound: { volume: 20 } } };
+        let persisted = { ...structuredClone(plain), otherWindow: true };
+        let release: (() => void) | undefined;
+        let changed = false;
+        const modules: Record<string, unknown> = {
+            "@api/Settings": { PlainSettings: plain, DefaultSettings: defaultSettings },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+            "@utils/Logger": { Logger: class {} },
+            "..": { DataStore: { entries: async () => [] } }
+        };
+        const api = runInNewContext(`${outputText}\nexports;`, {
+            exports: {}, structuredClone, require: (name: string) => modules[name] ?? {},
+            VencordNative: {
+                settings: {
+                    get: () => structuredClone(persisted),
+                    set: async (next: typeof persisted, _path?: string, expected?: string) => {
+                        await new Promise<void>(resolve => { release = resolve; });
+                        if (JSON.stringify({ ...persisted, cloud: undefined }) !== expected) throw new Error("Settings conflict");
+                        persisted = structuredClone(next);
+                    }
+                },
+                quickCss: { get: async () => "" }
+            }
+        });
+        const expected = await api.captureCloudImportState();
+        const pending = api.importSettings('{"settings":{"plugins":{"Sound":{"volume":70}}}}', "all", true, () => {
+            if (changed) throw new Error("Local edit");
+        }, expected);
+        assert.equal(plain.plugins.Sound.volume, 20);
+        assert.equal(persisted.plugins.Sound.volume, 20);
+        assert.ok(release);
+        if (change === "persisted") persisted.plugins.Sound.volume = 90;
+        if (change === "renderer") {
+            plain.plugins.Sound.volume = 90;
+            changed = true;
+        }
+        release();
+        if (change === "none") {
+            await pending;
+            assert.equal(plain.plugins.Sound.volume, 70);
+            assert.equal(expected.settings, JSON.stringify({ ...persisted, cloud: undefined }));
+        } else {
+            await assert.rejects(pending, /Settings import did not finish/);
+            assert.equal(plain.plugins.Sound.volume, change === "renderer" ? 90 : 20);
+            if (change === "persisted") assert.equal(persisted.plugins.Sound.volume, 90);
+        }
+        assert.equal(persisted.otherWindow, true);
     }
 });
 
@@ -638,7 +699,7 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
         require: (name: string) => modules[name], TextEncoder, TextDecoder, Uint8Array, atob,
         VencordNative: { settings: { get: () => nativeSettings, set: async () => {} }, quickCss: { get: async () => "", set: async (value: string) => css.push(value) } }
     };
-    const offline = runInNewContext(`${outputText}\nexports;`, { ...globals, exports: {} });
+    const offline = runInNewContext(`${outputText}\nexports;`, { structuredClone, ...globals, exports: {} });
     modules["./offline"] = offline;
     const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
@@ -684,6 +745,75 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
     assert.deepEqual(JSON.parse(JSON.stringify(writes.at(-1))), records, "Explicit offline restores retain their existing complete-record behavior");
     records.push(["binary", new Uint8Array([1, 2]).buffer]);
     await assert.rejects(buildLocalData(), /JSON backup format cannot preserve/);
+});
+
+test("cloud checkpoints preserve persisted fields and reject intervening settings writes", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const version of ["v1", "v2"]) for (const direction of ["getCloudSettings", "putCloudSettings"]) for (const stage of ["none", "response", "checkpoint"]) {
+        const plain = { cloud: { settingsSyncVersion: 1 }, plugins: { Sound: { value: "original" } } };
+        let persisted = { ...structuredClone(plain), otherWindow: true };
+        const storage = { Vencord_settingsDirty: "true" };
+        const notifications: { color: string }[] = [];
+        let manifests = 0;
+        let edited = false;
+        const store = {
+            get: async (key: string) => key === "Vencord_cloudApiVersions" ? { "https://first.invalid": version } : undefined,
+            entries: async () => [], set: async () => manifests++
+        };
+        const modules: Record<string, unknown> = {
+            "@shared/readResponseText": jsonResponseReader,
+            "@api/DataStore": store, "..": { DataStore: store },
+            "@api/Settings": { PlainSettings: plain, Settings: plain, DefaultSettings: defaultSettings },
+            "@api/Notifications": { showNotification: (value: { color: string }) => notifications.push(value) },
+            "@utils/localStorage": { localStorage: storage },
+            "@utils/Logger": { Logger: class { info() {} error() {} } },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" },
+            fflate: { deflateSync: (value: Uint8Array) => value }
+        };
+        const remote = { plugins: { Sound: { value: "remote" } } };
+        const globals = {
+            require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextEncoder, TextDecoder, TransformStream, DecompressionStream, Response, atob, btoa, crypto, IS_WEB: true,
+            VencordNative: {
+                settings: {
+                    get: () => structuredClone(persisted),
+                    set: async (next: typeof persisted, _path?: string, expected?: string) => {
+                        if (stage === "checkpoint" && next.cloud.settingsSyncVersion !== 1) {
+                            persisted.plugins.Sound.value = "newer";
+                            edited = true;
+                        }
+                        if (JSON.stringify({ ...persisted, cloud: undefined }) !== expected) throw new Error("Settings conflict");
+                        persisted = structuredClone(next);
+                    }
+                },
+                quickCss: { get: async () => "" }
+            },
+            fetch: async () => {
+                if (stage === "response") {
+                    persisted.plugins.Sound.value = "newer";
+                    edited = true;
+                }
+                return {
+                    ok: true, status: 200, headers: { get: () => "2" },
+                    json: async () => ({ written: 2, errors: [], uploaded: [], server_manifest: [], downloads: [{ key: "settings", version: 2, checksum: "synthetic", value: btoa(JSON.stringify(remote)) }] }),
+                    body: compressedBody(async () => JSON.stringify({ settings: remote }))
+                };
+            }
+        };
+        modules["./offline"] = runInNewContext(`${outputText}\nexports;`, { ...globals, exports: {}, structuredClone });
+        const api = runInNewContext(`${compiled}\nexports;`, { ...globals, exports: {} });
+        await api[direction](true);
+        assert.equal(persisted.otherWindow, true);
+        assert.equal(edited, stage !== "none");
+        assert.equal(persisted.plugins.Sound.value, edited ? "newer" : version === "v1" && direction === "putCloudSettings" ? "original" : "remote");
+        assert.equal(storage.Vencord_settingsDirty, edited ? "true" : undefined);
+        assert.equal(manifests, !edited && version === "v2" ? 1 : 0);
+        assert.equal(notifications.some(({ color }) => color === "var(--red-360)"), edited);
+        assert.equal(notifications.length, 1);
+    }
 });
 
 test("cloud JSON failures do not copy response contents into logs or notifications", async () => {
@@ -832,7 +962,7 @@ test("legacy downloads bound compressed and expanded bytes before importing", as
         };
         const { getCloudSettings } = runInNewContext(`${compiled}\nexports;`, {
             exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextDecoder, Uint8Array, TransformStream, DecompressionStream, Response, IS_WEB: true,
-            VencordNative: { settings: { set: async () => saves++ } },
+            VencordNative: { settings: { get: () => ({}), set: async () => saves++ } },
             fetch: async () => {
                 const mode = retry ? "none" : failure;
                 const bytes = mode === "expanded" ? expanded : mode === "truncated" ? normal.subarray(0, -1) : mode === "invalid" ? new Uint8Array([255]) : normal;
@@ -938,7 +1068,7 @@ test("legacy cloud sync waits for local settings persistence before reporting su
         const entry = runInNewContext(`${compiled}\n({ putV1, getV1 });`, {
             exports: {}, require: (name: string) => modules[name], URL, AbortSignal, TextEncoder, TextDecoder, TransformStream, DecompressionStream, Response, Uint8Array, IS_WEB: true,
             fetch: async () => ({ ok: true, status: 200, json: async () => ({ written: 2 }), headers: { get: () => "2" }, body: compressedBody(async () => "{}") }),
-            VencordNative: { settings: { set: () => new Promise<void>((_resolve, reject) => { rejectSave = reject; saveStarted.resolve(); }) } }
+            VencordNative: { settings: { get: () => ({}), set: () => new Promise<void>((_resolve, reject) => { rejectSave = reject; saveStarted.resolve(); }) } }
         });
         let settled = false;
         const pending = entry[direction]({ url: new URL("https://sync.invalid"), assertCurrent() {} }, true, true).then(
@@ -987,7 +1117,7 @@ test("legacy sync rejects invalid timestamps without treating local edit times a
         };
         const api = runInNewContext(`${compiled}\nexports;`, {
             exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextEncoder, TextDecoder, TransformStream, DecompressionStream, Response, IS_WEB: true,
-            VencordNative: { settings: { set: async () => saves++ } },
+            VencordNative: { settings: { get: () => ({}), set: async () => saves++ } },
             fetch: async (_url: URL, init: RequestInit) => {
                 requestHeaders = init.headers;
                 if (direction === "getCloudSettings" && written === 7 && new Headers(init.headers).get("If-None-Match") === "7")
@@ -1366,7 +1496,7 @@ test("cloud uploads and downloads discard obsolete responses and stop subsequent
                     };
                 }
             };
-            modules["./offline"] = runInNewContext(`${outputText}\nexports;`, { ...globals, exports: {} });
+            modules["./offline"] = runInNewContext(`${outputText}\nexports;`, { structuredClone, ...globals, exports: {} });
             const api = runInNewContext(`${compiled}\nexports;`, { ...globals, exports: {} });
             await api[direction]();
             assert.ok(events.includes(stage), `${version}/${direction}/${stage} must be exercised`);
@@ -1434,7 +1564,7 @@ test("cloud sync preserves edits made while responses or local saves are pending
                 };
             }
         };
-        modules["./offline"] = runInNewContext(`${outputText}\nexports;`, { ...globals, exports: {} });
+        modules["./offline"] = runInNewContext(`${outputText}\nexports;`, { structuredClone, ...globals, exports: {} });
         const api = runInNewContext(`${compiled}\nexports;`, { ...globals, exports: {} });
         markChanged = api.markLocalSettingsDirty;
         await api[direction](true);
@@ -1676,7 +1806,7 @@ test("cloud manifests belong to one account and service without claiming the own
     const manifest = () => [{ key: "settings", version: 1, checksum: `${service}/${userId}` }];
     const { getCloudSettings, deleteCloudSettings } = runInNewContext(`${compiled}\nexports;`, {
         exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextDecoder, atob, IS_WEB: true,
-        VencordNative: { settings: { set: async () => {} } },
+        VencordNative: { settings: { get: () => ({}), set: async () => {} } },
         fetch: async (url: URL, init: RequestInit) => {
             if (url.pathname === "/v2/sync") {
                 observed.push(JSON.parse(String(init.body)).client_manifest);
@@ -1736,7 +1866,7 @@ test("cloud deletion stops when its account or service changes", async () => {
             };
             const { deleteCloudSettings } = runInNewContext(`${compiled}\nexports;`, {
                 exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal,
-                VencordNative: { settings: { set: async () => pause("settings-save") } },
+                VencordNative: { settings: { get: () => ({}), set: async () => pause("settings-save") } },
                 fetch: async (url: URL, init: RequestInit) => {
                     assert.equal(url.origin, "https://first.invalid", "Authorization must never move to another service");
                     await pause(init.method === "DELETE" ? "delete" : "manifest");
@@ -1806,7 +1936,7 @@ test("cloud deletion sends one request at a time and stops after failure or owne
         };
         const api = runInNewContext(`${compiled}\nexports;`, {
             exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal,
-            VencordNative: { settings: { set: async () => writes.push("settings") } },
+            VencordNative: { settings: { get: () => ({}), set: async () => writes.push("settings") } },
             fetch: async (url: URL, init: RequestInit) => {
                 requests++;
                 if (init.method === "DELETE") {
@@ -1912,7 +2042,7 @@ test("backup imports await file reading, preserve empty CSS, and never log backu
         "..": { DataStore: { setMany: async () => { } } }
     };
     const { importSettings, uploadSettingsBackup } = runInNewContext(`${outputText}\nexports;`, {
-        exports: {}, require: (name: string) => modules[name], IS_DISCORD_DESKTOP: false,
+        exports: {}, structuredClone, require: (name: string) => modules[name], IS_DISCORD_DESKTOP: false,
         console: { log: (...args: unknown[]) => logs.push(args) },
         VencordNative: { settings: { set: async () => { } }, quickCss: { set: async (value: string) => css.push(value) } }
     });
@@ -1951,8 +2081,8 @@ test("cloud imports preserve CSS and DataStore edits made after their snapshot",
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) }
         };
         const api = runInNewContext(`${outputText}\nexports;`, {
-            exports: {}, require: (name: string) => modules[name] ?? {},
-            VencordNative: { quickCss: {
+            exports: {}, structuredClone, require: (name: string) => modules[name] ?? {},
+            VencordNative: { settings: { get: () => ({}) }, quickCss: {
                 get: async () => css,
                 set: async (value: string, expected?: string) => {
                     if (expected !== undefined && css !== expected) throw new Error("CSS conflict");

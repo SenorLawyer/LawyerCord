@@ -27,6 +27,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Cloud imports reject newer persisted settings instead of overwriting them. Failed saves leave renderer settings unchanged, and sync checkpoints preserve unrelated saved fields. Web settings writes share a lock across windows.
 - Cloud downloads preserve QuickCSS and DataStore edits made while synchronization is pending. Conflicting DataStore batches abort together, and web QuickCSS is no longer written twice through separate cloud records.
 - Legacy cloud downloads no longer use a local edit timestamp as a server cache validator, which could incorrectly skip different settings with the same timestamp.
 - Cloud reauthorization stays tied to the account and backend that started it and stops if cancelled during credential deletion.

@@ -254,7 +254,7 @@ async function putV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>, m
     context.assertCurrent();
 
     PlainSettings.cloud.settingsSyncVersion = Date.now();
-    await VencordNative.settings.set(PlainSettings);
+    await VencordNative.settings.set({ ...VencordNative.settings.get(), cloud: PlainSettings.cloud }, undefined, context.expected?.settings);
     context.assertCurrent();
     await saveLocalManifest(context, response.server_manifest);
     context.assertCurrent();
@@ -299,7 +299,7 @@ async function getV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>, s
     context.assertCurrent();
 
     PlainSettings.cloud.settingsSyncVersion = Date.now();
-    await VencordNative.settings.set(PlainSettings);
+    await VencordNative.settings.set({ ...VencordNative.settings.get(), cloud: PlainSettings.cloud }, undefined, context.expected?.settings);
     context.assertCurrent();
     await saveLocalManifest(context, response.server_manifest);
     context.assertCurrent();
@@ -360,7 +360,7 @@ async function deleteV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>
     if (!context.isCurrent()) return;
 
     PlainSettings.cloud.settingsSyncVersion = 0;
-    await VencordNative.settings.set(PlainSettings);
+    await VencordNative.settings.set({ ...VencordNative.settings.get(), cloud: PlainSettings.cloud }, undefined, context.expected?.settings);
     if (!context.isCurrent()) return;
 
     logger.info("Settings deleted from cloud successfully");
@@ -407,7 +407,7 @@ async function putV1(context: Awaited<ReturnType<typeof getCloudSyncContext>>, m
     if (!isObject(response) || !("written" in response) || !isSyncVersion(response.written))
         throw new Error("The cloud server returned an invalid sync timestamp.");
     PlainSettings.cloud.settingsSyncVersion = response.written;
-    await VencordNative.settings.set(PlainSettings);
+    await VencordNative.settings.set({ ...VencordNative.settings.get(), cloud: PlainSettings.cloud }, undefined, context.expected?.settings);
     context.assertCurrent();
 
     logger.info("Settings uploaded to cloud successfully");
@@ -508,7 +508,7 @@ async function getV1(context: Awaited<ReturnType<typeof getCloudSyncContext>>, s
     context.assertCurrent();
 
     PlainSettings.cloud.settingsSyncVersion = written;
-    await VencordNative.settings.set(PlainSettings);
+    await VencordNative.settings.set({ ...VencordNative.settings.get(), cloud: PlainSettings.cloud }, undefined, context.expected?.settings);
     context.assertCurrent();
 
     logger.info("Settings loaded from cloud successfully");

@@ -132,7 +132,22 @@ window.VencordNative = {
                 return {};
             }
         },
-        set: async (s: Settings) => localStorage.setItem("LawyerCordSettings", JSON.stringify(s)),
+        set: async (s: Settings, _pathToNotify?: string, expected?: string) => {
+            const serialized = JSON.stringify(s);
+            const save = () => {
+                if (expected !== undefined) {
+                    const current = JSON.parse(localStorage.getItem("LawyerCordSettings") || "{}");
+                    if (JSON.stringify({ ...current, cloud: undefined }) !== expected)
+                        throw new Error("Settings changed during sync. Try again to include your latest changes.");
+                }
+                localStorage.setItem("LawyerCordSettings", serialized);
+            };
+            if (!navigator.locks) {
+                if (expected !== undefined) throw new Error("This browser cannot safely apply cloud settings. Update your browser and try again.");
+                return save();
+            }
+            await navigator.locks.request("LawyerCordSettings", save);
+        },
         getSettingsDir: async () => "LocalStorage",
         openFolder: async () => Promise.reject("settings:openFolder is not supported on web"),
     },

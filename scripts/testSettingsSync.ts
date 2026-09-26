@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
-import { createSourceFile, isVariableStatement, ModuleKind, ScriptTarget, transpileModule } from "typescript";
+import { createSourceFile, isVariableStatement, JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 const { outputText } = transpileModule(readFileSync("src/api/SettingsSync/offline.ts", "utf8"), {
     compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
@@ -23,6 +23,69 @@ const defaultsDeclaration = settingsSource.statements.filter(isVariableStatement
     .find(declaration => declaration.name.getText(settingsSource) === "DefaultSettings");
 assert.ok(defaultsDeclaration?.initializer);
 const defaultSettings = runInNewContext(`(${defaultsDeclaration.initializer.getText(settingsSource)})`);
+
+test("cloud authentication rejects missing or changed owners and deauthorizes the captured account", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSetup.tsx", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022, jsx: JsxEmit.React }, fileName: "cloudSetup.tsx"
+    }).outputText;
+    let userId = "first";
+    const settings = { cloud: { url: "https://first.invalid" } };
+    let finishRead: ((value: Record<string, string>) => void) | undefined;
+    let finishUpdate: (() => void) | undefined;
+    let records = { "https://first.invalid:first": "first", "https://first.invalid:second": "second" } as Record<string, string>;
+    const modules: Record<string, unknown> = {
+        "@api/DataStore": {
+            get: () => new Promise<Record<string, string>>(resolve => { finishRead = resolve; }),
+            update: (_key: string, change: (value: Record<string, string>) => Record<string, string>) => new Promise<void>(resolve => { finishUpdate = () => { records = change(records); resolve(); }; })
+        },
+        "@api/Settings": { Settings: settings },
+        "@utils/Logger": { Logger: class {} },
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } }
+    };
+    const { getAuthorization, getCloudAuth, deauthorizeCloud } = runInNewContext(`${compiled}\nexports;`, {
+        exports: {}, require: (name: string) => modules[name] ?? {}, URL, window: { btoa }
+    });
+    for (const change of ["account", "service", "missing"]) {
+        userId = "first";
+        settings.cloud.url = "https://first.invalid";
+        const pending = getCloudAuth();
+        assert.ok(finishRead);
+        if (change === "account") userId = "second";
+        if (change === "service") settings.cloud.url = "https://second.invalid";
+        finishRead(change === "missing" ? {} : records);
+        await assert.rejects(pending, /Cloud authorization/);
+    }
+    userId = "first";
+    settings.cloud.url = "https://first.invalid";
+    const valid = getCloudAuth();
+    assert.ok(finishRead);
+    finishRead(records);
+    assert.equal(await valid, btoa("first:first"));
+    const removal = deauthorizeCloud();
+    assert.ok(finishUpdate);
+    userId = "second";
+    finishUpdate();
+    await removal;
+    assert.deepEqual(records, { "https://first.invalid:second": "second" });
+    for (const change of ["account", "newer", "removed"]) {
+        userId = "first";
+        records = { "https://first.invalid": "legacy" };
+        const previousUpdate = finishUpdate;
+        const migration = getAuthorization();
+        assert.ok(finishRead);
+        finishRead({ ...records });
+        await new Promise<void>(resolve => setImmediate(resolve));
+        assert.ok(finishUpdate);
+        assert.notEqual(finishUpdate, previousUpdate);
+        if (change === "account") userId = "second";
+        if (change === "newer") records["https://first.invalid:first"] = "newer";
+        if (change === "removed") records = {};
+        finishUpdate();
+        assert.equal(await migration, change === "account" ? "legacy" : change === "newer" ? "newer" : undefined);
+        assert.equal(records["https://first.invalid:second"], undefined);
+        assert.equal(records["https://first.invalid:first"], change === "account" ? "legacy" : change === "newer" ? "newer" : undefined);
+    }
+});
 
 test("desktop settings saves preserve the previous file and store when disk writes fail", () => {
     const directory = fs.mkdtempSync(join(tmpdir(), "lawyercord-settings-"));

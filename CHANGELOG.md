@@ -302,6 +302,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Restore cloud DataStore bundles through the backup validator and synchronize cleared QuickCSS values.
 - Advance the cloud sync manifest only after local settings are saved, allowing failed saves to retry downloads.
 - Keep cloud credentials and sync bookkeeping local during cloud uploads and restores.
+- Bind credential reads and mutations to their starting account, reject changed or missing cloud authorization, and preserve newer credentials during legacy migration.
 - Explain that runtime backup import failures can leave some changes applied, while retaining the underlying error for diagnosis.
 
 - Honor the default two-way cloud sync direction and remove unreachable startup warnings and unused notification code.

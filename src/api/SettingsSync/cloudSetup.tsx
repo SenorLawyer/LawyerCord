@@ -22,39 +22,43 @@ const getUserId = () => {
 };
 
 export async function getAuthorization() {
-    const secrets = await DataStore.get<Record<string, string>>("Vencord_cloudSecret") ?? {};
-
     const origin = getCloudUrlOrigin();
+    const key = `${origin}:${getUserId()}`;
+    const secrets = await DataStore.get<Record<string, string>>("Vencord_cloudSecret") ?? {};
+    if (secrets[key] !== undefined) return secrets[key];
 
     // we need to migrate from the old format here
     if (secrets[origin]) {
+        let authorization: string | undefined;
         await DataStore.update<Record<string, string>>("Vencord_cloudSecret", secrets => {
             secrets ??= {};
-            // use the current user ID
-            secrets[`${origin}:${getUserId()}`] = secrets[origin];
-            delete secrets[origin];
+            if (secrets[key] === undefined && secrets[origin] !== undefined) {
+                secrets[key] = secrets[origin];
+                delete secrets[origin];
+            }
+            authorization = secrets[key];
             return secrets;
         });
-
-        // since this doesn't update the original object, we'll early return the existing authorization
-        return secrets[origin];
+        return authorization;
     }
 
-    return secrets[`${origin}:${getUserId()}`];
+    return secrets[key];
 }
 
 async function setAuthorization(secret: string) {
+    const key = `${getCloudUrlOrigin()}:${getUserId()}`;
     await DataStore.update<Record<string, string>>("Vencord_cloudSecret", secrets => {
         secrets ??= {};
-        secrets[`${getCloudUrlOrigin()}:${getUserId()}`] = secret;
+        secrets[key] = secret;
         return secrets;
     });
 }
 
 export async function deauthorizeCloud() {
+    const key = `${getCloudUrlOrigin()}:${getUserId()}`;
     await DataStore.update<Record<string, string>>("Vencord_cloudSecret", secrets => {
         secrets ??= {};
-        delete secrets[`${getCloudUrlOrigin()}:${getUserId()}`];
+        delete secrets[key];
         return secrets;
     });
 }
@@ -128,7 +132,12 @@ export async function authorizeCloud() {
 }
 
 export async function getCloudAuth() {
+    const userId = getUserId();
+    const origin = getCloudUrlOrigin();
     const secret = await getAuthorization();
-
-    return window.btoa(`${secret}:${getUserId()}`);
+    if (UserStore.getCurrentUser()?.id !== userId || getCloudUrlOrigin() !== origin)
+        throw new Error("Cloud authorization changed. Please try again.");
+    if (typeof secret !== "string" || !secret)
+        throw new Error("Cloud authorization is unavailable. Please authorize this account.");
+    return window.btoa(`${secret}:${userId}`);
 }

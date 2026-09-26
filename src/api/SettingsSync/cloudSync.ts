@@ -27,10 +27,14 @@ type ApiVersion = "v2" | "v1";
 
 const SYNC_DIRECTION_KEY = "Vencord_cloudSyncDirection";
 const SETTINGS_DIRTY_KEY = "Vencord_settingsDirty";
+let localSettingsRevision = 0;
 export const getCloudSyncDirection = () => localStorage.getItem(SYNC_DIRECTION_KEY) || "both";
 export const setCloudSyncDirection = (direction: "push" | "pull" | "both" | "manual") => localStorage.setItem(SYNC_DIRECTION_KEY, direction);
 export const areLocalSettingsDirty = () => localStorage.getItem(SETTINGS_DIRTY_KEY) === "true";
-export const markLocalSettingsDirty = () => localStorage.setItem(SETTINGS_DIRTY_KEY, "true");
+export const markLocalSettingsDirty = () => {
+    localSettingsRevision++;
+    localStorage.setItem(SETTINGS_DIRTY_KEY, "true");
+};
 export const markLocalSettingsClean = () => localStorage.removeItem(SETTINGS_DIRTY_KEY);
 
 async function loadApiVersionMap(): Promise<Record<string, ApiVersion>> {
@@ -42,9 +46,10 @@ async function getApiVersion(origin: string): Promise<ApiVersion> {
     return map[origin] ?? "v2";
 }
 
-function getCloudSyncContext() {
+function getCloudSyncContext(checkLocalEdits = false) {
     const url = getCloudUrl();
     const userId = UserStore.getCurrentUser()?.id;
+    const revision = localSettingsRevision;
     const isCurrent = () => userId !== undefined && UserStore.getCurrentUser()?.id === userId && getCloudUrl().href === url.href;
     return {
         url,
@@ -52,6 +57,8 @@ function getCloudSyncContext() {
         isCurrent,
         assertCurrent: () => {
             if (!isCurrent()) throw new Error("Cloud sync account or service changed.");
+            if (checkLocalEdits && localSettingsRevision !== revision)
+                throw new Error("Local settings changed during sync. Try again to include your latest changes.");
         }
     };
 }
@@ -539,7 +546,7 @@ export function shouldCloudSync(direction: "push" | "pull") {
 export async function putCloudSettings(manual?: boolean) {
     let context: ReturnType<typeof getCloudSyncContext> | undefined;
     try {
-        context = getCloudSyncContext();
+        context = getCloudSyncContext(true);
         const version = await getApiVersion(context.url.origin);
         context.assertCurrent();
         if (version === "v2") {
@@ -566,7 +573,7 @@ export async function putCloudSettings(manual?: boolean) {
 export async function getCloudSettings(shouldNotify = true, force = false) {
     let context: ReturnType<typeof getCloudSyncContext> | undefined;
     try {
-        context = getCloudSyncContext();
+        context = getCloudSyncContext(true);
         const version = await getApiVersion(context.url.origin);
         context.assertCurrent();
         if (version === "v2") {

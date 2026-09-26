@@ -906,6 +906,77 @@ test("cloud uploads and downloads discard obsolete responses and stop subsequent
     }
 });
 
+test("cloud sync preserves edits made while responses or local saves are pending", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const version of ["v1", "v2"]) for (const direction of ["getCloudSettings", "putCloudSettings"]) for (const stage of ["response", "save"]) {
+        const plain = { cloud: { settingsSyncVersion: 1 }, plugins: { Sound: { value: "original" } } };
+        const storage: Record<string, unknown> = { Vencord_settingsDirty: "true" };
+        storage.setItem = (key: string, value: string) => { storage[key] = value; };
+        let markChanged = () => {};
+        let edited = false;
+        let retry = false;
+        let manifests = 0;
+        const notifications: { color: string }[] = [];
+        const edit = () => {
+            plain.plugins.Sound.value = "newer";
+            edited = true;
+            markChanged();
+        };
+        const store = {
+            get: async (key: string) => key === "Vencord_cloudApiVersions" ? { "https://first.invalid": version } : undefined,
+            entries: async () => [], set: async () => manifests++
+        };
+        const modules: Record<string, unknown> = {
+            "@api/DataStore": store, "..": { DataStore: store },
+            "@api/Settings": { PlainSettings: plain, Settings: plain, DefaultSettings: defaultSettings },
+            "@api/Notifications": { showNotification: (value: { color: string }) => notifications.push(value) },
+            "@utils/localStorage": { localStorage: storage },
+            "@utils/Logger": { Logger: class { info() {} error() {} } },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" },
+            fflate: { deflateSync: (value: Uint8Array) => value, inflateSync: (value: Uint8Array) => value }
+        };
+        const remote = { plugins: { Sound: { value: "remote" } } };
+        const entry = { key: "settings", checksum: "synthetic", version: 2 };
+        const globals = {
+            require: (name: string) => modules[name] ?? {}, URL, TextEncoder, TextDecoder, atob, btoa, crypto, IS_WEB: true,
+            VencordNative: { settings: { get: () => plain, set: async () => { if (stage === "save" && !edited) edit(); } }, quickCss: { get: async () => "" } },
+            fetch: async (_url: URL, init: RequestInit) => {
+                if (stage === "response" && !edited) edit();
+                if (retry) {
+                    const payload = version === "v2"
+                        ? JSON.parse(atob(JSON.parse(String(init.body)).uploads.find((entry: { key: string }) => entry.key === "settings").value))
+                        : JSON.parse(new TextDecoder().decode(init.body as Uint8Array)).settings;
+                    assert.equal(payload.plugins.Sound.value, "newer");
+                }
+                return {
+                    ok: true, status: 200, headers: { get: () => "2" },
+                    json: async () => ({ written: 2, errors: [], uploaded: [], server_manifest: [entry], downloads: retry ? [] : [{ ...entry, value: btoa(JSON.stringify(remote)) }] }),
+                    arrayBuffer: async () => new TextEncoder().encode(JSON.stringify({ settings: remote })).buffer
+                };
+            }
+        };
+        modules["./offline"] = runInNewContext(`${outputText}\nexports;`, { ...globals, exports: {} });
+        const api = runInNewContext(`${compiled}\nexports;`, { ...globals, exports: {} });
+        markChanged = api.markLocalSettingsDirty;
+        await api[direction](true);
+        assert.equal(edited, true);
+        assert.equal(plain.plugins.Sound.value, "newer", `${version}/${direction}/${stage}`);
+        assert.equal(storage.Vencord_settingsDirty, "true");
+        assert.equal(manifests, 0);
+        assert.deepEqual(notifications.map(value => value.color), ["var(--red-360)"]);
+        retry = true;
+        await api.putCloudSettings(true);
+        assert.equal(plain.plugins.Sound.value, "newer");
+        assert.equal(storage.Vencord_settingsDirty, undefined);
+        assert.equal(manifests, version === "v2" ? 1 : 0);
+        assert.equal(notifications.length, 2);
+    }
+});
+
 test("obsolete cloud failures cannot deauthorize another account or start fallback requests", async () => {
     const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }

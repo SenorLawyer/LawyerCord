@@ -32,7 +32,7 @@ export default definePlugin({
         {
             find: "#{intl::GUILD_COMMUNICATION_DISABLED_ICON_TOOLTIP_BODY}",
             replacement: {
-                match: /#{intl::GUILD_COMMUNICATION_DISABLED_BOTTOM_SHEET_TITLE}.+?renderPopout:.+?(?=\])/,
+                match: /#{intl::GUILD_COMMUNICATION_DISABLED_BOTTOM_SHEET_TITLE}.{0,150}?renderPopout:.{0,150}?(?=\])/,
                 replace: "$&,Vencord.Api.MessageDecorations.__addDecorationsToMessage(arguments[0])"
             }
         }

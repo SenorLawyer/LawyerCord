@@ -9,6 +9,7 @@ import { showNotification } from "@api/Notifications";
 import { PlainSettings, Settings } from "@api/Settings";
 import { localStorage } from "@utils/localStorage";
 import { Logger } from "@utils/Logger";
+import { isObject } from "@utils/misc";
 import { relaunch } from "@utils/native";
 import { SettingsRouter, UserStore } from "@webpack/common";
 import { deflateSync, inflateSync } from "fflate";
@@ -146,6 +147,24 @@ function handleAuthFailure() {
     Settings.cloud.authenticated = false;
 }
 
+function isManifestEntry(value: unknown): value is ManifestEntry {
+    return isObject(value) && "key" in value && typeof value.key === "string"
+        && "version" in value && typeof value.version === "number" && Number.isFinite(value.version)
+        && "checksum" in value && typeof value.checksum === "string";
+}
+
+function isSyncResponse(value: unknown): value is SyncResponse {
+    return isObject(value)
+        && "server_manifest" in value && Array.isArray(value.server_manifest) && value.server_manifest.every(isManifestEntry)
+        && "uploaded" in value && Array.isArray(value.uploaded) && value.uploaded.every(isManifestEntry)
+        && "errors" in value && Array.isArray(value.errors) && value.errors.every((entry: unknown) =>
+            isObject(entry) && "key" in entry && typeof entry.key === "string" && "error" in entry && typeof entry.error === "string")
+        && "downloads" in value && Array.isArray(value.downloads) && value.downloads.every((entry: unknown) =>
+            isManifestEntry(entry) && "value" in entry && typeof entry.value === "string"
+            && (["settings", "quickCss", "dataStore"].includes(entry.key)
+                || (entry.key.startsWith("dataStore/") && entry.key.length > "dataStore/".length)));
+}
+
 async function doSyncV2(uploads: SyncRequest["uploads"], clientManifest: ManifestEntry[], context: ReturnType<typeof getCloudSyncContext>): Promise<SyncResponse | null> {
     const auth = await getCloudAuth();
     context.assertCurrent();
@@ -187,8 +206,10 @@ async function doSyncV2(uploads: SyncRequest["uploads"], clientManifest: Manifes
         return null;
     }
 
-    const response: SyncResponse = await res.json();
+    const response: unknown = await res.json();
     context.assertCurrent();
+    if (!isSyncResponse(response))
+        throw new Error("The cloud server returned invalid or unsupported sync data.");
     if (response.errors.length)
         throw new Error("The cloud server could not synchronize all data. Please try again.");
     return response;
@@ -311,10 +332,12 @@ async function deleteV2(context: ReturnType<typeof getCloudSyncContext>) {
         return;
     }
 
-    const { entries }: { entries: ManifestEntry[]; } = await manifestRes.json();
+    const manifest: unknown = await manifestRes.json();
     if (!context.isCurrent()) return;
+    if (!isObject(manifest) || !("entries" in manifest) || !Array.isArray(manifest.entries) || !manifest.entries.every(isManifestEntry))
+        throw new Error("The cloud server returned an invalid deletion manifest.");
 
-    await Promise.all(entries.map(async entry => {
+    await Promise.all(manifest.entries.map(async (entry: ManifestEntry) => {
         const res = await fetch(new URL(`/v2/data/${encodeURIComponent(entry.key)}`, context.url), {
             method: "DELETE",
             headers: { Authorization: auth },

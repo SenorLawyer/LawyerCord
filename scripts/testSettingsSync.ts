@@ -617,7 +617,7 @@ test("failed cloud downloads and deletions do not advance the manifest or report
         VencordNative: { settings: { get: () => ({}), set: async () => { events.push("settings"); if (saveFails) throw new Error("Save failed"); writes++; } }, quickCss: { get: async () => "" } }
     });
     for (const [downloads, errors] of [
-        [[{ key: "settings", value: btoa("{}") }], []],
+        [[{ key: "settings", version: 2, checksum: "synthetic", value: btoa("{}") }], []],
         [[], [{ key: "settings", error: "Server failed" }]]
     ]) {
         response = { downloads, errors, server_manifest: [], uploaded: [] };
@@ -627,14 +627,14 @@ test("failed cloud downloads and deletions do not advance the manifest or report
         assert.equal(notifications.length, 1);
         assert.equal(notifications[0].color, "var(--red-360)");
     }
-    response = { entries: [{ key: "settings" }] };
+    response = { entries: [{ key: "settings", version: 1, checksum: "synthetic" }] };
     notifications = [];
     await deleteCloudSettings();
     assert.equal(writes, 0);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0].color, "var(--red-360)");
     importFails = false;
-    response = { downloads: [{ key: "settings", value: btoa("{}") }], errors: [], server_manifest: [{ key: "settings", version: 2 }], uploaded: [] };
+    response = { downloads: [{ key: "settings", version: 2, checksum: "synthetic", value: btoa("{}") }], errors: [], server_manifest: [{ key: "settings", version: 2, checksum: "synthetic" }], uploaded: [] };
     for (const sync of [getCloudSettings, putCloudSettings]) {
         writes = 0;
         events.length = 0;
@@ -713,7 +713,7 @@ test("cloud uploads and downloads discard obsolete responses and stop subsequent
                         arrayBuffer: async () => { await pause("body"); return new TextEncoder().encode(JSON.stringify(bundle)).buffer; },
                         json: async () => {
                             await pause("body");
-                            return { written: 2, errors: [], uploaded: [], server_manifest: [], downloads: Object.entries(bundle).map(([key, value]) => ({ key, value: btoa(key === "quickCss" ? String(value) : JSON.stringify(value)) })) };
+                            return { written: 2, errors: [], uploaded: [], server_manifest: [], downloads: Object.entries(bundle).map(([key, value]) => ({ key, version: 2, checksum: "synthetic", value: btoa(key === "quickCss" ? String(value) : JSON.stringify(value)) })) };
                         }
                     };
                 }
@@ -773,6 +773,47 @@ test("obsolete cloud failures cannot deauthorize another account or start fallba
     }
 });
 
+test("invalid cloud response envelopes fail before local writes or manifest acknowledgment", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    const entry = { key: "settings", version: 1, checksum: "synthetic" };
+    const valid = { errors: [], uploaded: [], server_manifest: [entry], downloads: [{ ...entry, value: btoa("{}") }] };
+    for (const response of [
+        { ...valid, downloads: [...valid.downloads, { ...entry, key: "unsupported", value: "" }] },
+        { ...valid, downloads: [...valid.downloads, { ...entry, key: "dataStore/", value: "" }] },
+        { ...valid, server_manifest: null }, { ...valid, uploaded: null }, { ...valid, errors: {} },
+        { ...valid, downloads: [...valid.downloads, { ...entry, value: 17 }] },
+        { ...valid, server_manifest: [{ ...entry, version: "wrong" }] },
+        { ...valid, server_manifest: [{ ...entry, checksum: null }] },
+        null, [], {}
+    ]) {
+        const writes: string[] = [];
+        const notifications: { color: string }[] = [];
+        const storage = { Vencord_settingsDirty: "true" };
+        const modules: Record<string, unknown> = {
+            "@api/DataStore": { get: async () => undefined, set: async () => writes.push("manifest") },
+            "@api/Settings": { PlainSettings: { cloud: {} } },
+            "@api/Notifications": { showNotification: (value: { color: string }) => notifications.push(value) },
+            "@utils/localStorage": { localStorage: storage },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+            "@utils/Logger": { Logger: class { info() {} error() {} } },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" },
+            "./offline": { importSettings: async () => writes.push("import") }
+        };
+        const { getCloudSettings } = runInNewContext(`${compiled}\nexports;`, {
+            exports: {}, require: (name: string) => modules[name] ?? {}, URL, TextDecoder, atob, IS_WEB: true,
+            VencordNative: { settings: { set: async () => writes.push("settings") } },
+            fetch: async () => ({ ok: true, json: async () => response })
+        });
+        assert.equal(await getCloudSettings(), false);
+        assert.deepEqual(writes, []);
+        assert.equal(storage.Vencord_settingsDirty, "true");
+        assert.deepEqual(notifications.map(value => value.color), ["var(--red-360)"]);
+    }
+});
+
 test("cloud manifests belong to one account and service without claiming the ownerless legacy record", async () => {
     const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
@@ -787,6 +828,7 @@ test("cloud manifests belong to one account and service without claiming the own
         "@api/DataStore": { get: async (key: string) => records.get(key), set: async (key: string, value: unknown) => { records.set(key, value); } },
         "@api/Notifications": { showNotification: () => {} },
         "@api/Settings": { PlainSettings: { cloud: {} } },
+        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
         "@utils/localStorage": { localStorage: {} },
         "@utils/Logger": { Logger: class { info() {} error() {} } },
         "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
@@ -800,7 +842,7 @@ test("cloud manifests belong to one account and service without claiming the own
         fetch: async (url: URL, init: RequestInit) => {
             if (url.pathname === "/v2/sync") {
                 observed.push(JSON.parse(String(init.body)).client_manifest);
-                return { ok: true, json: async () => ({ errors: [], uploaded: [], server_manifest: manifest(), downloads: [{ key: "settings", value: btoa("{}") }] }) };
+                return { ok: true, json: async () => ({ errors: [], uploaded: [], server_manifest: manifest(), downloads: [{ key: "settings", version: 2, checksum: "synthetic", value: btoa("{}") }] }) };
             }
             return { ok: true, json: async () => ({ entries: [] }) };
         }
@@ -848,6 +890,7 @@ test("cloud deletion stops when its account or service changes", async () => {
                 },
                 "@api/Notifications": { showNotification: () => events.push("notification") },
                 "@api/Settings": { PlainSettings: plain, Settings: plain },
+                "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
                 "@utils/Logger": { Logger: class { info() {} error() {} } },
                 "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
                 "./cloudSetup": { getCloudUrl: () => new URL(service), getCloudAuth: async () => { await pause("auth"); return "synthetic"; } }
@@ -858,7 +901,7 @@ test("cloud deletion stops when its account or service changes", async () => {
                 fetch: async (url: URL, init: RequestInit) => {
                     assert.equal(url.origin, "https://first.invalid", "Authorization must never move to another service");
                     await pause(init.method === "DELETE" ? "delete" : "manifest");
-                    return { ok: true, json: async () => { await pause("body"); return { entries: [{ key: "settings" }] }; } };
+                    return { ok: true, json: async () => { await pause("body"); return { entries: [{ key: "settings", version: 1, checksum: "synthetic" }] }; } };
                 }
             });
             await deleteCloudSettings();
@@ -867,6 +910,33 @@ test("cloud deletion stops when its account or service changes", async () => {
             if (change !== "none" && !["manifest-save", "settings-save"].includes(stage))
                 assert.equal(plain.cloud.settingsSyncVersion, 5);
         }
+    }
+});
+
+test("cloud deletion validates the complete manifest before deleting any entries", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const manifest of [null, {}, { entries: null }, { entries: [{ key: "valid", version: 1, checksum: "synthetic" }, { version: 1, checksum: "synthetic" }] }]) {
+        let deletes = 0;
+        let writes = 0;
+        let notifications = 0;
+        const modules: Record<string, unknown> = {
+            "@api/DataStore": { get: async () => undefined, set: async () => writes++ },
+            "@api/Notifications": { showNotification: () => notifications++ },
+            "@utils/Logger": { Logger: class { info() {} error() {} } },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" }
+        };
+        const { deleteCloudSettings } = runInNewContext(`${compiled}\nexports;`, {
+            exports: {}, require: (name: string) => modules[name] ?? {}, URL,
+            fetch: async (_url: URL, init: RequestInit) => { if (init.method === "DELETE") deletes++; return { ok: true, json: async () => manifest }; }
+        });
+        await deleteCloudSettings();
+        assert.equal(deletes, 0);
+        assert.equal(writes, 0);
+        assert.equal(notifications, 1);
     }
 });
 

@@ -294,6 +294,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Await backup file imports, preserve empty QuickCSS backups, and remove backup-content logging and duplicate import handling.
 - Fail full backups when required data cannot be read, and read only the requested sections for partial backups.
 - Await desktop backup saves so native save failures reach the export error handler.
+- Validate all selected backup sections before applying any settings, CSS or DataStore writes.
 
 - Honor the default two-way cloud sync direction and remove unreachable startup warnings and unused notification code.
 

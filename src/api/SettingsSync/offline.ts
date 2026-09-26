@@ -6,6 +6,7 @@
 
 import { PlainSettings } from "@api/Settings";
 import { Logger } from "@utils/Logger";
+import { isObject } from "@utils/misc";
 import { chooseFile, saveFile } from "@utils/web";
 import { moment, Toasts } from "@webpack/common";
 
@@ -23,35 +24,33 @@ const toast = (type: string, message: string) =>
 const toastSuccess = () =>
     toast(Toasts.Type.SUCCESS, "Settings successfully imported. Restart to apply changes!");
 
-const toastFailure = (err: any) =>
+const toastFailure = (err: unknown) =>
     toast(Toasts.Type.FAILURE, `Failed to import settings: ${String(err)}`);
 
 const logger = new Logger("SettingsSync:Offline", "#39b7e0");
 
-function deepMerge<T extends object>(target: T, source: T): T {
-    for (const key in source) {
-        const sourceVal = source[key];
-
-        if (sourceVal !== null && typeof sourceVal === "object" && !Array.isArray(sourceVal)) {
-            if (target[key] === null || target[key] === undefined || typeof target[key] !== "object" || Array.isArray(target[key])) {
-                target[key] = {} as any;
-            }
-            deepMerge(target[key] as object, sourceVal as object);
+function deepMerge(target: object, source: object) {
+    const values = target as Record<string, unknown>;
+    for (const [key, value] of Object.entries(source)) {
+        if (isObject(value)) {
+            const current = values[key];
+            const next = isObject(current) ? current : {};
+            deepMerge(next, value);
+            values[key] = next;
         } else {
-            target[key] = sourceVal;
+            values[key] = value;
         }
     }
-    return target;
 }
 
-function isSafeObject(obj: any) {
+function isSafeObject(obj: unknown): boolean {
     if (obj == null || typeof obj !== "object") return true;
 
-    for (const key in obj) {
+    for (const [key, value] of Object.entries(obj)) {
         if (["__proto__", "constructor", "prototype"].includes(key)) {
             return false;
         }
-        if (!isSafeObject(obj[key])) {
+        if (!isSafeObject(value)) {
             return false;
         }
     }
@@ -59,49 +58,56 @@ function isSafeObject(obj: any) {
     return true;
 }
 
+function isDataStoreKey(key: unknown): key is IDBValidKey {
+    return typeof key === "string" || (typeof key === "number" && !Number.isNaN(key))
+        || (Array.isArray(key) && key.every(isDataStoreKey));
+}
+
 export async function importSettings(data: string, type: BackupType = "all", cloud = false) {
+    let parsed: unknown;
     try {
-        var parsed = JSON.parse(data);
-    } catch (err) {
-        throw new Error("Failed to parse JSON: " + String(err));
+        parsed = JSON.parse(data);
+    } catch {
+        throw new Error("Invalid settings backup JSON.");
     }
 
-    if (!isSafeObject(parsed))
-        throw new Error("Unsafe Settings");
+    if (!isObject(parsed) || !isSafeObject(parsed))
+        throw new Error("Invalid settings backup.");
 
-    switch (type) {
-        case "all": {
-            if (!cloud && (!("settings" in parsed)))
-                throw new Error("Invalid Settings. Plugin settings is required for this import try a different one.");
-
-            if (parsed.settings) {
-                deepMerge(PlainSettings, parsed.settings);
-                await VencordNative.settings.set(PlainSettings);
+    let settings: object | undefined;
+    let quickCss: string | undefined;
+    let dataStore: [IDBValidKey, unknown][] | undefined;
+    if (type === "all" || type === "plugins") {
+        const value = "settings" in parsed ? parsed.settings : undefined;
+        if (value !== undefined || type === "plugins" || !cloud) {
+            if (!isObject(value)) throw new Error("Plugin settings must be an object.");
+            settings = value;
+        }
+    }
+    if (type === "all" || type === "css") {
+        const value = "quickCss" in parsed ? parsed.quickCss : undefined;
+        if (value !== undefined || type === "css") {
+            if (typeof value !== "string") throw new Error("QuickCSS must be a string.");
+            quickCss = value;
+        }
+    }
+    if (type === "all" || type === "datastore") {
+        const value = "dataStore" in parsed ? parsed.dataStore : undefined;
+        if (value !== undefined || type === "datastore") {
+            if (!Array.isArray(value) || !value.every((entry: unknown): entry is [IDBValidKey, unknown] =>
+                Array.isArray(entry) && entry.length === 2 && isDataStoreKey(entry[0]))) {
+                throw new Error("DataStore must contain valid key and value pairs.");
             }
-            if (typeof parsed.quickCss === "string") await VencordNative.quickCss.set(parsed.quickCss);
-            if (parsed.dataStore) await DataStore.setMany(parsed.dataStore);
-            break;
-        }
-        case "plugins": {
-            if (!parsed.settings) throw new Error("Plugin settings missing");
-
-            deepMerge(PlainSettings, parsed.settings);
-            await VencordNative.settings.set(PlainSettings);
-            break;
-        }
-        case "css": {
-            if (typeof parsed.quickCss !== "string") throw new Error("CSS missing");
-
-            await VencordNative.quickCss.set(parsed.quickCss);
-            break;
-        }
-        case "datastore": {
-            if (!parsed.dataStore) throw new Error("DataStore data missing");
-
-            await DataStore.setMany(parsed.dataStore);
-            break;
+            dataStore = value;
         }
     }
+
+    if (settings) {
+        deepMerge(PlainSettings, settings);
+        await VencordNative.settings.set(PlainSettings);
+    }
+    if (quickCss !== undefined) await VencordNative.quickCss.set(quickCss);
+    if (dataStore) await DataStore.setMany(dataStore);
 }
 
 export async function exportSettings({ syncDataStore = true, type = "all", minify }: { syncDataStore?: boolean; type?: BackupType; minify?: boolean; }) {

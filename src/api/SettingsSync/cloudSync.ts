@@ -105,6 +105,14 @@ async function saveLocalManifest(context: Awaited<ReturnType<typeof getCloudSync
     await DataStore.set(context.manifestKey, manifest);
 }
 
+async function saveSyncVersion(context: Awaited<ReturnType<typeof getCloudSyncContext>>, version: number) {
+    const next = VencordNative.settings.get();
+    next.cloud = { ...next.cloud, settingsSyncVersion: version };
+    await VencordNative.settings.set(next, undefined, context.expected?.settings);
+    context.assertCurrent();
+    PlainSettings.cloud.settingsSyncVersion = version;
+}
+
 async function buildLocalData(): Promise<Map<string, Uint8Array>> {
     const encoder = new TextEncoder();
     const data = new Map<string, Uint8Array>();
@@ -253,8 +261,7 @@ async function putV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>, m
     const hadDownloads = await applyDownloads(response.downloads, context);
     context.assertCurrent();
 
-    PlainSettings.cloud.settingsSyncVersion = Date.now();
-    await VencordNative.settings.set({ ...VencordNative.settings.get(), cloud: PlainSettings.cloud }, undefined, context.expected?.settings);
+    await saveSyncVersion(context, Date.now());
     context.assertCurrent();
     await saveLocalManifest(context, response.server_manifest);
     context.assertCurrent();
@@ -298,8 +305,7 @@ async function getV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>, s
     const settingsChanged = await applyDownloads(response.downloads, context);
     context.assertCurrent();
 
-    PlainSettings.cloud.settingsSyncVersion = Date.now();
-    await VencordNative.settings.set({ ...VencordNative.settings.get(), cloud: PlainSettings.cloud }, undefined, context.expected?.settings);
+    await saveSyncVersion(context, Date.now());
     context.assertCurrent();
     await saveLocalManifest(context, response.server_manifest);
     context.assertCurrent();
@@ -359,8 +365,7 @@ async function deleteV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>
     await saveLocalManifest(context, []);
     if (!context.isCurrent()) return;
 
-    PlainSettings.cloud.settingsSyncVersion = 0;
-    await VencordNative.settings.set({ ...VencordNative.settings.get(), cloud: PlainSettings.cloud }, undefined, context.expected?.settings);
+    await saveSyncVersion(context, 0);
     if (!context.isCurrent()) return;
 
     logger.info("Settings deleted from cloud successfully");
@@ -406,8 +411,7 @@ async function putV1(context: Awaited<ReturnType<typeof getCloudSyncContext>>, m
     context.assertCurrent();
     if (!isObject(response) || !("written" in response) || !isSyncVersion(response.written))
         throw new Error("The cloud server returned an invalid sync timestamp.");
-    PlainSettings.cloud.settingsSyncVersion = response.written;
-    await VencordNative.settings.set({ ...VencordNative.settings.get(), cloud: PlainSettings.cloud }, undefined, context.expected?.settings);
+    await saveSyncVersion(context, response.written);
     context.assertCurrent();
 
     logger.info("Settings uploaded to cloud successfully");
@@ -507,8 +511,7 @@ async function getV1(context: Awaited<ReturnType<typeof getCloudSyncContext>>, s
     await importSettings(settings, "all", true, context.assertCurrent, context.expected);
     context.assertCurrent();
 
-    PlainSettings.cloud.settingsSyncVersion = written;
-    await VencordNative.settings.set({ ...VencordNative.settings.get(), cloud: PlainSettings.cloud }, undefined, context.expected?.settings);
+    await saveSyncVersion(context, written);
     context.assertCurrent();
 
     logger.info("Settings loaded from cloud successfully");

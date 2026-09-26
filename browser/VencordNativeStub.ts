@@ -137,7 +137,7 @@ window.VencordNative = {
             const save = () => {
                 if (expected !== undefined) {
                     const current = JSON.parse(localStorage.getItem("LawyerCordSettings") || "{}");
-                    if (JSON.stringify({ ...current, cloud: undefined }) !== expected)
+                    if (JSON.stringify(current) !== expected)
                         throw new Error("Settings changed during sync. Try again to include your latest changes.");
                 }
                 localStorage.setItem("LawyerCordSettings", serialized);

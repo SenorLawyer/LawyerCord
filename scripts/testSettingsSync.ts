@@ -433,7 +433,8 @@ test("desktop settings saves preserve the previous file and store when disk writ
         assert.deepEqual(changes, [70]);
         const checkpoint = { ...next, cloud: { settingsSyncVersion: 10 } };
         save(undefined, checkpoint, undefined, JSON.stringify(next));
-        save(undefined, initial, "plugins.Sound.volume", JSON.stringify(next));
+        assert.throws(() => save(undefined, initial, "plugins.Sound.volume", JSON.stringify(next)), /Settings changed during sync/);
+        save(undefined, initial, "plugins.Sound.volume", JSON.stringify(checkpoint));
         assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), initial);
         assert.deepEqual(changes, [70, 20]);
         assert.equal(errors.length, 2);
@@ -549,8 +550,8 @@ test("runtime import failures report partial application without undoing newer e
 });
 
 test("cloud settings imports stage changes and reject newer persisted settings", async () => {
-    for (const change of ["none", "persisted", "renderer"]) {
-        const plain = { cloud: { settingsSyncVersion: 1 }, plugins: { Sound: { volume: 20 } } };
+    for (const change of ["none", "persisted", "cloud", "renderer"]) {
+        const plain = { cloud: { settingsSyncVersion: 1, url: "https://first.invalid" }, plugins: { Sound: { volume: 20 } } };
         let persisted = { ...structuredClone(plain), otherWindow: true };
         let release: (() => void) | undefined;
         let changed = false;
@@ -567,7 +568,7 @@ test("cloud settings imports stage changes and reject newer persisted settings",
                     get: () => structuredClone(persisted),
                     set: async (next: typeof persisted, _path?: string, expected?: string) => {
                         await new Promise<void>(resolve => { release = resolve; });
-                        if (JSON.stringify({ ...persisted, cloud: undefined }) !== expected) throw new Error("Settings conflict");
+                        if (JSON.stringify(persisted) !== expected) throw new Error("Settings conflict");
                         persisted = structuredClone(next);
                     }
                 },
@@ -582,6 +583,7 @@ test("cloud settings imports stage changes and reject newer persisted settings",
         assert.equal(persisted.plugins.Sound.volume, 20);
         assert.ok(release);
         if (change === "persisted") persisted.plugins.Sound.volume = 90;
+        if (change === "cloud") persisted.cloud.url = "https://second.invalid";
         if (change === "renderer") {
             plain.plugins.Sound.volume = 90;
             changed = true;
@@ -590,11 +592,12 @@ test("cloud settings imports stage changes and reject newer persisted settings",
         if (change === "none") {
             await pending;
             assert.equal(plain.plugins.Sound.volume, 70);
-            assert.equal(expected.settings, JSON.stringify({ ...persisted, cloud: undefined }));
+            assert.equal(expected.settings, JSON.stringify(persisted));
         } else {
             await assert.rejects(pending, /Settings import did not finish/);
             assert.equal(plain.plugins.Sound.volume, change === "renderer" ? 90 : 20);
             if (change === "persisted") assert.equal(persisted.plugins.Sound.volume, 90);
+            if (change === "cloud") assert.equal(persisted.cloud.url, "https://second.invalid");
         }
         assert.equal(persisted.otherWindow, true);
     }
@@ -753,7 +756,7 @@ test("cloud checkpoints preserve persisted fields and reject intervening setting
     }).outputText;
     for (const version of ["v1", "v2"]) for (const direction of ["getCloudSettings", "putCloudSettings"]) for (const stage of ["none", "response", "checkpoint"]) {
         const plain = { cloud: { settingsSyncVersion: 1 }, plugins: { Sound: { value: "original" } } };
-        let persisted = { ...structuredClone(plain), otherWindow: true };
+        let persisted = { ...structuredClone(plain), cloud: { ...plain.cloud, otherWindow: true }, otherWindow: true };
         const storage = { Vencord_settingsDirty: "true" };
         const notifications: { color: string }[] = [];
         let manifests = 0;
@@ -785,7 +788,7 @@ test("cloud checkpoints preserve persisted fields and reject intervening setting
                             persisted.plugins.Sound.value = "newer";
                             edited = true;
                         }
-                        if (JSON.stringify({ ...persisted, cloud: undefined }) !== expected) throw new Error("Settings conflict");
+                        if (JSON.stringify(persisted) !== expected) throw new Error("Settings conflict");
                         persisted = structuredClone(next);
                     }
                 },
@@ -807,6 +810,8 @@ test("cloud checkpoints preserve persisted fields and reject intervening setting
         const api = runInNewContext(`${compiled}\nexports;`, { ...globals, exports: {} });
         await api[direction](true);
         assert.equal(persisted.otherWindow, true);
+        assert.equal(persisted.cloud.otherWindow, true);
+        assert.equal(plain.cloud.settingsSyncVersion, edited ? 1 : persisted.cloud.settingsSyncVersion);
         assert.equal(edited, stage !== "none");
         assert.equal(persisted.plugins.Sound.value, edited ? "newer" : version === "v1" && direction === "putCloudSettings" ? "original" : "remote");
         assert.equal(storage.Vencord_settingsDirty, edited ? "true" : undefined);

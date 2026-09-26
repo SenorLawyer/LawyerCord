@@ -32,7 +32,7 @@ ipcMain.handle(IpcEvents.GET_SETTINGS_DIR, () => SETTINGS_DIR);
 ipcMain.on(IpcEvents.GET_SETTINGS, e => e.returnValue = RendererSettings.plain);
 
 ipcMain.handle(IpcEvents.SET_SETTINGS, (_, data: Settings, pathToNotify?: string, expected?: string) => {
-    if (expected !== undefined && JSON.stringify({ ...RendererSettings.plain, cloud: undefined }) !== expected)
+    if (expected !== undefined && JSON.stringify(RendererSettings.plain) !== expected)
         throw new Error("Settings changed during sync. Try again to include your latest changes.");
     try {
         const temporaryFile = `${SETTINGS_FILE}.tmp`;

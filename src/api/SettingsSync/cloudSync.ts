@@ -118,31 +118,32 @@ async function buildLocalData(): Promise<Map<string, Uint8Array>> {
 
 async function applyDownloads(downloads: SyncResponse["downloads"], context: ReturnType<typeof getCloudSyncContext>) {
     if (downloads.length === 0) return false;
+    if (new Set(downloads.map(({ key }) => key)).size !== downloads.length)
+        throw new Error("The cloud server returned duplicate download records.");
 
-    let settingsChanged = false;
+    const backup: { settings?: unknown; quickCss?: string; dataStore?: unknown[]; } = {};
     const decoder = new TextDecoder();
 
     for (const dl of downloads) {
-        context.assertCurrent();
+        if (dl.key.startsWith("dataStore/") && isLocalDataStoreKey(dl.key.slice("dataStore/".length))) continue;
         const text = decoder.decode(fromBase64(dl.value));
 
         if (dl.key === "settings") {
-            await importSettings(JSON.stringify({ settings: JSON.parse(text) }), "all", true);
-            settingsChanged = true;
+            backup.settings = JSON.parse(text);
         } else if (dl.key === "quickCss") {
-            await VencordNative.quickCss.set(text);
-            settingsChanged = true;
+            backup.quickCss = text;
         } else if (dl.key === "dataStore") {
-            await importSettings(JSON.stringify({ dataStore: JSON.parse(text) }), "datastore", true);
-            settingsChanged = true;
+            const entries: unknown = JSON.parse(text);
+            if (!Array.isArray(entries)) throw new Error("Cloud DataStore must contain key and value pairs.");
+            backup.dataStore = (backup.dataStore ?? []).concat(entries);
         } else if (dl.key.startsWith("dataStore/")) {
-            const dsKey = dl.key.slice("dataStore/".length);
-            if (isLocalDataStoreKey(dsKey)) continue;
-            await DataStore.set(dsKey, JSON.parse(text));
+            (backup.dataStore ??= []).push([dl.key.slice("dataStore/".length), JSON.parse(text)]);
         }
     }
 
-    return settingsChanged;
+    if (Object.keys(backup).length === 0) return false;
+    await importSettings(JSON.stringify(backup), "all", true, context.assertCurrent);
+    return true;
 }
 
 function handleAuthFailure() {

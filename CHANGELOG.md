@@ -313,6 +313,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Keep full cloud erasure bound to its starting account and report request or storage failures without deauthorizing a newly selected account.
 - Store cloud sync manifests separately for each account and service, preserve ownerless legacy records, and keep scoped checkpoints out of cloud transfers.
 - Reject malformed cloud sync responses and unsupported downloads before local writes, and validate deletion manifests before deleting entries.
+- Validate all cloud download payloads before applying any section, and restore legacy DataStore records through the shared batch importer.
 - Reject invalid legacy cloud timestamps before applying settings or saving checkpoints, and omit cache validation on forced downloads.
 - Save cloud connection preferences locally without treating them as synchronized-content edits or scheduling uploads for them.
 - Start tracking settings edits before cloud startup awaits so disconnected or failed initialization does not disable later automatic uploads.

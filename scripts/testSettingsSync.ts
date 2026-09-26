@@ -555,7 +555,17 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
     assert.deepEqual(JSON.parse(JSON.stringify(writes)), [syncedRecords]);
     assert.deepEqual(css, [""]);
     await applyDownloads([download("dataStore/legacy", '{"kept":true}')]);
-    assert.deepEqual(JSON.parse(JSON.stringify(writes.at(-1))), ["legacy", { kept: true }]);
+    assert.deepEqual(JSON.parse(JSON.stringify(writes.at(-1))), [["legacy", { kept: true }]]);
+    for (const aggregateFirst of [true, false]) {
+        const aggregate = download("dataStore", '[["shared",1],["aggregate",true]]');
+        const legacy = download("dataStore/shared", "2");
+        const before = writes.length;
+        assert.equal(await applyDownloads(aggregateFirst ? [aggregate, legacy] : [legacy, aggregate]), true);
+        assert.equal(writes.length, before + 1, "All DataStore entries use one validated batch");
+        const restored = new Map<string, unknown>(JSON.parse(JSON.stringify(writes.at(-1))));
+        assert.equal(restored.get("shared"), aggregateFirst ? 2 : 1);
+        assert.equal(restored.get("aggregate"), true);
+    }
     const count = writes.length;
     await applyDownloads(localKeys.map(key => download(`dataStore/${key}`, '{"remote":true}')));
     assert.equal(writes.length, count, "Remote data must not replace local credentials or sync bookkeeping");
@@ -567,6 +577,40 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
     assert.deepEqual(JSON.parse(JSON.stringify(writes.at(-1))), records, "Explicit offline restores retain their existing complete-record behavior");
     records.push(["binary", new Uint8Array([1, 2]).buffer]);
     await assert.rejects(buildLocalData(), /JSON backup format cannot preserve/);
+});
+
+test("cloud downloads validate every record before writing any section", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    const download = (key: string, text: string) => ({ key, value: btoa(text) });
+    for (const invalid of [
+        download("settings", "{"), download("settings", '{"plugins":false}'),
+        download("dataStore", "null"), download("dataStore", "[[null,1]]"),
+        download("dataStore/legacy", "{"), download("dataStore/legacy", '{"__proto__":{"enabled":true}}'),
+        { key: "dataStore", value: "%" }, download("quickCss", "duplicate")
+    ]) {
+        const writes: string[] = [];
+        const plain = { plugins: {} };
+        const modules: Record<string, unknown> = {
+            "@api/Settings": { PlainSettings: plain, DefaultSettings: defaultSettings },
+            "@api/DataStore": { set: async () => writes.push("legacy") },
+            "..": { DataStore: { setMany: async () => writes.push("datastore") } },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+            "@utils/Logger": { Logger: class {} }
+        };
+        const globals = {
+            require: (name: string) => modules[name] ?? {}, TextDecoder, Uint8Array, atob,
+            VencordNative: { settings: { set: async () => writes.push("settings") }, quickCss: { set: async () => writes.push("css") } }
+        };
+        modules["./offline"] = runInNewContext(`${outputText}\nexports;`, { ...globals, exports: {} });
+        const applyDownloads = runInNewContext(`${compiled}\n(downloads => applyDownloads(downloads, { assertCurrent() {} }));`, { ...globals, exports: {} });
+        const valid = [download("quickCss", "first")];
+        if (invalid.key !== "settings") valid.push(download("settings", '{"plugins":{"Sound":{"enabled":false}}}'));
+        await assert.rejects(applyDownloads([...valid, invalid]));
+        assert.deepEqual(writes, [], invalid.key);
+        assert.deepEqual(plain, { plugins: {} });
+    }
 });
 
 test("legacy cloud sync waits for local settings persistence before reporting success", async () => {

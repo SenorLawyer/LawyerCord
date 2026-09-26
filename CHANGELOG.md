@@ -25,6 +25,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomTimestamps expands repeated placeholders without rewriting literal labels or escaped brackets, and skips refresh timers for static labels.
+
 - CustomTimestamps no longer changes the parent component's hook order when timestamp tooltips are hidden or an application preview replaces them.
 
 - CustomTimestamps keeps its relative-time thresholds local instead of changing date formatting elsewhere in Discord.

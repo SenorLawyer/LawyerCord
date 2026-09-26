@@ -26,24 +26,37 @@ interface TimeRowProps {
     pluginSettings: Partial<Record<string, string>>;
 }
 
+const FORMAT_LITERALS = /\[[^[]*\]|\\./g;
+
 const format = (date: Date, formatTemplate: string): string => {
     const mmt = moment(date);
+    if (!mmt.isValid()) return mmt.format(formatTemplate);
     const { formats } = settings.store;
     const sameDayFormat = formats?.sameDayFormat || timeFormats.sameDayFormat.default;
     const lastDayFormat = formats?.lastDayFormat || timeFormats.lastDayFormat.default;
     const lastWeekFormat = formats?.lastWeekFormat || timeFormats.lastWeekFormat.default;
     const sameElseFormat = formats?.sameElseFormat || timeFormats.sameElseFormat.default;
 
-    return mmt.format(formatTemplate)
-        .replace("calendar", () => mmt.calendar(null, {
+    let result = "";
+    let offset = 0;
+    for (const match of formatTemplate.matchAll(FORMAT_LITERALS)) {
+        const part = match[0];
+        if (part !== "[calendar]" && part !== "[relative]") continue;
+
+        const before = formatTemplate.slice(offset, match.index);
+        result += before ? mmt.format(before) : "";
+        result += part === "[calendar]" ? mmt.calendar(null, {
             sameDay: sameDayFormat,
             lastDay: lastDayFormat,
             lastWeek: lastWeekFormat,
             sameElse: sameElseFormat
-        }))
-        .replace("relative", () => moment.duration({ to: mmt, from: moment() })
+        }) : moment.duration({ to: mmt, from: moment() })
             .locale(mmt.locale())
-            .humanize(true, { s: 60, ss: -1, m: 60 }));
+            .humanize(true, { s: 60, ss: -1, m: 60 });
+        offset = match.index + part.length;
+    }
+    const after = formatTemplate.slice(offset);
+    return result + (after ? mmt.format(after) : "");
 };
 
 const timestampSubscribers = new Set<() => void>();
@@ -158,7 +171,9 @@ function renderTimestamp(date: Date, type: "cozy" | "compact" | "tooltip" | "ari
     }
 
     useEffect(() => {
-        if (formatTemplate.includes("calendar") || formatTemplate.includes("relative")) {
+        const dynamic = Array.from(formatTemplate.matchAll(FORMAT_LITERALS))
+            .some(([part]) => part === "[calendar]" || part === "[relative]");
+        if (dynamic) {
             return subscribeTimestampRefresh(forceUpdater);
         }
     }, [forceUpdater, formatTemplate]);

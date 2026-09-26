@@ -7816,10 +7816,11 @@ test("sound imports validate all overrides before replacing settings", () => {
     assert.deepEqual(JSON.parse(store.message1), makeEmptyOverride());
 });
 
-test("custom timestamps keep relative thresholds local to their own output", () => {
+test("custom timestamps expand explicit placeholders without altering shared formatting", () => {
     const originalNow = moment.now;
     const thresholds = ["s", "ss", "m"].map(key => [key, moment.relativeTimeThreshold(key)] as const);
-    const settings = { store: { formats: {} }, withPrivateSettings() { return this; } };
+    const savedFormats: Record<string, string> = {};
+    const settings = { store: { formats: savedFormats }, withPrivateSettings() { return this; } };
     const { format } = loadSource("src/equicordplugins/customTimestamps/index.tsx", {
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@api/Settings": { definePluginSettings: () => settings },
@@ -7837,6 +7838,15 @@ test("custom timestamps keep relative thresholds local to their own output", () 
         assert.deepEqual(thresholds.map(([key]) => [key, moment.relativeTimeThreshold(key)]), thresholds);
         assert.equal(format(date, "[relative]"), "45 seconds ago");
         assert.equal(format(new Date(moment.now() + 45 * 60_000), "[relative]"), "in 45 minutes");
+        assert.equal(format(date, "[relative] / [relative]"), "45 seconds ago / 45 seconds ago");
+        assert.equal(format(date, "[calendar] / [calendar]"), "2026-09-26 / 2026-09-26");
+        assert.equal(format(date, "[my relative calendar]"), "my relative calendar");
+        assert.equal(format(date, "[relative] [a calendar label]"), "45 seconds ago a calendar label");
+        assert.equal(format(date, String.raw`\[relative]`), moment(date).format(String.raw`\[relative]`));
+        assert.equal(format(date, "[[relative]]"), moment(date).format("[[relative]]"));
+        assert.equal(format(new Date(NaN), "[relative] / [calendar]"), moment.invalid().format());
+        savedFormats.sameDayFormat = "[my relative calendar]";
+        assert.equal(format(date, "[calendar]"), "my relative calendar");
         assert.equal(moment(date).fromNow(), outside);
         assert.deepEqual(thresholds.map(([key]) => [key, moment.relativeTimeThreshold(key)]), thresholds);
     } finally {

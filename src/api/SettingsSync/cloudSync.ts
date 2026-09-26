@@ -543,7 +543,23 @@ export function shouldCloudSync(direction: "push" | "pull") {
     return localDirection === direction || localDirection === "both";
 }
 
+let cloudOperationPending = false;
+
+function beginCloudOperation(shouldNotify: boolean) {
+    if (cloudOperationPending) {
+        if (shouldNotify) showNotification({
+            title: "Cloud Settings",
+            body: "Another cloud operation is still running. Try again when it finishes.",
+            noPersist: true,
+        });
+        return false;
+    }
+    cloudOperationPending = true;
+    return true;
+}
+
 export async function putCloudSettings(manual?: boolean) {
+    if (!beginCloudOperation(Boolean(manual))) return;
     let context: ReturnType<typeof getCloudSyncContext> | undefined;
     try {
         context = getCloudSyncContext(true);
@@ -567,10 +583,13 @@ export async function putCloudSettings(manual?: boolean) {
             body: `Could not synchronize settings to the cloud (${String(e)}).`,
             color: "var(--red-360)",
         });
+    } finally {
+        cloudOperationPending = false;
     }
 }
 
 export async function getCloudSettings(shouldNotify = true, force = false) {
+    if (!beginCloudOperation(shouldNotify)) return false;
     let context: ReturnType<typeof getCloudSyncContext> | undefined;
     try {
         context = getCloudSyncContext(true);
@@ -595,10 +614,13 @@ export async function getCloudSettings(shouldNotify = true, force = false) {
             color: "var(--red-360)",
         });
         return false;
+    } finally {
+        cloudOperationPending = false;
     }
 }
 
 export async function deleteCloudSettings() {
+    if (!beginCloudOperation(true)) return;
     let context: ReturnType<typeof getCloudSyncContext> | undefined;
     try {
         context = getCloudSyncContext();
@@ -616,10 +638,13 @@ export async function deleteCloudSettings() {
             body: `Could not delete settings (${String(e)}).`,
             color: "var(--red-360)",
         });
+    } finally {
+        cloudOperationPending = false;
     }
 }
 
 export async function eraseAllCloudData() {
+    if (!beginCloudOperation(true)) return;
     let context: ReturnType<typeof getCloudSyncContext> | undefined;
     try {
         context = getCloudSyncContext();
@@ -653,5 +678,7 @@ export async function eraseAllCloudData() {
             body: `Could not finish erasing cloud data (${String(error)}).`,
             color: "var(--red-360)",
         });
+    } finally {
+        cloudOperationPending = false;
     }
 }

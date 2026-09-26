@@ -977,6 +977,55 @@ test("cloud sync preserves edits made while responses or local saves are pending
     }
 });
 
+test("cloud operations cannot overlap and a completed or failed operation releases the next attempt", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    const operations = ["getCloudSettings", "putCloudSettings", "deleteCloudSettings", "eraseAllCloudData"];
+    for (const first of operations) for (const second of operations) for (const fail of [false, true]) {
+        let requests = 0;
+        let signalStarted = () => {};
+        const started = new Promise<void>(resolve => { signalStarted = resolve; });
+        let finish: ((value: unknown) => void) | undefined;
+        let reject: ((error: Error) => void) | undefined;
+        const notifications: { body: string }[] = [];
+        const plain = { cloud: { authenticated: true, settingsSyncVersion: 1 } };
+        const modules: Record<string, unknown> = {
+            "@api/DataStore": { get: async () => undefined, entries: async () => [], set: async () => {} },
+            "@api/Settings": { PlainSettings: plain, Settings: plain },
+            "@api/Notifications": { showNotification: (value: { body: string }) => notifications.push(value) },
+            "@utils/localStorage": { localStorage: {} },
+            "@utils/Logger": { Logger: class { info() {} error() {} } },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic", deauthorizeCloud: async () => {} },
+            "./offline": { omitCloudSettings: (value: object) => value, serializeDataStore: JSON.stringify }
+        };
+        const response = { ok: true, json: async () => ({ errors: [], uploaded: [], downloads: [], server_manifest: [], entries: [] }) };
+        const api = runInNewContext(`${compiled}\nexports;`, {
+            exports: {}, require: (name: string) => modules[name] ?? {}, URL, TextEncoder, crypto, btoa,
+            VencordNative: { settings: { get: () => plain, set: async () => {} }, quickCss: { get: async () => "" } },
+            fetch: async () => {
+                requests++;
+                return requests === 1 ? new Promise((resolve, fail) => { finish = resolve; reject = fail; signalStarted(); }) : response;
+            }
+        });
+        const pending = api[first](first !== "getCloudSettings");
+        await started;
+        assert.ok(finish);
+        assert.ok(reject);
+        await api[second](true);
+        assert.equal(requests, 1, second);
+        assert.equal(notifications.length, 1);
+        assert.match(notifications[0].body, /still running/);
+        if (fail) reject(new Error("Synthetic network failure"));
+        else finish(response);
+        await pending;
+        await api.getCloudSettings(false);
+        assert.equal(requests, 2, "The operation must release its slot even after failure");
+    }
+});
+
 test("obsolete cloud failures cannot deauthorize another account or start fallback requests", async () => {
     const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }

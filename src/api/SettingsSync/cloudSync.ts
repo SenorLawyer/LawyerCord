@@ -13,7 +13,7 @@ import { Logger } from "@utils/Logger";
 import { isObject } from "@utils/misc";
 import { relaunch } from "@utils/native";
 import { SettingsRouter, UserStore } from "@webpack/common";
-import { deflateSync, inflateSync } from "fflate";
+import { deflateSync } from "fflate";
 
 import { deauthorizeCloud, getCloudAuth, getCloudUrl } from "./cloudSetup";
 import { exportSettings, importSettings, isLocalDataStoreKey, omitCloudSettings, serializeDataStore } from "./offline";
@@ -492,9 +492,20 @@ async function getV1(context: ReturnType<typeof getCloudSyncContext>, shouldNoti
         return false;
     }
 
-    const data = await res.arrayBuffer();
+    if (!res.body) throw new Error("The cloud settings response is empty.");
+    let compressedBytes = 0;
+    const compressed = res.body.pipeThrough(new TransformStream<Uint8Array<ArrayBuffer>, BufferSource>({
+        transform(chunk, controller) {
+            context.assertCurrent();
+            compressedBytes += chunk.byteLength;
+            if (compressedBytes > MAX_SYNC_RESPONSE_BYTES) throw new Error("Cloud settings exceed the download size limit.");
+            for (let offset = 0; offset < chunk.length; offset += 1024)
+                controller.enqueue(chunk.subarray(offset, offset + 1024));
+        }
+    }));
+    const expanded = compressed.pipeThrough(new DecompressionStream("deflate-raw"));
+    const settings = await readResponseText(new Response(expanded), MAX_SYNC_RESPONSE_BYTES);
     context.assertCurrent();
-    const settings = new TextDecoder().decode(inflateSync(new Uint8Array(data)));
     await importSettings(settings, "all", true, context.assertCurrent);
     context.assertCurrent();
 

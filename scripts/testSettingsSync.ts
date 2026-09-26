@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { Deflate, deflateSync } from "fflate";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import { readFileSync } from "node:fs";
@@ -16,9 +17,18 @@ import { createSourceFile, isCallExpression, isFunctionDeclaration, isPropertyAc
 import { readResponseText } from "../src/shared/readResponseText";
 
 const jsonResponseReader = {
-    readResponseText: async (response: { json(): Promise<unknown>; }, maxBytes: number) =>
-        readResponseText(Response.json(await response.json()), maxBytes)
+    readResponseText: async (response: Response | { json(): Promise<unknown>; }, maxBytes: number) =>
+        readResponseText(response instanceof Response ? response : Response.json(await response.json()), maxBytes)
 };
+
+function compressedBody(read: () => Promise<string>) {
+    return new ReadableStream<Uint8Array>({
+        async pull(controller) {
+            controller.enqueue(deflateSync(new TextEncoder().encode(await read())));
+            controller.close();
+        }
+    }, { highWaterMark: 0 });
+}
 
 const { outputText } = transpileModule(readFileSync("src/api/SettingsSync/offline.ts", "utf8"), {
     compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
@@ -650,6 +660,87 @@ test("cloud JSON responses stop oversized streams before writes and allow retry"
     }
 });
 
+test("legacy downloads bound compressed and expanded bytes before importing", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    const limit = 128 * 1024 * 1024;
+    const text = JSON.stringify({ settings: { plugins: { Test: { text: "\u20ac\u{1f98a}".repeat(7000) } } } });
+    const normal = deflateSync(new TextEncoder().encode(text));
+    const chunks: Uint8Array[] = [];
+    const compressor = new Deflate(chunk => chunks.push(chunk));
+    compressor.push(new TextEncoder().encode("{}"));
+    const padding = new Uint8Array(1024 * 1024).fill(32);
+    for (let written = 2; written < limit + 1; written += padding.length)
+        compressor.push(padding.subarray(0, Math.min(padding.length, limit + 1 - written)));
+    compressor.push(new Uint8Array(), true);
+    const expanded = Buffer.concat(chunks);
+    for (const failure of ["expanded", "compressed", "truncated", "invalid", "empty", "read", "none"]) {
+        let retry = false;
+        let cancelled = false;
+        let response: Response | undefined;
+        const imports: string[] = [];
+        let saves = 0;
+        const notifications: { color?: string }[] = [];
+        const plain = { cloud: { settingsSyncVersion: 1 } };
+        const storage = { Vencord_settingsDirty: "true" };
+        const modules: Record<string, unknown> = {
+            "@shared/readResponseText": { readResponseText },
+            "@api/DataStore": { get: async () => ({ "https://first.invalid": "v1" }) },
+            "@api/Settings": { PlainSettings: plain, Settings: plain },
+            "@api/Notifications": { showNotification: (value: { color?: string }) => notifications.push(value) },
+            "@utils/localStorage": { localStorage: storage },
+            "@utils/Logger": { Logger: class { info() {} error() {} } },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" },
+            "./offline": { importSettings: async (value: string) => { JSON.parse(value); imports.push(value); } },
+        };
+        const { getCloudSettings } = runInNewContext(`${compiled}\nexports;`, {
+            exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextDecoder, Uint8Array, TransformStream, DecompressionStream, Response, IS_WEB: true,
+            VencordNative: { settings: { set: async () => saves++ } },
+            fetch: async () => {
+                const mode = retry ? "none" : failure;
+                const bytes = mode === "expanded" ? expanded : mode === "truncated" ? normal.subarray(0, -1) : mode === "invalid" ? new Uint8Array([255]) : normal;
+                let position = 0;
+                response = new Response(new ReadableStream<Uint8Array>({
+                    pull(controller) {
+                        if (mode === "read") { controller.error(new Error("Interrupted body")); return; }
+                        if (mode === "empty") { controller.close(); return; }
+                        if (mode === "compressed") {
+                            const block = new Uint8Array(65540).fill(32);
+                            block.set([0, 255, 255, 0, 0]);
+                            if (position === 0) block.set([123, 125], 5);
+                            controller.enqueue(block);
+                            position += block.length;
+                            return;
+                        }
+                        if (position >= bytes.length) { if (mode !== "expanded") controller.close(); return; }
+                        const end = mode === "expanded" ? bytes.length : Math.min(position + 7, bytes.length);
+                        controller.enqueue(bytes.subarray(position, end));
+                        position = end;
+                    },
+                    cancel() { cancelled = true; }
+                }, { highWaterMark: 0 }), { headers: { etag: "2", "Content-Length": "1" } });
+                return response;
+            }
+        });
+        assert.equal(await getCloudSettings(), failure === "none", failure);
+        assert.equal(saves, failure === "none" ? 1 : 0, failure);
+        assert.deepEqual(imports, failure === "none" ? [text] : [], failure);
+        if (failure !== "none") {
+            assert.equal(plain.cloud.settingsSyncVersion, 1);
+            assert.equal(storage.Vencord_settingsDirty, "true");
+            assert.equal(notifications[0]?.color, "var(--red-360)");
+            await new Promise<void>(resolve => setImmediate(resolve));
+            if (failure === "expanded" || failure === "compressed") assert.equal(cancelled, true, failure);
+            assert.equal(response?.body?.locked, false);
+            retry = true;
+            assert.equal(await getCloudSettings(), true);
+            assert.deepEqual(imports, [text]);
+        }
+    }
+});
+
 test("cloud downloads validate every record before writing any section", async () => {
     const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
@@ -693,6 +784,7 @@ test("legacy cloud sync waits for local settings persistence before reporting su
         const notifications: unknown[] = [];
         const storage: Record<string, string> = { Vencord_settingsDirty: "true" };
         const plain = { cloud: { settingsSyncVersion: 1 } };
+        const saveStarted = Promise.withResolvers<void>();
         let rejectSave: ((reason: Error) => void) | undefined;
         const modules: Record<string, unknown> = {
             "@shared/readResponseText": jsonResponseReader,
@@ -704,21 +796,21 @@ test("legacy cloud sync waits for local settings persistence before reporting su
             "@utils/Logger": { Logger: class { info() {} error() {} } },
             "@utils/native": {},
             "@webpack/common": {},
-            fflate: { deflateSync: (value: Uint8Array) => value, inflateSync: (value: Uint8Array) => value },
+            fflate: { deflateSync: (value: Uint8Array) => value },
             "./cloudSetup": { getCloudUrl: () => new URL("https://sync.invalid"), getCloudAuth: async () => "test" },
             "./offline": { exportSettings: async (options: { cloud?: boolean }) => { assert.equal(options.cloud, true); return "{}"; }, importSettings: async () => {} }
         };
         const entry = runInNewContext(`${compiled}\n({ putV1, getV1 });`, {
-            exports: {}, require: (name: string) => modules[name], URL, AbortSignal, TextEncoder, TextDecoder, Uint8Array, IS_WEB: true,
-            fetch: async () => ({ ok: true, status: 200, json: async () => ({ written: 2 }), headers: { get: () => "2" }, arrayBuffer: async () => new TextEncoder().encode("{}").buffer }),
-            VencordNative: { settings: { set: () => new Promise<void>((_resolve, reject) => { rejectSave = reject; }) } }
+            exports: {}, require: (name: string) => modules[name], URL, AbortSignal, TextEncoder, TextDecoder, TransformStream, DecompressionStream, Response, Uint8Array, IS_WEB: true,
+            fetch: async () => ({ ok: true, status: 200, json: async () => ({ written: 2 }), headers: { get: () => "2" }, body: compressedBody(async () => "{}") }),
+            VencordNative: { settings: { set: () => new Promise<void>((_resolve, reject) => { rejectSave = reject; saveStarted.resolve(); }) } }
         });
         let settled = false;
         const pending = entry[direction]({ url: new URL("https://sync.invalid"), assertCurrent() {} }, true, true).then(
             () => { settled = true; },
             (error: unknown) => { settled = true; return error; }
         );
-        await new Promise<void>(resolve => setImmediate(resolve));
+        await Promise.race([saveStarted.promise, pending]);
         assert.ok(rejectSave);
         assert.equal(settled, false, `${direction} must await the local save`);
         assert.equal(notifications.length, 0);
@@ -756,17 +848,17 @@ test("legacy sync rejects invalid timestamps and forced downloads bypass cache v
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
             "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" },
             "./offline": { exportSettings: async () => "{}", importSettings: async () => imports++ },
-            fflate: { deflateSync: (value: Uint8Array) => value, inflateSync: (value: Uint8Array) => value }
+            fflate: { deflateSync: (value: Uint8Array) => value }
         };
         const api = runInNewContext(`${compiled}\nexports;`, {
-            exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextEncoder, TextDecoder, IS_WEB: true,
+            exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextEncoder, TextDecoder, TransformStream, DecompressionStream, Response, IS_WEB: true,
             VencordNative: { settings: { set: async () => saves++ } },
             fetch: async (_url: URL, init: RequestInit) => {
                 requestHeaders = init.headers;
                 return {
                     ok: true, status: 200, json: async () => ({ written }),
                     headers: { get: () => written == null ? null : String(written) },
-                    arrayBuffer: async () => { bodyReads++; return new TextEncoder().encode("{}").buffer; }
+                    body: compressedBody(async () => { bodyReads++; return "{}"; })
                 };
             }
         });
@@ -1076,11 +1168,11 @@ test("cloud uploads and downloads discard obsolete responses and stop subsequent
                 "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
                 "@utils/Logger": { Logger: class { info() {} error() {} } },
                 "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
-                fflate: { deflateSync: (value: Uint8Array) => value, inflateSync: (value: Uint8Array) => value },
+                fflate: { deflateSync: (value: Uint8Array) => value },
                 "./cloudSetup": { getCloudUrl: () => new URL(service), getCloudAuth: async () => { await pause("auth"); return "synthetic"; } }
             };
             const globals = {
-                require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextEncoder, TextDecoder, Uint8Array, atob, btoa, crypto, IS_WEB: true,
+                require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextEncoder, TextDecoder, TransformStream, DecompressionStream, Response, Uint8Array, atob, btoa, crypto, IS_WEB: true,
                 VencordNative: {
                     settings: { get: () => plain, set: async () => pause(++settingsSaves === 1 && (version === "v2" || direction === "getCloudSettings") ? "settings" : "checkpoint") },
                     quickCss: { get: async () => "", set: async () => pause("css") }
@@ -1090,7 +1182,7 @@ test("cloud uploads and downloads discard obsolete responses and stop subsequent
                     await pause("response");
                     return {
                         ok: true, status: 200, headers: { get: () => "2" },
-                        arrayBuffer: async () => { await pause("body"); return new TextEncoder().encode(JSON.stringify(bundle)).buffer; },
+                        body: compressedBody(async () => { await pause("body"); return JSON.stringify(bundle); }),
                         json: async () => {
                             await pause("body");
                             return { written: 2, errors: [], uploaded: [], server_manifest: [], downloads: Object.entries(bundle).map(([key, value]) => ({ key, version: 2, checksum: "synthetic", value: btoa(key === "quickCss" ? String(value) : JSON.stringify(value)) })) };
@@ -1144,12 +1236,12 @@ test("cloud sync preserves edits made while responses or local saves are pending
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
             "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" },
-            fflate: { deflateSync: (value: Uint8Array) => value, inflateSync: (value: Uint8Array) => value }
+            fflate: { deflateSync: (value: Uint8Array) => value }
         };
         const remote = { plugins: { Sound: { value: "remote" } } };
         const entry = { key: "settings", checksum: "synthetic", version: 2 };
         const globals = {
-            require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextEncoder, TextDecoder, atob, btoa, crypto, IS_WEB: true,
+            require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextEncoder, TextDecoder, TransformStream, DecompressionStream, Response, atob, btoa, crypto, IS_WEB: true,
             VencordNative: { settings: { get: () => plain, set: async () => { if (stage === "save" && !edited) edit(); } }, quickCss: { get: async () => "" } },
             fetch: async (_url: URL, init: RequestInit) => {
                 if (stage === "response" && !edited) edit();
@@ -1162,7 +1254,7 @@ test("cloud sync preserves edits made while responses or local saves are pending
                 return {
                     ok: true, status: 200, headers: { get: () => "2" },
                     json: async () => ({ written: 2, errors: [], uploaded: [], server_manifest: [entry], downloads: retry ? [] : [{ ...entry, value: btoa(JSON.stringify(remote)) }] }),
-                    arrayBuffer: async () => new TextEncoder().encode(JSON.stringify({ settings: remote })).buffer
+                    body: compressedBody(async () => JSON.stringify({ settings: remote }))
                 };
             }
         };
@@ -1248,7 +1340,7 @@ test("cloud request timeouts cover response bodies and release the operation for
         let retry = false;
         let signalStarted = () => {};
         const started = new Promise<void>(resolve => { signalStarted = resolve; });
-        const stall = (signal: AbortSignal | null | undefined) => new Promise((_resolve, reject) => {
+        const stall = (signal: AbortSignal | null | undefined) => new Promise<never>((_resolve, reject) => {
             if (signal?.aborted) reject(signal.reason);
             else signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
         });
@@ -1264,10 +1356,10 @@ test("cloud request timeouts cover response bodies and release the operation for
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
             "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic", deauthorizeCloud: async () => {} },
             "./offline": { omitCloudSettings: (value: object) => value, serializeDataStore: JSON.stringify, exportSettings: async () => "{}", importSettings: async () => writes++ },
-            fflate: { deflateSync: (value: Uint8Array) => value, inflateSync: (value: Uint8Array) => value }
+            fflate: { deflateSync: (value: Uint8Array) => value }
         };
         const api = runInNewContext(`${compiled}\nexports;`, {
-            exports: {}, require: (name: string) => modules[name] ?? {}, URL, TextEncoder, TextDecoder, crypto, btoa,
+            exports: {}, require: (name: string) => modules[name] ?? {}, URL, TextEncoder, TextDecoder, TransformStream, DecompressionStream, Response, crypto, btoa,
             AbortSignal: { timeout: (milliseconds: number) => { assert.equal(milliseconds, 120_000); const controller = new AbortController(); controllers.push(controller); return controller.signal; } },
             VencordNative: { settings: { get: () => plain, set: async () => writes++ }, quickCss: { get: async () => "" } },
             fetch: async (_url: URL, init: RequestInit) => {
@@ -1278,7 +1370,7 @@ test("cloud request timeouts cover response bodies and release the operation for
                 return {
                     ok: true, status: 200, headers: { get: () => "2" },
                     json: async () => retry ? { written: 2, errors: [], uploaded: [], downloads: [], server_manifest: [], entries: [] } : stall(signal),
-                    arrayBuffer: async () => retry ? new TextEncoder().encode("{}").buffer : stall(signal)
+                    body: compressedBody(async () => retry ? "{}" : stall(signal))
                 };
             }
         });

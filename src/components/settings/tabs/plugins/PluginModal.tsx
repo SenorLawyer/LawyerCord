@@ -36,7 +36,7 @@ import { useForceUpdater } from "@utils/react";
 import { OptionType, Plugin, PluginTag } from "@utils/types";
 import { RenderModalProps, User } from "@vencord/discord-types";
 import { findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
-import { Clickable, FluxDispatcher, Modal, openModal, React, Text, Toasts, Tooltip, useEffect, useMemo, useRef, UserStore, UserSummaryItem, UserUtils, useState } from "@webpack/common";
+import { Clickable, FluxDispatcher, lodash, Modal, openModal, React, Text, Toasts, Tooltip, useEffect, useMemo, useRef, UserStore, UserSummaryItem, UserUtils, useState } from "@webpack/common";
 import { Constructor } from "type-fest";
 
 import { PluginMeta } from "~plugins";
@@ -89,6 +89,15 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
     const hasSettings = hasAnyVisibleSettings(plugin);
     const resetVersion = useRef(0);
     const forceUpdate = useForceUpdater();
+    const changeHandlers = useMemo(() => Object.fromEntries(
+        Object.entries(plugin.settings?.def ?? {}).map(([key, option]) => [key, debounce((newValue: unknown, previousValue: unknown, version: number) => {
+            const currentSettings = plugin.settings?.store;
+            if (!currentSettings || version !== resetVersion.current || !lodash.isEqual(currentSettings[key], previousValue)) return;
+
+            currentSettings[key] = newValue;
+            if (option.restartNeeded) onRestartNeeded(key);
+        })])
+    ), [plugin, onRestartNeeded]);
 
     // avoid layout shift by showing dummy users while loading users
     const fallbackAuthors = useMemo(() => [makeDummyUser({ username: "Loading...", id: "-1465912127305809920" })], []);
@@ -129,23 +138,13 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
 
             if (isSettingHidden(settings, setting)) return null;
 
-            function onChange(newValue: any) {
-                if (version !== resetVersion.current) return;
-                const option = plugin.settings!.def[key];
-                if (!option || option.type === OptionType.CUSTOM) return;
-
-                pluginSettings[key] = newValue;
-
-                if (option.restartNeeded) onRestartNeeded(key);
-            }
-
             const Component = OptionComponentMap[setting.type];
             return (
                 <ErrorBoundary noop key={`${version}:${key}`}>
                     <Component
                         id={key}
                         setting={setting}
-                        onChange={debounce(onChange)}
+                        onChange={newValue => changeHandlers[key](newValue, lodash.cloneDeep(pluginSettings[key]), version)}
                         pluginSettings={pluginSettings}
                         definedSettings={settings}
                         closePluginSettings={onClose}

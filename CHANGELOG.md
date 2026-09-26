@@ -25,6 +25,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomSounds stops previews when the editor closes and prevents pending loads from playing after Stop or a changed selection.
+
 - CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
 
 - CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
@@ -327,6 +329,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomSounds stops previews when the editor closes and prevents pending loads from playing after Stop or a changed selection.
+
 - CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
 
 - CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
@@ -347,6 +351,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed
+
+- CustomSounds stops previews when the editor closes and prevents pending loads from playing after Stop or a changed selection.
 
 - CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
 
@@ -388,6 +394,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomSounds stops previews when the editor closes and prevents pending loads from playing after Stop or a changed selection.
+
 - CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
 
 - CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
@@ -408,6 +416,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomSounds stops previews when the editor closes and prevents pending loads from playing after Stop or a changed selection.
+
 - CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
 
 - CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
@@ -427,6 +437,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ## 2.0.0.0 - 2026-08-29
 
 ### Fixed
+
+- CustomSounds stops previews when the editor closes and prevents pending loads from playing after Stop or a changed selection.
 
 - CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
 
@@ -461,6 +473,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomSounds stops previews when the editor closes and prevents pending loads from playing after Stop or a changed selection.
+
 - CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
 
 - CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
@@ -480,6 +494,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ## 1.16.1.0 - 2026-07-29
 
 ### Fixed
+
+- CustomSounds stops previews when the editor closes and prevents pending loads from playing after Stop or a changed selection.
 
 - CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
 

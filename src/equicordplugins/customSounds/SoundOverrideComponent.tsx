@@ -37,6 +37,15 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const update = useForceUpdater();
     const sound = React.useRef<AudioPlayerInterface | null>(null);
+    const previewVersion = React.useRef(0);
+
+    const stopPreview = () => {
+        previewVersion.current++;
+        sound.current?.stop();
+        sound.current = null;
+    };
+
+    React.useEffect(() => stopPreview, [override.enabled, override.selectedSound, override.selectedFileId]);
 
     const saveAndNotify = async () => {
         await onChange();
@@ -44,7 +53,8 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
     };
 
     const previewSound = async () => {
-        sound.current?.stop();
+        stopPreview();
+        const version = previewVersion.current;
 
         if (!override.enabled) {
             sound.current = playAudio(type.id);
@@ -56,6 +66,7 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
         if (selectedSound === "custom" && override.selectedFileId) {
             try {
                 const dataUri = await ensureDataURICached(override.selectedFileId);
+                if (version !== previewVersion.current) return;
 
                 if (!dataUri || !dataUri.startsWith("data:audio/")) {
                     showToast("No custom sound file available for preview");
@@ -64,11 +75,13 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
 
                 sound.current = playAudio(dataUri, {
                     volume: override.volume, onError: e => {
+                        if (version !== previewVersion.current) return;
                         console.error("[CustomSounds] Error playing custom audio:", e);
                         showToast("Error playing custom sound. File may be corrupted.");
                     }
                 });
             } catch (error) {
+                if (version !== previewVersion.current) return;
                 console.error("[CustomSounds] Error in previewSound:", error);
                 showToast("Error playing sound.");
             }
@@ -94,6 +107,7 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
             showToast("Uploading file...");
             const id = await saveAudio(file);
 
+            stopPreview();
             override.selectedFileId = id;
             override.selectedSound = "custom";
 
@@ -113,6 +127,7 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
     const deleteFile = async (id: string) => {
         try {
             await deleteAudio(id);
+            stopPreview();
 
             if (override.selectedFileId === id) {
                 override.selectedFileId = undefined;
@@ -135,6 +150,7 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
                 title={type.name}
                 value={override.enabled || false}
                 onChange={async val => {
+                    stopPreview();
                     console.log(`[CustomSounds] Setting ${type.id} enabled to:`, val);
 
                     override.enabled = val;
@@ -166,7 +182,7 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
                         </Button>
                         <Button
                             variant="dangerPrimary"
-                            onClick={() => sound.current?.stop()}
+                            onClick={stopPreview}
                         >
                             Stop
                         </Button>
@@ -196,6 +212,7 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
                             ]}
                             isSelected={v => v === override.selectedSound}
                             select={async v => {
+                                stopPreview();
                                 override.selectedSound = v;
 
                                 if (v === "custom" && override.selectedFileId) {
@@ -224,6 +241,7 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
                                     ]}
                                     isSelected={v => v === (override.selectedFileId || "")}
                                     select={async id => {
+                                        stopPreview();
                                         if (!id) {
                                             override.selectedFileId = undefined;
                                         } else {

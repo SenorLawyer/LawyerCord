@@ -308,6 +308,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Validate cloud OAuth configuration and callback destinations, handle credential-read failures, and reject unsuccessful authorization responses.
 - Stop cloud settings deletion after an account or service change and keep its authorization bound to the original service.
 - Discard obsolete cloud upload and download results, stop later import stages after account changes, and keep fallback requests bound to their starting service.
+- Keep full cloud erasure bound to its starting account and report request or storage failures without deauthorizing a newly selected account.
 - Explain that runtime backup import failures can leave some changes applied, while retaining the underlying error for diagnosis.
 
 - Honor the default two-way cloud sync direction and remove unreachable startup warnings and unused notification code.

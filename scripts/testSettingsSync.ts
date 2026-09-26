@@ -820,6 +820,48 @@ test("cloud deletion stops when its account or service changes", async () => {
     }
 });
 
+test("cloud erasure stops after account or service changes without affecting the new owner", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const fail of ["none", "throw", "http"]) for (const change of ["account", "service", "none"]) for (const stage of ["auth", "response", "deauthorize", "manifest"]) {
+        if (fail === "http" && stage !== "response") continue;
+        let userId = "first";
+        let service = "https://first.invalid";
+        const events: string[] = [];
+        const settings = { cloud: { authenticated: true } };
+        const pause = async (event: string) => {
+            events.push(event);
+            if (event === stage) {
+                if (change === "account") userId = "second";
+                if (change === "service") service = "https://second.invalid";
+                if (fail === "throw") throw new Error("Synthetic failure");
+            }
+        };
+        const modules: Record<string, unknown> = {
+            "@api/DataStore": { set: async () => pause("manifest") },
+            "@api/Settings": { Settings: settings },
+            "@api/Notifications": { showNotification: () => events.push("notification") },
+            "@utils/Logger": { Logger: class { info() {} error() {} } },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
+            "./cloudSetup": {
+                getCloudUrl: () => new URL(service),
+                getCloudAuth: async () => { await pause("auth"); return "synthetic"; },
+                deauthorizeCloud: async () => { assert.equal(userId, "first"); assert.equal(service, "https://first.invalid"); await pause("deauthorize"); }
+            }
+        };
+        const { eraseAllCloudData } = runInNewContext(`${compiled}\nexports;`, {
+            exports: {}, require: (name: string) => modules[name] ?? {}, URL,
+            fetch: async (url: URL) => { assert.equal(url.origin, "https://first.invalid"); await pause("response"); return { ok: fail !== "http", status: fail === "http" ? 500 : 200 }; }
+        });
+        await eraseAllCloudData();
+        const stages = ["auth", "response", "deauthorize", "manifest", "notification"];
+        const completed = stages.slice(0, stages.indexOf(stage) + 1);
+        assert.deepEqual(events, change === "none" ? (fail !== "none" ? [...completed, "notification"] : stages) : completed, `${fail}/${change}/${stage}`);
+        if (change !== "none" && ["auth", "response"].includes(stage)) assert.equal(settings.cloud.authenticated, true);
+    }
+});
+
 test("backup imports await file reading, preserve empty CSS, and never log backup content", async () => {
     const css: string[] = [];
     const logs: unknown[] = [];

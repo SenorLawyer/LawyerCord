@@ -580,28 +580,38 @@ export async function deleteCloudSettings() {
 }
 
 export async function eraseAllCloudData() {
-    const res = await fetch(new URL("/v1/", getCloudUrl()), {
-        method: "DELETE",
-        headers: { Authorization: await getCloudAuth() },
-    });
+    let context: ReturnType<typeof getCloudSyncContext> | undefined;
+    try {
+        context = getCloudSyncContext();
+        const auth = await getCloudAuth();
+        context.assertCurrent();
+        const res = await fetch(new URL("/v1/", context.url), {
+            method: "DELETE",
+            headers: { Authorization: auth },
+        });
+        context.assertCurrent();
 
-    if (!res.ok) {
-        logger.error(`Failed to erase data, API returned ${res.status}`);
+        if (!res.ok)
+            throw new Error(`API returned ${res.status}.`);
+
+        Settings.cloud.authenticated = false;
+        await deauthorizeCloud();
+        context.assertCurrent();
+        await saveLocalManifest([]);
+        context.assertCurrent();
+
         showNotification({
             title: "Cloud Integrations",
-            body: `Could not erase all data (API returned ${res.status}), please contact support.`,
+            body: "Successfully erased all data.",
+            color: "var(--green-360)",
+        });
+    } catch (error: unknown) {
+        if (context && !context.isCurrent()) return;
+        logger.error("Failed to erase cloud data", error);
+        showNotification({
+            title: "Cloud Integrations",
+            body: `Could not finish erasing cloud data (${String(error)}).`,
             color: "var(--red-360)",
         });
-        return;
     }
-
-    Settings.cloud.authenticated = false;
-    await deauthorizeCloud();
-    await saveLocalManifest([]);
-
-    showNotification({
-        title: "Cloud Integrations",
-        body: "Successfully erased all data.",
-        color: "var(--green-360)",
-    });
 }

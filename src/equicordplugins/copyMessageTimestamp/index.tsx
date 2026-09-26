@@ -25,7 +25,7 @@ const timestampFormats = [
 ] as const;
 
 function getMessageUnixTimestamp(message: Message) {
-    const timestamp = new Date(message.timestamp as unknown as string | number | Date).getTime();
+    const timestamp = message.timestamp.getTime();
     if (!Number.isFinite(timestamp)) return null;
 
     return Math.floor(timestamp / 1000);

@@ -25,6 +25,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
+
 - CustomTimestamps expands repeated placeholders without rewriting literal labels or escaped brackets, and skips refresh timers for static labels.
 
 - CustomTimestamps no longer changes the parent component's hook order when timestamp tooltips are hidden or an application preview replaces them.
@@ -313,12 +315,16 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
+
 - Search messages by author in a server or DM, paginate up to the requested result count, exclude surrounding context messages, and stop fetching when cancelled.
 - Index triggers by event, channel, and user. Group run history without copying earlier entries for each log.
 
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed
+
+- CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
 
 - Reduce notification updates, timezone formatting work, visibility observer churn and repeated badge rendering work.
 - Cancel obsolete plugin requests, presence updates, theme loads and native CSS watchers while preserving independent Discord windows.
@@ -346,17 +352,23 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
+
 - Update the pinned fast-uri dependency to 3.1.6 to resolve the dependency audit failures.
 
 ## 2.0.1.0 - 2026-08-29
 
 ### Fixed
 
+- CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
+
 - Restore Discord's original app archive when an interrupted update leaves only the LawyerCord patch marker, so Install, Reinstall / Repair, and Uninstall work again.
 
 ## 2.0.0.0 - 2026-08-29
 
 ### Fixed
+
+- CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
 
 - Make Stable, Beta, and Nightly updates fall back to the newest eligible release instead of reporting an older channel build as current.
 - Show the installed LawyerCord version in Updater settings.
@@ -377,11 +389,15 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
+
 - Repair folder-style patched Discord installations before installing LawyerCord.
 
 ## 1.16.1.0 - 2026-07-29
 
 ### Fixed
+
+- CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
 
 - Publish the standalone updater asset as `desktop.asar` alongside the LawyerCord-named copy.
 - Defer Ghosted's private-settings restore until startup so LawyerCord loads correctly.

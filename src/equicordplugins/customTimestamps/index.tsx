@@ -6,7 +6,7 @@
 
 import "./style.css";
 
-import { definePluginSettings, useSettings } from "@api/Settings";
+import { definePluginSettings } from "@api/Settings";
 import { Divider } from "@components/Divider";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Heading, HeadingPrimary } from "@components/Heading";
@@ -27,6 +27,7 @@ interface TimeRowProps {
 }
 
 const FORMAT_LITERALS = /\[[^[]*\]|\\./g;
+const FORMAT_SETTINGS: "formats"[] = ["formats"];
 
 const format = (date: Date, formatTemplate: string): string => {
     const mmt = moment(date);
@@ -106,7 +107,7 @@ const settings = definePluginSettings({
         type: OptionType.COMPONENT,
         description: "Customize the timestamp formats",
         component: componentProps => {
-            const [settingsState, setSettingsState] = useState(useSettings().plugins?.CustomTimestamps?.formats ?? {});
+            const [settingsState, setSettingsState] = useState(() => settings.store.formats ?? {});
 
             const setNewValue = (key: string, value: string) => {
                 const newSettings = { ...settingsState, [key]: value };
@@ -154,21 +155,9 @@ const settings = definePluginSettings({
 
 function renderTimestamp(date: Date, type: "cozy" | "compact" | "tooltip" | "ariaLabel") {
     const forceUpdater = useForceUpdater();
-    let formatTemplate: string;
-
-    switch (type) {
-        case "cozy":
-            formatTemplate = settings.store.formats?.cozyFormat || timeFormats.cozyFormat.default;
-            break;
-        case "compact":
-            formatTemplate = settings.store.formats?.compactFormat || timeFormats.compactFormat.default;
-            break;
-        case "tooltip":
-            formatTemplate = settings.store.formats?.tooltipFormat || timeFormats.tooltipFormat.default;
-            break;
-        case "ariaLabel":
-            formatTemplate = settings.store.formats?.ariaLabelFormat || timeFormats.ariaLabelFormat.default;
-    }
+    const { formats } = settings.use(FORMAT_SETTINGS);
+    const key = `${type}Format` as const;
+    const formatTemplate: string = formats?.[key] || timeFormats[key].default;
 
     useEffect(() => {
         const dynamic = Array.from(formatTemplate.matchAll(FORMAT_LITERALS))

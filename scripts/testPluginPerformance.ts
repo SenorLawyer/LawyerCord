@@ -7870,11 +7870,11 @@ test("sound imports validate overrides and invalidate pending playback data", as
     const seasonalSounds = { halloween_message1: "https://fixture.invalid/halloween.mp3", winter_message1: "https://fixture.invalid/winter.mp3" };
     const makeEmptyOverride = () => ({ enabled: false, selectedSound: "default", volume: 100, useFile: false });
     const store: Record<string, string> = { message1: "original message", mute: "original mute" };
-    let resolveRead: (value: string) => void = () => assert.fail("Audio read was not started");
+    let resolveRead: (value: unknown) => void = () => assert.fail("Audio read was not started");
     let reads = 0;
     let snapshotsRead = 0;
     const snapshots: unknown[] = [];
-    const pendingReads: Array<(value: string) => void> = [];
+    const pendingReads: Array<(value: unknown) => void> = [];
     const { importOverrides, getOverride, ensureDataURICached, getCustomSoundURL, plugin } = loadSource("src/equicordplugins/customSounds/index.tsx", {
         "@utils/web": {},
         "@api/DataStore": {},
@@ -7889,7 +7889,7 @@ test("sound imports validate overrides and invalidate pending playback data", as
         "./audioStore": { getAllAudio: async () => { snapshotsRead++; return {}; }, getAudioDataURI: (_id: string, files?: unknown) => {
             reads++;
             snapshots.push(files);
-            return new Promise<string>(resolve => { resolveRead = resolve; pendingReads.push(resolve); });
+            return new Promise<unknown>(resolve => { resolveRead = resolve; pendingReads.push(resolve); });
         } },
         "./types": { soundTypes, makeEmptyOverride, seasonalSounds }
     }, {}, "({ importOverrides, getOverride, ensureDataURICached, getCustomSoundURL, plugin: exports.default })");
@@ -7973,6 +7973,14 @@ test("sound imports validate overrides and invalidate pending playback data", as
     assert.equal(snapshotsRead, 2);
     await plugin.start();
     assert.equal(snapshotsRead, 2, "Already cached files must not reread storage");
+    for (const value of [123, {}, "https://fixture.invalid/audio.mp3", "invalid", null]) {
+        const invalid = ensureDataURICached("invalid");
+        resolveRead(value);
+        assert.equal(await invalid, null, "Malformed stored audio must not enter the playback cache");
+    }
+    const video = ensureDataURICached("video");
+    resolveRead("data:video/mp4;base64,AAAA");
+    assert.equal(await video, "data:video/mp4;base64,AAAA");
 });
 
 test("custom timestamps expand explicit placeholders without altering shared formatting", () => {

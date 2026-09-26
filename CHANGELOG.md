@@ -35,6 +35,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - CustomSounds exports all sound settings, preserving disabled overrides with saved volume or file choices.
 - CustomSounds previews require a selected custom file, resolve built-in overrides consistently and apply volume changes after saving them.
 - CustomSounds preloads custom audio from one database snapshot instead of rereading every saved file for each sound.
+- CustomSounds previews accept uploaded MP4 data with video MIME types and exclude malformed stored values from playback.
 - CustomSounds releases cached playback data on stop, reset and file deletion, and ignores stale loads that finish afterward.
 
 - CustomSounds stops previews when the editor closes and prevents pending loads from playing after Stop or a changed selection.

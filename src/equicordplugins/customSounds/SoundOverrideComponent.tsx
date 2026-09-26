@@ -67,7 +67,7 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
                 const dataUri = override.selectedFileId ? await ensureDataURICached(override.selectedFileId) : null;
                 if (version !== previewVersion.current) return;
 
-                if (!dataUri || !dataUri.startsWith("data:audio/")) {
+                if (!dataUri) {
                     showToast("No custom sound file available for preview");
                     return;
                 }

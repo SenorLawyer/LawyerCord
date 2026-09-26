@@ -143,8 +143,9 @@ export function ensureDataURICached(fileId: string, files?: ReturnType<typeof ge
 
     const request = getAudioDataURI(fileId, files).then(dataUri => {
         if (pendingDataUris.get(fileId) !== request) return null;
-        if (dataUri) dataUriCache.set(fileId, dataUri);
-        return dataUri ?? null;
+        if (typeof dataUri !== "string" || !dataUri.startsWith("data:")) return null;
+        dataUriCache.set(fileId, dataUri);
+        return dataUri;
     }).catch(error => {
         if (pendingDataUris.get(fileId) === request) logger.error("Could not load a custom sound.", error);
         return null;

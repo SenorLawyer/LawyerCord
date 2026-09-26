@@ -1175,10 +1175,15 @@ test("support messages cannot offer executable snippets", () => {
     assert.equal(plugin.renderMessageAccessory(props), null);
     trusted = true;
     assert.equal(plugin.renderMessageAccessory(props), null);
-    props.message.content = "/equicord-debug";
-    const diagnostics = plugin.renderMessageAccessory(props);
-    const buttons = diagnostics.children[0];
-    assert.deepEqual(Array.from(buttons, (button: { children: string[]; }) => button.children[0]), ["Run /equicord-debug", "Run /equicord-plugins"]);
+    for (const command of ["/equicord-debug", "/equicord-plugins", "/lawyercord-debug", "/lawyercord-plugins"]) {
+        props.message.content = command;
+        trusted = false;
+        assert.equal(plugin.renderMessageAccessory(props), null);
+        trusted = true;
+        const diagnostics = plugin.renderMessageAccessory(props);
+        const buttons = diagnostics.children[0];
+        assert.deepEqual(Array.from(buttons, (button: { children: string[]; }) => button.children[0]), ["Run /lawyercord-debug", "Run /lawyercord-plugins"]);
+    }
 });
 
 test("XSOverlay applies each channel notification setting independently", () => {

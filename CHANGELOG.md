@@ -27,6 +27,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Support diagnostics identify LawyerCord and link to the configured repository. Support buttons show LawyerCord commands and recognize both current and legacy command names.
 - CommandsAPI uses the adjacent command description to locate the plugin label instead of an unbounded backward search.
 - CommandsAPI recognizes longer minified identifiers, and UserSettingsAPI bounds its setting-definition patch search.
 - ContextMenu targets the menu handler directly and reads component registrations without an unbounded backward patch search.

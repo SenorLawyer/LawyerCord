@@ -105,7 +105,7 @@ export interface Settings {
     ignoreResetWarning: boolean;
 }
 
-const DefaultSettings: Settings = {
+export const DefaultSettings: Settings = {
     // Keep source updates opt-in until the operator has configured a trusted LawyerCord remote.
     autoUpdate: false,
     autoUpdateNotification: true,

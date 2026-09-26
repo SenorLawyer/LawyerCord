@@ -11,11 +11,18 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
-import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
+import { createSourceFile, isVariableStatement, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 const { outputText } = transpileModule(readFileSync("src/api/SettingsSync/offline.ts", "utf8"), {
     compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
 });
+
+const settingsSource = createSourceFile("Settings.ts", readFileSync("src/api/Settings.ts", "utf8"), ScriptTarget.Latest, true);
+const defaultsDeclaration = settingsSource.statements.filter(isVariableStatement)
+    .flatMap(statement => [...statement.declarationList.declarations])
+    .find(declaration => declaration.name.getText(settingsSource) === "DefaultSettings");
+assert.ok(defaultsDeclaration?.initializer);
+const defaultSettings = runInNewContext(`(${defaultsDeclaration.initializer.getText(settingsSource)})`);
 
 test("desktop settings saves preserve the previous file and store when disk writes fail", () => {
     const directory = fs.mkdtempSync(join(tmpdir(), "lawyercord-settings-"));
@@ -82,7 +89,7 @@ test("backup imports validate every selected section before changing settings or
     const writes: unknown[] = [];
     const modules: Record<string, unknown> = {
         "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
-        "@api/Settings": { PlainSettings: plain },
+        "@api/Settings": { PlainSettings: plain, DefaultSettings: defaultSettings },
         "@utils/Logger": { Logger: class {} },
         "@utils/web": {},
         "@webpack/common": {},
@@ -98,6 +105,11 @@ test("backup imports validate every selected section before changing settings or
         { settings: { themeLinks: ["new"] }, dataStore: {} },
         { settings: { themeLinks: ["new"] }, quickCss: "new", dataStore: [["valid", 1], ["missing value"]] },
         { settings: "invalid" }, { settings: [] }, { settings: null },
+        { settings: { plugins: false } }, { settings: { plugins: { Sound: null } } },
+        { settings: { plugins: { Sound: { enabled: "yes" } } } },
+        { settings: { cloud: null } }, { settings: { cloud: { authenticated: 1 } } },
+        { settings: { themeLinks: "url" } }, { settings: { themeLinks: [17] } },
+        { settings: { notifications: { timeout: "long" } } },
         { settings: {}, dataStore: [[{}, "value"]] }, { settings: {}, dataStore: [[null, "value"]] },
         null, [], 5
     ]) {
@@ -106,6 +118,7 @@ test("backup imports validate every selected section before changing settings or
         assert.equal(writes.length, 0);
     }
     await assert.rejects(importSettings('{"settings":{"plugins":{"__proto__":{"polluted":true}}}}'));
+    await assert.rejects(importSettings('{"settings":{"notifications":{"timeout":1e400}}}'));
     assert.deepEqual(plain, initial);
     assert.equal(writes.length, 0);
     await importSettings(JSON.stringify({ settings: { themeLinks: ["new"], plugins: { Sound: { volume: 20 } } }, quickCss: "", dataStore: [[["key", 2], { saved: true }]] }));
@@ -124,6 +137,8 @@ test("backup imports validate every selected section before changing settings or
     assert.ok(Array.isArray(pairs));
     assert.equal(pairs[0][0], Infinity);
     assert.deepEqual(Array.from(pairs[1][0]), []);
+    await importSettings('{"settings":{"plugins":{"FuturePlugin":{"enabled":false,"custom":[null,false,{"future":true}]}}}}', "plugins");
+    assert.deepEqual(JSON.parse(JSON.stringify(plain)).plugins.FuturePlugin, { enabled: false, custom: [null, false, { future: true }] });
 });
 
 test("runtime import failures report partial application without undoing newer edits", async () => {
@@ -138,7 +153,7 @@ test("runtime import failures report partial application without undoing newer e
         };
         const modules: Record<string, unknown> = {
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
-            "@api/Settings": { PlainSettings: plain },
+            "@api/Settings": { PlainSettings: plain, DefaultSettings: defaultSettings },
             "@utils/Logger": { Logger: class {} },
             "@utils/web": {},
             "@webpack/common": {},
@@ -178,7 +193,7 @@ test("backups read only requested sections and never omit failed required data",
     };
     const modules: Record<string, unknown> = {
         "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
-        "@api/Settings": { PlainSettings: {} },
+        "@api/Settings": { PlainSettings: {}, DefaultSettings: defaultSettings },
         "@utils/Logger": { Logger: class { error() {} warn() {} } },
         "@utils/web": { saveFile: () => { saves++; } },
         "@webpack/common": { Toasts: { show: (toast: { type: string }) => notifications.push(toast), genId: () => "test", Type: { FAILURE: "failure", MESSAGE: "message" } } },
@@ -213,7 +228,7 @@ test("backups reject DataStore values that JSON would silently discard or change
     let files = 0;
     const modules: Record<string, unknown> = {
         "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
-        "@api/Settings": { PlainSettings: {} },
+        "@api/Settings": { PlainSettings: {}, DefaultSettings: defaultSettings },
         "@utils/Logger": { Logger: class { error() {} } },
         "@utils/web": { saveFile: () => { files++; } },
         "@webpack/common": { Toasts: { show() {}, genId: () => "test", Type: { FAILURE: "failure" } } },
@@ -244,7 +259,7 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
     const modules: Record<string, unknown> = {
         "@api/DataStore": { entries: async () => records, set: async (key: string, value: unknown) => writes.push([key, value]) },
         "@api/Notifications": {},
-        "@api/Settings": { PlainSettings: {} },
+        "@api/Settings": { PlainSettings: {}, DefaultSettings: defaultSettings },
         "@utils/localStorage": {},
         "@utils/Logger": { Logger: class {} },
         "@utils/native": {},
@@ -351,7 +366,7 @@ test("desktop backup exports await native saving and report rejected saves", asy
     const notifications: { type: string; }[] = [];
     const modules: Record<string, unknown> = {
         "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
-        "@api/Settings": { PlainSettings: {} },
+        "@api/Settings": { PlainSettings: {}, DefaultSettings: defaultSettings },
         "@utils/Logger": { Logger: class { error() {} } },
         "@utils/web": {},
         "@webpack/common": {
@@ -439,7 +454,7 @@ test("backup imports await file reading, preserve empty CSS, and never log backu
     let finishRead: ((value: string) => void) | undefined;
     const modules: Record<string, unknown> = {
         "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
-        "@api/Settings": { PlainSettings: {} },
+        "@api/Settings": { PlainSettings: {}, DefaultSettings: defaultSettings },
         "@utils/Logger": { Logger: class { error() { } } },
         "@utils/web": { chooseFile: async () => ({ text: () => new Promise<string>(resolve => { finishRead = resolve; }) }) },
         "@webpack/common": { Toasts: { show: (toast: unknown) => notifications.push(toast), genId: () => "test", Type: { SUCCESS: "success", FAILURE: "failure" } } },

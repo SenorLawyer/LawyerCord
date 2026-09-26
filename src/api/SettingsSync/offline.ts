@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { PlainSettings } from "@api/Settings";
+import { DefaultSettings, PlainSettings } from "@api/Settings";
 import { Logger } from "@utils/Logger";
 import { isObject } from "@utils/misc";
 import { chooseFile, saveFile } from "@utils/web";
@@ -63,6 +63,23 @@ function isDataStoreKey(key: unknown): key is IDBValidKey {
         || (Array.isArray(key) && key.every(isDataStoreKey));
 }
 
+function validateSettingTypes(settings: object, defaults: object) {
+    const values = settings as Record<string, unknown>;
+    for (const [key, expected] of Object.entries(defaults)) {
+        if (!Object.hasOwn(values, key) || expected === undefined) continue;
+        const value = values[key];
+        if (Array.isArray(expected)) {
+            if (!Array.isArray(value) || value.some((item: unknown) => typeof item !== "string"))
+                throw new Error(`Invalid setting: ${key}.`);
+        } else if (isObject(expected)) {
+            if (!isObject(value)) throw new Error(`Invalid setting: ${key}.`);
+            validateSettingTypes(value, expected);
+        } else if (typeof value !== typeof expected || (typeof value === "number" && !Number.isFinite(value))) {
+            throw new Error(`Invalid setting: ${key}.`);
+        }
+    }
+}
+
 export async function importSettings(data: string, type: BackupType = "all", cloud = false) {
     let parsed: unknown;
     try {
@@ -81,6 +98,11 @@ export async function importSettings(data: string, type: BackupType = "all", clo
         const value = "settings" in parsed ? parsed.settings : undefined;
         if (value !== undefined || type === "plugins" || !cloud) {
             if (!isObject(value)) throw new Error("Plugin settings must be an object.");
+            validateSettingTypes(value, DefaultSettings);
+            if ("plugins" in value && isObject(value.plugins) && Object.values(value.plugins).some((plugin: unknown) =>
+                !isObject(plugin) || ("enabled" in plugin && typeof plugin.enabled !== "boolean"))) {
+                throw new Error("Plugin settings must contain objects with boolean enabled flags.");
+            }
             settings = value;
         }
     }

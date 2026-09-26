@@ -80,9 +80,6 @@ function FlaggedInput({ index, forceUpdate }) {
     };
 
     const removeSelf = () => {
-        if (triggerWords.length === 1) {
-            return;
-        }
         triggerWords = triggerWords.slice(0, index).concat(triggerWords.slice(index + 1));
         saveTriggerWords();
         forceUpdate();
@@ -98,18 +95,18 @@ function FlaggedInput({ index, forceUpdate }) {
             />
         </div>
 
-        <Button
+        {isLast ? null : <Button
             onClick={removeSelf}
+            aria-label="Delete word"
             look={Button.Looks.FILLED}
             size={Button.Sizes.SMALL}
             style={{
                 padding: 0,
                 color: "var(--primary-400)",
-                transition: "color 0.2s ease-in-out",
-                opacity: isLast ? "0%" : "100%"
+                transition: "color 0.2s ease-in-out"
             }}>
             <DeleteIcon />
-        </Button>
+        </Button>}
     </Flex>);
 }
 

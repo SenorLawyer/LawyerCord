@@ -18,12 +18,12 @@ import definePlugin, { OptionType } from "@utils/types";
 import { moment, TextInput, useEffect, useState } from "@webpack/common";
 
 import { DemoMessageContainer, type TimeFormat, timeFormats } from "./utils";
-type TimeRowProps = {
+interface TimeRowProps {
     id: string;
     format: TimeFormat;
     onChange: (key: string, value: string) => void;
-    pluginSettings: any;
-};
+    pluginSettings: Partial<Record<string, string>>;
+}
 
 const format = (date: Date, formatTemplate: string): string => {
     const mmt = moment(date);
@@ -76,22 +76,16 @@ function clearTimestampRefresh() {
     timestampRefreshInterval = undefined;
 }
 
-const TimeRow = (props: TimeRowProps) => {
-    const [state, setState] = useState(props.pluginSettings?.[props.id] || props.format.default);
-
-    const handleChange = (value: string) => {
-        setState(value);
-        props.onChange(props.id, value);
-    };
-
-    return (
-        <>
-            <Heading>{props.format.name}</Heading>
-            <Paragraph>{props.format.description}</Paragraph>
-            <TextInput value={state} onChange={handleChange} />
-        </>
-    );
-};
+const TimeRow = (props: TimeRowProps) => (
+    <>
+        <Heading>{props.format.name}</Heading>
+        <Paragraph>{props.format.description}</Paragraph>
+        <TextInput
+            value={props.pluginSettings[props.id] ?? props.format.default}
+            onChange={value => props.onChange(props.id, value)}
+        />
+    </>
+);
 
 const settings = definePluginSettings({
     formats: {

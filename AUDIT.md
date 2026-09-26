@@ -2,6 +2,10 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
+September 26 patch review: ImageFilename now adds the tooltip directly after the image link's `href`, using the image role as its module anchor. NoRPC removes only the native transport registration callback, with a bounded match that cannot cross nested braces. The previous patterns searched across arbitrary surrounding code. Controlled execution of both captured image modules preserves the rendered output across sixteen URL/preference cases; the captured RPC method remains identical after patching, still requesting the module without registering its native transports. All three patched modules compile. These checks use captured code and mocked dependencies, not signed-in client acceptance. Evidence is in `.git/audit/patch-simplification-check.cjs` and `patch-simplification-result.json`.
+
+After these changes, all 624 broader regression tests and timezone checks, TypeScript, focused ESLint, both standalone builds, and release artifact scanning pass. Patch lint reports 165 warnings and no errors. Logs are `.git/audit/patch-simplification-{tests,lint,desktop,web}.log`. All four GitHub checks passed on preceding commit `46d4e7377`; CI for the new changes is separate.
+
 ## Scope and source
 
 - Baseline: `6e664e03ba3d0b7746ce34740ca444f5112b04bc`, published as `nightly-20260905-1918-6e664e03`.

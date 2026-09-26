@@ -27,6 +27,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- ImageFilename targets the image link directly, and NoRPC removes only its native transport registration callback. Both patches avoid unbounded searches across surrounding code.
 - CustomSounds applies seasonal overrides to incoming seasonal sounds and ignores inherited object names in saved sound selections.
 - CustomSounds saves selections before loading playback data, so pending selection loads cannot undo Reset All.
 - CustomSounds keeps completed uploads available without letting late uploads or deletions overwrite resets or newer edits.

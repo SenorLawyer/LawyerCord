@@ -28,10 +28,10 @@ export default definePlugin({
 
     patches: [
         {
-            find: ".RESPONSIVE?",
+            find: '"data-role":"img"',
             replacement: {
-                match: /(?="data-role":"img","data-safe-src":)(?<=href:(\i).+?)/,
-                replace: "title:$self.getTitle($1),"
+                match: /href:(\i),/,
+                replace: "href:$1,title:$self.getTitle($1),"
             }
         },
     ],

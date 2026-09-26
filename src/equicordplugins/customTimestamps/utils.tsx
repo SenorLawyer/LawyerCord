@@ -4,11 +4,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import "./style.css";
-
 import ErrorBoundary from "@components/ErrorBoundary";
+import type { Message, User, UserJSON } from "@vencord/discord-types";
 import { findByCodeLazy, findComponentByCodeLazy } from "@webpack";
-import { Button, moment, useRef, UserStore, useState } from "@webpack/common";
+import { Button, useRef, UserStore, useState } from "@webpack/common";
 
 export type TimeFormat = {
     name: string;
@@ -16,16 +15,30 @@ export type TimeFormat = {
     default: string;
     offset: number;
 };
-const MessagePreview = findComponentByCodeLazy<{
-    author: any,
-    message: any,
-    compact: boolean,
-    isGroupStart: boolean,
-    className: string,
+interface MessagePreviewProps {
+    author: Partial<User> & { nick: string; };
+    message: Message;
+    compact: boolean;
+    isGroupStart: boolean;
+    className: string;
     hideSimpleEmbedContent: boolean;
-}>(/previewGuildId:\i,preview:\i,/);
-const createBotMessage = findByCodeLazy('username:"Clyde"');
-const populateMessagePrototype = findByCodeLazy("isProbablyAValidSnowflake", "messageReference:");
+}
+
+interface PreviewMessage {
+    author: User | UserJSON;
+    timestamp: string;
+}
+
+interface DemoMessageProps {
+    msgId: string;
+    compact: boolean;
+    message: string;
+    date: Date;
+}
+
+const MessagePreview = findComponentByCodeLazy<MessagePreviewProps>(/previewGuildId:\i,preview:\i,/);
+const createBotMessage: (options: { messageId: string; content: string; channelId: string; }) => PreviewMessage = findByCodeLazy('username:"Clyde"');
+const populateMessagePrototype: (message: PreviewMessage) => Message = findByCodeLazy("isProbablyAValidSnowflake", "messageReference:");
 
 export const timeFormats: Record<string, TimeFormat> = {
     cozyFormat: {
@@ -78,19 +91,18 @@ export const timeFormats: Record<string, TimeFormat> = {
     }
 };
 
-const DemoMessage = (props: { msgId, compact, message, date: Date | undefined, isGroupStart?: boolean; }) => {
+const DemoMessage = (props: DemoMessageProps) => {
     const user = UserStore.getCurrentUser();
-    const message = createBotMessage({ content: props.message, channelId: "1337", embeds: [] });
+    const message = createBotMessage({ messageId: props.msgId, content: props.message, channelId: "1337" });
     message.author = user;
-    message.id = props.msgId;
-    message.timestamp = moment(props.date ?? new Date());
+    message.timestamp = props.date.toISOString();
     return (
         <div className="vc-cmt-demo-message">
             <MessagePreview
                 author={{ ...user, nick: user.globalName || user.username }}
                 message={populateMessagePrototype(message)}
                 compact={props.compact}
-                isGroupStart={props.isGroupStart || false}
+                isGroupStart={true}
                 className="vc-cmt-demo-message-preview"
                 hideSimpleEmbedContent={true}
             />
@@ -111,13 +123,13 @@ export const DemoMessageContainer = ErrorBoundary.wrap(() => {
                 Switch to {isCompact ? "cozy" : "compact"} mode
             </Button>
             <DemoMessage compact={isCompact} msgId={"1337"}
-                message="This message was sent a month ago" isGroupStart={true}
+                message="This message was sent a month ago"
                 date={aMonthAgo.current} />
             <DemoMessage compact={isCompact} msgId={"1338"} message={"This message was sent in the last week"}
-                isGroupStart={true} date={lastWeek.current} />
+                date={lastWeek.current} />
             <DemoMessage compact={isCompact} msgId={"1339"} message={"Hover over timestamps to see tooltip formats"}
-                isGroupStart={true} date={yesterday.current} />
-            <DemoMessage compact={isCompact} msgId={"1340"} message={"Edit the formats below to see them live update here"} isGroupStart={true}
+                date={yesterday.current} />
+            <DemoMessage compact={isCompact} msgId={"1340"} message={"Edit the formats below to see them live update here"}
                 date={today.current} />
         </div>
     );

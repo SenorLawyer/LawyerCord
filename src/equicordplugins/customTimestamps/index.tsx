@@ -15,7 +15,7 @@ import { Paragraph } from "@components/Paragraph";
 import { Devs, EquicordDevs } from "@utils/constants";
 import { Margins } from "@utils/margins";
 import { useForceUpdater } from "@utils/react";
-import definePlugin, { OptionType } from "@utils/types";
+import definePlugin, { OptionType, PluginSettingComponentProps } from "@utils/types";
 import { moment, TextInput, useEffect, useState } from "@webpack/common";
 
 import { DemoMessageContainer, type TimeFormat, timeFormats } from "./utils";
@@ -103,6 +103,40 @@ const TimeRow = (props: TimeRowProps) => (
     </>
 );
 
+function FormatEditor({ setValue }: PluginSettingComponentProps) {
+    const [settingsState, setSettingsState] = useState(() => settings.store.formats ?? {});
+
+    const setNewValue = (key: string, value: string) => {
+        const newSettings = { ...settingsState, [key]: value };
+        setSettingsState(newSettings);
+        setValue(newSettings);
+    };
+
+    return (
+        <>
+            <DemoMessageContainer />
+            {Object.entries(timeFormats).map(([key, value]) => (
+                <section key={key}>
+                    {key === "sameDayFormat" && (
+                        <div className={Margins.bottom20}>
+                            <Divider style={{ marginBottom: "10px" }} />
+                            <Heading tag="h1">Calendar formats</Heading>
+                            <Paragraph>
+                                How to format the [calendar] value if used in the above timestamps.
+                            </Paragraph>
+                        </div>
+                    )}
+                    <TimeRow
+                        id={key}
+                        format={value}
+                        onChange={setNewValue}
+                        pluginSettings={settingsState}
+                    />
+                </section>
+            ))}
+        </>);
+}
+
 const settings = definePluginSettings({
     formats: {
         type: OptionType.COMPONENT,
@@ -110,39 +144,7 @@ const settings = definePluginSettings({
             return {};
         },
         description: "Customize the timestamp formats",
-        component: componentProps => {
-            const [settingsState, setSettingsState] = useState(() => settings.store.formats ?? {});
-
-            const setNewValue = (key: string, value: string) => {
-                const newSettings = { ...settingsState, [key]: value };
-                setSettingsState(newSettings);
-                componentProps.setValue(newSettings);
-            };
-
-            return (
-                <>
-                    <DemoMessageContainer />
-                    {Object.entries(timeFormats).map(([key, value]) => (
-                        <section key={key}>
-                            {key === "sameDayFormat" && (
-                                <div className={Margins.bottom20}>
-                                    <Divider style={{ marginBottom: "10px" }} />
-                                    <Heading tag="h1">Calendar formats</Heading>
-                                    <Paragraph>
-                                        How to format the [calendar] value if used in the above timestamps.
-                                    </Paragraph>
-                                </div>
-                            )}
-                            <TimeRow
-                                id={key}
-                                format={value}
-                                onChange={setNewValue}
-                                pluginSettings={settingsState}
-                            />
-                        </section>
-                    ))}
-                </>);
-        }
+        component: FormatEditor
     }
 });
 

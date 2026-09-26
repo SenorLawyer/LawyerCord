@@ -1019,3 +1019,11 @@ All 628 broader regressions and timezone checks, the message-event priority suit
 MessageDecorations now bounds both gaps around the timeout tooltip and popout insertion. ServerList's home-button patch uses the adjacent return expression and friends-list tutorial ID, removing its unbounded backward search and redundant capture. Its existing module anchor remains in place. The measured captured matches are 143 and 266 characters respectively; the bounds retain headroom around the inspected expressions without spanning arbitrary surrounding code.
 
 The comparison fixture applies the old patches from c3ad1ce21 and the new production patches to complete captured modules 622868 and 24594. Each pattern matches once, both complete patched outputs are byte-for-byte identical, and both compile. No new behavior or signed-in acceptance is claimed. Evidence is `.git/audit/core-patch-bounds.cjs --current`. All 628 broader regressions and timezone checks, TypeScript, focused ESLint, desktop/web standalone builds and artifact scanning pass. Patch lint reports 162 warnings and no errors. Logs are `.git/audit/core-patch-bounds-{tests,desktop,web}.log`.
+
+## MessagePopover patch bounds and ordering
+
+The MessagePopover patch now bounds each previously unbounded gap at 150 characters. The captured target still matches once with the same four captures: the reaction picker, shared button component, reaction visibility flag and message. Applying the old patch from 29c7bb180 and the new production patch to complete module 247933 produces byte-for-byte identical output, which compiles.
+
+Controlled evaluation of the actual patched return expression covers eight combinations of expanded state, reaction availability and reply availability. Plugin buttons follow the quick-reaction controls and precede the emoji picker; they remain present when reactions are unavailable. Component implementations and surrounding state are mocked, so this does not establish live hover-menu or focus acceptance. Evidence is `.git/audit/message-popover-order.cjs --current` and `message-popover-order.json`.
+
+All 628 broader regressions and timezone checks, TypeScript, focused ESLint, both standalone builds and artifact scanning pass. Patch lint reports 161 warnings and no errors. Logs are `.git/audit/message-popover-bounds-{tests,desktop,web}.log`.

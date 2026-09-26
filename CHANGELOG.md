@@ -27,6 +27,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- MessagePopover bounds its patch searches while preserving plugin-button order and reaction visibility.
 - MessageDecorations and ServerList use bounded patch matches, preserving their output on the captured Discord modules.
 - MessageEventsAPI runs awaited pre-edit hooks for component-message edits as well as plain text, preserving hook cancellation and content changes.
 - MessageEventsAPI makes Discord's send-validation callback asynchronous before adding awaited hooks, keeping the patched module valid and allowing hooks to cancel sends.

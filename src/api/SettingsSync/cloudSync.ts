@@ -198,10 +198,10 @@ async function putV2(manual?: boolean) {
     if (!response) return;
 
     const hadDownloads = await applyDownloads(response.downloads);
-    await saveLocalManifest(response.server_manifest);
 
     PlainSettings.cloud.settingsSyncVersion = Date.now();
     await VencordNative.settings.set(PlainSettings);
+    await saveLocalManifest(response.server_manifest);
 
     logger.info(`Sync complete: ${response.uploaded.length} uploaded, ${response.downloads.length} downloaded`);
 
@@ -238,10 +238,10 @@ async function getV2(shouldNotify: boolean, force: boolean) {
     }
 
     const settingsChanged = await applyDownloads(response.downloads);
-    await saveLocalManifest(response.server_manifest);
 
     PlainSettings.cloud.settingsSyncVersion = Date.now();
     await VencordNative.settings.set(PlainSettings);
+    await saveLocalManifest(response.server_manifest);
 
     logger.info(`Pulled ${response.downloads.length} keys from cloud`);
 

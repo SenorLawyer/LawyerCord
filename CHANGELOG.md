@@ -300,6 +300,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Preserve the previous desktop settings file and main-process settings when saving fails, and report the failure to the caller.
 - Wait for local settings saves before reporting legacy cloud synchronization as successful.
 - Restore cloud DataStore bundles through the backup validator and synchronize cleared QuickCSS values.
+- Advance the cloud sync manifest only after local settings are saved, allowing failed saves to retry downloads.
 - Explain that runtime backup import failures can leave some changes applied, while retaining the underlying error for diagnosis.
 
 - Honor the default two-way cloud sync direction and remove unreachable startup warnings and unused notification code.

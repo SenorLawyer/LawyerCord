@@ -411,22 +411,25 @@ test("failed cloud downloads and deletions do not advance the manifest or report
     let writes = 0;
     let notifications: { color: string; }[] = [];
     let response: unknown;
+    let importFails = true;
+    let saveFails = false;
+    const events: string[] = [];
     const modules: Record<string, unknown> = {
         "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
-        "@api/DataStore": { get: async () => undefined, set: async () => { writes++; } },
+        "@api/DataStore": { get: async () => undefined, entries: async () => [], set: async () => { events.push("manifest"); writes++; } },
         "@api/Notifications": { showNotification: (data: { color: string; }) => notifications.push(data) },
         "@api/Settings": { PlainSettings: { cloud: {} } },
         "@utils/localStorage": { localStorage: {} },
         "@utils/Logger": { Logger: class { info() { } error() { } } },
         "./cloudSetup": { getCloudUrl: () => new URL("https://cloud.example"), getCloudAuth: async () => "test" },
-        "./offline": { importSettings: async () => { throw new Error("Import failed"); } }
+        "./offline": { serializeDataStore: JSON.stringify, importSettings: async () => { if (importFails) throw new Error("Import failed"); } }
     };
-    const { getCloudSettings, deleteCloudSettings } = runInNewContext(`${outputText}\nexports;`, {
-        exports: {}, require: (name: string) => modules[name] ?? {}, URL, TextDecoder, atob,
+    const { getCloudSettings, putCloudSettings, deleteCloudSettings } = runInNewContext(`${outputText}\nexports;`, {
+        exports: {}, require: (name: string) => modules[name] ?? {}, URL, TextEncoder, TextDecoder, atob, btoa, crypto, IS_WEB: true,
         fetch: async (_url: URL, init: RequestInit) => init.method === "DELETE"
             ? { ok: false, status: 500 }
             : { ok: true, json: async () => response },
-        VencordNative: { settings: { set: async () => { writes++; } } }
+        VencordNative: { settings: { get: () => ({}), set: async () => { events.push("settings"); if (saveFails) throw new Error("Save failed"); writes++; } }, quickCss: { get: async () => "" } }
     });
     for (const [downloads, errors] of [
         [[{ key: "settings", value: btoa("{}") }], []],
@@ -445,6 +448,26 @@ test("failed cloud downloads and deletions do not advance the manifest or report
     assert.equal(writes, 0);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0].color, "var(--red-360)");
+    importFails = false;
+    response = { downloads: [{ key: "settings", value: btoa("{}") }], errors: [], server_manifest: [{ key: "settings", version: 2 }], uploaded: [] };
+    for (const sync of [getCloudSettings, putCloudSettings]) {
+        writes = 0;
+        events.length = 0;
+        notifications = [];
+        saveFails = true;
+        await sync(true);
+        assert.equal(writes, 0, "Failed settings persistence must not acknowledge the cloud manifest");
+        assert.deepEqual(events, ["settings"]);
+        assert.equal(notifications.length, 1);
+        assert.equal(notifications[0].color, "var(--red-360)");
+        events.length = 0;
+        notifications = [];
+        saveFails = false;
+        await sync(true);
+        assert.deepEqual(events, ["settings", "manifest"]);
+        assert.equal(notifications.length, 1);
+        assert.equal(notifications[0].color, "var(--green-360)");
+    }
 });
 
 test("backup imports await file reading, preserve empty CSS, and never log backup content", async () => {

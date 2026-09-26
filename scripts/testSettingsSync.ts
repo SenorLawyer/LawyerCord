@@ -1081,6 +1081,44 @@ test("startup tracks edits before credential lookup and after initially disconne
     }
 });
 
+test("automatic cloud upload retries a busy operation and rechecks sync preferences", async () => {
+    const source = createSourceFile("Vencord.ts", readFileSync("src/Vencord.ts", "utf8"), ScriptTarget.Latest, true);
+    const declaration = source.statements.find(node => isFunctionDeclaration(node) && node.name?.text === "syncSettings");
+    assert.ok(declaration);
+    const compiled = transpileModule(declaration.getText(source), { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
+    let scheduled: (() => Promise<void>) | undefined;
+    let queued = 0;
+    let uploads = 0;
+    let busy = true;
+    let signedIn = false;
+    const settings = { cloud: { authenticated: false, settingsSync: true } };
+    const syncSettings = runInNewContext(`${compiled}\nsyncSettings;`, {
+        Settings: settings, SettingsStore: { addGlobalChangeListener() {} },
+        UserStore: { getCurrentUser: () => signedIn ? { id: "first" } : undefined },
+        getAuthorization: async () => "synthetic", areLocalSettingsDirty: () => true, getCloudSyncDirection: () => "both",
+        debounce: (callback: () => Promise<void>, delay: number) => { assert.equal(delay, 60_000); scheduled = callback; return () => queued++; },
+        shouldCloudSync: () => true,
+        putCloudSettings: async () => { uploads++; return busy ? false : undefined; }
+    });
+    await syncSettings();
+    assert.ok(scheduled);
+    settings.cloud.authenticated = true;
+    await scheduled();
+    assert.equal(queued, 1, "A busy cloud operation must not consume the only scheduled upload");
+    settings.cloud.settingsSync = false;
+    await scheduled();
+    assert.equal(uploads, 1, "A retry must honor disabled sync");
+    settings.cloud.settingsSync = true;
+    busy = false;
+    await scheduled();
+    assert.equal(uploads, 2);
+    assert.equal(queued, 1, "Completed attempts must not create a retry loop");
+    signedIn = true;
+    busy = true;
+    await syncSettings();
+    assert.equal(queued, 2, "Startup must also reschedule an upload blocked by another operation");
+});
+
 test("startup uses the current account credential and discards lookup results after owner changes", async () => {
     const source = createSourceFile("Vencord.ts", readFileSync("src/Vencord.ts", "utf8"), ScriptTarget.Latest, true);
     const declaration = source.statements.find(node => isFunctionDeclaration(node) && node.name?.text === "syncSettings");
@@ -1432,7 +1470,8 @@ test("cloud operations cannot overlap and a completed or failed operation releas
         await started;
         assert.ok(finish);
         assert.ok(reject);
-        await api[second](true);
+        const blocked = await api[second](true);
+        if (second === "putCloudSettings") assert.equal(blocked, false);
         assert.equal(requests, 1, second);
         assert.equal(notifications.length, 1);
         assert.match(notifications[0].body, /still running/);

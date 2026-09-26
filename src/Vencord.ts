@@ -55,7 +55,7 @@ if (IS_REPORTER) {
 async function syncSettings() {
     const saveSettingsOnFrequentAction = debounce(async () => {
         if (Settings.cloud.settingsSync && Settings.cloud.authenticated && shouldCloudSync("push")) {
-            await putCloudSettings();
+            if (await putCloudSettings() === false) saveSettingsOnFrequentAction();
         }
     }, 60_000);
 
@@ -91,7 +91,7 @@ async function syncSettings() {
         getCloudSyncDirection() !== "manual" // if we're not in manual mode
     ) {
         if (areLocalSettingsDirty() && shouldCloudSync("push")) {
-            await putCloudSettings();
+            if (await putCloudSettings() === false) saveSettingsOnFrequentAction();
         } else if (shouldCloudSync("pull") && await getCloudSettings(false)) { // if we synchronized something (false means no sync)
             // we show a notification here instead of allowing getCloudSettings() to show one to declutter the amount of
             // potential notifications that might occur. getCloudSettings() will always send a notification regardless if

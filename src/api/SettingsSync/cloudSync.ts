@@ -574,7 +574,7 @@ function beginCloudOperation(shouldNotify: boolean) {
 }
 
 export async function putCloudSettings(manual?: boolean) {
-    if (!beginCloudOperation(Boolean(manual))) return;
+    if (!beginCloudOperation(Boolean(manual))) return false;
     let context: ReturnType<typeof getCloudSyncContext> | undefined;
     try {
         context = getCloudSyncContext(true);

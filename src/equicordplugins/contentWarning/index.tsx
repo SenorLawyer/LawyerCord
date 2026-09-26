@@ -171,10 +171,17 @@ export default definePlugin({
     patches: [
         {
             find: ".VOICE_HANGOUT_INVITE?",
-            replacement: {
-                match: /(compact:\i}=\i.+?)(\(0,.+\}\)\]\}\))/,
-                replace: "$1 $self.modify(arguments[0].message,$2)"
-            }
+            group: true,
+            replacement: [
+                {
+                    match: /(?=\(0,\i\.jsxs\)\("div",\{id:\(0,\i\.\i\)\(\i\),ref:)/,
+                    replace: "$self.modify(arguments[0].message,"
+                },
+                {
+                    match: /WITH_CONTENT\}\)\]\}\)/,
+                    replace: "$&)"
+                }
+            ]
         }
     ],
 

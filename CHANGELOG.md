@@ -307,6 +307,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Discard obsolete OAuth results after account or service changes, deauthorization, cancellation or a newer authorization attempt.
 - Validate cloud OAuth configuration and callback destinations, handle credential-read failures, and reject unsuccessful authorization responses.
 - Time out stalled cloud authorization configuration and callback requests.
+- Limit streamed cloud authorization responses before parsing or saving credentials.
 - Stop cloud settings deletion after an account or service change and keep its authorization bound to the original service.
 - Discard obsolete cloud upload and download results, stop later import stages after account changes, and keep fallback requests bound to their starting service.
 - Keep full cloud erasure bound to its starting account and report request or storage failures without deauthorizing a newly selected account.

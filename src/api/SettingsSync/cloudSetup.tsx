@@ -7,11 +7,13 @@
 import * as DataStore from "@api/DataStore";
 import { showNotification } from "@api/Notifications";
 import { Settings } from "@api/Settings";
+import { readResponseText } from "@shared/readResponseText";
 import { Logger } from "@utils/Logger";
 import { parseUrl } from "@utils/misc";
 import { OAuth2AuthorizeModal, openModal, UserStore } from "@webpack/common";
 
 export const logger = new Logger("SettingsSync:CloudSetup", "#39b7e0");
+const MAX_AUTH_RESPONSE_BYTES = 1024 * 1024;
 
 export const getCloudUrl = () => new URL(Settings.cloud.url);
 const getCloudUrlOrigin = () => getCloudUrl().origin;
@@ -78,7 +80,7 @@ export async function authorizeCloud() {
             signal: AbortSignal.timeout(30_000)
         });
         if (!oauthConfiguration.ok) throw new Error("Cloud configuration request failed.");
-        const configuration: unknown = await oauthConfiguration.json();
+        const configuration: unknown = JSON.parse(await readResponseText(oauthConfiguration, MAX_AUTH_RESPONSE_BYTES));
         if (!isCurrent()) return;
         if (!configuration || typeof configuration !== "object"
             || !("clientId" in configuration) || typeof configuration.clientId !== "string" || !configuration.clientId
@@ -125,7 +127,7 @@ export async function authorizeCloud() {
                     headers: { Accept: "application/json" }
                 });
                 if (!res.ok) throw new Error("Cloud authorization request failed.");
-                const data: unknown = await res.json();
+                const data: unknown = JSON.parse(await readResponseText(res, MAX_AUTH_RESPONSE_BYTES));
                 if (!isCurrent()) return;
                 if (!data || typeof data !== "object") throw new Error("Invalid cloud authorization response.");
                 if ("secret" in data && typeof data.secret === "string" && data.secret) {

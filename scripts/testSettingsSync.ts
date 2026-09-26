@@ -13,6 +13,8 @@ import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { createSourceFile, isCallExpression, isFunctionDeclaration, isPropertyAccessExpression, isVariableStatement, JsxEmit, ModuleKind, type Node, ScriptTarget, transpileModule } from "typescript";
 
+import { readResponseText } from "../src/shared/readResponseText";
+
 const { outputText } = transpileModule(readFileSync("src/api/SettingsSync/offline.ts", "utf8"), {
     compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
 });
@@ -100,6 +102,7 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
         let modal: { callback: (value: { location: string }) => Promise<void> } | undefined;
         let records: Record<string, string> = {};
         const modules: Record<string, unknown> = {
+            "@shared/readResponseText": { readResponseText },
             "@api/DataStore": { get: async () => { if (change === "storage") throw new Error("Storage unavailable"); return { ...records }; }, update: async (_key: string, fn: (value: Record<string, string>) => Record<string, string>) => { records = fn(records); } },
             "@api/Settings": { Settings: settings },
             "@api/Notifications": { showNotification: (value: unknown) => notifications.push(value) },
@@ -113,7 +116,7 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
             React: { createElement: (_type: unknown, props: unknown) => props },
             fetch: (_url: URL, options?: RequestInit) => new Promise((resolve, reject) => { requests.push(resolve); options?.signal?.addEventListener("abort", () => reject(new Error("Synthetic timeout")), { once: true }); })
         });
-        const configuration = { ok: change !== "config-status", status: 500, json: async () => change === "config-shape" ? null : ({ clientId: "test", redirectUri: change === "config-protocol" ? "javascript:alert(1)" : "https://first.invalid/callback" }) };
+        const configuration = () => Response.json(change === "config-shape" ? null : { clientId: "test", redirectUri: change === "config-protocol" ? "javascript:alert(1)" : "https://first.invalid/callback" }, { status: change === "config-status" ? 500 : 200 });
         const begin = authorizeCloud().catch((error: unknown) => error);
         if (change === "read") userId = "second";
         await new Promise<void>(resolve => setImmediate(resolve));
@@ -139,7 +142,7 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
             continue;
         }
         if (change === "configuration") userId = "second";
-        requests.shift()?.(configuration);
+        requests.shift()?.(configuration());
         await begin;
         if (change.startsWith("config-")) {
             assert.equal(modal, undefined);
@@ -180,7 +183,7 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
             newer = authorizeCloud();
             await new Promise<void>(resolve => setImmediate(resolve));
         }
-        finishResponse({ ok: change !== "callback-status", status: 500, json: async () => ({ secret: change === "invalid" ? 17 : "synthetic" }) });
+        finishResponse(Response.json({ secret: change === "invalid" ? 17 : "synthetic" }, { status: change === "callback-status" ? 500 : 200 }));
         await pending;
         if (change === "none") {
             assert.deepEqual(records, { "https://first.invalid:first": "synthetic" });
@@ -198,8 +201,70 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
         assert.equal(settings.cloud.authenticated, false, change);
         assert.equal(notifications.length, 0, change);
         if (newer) {
-            requests.shift()?.(configuration);
+            requests.shift()?.(configuration());
             await newer;
+        }
+    }
+});
+
+test("cloud authorization bounds streamed configuration and callback bodies before accepting them", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSetup.tsx", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022, jsx: JsxEmit.React }, fileName: "cloudSetup.tsx"
+    }).outputText;
+    const limit = 1024 * 1024;
+    for (const stage of ["configuration", "callback"]) for (const extra of [0, 1]) for (const header of [undefined, "1"]) {
+        const settings = { cloud: { url: "https://first.invalid", authenticated: false } };
+        const notifications: unknown[] = [];
+        let records: Record<string, string> = {};
+        let modal: { callback: (value: { location: string }) => Promise<void> } | undefined;
+        let cancelled = false;
+        let response: Response | undefined;
+        let count = 0;
+        const configuration = { clientId: "test", redirectUri: "https://first.invalid/callback" };
+        const modules: Record<string, unknown> = {
+            "@shared/readResponseText": { readResponseText },
+            "@api/DataStore": { get: async () => records, update: async (_key: string, fn: (value: Record<string, string>) => Record<string, string>) => { records = fn(records); } },
+            "@api/Settings": { Settings: settings },
+            "@api/Notifications": { showNotification: (value: unknown) => notifications.push(value) },
+            "@utils/Logger": { Logger: class { info() {} error() {} } },
+            "@utils/misc": { parseUrl: (value: string) => new URL(value) },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) }, OAuth2AuthorizeModal: "modal", openModal: (render: (props: object) => typeof modal) => { modal = render({}); } }
+        };
+        const { authorizeCloud } = runInNewContext(`${compiled}\nexports;`, {
+            exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal,
+            React: { createElement: (_type: unknown, props: unknown) => props },
+            fetch: async () => {
+                const isConfiguration = count++ === 0;
+                const value = isConfiguration ? configuration : { secret: "synthetic" };
+                if (isConfiguration !== (stage === "configuration")) return Response.json(value);
+                const json = JSON.stringify(value);
+                const bytes = new TextEncoder().encode(json + " ".repeat(limit + extra - json.length));
+                let position = 0;
+                response = new Response(new ReadableStream<Uint8Array>({
+                    pull(controller) {
+                        if (position === bytes.length) { controller.close(); return; }
+                        const end = Math.min(position + 8192, bytes.length);
+                        controller.enqueue(bytes.subarray(position, end));
+                        position = end;
+                    },
+                    cancel() { cancelled = true; }
+                }, { highWaterMark: 0 }), { headers: header === undefined ? {} : { "Content-Length": header } });
+                return response;
+            }
+        });
+        await authorizeCloud();
+        if (stage === "configuration" && extra) assert.equal(modal, undefined);
+        else {
+            assert.ok(modal);
+            await modal.callback({ location: "https://first.invalid/callback?code=synthetic" });
+        }
+        assert.ok(response?.body);
+        assert.equal(settings.cloud.authenticated, extra === 0);
+        assert.equal(notifications.length, 1);
+        assert.deepEqual(records, extra ? {} : { "https://first.invalid:first": "synthetic" });
+        if (extra) {
+            assert.equal(cancelled, true);
+            assert.equal(response.body.locked, false);
         }
     }
 });

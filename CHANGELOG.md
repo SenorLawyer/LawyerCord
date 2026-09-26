@@ -27,6 +27,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- ContextMenu targets the menu handler directly and reads component registrations without an unbounded backward patch search.
 - MessagePopover keeps each button's error boundary tied to its plugin, so hiding a failed button does not hide a healthy neighbor.
 - MessagePopover bounds its patch searches while preserving plugin-button order and reaction visibility.
 - MessageDecorations and ServerList use bounded patch matches, preserving their output on the captured Discord modules.

@@ -19,6 +19,10 @@ Changes are accumulated in [PR #47](https://github.com/SenorLawyer/LawyerCord/pu
 
 ## Latest local verification
 
+September 27 ContextMenu follow-up: the central handler patch now matches its function signature directly. Component registration reads the same validation region from the replacement callback's source argument, removing the large backward capture. The complete patched captured module is byte-for-byte identical and compiles, with one handler injection and the same six registrations. The global `navId` argument patch remains a separate open review. The comparison is `.git/audit/context-menu-central-compare.cjs`; it does not establish signed-in client acceptance or a performance improvement.
+
+On this ContextMenu change, all 628 broader regression tests and timezone checks, TypeScript, focused ESLint, desktop and web standalone builds, and release credential scanning pass. Patch lint reports 159 warnings and no errors. Logs are `.git/audit/context-menu-central-{tests,desktop,web}.log`.
+
 At `c58d14538`, all 628 broader regression tests and timezone checks, 34 SettingsSync tests, TypeScript, desktop and web standalone builds, and release credential scanning pass. Repository-wide ESLint, CSS lint and internationalization lint were refreshed on September 27 and pass on that source. Patch lint last passed at `a9787f6b4` with 161 warnings and no errors; warning disposition remains unfinished. Logs include `.git/audit/message-popover-keys-{tests,desktop,web}.log` and `reconciliation-20260927-{sync,eslint,styles,intl}.log`.
 
 GitHub Build and test, Windows smoke, CodeQL and Dependency review all passed at `43957c7ee`. PR #47 remains open and draft, targeting main with `release:nightly`; auto-merge is not enabled while required audit work remains. The September 26 fetch confirmed main `8fc182ba7` is already integrated and the latest published nightly remains `6e664e03`. These results apply to the stated code revision, not a future release.

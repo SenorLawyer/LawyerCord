@@ -7,11 +7,11 @@
 import { makeRange } from "@utils/types";
 import { Button, closeModal, Menu, Modal, openModalLazy, Slider, TextInput, useState } from "@webpack/common";
 
-import { folderIconsData, settings } from "./settings";
+import { settings } from "./settings";
 import { folderProp, int2rgba } from "./util";
 
 export function ImageModal(folderProps: folderProp) {
-    const saved = (settings.store.folderIcons as folderIconsData | undefined)?.[folderProps.folderId];
+    const saved = settings.store.folderIcons?.[folderProps.folderId];
     const [data, setData] = useState(saved?.url ?? "");
     const [size, setSize] = useState(saved?.size ?? 100);
     return (
@@ -52,7 +52,7 @@ export function ImageModal(folderProps: folderProp) {
             <hr />
             <Button onClick={() => {
                 // INFO: unset button
-                const folderSettings = settings.store.folderIcons as folderIconsData | undefined;
+                const folderSettings = settings.store.folderIcons;
                 if (folderSettings?.[folderProps.folderId]) {
                     folderSettings[folderProps.folderId] = null;
                 }

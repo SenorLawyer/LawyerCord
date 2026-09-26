@@ -18,11 +18,5 @@ export const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         default: false,
         description: "Use a solid background on the background of the image"
-    },
-    folderIcons: {
-        type: OptionType.COMPONENT,
-        hidden: true,
-        description: "folder icon settings",
-        component: () => <></>
     }
-});
+}).withPrivateSettings<{ folderIcons?: folderIconsData; }>();

@@ -10,7 +10,7 @@ import definePlugin from "@utils/types";
 import type { ReactNode } from "react";
 
 import { makeContextItem } from "./components";
-import { folderIconsData, settings } from "./settings";
+import { settings } from "./settings";
 import { folderProp, int2rgba } from "./util";
 
 interface FolderIconProps {
@@ -43,7 +43,7 @@ export default definePlugin({
     },
     replace: ErrorBoundary.wrap((props: FolderIconProps) => {
         const { folderIcons, solidIcon } = settings.use(SETTINGS);
-        const data = (folderIcons as folderIconsData | undefined)?.[props.folderNode.id];
+        const data = folderIcons?.[props.folderNode.id];
         if (!data?.url) return props.original;
         return (
             <div

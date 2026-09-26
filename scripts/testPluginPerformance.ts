@@ -20,6 +20,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { runInNewContext } from "node:vm";
 
+import moment from "moment";
 import * as typescript from "typescript";
 import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
@@ -7813,6 +7814,36 @@ test("sound imports validate all overrides before replacing settings", () => {
     assert.deepEqual(JSON.parse(store.mute), makeEmptyOverride());
     importOverrides('{"overrides":[]}');
     assert.deepEqual(JSON.parse(store.message1), makeEmptyOverride());
+});
+
+test("custom timestamps keep relative thresholds local to their own output", () => {
+    const originalNow = moment.now;
+    const thresholds = ["s", "ss", "m"].map(key => [key, moment.relativeTimeThreshold(key)] as const);
+    const settings = { store: { formats: {} }, withPrivateSettings() { return this; } };
+    const { format } = loadSource("src/equicordplugins/customTimestamps/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => settings },
+        "@components/Divider": {}, "@components/Heading": {}, "@components/Link": {}, "@components/Paragraph": {},
+        "@utils/constants": { Devs: {}, EquicordDevs: {} }, "@utils/margins": {}, "@utils/react": {},
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+        "@webpack/common": { moment },
+        "./utils": { timeFormats: Object.fromEntries(["sameDayFormat", "lastDayFormat", "lastWeekFormat", "sameElseFormat"].map(key => [key, { default: "YYYY-MM-DD" }])) }
+    }, {}, "({ format })");
+    try {
+        moment.now = () => Date.UTC(2026, 8, 26, 12);
+        const date = new Date(moment.now() - 45_000);
+        const outside = moment(date).fromNow();
+        assert.equal(format(date, "YYYY-MM-DD"), "2026-09-26");
+        assert.deepEqual(thresholds.map(([key]) => [key, moment.relativeTimeThreshold(key)]), thresholds);
+        assert.equal(format(date, "[relative]"), "45 seconds ago");
+        assert.equal(format(new Date(moment.now() + 45 * 60_000), "[relative]"), "in 45 minutes");
+        assert.equal(moment(date).fromNow(), outside);
+        assert.deepEqual(thresholds.map(([key]) => [key, moment.relativeTimeThreshold(key)]), thresholds);
+    } finally {
+        moment.now = originalNow;
+        for (const [key, value] of thresholds) {
+            if (typeof value === "number") moment.relativeTimeThreshold(key, value);
+        }
+    }
 });
 
 test("folder icon rendering subscribes to changes and preserves the native fallback", () => {

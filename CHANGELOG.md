@@ -25,6 +25,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomTimestamps keeps its relative-time thresholds local instead of changing date formatting elsewhere in Discord.
+
 - CustomFolderIcons applies saved icons, size changes, background settings and resets immediately without requiring a hover.
 
 - ClientSideBlock restores hiding for current direct-message rows while preserving group and system conversations.

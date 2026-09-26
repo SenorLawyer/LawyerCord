@@ -25,20 +25,7 @@ type TimeRowProps = {
     pluginSettings: any;
 };
 
-let hasConfiguredRelativeThresholds = false;
-
-function configureRelativeThresholds() {
-    if (hasConfiguredRelativeThresholds) return;
-
-    moment.relativeTimeThreshold("s", 60);
-    moment.relativeTimeThreshold("ss", -1);
-    moment.relativeTimeThreshold("m", 60);
-    hasConfiguredRelativeThresholds = true;
-}
-
 const format = (date: Date, formatTemplate: string): string => {
-    configureRelativeThresholds();
-
     const mmt = moment(date);
     const { formats } = settings.store;
     const sameDayFormat = formats?.sameDayFormat || timeFormats.sameDayFormat.default;
@@ -53,7 +40,9 @@ const format = (date: Date, formatTemplate: string): string => {
             lastWeek: lastWeekFormat,
             sameElse: sameElseFormat
         }))
-        .replace("relative", () => mmt.fromNow());
+        .replace("relative", () => moment.duration({ to: mmt, from: moment() })
+            .locale(mmt.locale())
+            .humanize(true, { s: 60, ss: -1, m: 60 }));
 };
 
 const timestampSubscribers = new Set<() => void>();

@@ -321,7 +321,7 @@ async function putV1(manual?: boolean) {
 
     const { written } = await res.json();
     PlainSettings.cloud.settingsSyncVersion = written;
-    VencordNative.settings.set(PlainSettings);
+    await VencordNative.settings.set(PlainSettings);
 
     logger.info("Settings uploaded to cloud successfully");
 
@@ -401,7 +401,7 @@ async function getV1(shouldNotify: boolean, force: boolean) {
     await importSettings(settings, "all", true);
 
     PlainSettings.cloud.settingsSyncVersion = written;
-    VencordNative.settings.set(PlainSettings);
+    await VencordNative.settings.set(PlainSettings);
 
     logger.info("Settings loaded from cloud successfully");
     if (shouldNotify)

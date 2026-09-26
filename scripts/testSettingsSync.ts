@@ -169,6 +169,50 @@ test("backups read only requested sections and never omit failed required data",
     assert.deepEqual(reads, ["plugins", "css"]);
 });
 
+test("legacy cloud sync waits for local settings persistence before reporting success", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const direction of ["putV1", "getV1"]) {
+        const notifications: unknown[] = [];
+        const storage: Record<string, string> = { Vencord_settingsDirty: "true" };
+        const plain = { cloud: { settingsSyncVersion: 1 } };
+        let rejectSave: ((reason: Error) => void) | undefined;
+        const modules: Record<string, unknown> = {
+            "@api/DataStore": {},
+            "@api/Notifications": { showNotification: (value: unknown) => notifications.push(value) },
+            "@api/Settings": { PlainSettings: plain, Settings: plain },
+            "@utils/localStorage": { localStorage: storage },
+            "@utils/Logger": { Logger: class { info() {} error() {} } },
+            "@utils/native": {},
+            "@webpack/common": {},
+            fflate: { deflateSync: (value: Uint8Array) => value, inflateSync: (value: Uint8Array) => value },
+            "./cloudSetup": { getCloudUrl: () => new URL("https://sync.invalid"), getCloudAuth: async () => "test" },
+            "./offline": { exportSettings: async () => "{}", importSettings: async () => {} }
+        };
+        const entry = runInNewContext(`${compiled}\n({ putV1, getV1 });`, {
+            exports: {}, require: (name: string) => modules[name], URL, TextEncoder, TextDecoder, Uint8Array, IS_WEB: true,
+            fetch: async () => ({ ok: true, status: 200, json: async () => ({ written: 2 }), headers: { get: () => "2" }, arrayBuffer: async () => new TextEncoder().encode("{}").buffer }),
+            VencordNative: { settings: { set: () => new Promise<void>((_resolve, reject) => { rejectSave = reject; }) } }
+        });
+        let settled = false;
+        const pending = entry[direction](true, true).then(
+            () => { settled = true; },
+            (error: unknown) => { settled = true; return error; }
+        );
+        await new Promise<void>(resolve => setImmediate(resolve));
+        assert.ok(rejectSave);
+        assert.equal(settled, false, `${direction} must await the local save`);
+        assert.equal(notifications.length, 0);
+        assert.equal(storage.Vencord_settingsDirty, "true");
+        const failure = new Error("Failed to save settings.");
+        rejectSave(failure);
+        assert.equal(await pending, failure);
+        assert.equal(notifications.length, 0);
+        assert.equal(storage.Vencord_settingsDirty, "true");
+    }
+});
+
 test("automatic cloud sync uses the displayed default and respects each direction", () => {
     const { outputText } = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }

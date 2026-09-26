@@ -197,7 +197,8 @@ export const SettingsStore = new SettingsStoreClass(settings, {
 
 if (!IS_REPORTER) {
     SettingsStore.addGlobalChangeListener((_, path) => {
-        SettingsStore.plain.cloud.settingsSyncVersion = Date.now();
+        if (path !== "cloud" && !path.startsWith("cloud."))
+            SettingsStore.plain.cloud.settingsSyncVersion = Date.now();
         VencordNative.settings.set(SettingsStore.plain, path).catch((error: unknown) => logger.error("Failed to save settings", error));
     });
 }

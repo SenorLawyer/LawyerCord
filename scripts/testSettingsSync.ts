@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
-import { createSourceFile, isVariableStatement, JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
+import { createSourceFile, isCallExpression, isPropertyAccessExpression, isVariableStatement, JsxEmit, ModuleKind, type Node, ScriptTarget, transpileModule } from "typescript";
 
 const { outputText } = transpileModule(readFileSync("src/api/SettingsSync/offline.ts", "utf8"), {
     compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
@@ -575,6 +575,43 @@ test("legacy sync rejects invalid timestamps and forced downloads bypass cache v
         assert.equal(notifications.length, 1);
         if (!valid) assert.equal(notifications[0].color, "var(--red-360)");
         if (direction === "getCloudSettings") assert.equal(new Headers(requestHeaders).has("If-None-Match"), !force);
+    }
+});
+
+test("cloud configuration changes persist locally without changing sync timestamps or scheduling uploads", () => {
+    for (const file of ["src/api/Settings.ts", "src/Vencord.ts"]) {
+        const source = createSourceFile(file, readFileSync(file, "utf8"), ScriptTarget.Latest, true);
+        let listener: Node | undefined;
+        const visit = (node: Node) => {
+            if (!listener && isCallExpression(node) && isPropertyAccessExpression(node.expression)
+                && node.expression.name.text === "addGlobalChangeListener") listener = node.arguments[0];
+            node.forEachChild(visit);
+        };
+        visit(source);
+        assert.ok(listener);
+        const compiled = transpileModule(`const listener = ${listener.getText(source)};`, {
+            compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+        }).outputText;
+        for (const path of ["cloud", "cloud.url", "cloud.authenticated", "cloud.settingsSync", "cloud.settingsSyncVersion", "", "plugins.Sound.enabled", "themeLinks", "cloudish"]) {
+            const plain = { cloud: { settingsSyncVersion: 5 } };
+            let saves = 0;
+            let dirty = 0;
+            let scheduled = 0;
+            const callback = runInNewContext(`${compiled}\nlistener;`, {
+                SettingsStore: { plain }, Date: { now: () => 100 },
+                VencordNative: { settings: { set: async () => { saves++; } } },
+                markLocalSettingsDirty: () => dirty++, saveSettingsOnFrequentAction: () => scheduled++
+            });
+            callback(plain, path);
+            const cloudOnly = path === "cloud" || path.startsWith("cloud.");
+            if (file === "src/api/Settings.ts") {
+                assert.equal(saves, 1);
+                assert.equal(plain.cloud.settingsSyncVersion, cloudOnly ? 5 : 100, path);
+            } else {
+                assert.equal(dirty, cloudOnly ? 0 : 1, path);
+                assert.equal(scheduled, dirty, path);
+            }
+        }
     }
 });
 

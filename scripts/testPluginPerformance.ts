@@ -7873,6 +7873,7 @@ test("sound imports validate overrides and invalidate pending playback data", as
     let resolveRead: (value: string) => void = () => assert.fail("Audio read was not started");
     let reads = 0;
     const { importOverrides, getOverride, ensureDataURICached, getCustomSoundURL, plugin } = loadSource("src/equicordplugins/customSounds/index.tsx", {
+        "@utils/web": {},
         "@api/DataStore": {},
         "@api/Settings": { definePluginSettings: () => ({ store }) },
         "@components/Button": {}, "@components/Heading": {},

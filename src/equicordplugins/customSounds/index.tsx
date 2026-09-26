@@ -15,6 +15,7 @@ import { classNameFactory } from "@utils/css";
 import { Logger } from "@utils/Logger";
 import { isObject } from "@utils/misc";
 import definePlugin, { OptionType, StartAt } from "@utils/types";
+import { saveFile } from "@utils/web";
 import { React, showToast, TextInput, Toasts } from "@webpack/common";
 
 import { deleteAudio, getAllAudio, getAudioDataURI } from "./audioStore";
@@ -243,7 +244,7 @@ const settings = definePluginSettings({
                 }
             };
 
-            const downloadSettings = async () => {
+            const downloadSettings = () => {
                 const overrides = soundTypes.map(type => {
                     const override = getOverride(type.id);
                     return {
@@ -253,20 +254,14 @@ const settings = definePluginSettings({
                         selectedFileId: override.selectedFileId ?? undefined,
                         volume: override.volume
                     };
-                }).filter(o => o.enabled || o.selectedSound !== "default");
+                });
 
                 const exportPayload = {
                     overrides,
                     __note: "Audio files are not included in exports and will need to be re-uploaded after import"
                 };
 
-                const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: "application/json" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = "customSounds-settings.json";
-                a.click();
-                URL.revokeObjectURL(url);
+                saveFile(new File([JSON.stringify(exportPayload, null, 2)], "customSounds-settings.json", { type: "application/json" }));
 
                 showToast(`Exported ${overrides.length} settings (audio files not included)`);
             };

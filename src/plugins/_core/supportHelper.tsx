@@ -319,7 +319,7 @@ export default definePlugin({
     patches: [{
         find: "#{intl::BEGINNING_DM}",
         replacement: {
-            match: /#{intl::BEGINNING_DM},{.+?}\),(?=.{0,300}(\i)\.isMultiUserDM)/,
+            match: /#{intl::BEGINNING_DM},{.{1,150}?}\),(?=.{0,300}(\i)\.isMultiUserDM)/,
             replace: "$& $self.renderContributorDmWarningCard({ channel: $1 }),"
         }
     }],

@@ -59,7 +59,7 @@ function copyMarkdownLinks(attachments: CopyableAttachment[]) {
     for (let index = 0; index < attachments.length; index++) {
         const attachment = attachments[index];
         if (links) links += "\n";
-        links += `[${escapeMarkdownLabel(attachment.filename ?? `attachment-${index + 1}`)}](${attachment.url})`;
+        links += `[${escapeMarkdownLabel(attachment.filename ?? `attachment-${index + 1}`)}](${attachment.url.replace(/[()]/g, "\\$&")})`;
     }
 
     copyWithToast(

@@ -7879,6 +7879,25 @@ test("folder icon editing preserves saved size and resetting an unused folder is
     assert.equal(closes, 3);
 });
 
+test("attachment Markdown escapes URL parentheses without changing raw URLs", () => {
+    const copied: string[] = [];
+    const { copyMarkdownLinks, copyRawUrls } = loadSource("src/equicordplugins/copyAttachmentLinks/index.tsx", {
+        "@api/ContextMenu": {},
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/discord": { copyWithToast: (text: string) => copied.push(text) },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+        "@webpack/common": {}
+    }, {}, "({ copyMarkdownLinks, copyRawUrls })");
+    const attachments = [
+        { filename: "report", url: "https://cdn.discordapp.com/attachments/1/2/report).txt?ex=123&hm=abc" },
+        { filename: "encoded", url: "https://cdn.discordapp.com/attachments/1/2/report%29.txt" }
+    ];
+    copyMarkdownLinks(attachments);
+    assert.equal(copied[0], "[report](https://cdn.discordapp.com/attachments/1/2/report\\).txt?ex=123&hm=abc)\n[encoded](https://cdn.discordapp.com/attachments/1/2/report%29.txt)");
+    copyRawUrls(attachments);
+    assert.equal(copied[1], attachments.map(attachment => attachment.url).join("\n"));
+});
+
 test("content warning saved words retain an empty input for adding words", async () => {
     for (const saved of [undefined, [], ["alpha"], ["alpha", ""]]) {
         const { plugin, words } = loadSource("src/equicordplugins/contentWarning/index.tsx", {

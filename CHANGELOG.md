@@ -27,6 +27,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- MessageEventsAPI runs awaited pre-edit hooks for component-message edits as well as plain text, preserving hook cancellation and content changes.
 - MessageEventsAPI makes Discord's send-validation callback asynchronous before adding awaited hooks, keeping the patched module valid and allowing hooks to cancel sends.
 - CustomSounds ignores malformed restored audio records without deleting them and preserves replacements made during legacy conversion.
 - Cloud deletion processes one record at a time and stops before further deletions after a failure or an account or backend change.

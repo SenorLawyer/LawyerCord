@@ -78,6 +78,51 @@ test("message send patches await asynchronous hooks inside the validation callba
     }
 });
 
+test("message edit patches await hooks for plain and component messages", async () => {
+    const { default: plugin } = loadSource("src/plugins/_api/messageEvents.ts", {
+        "@utils/constants": { Devs: {} }, "@utils/types": { __esModule: true, default: (value: unknown) => value }
+    });
+    const { canonicalizeMatch } = loadSource("src/utils/patches.ts", { "./intlHash": {} });
+    const patch = plugin.patches[0];
+    assert.equal(patch.group, true);
+    let source = "class Editor {props={channel:{id:'channel'},message:{id:'message',content:'old',components:[{content:'old'}]}};save(){return Promise.resolve({valid}).then(s=>{let{valid:u}=s;if(!u)return{shouldClear:false};if(component){let t=parser.A.parse(this.props.channel,e),n=this.props.message.components;if(n.length===1){let old=n[0];e!==old.content&&edit(this.props.channel.id,this.props.message.id,t)}}else{let t=parser.A.parse(this.props.channel,e);t.content!==this.props.message.content&&edit(this.props.channel.id,this.props.message.id,t)}return{shouldClear:true}})}};new Editor()";
+    for (const [index, replacement] of patch.replacement.entries()) {
+        const match = canonicalizeMatch(replacement.match);
+        assert.equal([...source.matchAll(new RegExp(match.source, "g"))].length, index === 0 ? 1 : 2);
+        source = source.replace(match, replacement.replace);
+    }
+    for (const component of [true, false]) for (const mode of ["block", "allow", "invalid"]) {
+        const edits: string[] = [];
+        let finish: ((stop: boolean) => void) | undefined;
+        const editor = runInNewContext(source, {
+            component, valid: mode !== "invalid", e: "new",
+            parser: { A: { parse: (_channel: unknown, content: string) => ({ content }) } },
+            edit: (_channel: string, _id: string, message: { content: string }) => edits.push(message.content),
+            Vencord: { Api: { MessageEvents: { _handlePreEdit: (channel: string, id: string, message: { content: string }) => {
+                assert.equal(channel, "channel");
+                assert.equal(id, "message");
+                assert.equal(finish, undefined, "Each edit runs the hook once");
+                message.content = "hooked";
+                return new Promise<boolean>(resolve => { finish = resolve; });
+            } } } }
+        });
+        const pending = editor.save();
+        await setImmediate();
+        assert.deepEqual(edits, []);
+        if (mode === "invalid") {
+            assert.equal(finish, undefined);
+            assert.equal((await pending).shouldClear, false);
+            continue;
+        }
+        assert.ok(finish);
+        finish(mode === "block");
+        const result = await pending;
+        assert.equal(result.shouldClear, mode === "allow");
+        if (mode === "block") assert.equal(result.shouldRefocus, true);
+        assert.deepEqual(edits, mode === "allow" ? ["hooked"] : []);
+    }
+});
+
 test("local DM hiding leaves group and system conversations alone", () => {
     const user = "111111111111111111";
     const store = { usersToBlock: user, guildBlackList: "", guildWhiteList: "", hideBlockedUsers: true };

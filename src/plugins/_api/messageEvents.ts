@@ -26,13 +26,14 @@ export default definePlugin({
     patches: [
         {
             find: "#{intl::EDIT_TEXTAREA_HELP}",
-            replacement: {
-                match: /(?<=,channel:\i,message:\i\}\)\.then\().+?(?=\i\.content!==this\.props\.message\.content&&\i\((.+?)\)\})/,
-                replace: (match, args) => "" +
-                    `async ${match}` +
-                    `if(await Vencord.Api.MessageEvents._handlePreEdit(${args}))` +
-                    "return Promise.resolve({shouldClear:false,shouldRefocus:true});"
-            }
+            group: true,
+            replacement: [{
+                match: /(?<=\.then\()\i(?==>\{let\{valid:\i\}=)/,
+                replace: "async $&"
+            }, {
+                match: /let (\i)=\i\.\i\.parse\(this\.props\.channel,\i\)(?:,[^;]{1,200})?;/g,
+                replace: "$&if(await Vencord.Api.MessageEvents._handlePreEdit(this.props.channel.id,this.props.message.id,$1))return{shouldClear:false,shouldRefocus:true};"
+            }]
         },
         {
             find: ".handleSendMessage,onResize:",

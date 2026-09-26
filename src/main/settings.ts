@@ -9,7 +9,7 @@ import { IpcEvents } from "@shared/IpcEvents";
 import { SettingsStore } from "@shared/SettingsStore";
 import { mergeDefaults } from "@utils/mergeDefaults";
 import { ipcMain } from "electron";
-import { mkdirSync, readFileSync, writeFileSync } from "fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "fs";
 
 import { NATIVE_SETTINGS_FILE, SETTINGS_DIR, SETTINGS_FILE } from "./utils/constants";
 
@@ -28,18 +28,18 @@ function readSettings<T = object>(name: string, file: string): Partial<T> {
 
 export const RendererSettings = new SettingsStore(readSettings<Settings>("renderer", SETTINGS_FILE));
 
-RendererSettings.addGlobalChangeListener(() => {
-    try {
-        writeFileSync(SETTINGS_FILE, JSON.stringify(RendererSettings.plain, null, 4));
-    } catch (e) {
-        console.error("Failed to write renderer settings", e);
-    }
-});
-
 ipcMain.handle(IpcEvents.GET_SETTINGS_DIR, () => SETTINGS_DIR);
 ipcMain.on(IpcEvents.GET_SETTINGS, e => e.returnValue = RendererSettings.plain);
 
 ipcMain.handle(IpcEvents.SET_SETTINGS, (_, data: Settings, pathToNotify?: string) => {
+    try {
+        const temporaryFile = `${SETTINGS_FILE}.tmp`;
+        writeFileSync(temporaryFile, JSON.stringify(data, null, 4));
+        renameSync(temporaryFile, SETTINGS_FILE);
+    } catch (e) {
+        console.error("Failed to write renderer settings", e);
+        throw new Error("Failed to save settings.");
+    }
     RendererSettings.setData(data, pathToNotify);
 });
 

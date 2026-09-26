@@ -295,6 +295,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Fail full backups when required data cannot be read, and read only the requested sections for partial backups.
 - Await desktop backup saves so native save failures reach the export error handler.
 - Validate all selected backup sections before applying any settings, CSS or DataStore writes.
+- Preserve the previous desktop settings file and main-process settings when saving fails, and report the failure to the caller.
 
 - Honor the default two-way cloud sync direction and remove unreachable startup warnings and unused notification code.
 

@@ -5,13 +5,75 @@
  */
 
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
 import { readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 const { outputText } = transpileModule(readFileSync("src/api/SettingsSync/offline.ts", "utf8"), {
     compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+});
+
+test("desktop settings saves preserve the previous file and store when disk writes fail", () => {
+    const directory = fs.mkdtempSync(join(tmpdir(), "lawyercord-settings-"));
+    const file = join(directory, "settings.json");
+    const initial = { plugins: { Sound: { volume: 20 } } };
+    fs.writeFileSync(file, JSON.stringify(initial));
+    const handlers = new Map<string, (event: unknown, value: unknown, path?: string) => void>();
+    const errors: unknown[][] = [];
+    let failure = "write";
+    const evaluate = (path: string, modules: Record<string, unknown> = {}) => {
+        const compiled = transpileModule(readFileSync(path, "utf8"), {
+            compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+        }).outputText;
+        return runInNewContext(`${compiled}\nexports;`, { exports: {}, require: (name: string) => modules[name], console: { ...console, error: (...values: unknown[]) => errors.push(values) } });
+    };
+    try {
+        const { RendererSettings } = evaluate("src/main/settings.ts", {
+            "@shared/IpcEvents": { IpcEvents: { GET_SETTINGS_DIR: "directory", GET_SETTINGS: "get", SET_SETTINGS: "set" } },
+            "@shared/SettingsStore": evaluate("src/shared/SettingsStore.ts"),
+            "@utils/mergeDefaults": evaluate("src/utils/mergeDefaults.ts"),
+            electron: { ipcMain: { handle: (name: string, handler: (event: unknown, value: unknown, path?: string) => void) => handlers.set(name, handler), on() {} } },
+            fs: {
+                ...fs,
+                writeFileSync: (path: string, data: string) => {
+                    if (failure === "write") {
+                        fs.writeFileSync(path, "partial");
+                        throw new Error(`Disk full at ${path}`);
+                    }
+                    fs.writeFileSync(path, data);
+                },
+                renameSync: (source: string, target: string) => {
+                    if (failure === "rename") throw new Error(`Access denied at ${target}`);
+                    fs.renameSync(source, target);
+                }
+            },
+            "./utils/constants": { SETTINGS_DIR: directory, SETTINGS_FILE: file, NATIVE_SETTINGS_FILE: join(directory, "native.json") }
+        });
+        const save = handlers.get("set");
+        assert.ok(save);
+        const changes: number[] = [];
+        RendererSettings.addChangeListener("plugins.Sound.volume", (value: number) => changes.push(value));
+        const next = { plugins: { Sound: { volume: 70 } } };
+        for (failure of ["write", "rename"]) {
+            assert.throws(() => save(undefined, next, "plugins.Sound.volume"), /^Error: Failed to save settings\.$/);
+            assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), initial);
+            assert.equal(RendererSettings.plain.plugins.Sound.volume, 20);
+            assert.deepEqual(changes, []);
+        }
+        failure = "";
+        save(undefined, next, "plugins.Sound.volume");
+        assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), next);
+        assert.equal(RendererSettings.plain.plugins.Sound.volume, 70);
+        assert.deepEqual(changes, [70]);
+        assert.equal(errors.length, 2);
+    } finally {
+        assert.equal(dirname(resolve(directory)), resolve(tmpdir()));
+        fs.rmSync(directory, { recursive: true, force: true });
+    }
 });
 
 test("backup imports validate every selected section before changing settings or storage", async () => {

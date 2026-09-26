@@ -7906,13 +7906,13 @@ test("content warnings are blurred before the first hover", () => {
         "@api/Settings": { definePluginSettings: () => ({ use: () => ({ onClick: false }) }) },
         "@components/Flex": {}, "@components/Heading": {}, "@components/Icons": {},
         "@utils/constants": { EquicordDevs: {} },
-        "@utils/css": { classNameFactory: (prefix: string) => (name: string, flags: Record<string, boolean>) => [name, ...Object.keys(flags).filter(key => flags[key])].map(key => prefix + key).join(" ") },
+        "@utils/css": { classNameFactory: (prefix: string) => (name: string, flags: Record<string, boolean> = {}) => [name, ...Object.keys(flags).filter(key => flags[key])].map(key => prefix + key).join(" ") },
         "@utils/react": {}, "@utils/text": { escapeRegExp: RegExp.escape },
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
-        "@webpack/common": { useState: () => [false, () => {}] }
-    }, { React: { createElement: (type: unknown, props: object) => ({ type, props }) } }, "TriggerContainer");
+        "@webpack/common": { Button: { Looks: { LINK: "link" }, Sizes: { SMALL: "small" } }, useState: () => [false, () => {}] }
+    }, { React: { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props: { ...props, children } }) } }, "TriggerContainer");
     const element = TriggerContainer({ child: "flagged content" });
-    assert.equal(element.props.className, "vc-content-warning-container vc-content-warning-hover");
+    assert.equal(element.props.children[1].props.className, "vc-content-warning-container vc-content-warning-hover");
 });
 
 test("command palette forms prevent duplicate submissions before rendering", async () => {

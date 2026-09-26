@@ -80,17 +80,27 @@ function TriggerContainer({ child }) {
         return child;
     } else {
         return (
-            <div
-                className={cl("container", { hover: !onClick })}
-                onClickCapture={event => {
-                    if (!onClick) return;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setVisible(true);
-                }}
-            >
-                {child}
-            </div >
+            <>
+                <Button
+                    className={cl("reveal")}
+                    look={Button.Looks.LINK}
+                    size={Button.Sizes.SMALL}
+                    onClick={() => setVisible(true)}
+                >
+                    Reveal message
+                </Button>
+                <div
+                    className={cl("container", { hover: !onClick })}
+                    onClickCapture={event => {
+                        if (!onClick) return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setVisible(true);
+                    }}
+                >
+                    {child}
+                </div>
+            </>
         );
     }
 }

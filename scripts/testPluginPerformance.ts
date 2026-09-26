@@ -7879,6 +7879,34 @@ test("folder icon editing preserves saved size and resetting an unused folder is
     assert.equal(closes, 3);
 });
 
+test("profile color and media copies wait for clipboard success and handle rejection", async () => {
+    for (const pluginName of ["copyProfileColors", "copyUserMediaUrls"]) {
+        for (const fail of [false, true]) {
+            const feedback: Array<{ type: string; }> = [];
+            let resolve = () => {};
+            let reject = (_error: Error) => {};
+            const pending = new Promise<void>((done, failed) => { resolve = done; reject = failed; });
+            const copy = loadSource(`src/equicordplugins/${pluginName}/index.tsx`, {
+                "@api/ContextMenu": {},
+                "@utils/clipboard": { copyToClipboard: () => pending },
+                "@utils/constants": { EquicordDevs: {} },
+                "@utils/Logger": { Logger: class { error() {} } },
+                "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+                "@webpack/common": {
+                    Toasts: { show: (toast: { type: string; }) => feedback.push(toast), genId: () => "toast", Type: { SUCCESS: "success", FAILURE: "failure" } },
+                    UserProfileStore: { getUserProfile: () => ({ themeColors: [0x112233, 0x445566] }) }
+                }
+            }, {}, pluginName === "copyProfileColors" ? "copyProfileColors" : "copyUrl");
+            const result = pluginName === "copyProfileColors" ? copy("user") : copy("Avatar URL", "https://example.com/avatar.png");
+            assert.equal(feedback.length, 0);
+            if (fail) reject(new Error("Clipboard denied"));
+            else resolve();
+            await result;
+            assert.deepEqual(feedback.map(toast => toast.type), [fail ? "failure" : "success"]);
+        }
+    }
+});
+
 test("attachment Markdown escapes URL parentheses without changing raw URLs", () => {
     const copied: string[] = [];
     const { copyMarkdownLinks, copyRawUrls } = loadSource("src/equicordplugins/copyAttachmentLinks/index.tsx", {

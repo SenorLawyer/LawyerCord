@@ -34,7 +34,7 @@ function getProfileColors(userId: string, guildId?: string) {
     }
 }
 
-function copyProfileColors(userId: string, guildId?: string) {
+async function copyProfileColors(userId: string, guildId?: string) {
     const colors = getProfileColors(userId, guildId);
 
     if (!colors) {
@@ -52,7 +52,7 @@ function copyProfileColors(userId: string, guildId?: string) {
     const formattedColors = `Primary-color #${primaryColor}, Secondary-Color #${secondaryColor}`;
 
     try {
-        copyToClipboard(formattedColors);
+        await copyToClipboard(formattedColors);
         Toasts.show({
             type: Toasts.Type.SUCCESS,
             message: "Profile colors copied to clipboard!",

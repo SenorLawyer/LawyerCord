@@ -24,7 +24,7 @@ function withCdnSize(url: string | null | undefined) {
     return url.replace(SIZE_QUERY_REGEX, `?size=${CDN_SIZE}`);
 }
 
-function copyUrl(label: string, url: string | null) {
+async function copyUrl(label: string, url: string | null) {
     if (!url) {
         Toasts.show({
             id: Toasts.genId(),
@@ -34,7 +34,16 @@ function copyUrl(label: string, url: string | null) {
         return;
     }
 
-    copyToClipboard(url);
+    try {
+        await copyToClipboard(url);
+    } catch {
+        Toasts.show({
+            id: Toasts.genId(),
+            message: `Could not copy ${label.toLowerCase()}.`,
+            type: Toasts.Type.FAILURE
+        });
+        return;
+    }
     Toasts.show({
         id: Toasts.genId(),
         message: `${label} copied.`,

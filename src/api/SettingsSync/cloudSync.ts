@@ -16,7 +16,7 @@ import { SettingsRouter, UserStore } from "@webpack/common";
 import { deflateSync } from "fflate";
 
 import { deauthorizeCloud, getCloudAuth, getCloudUrl } from "./cloudSetup";
-import { exportSettings, importSettings, isLocalDataStoreKey, omitCloudSettings, serializeDataStore } from "./offline";
+import { captureCloudImportState, exportSettings, importSettings, isLocalDataStoreKey, omitCloudSettings, serializeDataStore } from "./offline";
 import { ManifestEntry, SyncRequest, SyncResponse } from "./types";
 
 const logger = new Logger("SettingsSync:Cloud", "#39b7e0");
@@ -50,12 +50,13 @@ async function getApiVersion(origin: string): Promise<ApiVersion> {
     return map[origin] ?? "v2";
 }
 
-function getCloudSyncContext(checkLocalEdits = false) {
+async function getCloudSyncContext(checkLocalEdits = false) {
     const url = getCloudUrl();
     const userId = UserStore.getCurrentUser()?.id;
     const revision = localSettingsRevision;
     const isCurrent = () => userId !== undefined && UserStore.getCurrentUser()?.id === userId && getCloudUrl().href === url.href;
     return {
+        expected: checkLocalEdits ? await captureCloudImportState() : undefined,
         url,
         manifestKey: `${MANIFEST_STORE_KEY}:${url.origin}:${userId}`,
         isCurrent,
@@ -96,11 +97,11 @@ async function computeChecksum(data: Uint8Array): Promise<string> {
     return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function getLocalManifest(context: ReturnType<typeof getCloudSyncContext>): Promise<ManifestEntry[]> {
+async function getLocalManifest(context: Awaited<ReturnType<typeof getCloudSyncContext>>): Promise<ManifestEntry[]> {
     return await DataStore.get<ManifestEntry[]>(context.manifestKey) ?? [];
 }
 
-async function saveLocalManifest(context: ReturnType<typeof getCloudSyncContext>, manifest: ManifestEntry[]) {
+async function saveLocalManifest(context: Awaited<ReturnType<typeof getCloudSyncContext>>, manifest: ManifestEntry[]) {
     await DataStore.set(context.manifestKey, manifest);
 }
 
@@ -119,7 +120,7 @@ async function buildLocalData(): Promise<Map<string, Uint8Array>> {
     return data;
 }
 
-async function applyDownloads(downloads: SyncResponse["downloads"], context: ReturnType<typeof getCloudSyncContext>) {
+async function applyDownloads(downloads: SyncResponse["downloads"], context: Awaited<ReturnType<typeof getCloudSyncContext>>) {
     if (downloads.length === 0) return false;
     if (new Set(downloads.map(({ key }) => key)).size !== downloads.length)
         throw new Error("The cloud server returned duplicate download records.");
@@ -145,7 +146,7 @@ async function applyDownloads(downloads: SyncResponse["downloads"], context: Ret
     }
 
     if (Object.keys(backup).length === 0) return false;
-    await importSettings(JSON.stringify(backup), "all", true, context.assertCurrent);
+    await importSettings(JSON.stringify(backup), "all", true, context.assertCurrent, context.expected);
     return true;
 }
 
@@ -177,7 +178,7 @@ function isSyncResponse(value: unknown): value is SyncResponse {
                 || (entry.key.startsWith("dataStore/") && entry.key.length > "dataStore/".length)));
 }
 
-async function doSyncV2(uploads: SyncRequest["uploads"], clientManifest: ManifestEntry[], context: ReturnType<typeof getCloudSyncContext>): Promise<SyncResponse | null> {
+async function doSyncV2(uploads: SyncRequest["uploads"], clientManifest: ManifestEntry[], context: Awaited<ReturnType<typeof getCloudSyncContext>>): Promise<SyncResponse | null> {
     const auth = await getCloudAuth();
     context.assertCurrent();
     const res = await fetch(new URL("/v2/sync", context.url), {
@@ -221,7 +222,7 @@ async function doSyncV2(uploads: SyncRequest["uploads"], clientManifest: Manifes
     return response;
 }
 
-async function putV2(context: ReturnType<typeof getCloudSyncContext>, manual?: boolean) {
+async function putV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>, manual?: boolean) {
     const localManifest = await getLocalManifest(context);
     context.assertCurrent();
     const manifestMap = new Map(localManifest.map(e => [e.key, e]));
@@ -275,7 +276,7 @@ async function putV2(context: ReturnType<typeof getCloudSyncContext>, manual?: b
     delete localStorage.Vencord_settingsDirty;
 }
 
-async function getV2(context: ReturnType<typeof getCloudSyncContext>, shouldNotify: boolean, force: boolean) {
+async function getV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>, shouldNotify: boolean, force: boolean) {
     const localManifest = force ? [] : await getLocalManifest(context);
     context.assertCurrent();
 
@@ -320,7 +321,7 @@ async function getV2(context: ReturnType<typeof getCloudSyncContext>, shouldNoti
     return true;
 }
 
-async function deleteV2(context: ReturnType<typeof getCloudSyncContext>) {
+async function deleteV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>) {
     const auth = await getCloudAuth();
     if (!context.isCurrent()) return;
 
@@ -374,7 +375,7 @@ function isSyncVersion(value: unknown): value is number {
     return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
-async function putV1(context: ReturnType<typeof getCloudSyncContext>, manual?: boolean) {
+async function putV1(context: Awaited<ReturnType<typeof getCloudSyncContext>>, manual?: boolean) {
     const settings = await exportSettings({ syncDataStore: false, minify: true, cloud: true });
 
     context.assertCurrent();
@@ -422,7 +423,7 @@ async function putV1(context: ReturnType<typeof getCloudSyncContext>, manual?: b
     delete localStorage.Vencord_settingsDirty;
 }
 
-async function getV1(context: ReturnType<typeof getCloudSyncContext>, shouldNotify: boolean, force: boolean) {
+async function getV1(context: Awaited<ReturnType<typeof getCloudSyncContext>>, shouldNotify: boolean, force: boolean) {
     context.assertCurrent();
     const auth = await getCloudAuth();
     context.assertCurrent();
@@ -503,7 +504,7 @@ async function getV1(context: ReturnType<typeof getCloudSyncContext>, shouldNoti
     const expanded = compressed.pipeThrough(new DecompressionStream("deflate-raw"));
     const settings = await readResponseText(new Response(expanded), MAX_SYNC_RESPONSE_BYTES);
     context.assertCurrent();
-    await importSettings(settings, "all", true, context.assertCurrent);
+    await importSettings(settings, "all", true, context.assertCurrent, context.expected);
     context.assertCurrent();
 
     PlainSettings.cloud.settingsSyncVersion = written;
@@ -524,7 +525,7 @@ async function getV1(context: ReturnType<typeof getCloudSyncContext>, shouldNoti
     return true;
 }
 
-async function deleteV1(context: ReturnType<typeof getCloudSyncContext>) {
+async function deleteV1(context: Awaited<ReturnType<typeof getCloudSyncContext>>) {
     const auth = await getCloudAuth();
     if (!context.isCurrent()) return;
     const res = await fetch(new URL("/v1/settings", context.url), {
@@ -574,9 +575,9 @@ function beginCloudOperation(shouldNotify: boolean) {
 
 export async function putCloudSettings(manual?: boolean) {
     if (!beginCloudOperation(Boolean(manual))) return false;
-    let context: ReturnType<typeof getCloudSyncContext> | undefined;
+    let context: Awaited<ReturnType<typeof getCloudSyncContext>> | undefined;
     try {
-        context = getCloudSyncContext(true);
+        context = await getCloudSyncContext(true);
         const version = await getApiVersion(context.url.origin);
         context.assertCurrent();
         if (version === "v2") {
@@ -605,9 +606,9 @@ export async function putCloudSettings(manual?: boolean) {
 
 export async function getCloudSettings(shouldNotify = true, force = false) {
     if (!beginCloudOperation(shouldNotify)) return false;
-    let context: ReturnType<typeof getCloudSyncContext> | undefined;
+    let context: Awaited<ReturnType<typeof getCloudSyncContext>> | undefined;
     try {
-        context = getCloudSyncContext(true);
+        context = await getCloudSyncContext(true);
         const version = await getApiVersion(context.url.origin);
         context.assertCurrent();
         if (version === "v2") {
@@ -637,9 +638,9 @@ export async function getCloudSettings(shouldNotify = true, force = false) {
 
 export async function deleteCloudSettings() {
     if (!beginCloudOperation(true)) return;
-    let context: ReturnType<typeof getCloudSyncContext> | undefined;
+    let context: Awaited<ReturnType<typeof getCloudSyncContext>> | undefined;
     try {
-        context = getCloudSyncContext();
+        context = await getCloudSyncContext();
         const version = await getApiVersion(context.url.origin);
         if (!context.isCurrent()) return;
         if (version === "v2")
@@ -662,9 +663,9 @@ export async function deleteCloudSettings() {
 
 export async function eraseAllCloudData() {
     if (!beginCloudOperation(true)) return;
-    let context: ReturnType<typeof getCloudSyncContext> | undefined;
+    let context: Awaited<ReturnType<typeof getCloudSyncContext>> | undefined;
     try {
-        context = getCloudSyncContext();
+        context = await getCloudSyncContext();
         const auth = await getCloudAuth();
         context.assertCurrent();
         const res = await fetch(new URL("/v1/", context.url), {

@@ -79,8 +79,12 @@ window.VencordNative = {
 
     quickCss: {
         get: () => DataStore.get("VencordQuickCss").then(s => s ?? ""),
-        set: async (css: string) => {
-            await DataStore.set("VencordQuickCss", css);
+        set: async (css: string, expected?: string) => {
+            await DataStore.update<string>("VencordQuickCss", current => {
+                if (expected !== undefined && (current ?? "") !== expected)
+                    throw new Error("QuickCSS changed during sync. Try again to include your latest changes.");
+                return css;
+            });
             cssListeners.forEach(l => l(css));
         },
         addChangeListener(cb) {

@@ -27,6 +27,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Cloud downloads preserve QuickCSS and DataStore edits made while synchronization is pending. Conflicting DataStore batches abort together, and web QuickCSS is no longer written twice through separate cloud records.
 - Legacy cloud downloads no longer use a local edit timestamp as a server cache validator, which could incorrectly skip different settings with the same timestamp.
 - Cloud reauthorization stays tied to the account and backend that started it and stops if cancelled during credential deletion.
 - Automatic cloud uploads retry through the existing debounce when another cloud operation is busy, instead of losing the scheduled upload. Retries recheck cloud sync preferences.

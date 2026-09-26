@@ -63,7 +63,7 @@ export default {
 
     quickCss: {
         get: () => invoke<string>(IpcEvents.GET_QUICK_CSS),
-        set: (css: string) => invoke<void>(IpcEvents.SET_QUICK_CSS, css),
+        set: (css: string, expected?: string) => invoke<void>(IpcEvents.SET_QUICK_CSS, css, expected),
 
         addChangeListener(cb: (newCss: string) => void) {
             ipcRenderer.on(IpcEvents.QUICK_CSS_UPDATE, (_, css) => cb(css));

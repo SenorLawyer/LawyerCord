@@ -13,7 +13,7 @@ import { moment, Toasts } from "@webpack/common";
 import { DataStore } from "..";
 
 type BackupType = "all" | "plugins" | "css" | "datastore";
-const LOCAL_DATASTORE_KEYS = new Set<unknown>(["Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions"]);
+const LOCAL_DATASTORE_KEYS = new Set<unknown>(["Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions", "VencordQuickCss"]);
 export const isLocalDataStoreKey = (key: unknown) => LOCAL_DATASTORE_KEYS.has(key)
     || (typeof key === "string" && key.startsWith("Vencord_cloudManifest:"));
 
@@ -85,7 +85,17 @@ function validateSettingTypes(settings: object, defaults: object) {
     }
 }
 
-export async function importSettings(data: string, type: BackupType = "all", cloud = false, checkCurrent?: () => void) {
+export async function captureCloudImportState() {
+    const quickCss = await VencordNative.quickCss.get();
+    const entries = await DataStore.entries<IDBValidKey, unknown>();
+    return {
+        quickCss,
+        dataStore: new Map(entries.filter(([key]) => isDataStoreKey(key) && !isLocalDataStoreKey(key))
+            .map(([key, value]) => [JSON.stringify(key), value] as const))
+    };
+}
+
+export async function importSettings(data: string, type: BackupType = "all", cloud = false, checkCurrent?: () => void, expected?: Awaited<ReturnType<typeof captureCloudImportState>>) {
     let parsed: unknown;
     try {
         parsed = JSON.parse(data);
@@ -136,9 +146,23 @@ export async function importSettings(data: string, type: BackupType = "all", clo
             await VencordNative.settings.set(PlainSettings);
         }
         checkCurrent?.();
-        if (quickCss !== undefined) await VencordNative.quickCss.set(quickCss);
+        if (quickCss !== undefined) await VencordNative.quickCss.set(quickCss, expected?.quickCss);
         checkCurrent?.();
-        if (dataStore) await DataStore.setMany(dataStore);
+        if (dataStore) {
+            if (expected) {
+                const entries = new Map(dataStore.map(entry => [JSON.stringify(entry[0]), entry]));
+                await DataStore.updateMany([...entries.values()].map(([key, value]) => [key, (current: unknown) => {
+                    checkCurrent?.();
+                    const previous = expected.dataStore.get(JSON.stringify(key));
+                    if (current !== previous && (current === undefined || previous === undefined
+                        || serializeDataStore([[key, current]]) !== serializeDataStore([[key, previous]])))
+                        throw new Error("Stored data changed during sync. Try again to include your latest changes.");
+                    return value;
+                }]));
+            } else {
+                await DataStore.setMany(dataStore);
+            }
+        }
     } catch (cause) {
         throw new Error("Settings import did not finish. Some changes may already have been applied.", { cause });
     }

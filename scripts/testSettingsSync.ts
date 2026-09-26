@@ -605,6 +605,7 @@ test("failed cloud downloads and deletions do not advance the manifest or report
         "@api/Settings": { PlainSettings: { cloud: {} } },
         "@utils/localStorage": { localStorage: {} },
         "@utils/Logger": { Logger: class { info() { } error() { } } },
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
         "./cloudSetup": { getCloudUrl: () => new URL("https://cloud.example"), getCloudAuth: async () => "test" },
         "./offline": { omitCloudSettings: (settings: object) => settings, serializeDataStore: JSON.stringify, importSettings: async () => { if (importFails) throw new Error("Import failed"); } }
     };
@@ -651,6 +652,53 @@ test("failed cloud downloads and deletions do not advance the manifest or report
         assert.deepEqual(events, ["settings", "manifest"]);
         assert.equal(notifications.length, 1);
         assert.equal(notifications[0].color, "var(--green-360)");
+    }
+});
+
+test("cloud deletion stops when its account or service changes", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const version of ["v1", "v2"]) for (const change of ["account", "service", "none"]) {
+        const stages = version === "v1" ? ["version", "auth", "delete"] : ["version", "auth", "manifest", "body", "delete", "manifest-save", "settings-save"];
+        for (const stage of stages) {
+            let userId = "first";
+            let service = "https://first.invalid";
+            const events: string[] = [];
+            const plain = { cloud: { settingsSyncVersion: 5 } };
+            const pause = async (event: string) => {
+                events.push(event);
+                if (event === stage) {
+                    if (change === "account") userId = "second";
+                    if (change === "service") service = "https://second.invalid";
+                }
+            };
+            const modules: Record<string, unknown> = {
+                "@api/DataStore": {
+                    get: async () => { await pause("version"); return { "https://first.invalid": version, "https://second.invalid": version }; },
+                    set: async () => pause("manifest-save")
+                },
+                "@api/Notifications": { showNotification: () => events.push("notification") },
+                "@api/Settings": { PlainSettings: plain, Settings: plain },
+                "@utils/Logger": { Logger: class { info() {} error() {} } },
+                "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
+                "./cloudSetup": { getCloudUrl: () => new URL(service), getCloudAuth: async () => { await pause("auth"); return "synthetic"; } }
+            };
+            const { deleteCloudSettings } = runInNewContext(`${compiled}\nexports;`, {
+                exports: {}, require: (name: string) => modules[name] ?? {}, URL,
+                VencordNative: { settings: { set: async () => pause("settings-save") } },
+                fetch: async (url: URL, init: RequestInit) => {
+                    assert.equal(url.origin, "https://first.invalid", "Authorization must never move to another service");
+                    await pause(init.method === "DELETE" ? "delete" : "manifest");
+                    return { ok: true, json: async () => { await pause("body"); return { entries: [{ key: "settings" }] }; } };
+                }
+            });
+            await deleteCloudSettings();
+            const expected = change === "none" ? [...stages, "notification"] : stages.slice(0, stages.indexOf(stage) + 1);
+            assert.deepEqual(events, expected, `${version}, ${change}, ${stage}`);
+            if (change !== "none" && !["manifest-save", "settings-save"].includes(stage))
+                assert.equal(plain.cloud.settingsSyncVersion, 5);
+        }
     }
 });
 

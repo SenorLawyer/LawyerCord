@@ -10,7 +10,7 @@ import { PlainSettings, Settings } from "@api/Settings";
 import { localStorage } from "@utils/localStorage";
 import { Logger } from "@utils/Logger";
 import { relaunch } from "@utils/native";
-import { SettingsRouter } from "@webpack/common";
+import { SettingsRouter, UserStore } from "@webpack/common";
 import { deflateSync, inflateSync } from "fflate";
 
 import { deauthorizeCloud, getCloudAuth, getCloudUrl } from "./cloudSetup";
@@ -36,9 +36,18 @@ async function loadApiVersionMap(): Promise<Record<string, ApiVersion>> {
     return await DataStore.get<Record<string, ApiVersion>>(API_VERSION_STORE_KEY) ?? {};
 }
 
-async function getApiVersion(): Promise<ApiVersion> {
+async function getApiVersion(origin = getCloudUrl().origin): Promise<ApiVersion> {
     const map = await loadApiVersionMap();
-    return map[getCloudUrl().origin] ?? "v2";
+    return map[origin] ?? "v2";
+}
+
+function getCloudSyncContext() {
+    const url = getCloudUrl();
+    const userId = UserStore.getCurrentUser()?.id;
+    return {
+        url,
+        isCurrent: () => userId !== undefined && UserStore.getCurrentUser()?.id === userId && getCloudUrl().href === url.href
+    };
 }
 
 async function setApiVersion(version: ApiVersion) {
@@ -261,12 +270,14 @@ async function getV2(shouldNotify: boolean, force: boolean) {
     return true;
 }
 
-async function deleteV2() {
+async function deleteV2(context: ReturnType<typeof getCloudSyncContext>) {
     const auth = await getCloudAuth();
+    if (!context.isCurrent()) return;
 
-    const manifestRes = await fetch(new URL("/v2/manifest", getCloudUrl()), {
+    const manifestRes = await fetch(new URL("/v2/manifest", context.url), {
         headers: { Authorization: auth },
     });
+    if (!context.isCurrent()) return;
 
     if (!manifestRes.ok) {
         showNotification({
@@ -278,20 +289,24 @@ async function deleteV2() {
     }
 
     const { entries }: { entries: ManifestEntry[]; } = await manifestRes.json();
+    if (!context.isCurrent()) return;
 
     await Promise.all(entries.map(async entry => {
-        const res = await fetch(new URL(`/v2/data/${encodeURIComponent(entry.key)}`, getCloudUrl()), {
+        const res = await fetch(new URL(`/v2/data/${encodeURIComponent(entry.key)}`, context.url), {
             method: "DELETE",
             headers: { Authorization: auth },
         });
         if (!res.ok && res.status !== 404)
             throw new Error(`Could not delete cloud data (API returned ${res.status}).`);
     }));
+    if (!context.isCurrent()) return;
 
     await saveLocalManifest([]);
+    if (!context.isCurrent()) return;
 
     PlainSettings.cloud.settingsSyncVersion = 0;
     await VencordNative.settings.set(PlainSettings);
+    if (!context.isCurrent()) return;
 
     logger.info("Settings deleted from cloud successfully");
     showNotification({
@@ -421,11 +436,14 @@ async function getV1(shouldNotify: boolean, force: boolean) {
     return true;
 }
 
-async function deleteV1() {
-    const res = await fetch(new URL("/v1/settings", getCloudUrl()), {
+async function deleteV1(context: ReturnType<typeof getCloudSyncContext>) {
+    const auth = await getCloudAuth();
+    if (!context.isCurrent()) return;
+    const res = await fetch(new URL("/v1/settings", context.url), {
         method: "DELETE",
-        headers: { Authorization: await getCloudAuth() },
+        headers: { Authorization: auth },
     });
+    if (!context.isCurrent()) return;
 
     if (!res.ok) {
         logger.error(`Failed to delete, API returned ${res.status}`);
@@ -492,17 +510,21 @@ export async function getCloudSettings(shouldNotify = true, force = false) {
 }
 
 export async function deleteCloudSettings() {
+    let context: ReturnType<typeof getCloudSyncContext> | undefined;
     try {
-        const version = await getApiVersion();
+        context = getCloudSyncContext();
+        const version = await getApiVersion(context.url.origin);
+        if (!context.isCurrent()) return;
         if (version === "v2")
-            await deleteV2();
+            await deleteV2(context);
         else
-            await deleteV1();
-    } catch (e: any) {
+            await deleteV1(context);
+    } catch (e: unknown) {
+        if (context && !context.isCurrent()) return;
         logger.error("Failed to delete", e);
         showNotification({
             title: "Cloud Settings",
-            body: `Could not delete settings (${e.toString()}).`,
+            body: `Could not delete settings (${String(e)}).`,
             color: "var(--red-360)",
         });
     }

@@ -53,8 +53,8 @@ export default definePlugin({
             find: "#{intl::COMMANDS_OPTIONAL_COUNT}",
             replacement: [
                 {
-                    match: /children:(?=\i\?\?\i\?\.name)(?<=command:(\i),.+?)/,
-                    replace: "children:$1.plugin??"
+                    match: /(\i)\.displayDescription\}\)\]\}\),.{0,100}?children:(?=\i\?\?\i\?\.name)/,
+                    replace: "$&$1.plugin??"
                 }
             ]
         }

@@ -42,11 +42,7 @@ function escapeMarkdownLabel(label: string) {
 }
 
 function copyRawUrls(attachments: CopyableAttachment[]) {
-    let urls = "";
-    for (const attachment of attachments) {
-        if (urls) urls += "\n";
-        urls += attachment.url;
-    }
+    const urls = attachments.map(attachment => attachment.url).join("\n");
 
     copyWithToast(
         urls,
@@ -55,12 +51,9 @@ function copyRawUrls(attachments: CopyableAttachment[]) {
 }
 
 function copyMarkdownLinks(attachments: CopyableAttachment[]) {
-    let links = "";
-    for (let index = 0; index < attachments.length; index++) {
-        const attachment = attachments[index];
-        if (links) links += "\n";
-        links += `[${escapeMarkdownLabel(attachment.filename ?? `attachment-${index + 1}`)}](${attachment.url.replace(/[()]/g, "\\$&")})`;
-    }
+    const links = attachments.map((attachment, index) =>
+        `[${escapeMarkdownLabel(attachment.filename ?? `attachment-${index + 1}`)}](${attachment.url.replace(/[()]/g, "\\$&")})`
+    ).join("\n");
 
     copyWithToast(
         links,

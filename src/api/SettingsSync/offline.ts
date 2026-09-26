@@ -105,25 +105,9 @@ export async function importSettings(data: string, type: BackupType = "all", clo
 }
 
 export async function exportSettings({ syncDataStore = true, type = "all", minify }: { syncDataStore?: boolean; type?: BackupType; minify?: boolean; }) {
-    const settings = VencordNative.settings.get();
-    const quickCss = await VencordNative.quickCss.get();
-    let dataStore: any;
-
-    if (syncDataStore) {
-        try {
-            dataStore = await DataStore.entries();
-        } catch (err) {
-            logger.error("Failed to read DataStore entries:", err);
-
-            if (type === "all") {
-                logger.warn("Skipping DataStore in backup due to size. Export DataStore separately if needed.");
-                toast(Toasts.Type.MESSAGE, "DataStore too large - exported without it. Use 'Export DataStore' separately if needed.");
-                dataStore = undefined;
-            } else if (type === "datastore") {
-                throw new Error("DataStore is too large to export. Please clear some plugin data and try again.");
-            }
-        }
-    }
+    const settings = type === "all" || type === "plugins" ? VencordNative.settings.get() : undefined;
+    const quickCss = type === "all" || type === "css" ? await VencordNative.quickCss.get() : undefined;
+    const dataStore = syncDataStore && (type === "all" || type === "datastore") ? await DataStore.entries() : undefined;
 
     switch (type) {
         case "all": {

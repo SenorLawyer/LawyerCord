@@ -292,6 +292,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Resolve cancelled file pickers and release their temporary inputs.
 - Simplify extension extraction, reject paths outside the extension directory, and finish cleanup before reporting installation failures.
 - Await backup file imports, preserve empty QuickCSS backups, and remove backup-content logging and duplicate import handling.
+- Fail full backups when required data cannot be read, and read only the requested sections for partial backups.
 
 - Honor the default two-way cloud sync direction and remove unreachable startup warnings and unused notification code.
 

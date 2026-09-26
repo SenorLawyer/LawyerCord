@@ -14,6 +14,48 @@ const { outputText } = transpileModule(readFileSync("src/api/SettingsSync/offlin
     compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
 });
 
+test("backups read only requested sections and never omit failed required data", async () => {
+    const reads: string[] = [];
+    const notifications: { type: string; }[] = [];
+    const failure = new Error("Database read failed");
+    let failedSection = "datastore";
+    let saves = 0;
+    const read = (section: string, value: unknown) => {
+        reads.push(section);
+        if (failedSection === section) throw failure;
+        return value;
+    };
+    const modules: Record<string, unknown> = {
+        "@api/Settings": { PlainSettings: {} },
+        "@utils/Logger": { Logger: class { error() {} warn() {} } },
+        "@utils/web": { saveFile: () => { saves++; } },
+        "@webpack/common": { Toasts: { show: (toast: { type: string }) => notifications.push(toast), genId: () => "test", Type: { FAILURE: "failure", MESSAGE: "message" } } },
+        "..": { DataStore: { entries: async () => read("datastore", [["audio", { name: "saved" }]]) } }
+    };
+    const { exportSettings, downloadSettingsBackup } = runInNewContext(`${outputText}\nexports;`, {
+        exports: {}, require: (name: string) => modules[name], IS_DISCORD_DESKTOP: false,
+        VencordNative: { settings: { get: () => read("plugins", { plugins: {} }) }, quickCss: { get: async () => read("css", "") } }
+    });
+    await assert.rejects(exportSettings({}), (error: unknown) => error === failure);
+    await assert.rejects(downloadSettingsBackup("all"), (error: unknown) => error === failure);
+    assert.equal(saves, 0);
+    assert.deepEqual(notifications.map(value => value.type), ["failure"]);
+    for (const [type, expected, failing] of [
+        ["plugins", { settings: { plugins: {} } }, "css"],
+        ["css", { quickCss: "" }, "plugins"],
+        ["datastore", { dataStore: [["audio", { name: "saved" }]] }, "plugins"]
+    ] as const) {
+        reads.length = 0;
+        failedSection = failing;
+        assert.deepEqual(JSON.parse(await exportSettings({ type })), expected);
+        assert.deepEqual(reads, [type]);
+    }
+    failedSection = "datastore";
+    reads.length = 0;
+    assert.deepEqual(JSON.parse(await exportSettings({ syncDataStore: false })), { settings: { plugins: {} }, quickCss: "" });
+    assert.deepEqual(reads, ["plugins", "css"]);
+});
+
 test("automatic cloud sync uses the displayed default and respects each direction", () => {
     const { outputText } = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }

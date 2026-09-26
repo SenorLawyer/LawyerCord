@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { Paragraph } from "@components/Paragraph";
 import { makeRange } from "@utils/types";
 import { Button, closeModal, Menu, Modal, openModalLazy, Slider, TextInput, useState } from "@webpack/common";
 
@@ -26,10 +27,9 @@ export function ImageModal(folderProps: folderProp) {
             </TextInput>
             <RenderPreview folderProps={folderProps} url={data} size={size} />
             {data && <>
-                <div style={{
-                    color: "#FFF"
-                }}>Change the size of the folder icon</div>
+                <Paragraph>Change the size of the folder icon</Paragraph>
                 <Slider
+                    aria-label="Folder icon size in percent"
                     initialValue={size}
                     onValueChange={setSize}
                     maxValue={200}

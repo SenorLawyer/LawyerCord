@@ -7871,6 +7871,7 @@ test("folder icon editing preserves saved size and resetting an unused folder is
         useState: (initial: unknown) => [initial, () => {}],
         Button: "button", Slider: "slider", closeModal: () => closes++
     }, {
+        "@components/Paragraph": { Paragraph: "p" },
         "./settings": { settings },
         "@utils/types": { makeRange: (start: number, end: number) => Array.from({ length: end - start + 1 }, (_, i) => start + i) },
         "./util": {}

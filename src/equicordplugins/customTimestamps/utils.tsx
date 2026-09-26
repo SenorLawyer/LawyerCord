@@ -7,11 +7,8 @@
 import "./style.css";
 
 import ErrorBoundary from "@components/ErrorBoundary";
-import { Paragraph } from "@components/Paragraph";
 import { findByCodeLazy, findComponentByCodeLazy } from "@webpack";
 import { moment, useRef, UserStore, useState } from "@webpack/common";
-
-import customTimestamps from ".";
 
 export type TimeFormat = {
     name: string;
@@ -82,29 +79,23 @@ export const timeFormats: Record<string, TimeFormat> = {
 };
 
 const DemoMessage = (props: { msgId, compact, message, date: Date | undefined, isGroupStart?: boolean; }) => {
+    const user = UserStore.getCurrentUser();
     const message = createBotMessage({ content: props.message, channelId: "1337", embeds: [] });
-    message.author = UserStore.getCurrentUser();
+    message.author = user;
     message.id = props.msgId;
     message.timestamp = moment(props.date ?? new Date());
-    const user = UserStore.getCurrentUser();
-    const populatedMessage = message && populateMessagePrototype(message);
-    return populatedMessage ? (
+    return (
         <div className="vc-cmt-demo-message">
             <MessagePreview
                 author={{ ...user, nick: user.globalName || user.username }}
-                message={populatedMessage}
+                message={populateMessagePrototype(message)}
                 compact={props.compact}
                 isGroupStart={props.isGroupStart || false}
                 className="vc-cmt-demo-message-preview"
                 hideSimpleEmbedContent={true}
             />
         </div>
-    ) : <div className="vc-cmt-demo-message">
-        <Paragraph>
-            {/* @ts-ignore */}
-            <b>Preview:</b> {customTimestamps.renderTimestamp(date, "cozy")}
-        </Paragraph>
-    </div>;
+    );
 };
 
 export const DemoMessageContainer = ErrorBoundary.wrap(() => {

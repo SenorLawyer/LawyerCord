@@ -229,6 +229,8 @@ Mocked Discord requests do not establish live account-switch, message-send, or p
 
 The reproduced CSS/DataStore download conflict is addressed by conditional writes described above. Remaining cloud work includes cross-context settings-object conflicts, automatic dirty tracking for non-settings edits, account-transition behavior and live acceptance. The import spans separate persistence mechanisms and is not an all-or-nothing transaction across all sections.
 
+The settings-object conflict is independently reproduced in `.git/audit/cloud-settings-conflict.cjs`: the actual downloader and importer overwrite a newer persisted settings value from another context and report success. The desktop settings handler serializes writes within its process, while the web setter directly replaces a localStorage item. The importer currently merges into live settings before awaiting persistence. A complete fix therefore needs a conditional write and staged in-memory application; the CSS/DataStore fix alone does not address this case.
+
 The full finding ledger is still being worked through. This list identifies major open areas and is not an assertion that other findings are closed:
 
 - Scheduled-message legacy recovery, remaining persisted-data constraints, media cancellation, and coordination between separate client contexts.

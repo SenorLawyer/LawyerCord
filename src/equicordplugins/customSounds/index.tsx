@@ -23,8 +23,6 @@ import { makeEmptyOverride, seasonalSounds, SoundOverride, soundTypes } from "./
 
 const cl = classNameFactory("vc-custom-sounds-");
 
-const allSoundTypes = soundTypes || [];
-
 const dataUriCache = new Map<string, string>();
 const pendingDataUris = new Map<string, Promise<string | null>>();
 const logger = new Logger("CustomSounds");
@@ -65,7 +63,7 @@ function importOverrides(text: string) {
         throw new Error("Invalid sound settings file.");
     }
 
-    const overrides = new Map(allSoundTypes.map(type => [type.id, makeEmptyOverride()]));
+    const overrides = new Map(soundTypes.map(type => [type.id, makeEmptyOverride()]));
     for (const value of imported.overrides as unknown[]) {
         if (!isObject(value)) throw new Error("Invalid sound override.");
         const { id, enabled = false, selectedSound = "default", selectedFileId, volume = 100 } = value as Record<string, unknown>;
@@ -86,7 +84,7 @@ function importOverrides(text: string) {
 export const getCustomSoundURL: AudioProcessor = (data: PreprocessAudioData) => {
     let audioOverride = data.audio;
 
-    if (data.audio in seasonalSounds) {
+    if (Object.hasOwn(seasonalSounds, data.audio)) {
         audioOverride = soundTypes.find(sound => sound.seasonal?.includes(data.audio))?.id || data.audio;
     }
 
@@ -108,20 +106,20 @@ export const getCustomSoundURL: AudioProcessor = (data: PreprocessAudioData) => 
     }
 
     if (override.selectedSound !== "default" && override.selectedSound !== "custom") {
-        if (override.selectedSound in seasonalSounds) {
+        if (Object.hasOwn(seasonalSounds, override.selectedSound)) {
             data.audio = seasonalSounds[override.selectedSound];
             data.volume = override.volume;
             return;
         }
 
-        const soundType = allSoundTypes.find(t => t.id === data.audio);
+        const soundType = soundTypes.find(t => t.id === audioOverride);
 
         if (soundType?.seasonal) {
             const seasonalId = soundType.seasonal.find(seasonalId =>
                 seasonalId.startsWith(`${override.selectedSound}_`)
             );
 
-            if (seasonalId && seasonalId in seasonalSounds) {
+            if (seasonalId && Object.hasOwn(seasonalSounds, seasonalId)) {
                 data.audio = seasonalSounds[seasonalId];
                 data.volume = override.volume;
                 return;
@@ -155,7 +153,7 @@ export function ensureDataURICached(fileId: string): Promise<string | null> {
 
 async function preloadDataURIs() {
     const version = cacheVersion;
-    for (const soundType of allSoundTypes) {
+    for (const soundType of soundTypes) {
         if (version !== cacheVersion) return;
         const override = getOverride(soundType.id);
         if (override?.enabled && override.selectedSound === "custom" && override.selectedFileId) {
@@ -165,7 +163,7 @@ async function preloadDataURIs() {
 }
 
 const soundSettings = Object.fromEntries(
-    allSoundTypes.map(type => [
+    soundTypes.map(type => [
         type.id,
         {
             type: OptionType.STRING,
@@ -196,7 +194,7 @@ const settings = definePluginSettings({
 
             React.useEffect(() => {
                 refreshFiles().catch(() => showToast("Could not load custom sound files.", Toasts.Type.FAILURE));
-                allSoundTypes.forEach(type => {
+                soundTypes.forEach(type => {
                     if (!settings.store[type.id]) {
                         setOverride(type.id, makeEmptyOverride());
                     }
@@ -204,7 +202,7 @@ const settings = definePluginSettings({
             }, []);
 
             const resetOverrides = () => {
-                allSoundTypes.forEach(type => {
+                soundTypes.forEach(type => {
                     setOverride(type.id, makeEmptyOverride());
                 });
                 clearAudioCache();
@@ -233,7 +231,7 @@ const settings = definePluginSettings({
             };
 
             const downloadSettings = async () => {
-                const overrides = allSoundTypes.map(type => {
+                const overrides = soundTypes.map(type => {
                     const override = getOverride(type.id);
                     return {
                         id: type.id,
@@ -260,7 +258,7 @@ const settings = definePluginSettings({
                 showToast(`Exported ${overrides.length} settings (audio files not included)`);
             };
 
-            const filteredSoundTypes = allSoundTypes.filter(type =>
+            const filteredSoundTypes = soundTypes.filter(type =>
                 type.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 type.id.toLowerCase().includes(searchQuery.toLowerCase())
             );

@@ -27,6 +27,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomSounds applies seasonal overrides to incoming seasonal sounds and ignores inherited object names in saved sound selections.
 - CustomSounds releases cached playback data on stop, reset and file deletion, and ignores stale loads that finish afterward.
 
 - CustomSounds stops previews when the editor closes and prevents pending loads from playing after Stop or a changed selection.

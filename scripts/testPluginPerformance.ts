@@ -7866,7 +7866,8 @@ test("custom sound conversion infers MIME types and rejects failed reads before 
 });
 
 test("sound imports validate overrides and invalidate pending playback data", async () => {
-    const soundTypes = [{ id: "message1", name: "Message" }, { id: "mute", name: "Mute" }];
+    const soundTypes = [{ id: "message1", name: "Message", seasonal: ["halloween_message1", "winter_message1"] }, { id: "mute", name: "Mute" }];
+    const seasonalSounds = { halloween_message1: "https://fixture.invalid/halloween.mp3", winter_message1: "https://fixture.invalid/winter.mp3" };
     const makeEmptyOverride = () => ({ enabled: false, selectedSound: "default", volume: 100, useFile: false });
     const store: Record<string, string> = { message1: "original message", mute: "original mute" };
     let resolveRead: (value: string) => void = () => assert.fail("Audio read was not started");
@@ -7885,7 +7886,7 @@ test("sound imports validate overrides and invalidate pending playback data", as
             reads++;
             return new Promise<string>(resolve => { resolveRead = resolve; });
         } },
-        "./types": { soundTypes, makeEmptyOverride, seasonalSounds: {} }
+        "./types": { soundTypes, makeEmptyOverride, seasonalSounds }
     }, {}, "({ importOverrides, ensureDataURICached, getCustomSoundURL, plugin: exports.default })");
     const original = { ...store };
     for (const text of ["{", "null", "{}", '{"overrides":[null]}', ...[
@@ -7919,6 +7920,21 @@ test("sound imports validate overrides and invalidate pending playback data", as
     const stopped = { audio: "message1", volume: 100 };
     getCustomSoundURL(stopped);
     assert.equal(stopped.audio, "message1");
+    for (const selectedSound of ["winter", "winter_message1"]) {
+        store.message1 = JSON.stringify({ ...makeEmptyOverride(), enabled: true, selectedSound, volume: 42 });
+        for (const audio of ["message1", "halloween_message1"]) {
+            const data = { audio, volume: 100 };
+            getCustomSoundURL(data);
+            assert.equal(data.audio, seasonalSounds.winter_message1);
+            assert.equal(data.volume, 42);
+        }
+    }
+    for (const selectedSound of ["constructor", "toString", "__proto__"]) {
+        store.message1 = JSON.stringify({ ...makeEmptyOverride(), enabled: true, selectedSound });
+        const data = { audio: "message1", volume: 100 };
+        getCustomSoundURL(data);
+        assert.equal(data.audio, "message1");
+    }
 });
 
 test("custom timestamps expand explicit placeholders without altering shared formatting", () => {

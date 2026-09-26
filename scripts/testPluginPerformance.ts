@@ -7866,6 +7866,56 @@ test("custom sound storage keeps concurrent deletes and failed writes consistent
     assert.equal((await current.getAllAudio()).one.name, "Imported name");
 });
 
+test("custom sound reads omit malformed restored records without rewriting storage", async () => {
+    const valid = { id: "valid", name: "valid.ogg", type: "audio/ogg", dataUri: "data:audio/ogg;base64,AA==" };
+    const legacy = { id: "legacy", name: "legacy.ogg", type: "audio/ogg", buffer: new Uint8Array([1, 2]).buffer };
+    const malformed = [null, 1, "file", {}, { ...valid, name: {} }, { ...valid, type: 7 }, { ...valid, id: null },
+        { ...valid, buffer: 1024 }, { ...valid, buffer: { byteLength: 2, length: 1024 } }, { ...valid, dataUri: 7 }];
+    let stored: unknown;
+    let writes = 0;
+    const { getAllAudio, getAudioDataURI } = loadSource("src/equicordplugins/customSounds/audioStore.ts", {
+        "@api/DataStore": { get: async () => structuredClone(stored), update: async () => { writes++; } }
+    }, { ArrayBuffer });
+    for (const value of malformed) {
+        stored = { valid, legacy, malformed: value };
+        const snapshot = await getAllAudio();
+        assert.deepEqual(Object.keys(snapshot), ["valid", "legacy"]);
+        assert.equal(await getAudioDataURI("malformed"), undefined);
+        assert.equal(await getAudioDataURI("valid"), valid.dataUri);
+        assert.equal(snapshot.legacy.buffer.byteLength, 2);
+        assert.deepEqual(stored, { valid, legacy, malformed: value });
+    }
+    for (stored of [null, undefined, 17, "files", [valid]])
+        assert.deepEqual(Object.keys(await getAllAudio()), []);
+    assert.equal(writes, 0);
+});
+
+test("custom sound conversion leaves malformed replacement records untouched", async () => {
+    const legacy = { id: "legacy", name: "old.ogg", type: "audio/ogg", buffer: new Uint8Array([1, 2]).buffer };
+    for (const replacement of [
+        { id: "legacy", name: "old.ogg", type: "audio/ogg", dataUri: 17 },
+        { id: "legacy", name: "old.ogg", type: "audio/ogg", buffer: { byteLength: 2, length: 2, 0: 1, 1: 2 } }
+    ]) {
+        let stored: unknown = { legacy: structuredClone(legacy) };
+        class Reader {
+            result = "data:audio/ogg;base64,AQI=";
+            onload?: () => void;
+            readAsDataURL() {
+                stored = { legacy: structuredClone(replacement) };
+                this.onload?.();
+            }
+        }
+        const { getAudioDataURI } = loadSource("src/equicordplugins/customSounds/audioStore.ts", {
+            "@api/DataStore": {
+                get: async () => structuredClone(stored),
+                update: async (_key: string, change: (value: unknown) => unknown) => { stored = change(stored); }
+            }
+        }, { ArrayBuffer, Uint8Array, Blob, FileReader: Reader });
+        assert.equal(await getAudioDataURI("legacy"), undefined);
+        assert.deepEqual(stored, { legacy: replacement });
+    }
+});
+
 test("custom sound conversion infers MIME types and rejects failed reads before saving", async () => {
     let mode = "success";
     let writes = 0;

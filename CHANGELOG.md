@@ -27,6 +27,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomSounds ignores malformed restored audio records without deleting them and preserves replacements made during legacy conversion.
 - Cloud deletion processes one record at a time and stops before further deletions after a failure or an account or backend change.
 - Malformed cloud JSON responses report a fixed error instead of copying response excerpts into logs and notifications.
 - Changing cloud backends preserves saved credentials. Disabling cloud integration cancels pending authorization. Reauthorize still clears the selected backend's credential before reconnecting.

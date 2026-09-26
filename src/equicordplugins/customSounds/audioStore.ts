@@ -36,7 +36,17 @@ export async function saveAudio(file: File): Promise<string> {
 }
 
 export async function getAllAudio(): Promise<Record<string, StoredAudioFile>> {
-    return await get<Record<string, StoredAudioFile>>(STORAGE_KEY) ?? {};
+    const files = await get<unknown>(STORAGE_KEY);
+    if (!files || typeof files !== "object" || Array.isArray(files)) return {};
+    return Object.fromEntries(Object.entries(files).filter((pair): pair is [string, StoredAudioFile] => {
+        const entry = pair[1];
+        return entry !== null && typeof entry === "object"
+            && "id" in entry && typeof entry.id === "string"
+            && "name" in entry && typeof entry.name === "string"
+            && "type" in entry && typeof entry.type === "string"
+            && (!("buffer" in entry) || entry.buffer === undefined || entry.buffer instanceof ArrayBuffer)
+            && (!("dataUri" in entry) || entry.dataUri === undefined || typeof entry.dataUri === "string");
+    }));
 }
 
 async function generateDataURI(buffer: ArrayBuffer, type: string, name: string): Promise<string> {
@@ -76,10 +86,10 @@ export async function getAudioDataURI(id: string, files = getAllAudio()): Promis
     let result: string | undefined;
     await update<Record<string, StoredAudioFile>>(STORAGE_KEY, files => {
         const current = files?.[id];
-        if (current?.dataUri) {
+        if (typeof current?.dataUri === "string" && current.dataUri) {
             result = current.dataUri;
             delete current.buffer;
-        } else if (current?.buffer && current.name === entry.name && current.type === entry.type
+        } else if (current?.buffer instanceof ArrayBuffer && current.name === entry.name && current.type === entry.type
             && current.buffer.byteLength === bytes.byteLength
             && new Uint8Array(current.buffer).every((byte, index) => byte === bytes[index])) {
             current.dataUri = result = dataUri;

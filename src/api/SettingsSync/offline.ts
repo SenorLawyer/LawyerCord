@@ -84,7 +84,7 @@ function validateSettingTypes(settings: object, defaults: object) {
     }
 }
 
-export async function importSettings(data: string, type: BackupType = "all", cloud = false) {
+export async function importSettings(data: string, type: BackupType = "all", cloud = false, checkCurrent?: () => void) {
     let parsed: unknown;
     try {
         parsed = JSON.parse(data);
@@ -129,11 +129,14 @@ export async function importSettings(data: string, type: BackupType = "all", clo
     }
 
     try {
+        checkCurrent?.();
         if (settings) {
             deepMerge(PlainSettings, settings);
             await VencordNative.settings.set(PlainSettings);
         }
+        checkCurrent?.();
         if (quickCss !== undefined) await VencordNative.quickCss.set(quickCss);
+        checkCurrent?.();
         if (dataStore) await DataStore.setMany(dataStore);
     } catch (cause) {
         throw new Error("Settings import did not finish. Some changes may already have been applied.", { cause });

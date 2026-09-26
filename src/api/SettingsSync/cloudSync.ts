@@ -36,7 +36,7 @@ async function loadApiVersionMap(): Promise<Record<string, ApiVersion>> {
     return await DataStore.get<Record<string, ApiVersion>>(API_VERSION_STORE_KEY) ?? {};
 }
 
-async function getApiVersion(origin = getCloudUrl().origin): Promise<ApiVersion> {
+async function getApiVersion(origin: string): Promise<ApiVersion> {
     const map = await loadApiVersionMap();
     return map[origin] ?? "v2";
 }
@@ -44,16 +44,20 @@ async function getApiVersion(origin = getCloudUrl().origin): Promise<ApiVersion>
 function getCloudSyncContext() {
     const url = getCloudUrl();
     const userId = UserStore.getCurrentUser()?.id;
+    const isCurrent = () => userId !== undefined && UserStore.getCurrentUser()?.id === userId && getCloudUrl().href === url.href;
     return {
         url,
-        isCurrent: () => userId !== undefined && UserStore.getCurrentUser()?.id === userId && getCloudUrl().href === url.href
+        isCurrent,
+        assertCurrent: () => {
+            if (!isCurrent()) throw new Error("Cloud sync account or service changed.");
+        }
     };
 }
 
-async function setApiVersion(version: ApiVersion) {
+async function setApiVersion(version: ApiVersion, origin: string) {
     await DataStore.update<Record<string, ApiVersion>>(API_VERSION_STORE_KEY, map => {
         map ??= {};
-        map[getCloudUrl().origin] = version;
+        map[origin] = version;
         return map;
     });
 }
@@ -102,13 +106,14 @@ async function buildLocalData(): Promise<Map<string, Uint8Array>> {
     return data;
 }
 
-async function applyDownloads(downloads: SyncResponse["downloads"]) {
+async function applyDownloads(downloads: SyncResponse["downloads"], context: ReturnType<typeof getCloudSyncContext>) {
     if (downloads.length === 0) return false;
 
     let settingsChanged = false;
     const decoder = new TextDecoder();
 
     for (const dl of downloads) {
+        context.assertCurrent();
         const text = decoder.decode(fromBase64(dl.value));
 
         if (dl.key === "settings") {
@@ -140,25 +145,29 @@ function handleAuthFailure() {
     Settings.cloud.authenticated = false;
 }
 
-async function doSyncV2(uploads: SyncRequest["uploads"], clientManifest: ManifestEntry[]): Promise<SyncResponse | null> {
+async function doSyncV2(uploads: SyncRequest["uploads"], clientManifest: ManifestEntry[], context: ReturnType<typeof getCloudSyncContext>): Promise<SyncResponse | null> {
+    const auth = await getCloudAuth();
+    context.assertCurrent();
     let res: Response;
     try {
-        res = await fetch(new URL("/v2/sync", getCloudUrl()), {
+        res = await fetch(new URL("/v2/sync", context.url), {
             method: "POST",
             headers: {
-                Authorization: await getCloudAuth(),
+                Authorization: auth,
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({ client_manifest: clientManifest, uploads } satisfies SyncRequest),
         });
     } catch (e) {
+        context.assertCurrent();
         logger.error("v2 sync network error, will retry next sync", e);
         return null;
     }
 
+    context.assertCurrent();
     if (res.status === 404) {
         logger.info("Server does not support v2, falling back to v1");
-        await setApiVersion("v1");
+        await setApiVersion("v1", context.url.origin);
         return null;
     }
 
@@ -178,20 +187,24 @@ async function doSyncV2(uploads: SyncRequest["uploads"], clientManifest: Manifes
     }
 
     const response: SyncResponse = await res.json();
+    context.assertCurrent();
     if (response.errors.length)
         throw new Error("The cloud server could not synchronize all data. Please try again.");
     return response;
 }
 
-async function putV2(manual?: boolean) {
+async function putV2(context: ReturnType<typeof getCloudSyncContext>, manual?: boolean) {
     const localManifest = await getLocalManifest();
+    context.assertCurrent();
     const manifestMap = new Map(localManifest.map(e => [e.key, e]));
 
     const localData = await buildLocalData();
+    context.assertCurrent();
     const uploads: SyncRequest["uploads"] = [];
 
     for (const [key, value] of localData) {
         const checksum = await computeChecksum(value);
+        context.assertCurrent();
         const existing = manifestMap.get(key);
 
         if (!existing || existing.checksum !== checksum)
@@ -204,14 +217,18 @@ async function putV2(manual?: boolean) {
         return;
     }
 
-    const response = await doSyncV2(uploads, localManifest);
+    const response = await doSyncV2(uploads, localManifest, context);
+    context.assertCurrent();
     if (!response) return;
 
-    const hadDownloads = await applyDownloads(response.downloads);
+    const hadDownloads = await applyDownloads(response.downloads, context);
+    context.assertCurrent();
 
     PlainSettings.cloud.settingsSyncVersion = Date.now();
     await VencordNative.settings.set(PlainSettings);
+    context.assertCurrent();
     await saveLocalManifest(response.server_manifest);
+    context.assertCurrent();
 
     logger.info(`Sync complete: ${response.uploaded.length} uploaded, ${response.downloads.length} downloaded`);
 
@@ -230,10 +247,12 @@ async function putV2(manual?: boolean) {
     delete localStorage.Vencord_settingsDirty;
 }
 
-async function getV2(shouldNotify: boolean, force: boolean) {
+async function getV2(context: ReturnType<typeof getCloudSyncContext>, shouldNotify: boolean, force: boolean) {
     const localManifest = force ? [] : await getLocalManifest();
+    context.assertCurrent();
 
-    const response = await doSyncV2([], localManifest);
+    const response = await doSyncV2([], localManifest, context);
+    context.assertCurrent();
     if (!response) return false;
 
     if (response.downloads.length === 0) {
@@ -247,11 +266,14 @@ async function getV2(shouldNotify: boolean, force: boolean) {
         return false;
     }
 
-    const settingsChanged = await applyDownloads(response.downloads);
+    const settingsChanged = await applyDownloads(response.downloads, context);
+    context.assertCurrent();
 
     PlainSettings.cloud.settingsSyncVersion = Date.now();
     await VencordNative.settings.set(PlainSettings);
+    context.assertCurrent();
     await saveLocalManifest(response.server_manifest);
+    context.assertCurrent();
 
     logger.info(`Pulled ${response.downloads.length} keys from cloud`);
 
@@ -316,18 +338,22 @@ async function deleteV2(context: ReturnType<typeof getCloudSyncContext>) {
     });
 }
 
-async function putV1(manual?: boolean) {
+async function putV1(context: ReturnType<typeof getCloudSyncContext>, manual?: boolean) {
     const settings = await exportSettings({ syncDataStore: false, minify: true, cloud: true });
 
-    const res = await fetch(new URL("/v1/settings", getCloudUrl()), {
+    context.assertCurrent();
+    const auth = await getCloudAuth();
+    context.assertCurrent();
+    const res = await fetch(new URL("/v1/settings", context.url), {
         method: "PUT",
         headers: {
-            Authorization: await getCloudAuth(),
+            Authorization: auth,
             "Content-Type": "application/octet-stream",
         },
         body: deflateSync(new TextEncoder().encode(settings)) as Uint8Array<ArrayBuffer>,
     });
 
+    context.assertCurrent();
     if (!res.ok) {
         logger.error(`Failed to sync up, API returned ${res.status}`);
         showNotification({
@@ -339,8 +365,10 @@ async function putV1(manual?: boolean) {
     }
 
     const { written } = await res.json();
+    context.assertCurrent();
     PlainSettings.cloud.settingsSyncVersion = written;
     await VencordNative.settings.set(PlainSettings);
+    context.assertCurrent();
 
     logger.info("Settings uploaded to cloud successfully");
 
@@ -355,16 +383,20 @@ async function putV1(manual?: boolean) {
     delete localStorage.Vencord_settingsDirty;
 }
 
-async function getV1(shouldNotify: boolean, force: boolean) {
-    const res = await fetch(new URL("/v1/settings", getCloudUrl()), {
+async function getV1(context: ReturnType<typeof getCloudSyncContext>, shouldNotify: boolean, force: boolean) {
+    context.assertCurrent();
+    const auth = await getCloudAuth();
+    context.assertCurrent();
+    const res = await fetch(new URL("/v1/settings", context.url), {
         method: "GET",
         headers: {
-            Authorization: await getCloudAuth(),
+            Authorization: auth,
             Accept: "application/octet-stream",
             "If-None-Match": Settings.cloud.settingsSyncVersion.toString(),
         },
     });
 
+    context.assertCurrent();
     if (res.status === 401) {
         handleAuthFailure();
         return false;
@@ -416,11 +448,14 @@ async function getV1(shouldNotify: boolean, force: boolean) {
     }
 
     const data = await res.arrayBuffer();
+    context.assertCurrent();
     const settings = new TextDecoder().decode(inflateSync(new Uint8Array(data)));
-    await importSettings(settings, "all", true);
+    await importSettings(settings, "all", true, context.assertCurrent);
+    context.assertCurrent();
 
     PlainSettings.cloud.settingsSyncVersion = written;
     await VencordNative.settings.set(PlainSettings);
+    context.assertCurrent();
 
     logger.info("Settings loaded from cloud successfully");
     if (shouldNotify)
@@ -469,40 +504,54 @@ export function shouldCloudSync(direction: "push" | "pull") {
 }
 
 export async function putCloudSettings(manual?: boolean) {
+    let context: ReturnType<typeof getCloudSyncContext> | undefined;
     try {
-        const version = await getApiVersion();
+        context = getCloudSyncContext();
+        const version = await getApiVersion(context.url.origin);
+        context.assertCurrent();
         if (version === "v2") {
-            await putV2(manual);
-            if (await getApiVersion() === "v1")
-                await putV1(manual);
+            await putV2(context, manual);
+            context.assertCurrent();
+            const nextVersion = await getApiVersion(context.url.origin);
+            context.assertCurrent();
+            if (nextVersion === "v1")
+                await putV1(context, manual);
         } else {
-            await putV1(manual);
+            await putV1(context, manual);
         }
-    } catch (e: any) {
+    } catch (e: unknown) {
+        if (context && !context.isCurrent()) return;
         logger.error("Failed to sync up", e);
         showNotification({
             title: "Cloud Settings",
-            body: `Could not synchronize settings to the cloud (${e.toString()}).`,
+            body: `Could not synchronize settings to the cloud (${String(e)}).`,
             color: "var(--red-360)",
         });
     }
 }
 
 export async function getCloudSettings(shouldNotify = true, force = false) {
+    let context: ReturnType<typeof getCloudSyncContext> | undefined;
     try {
-        const version = await getApiVersion();
+        context = getCloudSyncContext();
+        const version = await getApiVersion(context.url.origin);
+        context.assertCurrent();
         if (version === "v2") {
-            const result = await getV2(shouldNotify, force);
-            if (await getApiVersion() === "v1")
-                return await getV1(shouldNotify, force);
+            const result = await getV2(context, shouldNotify, force);
+            context.assertCurrent();
+            const nextVersion = await getApiVersion(context.url.origin);
+            context.assertCurrent();
+            if (nextVersion === "v1")
+                return await getV1(context, shouldNotify, force);
             return result;
         }
-        return await getV1(shouldNotify, force);
-    } catch (e: any) {
+        return await getV1(context, shouldNotify, force);
+    } catch (e: unknown) {
+        if (context && !context.isCurrent()) return false;
         logger.error("Failed to sync down", e);
         showNotification({
             title: "Cloud Settings",
-            body: `Could not synchronize settings from the cloud (${e.toString()}).`,
+            body: `Could not synchronize settings from the cloud (${String(e)}).`,
             color: "var(--red-360)",
         });
         return false;

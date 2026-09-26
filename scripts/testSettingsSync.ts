@@ -450,7 +450,7 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
     const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
     }).outputText;
-    const { buildLocalData, applyDownloads } = runInNewContext(`${compiled}\n({ buildLocalData, applyDownloads });`, { ...globals, exports: {} });
+    const { buildLocalData, applyDownloads } = runInNewContext(`${compiled}\n({ buildLocalData, applyDownloads: downloads => applyDownloads(downloads, { assertCurrent() {} }) });`, { ...globals, exports: {} });
     const local = await buildLocalData();
     const settingsJson = new TextDecoder().decode(local.get("settings"));
     assert.deepEqual(JSON.parse(settingsJson), { plugins: {} });
@@ -510,7 +510,7 @@ test("legacy cloud sync waits for local settings persistence before reporting su
             VencordNative: { settings: { set: () => new Promise<void>((_resolve, reject) => { rejectSave = reject; }) } }
         });
         let settled = false;
-        const pending = entry[direction](true, true).then(
+        const pending = entry[direction]({ url: new URL("https://sync.invalid"), assertCurrent() {} }, true, true).then(
             () => { settled = true; },
             (error: unknown) => { settled = true; return error; }
         );
@@ -652,6 +652,124 @@ test("failed cloud downloads and deletions do not advance the manifest or report
         assert.deepEqual(events, ["settings", "manifest"]);
         assert.equal(notifications.length, 1);
         assert.equal(notifications[0].color, "var(--green-360)");
+    }
+});
+
+test("cloud uploads and downloads discard obsolete responses and stop subsequent writes", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const version of ["v1", "v2"]) for (const direction of ["getCloudSettings", "putCloudSettings"]) {
+        const stages = ["version", "auth", "response", "body", "checkpoint"];
+        if (version === "v2" || direction === "getCloudSettings") stages.push("settings", "css", "datastore");
+        if (version === "v2") stages.push("manifest-save");
+        for (const change of ["account", "service", "none"]) for (const stage of stages) {
+            let userId = "first";
+            let service = "https://first.invalid";
+            let changed = false;
+            let settingsSaves = 0;
+            const events: string[] = [];
+            const storage = { Vencord_settingsDirty: "true" };
+            const plain = { cloud: { settingsSyncVersion: 1, authenticated: true }, plugins: { Sound: { enabled: true } } };
+            const pause = async (event: string) => {
+                events.push(event);
+                assert.equal(changed, false, `Unexpected ${event} after ${version}/${direction}/${change}/${stage}`);
+                if (event === stage && change !== "none") {
+                    changed = true;
+                    if (change === "account") userId = "second";
+                    else service = "https://second.invalid";
+                }
+            };
+            const bundle = { settings: { plugins: { Sound: { enabled: false } } }, quickCss: "", dataStore: [["plugin", 1]] };
+            const store = {
+                get: async (key: string) => { if (key === "Vencord_cloudApiVersions") { await pause("version"); return { "https://first.invalid": version }; } },
+                entries: async () => [],
+                set: async () => pause("manifest-save"),
+                setMany: async () => pause("datastore")
+            };
+            const modules: Record<string, unknown> = {
+                "@api/DataStore": store,
+                "..": { DataStore: store },
+                "@api/Notifications": { showNotification: () => { events.push("notification"); assert.equal(changed, false); } },
+                "@api/Settings": { PlainSettings: plain, Settings: plain, DefaultSettings: defaultSettings },
+                "@utils/localStorage": { localStorage: storage },
+                "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+                "@utils/Logger": { Logger: class { info() {} error() {} } },
+                "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
+                fflate: { deflateSync: (value: Uint8Array) => value, inflateSync: (value: Uint8Array) => value },
+                "./cloudSetup": { getCloudUrl: () => new URL(service), getCloudAuth: async () => { await pause("auth"); return "synthetic"; } }
+            };
+            const globals = {
+                require: (name: string) => modules[name] ?? {}, URL, TextEncoder, TextDecoder, Uint8Array, atob, btoa, crypto, IS_WEB: true,
+                VencordNative: {
+                    settings: { get: () => plain, set: async () => pause(++settingsSaves === 1 && (version === "v2" || direction === "getCloudSettings") ? "settings" : "checkpoint") },
+                    quickCss: { get: async () => "", set: async () => pause("css") }
+                },
+                fetch: async (url: URL) => {
+                    assert.equal(url.origin, "https://first.invalid");
+                    await pause("response");
+                    return {
+                        ok: true, status: 200, headers: { get: () => "2" },
+                        arrayBuffer: async () => { await pause("body"); return new TextEncoder().encode(JSON.stringify(bundle)).buffer; },
+                        json: async () => {
+                            await pause("body");
+                            return { written: 2, errors: [], uploaded: [], server_manifest: [], downloads: Object.entries(bundle).map(([key, value]) => ({ key, value: btoa(key === "quickCss" ? String(value) : JSON.stringify(value)) })) };
+                        }
+                    };
+                }
+            };
+            modules["./offline"] = runInNewContext(`${outputText}\nexports;`, { ...globals, exports: {} });
+            const api = runInNewContext(`${compiled}\nexports;`, { ...globals, exports: {} });
+            await api[direction]();
+            assert.ok(events.includes(stage), `${version}/${direction}/${stage} must be exercised`);
+            if (change !== "none") {
+                assert.equal(events.at(-1), stage);
+                assert.equal(storage.Vencord_settingsDirty, "true");
+            } else {
+                assert.equal(storage.Vencord_settingsDirty, undefined);
+            }
+        }
+    }
+});
+
+test("obsolete cloud failures cannot deauthorize another account or start fallback requests", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const version of ["v1", "v2"]) for (const status of [401, 404, 500]) for (const during of ["response", "fallback"]) {
+        if (during === "fallback" && (version !== "v2" || status !== 404)) continue;
+        let service = "https://first.invalid";
+        let requests = 0;
+        let notifications = 0;
+        let updates = 0;
+        const plain = { cloud: { authenticated: true, settingsSyncVersion: 1 } };
+        const versions: Record<string, string> = { "https://first.invalid": version };
+        const modules: Record<string, unknown> = {
+            "@api/DataStore": {
+                get: async (key: string) => key === "Vencord_cloudApiVersions" ? versions : [],
+                update: async (_key: string, updater: (map: Record<string, string>) => unknown) => {
+                    updates++;
+                    service = "https://second.invalid";
+                    updater(versions);
+                }
+            },
+            "@api/Notifications": { showNotification: () => notifications++ },
+            "@api/Settings": { PlainSettings: plain, Settings: plain },
+            "@utils/Logger": { Logger: class { info() {} error() {} } },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "./cloudSetup": { getCloudUrl: () => new URL(service), getCloudAuth: async () => "synthetic" }
+        };
+        const { getCloudSettings } = runInNewContext(`${compiled}\nexports;`, {
+            exports: {}, require: (name: string) => modules[name] ?? {}, URL,
+            fetch: async () => { requests++; if (during === "response") service = "https://second.invalid"; return { status, ok: false }; }
+        });
+        assert.equal(await getCloudSettings(), false);
+        assert.equal(requests, 1);
+        assert.equal(notifications, 0);
+        assert.equal(plain.cloud.authenticated, true);
+        assert.equal(updates, during === "fallback" ? 1 : 0);
+        assert.equal(versions["https://second.invalid"], undefined);
+        if (during === "fallback") assert.equal(versions["https://first.invalid"], "v1");
     }
 });
 

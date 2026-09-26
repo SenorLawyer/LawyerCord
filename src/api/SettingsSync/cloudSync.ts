@@ -22,6 +22,7 @@ const logger = new Logger("SettingsSync:Cloud", "#39b7e0");
 
 const MANIFEST_STORE_KEY = "Vencord_cloudManifest";
 const API_VERSION_STORE_KEY = "Vencord_cloudApiVersions";
+const REQUEST_TIMEOUT_MS = 120_000;
 
 type ApiVersion = "v2" | "v1";
 
@@ -175,21 +176,15 @@ function isSyncResponse(value: unknown): value is SyncResponse {
 async function doSyncV2(uploads: SyncRequest["uploads"], clientManifest: ManifestEntry[], context: ReturnType<typeof getCloudSyncContext>): Promise<SyncResponse | null> {
     const auth = await getCloudAuth();
     context.assertCurrent();
-    let res: Response;
-    try {
-        res = await fetch(new URL("/v2/sync", context.url), {
-            method: "POST",
-            headers: {
-                Authorization: auth,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ client_manifest: clientManifest, uploads } satisfies SyncRequest),
-        });
-    } catch (e) {
-        context.assertCurrent();
-        logger.error("v2 sync network error, will retry next sync", e);
-        return null;
-    }
+    const res = await fetch(new URL("/v2/sync", context.url), {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        method: "POST",
+        headers: {
+            Authorization: auth,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ client_manifest: clientManifest, uploads } satisfies SyncRequest),
+    });
 
     context.assertCurrent();
     if (res.status === 404) {
@@ -326,6 +321,7 @@ async function deleteV2(context: ReturnType<typeof getCloudSyncContext>) {
     if (!context.isCurrent()) return;
 
     const manifestRes = await fetch(new URL("/v2/manifest", context.url), {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         headers: { Authorization: auth },
     });
     if (!context.isCurrent()) return;
@@ -344,8 +340,9 @@ async function deleteV2(context: ReturnType<typeof getCloudSyncContext>) {
     if (!isObject(manifest) || !("entries" in manifest) || !Array.isArray(manifest.entries) || !manifest.entries.every(isManifestEntry))
         throw new Error("The cloud server returned an invalid deletion manifest.");
 
-    await Promise.all(manifest.entries.map(async (entry: ManifestEntry) => {
+    const results = await Promise.allSettled(manifest.entries.map(async (entry: ManifestEntry) => {
         const res = await fetch(new URL(`/v2/data/${encodeURIComponent(entry.key)}`, context.url), {
+            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
             method: "DELETE",
             headers: { Authorization: auth },
         });
@@ -353,6 +350,8 @@ async function deleteV2(context: ReturnType<typeof getCloudSyncContext>) {
             throw new Error(`Could not delete cloud data (API returned ${res.status}).`);
     }));
     if (!context.isCurrent()) return;
+    const failure = results.find(result => result.status === "rejected");
+    if (failure) throw failure.reason;
 
     await saveLocalManifest(context, []);
     if (!context.isCurrent()) return;
@@ -380,6 +379,7 @@ async function putV1(context: ReturnType<typeof getCloudSyncContext>, manual?: b
     const auth = await getCloudAuth();
     context.assertCurrent();
     const res = await fetch(new URL("/v1/settings", context.url), {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         method: "PUT",
         headers: {
             Authorization: auth,
@@ -425,6 +425,7 @@ async function getV1(context: ReturnType<typeof getCloudSyncContext>, shouldNoti
     const auth = await getCloudAuth();
     context.assertCurrent();
     const res = await fetch(new URL("/v1/settings", context.url), {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         method: "GET",
         headers: {
             Authorization: auth,
@@ -515,6 +516,7 @@ async function deleteV1(context: ReturnType<typeof getCloudSyncContext>) {
     const auth = await getCloudAuth();
     if (!context.isCurrent()) return;
     const res = await fetch(new URL("/v1/settings", context.url), {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         method: "DELETE",
         headers: { Authorization: auth },
     });
@@ -651,6 +653,7 @@ export async function eraseAllCloudData() {
         const auth = await getCloudAuth();
         context.assertCurrent();
         const res = await fetch(new URL("/v1/", context.url), {
+            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
             method: "DELETE",
             headers: { Authorization: auth },
         });

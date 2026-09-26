@@ -25,6 +25,7 @@ const REVEAL_SETTINGS: "onClick"[] = ["onClick"];
 
 let triggerWords = [""];
 let triggerWordRegex: RegExp | null = null;
+let loadGeneration = 0;
 
 function compileTriggerWords() {
     const escapedWords: string[] = [];
@@ -175,8 +176,15 @@ export default definePlugin({
     },
 
     async start() {
-        triggerWords = await DataStore.get(WORDS_KEY) ?? [""];
+        const generation = ++loadGeneration;
+        const words = await DataStore.get(WORDS_KEY);
+        if (generation !== loadGeneration) return;
+        triggerWords = words ?? [""];
         if (triggerWords.at(-1) !== "") triggerWords.push("");
         compileTriggerWords();
+    },
+
+    stop() {
+        loadGeneration++;
     }
 });

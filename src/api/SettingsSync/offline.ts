@@ -16,6 +16,8 @@ type BackupType = "all" | "plugins" | "css" | "datastore";
 const LOCAL_DATASTORE_KEYS = new Set<unknown>(["Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions"]);
 export const isLocalDataStoreKey = (key: unknown) => LOCAL_DATASTORE_KEYS.has(key);
 
+export const omitCloudSettings = (settings: object) => Object.fromEntries(Object.entries(settings).filter(([key]) => key !== "cloud"));
+
 const toast = (type: string, message: string) =>
     Toasts.show({
         type,
@@ -105,7 +107,7 @@ export async function importSettings(data: string, type: BackupType = "all", clo
                 !isObject(plugin) || ("enabled" in plugin && typeof plugin.enabled !== "boolean"))) {
                 throw new Error("Plugin settings must contain objects with boolean enabled flags.");
             }
-            settings = value;
+            settings = cloud ? omitCloudSettings(value) : value;
         }
     }
     if (type === "all" || type === "css") {
@@ -138,8 +140,9 @@ export async function importSettings(data: string, type: BackupType = "all", clo
     }
 }
 
-export async function exportSettings({ syncDataStore = true, type = "all", minify }: { syncDataStore?: boolean; type?: BackupType; minify?: boolean; }) {
-    const settings = type === "all" || type === "plugins" ? VencordNative.settings.get() : undefined;
+export async function exportSettings({ syncDataStore = true, type = "all", minify, cloud = false }: { syncDataStore?: boolean; type?: BackupType; minify?: boolean; cloud?: boolean; }) {
+    let settings: object | undefined = type === "all" || type === "plugins" ? VencordNative.settings.get() : undefined;
+    if (cloud && settings) settings = omitCloudSettings(settings);
     const quickCss = type === "all" || type === "css" ? await VencordNative.quickCss.get() : undefined;
     const dataStore = syncDataStore && (type === "all" || type === "datastore") ? await DataStore.entries() : undefined;
     if (dataStore) serializeDataStore(dataStore);

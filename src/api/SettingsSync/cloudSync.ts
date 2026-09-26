@@ -14,7 +14,7 @@ import { SettingsRouter } from "@webpack/common";
 import { deflateSync, inflateSync } from "fflate";
 
 import { deauthorizeCloud, getCloudAuth, getCloudUrl } from "./cloudSetup";
-import { exportSettings, importSettings, isLocalDataStoreKey, serializeDataStore } from "./offline";
+import { exportSettings, importSettings, isLocalDataStoreKey, omitCloudSettings, serializeDataStore } from "./offline";
 import { ManifestEntry, SyncRequest, SyncResponse } from "./types";
 
 const logger = new Logger("SettingsSync:Cloud", "#39b7e0");
@@ -82,7 +82,7 @@ async function buildLocalData(): Promise<Map<string, Uint8Array>> {
     const encoder = new TextEncoder();
     const data = new Map<string, Uint8Array>();
 
-    data.set("settings", encoder.encode(JSON.stringify(VencordNative.settings.get())));
+    data.set("settings", encoder.encode(JSON.stringify(omitCloudSettings(VencordNative.settings.get()))));
 
     const quickCss = await VencordNative.quickCss.get();
     data.set("quickCss", encoder.encode(quickCss));
@@ -302,7 +302,7 @@ async function deleteV2() {
 }
 
 async function putV1(manual?: boolean) {
-    const settings = await exportSettings({ syncDataStore: false, minify: true });
+    const settings = await exportSettings({ syncDataStore: false, minify: true, cloud: true });
 
     const res = await fetch(new URL("/v1/settings", getCloudUrl()), {
         method: "PUT",

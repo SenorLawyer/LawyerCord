@@ -243,7 +243,7 @@ test("desktop settings saves preserve the previous file and store when disk writ
 });
 
 test("backup imports validate every selected section before changing settings or storage", async () => {
-    const initial = { themeLinks: ["old"], plugins: { Sound: { enabled: true } } };
+    const initial = { themeLinks: ["old"], plugins: { Sound: { enabled: true } }, cloud: { url: "https://local.invalid", authenticated: true, settingsSync: true, settingsSyncVersion: 10 } };
     const plain = structuredClone(initial);
     const writes: unknown[] = [];
     const modules: Record<string, unknown> = {
@@ -298,6 +298,14 @@ test("backup imports validate every selected section before changing settings or
     assert.deepEqual(Array.from(pairs[1][0]), []);
     await importSettings('{"settings":{"plugins":{"FuturePlugin":{"enabled":false,"custom":[null,false,{"future":true}]}}}}', "plugins");
     assert.deepEqual(JSON.parse(JSON.stringify(plain)).plugins.FuturePlugin, { enabled: false, custom: [null, false, { future: true }] });
+    const cloud = plain.cloud;
+    const downloaded = { settings: { cloud: { url: "https://remote.invalid", authenticated: false, settingsSync: false, settingsSyncVersion: 99 }, plugins: { Sound: { enabled: false } } } };
+    await importSettings(JSON.stringify(downloaded), "all", true);
+    assert.equal(plain.cloud, cloud);
+    assert.deepEqual(plain.cloud, initial.cloud, "Cloud downloads must preserve local service and authentication settings");
+    assert.equal(plain.plugins.Sound.enabled, false);
+    await importSettings(JSON.stringify(downloaded), "plugins");
+    assert.deepEqual(plain.cloud, downloaded.settings.cloud, "Explicit offline restores may restore cloud configuration");
 });
 
 test("runtime import failures report partial application without undoing newer edits", async () => {
@@ -412,6 +420,7 @@ test("backups reject DataStore values that JSON would silently discard or change
 });
 
 test("cloud data round trips the aggregate DataStore record and empty CSS", async () => {
+    const nativeSettings = { plugins: {}, cloud: { url: "https://local.invalid", authenticated: true, settingsSyncVersion: 1 } };
     const records: [string, unknown][] = [["CustomSounds", { saved: true }], ["VoiceStats", { seconds: 42 }]];
     const syncedRecords = records.slice();
     const localKeys = ["Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions"];
@@ -434,7 +443,7 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
     };
     const globals = {
         require: (name: string) => modules[name], TextEncoder, TextDecoder, Uint8Array, atob,
-        VencordNative: { settings: { get: () => ({}), set: async () => {} }, quickCss: { get: async () => "", set: async (value: string) => css.push(value) } }
+        VencordNative: { settings: { get: () => nativeSettings, set: async () => {} }, quickCss: { get: async () => "", set: async (value: string) => css.push(value) } }
     };
     const offline = runInNewContext(`${outputText}\nexports;`, { ...globals, exports: {} });
     modules["./offline"] = offline;
@@ -443,6 +452,12 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
     }).outputText;
     const { buildLocalData, applyDownloads } = runInNewContext(`${compiled}\n({ buildLocalData, applyDownloads });`, { ...globals, exports: {} });
     const local = await buildLocalData();
+    const settingsJson = new TextDecoder().decode(local.get("settings"));
+    assert.deepEqual(JSON.parse(settingsJson), { plugins: {} });
+    nativeSettings.cloud.settingsSyncVersion++;
+    assert.equal(new TextDecoder().decode((await buildLocalData()).get("settings")), settingsJson, "A local sync timestamp must not change the uploaded settings checksum");
+    assert.deepEqual(JSON.parse(await offline.exportSettings({ type: "plugins", cloud: true })), { settings: { plugins: {} } });
+    assert.deepEqual(JSON.parse(await offline.exportSettings({ type: "plugins" })), { settings: nativeSettings });
     assert.equal(local.has("quickCss"), true, "Cleared CSS must replace an older cloud value");
     assert.equal(new TextDecoder().decode(local.get("quickCss")), "");
     assert.deepEqual(JSON.parse(new TextDecoder().decode(local.get("dataStore"))), syncedRecords);
@@ -487,7 +502,7 @@ test("legacy cloud sync waits for local settings persistence before reporting su
             "@webpack/common": {},
             fflate: { deflateSync: (value: Uint8Array) => value, inflateSync: (value: Uint8Array) => value },
             "./cloudSetup": { getCloudUrl: () => new URL("https://sync.invalid"), getCloudAuth: async () => "test" },
-            "./offline": { exportSettings: async () => "{}", importSettings: async () => {} }
+            "./offline": { exportSettings: async (options: { cloud?: boolean }) => { assert.equal(options.cloud, true); return "{}"; }, importSettings: async () => {} }
         };
         const entry = runInNewContext(`${compiled}\n({ putV1, getV1 });`, {
             exports: {}, require: (name: string) => modules[name], URL, TextEncoder, TextDecoder, Uint8Array, IS_WEB: true,
@@ -591,7 +606,7 @@ test("failed cloud downloads and deletions do not advance the manifest or report
         "@utils/localStorage": { localStorage: {} },
         "@utils/Logger": { Logger: class { info() { } error() { } } },
         "./cloudSetup": { getCloudUrl: () => new URL("https://cloud.example"), getCloudAuth: async () => "test" },
-        "./offline": { serializeDataStore: JSON.stringify, importSettings: async () => { if (importFails) throw new Error("Import failed"); } }
+        "./offline": { omitCloudSettings: (settings: object) => settings, serializeDataStore: JSON.stringify, importSettings: async () => { if (importFails) throw new Error("Import failed"); } }
     };
     const { getCloudSettings, putCloudSettings, deleteCloudSettings } = runInNewContext(`${outputText}\nexports;`, {
         exports: {}, require: (name: string) => modules[name] ?? {}, URL, TextEncoder, TextDecoder, atob, btoa, crypto, IS_WEB: true,

@@ -25,6 +25,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomFolderIcons applies saved icons, size changes, background settings and resets immediately without requiring a hover.
+
 - ClientSideBlock restores hiding for current direct-message rows while preserving group and system conversations.
 
 - ClientSideBlock hides role headers only when every displayed member is loaded and hidden, preserving headers for incomplete groups.

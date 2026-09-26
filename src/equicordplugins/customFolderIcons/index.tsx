@@ -7,6 +7,7 @@
 import ErrorBoundary from "@components/ErrorBoundary";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
+import type { ReactNode } from "react";
 
 import { makeContextItem } from "./components";
 import { folderIconsData, settings } from "./settings";
@@ -14,7 +15,10 @@ import { folderProp, int2rgba } from "./util";
 
 interface FolderIconProps {
     folderNode: { id: string; color: number; };
+    original: ReactNode;
 }
+
+const SETTINGS: ("folderIcons" | "solidIcon")[] = ["folderIcons", "solidIcon"];
 
 export default definePlugin({
     name: "CustomFolderIcons",
@@ -27,7 +31,7 @@ export default definePlugin({
             find: "#{intl::GUILD_FOLDER_TOOLTIP_A11Y_LABEL}",
             replacement: {
                 match: /(\(0,\i\.jsx\)\(\i,\{folderNode:(\i),hovered:\i,sorting:\i\}\))/,
-                replace: "($self.shouldReplace({folderNode:$2})?$self.replace({folderNode:$2}):$1)"
+                replace: "$self.replace({folderNode:$2,original:$1})"
             }
         },
     ],
@@ -37,16 +41,14 @@ export default definePlugin({
             menuItems.push(makeContextItem(props));
         }
     },
-    shouldReplace(props: FolderIconProps): boolean {
-        return !!((settings.store.folderIcons as folderIconsData)?.[props.folderNode.id]?.url);
-    },
     replace: ErrorBoundary.wrap((props: FolderIconProps) => {
-        const data = (settings.store.folderIcons as folderIconsData | undefined)?.[props.folderNode.id];
-        if (!data) return null;
+        const { folderIcons, solidIcon } = settings.use(SETTINGS);
+        const data = (folderIcons as folderIconsData | undefined)?.[props.folderNode.id];
+        if (!data?.url) return props.original;
         return (
             <div
                 style={{
-                    backgroundColor: int2rgba(props.folderNode.color, settings.store.solidIcon ? 1 : .4),
+                    backgroundColor: int2rgba(props.folderNode.color, solidIcon ? 1 : .4),
                     display: "flex",
                     justifyContent: "center",
                     alignItems: "center",

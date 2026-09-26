@@ -7815,9 +7815,19 @@ test("sound imports validate all overrides before replacing settings", () => {
     assert.deepEqual(JSON.parse(store.message1), makeEmptyOverride());
 });
 
-test("folder icon rendering handles unset entries and uses the shared error boundary", () => {
-    const settings: { store: { folderIcons?: Record<string, { url: string; size?: number; } | null>; solidIcon: boolean; } } = {
-        store: { solidIcon: false }
+test("folder icon rendering subscribes to changes and preserves the native fallback", () => {
+    interface FolderSettings {
+        folderIcons?: Record<string, { url: string; size?: number; } | null>;
+        solidIcon: boolean;
+    }
+    const subscriptions: string[][] = [];
+    const store: FolderSettings = { solidIcon: false };
+    const settings = {
+        store,
+        use(keys: string[]) {
+            subscriptions.push(keys);
+            return this.store;
+        }
     };
     let boundaryOptions: unknown;
     const { default: plugin } = loadComponent("src/equicordplugins/customFolderIcons/index.tsx", {}, {
@@ -7831,15 +7841,14 @@ test("folder icon rendering handles unset entries and uses the shared error boun
         "./util": { int2rgba: (_color: number, alpha: number) => String(alpha) }
     });
     assert.equal((boundaryOptions as { noop: boolean }).noop, true);
-    const props = { folderNode: { id: "folder", color: 0 } };
-    const unsetEntries: Array<typeof settings.store.folderIcons> = [undefined, {}, { folder: null }];
+    const original = { type: "native-folder-icon" };
+    const props = { folderNode: { id: "folder", color: 0 }, original };
+    const unsetEntries: Array<typeof settings.store.folderIcons> = [undefined, {}, { folder: null }, { folder: { url: "" } }];
     for (const folderIcons of unsetEntries) {
         settings.store.folderIcons = folderIcons;
-        assert.equal(plugin.shouldReplace(props), false);
-        assert.equal(plugin.replace(props), null);
+        assert.equal(plugin.replace(props), original);
     }
     settings.store.folderIcons = { folder: { url: "https://fixture.invalid/icon.png", size: 175 } };
-    assert.equal(plugin.shouldReplace(props), true);
     let tree = plugin.replace(props);
     assert.equal(tree.props.children[0].props.src, "https://fixture.invalid/icon.png");
     assert.equal(tree.props.children[0].props.width, "175%");
@@ -7849,6 +7858,8 @@ test("folder icon rendering handles unset entries and uses the shared error boun
     tree = plugin.replace(props);
     assert.equal(tree.props.children[0].props.width, "100%");
     assert.equal(tree.props.style.backgroundColor, "1");
+    assert.deepEqual(Array.from(subscriptions[0]), ["folderIcons", "solidIcon"]);
+    assert.ok(subscriptions.every(keys => keys === subscriptions[0]));
 });
 
 test("folder icon editing preserves saved size and resetting an unused folder is safe", () => {

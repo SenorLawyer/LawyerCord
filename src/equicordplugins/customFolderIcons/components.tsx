@@ -98,13 +98,6 @@ export function makeContextItem(a: folderProp) {
                             title="Set a New Icon."
                         >
                             <ImageModal folderId={a.folderId} folderColor={a.folderColor} />
-                            <div style={{
-                                color: "white",
-                                margin: "2.5%",
-                                marginTop: "1%"
-                            }}>
-                                You might have to hover the folder after setting in order for it to refresh.
-                            </div>
                         </Modal>
                     );
                 },

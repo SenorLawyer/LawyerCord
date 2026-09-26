@@ -342,48 +342,12 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
-- CustomSounds releases cached playback data on stop, reset and file deletion, and ignores stale loads that finish afterward.
-
-- CustomSounds stops previews when the editor closes and prevents pending loads from playing after Stop or a changed selection.
-
-- CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
-
-- CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
-
-- CustomSounds detects audio types when a file has no MIME type and rejects cancelled reads instead of saving an invalid sound.
-
-- Queued plugin setting edits no longer overwrite newer imported values, and repeated typing stays debounced across modal rerenders.
-
-- Resetting plugin settings refreshes open inputs and prevents older queued edits from undoing the reset.
-
-- CustomTimestamps restores its original formats when Reset Settings is used.
-
-- CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
-
 - Search messages by author in a server or DM, paginate up to the requested result count, exclude surrounding context messages, and stop fetching when cancelled.
 - Index triggers by event, channel, and user. Group run history without copying earlier entries for each log.
 
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed
-
-- CustomSounds releases cached playback data on stop, reset and file deletion, and ignores stale loads that finish afterward.
-
-- CustomSounds stops previews when the editor closes and prevents pending loads from playing after Stop or a changed selection.
-
-- CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
-
-- CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
-
-- CustomSounds detects audio types when a file has no MIME type and rejects cancelled reads instead of saving an invalid sound.
-
-- Queued plugin setting edits no longer overwrite newer imported values, and repeated typing stays debounced across modal rerenders.
-
-- Resetting plugin settings refreshes open inputs and prevents older queued edits from undoing the reset.
-
-- CustomTimestamps restores its original formats when Reset Settings is used.
-
-- CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
 
 - Reduce notification updates, timezone formatting work, visibility observer churn and repeated badge rendering work.
 - Cancel obsolete plugin requests, presence updates, theme loads and native CSS watchers while preserving independent Discord windows.
@@ -411,71 +375,17 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
-- CustomSounds releases cached playback data on stop, reset and file deletion, and ignores stale loads that finish afterward.
-
-- CustomSounds stops previews when the editor closes and prevents pending loads from playing after Stop or a changed selection.
-
-- CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
-
-- CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
-
-- CustomSounds detects audio types when a file has no MIME type and rejects cancelled reads instead of saving an invalid sound.
-
-- Queued plugin setting edits no longer overwrite newer imported values, and repeated typing stays debounced across modal rerenders.
-
-- Resetting plugin settings refreshes open inputs and prevents older queued edits from undoing the reset.
-
-- CustomTimestamps restores its original formats when Reset Settings is used.
-
-- CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
-
 - Update the pinned fast-uri dependency to 3.1.6 to resolve the dependency audit failures.
 
 ## 2.0.1.0 - 2026-08-29
 
 ### Fixed
 
-- CustomSounds releases cached playback data on stop, reset and file deletion, and ignores stale loads that finish afterward.
-
-- CustomSounds stops previews when the editor closes and prevents pending loads from playing after Stop or a changed selection.
-
-- CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
-
-- CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
-
-- CustomSounds detects audio types when a file has no MIME type and rejects cancelled reads instead of saving an invalid sound.
-
-- Queued plugin setting edits no longer overwrite newer imported values, and repeated typing stays debounced across modal rerenders.
-
-- Resetting plugin settings refreshes open inputs and prevents older queued edits from undoing the reset.
-
-- CustomTimestamps restores its original formats when Reset Settings is used.
-
-- CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
-
 - Restore Discord's original app archive when an interrupted update leaves only the LawyerCord patch marker, so Install, Reinstall / Repair, and Uninstall work again.
 
 ## 2.0.0.0 - 2026-08-29
 
 ### Fixed
-
-- CustomSounds releases cached playback data on stop, reset and file deletion, and ignores stale loads that finish afterward.
-
-- CustomSounds stops previews when the editor closes and prevents pending loads from playing after Stop or a changed selection.
-
-- CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
-
-- CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
-
-- CustomSounds detects audio types when a file has no MIME type and rejects cancelled reads instead of saving an invalid sound.
-
-- Queued plugin setting edits no longer overwrite newer imported values, and repeated typing stays debounced across modal rerenders.
-
-- Resetting plugin settings refreshes open inputs and prevents older queued edits from undoing the reset.
-
-- CustomTimestamps restores its original formats when Reset Settings is used.
-
-- CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
 
 - Make Stable, Beta, and Nightly updates fall back to the newest eligible release instead of reporting an older channel build as current.
 - Show the installed LawyerCord version in Updater settings.
@@ -496,47 +406,11 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
-- CustomSounds releases cached playback data on stop, reset and file deletion, and ignores stale loads that finish afterward.
-
-- CustomSounds stops previews when the editor closes and prevents pending loads from playing after Stop or a changed selection.
-
-- CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
-
-- CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
-
-- CustomSounds detects audio types when a file has no MIME type and rejects cancelled reads instead of saving an invalid sound.
-
-- Queued plugin setting edits no longer overwrite newer imported values, and repeated typing stays debounced across modal rerenders.
-
-- Resetting plugin settings refreshes open inputs and prevents older queued edits from undoing the reset.
-
-- CustomTimestamps restores its original formats when Reset Settings is used.
-
-- CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
-
 - Repair folder-style patched Discord installations before installing LawyerCord.
 
 ## 1.16.1.0 - 2026-07-29
 
 ### Fixed
-
-- CustomSounds releases cached playback data on stop, reset and file deletion, and ignores stale loads that finish afterward.
-
-- CustomSounds stops previews when the editor closes and prevents pending loads from playing after Stop or a changed selection.
-
-- CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
-
-- CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
-
-- CustomSounds detects audio types when a file has no MIME type and rejects cancelled reads instead of saving an invalid sound.
-
-- Queued plugin setting edits no longer overwrite newer imported values, and repeated typing stays debounced across modal rerenders.
-
-- Resetting plugin settings refreshes open inputs and prevents older queued edits from undoing the reset.
-
-- CustomTimestamps restores its original formats when Reset Settings is used.
-
-- CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
 
 - Publish the standalone updater asset as `desktop.asar` alongside the LawyerCord-named copy.
 - Defer Ghosted's private-settings restore until startup so LawyerCord loads correctly.

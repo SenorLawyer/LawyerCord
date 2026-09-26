@@ -15,8 +15,8 @@ import { useForceUpdater } from "@utils/react";
 import { makeRange } from "@utils/types";
 import { React, Select, showToast, Slider } from "@webpack/common";
 
-import { deleteAudio, saveAudio } from "./audioStore";
-import { ensureDataURICached } from "./index";
+import { saveAudio } from "./audioStore";
+import { deleteCustomAudio, ensureDataURICached } from "./index";
 import { SoundOverride, SoundType } from "./types";
 
 const AUDIO_EXTENSIONS = ["mp3", "wav", "ogg", "m4a", "aac", "flac", "webm", "wma", "mp4"];
@@ -126,7 +126,7 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
 
     const deleteFile = async (id: string) => {
         try {
-            await deleteAudio(id);
+            await deleteCustomAudio(id);
             stopPreview();
 
             if (override.selectedFileId === id) {

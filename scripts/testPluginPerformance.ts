@@ -7865,21 +7865,28 @@ test("custom sound conversion infers MIME types and rejects failed reads before 
     assert.equal(writes, 1);
 });
 
-test("sound imports validate all overrides before replacing settings", () => {
+test("sound imports validate overrides and invalidate pending playback data", async () => {
     const soundTypes = [{ id: "message1", name: "Message" }, { id: "mute", name: "Mute" }];
     const makeEmptyOverride = () => ({ enabled: false, selectedSound: "default", volume: 100, useFile: false });
     const store: Record<string, string> = { message1: "original message", mute: "original mute" };
-    const { importOverrides } = loadSource("src/equicordplugins/customSounds/index.tsx", {
+    let resolveRead: (value: string) => void = () => assert.fail("Audio read was not started");
+    let reads = 0;
+    const { importOverrides, ensureDataURICached, getCustomSoundURL, plugin } = loadSource("src/equicordplugins/customSounds/index.tsx", {
         "@api/DataStore": {},
         "@api/Settings": { definePluginSettings: () => ({ store }) },
         "@components/Button": {}, "@components/Heading": {},
         "@utils/constants": { Devs: {} },
         "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/Logger": { Logger: class { error() {} } },
         "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {}, StartAt: {} },
-        "@webpack/common": {}, "./audioStore": {}, "./SoundOverrideComponent": {},
+        "@webpack/common": {}, "./SoundOverrideComponent": {},
+        "./audioStore": { getAudioDataURI: () => {
+            reads++;
+            return new Promise<string>(resolve => { resolveRead = resolve; });
+        } },
         "./types": { soundTypes, makeEmptyOverride, seasonalSounds: {} }
-    }, {}, "({ importOverrides })");
+    }, {}, "({ importOverrides, ensureDataURICached, getCustomSoundURL, plugin: exports.default })");
     const original = { ...store };
     for (const text of ["{", "null", "{}", '{"overrides":[null]}', ...[
         { id: "unknown" }, { id: "__proto__" }, { id: "mute", volume: -1 },
@@ -7894,6 +7901,24 @@ test("sound imports validate all overrides before replacing settings", () => {
     assert.deepEqual(JSON.parse(store.mute), makeEmptyOverride());
     importOverrides('{"overrides":[]}');
     assert.deepEqual(JSON.parse(store.message1), makeEmptyOverride());
+    const pending = ensureDataURICached("file");
+    const shared = ensureDataURICached("file");
+    assert.equal(reads, 1);
+    importOverrides('{"overrides":[]}');
+    resolveRead("data:audio/ogg;base64,AA==");
+    assert.equal(await pending, null);
+    assert.equal(await shared, null);
+    store.message1 = JSON.stringify({ ...makeEmptyOverride(), enabled: true, selectedSound: "custom", selectedFileId: "file" });
+    const current = ensureDataURICached("file");
+    resolveRead("data:audio/ogg;base64,AQ==");
+    await current;
+    const active = { audio: "message1", volume: 100 };
+    getCustomSoundURL(active);
+    assert.equal(active.audio, "data:audio/ogg;base64,AQ==");
+    plugin.stop();
+    const stopped = { audio: "message1", volume: 100 };
+    getCustomSoundURL(stopped);
+    assert.equal(stopped.audio, "message1");
 });
 
 test("custom timestamps expand explicit placeholders without altering shared formatting", () => {

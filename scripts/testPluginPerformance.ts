@@ -7879,6 +7879,23 @@ test("folder icon editing preserves saved size and resetting an unused folder is
     assert.equal(closes, 3);
 });
 
+test("copied media URLs retain maximum size without losing animation parameters", () => {
+    const { getAvatarUrl, withCdnSize } = loadSource("src/equicordplugins/copyUserMediaUrls/index.tsx", {
+        "@api/ContextMenu": {}, "@utils/clipboard": {},
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+        "@webpack/common": {}
+    }, {}, "({ getAvatarUrl, withCdnSize })");
+    assert.equal(getAvatarUrl({ getAvatarURL: (guildId: string, size: number, animate: boolean) => {
+        assert.deepEqual([guildId, size, animate], ["guild", 4096, true]);
+        return "https://example.com/avatar.webp?size=2048&animated=true";
+    } }, "guild"), "https://example.com/avatar.webp?size=4096&animated=true");
+    assert.equal(withCdnSize("https://example.com/banner.webp?animated=true&size=2048#preview"), "https://example.com/banner.webp?animated=true&size=4096#preview");
+    assert.equal(withCdnSize("data:image/png;base64,abc"), "data:image/png;base64,abc");
+    assert.equal(withCdnSize("https://example.com/default.png"), "https://example.com/default.png");
+    assert.equal(withCdnSize(undefined), null);
+});
+
 test("profile color and media copies wait for clipboard success and handle rejection", async () => {
     for (const pluginName of ["copyProfileColors", "copyUserMediaUrls"]) {
         for (const fail of [false, true]) {

@@ -16,12 +16,12 @@ interface UserContextProps {
     user?: User;
 }
 
-const SIZE_QUERY_REGEX = /\?size=\d+$/;
+const SIZE_QUERY_REGEX = /(?<=[?&]size=)\d+(?=&|#|$)/;
 const CDN_SIZE = 4096;
 
 function withCdnSize(url: string | null | undefined) {
     if (!url) return null;
-    return url.replace(SIZE_QUERY_REGEX, `?size=${CDN_SIZE}`);
+    return url.replace(SIZE_QUERY_REGEX, String(CDN_SIZE));
 }
 
 async function copyUrl(label: string, url: string | null) {
@@ -63,9 +63,9 @@ function getBannerUrl(userId: string, guildId?: string) {
     if (!banner) return null;
 
     const data = { id: userId, banner, canAnimate: true, size: CDN_SIZE };
-    return (guildId
+    return withCdnSize(guildId
         ? IconUtils.getGuildMemberBannerURL({ ...data, guildId })
-        : IconUtils.getUserBannerURL(data)) ?? null;
+        : IconUtils.getUserBannerURL(data));
 }
 
 const userContextPatch: NavContextMenuPatchCallback = (children, { guildId, user }: UserContextProps) => {

@@ -133,7 +133,7 @@ export async function downloadSettingsBackup(type: BackupType = "all", { minify 
         const data = new TextEncoder().encode(backup);
 
         if (IS_DISCORD_DESKTOP) {
-            DiscordNative.fileManager.saveWithDialog(data, filename);
+            await DiscordNative.fileManager.saveWithDialog(data, filename);
         } else {
             saveFile(new File([data], filename, { type: "application/json" }));
         }

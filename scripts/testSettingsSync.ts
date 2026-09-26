@@ -75,6 +75,47 @@ test("automatic cloud sync uses the displayed default and respects each directio
     }
 });
 
+test("desktop backup exports await native saving and report rejected saves", async () => {
+    const notifications: { type: string; }[] = [];
+    const modules: Record<string, unknown> = {
+        "@api/Settings": { PlainSettings: {} },
+        "@utils/Logger": { Logger: class { error() {} } },
+        "@utils/web": {},
+        "@webpack/common": {
+            moment: () => ({ format: () => "2026-09-26" }),
+            Toasts: { show: (toast: { type: string }) => notifications.push(toast), genId: () => "test", Type: { FAILURE: "failure" } }
+        },
+        "..": { DataStore: {} }
+    };
+    let finishSave: ((value: unknown) => void) | undefined;
+    let failSave: ((error: Error) => void) | undefined;
+    const { downloadSettingsBackup } = runInNewContext(`${outputText}\nexports;`, {
+        exports: {}, require: (name: string) => modules[name], IS_DISCORD_DESKTOP: true, TextEncoder,
+        VencordNative: { settings: { get: () => ({ plugins: {} }) } },
+        DiscordNative: { fileManager: { saveWithDialog: (data: Uint8Array, filename: string) => {
+            assert.equal(filename, "lawyercord-plugins-backup-2026-09-26.json");
+            assert.deepEqual(JSON.parse(new TextDecoder().decode(data)), { settings: { plugins: {} } });
+            return new Promise<unknown>((resolve, reject) => { finishSave = resolve; failSave = reject; });
+        } } }
+    });
+    for (const reject of [false, true]) {
+        let settled = false;
+        const failure = new Error("Native save failed");
+        const outcome = downloadSettingsBackup("plugins").then(
+            () => { settled = true; },
+            (error: unknown) => { settled = true; return error; }
+        );
+        await new Promise<void>(resolve => setImmediate(resolve));
+        assert.equal(settled, false, "Export must remain pending while native saving is pending");
+        assert.ok(finishSave);
+        assert.ok(failSave);
+        if (reject) failSave(failure);
+        else finishSave(undefined);
+        assert.equal(await outcome, reject ? failure : undefined);
+    }
+    assert.deepEqual(notifications.map(value => value.type), ["failure"]);
+});
+
 test("failed cloud downloads and deletions do not advance the manifest or report success", async () => {
     const { outputText } = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }

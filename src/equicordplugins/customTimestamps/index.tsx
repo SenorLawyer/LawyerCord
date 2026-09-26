@@ -106,6 +106,9 @@ const TimeRow = (props: TimeRowProps) => (
 const settings = definePluginSettings({
     formats: {
         type: OptionType.COMPONENT,
+        get default(): Partial<Record<string, string>> {
+            return {};
+        },
         description: "Customize the timestamp formats",
         component: componentProps => {
             const [settingsState, setSettingsState] = useState(() => settings.store.formats ?? {});
@@ -141,18 +144,7 @@ const settings = definePluginSettings({
                 </>);
         }
     }
-}).withPrivateSettings<{
-    formats: {
-        cozyFormat: string;
-        compactFormat: string;
-        tooltipFormat: string;
-        ariaLabelFormat: string;
-        sameDayFormat: string;
-        lastDayFormat: string;
-        lastWeekFormat: string;
-        sameElseFormat: string;
-    };
-}>();
+});
 
 function renderTimestamp(date: Date, type: "cozy" | "compact" | "tooltip" | "ariaLabel") {
     const forceUpdater = useForceUpdater();

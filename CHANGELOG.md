@@ -25,6 +25,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomTimestamps restores its original formats when Reset Settings is used.
+
 - CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
 
 - CustomTimestamps expands repeated placeholders without rewriting literal labels or escaped brackets, and skips refresh timers for static labels.
@@ -315,6 +317,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomTimestamps restores its original formats when Reset Settings is used.
+
 - CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
 
 - Search messages by author in a server or DM, paginate up to the requested result count, exclude surrounding context messages, and stop fetching when cancelled.
@@ -323,6 +327,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed
+
+- CustomTimestamps restores its original formats when Reset Settings is used.
 
 - CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
 
@@ -352,6 +358,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomTimestamps restores its original formats when Reset Settings is used.
+
 - CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
 
 - Update the pinned fast-uri dependency to 3.1.6 to resolve the dependency audit failures.
@@ -360,6 +368,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomTimestamps restores its original formats when Reset Settings is used.
+
 - CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
 
 - Restore Discord's original app archive when an interrupted update leaves only the LawyerCord patch marker, so Install, Reinstall / Repair, and Uninstall work again.
@@ -367,6 +377,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ## 2.0.0.0 - 2026-08-29
 
 ### Fixed
+
+- CustomTimestamps restores its original formats when Reset Settings is used.
 
 - CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
 
@@ -389,6 +401,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomTimestamps restores its original formats when Reset Settings is used.
+
 - CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
 
 - Repair folder-style patched Discord installations before installing LawyerCord.
@@ -396,6 +410,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ## 1.16.1.0 - 2026-07-29
 
 ### Fixed
+
+- CustomTimestamps restores its original formats when Reset Settings is used.
 
 - CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
 

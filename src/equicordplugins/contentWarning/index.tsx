@@ -66,24 +66,17 @@ function TriggerContainer({ child }) {
 }
 
 function FlaggedInput({ index, forceUpdate }) {
-    const [value, setValue] = useState(triggerWords[index]);
-
-    if (value !== triggerWords[index]) {
-        setValue(triggerWords[index]);
-    }
-
     const isLast = index === triggerWords.length - 1;
 
     const updateValue = v => {
         triggerWords[index] = v;
-        setValue(v);
 
         if (isLast) {
             triggerWords.push("");
-            forceUpdate();
         }
 
         saveTriggerWords();
+        forceUpdate();
     };
 
     const removeSelf = () => {
@@ -100,7 +93,7 @@ function FlaggedInput({ index, forceUpdate }) {
             <TextInput
                 placeholder="Word"
                 spellCheck={false}
-                value={value}
+                value={triggerWords[index]}
                 onChange={updateValue}
             />
         </div>

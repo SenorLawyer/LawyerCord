@@ -15,7 +15,7 @@ import { useForceUpdater } from "@utils/react";
 import { makeRange } from "@utils/types";
 import { React, Select, showToast, Slider } from "@webpack/common";
 
-import { deleteAudio, getAllAudio, saveAudio, StoredAudioFile } from "./audioStore";
+import { deleteAudio, saveAudio } from "./audioStore";
 import { ensureDataURICached } from "./index";
 import { SoundOverride, SoundType } from "./types";
 
@@ -25,19 +25,18 @@ const cl = classNameFactory("vc-custom-sounds-");
 const capitalizeWords = (str: string) =>
     str.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 
-export function SoundOverrideComponent({ type, override, onChange }: {
+interface SoundOverrideProps {
     type: SoundType;
     override: SoundOverride;
     onChange: () => Promise<void>;
-}) {
+    files: Record<string, string>;
+    refreshFiles: () => Promise<void>;
+}
+
+export function SoundOverrideComponent({ type, override, onChange, files, refreshFiles }: SoundOverrideProps) {
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const update = useForceUpdater();
     const sound = React.useRef<AudioPlayerInterface | null>(null);
-    const [files, setFiles] = React.useState<Record<string, StoredAudioFile>>({});
-
-    React.useEffect(() => {
-        getAllAudio().then(setFiles);
-    }, []);
 
     const saveAndNotify = async () => {
         await onChange();
@@ -95,14 +94,12 @@ export function SoundOverrideComponent({ type, override, onChange }: {
             showToast("Uploading file...");
             const id = await saveAudio(file);
 
-            const savedFiles = await getAllAudio();
-            setFiles(savedFiles);
-
             override.selectedFileId = id;
             override.selectedSound = "custom";
 
             await ensureDataURICached(id);
             await saveAndNotify();
+            await refreshFiles();
 
             showToast(`File uploaded successfully: ${file.name}`);
         } catch (error) {
@@ -116,16 +113,13 @@ export function SoundOverrideComponent({ type, override, onChange }: {
     const deleteFile = async (id: string) => {
         try {
             await deleteAudio(id);
-            const updated = await getAllAudio();
-            setFiles(updated);
 
             if (override.selectedFileId === id) {
                 override.selectedFileId = undefined;
                 override.selectedSound = "default";
                 await saveAndNotify();
-            } else {
-                update();
             }
+            await refreshFiles();
             showToast("File deleted successfully");
         } catch (error) {
             console.error("[CustomSounds] Error deleting file:", error);
@@ -133,12 +127,7 @@ export function SoundOverrideComponent({ type, override, onChange }: {
         }
     };
 
-    const customFileOptions = Object.entries(files)
-        .filter(([id, file]) => !!id && !!file?.name)
-        .map(([id, file]) => ({
-            value: id,
-            label: file.name
-        }));
+    const customFileOptions = Object.entries(files).map(([value, label]) => ({ value, label }));
 
     return (
         <Card className={cl("card")}>

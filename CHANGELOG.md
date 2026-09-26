@@ -25,6 +25,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
+
 - CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
 
 - CustomSounds detects audio types when a file has no MIME type and rejects cancelled reads instead of saving an invalid sound.
@@ -325,6 +327,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
+
 - CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
 
 - CustomSounds detects audio types when a file has no MIME type and rejects cancelled reads instead of saving an invalid sound.
@@ -343,6 +347,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed
+
+- CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
 
 - CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
 
@@ -382,6 +388,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
+
 - CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
 
 - CustomSounds detects audio types when a file has no MIME type and rejects cancelled reads instead of saving an invalid sound.
@@ -400,6 +408,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
+
 - CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
 
 - CustomSounds detects audio types when a file has no MIME type and rejects cancelled reads instead of saving an invalid sound.
@@ -417,6 +427,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ## 2.0.0.0 - 2026-08-29
 
 ### Fixed
+
+- CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
 
 - CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
 
@@ -449,6 +461,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
+
 - CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
 
 - CustomSounds detects audio types when a file has no MIME type and rejects cancelled reads instead of saving an invalid sound.
@@ -466,6 +480,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ## 1.16.1.0 - 2026-07-29
 
 ### Fixed
+
+- CustomSounds shares one file-name list across sound rows, so uploads and deletions appear everywhere without retaining repeated audio payloads.
 
 - CustomSounds preserves concurrent audio uploads and deletions, avoids phantom files after failed saves, and prevents stale legacy conversions from restoring replaced files.
 

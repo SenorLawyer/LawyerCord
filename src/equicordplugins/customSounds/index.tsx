@@ -15,7 +15,7 @@ import { Devs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import { isObject } from "@utils/misc";
 import definePlugin, { OptionType, StartAt } from "@utils/types";
-import { React, showToast, TextInput } from "@webpack/common";
+import { React, showToast, TextInput, Toasts } from "@webpack/common";
 
 import { getAllAudio, getAudioDataURI } from "./audioStore";
 import { SoundOverrideComponent } from "./SoundOverrideComponent";
@@ -238,9 +238,18 @@ const settings = definePluginSettings({
         component: () => {
             const [resetTrigger, setResetTrigger] = React.useState(0);
             const [searchQuery, setSearchQuery] = React.useState("");
+            const [files, setFiles] = React.useState<Record<string, string>>({});
             const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+            const refreshFiles = async () => {
+                const stored = await getAllAudio();
+                setFiles(Object.fromEntries(Object.entries(stored)
+                    .filter(([id, file]) => !!id && !!file?.name)
+                    .map(([id, file]) => [id, file.name])));
+            };
+
             React.useEffect(() => {
+                refreshFiles().catch(() => showToast("Could not load custom sound files.", Toasts.Type.FAILURE));
                 allSoundTypes.forEach(type => {
                     if (!settings.store[type.id]) {
                         setOverride(type.id, makeEmptyOverride());
@@ -344,6 +353,8 @@ const settings = definePluginSettings({
                                     key={`${type.id}-${resetTrigger}`}
                                     type={type}
                                     override={currentOverride}
+                                    files={files}
+                                    refreshFiles={refreshFiles}
                                     onChange={async () => {
 
                                         setOverride(type.id, currentOverride);

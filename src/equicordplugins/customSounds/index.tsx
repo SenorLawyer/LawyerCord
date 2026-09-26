@@ -7,7 +7,6 @@
 import "./styles.css";
 
 import { AudioProcessor, PreprocessAudioData } from "@api/AudioPlayer";
-import { get as getFromDataStore } from "@api/DataStore";
 import { definePluginSettings } from "@api/Settings";
 import { Button } from "@components/Button";
 import { Heading } from "@components/Heading";
@@ -25,8 +24,6 @@ import { makeEmptyOverride, seasonalSounds, SoundOverride, soundTypes } from "./
 const cl = classNameFactory("vc-custom-sounds-");
 
 const allSoundTypes = soundTypes || [];
-
-const AUDIO_STORE_KEY = "ScattrdCustomSounds";
 
 const dataUriCache = new Map<string, string>();
 const pendingDataUris = new Map<string, Promise<string | null>>();
@@ -167,67 +164,6 @@ async function preloadDataURIs() {
     }
 }
 
-export async function debugCustomSounds() {
-    console.log("[CustomSounds] === DEBUG INFO ===");
-
-    const rawDataStore = await getFromDataStore(AUDIO_STORE_KEY);
-    console.log("[CustomSounds] Raw DataStore content:", rawDataStore);
-
-    const allFiles = await getAllAudio();
-    console.log(`[CustomSounds] Stored files: ${Object.keys(allFiles).length}`);
-
-    let totalBufferSize = 0;
-    let totalDataUriSize = 0;
-
-    for (const [id, file] of Object.entries(allFiles)) {
-        const bufferSize = file.buffer?.byteLength || 0;
-        const dataUriSize = file.dataUri?.length || 0;
-        totalBufferSize += bufferSize;
-        totalDataUriSize += dataUriSize;
-
-        console.log(`[CustomSounds] File ${id}:`, {
-            name: file.name,
-            type: file.type,
-            bufferSize: `${(bufferSize / 1024).toFixed(1)}KB`,
-            hasValidBuffer: file.buffer instanceof ArrayBuffer,
-            hasDataUri: !!file.dataUri,
-            dataUriSize: `${(dataUriSize / 1024).toFixed(1)}KB`
-        });
-    }
-
-    console.log(`[CustomSounds] Total storage - Buffers: ${(totalBufferSize / 1024).toFixed(1)}KB, DataURIs: ${(totalDataUriSize / 1024).toFixed(1)}KB`);
-
-    console.log(`[CustomSounds] Memory cache contains ${dataUriCache.size} data URIs`);
-
-    console.log("[CustomSounds] Settings store structure:", Object.keys(settings.store));
-
-    console.log("[CustomSounds] Sound override status:");
-    let enabledCount = 0;
-    let totalSettingsSize = 0;
-
-    for (const [soundId, storedValue] of Object.entries(settings.store)) {
-        if (soundId === "overrides") continue;
-
-        const override = getOverride(soundId);
-        const settingsSize = JSON.stringify(override).length;
-        totalSettingsSize += settingsSize;
-
-        console.log(`[CustomSounds] ${soundId}:`, {
-            enabled: override.enabled,
-            selectedSound: override.selectedSound,
-            selectedFileId: override.selectedFileId,
-            volume: override.volume,
-            settingsSize: `${settingsSize}B`
-        });
-
-        if (override.enabled) enabledCount++;
-    }
-
-    console.log(`[CustomSounds] Total enabled overrides: ${enabledCount}`);
-    console.log(`[CustomSounds] Estimated settings size: ${(totalSettingsSize / 1024).toFixed(1)}KB`);
-    console.log("[CustomSounds] === END DEBUG ===");
-}
-
 const soundSettings = Object.fromEntries(
     allSoundTypes.map(type => [
         type.id,
@@ -335,7 +271,6 @@ const settings = definePluginSettings({
                         <Button variant="primary" onClick={triggerFileUpload}>Import</Button>
                         <Button variant="secondary" onClick={downloadSettings}>Export</Button>
                         <Button variant="dangerPrimary" onClick={resetOverrides}>Reset All</Button>
-                        <Button variant="overlayPrimary" onClick={debugCustomSounds}>Debug</Button>
                         <input
                             className={cl("file-input")}
                             ref={fileInputRef}

@@ -1720,43 +1720,78 @@ test("cloud deletion validates the complete manifest before deleting any entries
     }
 });
 
-test("a failed deletion waits for the rest of its batch before releasing the operation", async () => {
+test("cloud deletion sends one request at a time and stops after failure or owner changes", async () => {
     const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
     }).outputText;
-    let requests = 0;
-    let writes = 0;
-    let finishDelete: ((value: unknown) => void) | undefined;
-    const modules: Record<string, unknown> = {
-        "@shared/readResponseText": jsonResponseReader,
-        "@api/DataStore": { get: async () => undefined, set: async () => writes++ },
-        "@api/Notifications": { showNotification: () => {} },
-        "@utils/Logger": { Logger: class { info() {} error() {} } },
-        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
-        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
-        "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" }
-    };
-    const api = runInNewContext(`${compiled}\nexports;`, {
-        exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal,
-        fetch: async (url: URL) => {
-            requests++;
-            if (url.pathname.endsWith("/a")) return { ok: false, status: 500 };
-            if (url.pathname.endsWith("/b")) return new Promise(resolve => { finishDelete = resolve; });
-            return { ok: true, json: async () => ({ entries: ["a", "b"].map(key => ({ key, version: 1, checksum: "synthetic" })), errors: [], uploaded: [], downloads: [], server_manifest: [] }) };
+    for (const change of ["none", "http", "throw", "account", "service"]) {
+        let userId = "first";
+        let service = "https://first.invalid";
+        const plain = { cloud: { settingsSyncVersion: 7 } };
+        const deletes: string[] = [];
+        const writes: string[] = [];
+        const notifications: { color?: string }[] = [];
+        const pending: { resolve: (value: unknown) => void; reject: (error: Error) => void }[] = [];
+        let requests = 0;
+        const modules: Record<string, unknown> = {
+            "@shared/readResponseText": jsonResponseReader,
+            "@api/DataStore": { get: async () => undefined, set: async () => writes.push("manifest") },
+            "@api/Settings": { PlainSettings: plain, Settings: plain },
+            "@api/Notifications": { showNotification: (value: { color?: string }) => notifications.push(value) },
+            "@utils/Logger": { Logger: class { info() {} error() {} } },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
+            "./cloudSetup": { getCloudUrl: () => new URL(service), getCloudAuth: async () => "synthetic" }
+        };
+        const api = runInNewContext(`${compiled}\nexports;`, {
+            exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal,
+            VencordNative: { settings: { set: async () => writes.push("settings") } },
+            fetch: async (url: URL, init: RequestInit) => {
+                requests++;
+                if (init.method === "DELETE") {
+                    deletes.push(url.href);
+                    return new Promise((resolve, reject) => { pending.push({ resolve, reject }); });
+                }
+                return { ok: true, json: async () => ({ entries: ["a", "b", "c"].map(key => ({ key, version: 1, checksum: "synthetic" })), errors: [], uploaded: [], downloads: [], server_manifest: [] }) };
+            }
+        });
+        let settled = false;
+        const operation = api.deleteCloudSettings().then(() => { settled = true; });
+        await new Promise<void>(resolve => setImmediate(resolve));
+        assert.deepEqual(deletes, ["https://first.invalid/v2/data/a"]);
+        assert.equal(settled, false);
+        await api.getCloudSettings(false);
+        assert.equal(requests, 2, "Pending deletion still owns the operation");
+        const first = pending.shift();
+        assert.ok(first);
+        if (change === "account") userId = "second";
+        if (change === "service") service = "https://second.invalid";
+        if (change === "throw") first.reject(new Error("Synthetic network failure"));
+        else first.resolve({ ok: change !== "http", status: change === "http" ? 500 : 204 });
+        await new Promise<void>(resolve => setImmediate(resolve));
+        if (change === "none") {
+            for (const key of ["b", "c"]) {
+                assert.equal(deletes.at(-1), `https://first.invalid/v2/data/${key}`);
+                assert.equal(pending.length, 1);
+                const next = pending.shift();
+                assert.ok(next);
+                next.resolve({ ok: key !== "b", status: key === "b" ? 404 : 204 });
+                await new Promise<void>(resolve => setImmediate(resolve));
+            }
+            assert.deepEqual(writes, ["manifest", "settings"]);
+            assert.equal(plain.cloud.settingsSyncVersion, 0);
+            assert.equal(notifications.at(-1)?.color, "var(--green-360)");
+        } else {
+            assert.equal(deletes.length, 1);
+            assert.deepEqual(writes, []);
+            assert.equal(plain.cloud.settingsSyncVersion, 7);
+            assert.equal(notifications.length, change === "account" || change === "service" ? 0 : 1);
         }
-    });
-    let settled = false;
-    const pending = api.deleteCloudSettings().then(() => { settled = true; });
-    await new Promise<void>(resolve => setImmediate(resolve));
-    assert.ok(finishDelete);
-    assert.equal(settled, false);
-    await api.getCloudSettings(false);
-    assert.equal(requests, 3);
-    finishDelete({ ok: true });
-    await pending;
-    assert.equal(writes, 0);
-    await api.getCloudSettings(false);
-    assert.equal(requests, 4);
+        await operation;
+        const beforeRetry = requests;
+        await api.getCloudSettings(false);
+        assert.equal(requests, beforeRetry + 1, "Completion releases the operation");
+    }
 });
 
 test("cloud erasure stops after account or service changes without affecting the new owner", async () => {

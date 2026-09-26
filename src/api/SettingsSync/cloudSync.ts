@@ -344,18 +344,16 @@ async function deleteV2(context: ReturnType<typeof getCloudSyncContext>) {
     if (!isObject(manifest) || !("entries" in manifest) || !Array.isArray(manifest.entries) || !manifest.entries.every(isManifestEntry))
         throw new Error("The cloud server returned an invalid deletion manifest.");
 
-    const results = await Promise.allSettled(manifest.entries.map(async (entry: ManifestEntry) => {
+    for (const entry of manifest.entries) {
         const res = await fetch(new URL(`/v2/data/${encodeURIComponent(entry.key)}`, context.url), {
             signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
             method: "DELETE",
             headers: { Authorization: auth },
         });
+        if (!context.isCurrent()) return;
         if (!res.ok && res.status !== 404)
             throw new Error(`Could not delete cloud data (API returned ${res.status}).`);
-    }));
-    if (!context.isCurrent()) return;
-    const failure = results.find(result => result.status === "rejected");
-    if (failure) throw failure.reason;
+    }
 
     await saveLocalManifest(context, []);
     if (!context.isCurrent()) return;

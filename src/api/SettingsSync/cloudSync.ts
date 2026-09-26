@@ -14,7 +14,7 @@ import { SettingsRouter } from "@webpack/common";
 import { deflateSync, inflateSync } from "fflate";
 
 import { deauthorizeCloud, getCloudAuth, getCloudUrl } from "./cloudSetup";
-import { exportSettings, importSettings, serializeDataStore } from "./offline";
+import { exportSettings, importSettings, isLocalDataStoreKey, serializeDataStore } from "./offline";
 import { ManifestEntry, SyncRequest, SyncResponse } from "./types";
 
 const logger = new Logger("SettingsSync:Cloud", "#39b7e0");
@@ -88,7 +88,7 @@ async function buildLocalData(): Promise<Map<string, Uint8Array>> {
     data.set("quickCss", encoder.encode(quickCss));
 
     const dataStoreEntries = await DataStore.entries();
-    data.set("dataStore", encoder.encode(serializeDataStore(dataStoreEntries)));
+    data.set("dataStore", encoder.encode(serializeDataStore(dataStoreEntries.filter(([key]) => !isLocalDataStoreKey(key)))));
 
     return data;
 }
@@ -113,6 +113,7 @@ async function applyDownloads(downloads: SyncResponse["downloads"]) {
             settingsChanged = true;
         } else if (dl.key.startsWith("dataStore/")) {
             const dsKey = dl.key.slice("dataStore/".length);
+            if (isLocalDataStoreKey(dsKey)) continue;
             await DataStore.set(dsKey, JSON.parse(text));
         }
     }

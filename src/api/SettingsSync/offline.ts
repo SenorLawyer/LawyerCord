@@ -13,6 +13,8 @@ import { moment, Toasts } from "@webpack/common";
 import { DataStore } from "..";
 
 type BackupType = "all" | "plugins" | "css" | "datastore";
+const LOCAL_DATASTORE_KEYS = new Set<unknown>(["Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions"]);
+export const isLocalDataStoreKey = (key: unknown) => LOCAL_DATASTORE_KEYS.has(key);
 
 const toast = (type: string, message: string) =>
     Toasts.show({
@@ -120,7 +122,7 @@ export async function importSettings(data: string, type: BackupType = "all", clo
                 Array.isArray(entry) && entry.length === 2 && isDataStoreKey(entry[0]))) {
                 throw new Error("DataStore must contain valid key and value pairs.");
             }
-            dataStore = value;
+            dataStore = cloud ? value.filter(([key]) => !isLocalDataStoreKey(key)) : value;
         }
     }
 

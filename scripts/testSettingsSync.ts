@@ -254,6 +254,9 @@ test("backups reject DataStore values that JSON would silently discard or change
 
 test("cloud data round trips the aggregate DataStore record and empty CSS", async () => {
     const records: [string, unknown][] = [["CustomSounds", { saved: true }], ["VoiceStats", { seconds: 42 }]];
+    const syncedRecords = records.slice();
+    const localKeys = ["Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions"];
+    for (const key of localKeys) records.push([key, { local: true }]);
     const writes: unknown[] = [];
     const css: string[] = [];
     const modules: Record<string, unknown> = {
@@ -272,9 +275,10 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
     };
     const globals = {
         require: (name: string) => modules[name], TextEncoder, TextDecoder, Uint8Array, atob,
-        VencordNative: { settings: { get: () => ({}) }, quickCss: { get: async () => "", set: async (value: string) => css.push(value) } }
+        VencordNative: { settings: { get: () => ({}), set: async () => {} }, quickCss: { get: async () => "", set: async (value: string) => css.push(value) } }
     };
-    modules["./offline"] = runInNewContext(`${outputText}\nexports;`, { ...globals, exports: {} });
+    const offline = runInNewContext(`${outputText}\nexports;`, { ...globals, exports: {} });
+    modules["./offline"] = offline;
     const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
     }).outputText;
@@ -282,19 +286,25 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
     const local = await buildLocalData();
     assert.equal(local.has("quickCss"), true, "Cleared CSS must replace an older cloud value");
     assert.equal(new TextDecoder().decode(local.get("quickCss")), "");
-    assert.deepEqual(JSON.parse(new TextDecoder().decode(local.get("dataStore"))), records);
+    assert.deepEqual(JSON.parse(new TextDecoder().decode(local.get("dataStore"))), syncedRecords);
     const download = (key: string, value: string) => ({ key, value: Buffer.from(value).toString("base64") });
     assert.equal(await applyDownloads([
-        download("dataStore", new TextDecoder().decode(local.get("dataStore"))),
+        download("dataStore", JSON.stringify(records)),
         download("quickCss", "")
     ]), true);
-    assert.deepEqual(JSON.parse(JSON.stringify(writes)), [records]);
+    assert.deepEqual(JSON.parse(JSON.stringify(writes)), [syncedRecords]);
     assert.deepEqual(css, [""]);
     await applyDownloads([download("dataStore/legacy", '{"kept":true}')]);
     assert.deepEqual(JSON.parse(JSON.stringify(writes.at(-1))), ["legacy", { kept: true }]);
     const count = writes.length;
+    await applyDownloads(localKeys.map(key => download(`dataStore/${key}`, '{"remote":true}')));
+    assert.equal(writes.length, count, "Remote data must not replace local credentials or sync bookkeeping");
     await assert.rejects(applyDownloads([download("dataStore", '[[null,1]]')]));
     assert.equal(writes.length, count);
+    await offline.importSettings(JSON.stringify({ settings: {}, dataStore: records }), "all", true);
+    assert.deepEqual(JSON.parse(JSON.stringify(writes.at(-1))), syncedRecords, "Legacy cloud bundles also preserve local credentials");
+    await offline.importSettings(JSON.stringify({ dataStore: records }), "datastore");
+    assert.deepEqual(JSON.parse(JSON.stringify(writes.at(-1))), records, "Explicit offline restores retain their existing complete-record behavior");
     records.push(["binary", new Uint8Array([1, 2]).buffer]);
     await assert.rejects(buildLocalData(), /JSON backup format cannot preserve/);
 });

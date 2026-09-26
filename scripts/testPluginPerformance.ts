@@ -7882,21 +7882,16 @@ test("folder icon editing preserves saved size and resetting an unused folder is
 test("content warnings are blurred before the first hover", () => {
     const TriggerContainer = loadSource("src/equicordplugins/contentWarning/index.tsx", {
         "@api/index": {},
-        "@api/Settings": { definePluginSettings: () => ({ store: { onClick: false } }) },
+        "@api/Settings": { definePluginSettings: () => ({ use: () => ({ onClick: false }) }) },
         "@components/Flex": {}, "@components/Heading": {}, "@components/Icons": {},
         "@utils/constants": { EquicordDevs: {} },
-        "@utils/css": { classNameFactory: (prefix: string) => (name: string) => prefix + name },
+        "@utils/css": { classNameFactory: (prefix: string) => (name: string, flags: Record<string, boolean>) => [name, ...Object.keys(flags).filter(key => flags[key])].map(key => prefix + key).join(" ") },
         "@utils/react": {}, "@utils/text": { escapeRegExp: RegExp.escape },
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
         "@webpack/common": { useState: () => [false, () => {}] }
     }, { React: { createElement: (type: unknown, props: object) => ({ type, props }) } }, "TriggerContainer");
     const element = TriggerContainer({ child: "flagged content" });
-    assert.equal(element.props.className, "vc-content-warning-container");
-    const target = { className: element.props.className };
-    element.props.onMouseEnter({ currentTarget: target });
-    assert.equal(target.className, "vc-content-warning-enter");
-    element.props.onMouseLeave({ currentTarget: target });
-    assert.equal(target.className, "vc-content-warning-leave");
+    assert.equal(element.props.className, "vc-content-warning-container vc-content-warning-hover");
 });
 
 test("command palette forms prevent duplicate submissions before rendering", async () => {

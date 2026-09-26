@@ -21,6 +21,7 @@ import { Button, TextInput, useState } from "@webpack/common";
 const cl = classNameFactory("vc-content-warning-");
 
 const WORDS_KEY = "ContentWarning_words";
+const REVEAL_SETTINGS: "onClick"[] = ["onClick"];
 
 let triggerWords = [""];
 let triggerWordRegex: RegExp | null = null;
@@ -48,25 +49,15 @@ function hasTriggerWord(content: string) {
 
 function TriggerContainer({ child }) {
     const [visible, setVisible] = useState(false);
-    const { onClick } = settings.store;
+    const { onClick } = settings.use(REVEAL_SETTINGS);
 
     if (visible) {
         return child;
     } else {
         return (
             <div
-                className={cl("container")}
+                className={cl("container", { hover: !onClick })}
                 onClick={() => onClick && setVisible(true)}
-                onMouseEnter={event => {
-                    if (!onClick) {
-                        event.currentTarget.className = cl("enter");
-                    }
-                }}
-                onMouseLeave={event => {
-                    if (!onClick) {
-                        event.currentTarget.className = cl("leave");
-                    }
-                }}
             >
                 {child}
             </div >

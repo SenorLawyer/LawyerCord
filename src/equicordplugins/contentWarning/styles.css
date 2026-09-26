@@ -4,10 +4,6 @@
     cursor: pointer;
 }
 
-.vc-content-warning-enter {
+.vc-content-warning-hover:hover {
     filter: none;
-}
-
-.vc-content-warning-leave {
-    filter: blur(5px) brightness(30%);
 }

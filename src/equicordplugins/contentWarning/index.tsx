@@ -82,7 +82,12 @@ function TriggerContainer({ child }) {
         return (
             <div
                 className={cl("container", { hover: !onClick })}
-                onClick={() => onClick && setVisible(true)}
+                onClickCapture={event => {
+                    if (!onClick) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setVisible(true);
+                }}
             >
                 {child}
             </div >

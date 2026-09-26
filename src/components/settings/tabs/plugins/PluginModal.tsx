@@ -32,10 +32,11 @@ import { classNameFactory } from "@utils/css";
 import { proxyLazy } from "@utils/lazy";
 import { Margins } from "@utils/margins";
 import { classes, isObjectEmpty } from "@utils/misc";
+import { useForceUpdater } from "@utils/react";
 import { OptionType, Plugin, PluginTag } from "@utils/types";
 import { RenderModalProps, User } from "@vencord/discord-types";
 import { findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
-import { Clickable, FluxDispatcher, Modal, openModal, React, Text, Toasts, Tooltip, useEffect, useMemo, UserStore, UserSummaryItem, UserUtils, useState } from "@webpack/common";
+import { Clickable, FluxDispatcher, Modal, openModal, React, Text, Toasts, Tooltip, useEffect, useMemo, useRef, UserStore, UserSummaryItem, UserUtils, useState } from "@webpack/common";
 import { Constructor } from "type-fest";
 
 import { PluginMeta } from "~plugins";
@@ -86,6 +87,8 @@ function PluginTags({ tags }: { tags: PluginTag[]; }) {
 export default function PluginModal({ plugin, onRestartNeeded, onClose, transitionState }: PluginModalProps) {
     const pluginSettings = useSettings([`plugins.${plugin.name}.*`]).plugins[plugin.name];
     const hasSettings = hasAnyVisibleSettings(plugin);
+    const resetVersion = useRef(0);
+    const forceUpdate = useForceUpdater();
 
     // avoid layout shift by showing dummy users while loading users
     const fallbackAuthors = useMemo(() => [makeDummyUser({ username: "Loading...", id: "-1465912127305809920" })], []);
@@ -109,10 +112,14 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
     }, [plugin.authors]);
 
     function handleResetClick() {
-        openWarningModal(plugin, onRestartNeeded);
+        openWarningModal(plugin, onRestartNeeded, true, undefined, () => {
+            resetVersion.current++;
+            forceUpdate();
+        });
     }
 
     function renderSettings() {
+        const version = resetVersion.current;
         const { settings } = plugin;
         if (!hasSettings || !settings)
             return <Paragraph>There are no settings for this plugin.</Paragraph>;
@@ -123,6 +130,7 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
             if (isSettingHidden(settings, setting)) return null;
 
             function onChange(newValue: any) {
+                if (version !== resetVersion.current) return;
                 const option = plugin.settings!.def[key];
                 if (!option || option.type === OptionType.CUSTOM) return;
 
@@ -133,7 +141,7 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
 
             const Component = OptionComponentMap[setting.type];
             return (
-                <ErrorBoundary noop key={key}>
+                <ErrorBoundary noop key={`${version}:${key}`}>
                     <Component
                         id={key}
                         setting={setting}
@@ -340,9 +348,8 @@ export function openWarningModal(plugin?: Plugin | null, onRestartNeeded?: (plug
             onConfirm={() => {
                 if (isPlugin && plugin) {
                     resetSettings(plugin, onRestartNeeded);
-                } else {
-                    reset?.();
                 }
+                reset?.();
             }}
             onCancel={props.onClose}
         >

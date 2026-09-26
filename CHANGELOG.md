@@ -25,6 +25,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Resetting plugin settings refreshes open inputs and prevents older queued edits from undoing the reset.
+
 - CustomTimestamps restores its original formats when Reset Settings is used.
 
 - CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
@@ -317,6 +319,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Resetting plugin settings refreshes open inputs and prevents older queued edits from undoing the reset.
+
 - CustomTimestamps restores its original formats when Reset Settings is used.
 
 - CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
@@ -327,6 +331,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ## 2.1.1.0 - 2026-09-05
 
 ### Fixed
+
+- Resetting plugin settings refreshes open inputs and prevents older queued edits from undoing the reset.
 
 - CustomTimestamps restores its original formats when Reset Settings is used.
 
@@ -358,6 +364,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Resetting plugin settings refreshes open inputs and prevents older queued edits from undoing the reset.
+
 - CustomTimestamps restores its original formats when Reset Settings is used.
 
 - CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
@@ -368,6 +376,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Resetting plugin settings refreshes open inputs and prevents older queued edits from undoing the reset.
+
 - CustomTimestamps restores its original formats when Reset Settings is used.
 
 - CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
@@ -377,6 +387,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ## 2.0.0.0 - 2026-08-29
 
 ### Fixed
+
+- Resetting plugin settings refreshes open inputs and prevents older queued edits from undoing the reset.
 
 - CustomTimestamps restores its original formats when Reset Settings is used.
 
@@ -401,6 +413,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Resetting plugin settings refreshes open inputs and prevents older queued edits from undoing the reset.
+
 - CustomTimestamps restores its original formats when Reset Settings is used.
 
 - CustomTimestamps applies saved format changes immediately, including static timestamps and calendar subformats.
@@ -410,6 +424,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ## 1.16.1.0 - 2026-07-29
 
 ### Fixed
+
+- Resetting plugin settings refreshes open inputs and prevents older queued edits from undoing the reset.
 
 - CustomTimestamps restores its original formats when Reset Settings is used.
 

@@ -958,12 +958,12 @@ test("legacy cloud sync waits for local settings persistence before reporting su
     }
 });
 
-test("legacy sync rejects invalid timestamps and forced downloads bypass cache validation", async () => {
+test("legacy sync rejects invalid timestamps without treating local edit times as cache validators", async () => {
     const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
     }).outputText;
-    for (const force of [false, true]) for (const direction of ["getCloudSettings", "putCloudSettings"]) for (const written of [undefined, null, "", "wrong", -1, 1.5, Infinity, Number.MAX_SAFE_INTEGER + 1, 0, 2, 8]) {
-        const valid = written === 0 || written === 2 || written === 8;
+    for (const force of [false, true]) for (const direction of ["getCloudSettings", "putCloudSettings"]) for (const written of [7, undefined, null, "", "wrong", -1, 1.5, Infinity, Number.MAX_SAFE_INTEGER + 1, 0, 2, 8]) {
+        const valid = written === 0 || written === 2 || written === 7 || written === 8;
         const applied = valid && (direction === "putCloudSettings" || force || written >= 7);
         let saves = 0;
         let imports = 0;
@@ -990,6 +990,8 @@ test("legacy sync rejects invalid timestamps and forced downloads bypass cache v
             VencordNative: { settings: { set: async () => saves++ } },
             fetch: async (_url: URL, init: RequestInit) => {
                 requestHeaders = init.headers;
+                if (direction === "getCloudSettings" && written === 7 && new Headers(init.headers).get("If-None-Match") === "7")
+                    return { ok: false, status: 304 };
                 return {
                     ok: true, status: 200, json: async () => ({ written }),
                     headers: { get: () => written == null ? null : String(written) },
@@ -1005,7 +1007,7 @@ test("legacy sync rejects invalid timestamps and forced downloads bypass cache v
         assert.equal(storage.Vencord_settingsDirty, applied ? undefined : "true");
         assert.equal(notifications.length, 1);
         if (!valid) assert.equal(notifications[0].color, "var(--red-360)");
-        if (direction === "getCloudSettings") assert.equal(new Headers(requestHeaders).has("If-None-Match"), !force);
+        if (direction === "getCloudSettings") assert.equal(new Headers(requestHeaders).has("If-None-Match"), false);
     }
 });
 

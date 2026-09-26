@@ -432,7 +432,6 @@ async function getV1(context: ReturnType<typeof getCloudSyncContext>, shouldNoti
         headers: {
             Authorization: auth,
             Accept: "application/octet-stream",
-            ...(!force && { "If-None-Match": Settings.cloud.settingsSyncVersion.toString() }),
         },
     });
 

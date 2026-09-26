@@ -5,13 +5,10 @@
  */
 
 import { get, set } from "@api/DataStore";
-import { Logger } from "@utils/Logger";
 
 const STORAGE_KEY = "ScattrdCustomSounds";
 export const MAX_AUDIO_FILE_BYTES = 8 * 1024 * 1024;
 export const MAX_AUDIO_FILE_MIB = MAX_AUDIO_FILE_BYTES / 1024 / 1024;
-
-const logger = new Logger("CustomSounds");
 
 export interface StoredAudioFile {
     id: string;
@@ -70,51 +67,28 @@ export async function getAllAudio(): Promise<Record<string, StoredAudioFile>> {
 }
 
 async function generateDataURI(buffer: ArrayBuffer, type: string, name: string): Promise<string> {
-    try {
-        let mimeType = type || "audio/mpeg";
-
-        if (!mimeType || mimeType === "application/octet-stream") {
-            if (name) {
-                const extension = name.split(".").pop()?.toLowerCase();
-                switch (extension) {
-                    case "ogg": mimeType = "audio/ogg"; break;
-                    case "mp3": mimeType = "audio/mpeg"; break;
-                    case "wav": mimeType = "audio/wav"; break;
-                    case "m4a":
-                    case "mp4": mimeType = "audio/mp4"; break;
-                    case "flac": mimeType = "audio/flac"; break;
-                    case "aac": mimeType = "audio/aac"; break;
-                    case "webm": mimeType = "audio/webm"; break;
-                    case "wma": mimeType = "audio/x-ms-wma"; break;
-                    default: mimeType = "audio/mpeg";
-                }
-            }
+    let mimeType = type;
+    if (!mimeType || mimeType === "application/octet-stream") {
+        switch (name.split(".").pop()?.toLowerCase()) {
+            case "ogg": mimeType = "audio/ogg"; break;
+            case "wav": mimeType = "audio/wav"; break;
+            case "m4a":
+            case "mp4": mimeType = "audio/mp4"; break;
+            case "flac": mimeType = "audio/flac"; break;
+            case "aac": mimeType = "audio/aac"; break;
+            case "webm": mimeType = "audio/webm"; break;
+            case "wma": mimeType = "audio/x-ms-wma"; break;
+            default: mimeType = "audio/mpeg";
         }
-
-        const uint8Array = new Uint8Array(buffer);
-        const blob = new Blob([uint8Array], { type: mimeType });
-
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
-    } catch (error) {
-        logger.error("Error generating data URI:", error);
-
-        const uint8Array = new Uint8Array(buffer);
-        let binary = "";
-        const chunkSize = 8192;
-
-        for (let i = 0; i < uint8Array.length; i += chunkSize) {
-            const chunk = uint8Array.slice(i, i + chunkSize);
-            binary += String.fromCharCode(...chunk);
-        }
-
-        const base64 = btoa(binary);
-        return `data:${type || "audio/mpeg"};base64,${base64}`;
     }
+
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.onabort = () => reject(new Error("Audio file reading was cancelled."));
+        reader.readAsDataURL(new Blob([buffer], { type: mimeType }));
+    });
 }
 
 export async function getAudioDataURI(id: string): Promise<string | undefined> {

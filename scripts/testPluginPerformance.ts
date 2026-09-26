@@ -7785,6 +7785,49 @@ test("custom user colors preserve black when reopening the picker", () => {
     assert.equal(initialColor, 372735);
 });
 
+test("custom sound conversion infers MIME types and rejects failed reads before saving", async () => {
+    let mode = "success";
+    let writes = 0;
+    class AudioReader {
+        result: string | null = null;
+        error = new Error("Read failed");
+        onload?: () => void;
+        onerror?: () => void;
+        onabort?: () => void;
+        readAsDataURL(blob: Blob) {
+            if (mode === "throw") throw this.error;
+            if (mode === "error") return this.onerror?.();
+            if (mode === "abort") return this.onabort?.();
+            void blob.arrayBuffer().then(buffer => {
+                this.result = `data:${blob.type};base64,${Buffer.from(buffer).toString("base64")}`;
+                this.onload?.();
+            });
+        }
+    }
+    const { generateDataURI, saveAudio } = loadSource("src/equicordplugins/customSounds/audioStore.ts", {
+        "@api/DataStore": { get: async () => ({}), set: async () => { writes++; } }
+    }, { Blob, FileReader: AudioReader, crypto: { randomUUID: () => "audio" } }, "({ generateDataURI, saveAudio })");
+    const buffer = new Uint8Array([0, 1, 127, 128, 255]).buffer;
+    for (const [type, name, expected] of [
+        ["", "sound.ogg", "audio/ogg"],
+        ["application/octet-stream", "sound.WAV", "audio/wav"],
+        ["audio/custom", "sound.mp3", "audio/custom"],
+        ["", "unknown.bin", "audio/mpeg"],
+        ["", "sound.m4a", "audio/mp4"],
+        ["", "sound.webm", "audio/webm"]
+    ]) {
+        assert.equal(await generateDataURI(buffer, type, name), `data:${expected};base64,AAF/gP8=`);
+    }
+    const file = new File([buffer], "sound.ogg");
+    for (mode of ["abort", "error", "throw"]) {
+        await assert.rejects(saveAudio(file));
+        assert.equal(writes, 0);
+    }
+    mode = "success";
+    assert.equal(await saveAudio(file), "audio");
+    assert.equal(writes, 1);
+});
+
 test("sound imports validate all overrides before replacing settings", () => {
     const soundTypes = [{ id: "message1", name: "Message" }, { id: "mute", name: "Mute" }];
     const makeEmptyOverride = () => ({ enabled: false, selectedSound: "default", volume: 100, useFile: false });

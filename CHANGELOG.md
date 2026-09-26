@@ -321,6 +321,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Preserve settings edited during an in-flight sync and retain their pending-upload marker until a later upload succeeds.
 - Prevent overlapping cloud sync and deletion operations in the same client, and tell users when a manual action must wait.
 - Time out stalled cloud requests, report transport failures, and wait for deletion batches to settle before allowing another operation.
+- Bound streamed cloud sync JSON, deletion manifests and upload acknowledgments before parsing them.
 - Explain that runtime backup import failures can leave some changes applied, while retaining the underlying error for diagnosis.
 
 - Honor the default two-way cloud sync direction and remove unreachable startup warnings and unused notification code.

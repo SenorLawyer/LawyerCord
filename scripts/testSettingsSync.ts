@@ -15,6 +15,11 @@ import { createSourceFile, isCallExpression, isFunctionDeclaration, isPropertyAc
 
 import { readResponseText } from "../src/shared/readResponseText";
 
+const jsonResponseReader = {
+    readResponseText: async (response: { json(): Promise<unknown>; }, maxBytes: number) =>
+        readResponseText(Response.json(await response.json()), maxBytes)
+};
+
 const { outputText } = transpileModule(readFileSync("src/api/SettingsSync/offline.ts", "utf8"), {
     compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
 });
@@ -514,6 +519,7 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
     const writes: unknown[] = [];
     const css: string[] = [];
     const modules: Record<string, unknown> = {
+        "@shared/readResponseText": jsonResponseReader,
         "@api/DataStore": { entries: async () => records, set: async (key: string, value: unknown) => writes.push([key, value]) },
         "@api/Notifications": {},
         "@api/Settings": { PlainSettings: {}, DefaultSettings: defaultSettings },
@@ -579,6 +585,71 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
     await assert.rejects(buildLocalData(), /JSON backup format cannot preserve/);
 });
 
+test("cloud JSON responses stop oversized streams before writes and allow retry", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const operation of ["getCloudSettings", "putCloudSettings", "deleteCloudSettings", "putV1"]) {
+        const legacy = operation === "putV1";
+        const limit = (legacy ? 1 : 128) * 1024 * 1024;
+        let oversized = true;
+        let cancelled = false;
+        let sent = 0;
+        let response: Response | undefined;
+        const writes: string[] = [];
+        const notifications: { color?: string }[] = [];
+        const plain = { cloud: { settingsSyncVersion: 1 } };
+        const storage = { Vencord_settingsDirty: "true" };
+        const modules: Record<string, unknown> = {
+            "@shared/readResponseText": { readResponseText },
+            "@api/DataStore": { get: async () => legacy ? { "https://first.invalid": "v1" } : undefined, entries: async () => [], set: async () => writes.push("manifest") },
+            "@api/Settings": { PlainSettings: plain, Settings: plain },
+            "@api/Notifications": { showNotification: (value: { color?: string }) => notifications.push(value) },
+            "@utils/localStorage": { localStorage: storage },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+            "@utils/Logger": { Logger: class { info() {} error() {} } },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" },
+            "./offline": { exportSettings: async () => "{}", omitCloudSettings: () => ({}), serializeDataStore: JSON.stringify },
+            fflate: { deflateSync: (value: Uint8Array) => value }
+        };
+        const api = runInNewContext(`${compiled}\nexports;`, {
+            exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextEncoder, TextDecoder, Uint8Array, btoa, crypto,
+            VencordNative: { settings: { get: () => plain, set: async () => writes.push("settings") }, quickCss: { get: async () => "" } },
+            fetch: async () => {
+                const value = legacy ? { written: 2 } : operation === "deleteCloudSettings" ? { entries: [] } : { server_manifest: [], downloads: [], uploaded: [], errors: [] };
+                if (!oversized) return Response.json(value);
+                const prefix = new TextEncoder().encode(JSON.stringify(value));
+                const chunk = new Uint8Array(64 * 1024).fill(32);
+                response = new Response(new ReadableStream<Uint8Array>({
+                    pull(controller) {
+                        if (sent === 0) { controller.enqueue(prefix); sent += prefix.length; return; }
+                        if (sent === limit + 1) { controller.close(); return; }
+                        const count = Math.min(chunk.length, limit + 1 - sent);
+                        controller.enqueue(chunk.subarray(0, count));
+                        sent += count;
+                    },
+                    cancel() { cancelled = true; }
+                }, { highWaterMark: 0 }), { headers: { "Content-Length": "1" } });
+                return response;
+            }
+        });
+        const run = () => api[legacy ? "putCloudSettings" : operation](true);
+        await run();
+        assert.deepEqual(writes, [], operation);
+        assert.equal(cancelled, true, operation);
+        assert.equal(response?.body?.locked, false);
+        assert.equal(plain.cloud.settingsSyncVersion, 1);
+        assert.equal(storage.Vencord_settingsDirty, "true");
+        assert.equal(notifications[0]?.color, "var(--red-360)");
+        oversized = false;
+        notifications.length = 0;
+        await run();
+        assert.ok(notifications.length > 0, "A retry must not be blocked by the failed request");
+        assert.notEqual(notifications[0]?.color, "var(--red-360)");
+    }
+});
+
 test("cloud downloads validate every record before writing any section", async () => {
     const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
@@ -593,6 +664,7 @@ test("cloud downloads validate every record before writing any section", async (
         const writes: string[] = [];
         const plain = { plugins: {} };
         const modules: Record<string, unknown> = {
+            "@shared/readResponseText": jsonResponseReader,
             "@api/Settings": { PlainSettings: plain, DefaultSettings: defaultSettings },
             "@api/DataStore": { set: async () => writes.push("legacy") },
             "..": { DataStore: { setMany: async () => writes.push("datastore") } },
@@ -623,6 +695,7 @@ test("legacy cloud sync waits for local settings persistence before reporting su
         const plain = { cloud: { settingsSyncVersion: 1 } };
         let rejectSave: ((reason: Error) => void) | undefined;
         const modules: Record<string, unknown> = {
+            "@shared/readResponseText": jsonResponseReader,
             "@api/DataStore": {},
             "@api/Notifications": { showNotification: (value: unknown) => notifications.push(value) },
             "@api/Settings": { PlainSettings: plain, Settings: plain },
@@ -673,6 +746,7 @@ test("legacy sync rejects invalid timestamps and forced downloads bypass cache v
         const plain = { cloud: { settingsSyncVersion: 7 } };
         const storage = { Vencord_settingsDirty: "true" };
         const modules: Record<string, unknown> = {
+            "@shared/readResponseText": jsonResponseReader,
             "@api/DataStore": { get: async () => ({ "https://first.invalid": "v1" }) },
             "@api/Settings": { PlainSettings: plain, Settings: plain },
             "@api/Notifications": { showNotification: (value: { color?: string }) => notifications.push(value) },
@@ -903,6 +977,7 @@ test("failed cloud downloads and deletions do not advance the manifest or report
     let saveFails = false;
     const events: string[] = [];
     const modules: Record<string, unknown> = {
+        "@shared/readResponseText": jsonResponseReader,
         "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
         "@api/DataStore": { get: async () => undefined, entries: async () => [], set: async () => { events.push("manifest"); writes++; } },
         "@api/Notifications": { showNotification: (data: { color: string; }) => notifications.push(data) },
@@ -992,6 +1067,7 @@ test("cloud uploads and downloads discard obsolete responses and stop subsequent
                 setMany: async () => pause("datastore")
             };
             const modules: Record<string, unknown> = {
+                "@shared/readResponseText": jsonResponseReader,
                 "@api/DataStore": store,
                 "..": { DataStore: store },
                 "@api/Notifications": { showNotification: () => { events.push("notification"); assert.equal(changed, false); } },
@@ -1059,6 +1135,7 @@ test("cloud sync preserves edits made while responses or local saves are pending
             entries: async () => [], set: async () => manifests++
         };
         const modules: Record<string, unknown> = {
+            "@shared/readResponseText": jsonResponseReader,
             "@api/DataStore": store, "..": { DataStore: store },
             "@api/Settings": { PlainSettings: plain, Settings: plain, DefaultSettings: defaultSettings },
             "@api/Notifications": { showNotification: (value: { color: string }) => notifications.push(value) },
@@ -1121,6 +1198,7 @@ test("cloud operations cannot overlap and a completed or failed operation releas
         const notifications: { body: string }[] = [];
         const plain = { cloud: { authenticated: true, settingsSyncVersion: 1 } };
         const modules: Record<string, unknown> = {
+            "@shared/readResponseText": jsonResponseReader,
             "@api/DataStore": { get: async () => undefined, entries: async () => [], set: async () => {} },
             "@api/Settings": { PlainSettings: plain, Settings: plain },
             "@api/Notifications": { showNotification: (value: { body: string }) => notifications.push(value) },
@@ -1176,6 +1254,7 @@ test("cloud request timeouts cover response bodies and release the operation for
         });
         const plain = { cloud: { authenticated: true, settingsSyncVersion: 1 } };
         const modules: Record<string, unknown> = {
+            "@shared/readResponseText": jsonResponseReader,
             "@api/DataStore": { get: async (key: string) => key === "Vencord_cloudApiVersions" ? { "https://first.invalid": version } : undefined, entries: async () => [], set: async () => writes++ },
             "@api/Settings": { PlainSettings: plain, Settings: plain },
             "@api/Notifications": { showNotification: (value: unknown) => notifications.push(value) },
@@ -1231,6 +1310,7 @@ test("obsolete cloud failures cannot deauthorize another account or start fallba
         const plain = { cloud: { authenticated: true, settingsSyncVersion: 1 } };
         const versions: Record<string, string> = { "https://first.invalid": version };
         const modules: Record<string, unknown> = {
+            "@shared/readResponseText": jsonResponseReader,
             "@api/DataStore": {
                 get: async (key: string) => key === "Vencord_cloudApiVersions" ? versions : [],
                 update: async (_key: string, updater: (map: Record<string, string>) => unknown) => {
@@ -1278,6 +1358,7 @@ test("invalid cloud response envelopes fail before local writes or manifest ackn
         const notifications: { color: string }[] = [];
         const storage = { Vencord_settingsDirty: "true" };
         const modules: Record<string, unknown> = {
+            "@shared/readResponseText": jsonResponseReader,
             "@api/DataStore": { get: async () => undefined, set: async () => writes.push("manifest") },
             "@api/Settings": { PlainSettings: { cloud: {} } },
             "@api/Notifications": { showNotification: (value: { color: string }) => notifications.push(value) },
@@ -1311,6 +1392,7 @@ test("cloud manifests belong to one account and service without claiming the own
     const observed: unknown[] = [];
     const contexts = [["first", "https://first.invalid"], ["second", "https://first.invalid"], ["first", "https://second.invalid"]];
     const modules: Record<string, unknown> = {
+        "@shared/readResponseText": jsonResponseReader,
         "@api/DataStore": { get: async (key: string) => records.get(key), set: async (key: string, value: unknown) => { records.set(key, value); } },
         "@api/Notifications": { showNotification: () => {} },
         "@api/Settings": { PlainSettings: { cloud: {} } },
@@ -1370,6 +1452,7 @@ test("cloud deletion stops when its account or service changes", async () => {
                 }
             };
             const modules: Record<string, unknown> = {
+                "@shared/readResponseText": jsonResponseReader,
                 "@api/DataStore": {
                     get: async () => { await pause("version"); return { "https://first.invalid": version, "https://second.invalid": version }; },
                     set: async () => pause("manifest-save")
@@ -1408,6 +1491,7 @@ test("cloud deletion validates the complete manifest before deleting any entries
         let writes = 0;
         let notifications = 0;
         const modules: Record<string, unknown> = {
+            "@shared/readResponseText": jsonResponseReader,
             "@api/DataStore": { get: async () => undefined, set: async () => writes++ },
             "@api/Notifications": { showNotification: () => notifications++ },
             "@utils/Logger": { Logger: class { info() {} error() {} } },
@@ -1434,6 +1518,7 @@ test("a failed deletion waits for the rest of its batch before releasing the ope
     let writes = 0;
     let finishDelete: ((value: unknown) => void) | undefined;
     const modules: Record<string, unknown> = {
+        "@shared/readResponseText": jsonResponseReader,
         "@api/DataStore": { get: async () => undefined, set: async () => writes++ },
         "@api/Notifications": { showNotification: () => {} },
         "@utils/Logger": { Logger: class { info() {} error() {} } },
@@ -1483,6 +1568,7 @@ test("cloud erasure stops after account or service changes without affecting the
             }
         };
         const modules: Record<string, unknown> = {
+            "@shared/readResponseText": jsonResponseReader,
             "@api/DataStore": { set: async () => pause("manifest") },
             "@api/Settings": { Settings: settings },
             "@api/Notifications": { showNotification: () => events.push("notification") },

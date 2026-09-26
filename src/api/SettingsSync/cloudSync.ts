@@ -7,6 +7,7 @@
 import * as DataStore from "@api/DataStore";
 import { showNotification } from "@api/Notifications";
 import { PlainSettings, Settings } from "@api/Settings";
+import { readResponseText } from "@shared/readResponseText";
 import { localStorage } from "@utils/localStorage";
 import { Logger } from "@utils/Logger";
 import { isObject } from "@utils/misc";
@@ -23,6 +24,8 @@ const logger = new Logger("SettingsSync:Cloud", "#39b7e0");
 const MANIFEST_STORE_KEY = "Vencord_cloudManifest";
 const API_VERSION_STORE_KEY = "Vencord_cloudApiVersions";
 const REQUEST_TIMEOUT_MS = 120_000;
+const MAX_SYNC_RESPONSE_BYTES = 128 * 1024 * 1024;
+const MAX_TIMESTAMP_RESPONSE_BYTES = 1024 * 1024;
 
 type ApiVersion = "v2" | "v1";
 
@@ -209,7 +212,7 @@ async function doSyncV2(uploads: SyncRequest["uploads"], clientManifest: Manifes
         return null;
     }
 
-    const response: unknown = await res.json();
+    const response: unknown = JSON.parse(await readResponseText(res, MAX_SYNC_RESPONSE_BYTES));
     context.assertCurrent();
     if (!isSyncResponse(response))
         throw new Error("The cloud server returned invalid or unsupported sync data.");
@@ -336,7 +339,7 @@ async function deleteV2(context: ReturnType<typeof getCloudSyncContext>) {
         return;
     }
 
-    const manifest: unknown = await manifestRes.json();
+    const manifest: unknown = JSON.parse(await readResponseText(manifestRes, MAX_SYNC_RESPONSE_BYTES));
     if (!context.isCurrent()) return;
     if (!isObject(manifest) || !("entries" in manifest) || !Array.isArray(manifest.entries) || !manifest.entries.every(isManifestEntry))
         throw new Error("The cloud server returned an invalid deletion manifest.");
@@ -400,7 +403,7 @@ async function putV1(context: ReturnType<typeof getCloudSyncContext>, manual?: b
         return;
     }
 
-    const response: unknown = await res.json();
+    const response: unknown = JSON.parse(await readResponseText(res, MAX_TIMESTAMP_RESPONSE_BYTES));
     context.assertCurrent();
     if (!isObject(response) || !("written" in response) || !isSyncVersion(response.written))
         throw new Error("The cloud server returned an invalid sync timestamp.");

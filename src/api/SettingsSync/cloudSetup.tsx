@@ -64,7 +64,7 @@ export async function deauthorizeCloud() {
     });
 }
 
-export async function authorizeCloud() {
+export async function authorizeCloud(replaceAuthorization = false) {
     const attempt = ++authorizationAttempt;
     const userId = getUserId();
     const service = Settings.cloud.url;
@@ -75,6 +75,15 @@ export async function authorizeCloud() {
     let redirectUri: string;
     let redirect: URL;
     try {
+        if (replaceAuthorization) {
+            Settings.cloud.authenticated = false;
+            await DataStore.update<Record<string, string>>("Vencord_cloudSecret", secrets => {
+                secrets ??= {};
+                delete secrets[key];
+                return secrets;
+            });
+            if (!isCurrent()) return;
+        }
         const authorization = await getAuthorization();
         if (!isCurrent()) return;
         if (typeof authorization === "string" && authorization) {

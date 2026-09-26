@@ -17,7 +17,7 @@
 */
 
 import { useSettings } from "@api/Settings";
-import { authorizeCloud, cancelCloudAuthorization, deauthorizeCloud } from "@api/SettingsSync/cloudSetup";
+import { authorizeCloud, cancelCloudAuthorization } from "@api/SettingsSync/cloudSetup";
 import { deleteCloudSettings, eraseAllCloudData, getCloudSettings, putCloudSettings } from "@api/SettingsSync/cloudSync";
 import { Button } from "@components/Button";
 import { CheckedTextInput } from "@components/CheckedTextInput";
@@ -144,10 +144,7 @@ function CloudTab() {
                 </div>
                 <Button
                     disabled={!isAuthenticated}
-                    onClick={async () => {
-                        await deauthorizeCloud();
-                        await authorizeCloud();
-                    }}
+                    onClick={() => authorizeCloud(true)}
                 >
                     <Flex gap="8px" alignItems="center">
                         <RefreshIcon color="currentColor" />

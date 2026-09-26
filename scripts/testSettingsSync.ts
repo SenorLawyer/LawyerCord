@@ -108,11 +108,13 @@ test("cloud backend controls retain saved credentials and reserve deletion for r
     const settings = { cloud: { url: "https://first.invalid", authenticated: true, settingsSync: false } };
     let records: Record<string, string> = { "https://first.invalid:first": "one", "https://second.invalid:first": "two" };
     let requests = 0;
+    let userId = "first";
+    let pauseUpdate: (() => Promise<void>) | undefined;
     const modules: Record<string, unknown> = {
         "@api/Settings": { Settings: settings, useSettings: () => settings },
         "@api/DataStore": {
             get: async () => ({ ...records }),
-            update: async (_key: string, change: (value: Record<string, string>) => Record<string, string>) => { records = change(records); }
+            update: async (_key: string, change: (value: Record<string, string>) => Record<string, string>) => { await pauseUpdate?.(); records = change(records); }
         },
         "@api/Notifications": { showNotification() {} },
         "@shared/readResponseText": { readResponseText },
@@ -123,7 +125,7 @@ test("cloud backend controls retain saved credentials and reserve deletion for r
         "@utils/margins": { Margins: {} },
         "@webpack": { findComponentByCodeLazy: () => "Icon" },
         "@webpack/common": {
-            UserStore: { getCurrentUser: () => ({ id: "first" }) },
+            UserStore: { getCurrentUser: () => ({ id: userId }) },
             useState: () => [0, () => {}], SearchableSelect: "SearchableSelect", Select: "Select",
             openModal() {}, OAuth2AuthorizeModal: "Modal"
         },
@@ -172,6 +174,21 @@ test("cloud backend controls retain saved credentials and reserve deletion for r
     await reauthorize.props.onClick();
     assert.deepEqual(records, { "https://first.invalid:first": "one" });
     assert.equal(requests, 1);
+    for (const change of ["account", "service", "cancel"]) {
+        userId = "first";
+        settings.cloud.url = "https://second.invalid";
+        records["https://second.invalid:first"] = "two";
+        let finish = () => {};
+        pauseUpdate = () => new Promise<void>(resolve => { finish = resolve; });
+        const pending = reauthorize.props.onClick();
+        if (change === "account") userId = "second";
+        if (change === "service") settings.cloud.url = "https://third.invalid";
+        if (change === "cancel") await toggle.props.onChange(false);
+        finish();
+        await pending;
+        assert.equal(requests, 1, `Reauthorization must stop after ${change}`);
+        assert.equal(records["https://second.invalid:first"], undefined);
+    }
 });
 
 test("obsolete cloud authorization callbacks cannot save credentials or change authentication", async () => {

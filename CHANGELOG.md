@@ -27,6 +27,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Cloud reauthorization stays tied to the account and backend that started it and stops if cancelled during credential deletion.
 - Automatic cloud uploads retry through the existing debounce when another cloud operation is busy, instead of losing the scheduled upload. Retries recheck cloud sync preferences.
 - SupportHelper bounds the contributor-DM warning patch while preserving the selected channel.
 - Support diagnostics identify LawyerCord and link to the configured repository. Support buttons show LawyerCord commands and recognize both current and legacy command names.

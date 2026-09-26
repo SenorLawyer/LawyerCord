@@ -7882,6 +7882,8 @@ test("folder icon editing preserves saved size and resetting an unused folder is
 test("content warning saved words retain an empty input for adding words", async () => {
     for (const saved of [undefined, [], ["alpha"], ["alpha", ""]]) {
         const { plugin, words } = loadSource("src/equicordplugins/contentWarning/index.tsx", {
+            "@utils/Logger": { Logger: class { error() {} } },
+            "@components/BaseText": {},
             "@api/index": { DataStore: { get: async () => saved?.slice() } },
             "@api/Settings": { definePluginSettings: () => ({}) },
             "@components/Flex": {}, "@components/Heading": {}, "@components/Icons": {},
@@ -7898,6 +7900,8 @@ test("content warning saved words retain an empty input for adding words", async
 
 test("content warnings are blurred before the first hover", () => {
     const TriggerContainer = loadSource("src/equicordplugins/contentWarning/index.tsx", {
+        "@utils/Logger": { Logger: class { error() {} } },
+        "@components/BaseText": {},
         "@api/index": {},
         "@api/Settings": { definePluginSettings: () => ({ use: () => ({ onClick: false }) }) },
         "@components/Flex": {}, "@components/Heading": {}, "@components/Icons": {},

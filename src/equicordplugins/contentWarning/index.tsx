@@ -8,24 +8,43 @@ import "./styles.css";
 
 import { DataStore } from "@api/index";
 import { definePluginSettings } from "@api/Settings";
+import { BaseText } from "@components/BaseText";
 import { Flex } from "@components/Flex";
 import { HeadingTertiary } from "@components/Heading";
 import { DeleteIcon } from "@components/Icons";
 import { EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
-import { useForceUpdater } from "@utils/react";
+import { Logger } from "@utils/Logger";
+import { useAwaiter, useForceUpdater } from "@utils/react";
 import { escapeRegExp } from "@utils/text";
 import definePlugin, { OptionType } from "@utils/types";
 import { Button, TextInput, useState } from "@webpack/common";
 
 const cl = classNameFactory("vc-content-warning-");
+const logger = new Logger("ContentWarning");
 
 const WORDS_KEY = "ContentWarning_words";
 const REVEAL_SETTINGS: "onClick"[] = ["onClick"];
 
 let triggerWords = [""];
 let triggerWordRegex: RegExp | null = null;
-let loadGeneration = 0;
+let wordsPromise: Promise<void> | undefined;
+
+function loadTriggerWords() {
+    if (wordsPromise) return wordsPromise;
+    const pending = DataStore.get<unknown>(WORDS_KEY).then(raw => {
+        if (wordsPromise !== pending) return;
+        const words = raw ?? [];
+        if (!Array.isArray(words) || !words.every((word: unknown) => typeof word === "string")) {
+            throw new Error("Invalid saved trigger words.");
+        }
+        triggerWords = words;
+        if (triggerWords.at(-1) !== "") triggerWords.push("");
+        compileTriggerWords();
+    });
+    wordsPromise = pending;
+    return pending;
+}
 
 function compileTriggerWords() {
     const escapedWords: string[] = [];
@@ -113,6 +132,10 @@ function FlaggedInput({ index, forceUpdate }) {
 
 function FlaggedWords() {
     const forceUpdate = useForceUpdater();
+    const [, error, pending] = useAwaiter(loadTriggerWords);
+
+    if (pending) return <BaseText>Loading words...</BaseText>;
+    if (error) return <BaseText>Words could not be loaded. Restart Discord to try again.</BaseText>;
 
     const inputs = triggerWords.map((_, idx) => {
         return (
@@ -175,16 +198,11 @@ export default definePlugin({
         }
     },
 
-    async start() {
-        const generation = ++loadGeneration;
-        const words = await DataStore.get(WORDS_KEY);
-        if (generation !== loadGeneration) return;
-        triggerWords = words ?? [""];
-        if (triggerWords.at(-1) !== "") triggerWords.push("");
-        compileTriggerWords();
+    start() {
+        return loadTriggerWords().catch(() => logger.error("Could not load trigger words."));
     },
 
     stop() {
-        loadGeneration++;
+        wordsPromise = undefined;
     }
 });

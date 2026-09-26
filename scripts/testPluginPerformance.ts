@@ -7879,6 +7879,23 @@ test("folder icon editing preserves saved size and resetting an unused folder is
     assert.equal(closes, 3);
 });
 
+test("content warning saved words retain an empty input for adding words", async () => {
+    for (const saved of [undefined, [], ["alpha"], ["alpha", ""]]) {
+        const { plugin, words } = loadSource("src/equicordplugins/contentWarning/index.tsx", {
+            "@api/index": { DataStore: { get: async () => saved?.slice() } },
+            "@api/Settings": { definePluginSettings: () => ({}) },
+            "@components/Flex": {}, "@components/Heading": {}, "@components/Icons": {},
+            "@utils/constants": { EquicordDevs: {} },
+            "@utils/css": { classNameFactory: () => () => "" },
+            "@utils/react": {}, "@utils/text": { escapeRegExp: RegExp.escape },
+            "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+            "@webpack/common": {}
+        }, {}, "({ plugin: exports.default, words: () => triggerWords })");
+        await plugin.start();
+        assert.deepEqual(Array.from(words()), saved?.length ? ["alpha", ""] : [""]);
+    }
+});
+
 test("content warnings are blurred before the first hover", () => {
     const TriggerContainer = loadSource("src/equicordplugins/contentWarning/index.tsx", {
         "@api/index": {},

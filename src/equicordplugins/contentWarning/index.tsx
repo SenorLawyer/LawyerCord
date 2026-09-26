@@ -176,6 +176,7 @@ export default definePlugin({
 
     async start() {
         triggerWords = await DataStore.get(WORDS_KEY) ?? [""];
+        if (triggerWords.at(-1) !== "") triggerWords.push("");
         compileTriggerWords();
     }
 });

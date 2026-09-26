@@ -9,6 +9,7 @@ import "./styles.css";
 import { DataStore } from "@api/index";
 import { definePluginSettings } from "@api/Settings";
 import { BaseText } from "@components/BaseText";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
 import { HeadingTertiary } from "@components/Heading";
 import { DeleteIcon } from "@components/Icons";
@@ -72,7 +73,7 @@ function hasTriggerWord(content: string) {
     return triggerWordRegex?.test(content) ?? false;
 }
 
-function TriggerContainer({ child }) {
+const TriggerContainer = ErrorBoundary.wrap(function TriggerContainer({ child }) {
     const [visible, setVisible] = useState(false);
     const { onClick } = settings.use(REVEAL_SETTINGS);
 
@@ -103,7 +104,7 @@ function TriggerContainer({ child }) {
             </>
         );
     }
-}
+}, { noop: true });
 
 function FlaggedInput({ index, forceUpdate }) {
     const isLast = index === triggerWords.length - 1;

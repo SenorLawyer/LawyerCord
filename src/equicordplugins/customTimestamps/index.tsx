@@ -96,6 +96,7 @@ const TimeRow = (props: TimeRowProps) => (
         <Heading>{props.format.name}</Heading>
         <Paragraph>{props.format.description}</Paragraph>
         <TextInput
+            aria-label={props.format.name}
             value={props.pluginSettings[props.id] ?? props.format.default}
             onChange={value => props.onChange(props.id, value)}
         />

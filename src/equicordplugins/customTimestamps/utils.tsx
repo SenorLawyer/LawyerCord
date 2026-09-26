@@ -8,7 +8,7 @@ import "./style.css";
 
 import ErrorBoundary from "@components/ErrorBoundary";
 import { findByCodeLazy, findComponentByCodeLazy } from "@webpack";
-import { moment, useRef, UserStore, useState } from "@webpack/common";
+import { Button, moment, useRef, UserStore, useState } from "@webpack/common";
 
 export type TimeFormat = {
     name: string;
@@ -106,9 +106,12 @@ export const DemoMessageContainer = ErrorBoundary.wrap(() => {
     const aMonthAgo = useRef<Date>(new Date(Date.now() + timeFormats.sameElseFormat.offset));
 
     return (
-        <div className={"vc-cmt-demo-message-container"} onClick={() => setIsCompact(!isCompact)}>
+        <div className="vc-cmt-demo-message-container">
+            <Button look={Button.Looks.LINK} size={Button.Sizes.SMALL} onClick={() => setIsCompact(!isCompact)}>
+                Switch to {isCompact ? "cozy" : "compact"} mode
+            </Button>
             <DemoMessage compact={isCompact} msgId={"1337"}
-                message={`Click me to switch to ${isCompact ? "cozy" : "compact"} mode`} isGroupStart={true}
+                message="This message was sent a month ago" isGroupStart={true}
                 date={aMonthAgo.current} />
             <DemoMessage compact={isCompact} msgId={"1338"} message={"This message was sent in the last week"}
                 isGroupStart={true} date={lastWeek.current} />

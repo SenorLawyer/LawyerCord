@@ -362,6 +362,10 @@ async function deleteV2(context: ReturnType<typeof getCloudSyncContext>) {
     });
 }
 
+function isSyncVersion(value: unknown): value is number {
+    return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
 async function putV1(context: ReturnType<typeof getCloudSyncContext>, manual?: boolean) {
     const settings = await exportSettings({ syncDataStore: false, minify: true, cloud: true });
 
@@ -388,9 +392,11 @@ async function putV1(context: ReturnType<typeof getCloudSyncContext>, manual?: b
         return;
     }
 
-    const { written } = await res.json();
+    const response: unknown = await res.json();
     context.assertCurrent();
-    PlainSettings.cloud.settingsSyncVersion = written;
+    if (!isObject(response) || !("written" in response) || !isSyncVersion(response.written))
+        throw new Error("The cloud server returned an invalid sync timestamp.");
+    PlainSettings.cloud.settingsSyncVersion = response.written;
     await VencordNative.settings.set(PlainSettings);
     context.assertCurrent();
 
@@ -416,7 +422,7 @@ async function getV1(context: ReturnType<typeof getCloudSyncContext>, shouldNoti
         headers: {
             Authorization: auth,
             Accept: "application/octet-stream",
-            "If-None-Match": Settings.cloud.settingsSyncVersion.toString(),
+            ...(!force && { "If-None-Match": Settings.cloud.settingsSyncVersion.toString() }),
         },
     });
 
@@ -458,7 +464,10 @@ async function getV1(context: ReturnType<typeof getCloudSyncContext>, shouldNoti
         return false;
     }
 
-    const written = Number(res.headers.get("etag")!);
+    const etag = res.headers.get("etag");
+    const written = Number(etag);
+    if (etag === null || !/^\d+$/.test(etag) || !isSyncVersion(written))
+        throw new Error("The cloud server returned an invalid sync timestamp.");
     const localWritten = Settings.cloud.settingsSyncVersion;
 
     if (!force && written < localWritten) {

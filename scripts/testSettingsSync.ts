@@ -497,6 +497,7 @@ test("legacy cloud sync waits for local settings persistence before reporting su
             "@api/Notifications": { showNotification: (value: unknown) => notifications.push(value) },
             "@api/Settings": { PlainSettings: plain, Settings: plain },
             "@utils/localStorage": { localStorage: storage },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
             "@utils/Logger": { Logger: class { info() {} error() {} } },
             "@utils/native": {},
             "@webpack/common": {},
@@ -524,6 +525,56 @@ test("legacy cloud sync waits for local settings persistence before reporting su
         assert.equal(await pending, failure);
         assert.equal(notifications.length, 0);
         assert.equal(storage.Vencord_settingsDirty, "true");
+    }
+});
+
+test("legacy sync rejects invalid timestamps and forced downloads bypass cache validation", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const force of [false, true]) for (const direction of ["getCloudSettings", "putCloudSettings"]) for (const written of [undefined, null, "", "wrong", -1, 1.5, Infinity, Number.MAX_SAFE_INTEGER + 1, 0, 2, 8]) {
+        const valid = written === 0 || written === 2 || written === 8;
+        const applied = valid && (direction === "putCloudSettings" || force || written >= 7);
+        let saves = 0;
+        let imports = 0;
+        let bodyReads = 0;
+        let requestHeaders: RequestInit["headers"];
+        const notifications: { color?: string }[] = [];
+        const plain = { cloud: { settingsSyncVersion: 7 } };
+        const storage = { Vencord_settingsDirty: "true" };
+        const modules: Record<string, unknown> = {
+            "@api/DataStore": { get: async () => ({ "https://first.invalid": "v1" }) },
+            "@api/Settings": { PlainSettings: plain, Settings: plain },
+            "@api/Notifications": { showNotification: (value: { color?: string }) => notifications.push(value) },
+            "@utils/localStorage": { localStorage: storage },
+            "@utils/Logger": { Logger: class { info() {} error() {} } },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" },
+            "./offline": { exportSettings: async () => "{}", importSettings: async () => imports++ },
+            fflate: { deflateSync: (value: Uint8Array) => value, inflateSync: (value: Uint8Array) => value }
+        };
+        const api = runInNewContext(`${compiled}\nexports;`, {
+            exports: {}, require: (name: string) => modules[name] ?? {}, URL, TextEncoder, TextDecoder, IS_WEB: true,
+            VencordNative: { settings: { set: async () => saves++ } },
+            fetch: async (_url: URL, init: RequestInit) => {
+                requestHeaders = init.headers;
+                return {
+                    ok: true, status: 200, json: async () => ({ written }),
+                    headers: { get: () => written == null ? null : String(written) },
+                    arrayBuffer: async () => { bodyReads++; return new TextEncoder().encode("{}").buffer; }
+                };
+            }
+        });
+        await api[direction](true, force);
+        assert.equal(saves, applied ? 1 : 0, `${direction}/${String(written)}`);
+        assert.equal(imports, applied && direction === "getCloudSettings" ? 1 : 0);
+        assert.equal(bodyReads, imports);
+        assert.equal(plain.cloud.settingsSyncVersion, applied ? written : 7);
+        assert.equal(storage.Vencord_settingsDirty, applied ? undefined : "true");
+        assert.equal(notifications.length, 1);
+        if (!valid) assert.equal(notifications[0].color, "var(--red-360)");
+        if (direction === "getCloudSettings") assert.equal(new Headers(requestHeaders).has("If-None-Match"), !force);
     }
 });
 

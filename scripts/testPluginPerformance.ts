@@ -7821,6 +7821,7 @@ test("custom timestamps keep relative thresholds local to their own output", () 
     const thresholds = ["s", "ss", "m"].map(key => [key, moment.relativeTimeThreshold(key)] as const);
     const settings = { store: { formats: {} }, withPrivateSettings() { return this; } };
     const { format } = loadSource("src/equicordplugins/customTimestamps/index.tsx", {
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@api/Settings": { definePluginSettings: () => settings },
         "@components/Divider": {}, "@components/Heading": {}, "@components/Link": {}, "@components/Paragraph": {},
         "@utils/constants": { Devs: {}, EquicordDevs: {} }, "@utils/margins": {}, "@utils/react": {},

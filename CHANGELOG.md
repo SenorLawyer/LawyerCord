@@ -25,6 +25,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomTimestamps no longer changes the parent component's hook order when timestamp tooltips are hidden or an application preview replaces them.
+
 - CustomTimestamps keeps its relative-time thresholds local instead of changing date formatting elsewhere in Discord.
 
 - CustomFolderIcons applies saved icons, size changes, background settings and resets immediately without requiring a hover.

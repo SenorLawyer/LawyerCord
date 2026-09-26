@@ -8,6 +8,7 @@ import "./style.css";
 
 import { definePluginSettings, useSettings } from "@api/Settings";
 import { Divider } from "@components/Divider";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { Heading, HeadingPrimary } from "@components/Heading";
 import { Link } from "@components/Link";
 import { Paragraph } from "@components/Paragraph";
@@ -138,6 +139,33 @@ const settings = definePluginSettings({
     };
 }>();
 
+function renderTimestamp(date: Date, type: "cozy" | "compact" | "tooltip" | "ariaLabel") {
+    const forceUpdater = useForceUpdater();
+    let formatTemplate: string;
+
+    switch (type) {
+        case "cozy":
+            formatTemplate = settings.store.formats?.cozyFormat || timeFormats.cozyFormat.default;
+            break;
+        case "compact":
+            formatTemplate = settings.store.formats?.compactFormat || timeFormats.compactFormat.default;
+            break;
+        case "tooltip":
+            formatTemplate = settings.store.formats?.tooltipFormat || timeFormats.tooltipFormat.default;
+            break;
+        case "ariaLabel":
+            formatTemplate = settings.store.formats?.ariaLabelFormat || timeFormats.ariaLabelFormat.default;
+    }
+
+    useEffect(() => {
+        if (formatTemplate.includes("calendar") || formatTemplate.includes("relative")) {
+            return subscribeTimestampRefresh(forceUpdater);
+        }
+    }, [forceUpdater, formatTemplate]);
+
+    return format(date, formatTemplate);
+}
+
 export default definePlugin({
     name: "CustomTimestamps",
     description: "Custom timestamps on messages and tooltips",
@@ -175,7 +203,7 @@ export default definePlugin({
                 {
                     // Tooltips when hovering over message timestamps
                     match: /(__unsupportedReactNodeAsText:).{0,25}"LLLL"\)/,
-                    replace: "$1$self.renderTimestamp(arguments[0].timestamp,'tooltip')",
+                    replace: "$1$self.renderTooltip({date:arguments[0].timestamp})",
                 },
             ]
         },
@@ -184,7 +212,7 @@ export default definePlugin({
             replacement: {
                 // Tooltips for timestamp markdown (e.g. <t:1234567890>)
                 match: /(__unsupportedReactNodeAsText:)\i.full/,
-                replace: "$1$self.renderTimestamp(new Date(arguments[0].node.timestamp*1000),'tooltip')"
+                replace: "$1$self.renderTooltip({date:new Date(arguments[0].node.timestamp*1000)})"
             }
         }
     ],
@@ -193,30 +221,6 @@ export default definePlugin({
         clearTimestampRefresh();
     },
 
-    renderTimestamp: (date: Date, type: "cozy" | "compact" | "tooltip" | "ariaLabel") => {
-        const forceUpdater = useForceUpdater();
-        let formatTemplate: string;
-
-        switch (type) {
-            case "cozy":
-                formatTemplate = settings.store.formats?.cozyFormat || timeFormats.cozyFormat.default;
-                break;
-            case "compact":
-                formatTemplate = settings.store.formats?.compactFormat || timeFormats.compactFormat.default;
-                break;
-            case "tooltip":
-                formatTemplate = settings.store.formats?.tooltipFormat || timeFormats.tooltipFormat.default;
-                break;
-            case "ariaLabel":
-                formatTemplate = settings.store.formats?.ariaLabelFormat || timeFormats.ariaLabelFormat.default;
-        }
-
-        useEffect(() => {
-            if (formatTemplate.includes("calendar") || formatTemplate.includes("relative")) {
-                return subscribeTimestampRefresh(forceUpdater);
-            }
-        }, [forceUpdater, formatTemplate]);
-
-        return format(date, formatTemplate);
-    }
+    renderTimestamp,
+    renderTooltip: ErrorBoundary.wrap(({ date }: { date: Date; }) => renderTimestamp(date, "tooltip"), { noop: true })
 });

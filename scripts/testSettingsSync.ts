@@ -91,7 +91,7 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
     const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSetup.tsx", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022, jsx: JsxEmit.React }, fileName: "cloudSetup.tsx"
     }).outputText;
-    for (const change of ["read", "configuration", "account", "service", "deauthorize", "newer", "invalid", "none"]) {
+    for (const change of ["storage", "config-status", "config-shape", "config-protocol", "callback-origin", "callback-path", "callback-status", "read", "configuration", "account", "service", "deauthorize", "newer", "invalid", "none"]) {
         let userId = "first";
         const settings = { cloud: { url: "https://first.invalid", authenticated: false } };
         const requests: ((value: unknown) => void)[] = [];
@@ -99,10 +99,11 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
         let modal: { callback: (value: { location: string }) => Promise<void> } | undefined;
         let records: Record<string, string> = {};
         const modules: Record<string, unknown> = {
-            "@api/DataStore": { get: async () => ({ ...records }), update: async (_key: string, fn: (value: Record<string, string>) => Record<string, string>) => { records = fn(records); } },
+            "@api/DataStore": { get: async () => { if (change === "storage") throw new Error("Storage unavailable"); return { ...records }; }, update: async (_key: string, fn: (value: Record<string, string>) => Record<string, string>) => { records = fn(records); } },
             "@api/Settings": { Settings: settings },
             "@api/Notifications": { showNotification: (value: unknown) => notifications.push(value) },
             "@utils/Logger": { Logger: class { info() {} error() {} } },
+            "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } },
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) }, OAuth2AuthorizeModal: "modal", openModal: (render: (props: object) => typeof modal) => { modal = render({}); } }
         };
         const { authorizeCloud, deauthorizeCloud } = runInNewContext(`${compiled}\nexports;`, {
@@ -110,10 +111,16 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
             React: { createElement: (_type: unknown, props: unknown) => props },
             fetch: () => new Promise(resolve => requests.push(resolve))
         });
-        const configuration = { json: async () => ({ clientId: "test", redirectUri: "https://first.invalid/callback" }) };
-        const begin = authorizeCloud();
+        const configuration = { ok: change !== "config-status", status: 500, json: async () => change === "config-shape" ? null : ({ clientId: "test", redirectUri: change === "config-protocol" ? "javascript:alert(1)" : "https://first.invalid/callback" }) };
+        const begin = authorizeCloud().catch((error: unknown) => error);
         if (change === "read") userId = "second";
         await new Promise<void>(resolve => setImmediate(resolve));
+        if (change === "storage") {
+            assert.equal(await begin, undefined);
+            assert.equal(requests.length, 0);
+            assert.equal(notifications.length, 1);
+            continue;
+        }
         if (change === "read") {
             await begin;
             assert.equal(requests.length, 0);
@@ -123,13 +130,25 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
         if (change === "configuration") userId = "second";
         requests.shift()?.(configuration);
         await begin;
+        if (change.startsWith("config-")) {
+            assert.equal(modal, undefined);
+            assert.equal(notifications.length, 1);
+            continue;
+        }
         if (change === "configuration") {
             assert.equal(modal, undefined);
             assert.equal(notifications.length, 0);
             continue;
         }
         assert.ok(modal);
-        const pending = modal.callback({ location: "https://first.invalid/callback" });
+        const pending = modal.callback({ location: change === "callback-origin" ? "https://second.invalid/callback" : change === "callback-path" ? "https://first.invalid/other" : "https://first.invalid/callback?code=synthetic" });
+        if (change === "callback-origin" || change === "callback-path") {
+            assert.equal(requests.length, 0);
+            await pending;
+            assert.deepEqual(records, {});
+            assert.equal(notifications.length, 1);
+            continue;
+        }
         const finishResponse = requests.shift();
         assert.ok(finishResponse);
         let newer: Promise<void> | undefined;
@@ -140,7 +159,7 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
             newer = authorizeCloud();
             await new Promise<void>(resolve => setImmediate(resolve));
         }
-        finishResponse({ json: async () => ({ secret: change === "invalid" ? 17 : "synthetic" }) });
+        finishResponse({ ok: change !== "callback-status", status: 500, json: async () => ({ secret: change === "invalid" ? 17 : "synthetic" }) });
         await pending;
         if (change === "none") {
             assert.deepEqual(records, { "https://first.invalid:first": "synthetic" });
@@ -148,7 +167,7 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
             assert.equal(notifications.length, 1);
             continue;
         }
-        if (change === "invalid") {
+        if (change === "invalid" || change === "callback-status") {
             assert.deepEqual(records, {});
             assert.equal(settings.cloud.authenticated, false);
             assert.equal(notifications.length, 1);

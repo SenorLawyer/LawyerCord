@@ -8,6 +8,7 @@ import * as DataStore from "@api/DataStore";
 import { showNotification } from "@api/Notifications";
 import { Settings } from "@api/Settings";
 import { Logger } from "@utils/Logger";
+import { parseUrl } from "@utils/misc";
 import { OAuth2AuthorizeModal, openModal, UserStore } from "@webpack/common";
 
 export const logger = new Logger("SettingsSync:CloudSetup", "#39b7e0");
@@ -63,22 +64,35 @@ export async function authorizeCloud() {
     const key = `${getCloudUrlOrigin()}:${userId}`;
     const isCurrent = () => attempt === authorizationAttempt
         && UserStore.getCurrentUser()?.id === userId && Settings.cloud.url === service;
-    const authorization = await getAuthorization();
-    if (!isCurrent()) return;
-    if (typeof authorization === "string" && authorization) {
-        Settings.cloud.authenticated = true;
-        return;
-    }
-
+    let clientId: string;
+    let redirectUri: string;
+    let redirect: URL;
     try {
-        const oauthConfiguration = await fetch(new URL("/v1/oauth/settings", getCloudUrl()));
-        var { clientId, redirectUri } = await oauthConfiguration.json();
+        const authorization = await getAuthorization();
         if (!isCurrent()) return;
+        if (typeof authorization === "string" && authorization) {
+            Settings.cloud.authenticated = true;
+            return;
+        }
+        const oauthConfiguration = await fetch(new URL("/v1/oauth/settings", getCloudUrl()));
+        if (!oauthConfiguration.ok) throw new Error("Cloud configuration request failed.");
+        const configuration: unknown = await oauthConfiguration.json();
+        if (!isCurrent()) return;
+        if (!configuration || typeof configuration !== "object"
+            || !("clientId" in configuration) || typeof configuration.clientId !== "string" || !configuration.clientId
+            || !("redirectUri" in configuration) || typeof configuration.redirectUri !== "string")
+            throw new Error("Invalid cloud authorization configuration.");
+        const parsedRedirect = parseUrl(configuration.redirectUri);
+        if (!parsedRedirect || !["http:", "https:"].includes(parsedRedirect.protocol) || parsedRedirect.username || parsedRedirect.password)
+            throw new Error("Invalid cloud authorization redirect.");
+        clientId = configuration.clientId;
+        redirectUri = configuration.redirectUri;
+        redirect = parsedRedirect;
     } catch {
         if (!isCurrent()) return;
         showNotification({
             title: "Cloud Integration",
-            body: "Setup failed (couldn't retrieve OAuth configuration)."
+            body: "Setup failed. Could not read authorization or retrieve valid cloud configuration."
         });
         Settings.cloud.authenticated = false;
         return;
@@ -101,15 +115,21 @@ export async function authorizeCloud() {
             }
 
             try {
-                const res = await fetch(location, {
+                const callbackUrl = parseUrl(location);
+                if (!callbackUrl || callbackUrl.origin !== redirect.origin || callbackUrl.pathname !== redirect.pathname || callbackUrl.username || callbackUrl.password)
+                    throw new Error("Unexpected cloud authorization callback.");
+                const res = await fetch(callbackUrl, {
                     headers: { Accept: "application/json" }
                 });
-                const data = await res.json();
+                if (!res.ok) throw new Error("Cloud authorization request failed.");
+                const data: unknown = await res.json();
                 if (!isCurrent()) return;
-                if (typeof data.secret === "string" && data.secret) {
+                if (!data || typeof data !== "object") throw new Error("Invalid cloud authorization response.");
+                if ("secret" in data && typeof data.secret === "string" && data.secret) {
+                    const { secret } = data;
                     await DataStore.update<Record<string, string>>("Vencord_cloudSecret", secrets => {
                         secrets ??= {};
-                        if (isCurrent()) secrets[key] = data.secret;
+                        if (isCurrent()) secrets[key] = secret;
                         return secrets;
                     });
                     if (!isCurrent()) return;
@@ -123,7 +143,7 @@ export async function authorizeCloud() {
                     logger.error("OAuth callback returned no secret");
                     showNotification({
                         title: "Cloud Integration",
-                        body: data.error
+                        body: "error" in data && typeof data.error === "string" && data.error
                             ? `Setup failed: ${data.error}`
                             : "Setup failed (no secret returned)."
                     });

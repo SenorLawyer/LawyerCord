@@ -38,6 +38,9 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
     const update = useForceUpdater();
     const sound = React.useRef<AudioPlayerInterface | null>(null);
     const previewVersion = React.useRef(0);
+    const editVersion = React.useRef(0);
+    const current = React.useRef({ override, onChange });
+    current.current = { override, onChange };
 
     const stopPreview = () => {
         previewVersion.current++;
@@ -46,9 +49,11 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
     };
 
     React.useEffect(() => stopPreview, [override.enabled, override.selectedSound, override.selectedFileId]);
+    React.useEffect(() => () => { editVersion.current++; }, [override.enabled, override.selectedSound, override.selectedFileId, override.volume]);
 
     const saveAndNotify = () => {
-        const saved = onChange();
+        editVersion.current++;
+        const saved = current.current.onChange();
         update();
         return saved;
     };
@@ -104,15 +109,17 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
             return;
         }
 
+        const version = ++editVersion.current;
         try {
             showToast("Uploading file...");
             const id = await saveAudio(file);
 
-            stopPreview();
-            override.selectedFileId = id;
-            override.selectedSound = "custom";
-
-            await saveAndNotify();
+            if (version === editVersion.current) {
+                stopPreview();
+                current.current.override.selectedFileId = id;
+                current.current.override.selectedSound = "custom";
+                await saveAndNotify();
+            }
             await refreshFiles();
 
             showToast(`File uploaded successfully: ${file.name}`);
@@ -125,13 +132,14 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
     };
 
     const deleteFile = async (id: string) => {
+        const version = ++editVersion.current;
         try {
             await deleteCustomAudio(id);
-            stopPreview();
 
-            if (override.selectedFileId === id) {
-                override.selectedFileId = undefined;
-                override.selectedSound = "default";
+            if (version === editVersion.current && current.current.override.selectedFileId === id) {
+                stopPreview();
+                current.current.override.selectedFileId = undefined;
+                current.current.override.selectedSound = "default";
                 await saveAndNotify();
             }
             await refreshFiles();

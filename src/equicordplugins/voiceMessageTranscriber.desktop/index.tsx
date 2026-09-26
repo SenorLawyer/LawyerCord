@@ -16,11 +16,11 @@ import { Span } from "@components/Span";
 import { getLanguages, translateText, TranslationValue } from "@plugins/translate/utils";
 import { DEFAULT_WAVEFORM, VoiceMessage } from "@plugins/voiceMessages";
 import { generateWaveform } from "@plugins/voiceMessages/waveform";
-import { copyToClipboard } from "@utils/clipboard";
 import { Devs } from "@utils/constants";
+import { copyWithToast } from "@utils/discord";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
 import { Message, RenderModalProps } from "@vencord/discord-types";
-import { lodash, Modal, openModal, ScrollerAuto, SearchableSelect, useCallback, useEffect, useRef, useState } from "@webpack/common";
+import { lodash, Modal, openModal, ScrollerAuto, SearchableSelect, showToast, Toasts, useCallback, useEffect, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
 
 import { detectAudioMimeType } from "./audioValidation";
 import { buildTargetLanguageOptions, getVoiceMessageMedia, LanguageOption, resolveTargetLanguage } from "./options";
@@ -32,7 +32,6 @@ const MAX_RESULT_CACHE_ENTRIES = 100;
 const MAX_PREPARED_AUDIO_CACHE_ENTRIES = 3;
 
 type ProcessingStatus = "idle" | "downloading_audio" | "processing_audio" | "loading" | "transcribing" | "translating" | "complete";
-type CopyTarget = "transcript" | "translation" | null;
 
 interface CachedResult {
     targetLanguage?: string;
@@ -42,6 +41,8 @@ interface CachedResult {
 }
 
 const resultCache = new Map<string, CachedResult>();
+let cacheGeneration = 0;
+const activeWorkers = new Set<TranscriptionWorker>();
 interface PreparedAudio {
     blob: Blob;
     samples: Float32Array;
@@ -56,7 +57,7 @@ function prepareAudio(src: string): Promise<PreparedAudio> {
 
     const pending = Native.fetchAudio(src)
         .then(async bytes => {
-            const blob = new Blob([bytes as any], { type: detectAudioMimeType(bytes) ?? "application/octet-stream" });
+            const blob = new Blob([bytes], { type: detectAudioMimeType(bytes) ?? "application/octet-stream" });
             const samples = await decodeAudio(blob);
             return {
                 blob,
@@ -65,7 +66,7 @@ function prepareAudio(src: string): Promise<PreparedAudio> {
             };
         })
         .catch(error => {
-            preparedAudioCache.delete(src);
+            if (preparedAudioCache.get(src) === pending) preparedAudioCache.delete(src);
             throw error;
         });
 
@@ -78,9 +79,9 @@ function prepareAudio(src: string): Promise<PreparedAudio> {
     return pending;
 }
 
-function cacheResult(messageId: string, result: CachedResult): void {
-    resultCache.delete(messageId);
-    resultCache.set(messageId, result);
+function cacheResult(cacheKey: string, result: CachedResult): void {
+    resultCache.delete(cacheKey);
+    resultCache.set(cacheKey, result);
 
     if (resultCache.size > MAX_RESULT_CACHE_ENTRIES) {
         const oldest = resultCache.keys().next().value;
@@ -152,7 +153,7 @@ const settings = definePluginSettings({
 
                     setSize(totalSize);
                     setDeleteKeys(keys);
-                });
+                }).catch(() => showToast("Failed to load downloaded speech models.", Toasts.Type.FAILURE));
             }, []);
 
             return (
@@ -162,7 +163,7 @@ const settings = definePluginSettings({
                         DataStore.delMany(deleteKeys).then(() => {
                             setSize(0);
                             setDeleteKeys([]);
-                        });
+                        }).catch(() => showToast("Failed to delete downloaded speech models.", Toasts.Type.FAILURE));
                     }}
                 >
                     Delete downloaded speech models ({(size / 1024 / 1024).toFixed(2)} MB)
@@ -186,7 +187,6 @@ function LanguageSelectionModal({ modalProps, onSelect }: LanguageSelectionModal
         const selected = options.find(option => option.value === language);
         if (!selected) return;
 
-        settings.store.targetLanguage = selected.value;
         modalProps.onClose();
         onSelect(selected);
     };
@@ -217,28 +217,46 @@ function LanguageSelectionModal({ modalProps, onSelect }: LanguageSelectionModal
     );
 }
 
-function chooseTargetLanguage(onSelect: (language: LanguageOption) => void): void {
-    openModal(modalProps => <LanguageSelectionModal modalProps={modalProps} onSelect={onSelect} />);
+function chooseTargetLanguage(onSelect: (language: LanguageOption) => void, job: { current: number; }): void {
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return;
+    const generation = cacheGeneration;
+    const jobId = job.current;
+    const select = (language: LanguageOption) => {
+        if (job.current !== jobId || generation !== cacheGeneration || UserStore.getCurrentUser()?.id !== userId) return;
+        settings.store.targetLanguage = language.value;
+        onSelect(language);
+    };
+    openModal(modalProps => <LanguageSelectionModal modalProps={modalProps} onSelect={select} />);
 }
 
 function progressPercent(progress: TranscriptionProgress | null): number | null {
     if (!progress) return null;
-    if (typeof progress.progress === "number") return Math.round(progress.progress);
-    if (typeof progress.loaded === "number" && typeof progress.total === "number" && progress.total > 0)
-        return Math.round(progress.loaded / progress.total * 100);
-    return null;
+    const percent = typeof progress.progress === "number" ? progress.progress
+        : typeof progress.loaded === "number" && typeof progress.total === "number" && progress.total > 0
+            ? progress.loaded / progress.total * 100 : NaN;
+    return Number.isFinite(percent) ? Math.min(100, Math.max(0, Math.round(percent))) : null;
+}
+
+async function copy(text: string) {
+    try {
+        await copyWithToast(text);
+    } catch {
+        showToast("Failed to copy to clipboard.", Toasts.Type.FAILURE);
+    }
 }
 
 interface VoiceMessageTranscriptionAccessoryProps {
+    userId: string;
     duration?: number;
-    messageId: string;
+    cacheKey: string;
     needsPlaybackFallback: boolean;
     src: string;
     waveform?: string;
 }
 
-function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlaybackFallback, src, waveform }: VoiceMessageTranscriptionAccessoryProps) {
-    const initial = resultCache.get(messageId);
+function VoiceMessageTranscriptionAccessory({ userId, duration, cacheKey, needsPlaybackFallback, src, waveform }: VoiceMessageTranscriptionAccessoryProps) {
+    const initial = resultCache.get(cacheKey);
     const [status, setStatus] = useState<ProcessingStatus>(initial ? "complete" : "idle");
     const [transcript, setTranscript] = useState<TranscriptionResult | null>(initial?.transcript ?? null);
     const [translation, setTranslation] = useState<TranslationValue | null>(initial?.translation ?? null);
@@ -247,46 +265,54 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
     const [showTimestamps, setShowTimestamps] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [progress, setProgress] = useState<TranscriptionProgress | null>(null);
-    const [copied, setCopied] = useState<CopyTarget>(null);
     const [playbackSrc, setPlaybackSrc] = useState(src);
     const [resolvedWaveform, setResolvedWaveform] = useState(waveform || DEFAULT_WAVEFORM);
     const workerRef = useRef<TranscriptionWorker | null>(null);
     const jobIdRef = useRef(0);
-    const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const autoStartedRef = useRef(false);
 
+    const isCurrentJob = useCallback((jobId: number, generation: number) =>
+        jobIdRef.current === jobId && generation === cacheGeneration && UserStore.getCurrentUser()?.id === userId, [userId]);
+
     const stopWorker = useCallback(() => {
-        workerRef.current?.terminate();
-        workerRef.current = null;
+        if (workerRef.current) {
+            activeWorkers.delete(workerRef.current);
+            workerRef.current.terminate();
+            workerRef.current = null;
+        }
     }, []);
 
     const translateTranscript = useCallback(async (value: TranscriptionResult, language: LanguageOption, jobId: number) => {
+        const generation = cacheGeneration;
+        if (!isCurrentJob(jobId, generation)) return;
         setStatus("translating");
         setError(null);
         setTargetLanguage(language.value);
         setTargetLanguageLabel(language.label);
 
         try {
-            const translated = await translateText(value.text, "auto", language.value);
-            if (jobIdRef.current !== jobId) return;
+            const translated = await translateText(value.text, "auto", language.value, () => false);
+            if (!isCurrentJob(jobId, generation)) return;
 
             setTranslation(translated);
             setStatus("complete");
-            cacheResult(messageId, {
+            cacheResult(cacheKey, {
                 transcript: value,
                 translation: translated,
                 targetLanguage: language.value,
                 targetLanguageLabel: language.label
             });
         } catch (caught) {
-            if (jobIdRef.current !== jobId) return;
+            if (!isCurrentJob(jobId, generation)) return;
             setError(`Translation failed: ${caught instanceof Error ? caught.message : String(caught)}`);
             setStatus("complete");
-            cacheResult(messageId, { transcript: value });
+            cacheResult(cacheKey, { transcript: value });
         }
-    }, [messageId]);
+    }, [cacheKey, isCurrentJob]);
 
     const startTranscription = useCallback((language?: LanguageOption) => {
+        if (UserStore.getCurrentUser()?.id !== userId) return;
+        const generation = cacheGeneration;
         const jobId = ++jobIdRef.current;
         stopWorker();
         setStatus("downloading_audio");
@@ -297,16 +323,16 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
         void (async () => {
             try {
                 const prepared = await prepareAudio(src);
-                if (jobIdRef.current !== jobId) return;
+                if (!isCurrentJob(jobId, generation)) return;
                 setStatus("processing_audio");
                 const audio = new Float32Array(prepared.samples);
 
                 workerRef.current = new TranscriptionWorker(
                     nextStatus => {
-                        if (jobIdRef.current === jobId) setStatus(nextStatus as ProcessingStatus);
+                        if (isCurrentJob(jobId, generation)) setStatus(nextStatus as ProcessingStatus);
                     },
                     output => {
-                        if (jobIdRef.current !== jobId) return;
+                        if (!isCurrentJob(jobId, generation)) return;
                         const value = normalizeTranscriptionResult(output);
                         stopWorker();
 
@@ -317,7 +343,7 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
                         }
 
                         setTranscript(value);
-                        cacheResult(messageId, { transcript: value });
+                        cacheResult(cacheKey, { transcript: value });
 
                         if (language) {
                             void translateTranscript(value, language, jobId);
@@ -326,21 +352,22 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
                         }
                     },
                     caught => {
-                        if (jobIdRef.current !== jobId) return;
+                        if (!isCurrentJob(jobId, generation)) return;
                         stopWorker();
                         setError(caught instanceof Error ? caught.message : String(caught));
                         setStatus("idle");
                     },
                     partial => {
-                        if (jobIdRef.current !== jobId) return;
+                        if (!isCurrentJob(jobId, generation)) return;
                         const value = normalizeTranscriptionResult(partial);
                         if (value.text) setTranscript(value);
                     },
                     nextProgress => {
-                        if (jobIdRef.current === jobId) setProgress(nextProgress);
+                        if (isCurrentJob(jobId, generation)) setProgress(nextProgress);
                     }
                 );
 
+                activeWorkers.add(workerRef.current);
                 const { audioLanguage, quantized, selectedModel } = settings.store;
                 workerRef.current.run(
                     audio,
@@ -349,13 +376,13 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
                     audioLanguage === "auto" ? undefined : audioLanguage
                 );
             } catch (caught) {
-                if (jobIdRef.current !== jobId) return;
+                if (!isCurrentJob(jobId, generation)) return;
                 stopWorker();
                 setError(caught instanceof Error ? caught.message : String(caught));
                 setStatus("idle");
             }
         })();
-    }, [messageId, src, stopWorker, translateTranscript]);
+    }, [cacheKey, isCurrentJob, src, stopWorker, translateTranscript, userId]);
 
     const startTranslation = useCallback((language: LanguageOption) => {
         if (!transcript) {
@@ -374,20 +401,9 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
         setStatus(transcript ? "complete" : "idle");
     }, [stopWorker, transcript]);
 
-    const copy = useCallback((target: Exclude<CopyTarget, null>, text: string) => {
-        copyToClipboard(text);
-        setCopied(target);
-        if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-        copyTimerRef.current = setTimeout(() => {
-            copyTimerRef.current = null;
-            setCopied(null);
-        }, 2000);
-    }, []);
-
     useEffect(() => () => {
         ++jobIdRef.current;
         stopWorker();
-        if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
     }, [stopWorker]);
 
     useEffect(() => {
@@ -429,7 +445,7 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
                 )}
                 <Flex gap={8} alignItems="center" flexWrap="wrap">
                     <Button size="xs" onClick={() => startTranscription()}>Transcribe</Button>
-                    <Button size="xs" variant="secondary" onClick={() => chooseTargetLanguage(startTranslation)}>Translate…</Button>
+                    <Button size="xs" variant="secondary" onClick={() => chooseTargetLanguage(startTranslation, jobIdRef)}>Translate…</Button>
                     <Span size="xs" color="text-muted">Voice message · on-device speech recognition</Span>
                 </Flex>
                 {error && <BaseText className={cl("error")} size="xs">{error}</BaseText>}
@@ -462,8 +478,8 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
                     <section>
                         <Flex alignItems="center" justifyContent="space-between" gap={8}>
                             <Heading tag="h5">Transcript</Heading>
-                            <TextButton variant="secondary" onClick={() => copy("transcript", transcriptText)}>
-                                {copied === "transcript" ? "Copied" : "Copy"}
+                            <TextButton variant="secondary" onClick={() => copy(transcriptText)}>
+                                Copy
                             </TextButton>
                         </Flex>
                         <ScrollerAuto className={cl("result")}>
@@ -480,8 +496,8 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
                         <section className={cl("translation")}>
                             <Flex alignItems="center" justifyContent="space-between" gap={8}>
                                 <Heading tag="h5">{targetLanguageLabel ?? targetLanguage ?? "Translation"}</Heading>
-                                <TextButton variant="secondary" onClick={() => copy("translation", translation.text)}>
-                                    {copied === "translation" ? "Copied" : "Copy"}
+                                <TextButton variant="secondary" onClick={() => copy(translation.text)}>
+                                    Copy
                                 </TextButton>
                             </Flex>
                             <ScrollerAuto className={cl("result")}>
@@ -495,13 +511,13 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
 
                     {!busy && (
                         <Flex gap={10} alignItems="center" flexWrap="wrap">
-                            <Button size="xs" variant="secondary" onClick={() => chooseTargetLanguage(startTranslation)}>
+                            <Button size="xs" variant="secondary" onClick={() => chooseTargetLanguage(startTranslation, jobIdRef)}>
                                 {translation ? "Change translation…" : "Translate…"}
                             </Button>
                             <TextButton
                                 variant="secondary"
                                 onClick={() => {
-                                    resultCache.delete(messageId);
+                                    resultCache.delete(cacheKey);
                                     setTranscript(null);
                                     setTranslation(null);
                                     setError(null);
@@ -519,12 +535,15 @@ function VoiceMessageTranscriptionAccessory({ duration, messageId, needsPlayback
 }
 
 function VoiceMessageAccessory({ message }: { message: Message; }) {
+    const userId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
     const media = getVoiceMessageMedia(message);
-    if (!media) return null;
+    if (!userId || !media) return null;
 
     return (
         <VoiceMessageTranscriptionAccessory
-            messageId={message.id}
+            userId={userId}
+            key={`${userId}:${message.id}`}
+            cacheKey={`${userId}:${message.id}`}
             duration={media.duration}
             needsPlaybackFallback={media.needsPlaybackFallback}
             src={media.url}
@@ -541,7 +560,13 @@ export default definePlugin({
     dependencies: ["MessageAccessoriesAPI", "VoiceMessages"],
     settings,
     renderMessageAccessory: props => <VoiceMessageAccessory message={props.message} />,
+    flux: {
+        LOGOUT(this: { stop(): void; }) { this.stop(); }
+    },
     stop() {
+        cacheGeneration++;
+        for (const worker of activeWorkers) worker.terminate();
+        activeWorkers.clear();
         preparedAudioCache.clear();
         resultCache.clear();
     }

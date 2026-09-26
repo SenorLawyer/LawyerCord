@@ -18,29 +18,44 @@
 
 import { getUniqueUsername, openUserProfile } from "@utils/discord";
 import { ChannelType, RelationshipType } from "@vencord/discord-types/enums";
-import { UserUtils } from "@webpack/common";
+import { RelationshipStore, UserStore, UserUtils } from "@webpack/common";
 
 import settings from "./settings";
 import { ChannelDelete, GuildDelete, RelationshipRemove } from "./types";
-import { deleteGroup, deleteGuild, getGroup, getGuild, GuildAvailabilityStore, notify } from "./utils";
+import { getGroup, getGuild, GuildAvailabilityStore, notify, resetState, session, syncGroups, syncGuilds } from "./utils";
 
-let manuallyRemovedFriend: string | undefined;
-let manuallyRemovedGuild: string | undefined;
-let manuallyRemovedGroup: string | undefined;
+const manuallyRemovedFriends = new Set<string>();
+const manuallyRemovedGuilds = new Set<string>();
+const manuallyRemovedGroups = new Set<string>();
 
-export const removeFriend = (id: string) => manuallyRemovedFriend = id;
-export const removeGuild = (id: string) => manuallyRemovedGuild = id;
-export const removeGroup = (id: string) => manuallyRemovedGroup = id;
+export function reset() {
+    manuallyRemovedFriends.clear();
+    manuallyRemovedGuilds.clear();
+    manuallyRemovedGroups.clear();
+    resetState();
+}
+
+export const removeFriend = (id: string) => manuallyRemovedFriends.add(id);
+export const removeGuild = (id: string) => manuallyRemovedGuilds.add(id);
+export const removeGroup = (id: string) => manuallyRemovedGroups.add(id);
 
 export async function onRelationshipRemove({ relationship: { type, id } }: RelationshipRemove) {
-    if (manuallyRemovedFriend === id) {
-        manuallyRemovedFriend = undefined;
-        return;
-    }
+    if (manuallyRemovedFriends.delete(id)) return;
+
+    if (!(type === RelationshipType.FRIEND && settings.store.friends
+        || type === RelationshipType.INCOMING_REQUEST && settings.store.friendRequestCancels)) return;
+
+    const currentSession = session;
+    const currentUserId = UserStore.getCurrentUser()?.id;
+    if (!currentUserId) return;
 
     const user = await UserUtils.getUser(id)
         .catch(() => null);
-    if (!user) return;
+    if (!user || currentSession !== session || UserStore.getCurrentUser()?.id !== currentUserId) return;
+
+    const currentType = RelationshipStore.getRelationshipType(id);
+    if (currentType === type || type === RelationshipType.INCOMING_REQUEST
+        && [RelationshipType.FRIEND, RelationshipType.BLOCKED, RelationshipType.OUTGOING_REQUEST].includes(currentType)) return;
 
     switch (type) {
         case RelationshipType.FRIEND:
@@ -62,36 +77,32 @@ export async function onRelationshipRemove({ relationship: { type, id } }: Relat
     }
 }
 
-export function onGuildDelete({ guild: { id, unavailable } }: GuildDelete) {
-    if (!settings.store.servers) return;
+export async function onGuildDelete({ guild: { id, unavailable } }: GuildDelete) {
     if (unavailable || GuildAvailabilityStore.isUnavailable(id)) return;
 
-    if (manuallyRemovedGuild === id) {
-        deleteGuild(id);
-        manuallyRemovedGuild = undefined;
-        return;
-    }
-
     const guild = getGuild(id);
-    if (guild) {
-        deleteGuild(id);
-        notify(`You were removed from the server ${guild.name}.`, guild.iconURL);
+    const manual = manuallyRemovedGuilds.delete(id);
+
+    const synced = syncGuilds();
+    try {
+        if (guild && !manual && settings.store.servers)
+            notify(`You were removed from the server ${guild.name}.`, guild.iconURL);
+    } finally {
+        await synced;
     }
 }
 
-export function onChannelDelete({ channel: { id, type } }: ChannelDelete) {
-    if (!settings.store.groups) return;
+export async function onChannelDelete({ channel: { id, type } }: ChannelDelete) {
     if (type !== ChannelType.GROUP_DM) return;
 
-    if (manuallyRemovedGroup === id) {
-        deleteGroup(id);
-        manuallyRemovedGroup = undefined;
-        return;
-    }
-
     const group = getGroup(id);
-    if (group) {
-        deleteGroup(id);
-        notify(`You were removed from the group ${group.name}.`, group.iconURL);
+    const manual = manuallyRemovedGroups.delete(id);
+
+    const synced = syncGroups();
+    try {
+        if (group && !manual && settings.store.groups)
+            notify(`You were removed from the group ${group.name}.`, group.iconURL);
+    } finally {
+        await synced;
     }
 }

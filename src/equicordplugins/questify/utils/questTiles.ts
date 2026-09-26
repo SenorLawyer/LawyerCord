@@ -14,8 +14,6 @@ import { adjustRGB, decimalToRGB, isDarkish, q, type RGB } from "./ui";
 
 type QuestGroupKey = "claimed" | "expired" | "ignored" | "unclaimed" | "unknown";
 
-export const desktopVideoCompatibilityQuestIds = new Set<string>();
-
 interface QuestTileColorSettings {
     questTileUnclaimedColor: QuestTileColorSetting;
     questTileClaimedColor: QuestTileColorSetting;
@@ -199,17 +197,7 @@ function getValidQuestOrder(value: unknown): QuestOrderStatus[] {
         : defaultQuestOrder;
     const order = configuredOrder.filter((status): status is QuestOrderStatus => validStatuses.has(status as QuestOrderStatus));
 
-    for (const status of defaultQuestOrder) {
-        if (!order.includes(status)) {
-            order.push(status);
-        }
-    }
-
-    return order;
-}
-
-export function hasInjectedDesktopVideoCompatibility(quest?: Quest | string | null): boolean {
-    return !quest ? false : desktopVideoCompatibilityQuestIds.has(typeof quest === "string" ? quest : quest.id);
+    return Array.from(new Set([...order, ...defaultQuestOrder]));
 }
 
 export function sortQuests(quests: Quest[], skip?: boolean): Quest[] {

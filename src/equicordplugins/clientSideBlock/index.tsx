@@ -8,8 +8,8 @@ import { definePluginSettings } from "@api/Settings";
 import { Paragraph } from "@components/Paragraph";
 import { Devs, EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { GuildMember } from "@vencord/discord-types";
-import { ChannelStore, GuildMemberStore, GuildRoleStore, React, RelationshipStore, UserStore } from "@webpack/common";
+import type { Channel } from "@vencord/discord-types";
+import { ChannelStore, GuildRoleStore, React, RelationshipStore } from "@webpack/common";
 
 const ID_REGEX = /^\d{17,20}$/;
 
@@ -62,10 +62,7 @@ const settings = definePluginSettings({
     usersToBlock: {
         type: OptionType.STRING,
         description: "User IDs separated by commas.",
-        onChange: value => {
-            userIdsToBlock = parseIdSet(value);
-            idCachesInitialized = true;
-        },
+        onChange: refreshIdCaches,
         isValid: validateIdList,
         default: ""
     },
@@ -99,20 +96,14 @@ const settings = definePluginSettings({
     guildBlackList: {
         type: OptionType.STRING,
         description: "Guild ids to disable functionality in",
-        onChange: value => {
-            guildBlacklistIds = parseIdSet(value);
-            idCachesInitialized = true;
-        },
+        onChange: refreshIdCaches,
         isValid: validateIdList,
         default: ""
     },
     guildWhiteList: {
         type: OptionType.STRING,
         description: "Guild ids to enable functionality in",
-        onChange: value => {
-            guildWhitelistIds = parseIdSet(value);
-            idCachesInitialized = true;
-        },
+        onChange: refreshIdCaches,
         isValid: validateIdList,
         default: ""
     }
@@ -141,21 +132,22 @@ function shouldHideUser(userId: string, channelId?: string) {
     return userIdsToBlock.has(userId);
 }
 
-function isRoleAllBlockedMembers(roleId, guildId) {
-    const role = GuildRoleStore.getRole(guildId, roleId);
-    if (!role) return false;
-    if (isPluginDisabledForGuild(guildId, true)) return false;
+interface MemberListProps {
+    channel: { id: string; guild_id: string; };
+    groups: { id: string; index?: number; count: number; }[];
+    rows: ({ user?: { id: string; }; } | null | undefined)[];
+}
 
-    let hasMembersWithRole = false;
-    for (const member of GuildMemberStore.getMembers(guildId) as GuildMember[]) {
-        if (!member.roles.includes(roleId)) continue;
+function isRoleGroupHidden({ channel, groups, rows }: MemberListProps, section: number) {
+    const group = groups[section];
+    if (!group || group.index === undefined || group.count <= 0) return false;
+    if (!GuildRoleStore.getRole(channel.guild_id, group.id)) return false;
 
-        hasMembersWithRole = true;
-        const user = UserStore.getUser(member.userId);
-        if (!shouldHideUser(member.userId) || user?.desktop || user?.mobile) return false;
+    for (let index = group.index + 1; index <= group.index + group.count; index++) {
+        const user = rows[index]?.user;
+        if (!user || !shouldHideUser(user.id, channel.id)) return false;
     }
-
-    return hasMembersWithRole;
+    return true;
 }
 
 function hiddenReplyComponent() {
@@ -171,34 +163,21 @@ function hiddenReplyComponent() {
     }
 }
 
-function activeNowView(cards) {
-    if (!Array.isArray(cards)) return cards;
+interface NowPlayingCard {
+    party: {
+        id: string;
+        partiedMembers: { id: string; }[];
+        guildContext?: { id: string; } | null;
+    };
+}
 
-    return cards.filter(card => {
-        if (!card?.key) return false;
-
-        const newKey = card.key.match(/(?:user-|party-spotify:)(.+)/)?.[1];
-        if (newKey) return !shouldHideUser(newKey);
-
-        if (card.key.startsWith("channel-") && settings.store.hideVc) {
-            const { party } = card.props;
-            if (!party) return true;
-
-            const { applicationStreams, partiedMembers, priorityMembers, voiceChannels } = party;
-            voiceChannels?.forEach(vc => vc.members = vc.members?.filter(m => !shouldHideUser(m.id)) ?? []);
-            party.applicationStreams = (applicationStreams ?? []).filter(applicationStream => !shouldHideUser(applicationStream.streamUser.id));
-            party.priorityMembers = priorityMembers?.filter(m => !shouldHideUser(m.user.id)) ?? [];
-            party.partiedMembers = partiedMembers?.filter(m => !shouldHideUser(m.id)) ?? [];
-
-            const hasMembers = (voiceChannels?.some(vc => vc.members?.length) ?? false) ||
-                (party.partiedMembers?.length ?? 0) ||
-                (party.priorityMembers?.length ?? 0) ||
-                (party.applicationStreams?.length ?? 0);
-
-            return hasMembers;
-        }
-
-        return true;
+function filterActiveNowCards<T extends NowPlayingCard>(cards: T[]): T[] {
+    const { hideVc } = settings.store;
+    return cards.filter(({ party }) => {
+        const channelId = party.id.startsWith("channel-") ? party.id.slice(8) : undefined;
+        if (channelId && !hideVc) return true;
+        if (isPluginDisabledForGuild(party.guildContext?.id, true)) return true;
+        return !party.partiedMembers.some(member => shouldHideUser(member.id, channelId));
     });
 }
 
@@ -218,10 +197,14 @@ export default definePlugin({
         guildWhitelistIds = new Set();
         idCachesInitialized = false;
     },
-    activeNowView,
+    filterActiveNowCards,
     shouldHideUser,
+    shouldHideDm(channel: Channel) {
+        const userId = channel.getRecipientId();
+        return channel.isDM() && !channel.isSystemDM() && userId !== undefined && shouldHideUser(userId);
+    },
     hiddenReplyComponent,
-    isRoleAllBlockedMembers,
+    isRoleGroupHidden,
     patches: [
         // message
         {
@@ -235,8 +218,8 @@ export default definePlugin({
         {
             find: "peopleListItemRef.current.componentWillLeave",
             replacement: {
-                match: /\i}=this.state;/,
-                replace: "$&if($self.shouldHideUser(this.props.user.id)) return null; "
+                match: /return \i===\i\.\i\.FRIEND_ANNIVERSARY/,
+                replace: "if($self.shouldHideUser(this.props.user.id)) return null;$&"
             }
         },
         // member list
@@ -244,13 +227,13 @@ export default definePlugin({
             find: "this.updateMaxContentFeedRowSeen()",
             replacement: [
                 {
-                    match: /(?<=user:(\i),guildId:\i,channel:(\i).*?)BOOST_GEM_ICON.{0,10}\);/,
-                    replace: "$&if($self.shouldHideUser($1.id, $2.id)) return null; "
+                    match: /BOOST_GEM_ICON.{0,10}\);/,
+                    replace: "$&if($self.shouldHideUser(arguments[0].user.id,arguments[0].channel.id)) return null;"
                 },
                 // stop the role header from displaying if all users with that role are hidden (wip sorta)
                 {
-                    match: /\i.memo\(function\(\i\){/,
-                    replace: "$&if($self.isRoleAllBlockedMembers(arguments[0].id, arguments[0].guildId)) return null;",
+                    match: /renderSection=(\i)=>\{/,
+                    replace: "$&if($self.isRoleGroupHidden(this.props,$1.section)) return null;",
                     predicate: () => settings.store.hideEmptyRoles
                 },
             ]
@@ -278,9 +261,8 @@ export default definePlugin({
         {
             find: "PrivateChannel.renderAvatar",
             replacement: {
-                // horror but it works
-                match: /(return \i\.isMultiUserDM\(\))(?<=function\(\i,(\i),\i\){.*)/,
-                replace: "if($2.rawRecipients[0] && $2.rawRecipients[0]?.id){if($self.shouldHideUser($2.rawRecipients[0].id)) return null;}$1"
+                match: /return \i\.isMultiUserDM\(\)\?/,
+                replace: "if($self.shouldHideDm(arguments[0].channel)) return null;$&"
             }
         },
         // thank nick (644298972420374528) for these patches :3
@@ -297,8 +279,8 @@ export default definePlugin({
         {
             find: "ACTIVE_NOW_COLUMN)",
             replacement: {
-                match: /(__invalid_consentCard.{0,40}\()(\i),\{/,
-                replace: '$1"div",{children:$self.activeNowView($2())'
+                match: /(\i)\.map(?=\(\i=>\{let\{party:\i\}=\i;return)/,
+                replace: "$self.filterActiveNowCards($1).map"
             }
         },
         // mutual friends list in user profile

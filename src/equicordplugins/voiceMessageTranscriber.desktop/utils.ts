@@ -114,10 +114,9 @@ export const LANGUAGES = {
 
 export const cl = classNameFactory("vc-transcription-");
 
-const getAudioContext = () => new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
 export async function decodeAudio(blob: Blob): Promise<Float32Array> {
     const arrayBuffer = await blob.arrayBuffer();
-    const audioContext = getAudioContext();
+    const audioContext = new AudioContext({ sampleRate: 16000 });
     try {
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
@@ -266,30 +265,30 @@ async function runTranscription({ audio, model, quantized, language }) {
 export class TranscriptionWorker {
     private worker: Worker;
     private workerUrl: string;
-    private onStatus: (status: string) => void;
-    private onComplete: (output: any) => void;
-    private onError: (error: any) => void;
-    private onPartial: (output: any) => void;
-    private onProgress: (progress: TranscriptionProgress) => void;
     private terminated = false;
+    private downloads = new AbortController();
 
     constructor(
-        onStatus: (status: string) => void,
-        onComplete: (output: any) => void,
-        onError: (error: any) => void,
-        onPartial: (output: any) => void,
-        onProgress: (progress: TranscriptionProgress) => void = () => { }
+        private onStatus: (status: string) => void,
+        private onComplete: (output: unknown) => void,
+        private onError: (error: unknown) => void,
+        private onPartial: (output: unknown) => void,
+        private onProgress: (progress: TranscriptionProgress) => void = () => { }
     ) {
-        this.onStatus = onStatus;
-        this.onComplete = onComplete;
-        this.onError = onError;
-        this.onPartial = onPartial;
-        this.onProgress = onProgress;
-
         const blob = new Blob([workerCode], { type: "text/javascript" });
         this.workerUrl = URL.createObjectURL(blob);
-        this.worker = new Worker(this.workerUrl, { type: "module" });
+        try {
+            this.worker = new Worker(this.workerUrl, { type: "module" });
+        } catch (error) {
+            URL.revokeObjectURL(this.workerUrl);
+            throw error;
+        }
         this.worker.onmessage = this.handleMessage.bind(this);
+        this.worker.onerror = () => {
+            if (this.terminated) return;
+            this.terminate();
+            this.onError(new Error("The speech recognition worker failed. Try transcribing again."));
+        };
     }
 
     private getMimeType(url: string): string {
@@ -300,9 +299,10 @@ export class TranscriptionWorker {
     }
 
     private validateModelUrl(url: string): void {
-        const { hostname } = new URL(url);
-        if (hostname !== "huggingface.co" && hostname !== "cdn.jsdelivr.net")
-            throw new Error(`Blocked unexpected model host: ${hostname}`);
+        const { protocol, hostname, port, username, password } = new URL(url);
+        if (protocol !== "https:" || port || username || password
+            || (hostname !== "huggingface.co" && hostname !== "cdn.jsdelivr.net"))
+            throw new Error("Blocked an untrusted model URL.");
     }
 
     private async handleMessage(event: MessageEvent) {
@@ -315,34 +315,28 @@ export class TranscriptionWorker {
                     const cachedData = await DataStore.get(`VoiceMessageTranscriber_${url}`);
                     if (this.terminated) return;
 
-                    if (cachedData && lodash.isArrayBuffer(cachedData)) {
-                        this.worker.postMessage({
-                            type: "fetch_response",
-                            id,
-                            response: cachedData,
-                            headers: {
-                                "Content-Length": cachedData.byteLength.toString(),
-                                "Content-Type": this.getMimeType(url)
-                            }
-                        }, [cachedData]);
+                    let buffer: ArrayBuffer;
+                    if (lodash.isArrayBuffer(cachedData)) {
+                        buffer = cachedData;
                     } else {
-                        const res = await fetch(url);
+                        const res = await fetch(url, { signal: this.downloads.signal });
                         if (!res.ok) throw new Error("Failed to fetch " + url);
 
-                        const buffer = await res.arrayBuffer();
+                        buffer = await res.arrayBuffer();
+                        if (this.terminated) return;
                         await DataStore.set(`VoiceMessageTranscriber_${url}`, buffer);
                         if (this.terminated) return;
-
-                        this.worker.postMessage({
-                            type: "fetch_response",
-                            id,
-                            response: buffer,
-                            headers: {
-                                "Content-Length": res.headers.get("Content-Length") || buffer.byteLength.toString(),
-                                "Content-Type": this.getMimeType(url)
-                            }
-                        }, [buffer]);
                     }
+
+                    this.worker.postMessage({
+                        type: "fetch_response",
+                        id,
+                        response: buffer,
+                        headers: {
+                            "Content-Length": buffer.byteLength.toString(),
+                            "Content-Type": this.getMimeType(url)
+                        }
+                    }, [buffer]);
                 } catch (err) {
                     if (this.terminated) return;
                     this.worker.postMessage({
@@ -383,6 +377,7 @@ export class TranscriptionWorker {
     public terminate() {
         if (this.terminated) return;
         this.terminated = true;
+        this.downloads.abort();
         this.worker.terminate();
         URL.revokeObjectURL(this.workerUrl);
     }

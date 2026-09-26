@@ -131,7 +131,7 @@ export async function* iterateAllMessagesIDB(batchSize = 100) {
 
         lastId = batch[batch.length - 1].message_id;
 
-        yield await cacheRecords(batch);
+        yield batch;
 
         if (batch.length < batchSize) break;
     }

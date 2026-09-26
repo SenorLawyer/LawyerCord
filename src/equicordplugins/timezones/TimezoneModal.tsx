@@ -42,11 +42,10 @@ export function SetTimezoneModal({ userId, modalProps, database }: { userId: str
             variant: "primary",
             disabled: currentValue === null,
             onClick: async () => {
+                if (currentValue === null) return;
                 if (database) {
-                    const success = await setTimezone(currentValue!);
-                    if (success) {
-                        await setUserDatabaseTimezone(userId, currentValue);
-                    }
+                    if (!await setTimezone(currentValue)) return;
+                    await setUserDatabaseTimezone(userId, currentValue);
                 } else {
                     await setUserTimezone(userId, currentValue);
                 }

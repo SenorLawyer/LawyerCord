@@ -6,6 +6,7 @@
 
 import { definePluginSettings } from "@api/Settings";
 import { EquicordDevs } from "@utils/constants";
+import { escapeRegExp } from "@utils/text";
 import definePlugin, { OptionType } from "@utils/types";
 import { React } from "@webpack/common";
 import { type ReactNode } from "react";
@@ -36,12 +37,8 @@ const settings = definePluginSettings({
     },
 });
 
-function escapeRegExp(value: string) {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 function parseCustomIndicators(raw: string): Record<string, string> {
-    const result: Record<string, string> = {};
+    const result: Record<string, string> = Object.create(null);
 
     raw.split(/;\s*/).forEach(entry => {
         const [key, ...rest] = entry.split("=");
@@ -86,11 +83,7 @@ function getIndicatorCache() {
     }
     escaped.sort((a, b) => b.length - a.length);
 
-    let escapedPattern = "";
-    for (const indicator of escaped) {
-        if (escapedPattern) escapedPattern += "|";
-        escapedPattern += indicator;
-    }
+    const escapedPattern = escaped.join("|");
 
     const escapedPrefix = getEscapedPrefix(prefix);
     indicatorCache = {
@@ -148,6 +141,8 @@ function splitTextWithIndicators(text: string): ReactNode[] {
                     desc={desc}
                 />,
             );
+        } else {
+            nodes.push(fullMatch);
         }
 
         lastIndex = matchEnd;

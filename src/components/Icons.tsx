@@ -46,9 +46,10 @@ function Icon({ height = 24, width = 24, className, children, viewBox, ...svgPro
 /**
  * Discord's link icon, as seen in the Message context menu "Copy Message Link" option
  */
-export function LinkIcon({ height = 24, width = 24, className }: IconProps) {
+export function LinkIcon({ height = 24, width = 24, className, ...props }: IconProps) {
     return (
         <Icon
+            {...props}
             height={height}
             width={width}
             className={classes(className, "vc-link-icon")}
@@ -149,9 +150,10 @@ export function InfoIcon(props: IconProps) {
     );
 }
 
-export function WarningIcon({ height = 32, width = 32, className }: IconProps) {
+export function WarningIcon({ height = 32, width = 32, className, ...props }: IconProps) {
     return (
         <Icon
+            {...props}
             height={height}
             width={width}
             className={classes(className, "vc-warning-icon")}
@@ -782,19 +784,7 @@ export function ChevronSmallUpIcon(props: IconProps) {
     );
 }
 
-export function DownArrow(props: IconProps) {
-    return (
-        <Icon
-            {...props}
-            viewBox="0 0 24 24"
-        >
-            <path
-                fill={props.fill || "currentColor"}
-                d="M5.3 9.3a1 1 0 0 1 1.4 0l5.3 5.29 5.3-5.3a1 1 0 1 1 1.4 1.42l-6 6a1 1 0 0 1-1.4 0l-6-6a1 1 0 0 1 0-1.42Z"
-            />
-        </Icon>
-    );
-}
+export { ChevronSmallDownIcon as DownArrow };
 
 export function RightArrow(props: IconProps) {
     return (

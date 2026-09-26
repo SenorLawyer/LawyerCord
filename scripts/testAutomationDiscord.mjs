@@ -135,6 +135,16 @@ try {
     assert.equal(relationship.userId, userId);
     assert.equal(relationship.relationshipType, 3);
     assert.ok(api.validateWorkflow({ ...flow, blocks: [block("wait-client-event", { eventType: "bad" })] }).some(issue => /supported Discord event/.test(issue.message)));
+    const invalidEventFlow = api.createAutomation();
+    const invalidWait = block("wait-client-event", { eventType: "unknown-saved-event", variable: "event" });
+    const nextBlock = block("log");
+    invalidWait.next = nextBlock.id;
+    invalidEventFlow.blocks = [invalidWait, nextBlock];
+    invalidEventFlow.entryId = invalidWait.id;
+    assert.ok(api.validateWorkflow(invalidEventFlow).some(issue => /supported Discord event/.test(issue.message)));
+    assert.doesNotThrow(() => api.getAutomationVariableNames(invalidEventFlow, nextBlock.id));
+    assert.doesNotThrow(() => api.blockOutputs(invalidEventFlow, nextBlock.id));
+    assert.equal(invalidWait.config.eventType, "unknown-saved-event", "Inspecting invalid saved data must preserve it for correction.");
     const triggered = api.createAutomation();
     triggered.enabled = true;
     triggered.trigger = { type: "presence-update", authorId: userId, status: "online" };

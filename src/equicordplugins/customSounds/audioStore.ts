@@ -4,14 +4,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { get, set } from "@api/DataStore";
-import { Logger } from "@utils/Logger";
+import { get, update } from "@api/DataStore";
 
 const STORAGE_KEY = "ScattrdCustomSounds";
 export const MAX_AUDIO_FILE_BYTES = 8 * 1024 * 1024;
 export const MAX_AUDIO_FILE_MIB = MAX_AUDIO_FILE_BYTES / 1024 / 1024;
-
-const logger = new Logger("CustomSounds");
 
 export interface StoredAudioFile {
     id: string;
@@ -19,29 +16,6 @@ export interface StoredAudioFile {
     buffer?: ArrayBuffer;
     type: string;
     dataUri?: string;
-}
-
-let cachedAudioFiles: Record<string, StoredAudioFile> | null = null;
-let audioFilesLoadPromise: Promise<Record<string, StoredAudioFile>> | null = null;
-
-async function loadAudioFiles(): Promise<Record<string, StoredAudioFile>> {
-    if (cachedAudioFiles) return cachedAudioFiles;
-
-    audioFilesLoadPromise ??= get<Record<string, StoredAudioFile>>(STORAGE_KEY)
-        .then(files => {
-            cachedAudioFiles = files ?? {};
-            return cachedAudioFiles;
-        })
-        .finally(() => {
-            audioFilesLoadPromise = null;
-        });
-
-    return audioFilesLoadPromise;
-}
-
-async function persistAudioFiles(files: Record<string, StoredAudioFile>) {
-    cachedAudioFiles = files;
-    await set(STORAGE_KEY, files);
 }
 
 export async function saveAudio(file: File): Promise<string> {
@@ -54,103 +28,71 @@ export async function saveAudio(file: File): Promise<string> {
 
     const dataUri = await generateDataURI(buffer, file.type, file.name);
 
-    const current = { ...await loadAudioFiles() };
-    current[id] = {
-        id,
-        name: file.name,
-        type: file.type,
-        dataUri
-    };
-    await persistAudioFiles(current);
+    await update<Record<string, StoredAudioFile>>(STORAGE_KEY, files => ({
+        ...files,
+        [id]: { id, name: file.name, type: file.type, dataUri }
+    }));
     return id;
 }
 
 export async function getAllAudio(): Promise<Record<string, StoredAudioFile>> {
-    return { ...await loadAudioFiles() };
+    return await get<Record<string, StoredAudioFile>>(STORAGE_KEY) ?? {};
 }
 
 async function generateDataURI(buffer: ArrayBuffer, type: string, name: string): Promise<string> {
-    try {
-        let mimeType = type || "audio/mpeg";
-
-        if (!mimeType || mimeType === "application/octet-stream") {
-            if (name) {
-                const extension = name.split(".").pop()?.toLowerCase();
-                switch (extension) {
-                    case "ogg": mimeType = "audio/ogg"; break;
-                    case "mp3": mimeType = "audio/mpeg"; break;
-                    case "wav": mimeType = "audio/wav"; break;
-                    case "m4a":
-                    case "mp4": mimeType = "audio/mp4"; break;
-                    case "flac": mimeType = "audio/flac"; break;
-                    case "aac": mimeType = "audio/aac"; break;
-                    case "webm": mimeType = "audio/webm"; break;
-                    case "wma": mimeType = "audio/x-ms-wma"; break;
-                    default: mimeType = "audio/mpeg";
-                }
-            }
+    let mimeType = type;
+    if (!mimeType || mimeType === "application/octet-stream") {
+        switch (name.split(".").pop()?.toLowerCase()) {
+            case "ogg": mimeType = "audio/ogg"; break;
+            case "wav": mimeType = "audio/wav"; break;
+            case "m4a":
+            case "mp4": mimeType = "audio/mp4"; break;
+            case "flac": mimeType = "audio/flac"; break;
+            case "aac": mimeType = "audio/aac"; break;
+            case "webm": mimeType = "audio/webm"; break;
+            case "wma": mimeType = "audio/x-ms-wma"; break;
+            default: mimeType = "audio/mpeg";
         }
-
-        const uint8Array = new Uint8Array(buffer);
-        const blob = new Blob([uint8Array], { type: mimeType });
-
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
-    } catch (error) {
-        logger.error("Error generating data URI:", error);
-
-        const uint8Array = new Uint8Array(buffer);
-        let binary = "";
-        const chunkSize = 8192;
-
-        for (let i = 0; i < uint8Array.length; i += chunkSize) {
-            const chunk = uint8Array.slice(i, i + chunkSize);
-            binary += String.fromCharCode(...chunk);
-        }
-
-        const base64 = btoa(binary);
-        return `data:${type || "audio/mpeg"};base64,${base64}`;
     }
+
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.onabort = () => reject(new Error("Audio file reading was cancelled."));
+        reader.readAsDataURL(new Blob([buffer], { type: mimeType }));
+    });
 }
 
-export async function getAudioDataURI(id: string): Promise<string | undefined> {
-    const all = await getAllAudio();
+export async function getAudioDataURI(id: string, files = getAllAudio()): Promise<string | undefined> {
+    const all = await files;
     const entry = all[id];
     if (!entry) return undefined;
 
-    if (entry.dataUri) {
-        if (entry.buffer) {
-            const current = { ...await loadAudioFiles() };
-            if (current[id]?.buffer) {
-                const { buffer: _, ...entryWithoutBuffer } = current[id];
-                current[id] = entryWithoutBuffer;
-                await persistAudioFiles(current);
-            }
+    if (!entry.buffer) return entry.dataUri;
+
+    const bytes = new Uint8Array(entry.buffer);
+    const dataUri = entry.dataUri || await generateDataURI(entry.buffer, entry.type, entry.name);
+    let result: string | undefined;
+    await update<Record<string, StoredAudioFile>>(STORAGE_KEY, files => {
+        const current = files?.[id];
+        if (current?.dataUri) {
+            result = current.dataUri;
+            delete current.buffer;
+        } else if (current?.buffer && current.name === entry.name && current.type === entry.type
+            && current.buffer.byteLength === bytes.byteLength
+            && new Uint8Array(current.buffer).every((byte, index) => byte === bytes[index])) {
+            current.dataUri = result = dataUri;
+            delete current.buffer;
         }
-
-        return entry.dataUri;
-    }
-
-    if (!entry.buffer) return undefined;
-
-    const dataUri = await generateDataURI(entry.buffer, entry.type, entry.name);
-
-    const current = { ...await loadAudioFiles() };
-    if (current[id]) {
-        const { buffer: _, ...entryWithoutBuffer } = current[id];
-        current[id] = { ...entryWithoutBuffer, dataUri };
-        await persistAudioFiles(current);
-    }
-
-    return dataUri;
+        return files ?? {};
+    });
+    return result;
 }
 
 export async function deleteAudio(id: string): Promise<void> {
-    const all = { ...await loadAudioFiles() };
-    delete all[id];
-    await persistAudioFiles(all);
+    await update<Record<string, StoredAudioFile>>(STORAGE_KEY, files => {
+        if (files) delete files[id];
+        return files ?? {};
+    });
 }

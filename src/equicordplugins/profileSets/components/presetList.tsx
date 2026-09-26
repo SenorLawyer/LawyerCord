@@ -4,22 +4,26 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { isNonNullish } from "@utils/guards";
+import { Button } from "@components/Button";
 import { classes } from "@utils/misc";
 import { ProfilePreset } from "@vencord/discord-types";
-import { ContextMenuApi, Menu, React, TextInput } from "@webpack/common";
+import { ContextMenuApi, Menu, React, showToast, TextInput, Toasts } from "@webpack/common";
 
 import { cl } from "..";
-import { deletePreset, movePreset, renamePreset, updatePresetField } from "../utils/actions";
-import { getCurrentProfile } from "../utils/profile";
-import { PresetSection, type ProfilePresetEx } from "../utils/storage";
+import { PresetActions } from "../utils/actions";
+import { PresetSection, type PresetStorage } from "../utils/storage";
+
+const presetKeys = new WeakMap<ProfilePreset, number>();
+let nextPresetKey = 0;
 
 interface PresetListProps {
-    presets: ProfilePresetEx[];
-    allPresets: ProfilePresetEx[];
+    storage: PresetStorage;
+    actions: PresetActions;
+    presets: ProfilePreset[];
+    allPresets: ProfilePreset[];
     avatarSize: number;
-    selectedPreset: number;
-    onLoad: (index: number) => void;
+    selectedPreset: ProfilePreset | null;
+    onLoad: (preset: ProfilePreset) => void;
     onUpdate: () => void;
     guildId?: string;
     section: PresetSection;
@@ -28,6 +32,8 @@ interface PresetListProps {
 }
 
 export function PresetList({
+    storage,
+    actions,
     presets,
     allPresets,
     avatarSize,
@@ -39,17 +45,30 @@ export function PresetList({
     currentPage,
     onPageChange
 }: PresetListProps) {
-    type EditableProfile = Omit<ProfilePreset, "name" | "timestamp">;
-    const [renaming, setRenaming] = React.useState<number>(-1);
+    const [renaming, setRenaming] = React.useState<ProfilePreset | null>(null);
     const [renameText, setRenameText] = React.useState("");
-    const isGuildProfile = section === "server";
+
+    const runChange = async (change: () => Promise<void>) => {
+        try {
+            if (storage.presets !== allPresets) throw new Error("The profile preset list changed.");
+            await change();
+            onUpdate();
+        } catch {
+            showToast("Could not save the profile preset change. Reopen this panel before trying again.", Toasts.Type.FAILURE);
+        }
+    };
 
     return (
         <div className={cl("list-container")}>
             {presets.map(preset => {
+                let key = presetKeys.get(preset);
+                if (key === undefined) {
+                    key = nextPresetKey++;
+                    presetKeys.set(preset, key);
+                }
                 const actualIndex = allPresets.indexOf(preset);
-                const isRenaming = renaming === actualIndex;
-                const isSelected = !isRenaming && selectedPreset === actualIndex;
+                const isRenaming = renaming === preset;
+                const isSelected = !isRenaming && selectedPreset === preset;
                 const date = new Date(preset.timestamp);
                 const formattedDate = date.toLocaleDateString(undefined, {
                     month: "short",
@@ -64,88 +83,82 @@ export function PresetList({
                 const commitRename = () => {
                     const nextName = renameText.trim();
                     if (!nextName) return;
-                    renamePreset(actualIndex, nextName, section, guildId);
-                    onUpdate();
+                    void runChange(() => actions.renamePreset(actualIndex, nextName, section));
                 };
 
                 const showMoveOptions = actualIndex > 0 || actualIndex < allPresets.length - 1 || currentPage > 1;
 
+                const content = (
+                    <>
+                        {preset.avatarDataUrl && (
+                            <img
+                                src={preset.avatarDataUrl}
+                                alt=""
+                                className={cl("avatar")}
+                                style={{ width: `${avatarSize}px`, height: `${avatarSize}px` }}
+                            />
+                        )}
+                        <div className={cl("rename")}>
+                            {isRenaming ? (
+                                <TextInput
+                                    value={renameText}
+                                    onChange={setRenameText}
+                                    onBlur={() => {
+                                        commitRename();
+                                        setRenaming(null);
+                                    }}
+                                    onKeyDown={e => {
+                                        if (e.key === "Enter") {
+                                            commitRename();
+                                            setRenaming(null);
+                                        } else if (e.key === "Escape") {
+                                            setRenaming(null);
+                                        }
+                                    }}
+                                    autoFocus
+                                />
+                            ) : (
+                                <>
+                                    <div className={cl("name")}>
+                                        {preset.name}
+                                    </div>
+                                    <div className={cl("timestamp")}>
+                                        {formattedDate} at {formattedTime}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </>
+                );
+
                 return (
                     <div
-                        key={actualIndex}
-                        tabIndex={isRenaming ? -1 : 0}
-                        role="button"
-                        onClick={() => {
-                            if (!isRenaming) {
-                                onLoad(actualIndex);
-                            }
-                        }}
-                        onKeyDown={e => {
-                            if (!isRenaming && (e.key === "Enter" || e.key === " ")) {
-                                e.preventDefault();
-                                onLoad(actualIndex);
-                            }
-                        }}
+                        key={key}
+                        role="group"
+                        aria-label={preset.name}
                         className={classes(cl("row"), isSelected ? "selected" : "")}
                     >
-                        <div className={cl("avatar-url")}>
-                            {preset.avatarDataUrl && (
-                                <img
-                                    src={preset.avatarDataUrl}
-                                    alt=""
-                                    className={cl("avatar")}
-                                    style={{ width: `${avatarSize}px`, height: `${avatarSize}px` }}
-                                />
-                            )}
-                            <div className={cl("rename")}>
-                                {isRenaming ? (
-                                    <TextInput
-                                        value={renameText}
-                                        onChange={setRenameText}
-                                        onBlur={() => {
-                                            commitRename();
-                                            setRenaming(-1);
-                                        }}
-                                        onKeyDown={e => {
-                                            if (e.key === "Enter") {
-                                                commitRename();
-                                                setRenaming(-1);
-                                            } else if (e.key === "Escape") {
-                                                setRenaming(-1);
-                                            }
-                                            e.stopPropagation();
-                                        }}
-                                        onClick={e => e.stopPropagation()}
-                                        autoFocus
-                                    />
-                                ) : (
-                                    <>
-                                        <div className={cl("name")}>
-                                            {preset.name}
-                                        </div>
-                                        <div className={cl("timestamp")}>
-                                            {formattedDate} at {formattedTime}
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        </div>
+                        {isRenaming ? (
+                            <div className={cl("avatar-url")}>{content}</div>
+                        ) : (
+                            <Button variant="none" size="min" className={cl("avatar-url")} aria-label={`Load ${preset.name}`} onClick={() => onLoad(preset)}>
+                                {content}
+                            </Button>
+                        )}
                         <div className={cl("updated")}>
-                            <svg
-                                width="20"
-                                height="20"
-                                viewBox="0 0 20 20"
-                                className={cl("menu-icon")}
+                            <Button
+                                variant="none"
+                                size="iconOnly"
+                                aria-label={`Options for ${preset.name}`}
+                                aria-haspopup="menu"
                                 onClick={e => {
-                                    e.stopPropagation();
-                                    const target = e.currentTarget;
                                     ContextMenuApi.openContextMenu(e, () => (
                                         <Menu.Menu navId="preset-options" onClose={ContextMenuApi.closeContextMenu}>
                                             <Menu.MenuItem
                                                 id="rename"
                                                 label="Rename"
                                                 action={() => {
-                                                    setRenaming(actualIndex);
+                                                    setRenaming(preset);
                                                     setRenameText(preset.name);
                                                 }}
                                             />
@@ -153,13 +166,12 @@ export function PresetList({
                                                 id="update"
                                                 label="Update"
                                                 action={async () => {
-                                                    const profile = await getCurrentProfile(guildId, { isGuildProfile });
-                                                    await Promise.all(
-                                                        (Object.entries(profile) as [keyof EditableProfile, EditableProfile[keyof EditableProfile]][])
-                                                            .filter(([, value]) => isNonNullish(value))
-                                                            .map(([key, value]) => updatePresetField(actualIndex, key, value, section, guildId))
-                                                    );
-                                                    onUpdate();
+                                                    try {
+                                                        await actions.refreshPreset(preset, section, guildId);
+                                                        onUpdate();
+                                                    } catch {
+                                                        showToast("Could not update the profile preset. Reopen this panel before trying again.", Toasts.Type.FAILURE);
+                                                    }
                                                 }}
                                             />
                                             <Menu.MenuSeparator />
@@ -167,31 +179,24 @@ export function PresetList({
                                                 <Menu.MenuItem
                                                     id="move-up"
                                                     label="Move Up"
-                                                    action={() => {
-                                                        movePreset(actualIndex, actualIndex - 1, section, guildId);
-                                                        onUpdate();
-                                                    }}
+                                                    action={() => runChange(() => actions.movePreset(actualIndex, actualIndex - 1, section))}
                                                 />
                                             )}
                                             {actualIndex < allPresets.length - 1 && (
                                                 <Menu.MenuItem
                                                     id="move-down"
                                                     label="Move Down"
-                                                    action={() => {
-                                                        movePreset(actualIndex, actualIndex + 1, section, guildId);
-                                                        onUpdate();
-                                                    }}
+                                                    action={() => runChange(() => actions.movePreset(actualIndex, actualIndex + 1, section))}
                                                 />
                                             )}
                                             {currentPage > 1 && (
                                                 <Menu.MenuItem
                                                     id="move-to-page-1"
                                                     label="Move to Page 1"
-                                                    action={() => {
-                                                        movePreset(actualIndex, 0, section, guildId);
+                                                    action={() => runChange(async () => {
+                                                        await actions.movePreset(actualIndex, 0, section);
                                                         onPageChange(1);
-                                                        onUpdate();
-                                                    }}
+                                                    })}
                                                 />
                                             )}
                                             {showMoveOptions && <Menu.MenuSeparator />}
@@ -199,20 +204,19 @@ export function PresetList({
                                                 id="delete"
                                                 label="Delete"
                                                 color="danger"
-                                                action={async () => {
-                                                    await deletePreset(actualIndex, section, guildId);
-                                                    onUpdate();
-                                                }}
+                                                action={() => runChange(() => actions.deletePreset(actualIndex, section))}
                                             />
                                         </Menu.Menu>
                                     ));
                                 }}
                             >
-                                <path
-                                    fill="currentColor"
-                                    d="M10 3a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm0 5a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm0 5a1.5 1.5 0 110 3 1.5 1.5 0 010-3z"
-                                />
-                            </svg>
+                                <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path
+                                        fill="currentColor"
+                                        d="M10 3a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm0 5a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm0 5a1.5 1.5 0 110 3 1.5 1.5 0 010-3z"
+                                    />
+                                </svg>
+                            </Button>
                         </div>
                     </div>
                 );

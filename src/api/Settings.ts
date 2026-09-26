@@ -229,9 +229,11 @@ export const Settings = SettingsStore.store;
 export function useSettings(paths?: UseSettings<Settings>[]) {
     const [, forceUpdate] = React.useReducer(() => ({}), {});
 
+    const pathsKey = JSON.stringify(paths);
     useEffect(() => {
-        if (paths) {
-            paths.forEach(p => {
+        const subscribedPaths = paths?.slice();
+        if (subscribedPaths) {
+            subscribedPaths.forEach(p => {
                 if (p.endsWith(".*")) {
                     SettingsStore.addPrefixChangeListener(p.slice(0, -2), forceUpdate);
                 } else {
@@ -239,7 +241,7 @@ export function useSettings(paths?: UseSettings<Settings>[]) {
                 }
             });
 
-            return () => paths.forEach(p => {
+            return () => subscribedPaths.forEach(p => {
                 if (p.endsWith(".*")) {
                     SettingsStore.removePrefixChangeListener(p.slice(0, -2), forceUpdate);
                 } else {
@@ -250,7 +252,7 @@ export function useSettings(paths?: UseSettings<Settings>[]) {
             SettingsStore.addGlobalChangeListener(forceUpdate);
             return () => SettingsStore.removeGlobalChangeListener(forceUpdate);
         }
-    }, [paths]);
+    }, [pathsKey]);
 
     return SettingsStore.store;
 }
@@ -382,14 +384,8 @@ export function definePluginSettings<
     return definedSettings;
 }
 
-type UseSettings<T extends object> = ResolveUseSettings<T>[keyof T];
-
-type ResolveUseSettings<T extends object> = {
-    [Key in keyof T]:
-    Key extends string
-    ? T[Key] extends Record<string, unknown>
-    // @ts-expect-error "Type instantiation is excessively deep and possibly infinite"
-    ? `${Key}.*` | (ResolveUseSettings<T[Key]> extends Record<string, string> ? `${Key}.${ResolveUseSettings<T[Key]>[keyof T[Key]]}` : never)
-    : Key
-    : never;
-};
+type UseSettings<T extends object> = string extends keyof T ? string : {
+    [Key in keyof T & string]: T[Key] extends Record<string, unknown>
+        ? `${Key}.*` | `${Key}.${UseSettings<T[Key]>}`
+        : Key;
+}[keyof T & string];

@@ -153,6 +153,33 @@ export function update<T = any>(
     );
 }
 
+export function updateMany<T extends unknown[]>(
+    entries: { [K in keyof T]: [IDBValidKey, (oldValue: T[K] | undefined) => T[K]] },
+    customStore = defaultGetStore(),
+): Promise<void> {
+    return customStore("readwrite", store => new Promise<void>((resolve, reject) => {
+        promisifyRequest(store.transaction).then(resolve, reject);
+        const fail = (error: unknown) => {
+            store.transaction.abort();
+            reject(error);
+        };
+        try {
+            for (const [key, updater] of entries) {
+                const request = store.get(key);
+                request.onsuccess = () => {
+                    try {
+                        store.put(updater(request.result), key);
+                    } catch (error) {
+                        fail(error);
+                    }
+                };
+            }
+        } catch (error) {
+            fail(error);
+        }
+    }));
+}
+
 /**
  * Delete a particular key from the store.
  *

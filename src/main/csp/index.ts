@@ -15,7 +15,6 @@ export const CssSrc = ["style-src", "font-src"];
 export const ImageAndMediaSrc = [...ImageSrc, "media-src"];
 export const ImageAndCssSrc = [...ImageSrc, ...CssSrc];
 export const ImageScriptsAndCssSrc = [...ImageAndCssSrc, "script-src", "worker-src"];
-export const CSPSrc = ["style-src", "connect-src", "img-src", "frame-src", "font-src", "media-src", "worker-src"];
 
 // Plugins can whitelist their own domains by importing this object in their native.ts
 // script and just adding to it. But generally, you should just edit this file instead
@@ -39,7 +38,9 @@ export const CspPolicies: PolicyMap = {
 
     "api.spotify.com": ConnectSrc, // Spotify playback control for automation blocks, using Discord's own connection token
 
-    "fonts.googleapis.com": CssSrc, // Google Fonts, used by many themes
+    "fonts.googleapis.com": [...ConnectSrc, ...CssSrc], // Google Fonts, used by many themes
+    "fonts.google.com": ConnectSrc,
+    "fonts.gstatic.com": [...ConnectSrc, "font-src"],
 
     "i.imgur.com": ImageSrc, // Imgur, used by some themes
     "i.ibb.co": ImageSrc, // ImgBB, used by some themes
@@ -66,6 +67,19 @@ export const CspPolicies: PolicyMap = {
     "*.vencord.dev": ImageSrc, // VenCloud (api.vencord.dev) and Badges (badges.vencord.dev)
     "manti.vendicated.dev": ImageSrc, // ReviewDB API
     "decor.fieryflames.dev": ConnectSrc, // Decor API
+    "streaks.equicord.org": ConnectSrc,
+    "badges.equicord.org": ConnectSrc,
+    "dc.songspotlight.nexpid.xyz": ConnectSrc,
+    "translate.googleapis.com": ConnectSrc,
+    "timezone.creations.works": ConnectSrc,
+    "themes.equicord.org": ConnectSrc,
+    "lrclib.net": ConnectSrc,
+    "spotify-lyrics-api-pi.vercel.app": ConnectSrc,
+    "api.stats.fm": ConnectSrc,
+    "www.reddit.com": ConnectSrc,
+    "nekos.best": ConnectSrc,
+    "api.thecatapi.com": ConnectSrc,
+    "api.thedogapi.com": ConnectSrc,
     "ugc.decor.fieryflames.dev": ImageSrc, // Decor CDN
     "sponsor.ajay.app": ConnectSrc, // Dearrow API
     "dearrow-thumb.ajay.app": ImageSrc, // Dearrow Thumbnail CDN

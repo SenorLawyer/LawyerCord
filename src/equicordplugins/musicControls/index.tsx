@@ -115,6 +115,8 @@ export default definePlugin({
     },
 
     async start() {
+        (TidalStore as typeof TidalStore & { [SYM_LAZY_CACHED]?: typeof TidalStore; })[SYM_LAZY_CACHED]?.socket.reconnect();
+        (TidalLrcStore as typeof TidalLrcStore & { [SYM_LAZY_CACHED]?: typeof TidalLrcStore; })[SYM_LAZY_CACHED]?.init();
         await migrateOldLyrics();
         toggleHoverControls(settings.store.hoverControls);
     },

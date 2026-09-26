@@ -62,14 +62,6 @@ function withDimmedClass(className: string | string[] | undefined, dimmed: boole
     ].filter(c => c !== undefined);
 }
 
-export function SettingsNotice({ children, className }: { children: ReactNode; className?: string | string[]; }): JSX.Element {
-    return (
-        <Paragraph className={q("notice-card", className)}>
-            {children}
-        </Paragraph>
-    );
-}
-
 export interface SettingsRowProps {
     children: ReactNode;
     className?: string | string[];

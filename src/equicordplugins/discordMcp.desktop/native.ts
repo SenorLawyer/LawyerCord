@@ -372,19 +372,20 @@ function safeDownloadName(filename: string): string {
 function validateAttachmentUrl(url: string): URL {
     const parsed = new URL(url);
     if (
-        parsed.protocol !== "https:" ||
-        !["cdn.discordapp.com", "media.discordapp.net"].includes(parsed.hostname) ||
+        !["https://cdn.discordapp.com", "https://media.discordapp.net"].includes(parsed.origin) ||
         !parsed.pathname.startsWith("/attachments/")
     ) throw new Error("Blocked an untrusted attachment URL");
     return parsed;
 }
 
 async function fetchAttachmentData(url: string): Promise<AttachmentData> {
-    const response = await fetch(validateAttachmentUrl(url));
+    const response = await fetch(validateAttachmentUrl(url), { redirect: "error", signal: AbortSignal.timeout(120_000) });
     if (!response.ok || !response.body) throw new Error(`Attachment download failed with HTTP ${response.status}`);
     const declaredSize = Number(response.headers.get("content-length"));
-    if (Number.isFinite(declaredSize) && declaredSize > MAX_ATTACHMENT_SIZE)
+    if (Number.isFinite(declaredSize) && declaredSize > MAX_ATTACHMENT_SIZE) {
+        await response.body.cancel();
         throw new Error("Attachment exceeds the 25 MB Discord MCP limit");
+    }
 
     const chunks: Uint8Array[] = [];
     let size = 0;

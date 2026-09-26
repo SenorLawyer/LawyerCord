@@ -7,11 +7,12 @@
 import "./styles.css";
 
 import { definePluginSettings } from "@api/Settings";
+import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import definePlugin, { makeRange, OptionType } from "@utils/types";
-import { ContextMenuApi, FluxDispatcher, Menu, React, Tooltip, useEffect } from "@webpack/common";
+import { ContextMenuApi, FluxDispatcher, Menu, React, Tooltip, useEffect, useRef } from "@webpack/common";
 import { RefObject } from "react";
 
 import SpeedIcon from "./components/SpeedIcon";
@@ -55,10 +56,17 @@ export default definePlugin({
         // replace voice message embed speed control because ours provides more speeds
         {
             find: "\"--:--\"",
-            replacement: {
-                match: /\(0,\i\.jsxs?\)\(.{0,50}\.\i,onClick:\(\).+?\}\)\}\)(?<=playbackCacheKey:\i\}=\i,(\i).+?)/,
-                replace: "$self.renderPlaybackSpeedComponent({mediaRef:$1})"
-            }
+            group: true,
+            replacement: [
+                {
+                    match: /(?<=playbackCacheKey:\i\}=\i,)(\i)=\i\.useRef\(null\)/,
+                    replace: "$&,vcPlaybackMediaRef=$1"
+                },
+                {
+                    match: /\(0,\i\.jsxs?\)\(\i\.\i,\{className:\i\.\i,onClick:\(\)=>\{.{0,150}?type:"MEDIA_PLAYBACK_RATE_UPDATE".{0,150}?\}\)\}\)/,
+                    replace: "$self.renderPlaybackSpeedComponent({mediaRef:vcPlaybackMediaRef,isVoiceMessage:true})"
+                }
+            ]
         },
         // audio & video embeds
         {
@@ -72,16 +80,18 @@ export default definePlugin({
         {
             find: "AUDIO:\"AUDIO\"",
             replacement: {
-                match: /sliderWrapperClassName:\i.\i\}\)\}\),/,
+                match: /sliderWrapperClassName:\i\.\i\}\)\}\),/,
                 replace: "$&$self.renderPlaybackSpeedComponent({mediaRef:this?.props?.mediaRef}),"
             }
         }
     ],
-    renderPlaybackSpeedComponent: ErrorBoundary.wrap(({ mediaRef }: { mediaRef: MediaRef; }) => {
-        const changeSpeed = (speed: number) => {
-            const media = mediaRef?.current;
+    renderPlaybackSpeedComponent: ErrorBoundary.wrap(({ mediaRef, isVoiceMessage = false }: { mediaRef: MediaRef; isVoiceMessage?: boolean; }) => {
+        const selectedSpeed = useRef<{ media: HTMLMediaElement; speed: number; } | null>(null);
+        const changeSpeed = (speed: number, media = mediaRef?.current) => {
             if (media) {
-                media.playbackRate = speed;
+                const rate = Number.isFinite(speed) && speed >= min && speed <= max ? speed : 1;
+                selectedSpeed.current = { media, speed: rate };
+                media.playbackRate = rate;
             }
         };
 
@@ -89,10 +99,12 @@ export default definePlugin({
             const media = mediaRef?.current;
             if (!media) return;
             if (media.tagName === "AUDIO") {
-                const isVoiceMessage = media.className.includes("audioElement");
                 if (isVoiceMessage) {
                     // Workaround because Discord seems to override it somewhere
-                    const setVoiceSpeed = () => changeSpeed(settings.store.defaultVoiceMessageSpeed);
+                    const setVoiceSpeed = () => {
+                        const selected = selectedSpeed.current;
+                        changeSpeed(selected?.media === media ? selected.speed : settings.store.defaultVoiceMessageSpeed, media);
+                    };
                     media.addEventListener("play", setVoiceSpeed, { once: true });
                     return () => media.removeEventListener("play", setVoiceSpeed);
                 } else {
@@ -101,13 +113,16 @@ export default definePlugin({
             } else if (media.tagName === "VIDEO") {
                 changeSpeed(settings.store.defaultVideoSpeed);
             }
-        }, [mediaRef]);
+        }, [mediaRef, isVoiceMessage]);
 
         return (
             <Tooltip text="Playback speed">
                 {tooltipProps => (
-                    <button
+                    <Button
                         {...tooltipProps}
+                        variant="none"
+                        size="min"
+                        aria-label="Playback speed"
                         className={cl("icon")}
                         onClick={e => {
                             ContextMenuApi.openContextMenu(e, () =>
@@ -120,10 +135,12 @@ export default definePlugin({
                                         label="Playback speed"
                                     >
                                         {speeds.map(speed => (
-                                            <Menu.MenuItem
+                                            <Menu.MenuRadioItem
                                                 key={speed}
                                                 id={"speed-" + speed}
                                                 label={`${speed}x`}
+                                                group="playback-speed"
+                                                checked={mediaRef?.current?.playbackRate === speed}
                                                 action={() => changeSpeed(speed)}
                                             />
                                         ))}
@@ -132,7 +149,7 @@ export default definePlugin({
                             );
                         }}>
                         <SpeedIcon />
-                    </button>
+                    </Button>
                 )}
             </Tooltip>
         );

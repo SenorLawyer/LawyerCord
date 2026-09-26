@@ -28,15 +28,15 @@ import { useState } from "@webpack/common";
 
 const ActionBarIcon = findByCodeLazy("Children.map", "isValidElement", "dangerous:");
 
-const enum Methods {
-    Random,
-    Consistent,
-    Timestamp,
-    Date
-}
+const Methods = {
+    Random: 0,
+    Consistent: 1,
+    Timestamp: 2,
+    Date: 3
+} as const;
 
 const ANONYMISE_UPLOAD_SYMBOL = Symbol("vcAnonymise");
-export const tarExtMatcher = /\.tar\.\w+$/;
+export const tarExtMatcher = /\.tar\.\w+$/i;
 
 const settings = definePluginSettings({
     anonymiseByDefault: {
@@ -60,9 +60,13 @@ const settings = definePluginSettings({
         ],
     },
     randomisedLength: {
-        description: "Random characters length",
+        description: "Number of random characters, from 1 to 255.",
         type: OptionType.NUMBER,
-        default: 7
+        default: 7,
+        isValid(value: string) {
+            const length = Number(value);
+            return Number.isInteger(length) && length >= 1 && length <= 255 || "Enter a whole number from 1 to 255.";
+        }
     },
     consistent: {
         description: "Consistent filename",
@@ -143,17 +147,22 @@ export default definePlugin({
         const addSpoilerPrefix = (str: string) => settings.store.spoilerMessages ? "SPOILER_" + str : str;
 
         if (Settings.plugins.FixFileExtensions.enabled) {
-            ext = reverseExtensionMap[ext] || ext;
+            ext = reverseExtensionMap[ext.toLowerCase()] || ext;
         }
 
-        if ((upload[ANONYMISE_UPLOAD_SYMBOL] ?? settings.store.anonymiseByDefault) === false) return addSpoilerPrefix(originalFileName + ext);
+        if ((upload[ANONYMISE_UPLOAD_SYMBOL] ?? settings.store.anonymiseByDefault) === false) {
+            upload.filename = addSpoilerPrefix((extIdx !== -1 ? originalFileName.slice(0, extIdx) : originalFileName) + ext);
+            return;
+        }
 
         const newFilename = (() => {
             switch (settings.store.method) {
                 case Methods.Random:
+                default:
                     const chars = "0123456789bdfhjkmnpqrstvwxz";
+                    const length = settings.store.randomisedLength;
                     const returnedName = Array.from(
-                        { length: settings.store.randomisedLength },
+                        { length: Number.isInteger(length) && length >= 1 && length <= 255 ? length : 7 },
                         () => chars[Math.floor(Math.random() * chars.length)]
                     ).join("") + ext;
                     return addSpoilerPrefix(returnedName);

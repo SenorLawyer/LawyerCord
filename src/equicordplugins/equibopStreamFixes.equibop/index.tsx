@@ -217,21 +217,6 @@ export default definePlugin({
     getBitrateMax() {
         return this.getStreamConfig().bitrateMax;
     },
-    coerceResolution(res: { height?: number; width?: number; }) {
-        if (!res) return res;
-        const config = this.getStreamConfig();
-        return {
-            ...res,
-            height: Math.max(res.height ?? 0, config.height),
-            width: Math.max(res.width ?? 0, config.width),
-        };
-    },
-    coerceFps(fps: number | undefined) {
-        const config = this.getStreamConfig();
-        return typeof fps === "number"
-            ? Math.max(fps, config.framerate)
-            : config.framerate;
-    },
     getMinBitrate() {
         return (settings.store.minBitrate ?? 500) * 1000;
     },

@@ -22,7 +22,7 @@ import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { saveFile } from "@utils/web";
 import { filters, mapMangledModuleLazy } from "@webpack";
-import { ComponentDispatch } from "@webpack/common";
+import { ComponentDispatch, showToast, Toasts } from "@webpack/common";
 
 const ctxMenuCallbacks = mapMangledModuleLazy('closest("[contenteditable=true]")', {
     contextMenuCallbackWeb: filters.byCode('"[contenteditable=true]"'),
@@ -31,9 +31,9 @@ const ctxMenuCallbacks = mapMangledModuleLazy('closest("[contenteditable=true]")
 
 async function fetchImage(url: string) {
     const res = await fetch(url);
-    if (res.status !== 200) return;
+    if (!res.ok) throw new Error("Could not download the image.");
 
-    return await res.blob();
+    return res.blob();
 }
 
 let requiredByPlatform = false;
@@ -68,19 +68,15 @@ const CDN_URL = "cdn.discordapp.com";
 
 function fixImageUrl(urlString: string) {
     const url = new URL(urlString);
-    if (url.host === CDN_URL) return urlString;
+    if (url.origin !== MEDIA_PROXY_URL) return urlString;
 
     url.searchParams.delete("width");
     url.searchParams.delete("height");
 
-    if (url.origin === MEDIA_PROXY_URL) {
-        url.host = CDN_URL;
-        url.searchParams.delete("size");
-        url.searchParams.delete("quality");
-        url.searchParams.delete("format");
-    } else {
-        url.searchParams.set("quality", "lossless");
-    }
+    url.host = CDN_URL;
+    url.searchParams.delete("size");
+    url.searchParams.delete("quality");
+    url.searchParams.delete("format");
 
     return url.toString();
 }
@@ -262,47 +258,57 @@ export default definePlugin({
     ],
 
     async copyImage(url: string) {
-        url = fixImageUrl(url);
+        try {
+            url = fixImageUrl(url);
 
-        let imageData = await fetch(url).then(r => r.blob());
-        if (imageData.type !== "image/png") {
-            const bitmap = await createImageBitmap(imageData);
+            let imageData = await fetchImage(url);
+            if (imageData.type !== "image/png") {
+                const canvas = document.createElement("canvas");
+                const bitmap = await createImageBitmap(imageData);
+                try {
+                    canvas.width = bitmap.width;
+                    canvas.height = bitmap.height;
+                    const context = canvas.getContext("2d");
+                    if (!context) throw new Error("Could not create the image canvas.");
+                    context.drawImage(bitmap, 0, 0);
+                } finally {
+                    bitmap.close();
+                }
 
-            const canvas = document.createElement("canvas");
-            canvas.width = bitmap.width;
-            canvas.height = bitmap.height;
-            canvas.getContext("2d")!.drawImage(bitmap, 0, 0);
+                imageData = await new Promise<Blob>((resolve, reject) => {
+                    canvas.toBlob(data => {
+                        if (data) resolve(data);
+                        else reject(new Error("Could not encode the image as PNG."));
+                    }, "image/png");
+                });
+            }
 
-            await new Promise<void>(done => {
-                canvas.toBlob(data => {
-                    imageData = data!;
-                    done();
-                }, "image/png");
-            });
-        }
+            if ((IS_VESKTOP || IS_EQUIBOP) && VesktopNative.clipboard)
+                return await VesktopNative.clipboard.copyImage(await imageData.arrayBuffer(), url);
 
-        if (IS_VESKTOP && VesktopNative.clipboard || IS_EQUIBOP && VesktopNative.clipboard) {
-            VesktopNative.clipboard.copyImage(await imageData.arrayBuffer(), url);
-            return;
-        } else {
-            navigator.clipboard.write([
+            return await navigator.clipboard.write([
                 new ClipboardItem({
                     "image/png": imageData
                 })
             ]);
+        } catch {
+            showToast("Could not copy the image.", Toasts.Type.FAILURE);
         }
     },
 
     async saveImage(url: string) {
-        url = fixImageUrl(url);
+        try {
+            url = fixImageUrl(url);
 
-        const data = await fetchImage(url);
-        if (!data) return;
+            const data = await fetchImage(url);
 
-        const name = new URL(url).pathname.split("/").pop()!;
-        const file = new File([data], name, { type: data.type });
+            const name = new URL(url).pathname.split("/").pop()!;
+            const file = new File([data], name, { type: data.type });
 
-        saveFile(file);
+            saveFile(file);
+        } catch {
+            showToast("Could not save the image.", Toasts.Type.FAILURE);
+        }
     },
 
     copy() {

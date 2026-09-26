@@ -22,7 +22,7 @@ import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/Co
 import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
 import { Message } from "@vencord/discord-types";
-import { ChannelStore, Menu } from "@webpack/common";
+import { ChannelStore, Menu, UserStore, useStateFromStores } from "@webpack/common";
 
 import { settings } from "./settings";
 import { setShouldShowTranslateEnabledTooltip, TranslateChatBarIcon, TranslateIcon } from "./TranslateIcon";
@@ -41,10 +41,7 @@ const messageCtxPatch: NavContextMenuPatchCallback = (children, { message }: { m
             id="vc-trans"
             label="Translate"
             icon={TranslateIcon}
-            action={async () => {
-                const trans = await translate("received", content);
-                handleTranslate(message.id, trans);
-            }}
+            action={() => translateReceivedMessage(message.id, content)}
         />
     ));
 };
@@ -58,7 +55,25 @@ function getMessageContent(message: Message) {
         || message.embeds?.find(embed => embed.type === "auto_moderation_message")?.rawDescription || "";
 }
 
+let translationGeneration = 0;
+const pendingTranslations = new Map<string, ReturnType<typeof translate>>();
 let tooltipTimeout: ReturnType<typeof setTimeout> | undefined;
+
+async function translateReceivedMessage(messageId: string, content: string) {
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return;
+    const generation = translationGeneration;
+    const isCurrent = () => pendingTranslations.get(messageId) === request && generation === translationGeneration && UserStore.getCurrentUser()?.id === userId;
+    const request = translate("received", content, isCurrent);
+    pendingTranslations.set(messageId, request);
+    try {
+        const trans = await request;
+        if (isCurrent())
+            handleTranslate(messageId, trans, content);
+    } finally {
+        if (pendingTranslations.get(messageId) === request) pendingTranslations.delete(messageId);
+    }
+}
 
 function clearTranslateTooltipTimeout() {
     if (tooltipTimeout === undefined) return;
@@ -77,10 +92,12 @@ export default definePlugin({
     contextMenus: {
         "message": messageCtxPatch
     },
-    // not used, just here in case some other plugin wants it or w/e
-    translate,
 
-    renderMessageAccessory: props => <TranslationAccessory message={props.message} />,
+    renderMessageAccessory: props => {
+        const userId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
+        const content = getMessageContent(props.message);
+        return userId ? <TranslationAccessory key={`${userId}:${props.message.id}:${content}`} message={props.message} content={content} /> : null;
+    },
 
     chatBarButton: {
         icon: TranslateIcon,
@@ -98,17 +115,28 @@ export default definePlugin({
                 icon: TranslateIcon,
                 message,
                 channel: ChannelStore.getChannel(message.channel_id),
-                onClick: async () => {
-                    const trans = await translate("received", content);
-                    handleTranslate(message.id, trans);
-                }
+                onClick: () => translateReceivedMessage(message.id, content)
             };
+        }
+    },
+
+    flux: {
+        LOGOUT() {
+            translationGeneration++;
+            pendingTranslations.clear();
         }
     },
 
     async onBeforeMessageSend(_, message) {
         if (!settings.store.autoTranslate) return;
         if (!message.content) return;
+
+        const userId = UserStore.getCurrentUser()?.id;
+        if (!userId) return { cancel: true };
+        const generation = translationGeneration;
+        const { content } = message;
+        const isCurrent = () => generation === translationGeneration && UserStore.getCurrentUser()?.id === userId
+            && settings.store.autoTranslate && message.content === content;
 
         setShouldShowTranslateEnabledTooltip?.(true);
         clearTranslateTooltipTimeout();
@@ -117,11 +145,19 @@ export default definePlugin({
             setShouldShowTranslateEnabledTooltip?.(false);
         }, 2000);
 
-        const trans = await translate("sent", message.content);
-        message.content = trans.text;
+        try {
+            const trans = await translate("sent", content, isCurrent);
+            if (!isCurrent())
+                return { cancel: true };
+            message.content = trans.text;
+        } catch {
+            return { cancel: true };
+        }
     },
 
     stop() {
+        translationGeneration++;
+        pendingTranslations.clear();
         clearTranslateTooltipTimeout();
         setShouldShowTranslateEnabledTooltip?.(false);
     }

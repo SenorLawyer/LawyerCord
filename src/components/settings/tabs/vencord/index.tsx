@@ -22,7 +22,6 @@ import { SpecialCard } from "@components/settings/SpecialCard";
 import BadgeAPI from "@plugins/_api/badges";
 import { gitRemote } from "@shared/vencordUserAgent";
 import { DONOR_ROLE_ID, GUILD_ID, IS_WINDOWS, VC_DONOR_ROLE_ID, VC_GUILD_ID } from "@utils/constants";
-import { classNameFactory } from "@utils/css";
 import { Margins } from "@utils/margins";
 import { isAnyPluginDev } from "@utils/misc";
 import { relaunch } from "@utils/native";
@@ -41,8 +40,6 @@ const COZY_CONTRIB_IMAGE = "https://cdn.discordapp.com/emojis/102653307095587233
 
 const DONOR_BACKGROUND_IMAGE = "https://media.discordapp.net/stickers/1311070116305436712.png?size=2048";
 const CONTRIB_BACKGROUND_IMAGE = "https://media.discordapp.net/stickers/1311070166481895484.png?size=2048";
-
-const cl = classNameFactory("vc-vencord-tab-");
 
 type KeysOfType<Object, Type> = {
     [K in keyof Object]: Object[K] extends Type ? K : never;
@@ -63,7 +60,7 @@ function Switches() {
             description: "Enable the React Developer Tools extension for debugging Discord's React components. Useful for plugin development.",
             restartRequired: true,
         },
-        (!IS_WEB && !IS_DISCORD_DESKTOP || !IS_WINDOWS) && {
+        !IS_WEB && (!IS_DISCORD_DESKTOP || !IS_WINDOWS) && {
             key: "mainWindowFrameless",
             title: "Disable the Main Window Frame",
             description: "Remove the native window frame for a cleaner look. You can still move the window by dragging the title bar area.",

@@ -8,10 +8,7 @@ import type { DropEntity } from "./utils";
 
 type DragSessionState = {
     activeEntity: DropEntity | null;
-    activeUserId: string | null;
-    activeGuildId: string | null;
     dragSourceIsInput: boolean;
-    active: boolean;
     lastDropAt: number;
     lastHandledDrop: { at: number; key: string; };
     lastDragEventAt: number;
@@ -23,10 +20,7 @@ const dropDedupeWindowMs = 150;
 
 const state: DragSessionState = {
     activeEntity: null,
-    activeUserId: null,
-    activeGuildId: null,
     dragSourceIsInput: false,
-    active: false,
     lastDropAt: 0,
     lastHandledDrop: { at: 0, key: "" },
     lastDragEventAt: 0,
@@ -37,18 +31,12 @@ const state: DragSessionState = {
 export function beginDrag(entity: DropEntity) {
     cancelGuildCleanup();
     state.activeEntity = entity;
-    state.activeUserId = entity.kind === "user" ? entity.id : null;
-    state.activeGuildId = entity.kind === "guild" ? entity.id : null;
-    state.active = true;
     touchDrag();
 }
 
 export function clearDragState() {
     state.activeEntity = null;
-    state.activeUserId = null;
-    state.activeGuildId = null;
     state.dragSourceIsInput = false;
-    state.active = false;
     cancelGuildCleanup();
     stopDragWatchdog();
 }
@@ -82,25 +70,21 @@ export function shouldIgnoreDrop(key: string) {
 }
 
 export function hasActiveDrag() {
-    return state.active || state.activeEntity !== null || state.activeUserId !== null || state.activeGuildId !== null;
+    return state.activeEntity !== null;
 }
 
 export function isGuildDragActive() {
-    return state.activeGuildId !== null || state.activeEntity?.kind === "guild";
+    return state.activeEntity?.kind === "guild";
 }
 
 export function isUserDragActive() {
-    return state.activeUserId !== null || state.activeEntity?.kind === "user";
-}
-
-export function getActiveEntity() {
-    return state.activeEntity;
+    return state.activeEntity?.kind === "user";
 }
 
 export function startDragWatchdog(onExpire: () => void) {
     if (state.watchdogTimer !== null) return;
     state.watchdogTimer = window.setInterval(() => {
-        if (!state.active) return;
+        if (!hasActiveDrag()) return;
         if (Date.now() - state.lastDragEventAt < 1200) return;
         clearDragState();
         onExpire();
@@ -132,10 +116,4 @@ export function cancelGuildCleanup() {
     if (state.guildCleanupTimer === null) return;
     clearTimeout(state.guildCleanupTimer);
     state.guildCleanupTimer = null;
-}
-
-export function stopDragState() {
-    cancelGuildCleanup();
-    stopDragWatchdog();
-    clearDragState();
 }

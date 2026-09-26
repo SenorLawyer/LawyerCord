@@ -80,7 +80,7 @@ const contextMenuPatch: NavContextMenuPatchCallback = (children, props: MessageA
 
     const group = findGroupChildrenByChildId("devmode-copy-id", children, true);
     group?.push(
-        CopyIdMenuItem({ id: author.id, label: getIntlMessage("COPY_ID_AUTHOR") })
+        <CopyIdMenuItem id={author.id} label={getIntlMessage("COPY_ID_AUTHOR")} />
     );
 };
 

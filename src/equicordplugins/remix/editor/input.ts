@@ -40,10 +40,8 @@ export function initInput() {
         Mouse.event.emit("move", e);
     };
 
-    const onMouseDown = (e: MouseEvent) => {
+    const onMouseDown = () => {
         Mouse.down = true;
-
-        Mouse.event.emit("down", e);
     };
 
     const onMouseUp = (e: MouseEvent) => {

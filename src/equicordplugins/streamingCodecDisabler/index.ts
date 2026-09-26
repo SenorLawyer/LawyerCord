@@ -4,26 +4,16 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { definePluginSettings, Settings } from "@api/Settings";
+import { definePluginSettings } from "@api/Settings";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { MediaEngineStore } from "@webpack/common";
 
-interface Codecs {
-    AV1: boolean;
-    H265: boolean,
-    H264: boolean;
-    VP8: boolean;
-    VP9: boolean;
+let active = false;
+interface Codec {
+    type: string;
+    name: string;
+    encode?: boolean;
 }
-
-const originalCodecStatuses: Codecs = {
-    AV1: true,
-    H265: true,
-    H264: true,
-    VP8: true,
-    VP9: true,
-};
 
 const settings = definePluginSettings({
     disableAv1Codec: {
@@ -42,11 +32,13 @@ const settings = definePluginSettings({
         default: false
     },
     disableVP8Codec: {
+        hidden: true,
         description: "Make Discord not consider using VP8 for streaming.",
         type: OptionType.BOOLEAN,
         default: false
     },
     disableVP9Codec: {
+        hidden: true,
         description: "Make Discord not consider using VP9 for streaming.",
         type: OptionType.BOOLEAN,
         default: false
@@ -59,29 +51,37 @@ export default definePlugin({
     tags: ["Utility", "Voice"],
     authors: [EquicordDevs.davidkra230],
     settings,
+    start() {
+        active = true;
+    },
+    stop() {
+        active = false;
+    },
 
     patches: [
         {
             find: "setVideoBroadcast(this.shouldConnectionBroadcastVideo",
-            replacement: {
-                match: /setGoLiveSource\(.,.\)\{/,
-                replace: "$&$self.updateDisabledCodecs();"
-            },
+            group: true,
+            replacement: [
+                {
+                    match: /(?<=codecs:)this\.codecs(?=\})/,
+                    replace: "$self.filterCodecs($&,this)"
+                },
+                {
+                    match: /(?<=\.Video(?:Encoder|Decoder)Fallback,)this\.codecs/g,
+                    replace: "$self.filterCodecs($&,this)"
+                }
+            ]
         }
     ],
 
-    async updateDisabledCodecs() {
-        const mediaEngine = MediaEngineStore.getMediaEngine();
-        const options = Object.keys(originalCodecStatuses);
-        const CodecCapabilities = JSON.parse(await new Promise(res => mediaEngine.getCodecCapabilities(res)));
-        CodecCapabilities.forEach((codec: { codec: string; encode: boolean; }) => {
-            if (options.includes(codec.codec)) {
-                originalCodecStatuses[codec.codec] = codec.encode;
-            }
-        });
-
-        mediaEngine.setAv1Enabled(originalCodecStatuses.AV1 && !Settings.plugins.StreamingCodecDisabler.disableAv1Codec);
-        mediaEngine.setH265Enabled(originalCodecStatuses.H265 && !Settings.plugins.StreamingCodecDisabler.disableH265Codec);
-        mediaEngine.setH264Enabled(originalCodecStatuses.H264 && !Settings.plugins.StreamingCodecDisabler.disableH264Codec);
+    filterCodecs(codecs: Codec[], connection: { context: string; userId: string; streamUserId?: string; }) {
+        if (!active || connection.context !== "stream" || connection.streamUserId !== connection.userId) return codecs;
+        const { disableAv1Codec, disableH265Codec, disableH264Codec } = settings.store;
+        return codecs.map(codec => codec.type === "video" && codec.encode && (
+            codec.name === "AV1" && disableAv1Codec
+            || codec.name === "H265" && disableH265Codec
+            || codec.name === "H264" && disableH264Codec
+        ) ? { ...codec, encode: false } : codec);
     },
 });

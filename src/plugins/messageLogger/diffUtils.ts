@@ -15,7 +15,7 @@ function tokenizeMessage(text: string): string[] {
 
     while (i < text.length) {
         // handle Discord custom emojis: <:name:id> or <a:name:id>
-        if (text[i] === "<" && (text.slice(i + 1, i + 3) === ":" || text.slice(i + 1, i + 3) === "a:")) {
+        if (text[i] === "<" && (text[i + 1] === ":" || text.slice(i + 1, i + 3) === "a:")) {
             const endIndex = text.indexOf(">", i);
             if (endIndex !== -1) {
                 tokens.push(text.slice(i, endIndex + 1));
@@ -93,7 +93,6 @@ export function createWordDiff(oldText: string, newText: string): DiffPart[] {
     const oldChars = tokenizeMessage(oldText);
     const newChars = tokenizeMessage(newText);
 
-    const result: DiffPart[] = [];
     const dp: number[][] = [];
 
     for (let i = 0; i <= oldChars.length; i++) {

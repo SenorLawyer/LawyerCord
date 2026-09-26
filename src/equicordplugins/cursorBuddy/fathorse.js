@@ -9,8 +9,6 @@
 
 // https://github.com/adryd325/oneko.js
 export default function fathorse(cfg) {
-    document.getElementById("fathorse")?.remove();
-
     // generated
     const spritesheet = { right: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [5, 0], [6, 0], [7, 0], [8, 0]], downright: [[0, 1], [1, 1], [2, 1], [3, 1], [4, 1], [5, 1], [6, 1], [7, 1], [8, 1]], down: [[0, 2], [1, 2], [2, 2], [3, 2], [4, 2], [5, 2], [6, 2], [7, 2], [8, 2]], downleft: [[0, 3], [1, 3], [2, 3], [3, 3], [4, 3], [5, 3], [6, 3], [7, 3], [8, 3]], left: [[0, 4], [1, 4], [2, 4], [3, 4], [4, 4], [5, 4], [6, 4], [7, 4], [8, 4]], upleft: [[0, 5], [1, 5], [2, 5], [3, 5], [4, 5], [5, 5], [6, 5], [7, 5], [8, 5]], up: [[0, 6], [1, 6], [2, 6], [3, 6], [4, 6], [5, 6], [6, 6], [7, 6], [8, 6]], upright: [[0, 7], [1, 7], [2, 7], [3, 7], [4, 7], [5, 7], [6, 7], [7, 7], [8, 7]] };
     const gridX = 9, gridY = 8;
@@ -39,6 +37,9 @@ export default function fathorse(cfg) {
     const freeroamSpeed = 12;
 
     const fathorse = document.createElement("div");
+    const originalTransform = document.body.style.transform;
+    const originalWillChange = document.body.style.willChange;
+    let frameRequest = 0;
 
     let lastFrame, shakeUntil = 0;
     function lifecycle() {
@@ -55,11 +56,11 @@ export default function fathorse(cfg) {
                 const y = Math.floor(Math.random() * 4 - 2);
                 document.body.style.transform = `translate3d(${x}px, ${y}px, 0)`;
             } else {
-                document.body.style.transform = "";
+                document.body.style.transform = originalTransform;
             }
         }
 
-        requestAnimationFrame(lifecycle);
+        frameRequest = requestAnimationFrame(lifecycle);
     }
 
     function moved() {
@@ -155,15 +156,24 @@ export default function fathorse(cfg) {
 
     if (config.shake) document.body.style.willChange = "transform";
 
-    window.addEventListener("mousemove", ev => {
+    function onMouseMove(ev) {
         mousePos.x = ev.clientX;
         mousePos.y = ev.clientY;
 
         nextMove = Date.now() + freeroamStart;
         isRoaming = false;
-    });
+    }
 
-    requestAnimationFrame(lifecycle);
+    window.addEventListener("mousemove", onMouseMove);
+    frameRequest = requestAnimationFrame(lifecycle);
 
-    return mousePos;
+    return () => {
+        cancelAnimationFrame(frameRequest);
+        window.removeEventListener("mousemove", onMouseMove);
+        fathorse.remove();
+        if (config.shake) {
+            document.body.style.transform = originalTransform;
+            document.body.style.willChange = originalWillChange;
+        }
+    };
 };

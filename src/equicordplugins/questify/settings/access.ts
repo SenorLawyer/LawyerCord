@@ -11,7 +11,6 @@ export const QUESTIFY_PLUGIN_NAME = "Questify";
 
 interface QuestifySettingsOverrides {
     ignoredQuestIDs: Record<string, string[]>;
-    resumeQuestIDs: Record<string, { timestamp: number, questIDs: string[]; }>;
 }
 
 type QuestifySettings = Settings["plugins"][typeof QUESTIFY_PLUGIN_NAME] & QuestifySettingsOverrides;

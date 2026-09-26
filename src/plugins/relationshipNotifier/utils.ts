@@ -20,6 +20,7 @@ import * as DataStore from "@api/DataStore";
 import { popNotice, showNotice } from "@api/Notices";
 import { showNotification } from "@api/Notifications";
 import { getUniqueUsername, openUserProfile } from "@utils/discord";
+import { Logger } from "@utils/Logger";
 import { FluxStore } from "@vencord/discord-types";
 import { ChannelType, RelationshipType } from "@vencord/discord-types/enums";
 import { findStoreLazy } from "@webpack";
@@ -35,12 +36,23 @@ export const GuildAvailabilityStore = findStoreLazy("GuildAvailabilityStore") as
     isUnavailable(guildId: string): boolean;
 };
 
+const logger = new Logger("RelationshipNotifier");
 const guilds = new Map<string, SimpleGuild>();
 const groups = new Map<string, SimpleGroupChannel>();
 const friends = {
     friends: [] as string[],
     requests: [] as string[]
 };
+
+export let session = Symbol();
+
+export function resetState() {
+    session = Symbol();
+    guilds.clear();
+    groups.clear();
+    friends.friends = [];
+    friends.requests = [];
+}
 
 const LEGACY_DATASTORE_KEYS = ["relationship-notifier-guilds", "relationship-notifier-groups", "relationship-notifier-friends"];
 let migrationsRun = false;
@@ -57,7 +69,9 @@ async function runMigrations() {
 }
 
 export async function syncAndRunChecks() {
+    const currentSession = session;
     await runMigrations();
+    if (currentSession !== session) return;
     const currentUserId = UserStore.getCurrentUser()?.id;
     if (!currentUserId) return;
 
@@ -67,7 +81,10 @@ export async function syncAndRunChecks() {
         friendsKey(currentUserId)
     ]) as [Map<string, SimpleGuild> | undefined, Map<string, SimpleGroupChannel> | undefined, Record<"friends" | "requests", string[]> | undefined];
 
+    if (currentSession !== session || UserStore.getCurrentUser()?.id !== currentUserId) return;
+
     await Promise.all([syncGuildsForUser(currentUserId), syncGroupsForUser(currentUserId), syncFriendsForUser(currentUserId)]);
+    if (currentSession !== session || UserStore.getCurrentUser()?.id !== currentUserId) return;
 
     if (settings.store.offlineRemovals) {
         if (settings.store.groups && oldGroups?.size) {
@@ -89,7 +106,9 @@ export async function syncAndRunChecks() {
                 if (friends.friends.includes(id)) continue;
 
                 const user = await UserUtils.getUser(id).catch(() => void 0);
-                if (user)
+                if (currentSession !== session || UserStore.getCurrentUser()?.id !== currentUserId) return;
+                if (user && settings.store.offlineRemovals && settings.store.friends
+                    && RelationshipStore.getRelationshipType(id) !== RelationshipType.FRIEND)
                     notify(
                         `You are no longer friends with ${getUniqueUsername(user)}.`,
                         user.getAvatarURL(undefined, undefined, false),
@@ -106,7 +125,9 @@ export async function syncAndRunChecks() {
                 ) continue;
 
                 const user = await UserUtils.getUser(id).catch(() => void 0);
-                if (user)
+                if (currentSession !== session || UserStore.getCurrentUser()?.id !== currentUserId) return;
+                if (user && settings.store.offlineRemovals && settings.store.friendRequestCancels
+                    && ![RelationshipType.FRIEND, RelationshipType.BLOCKED, RelationshipType.INCOMING_REQUEST, RelationshipType.OUTGOING_REQUEST].includes(RelationshipStore.getRelationshipType(id)))
                     notify(
                         `Friend request from ${getUniqueUsername(user)} has been revoked.`,
                         user.getAvatarURL(undefined, undefined, false),
@@ -121,21 +142,16 @@ export function notify(text: string, icon?: string, onClick?: () => void) {
     if (settings.store.notices)
         showNotice(text, "OK", () => popNotice());
 
-    showNotification({
+    void showNotification({
         title: "Relationship Notifier",
         body: text,
         icon,
         onClick
-    });
+    }).catch(error => logger.error("Could not show relationship notification.", error));
 }
 
 export function getGuild(id: string) {
     return guilds.get(id);
-}
-
-export function deleteGuild(id: string) {
-    guilds.delete(id);
-    syncGuilds();
 }
 
 export async function syncGuilds() {
@@ -156,16 +172,11 @@ async function syncGuildsForUser(userId: string) {
                 iconURL: icon && `https://cdn.discordapp.com/icons/${id}/${icon}.png`
             });
     }
-    await DataStore.set(guildsKey(userId), guilds);
+    await DataStore.set(guildsKey(userId), new Map(guilds));
 }
 
 export function getGroup(id: string) {
     return groups.get(id);
-}
-
-export function deleteGroup(id: string) {
-    groups.delete(id);
-    syncGroups();
 }
 
 export async function syncGroups() {
@@ -194,7 +205,7 @@ async function syncGroupsForUser(userId: string) {
         }
     }
 
-    await DataStore.set(groupsKey(userId), groups);
+    await DataStore.set(groupsKey(userId), new Map(groups));
 }
 
 export async function syncFriends() {
@@ -220,5 +231,5 @@ async function syncFriendsForUser(userId: string) {
         }
     }
 
-    await DataStore.set(friendsKey(userId), friends);
+    await DataStore.set(friendsKey(userId), { ...friends });
 }

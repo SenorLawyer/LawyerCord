@@ -21,13 +21,6 @@ interface LrcLibResponse {
     syncedLyrics: string | null;
 }
 
-function lyricTimeToSeconds(time: string) {
-    const separatorIndex = time.indexOf(":");
-    const minutes = Number(time.slice(1, separatorIndex));
-    const seconds = Number(time.slice(separatorIndex + 1, -1));
-    return minutes * 60 + seconds;
-}
-
 export async function getLyricsLrclib(track: Track): Promise<LyricsData | null> {
     const info = {
         track_name: track.name,
@@ -51,12 +44,13 @@ export async function getLyricsLrclib(track: Track): Promise<LyricsData | null> 
 
     const lines: SyncedLyric[] = [];
     for (const line of data.syncedLyrics.split("\n")) {
-        if (!line.trim()) continue;
+        const match = /^\[(\d+):([0-5]\d(?:\.\d+)?)\](.*)$/.exec(line.trim());
+        if (!match) continue;
 
-        const [lrcTime, text] = line.split("]");
+        const [, minutes, seconds, text] = match;
         const trimmedText = text.trim();
         lines.push({
-            time: lyricTimeToSeconds(lrcTime),
+            time: Number(minutes) * 60 + Number(seconds),
             text: (trimmedText === "" || trimmedText === "♪") ? null : trimmedText
         });
     }

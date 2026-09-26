@@ -37,10 +37,6 @@
     }
 }
 
-.vc-plugins-settings-button:hover {
-    color: var(--interactive-icon-hover);
-}
-
 .vc-plugins-filter-controls {
     display: grid;
     height: 40px;
@@ -53,10 +49,6 @@
     height: 40px;
 }
 
-.vc-plugins-dep-name {
-    margin: 0 auto;
-}
-
 .vc-plugins-info-card {
     padding: 1em;
     height: fit-content;
@@ -66,13 +58,6 @@
     transition: 0.1s ease-out;
     transition-property: box-shadow, transform, background, opacity;
     gap: 0.25em;
-}
-
-.vc-plugins-restart-card {
-    padding: 1em;
-    background: var(--icon-status-idle) !important;
-    border: 1px solid var(--icon-status-idle) !important;
-    color: var(--text-status-idle);
 }
 
 .vc-plugins-info-icon:not(:hover, :focus) {
@@ -127,10 +112,6 @@
 }
 
 /* Shared styles for warning modal and disable all modal */
-
-.vc-text-selectable {
-    user-select: none;
-}
 
 .vc-warning-info {
     gap: 15px;
@@ -263,14 +244,6 @@
     display: flex;
     flex-direction: column;
     gap: 1.25em;
-}
-
-.vc-plugins-page-buttons {
-    margin-top: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
 }
 
 .vc-plugins-source {

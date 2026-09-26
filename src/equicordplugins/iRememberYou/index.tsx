@@ -35,7 +35,7 @@ export default definePlugin({
             Icon: EyeIcon
         });
 
-        const data = (this.dataManager = await new Data().withStart());
+        const data = (this.dataManager = new Data());
 
         await data.initializeUsersCollection();
         if (generation !== this.startGeneration) {

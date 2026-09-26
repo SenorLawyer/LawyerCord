@@ -8,24 +8,43 @@ import "./styles.css";
 
 import { DataStore } from "@api/index";
 import { definePluginSettings } from "@api/Settings";
+import { BaseText } from "@components/BaseText";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
 import { HeadingTertiary } from "@components/Heading";
 import { DeleteIcon } from "@components/Icons";
 import { EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
-import { useForceUpdater } from "@utils/react";
+import { Logger } from "@utils/Logger";
+import { useAwaiter, useForceUpdater } from "@utils/react";
+import { escapeRegExp } from "@utils/text";
 import definePlugin, { OptionType } from "@utils/types";
-import { Button, TextInput, useState } from "@webpack/common";
+import { Button, showToast, TextInput, Toasts, useState } from "@webpack/common";
 
 const cl = classNameFactory("vc-content-warning-");
+const logger = new Logger("ContentWarning");
 
 const WORDS_KEY = "ContentWarning_words";
+const REVEAL_SETTINGS: "onClick"[] = ["onClick"];
 
 let triggerWords = [""];
 let triggerWordRegex: RegExp | null = null;
+let wordsPromise: Promise<void> | undefined;
 
-function escapeRegExp(value: string) {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function loadTriggerWords() {
+    if (wordsPromise) return wordsPromise;
+    const pending = DataStore.get<unknown>(WORDS_KEY).then(raw => {
+        if (wordsPromise !== pending) return;
+        const words = raw ?? [];
+        if (!Array.isArray(words) || !words.every((word: unknown) => typeof word === "string")) {
+            throw new Error("Invalid saved trigger words.");
+        }
+        triggerWords = words;
+        if (triggerWords.at(-1) !== "") triggerWords.push("");
+        compileTriggerWords();
+    });
+    wordsPromise = pending;
+    return pending;
 }
 
 function compileTriggerWords() {
@@ -42,68 +61,66 @@ function compileTriggerWords() {
 
 function saveTriggerWords() {
     compileTriggerWords();
-    void DataStore.set(WORDS_KEY, triggerWords);
+    const pending = wordsPromise;
+    void DataStore.set(WORDS_KEY, triggerWords).catch(() => {
+        if (wordsPromise !== pending) return;
+        logger.error("Could not save trigger words.");
+        showToast("Could not save words. Changes may be lost when Discord restarts.", Toasts.Type.FAILURE);
+    });
 }
 
 function hasTriggerWord(content: string) {
     return triggerWordRegex?.test(content) ?? false;
 }
 
-function TriggerContainer({ child }) {
+const TriggerContainer = ErrorBoundary.wrap(function TriggerContainer({ child }) {
     const [visible, setVisible] = useState(false);
-    const { onClick } = settings.store;
-
-    const className = onClick ? cl("container") : "";
+    const { onClick } = settings.use(REVEAL_SETTINGS);
 
     if (visible) {
         return child;
     } else {
         return (
-            <div
-                className={className}
-                onClick={() => onClick && setVisible(true)}
-                onMouseEnter={event => {
-                    if (!onClick) {
-                        event.currentTarget.className = cl("enter");
-                    }
-                }}
-                onMouseLeave={event => {
-                    if (!onClick) {
-                        event.currentTarget.className = cl("leave");
-                    }
-                }}
-            >
-                {child}
-            </div >
+            <>
+                <Button
+                    className={cl("reveal")}
+                    look={Button.Looks.LINK}
+                    size={Button.Sizes.SMALL}
+                    onClick={() => setVisible(true)}
+                >
+                    Reveal message
+                </Button>
+                <div
+                    className={cl("container", { hover: !onClick })}
+                    onClickCapture={event => {
+                        if (!onClick) return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setVisible(true);
+                    }}
+                >
+                    {child}
+                </div>
+            </>
         );
     }
-}
+}, { noop: true });
 
 function FlaggedInput({ index, forceUpdate }) {
-    const [value, setValue] = useState(triggerWords[index]);
-
-    if (value !== triggerWords[index]) {
-        setValue(triggerWords[index]);
-    }
-
     const isLast = index === triggerWords.length - 1;
 
     const updateValue = v => {
         triggerWords[index] = v;
-        setValue(v);
 
         if (isLast) {
             triggerWords.push("");
-            forceUpdate();
         }
 
         saveTriggerWords();
+        forceUpdate();
     };
 
     const removeSelf = () => {
-        if (triggerWords.length === 1) {
-            return;
-        }
         triggerWords = triggerWords.slice(0, index).concat(triggerWords.slice(index + 1));
         saveTriggerWords();
         forceUpdate();
@@ -114,28 +131,32 @@ function FlaggedInput({ index, forceUpdate }) {
             <TextInput
                 placeholder="Word"
                 spellCheck={false}
-                value={value}
+                value={triggerWords[index]}
                 onChange={updateValue}
             />
         </div>
 
-        <Button
+        {isLast ? null : <Button
             onClick={removeSelf}
+            aria-label="Delete word"
             look={Button.Looks.FILLED}
             size={Button.Sizes.SMALL}
             style={{
                 padding: 0,
                 color: "var(--primary-400)",
-                transition: "color 0.2s ease-in-out",
-                opacity: isLast ? "0%" : "100%"
+                transition: "color 0.2s ease-in-out"
             }}>
             <DeleteIcon />
-        </Button>
+        </Button>}
     </Flex>);
 }
 
 function FlaggedWords() {
     const forceUpdate = useForceUpdater();
+    const [, error, pending] = useAwaiter(loadTriggerWords);
+
+    if (pending) return <BaseText>Loading words...</BaseText>;
+    if (error) return <BaseText>Words could not be loaded. Restart Discord to try again.</BaseText>;
 
     const inputs = triggerWords.map((_, idx) => {
         return (
@@ -176,23 +197,33 @@ export default definePlugin({
     patches: [
         {
             find: ".VOICE_HANGOUT_INVITE?",
-            replacement: {
-                match: /(compact:\i}=\i.+?)(\(0,.+\}\)\]\}\))/,
-                replace: "$1 $self.modify(arguments[0].message,$2)"
-            }
+            group: true,
+            replacement: [
+                {
+                    match: /(?=\(0,\i\.jsxs\)\("div",\{id:\(0,\i\.\i\)\(\i\),ref:)/,
+                    replace: "$self.modify(arguments[0].message,"
+                },
+                {
+                    match: /WITH_CONTENT\}\)\]\}\)/,
+                    replace: "$&)"
+                }
+            ]
         }
     ],
 
     modify(message, child) {
         if (hasTriggerWord(message.content)) {
-            return <TriggerContainer child={child} />;
+            return <TriggerContainer key={`${message.id}:${message.content}`} child={child} />;
         } else {
             return child;
         }
     },
 
-    async start() {
-        triggerWords = await DataStore.get(WORDS_KEY) ?? [""];
-        compileTriggerWords();
+    start() {
+        return loadTriggerWords().catch(() => logger.error("Could not load trigger words."));
+    },
+
+    stop() {
+        wordsPromise = undefined;
     }
 });

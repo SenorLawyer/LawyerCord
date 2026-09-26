@@ -47,7 +47,7 @@ const cache = new Map<string, AttachmentCacheEntry>();
 let cachedBytes = 0;
 
 function cacheKey(message: Message): string {
-    return `${message.channel_id}\0${message.id}\0${message.content}\0${message.attachments.map(attachment =>
+    return `${UserStore.getCurrentUser()?.id ?? ""}\0${message.author.id}\0${discordEditedTimestamp(message)}\0${message.channel_id}\0${message.id}\0${message.content}\0${message.attachments.map(attachment =>
         `${attachment.id}:${attachment.size}:${attachment.url}:${attachment.proxy_url}`).join("\0")}`;
 }
 

@@ -24,7 +24,7 @@ const UserSummaryItem = findComponentByCodeLazy("defaultRenderUser", "showDefaul
 
 async function downloadTheme(theme: Theme) {
     try {
-        await Native.downloadTheme(theme);
+        await Native.downloadTheme({ id: theme.id, name: theme.name });
         showToast(`Downloaded ${theme.name}!`, Toasts.Type.SUCCESS);
     } catch (err: unknown) {
         logger.error(err);
@@ -63,7 +63,7 @@ export const ThemeInfoModal: React.FC<ThemeInfoModalProps> = ({ author, theme, .
                     onClick: async () => {
                         const fileName = `${theme?.name}.theme.css`;
 
-                        const exists = await Native.themeExists(theme);
+                        const exists = await Native.themeExists({ name: theme.name });
                         if (exists) {
                             openModal(modalProps => (
                                 <Modal

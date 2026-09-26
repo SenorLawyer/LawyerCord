@@ -123,12 +123,10 @@ export default definePlugin({
             return colorString;
         }
 
-        const dmColor = (!settings.store.applyColorOnlyToUsersWithoutColor || !colorString)
-            ? color
-            : colorString;
+        if (settings.store.applyColorOnlyToUsersWithoutColor && colorString) return colorString;
 
         // guarantee minimum difference in dms
-        if (context?.channel?.isPrivate?.() && dmColor && userId) {
+        if (context?.channel?.isPrivate?.() && color && userId) {
             const currentUserId = UserStore.getCurrentUser()?.id;
             if (currentUserId && userId !== currentUserId) {
                 const currentUserColor = Number(h64(currentUserId) % 360n);
@@ -141,7 +139,7 @@ export default definePlugin({
             }
         }
 
-        return dmColor;
+        return color;
     },
 
     calculateNameColorForListContext(context: any) {

@@ -4,85 +4,89 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { set } from "@api/DataStore";
+import { update } from "@api/DataStore";
+import { Button } from "@components/Button";
 import { Heading } from "@components/Heading";
 import { Margins } from "@components/margins";
 import { classNameFactory } from "@utils/css";
 import { RenderModalProps } from "@vencord/discord-types";
-import { IconUtils, Modal, React, TextInput, Toasts, UserStore, useState } from "@webpack/common";
+import { IconUtils, Modal, React, TextInput, Toasts, useEffect, UserStore, useState } from "@webpack/common";
 
-import { clearAvatarUrlCache, data, KEY_DATASTORE } from ".";
+import { data, isAvatarMap, KEY_DATASTORE } from ".";
 
 const cl = classNameFactory("vc-userpfp-");
-
-function fileToDataUrl(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
-}
 
 export function SetAvatarModal({ userId, modalProps }: { userId: string; modalProps: RenderModalProps; }) {
     const { avatars } = data;
     const user = UserStore.getUser(userId);
-    const originalAvatar = IconUtils.getUserAvatarURL(user, true, 128) || "";
+    const currentAvatar = IconUtils.getUserAvatarURL(user, true, 128) || "";
 
     const [url, setUrl] = useState(avatars[userId] || "");
-    const [preview, setPreview] = useState<string>(avatars[userId] || "");
+    const preview = url.trim();
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
+    const readerRef = React.useRef<FileReader | null>(null);
+
+    function cancelRead() {
+        const reader = readerRef.current;
+        readerRef.current = null;
+        reader?.abort();
+    }
+
+    useEffect(() => cancelRead, []);
 
     function handleKey(e: React.KeyboardEvent) {
-        if (e.key === "Enter") saveUserAvatar();
+        if (e.key === "Enter") saveUserAvatar(url.trim());
     }
 
-    function handleUrlChange(val: string) {
-        setUrl(val);
-        setPreview(val.trim());
-    }
-
-    async function handleFile(file: File) {
+    function handleFile(file: File) {
+        cancelRead();
         if (!file.type.startsWith("image/")) return;
+        if (file.size > 10 * 1024 * 1024) {
+            Toasts.show({ message: "The image exceeds 10 MiB.", type: Toasts.Type.FAILURE, id: Toasts.genId() });
+            return;
+        }
 
-        if (file.type === "image/gif" || file.type === "image/webp") {
-            Toasts.show({
-                message: "GIFs/WebP must be added via URL. Upload your GIF/WebP to a image hosting service and paste the link.",
-                type: Toasts.Type.FAILURE,
-                id: Toasts.genId(),
+        const reader = readerRef.current = new FileReader();
+        reader.onload = () => {
+            if (readerRef.current !== reader) return;
+            readerRef.current = null;
+            setUrl(reader.result as string);
+        };
+        reader.onerror = () => {
+            if (readerRef.current !== reader) return;
+            readerRef.current = null;
+            Toasts.show({ message: "Could not read the image.", type: Toasts.Type.FAILURE, id: Toasts.genId() });
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async function saveUserAvatar(value: string) {
+        if (readerRef.current) {
+            Toasts.show({ message: "Wait for the image to finish loading before saving.", type: Toasts.Type.FAILURE, id: Toasts.genId() });
+            return;
+        }
+        try {
+            let saved: Record<string, string> = {};
+            await update<unknown>(KEY_DATASTORE, stored => {
+                if (stored !== undefined && !isAvatarMap(stored)) throw new Error("Invalid stored avatars.");
+                saved = { ...stored };
+                if (value) saved[userId] = value;
+                else delete saved[userId];
+                return saved;
             });
-            return;
+            data.avatars = saved;
+            modalProps.onClose();
+        } catch {
+            Toasts.show({ message: "Could not save the avatar.", type: Toasts.Type.FAILURE, id: Toasts.genId() });
         }
-
-        const dataUrl = await fileToDataUrl(file);
-        setUrl(dataUrl);
-        setPreview(dataUrl);
-    }
-
-    async function saveUserAvatar() {
-        if (!url.trim()) {
-            await deleteUserAvatar();
-            return;
-        }
-        avatars[userId] = url.trim();
-        clearAvatarUrlCache(userId);
-        await set(KEY_DATASTORE, avatars);
-        modalProps.onClose();
-    }
-
-    async function deleteUserAvatar() {
-        delete avatars[userId];
-        clearAvatarUrlCache(userId);
-        await set(KEY_DATASTORE, avatars);
-        modalProps.onClose();
     }
 
     const actions = [
         {
             text: "Save",
             variant: "primary",
-            onClick: saveUserAvatar
+            onClick: () => saveUserAvatar(url.trim())
         }
     ];
 
@@ -90,7 +94,7 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
         actions.unshift({
             text: "Delete",
             variant: "dangerPrimary",
-            onClick: deleteUserAvatar
+            onClick: () => { cancelRead(); return saveUserAvatar(""); }
         });
     }
 
@@ -101,18 +105,18 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
             title="Custom Avatar"
             actions={actions}
         >
-            <div onKeyDown={handleKey}>
+            <div>
                 {/* Preview */}
                 <div className={cl("preview-row")}>
                     <div className={cl("preview-box")}>
-                        <span className={cl("preview-label")}>Original</span>
-                        <img src={originalAvatar} className={cl("avatar")} alt="original" />
+                        <span className={cl("preview-label")}>Current</span>
+                        <img src={currentAvatar} className={cl("avatar")} alt="Current avatar" />
                     </div>
                     <span className={cl("arrow")}>→</span>
                     <div className={cl("preview-box")}>
                         <span className={cl("preview-label")}>Local</span>
                         <img
-                            src={preview || originalAvatar}
+                            src={preview || currentAvatar}
                             className={`${cl("avatar")} ${preview ? cl("avatar-active") : ""}`}
                             alt="local"
                         />
@@ -121,11 +125,12 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
 
                 {/* URL input */}
                 <section className={Margins.bottom8}>
-                    <Heading tag="h3">Enter PNG/GIF URL</Heading>
+                    <Heading tag="h3">Enter an image URL</Heading>
                     <TextInput
                         placeholder="https://example.com/image.png"
                         value={url.startsWith("data:") ? "(uploaded file)" : url}
-                        onChange={handleUrlChange}
+                        onChange={value => { cancelRead(); setUrl(value); }}
+                        onKeyDown={handleKey}
                         autoFocus
                     />
                 </section>
@@ -141,13 +146,14 @@ export function SetAvatarModal({ userId, modalProps }: { userId: string; modalPr
                         const file = e.dataTransfer.files?.[0];
                         if (file) handleFile(file);
                     }}
-                    onClick={() => fileInputRef.current?.click()}
                 >
-                    {isDragging ? "Drop here!" : "⬆ Drag an image or click to upload (for GIFs or WebP use a URL instead)"}
+                    <Button variant="none" size="min" type="button" onClick={() => fileInputRef.current?.click()}>
+                        {isDragging ? "Drop here!" : "Choose an image or drop it here."}
+                    </Button>
                     <input
                         ref={fileInputRef}
                         type="file"
-                        accept="image/png,image/jpeg"
+                        accept="image/png,image/jpeg,image/gif,image/webp"
                         style={{ display: "none" }}
                         onChange={e => {
                             const file = e.currentTarget.files?.[0];

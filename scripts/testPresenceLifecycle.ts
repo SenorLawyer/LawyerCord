@@ -141,6 +141,12 @@ test("Custom RPC debounces settings changes and bounds very short timestamp loop
     await setImmediate();
     assert.equal(builds, 1);
     assert.equal(activities.length, 1);
+    context.settings.store.startTime = 0;
+    rpc.handleSettingsChange(undefined, "plugins.CustomRPC.startTime");
+    assert.deepEqual([...timers.values()], [300]);
+    context.settings.store.startTime = 1;
+    rpc.handleSettingsChange(undefined, "plugins.CustomRPC.startTime");
+    assert.deepEqual([...timers.values()].sort((a, b) => a - b), [300, 1000]);
     rpc.handleSettingsChange(undefined, "plugins.CustomRPC.details");
     rpc.lifecycle.flux.LOGOUT();
     assert.equal(timers.size, 0);

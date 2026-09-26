@@ -6,9 +6,9 @@
 
 import * as DataStore from "@api/DataStore";
 import { Logger } from "@utils/Logger";
-import { Message } from "@vencord/discord-types";
+import { isObject } from "@utils/misc";
 import { CloudUploadPlatform } from "@vencord/discord-types/enums";
-import { ChannelStore, CloudUploader, Constants, FluxDispatcher, GuildStore, IconUtils, MessageActions, MessageStore, RestAPI, showToast, SnowflakeUtils, Toasts, UserStore } from "@webpack/common";
+import { ChannelStore, CloudUploader, Constants, FluxDispatcher, GuildStore, IconUtils, lodash, MessageActions, MessageStore, RestAPI, showToast, SnowflakeUtils, Toasts, UserStore } from "@webpack/common";
 
 import { settings } from ".";
 import { PhantomMessageData, ScheduledAttachment, ScheduledMessage, ScheduledReaction } from "./types";
@@ -17,12 +17,17 @@ const logger = new Logger("ScheduledMessages");
 const STORAGE_KEY = "ScheduledMessages_queue";
 
 let scheduledMessages: ScheduledMessage[] = [];
+let savedMessages: ScheduledMessage[] | undefined;
+let queueLoaded = false;
+let invalidStoredQueue = false;
+let queueOperation: Promise<void> = Promise.resolve();
 let checkTimeout: ReturnType<typeof setTimeout> | null = null;
 let schedulerRunning = false;
+let schedulerGeneration = 0;
 let isProcessingMessages = false;
+const sendingMessages = new Set<string>();
 
 export const phantomMessageMap = new Map<string, PhantomMessageData>();
-const pendingReactions = new Map<string, ScheduledReaction[]>();
 
 const recentReactionChanges = new Map<string, { action: string; timestamp: number; }>();
 const REACTION_COOLDOWN_MS = 2000;
@@ -31,24 +36,87 @@ const pendingRecreations = new Map<string, ReturnType<typeof setTimeout>>();
 const RECREATE_DEBOUNCE_MS = 300;
 let phantomGeneration = 0;
 
-export async function loadScheduledMessages(): Promise<void> {
-    const saved = await DataStore.get<ScheduledMessage[]>(STORAGE_KEY);
-    scheduledMessages = Array.isArray(saved) ? saved : [];
-    scheduledMessages.sort((a, b) => a.scheduledTime - b.scheduledTime);
+function isStoredTimestamp(value: unknown): value is number {
+    return typeof value === "number" && Number.isFinite(value) && !Number.isNaN(new Date(value).getTime());
 }
 
-async function saveScheduledMessages(): Promise<void> {
-    await DataStore.set(STORAGE_KEY, scheduledMessages);
+function isScheduledMessage(value: unknown): value is ScheduledMessage {
+    if (!isObject(value)) return false;
+    const entry = value as Partial<ScheduledMessage>;
+    return typeof entry.id === "string" && entry.id.length > 0
+        && typeof entry.channelId === "string" && entry.channelId.length > 0
+        && typeof entry.content === "string"
+        && isStoredTimestamp(entry.scheduledTime) && isStoredTimestamp(entry.createdAt)
+        && (entry.userId === undefined || typeof entry.userId === "string" && entry.userId.length > 0)
+        && (entry.attemptedAt === undefined || isStoredTimestamp(entry.attemptedAt))
+        && (entry.attachments === undefined || Array.isArray(entry.attachments) && [...entry.attachments].every((attachment: unknown) => {
+            if (!isObject(attachment)) return false;
+            const item = attachment as Partial<ScheduledAttachment>;
+            return typeof item.filename === "string" && typeof item.data === "string" && typeof item.type === "string";
+        }))
+        && (entry.reactions === undefined || Array.isArray(entry.reactions) && [...entry.reactions].every((reaction: unknown) => {
+            if (!isObject(reaction)) return false;
+            const item = reaction as Partial<ScheduledReaction>;
+            return isObject(item.emoji) && (item.emoji.id === null || typeof item.emoji.id === "string")
+                && typeof item.emoji.name === "string"
+                && (item.emoji.animated === undefined || typeof item.emoji.animated === "boolean")
+                && typeof item.count === "number" && Number.isSafeInteger(item.count) && item.count >= 0;
+        }));
+}
+
+export async function loadScheduledMessages(refreshPreviews = false): Promise<void> {
+    const generation = schedulerGeneration;
+    const userId = refreshPreviews ? UserStore.getCurrentUser()?.id : undefined;
+    await runQueueOperation(readStoredQueue, true);
+    if (refreshPreviews && schedulerRunning && generation === schedulerGeneration && UserStore.getCurrentUser()?.id === userId) {
+        cleanupAllPhantomMessages();
+        await recreatePhantomMessages();
+    }
+}
+
+async function readStoredQueue(): Promise<void> {
+    invalidStoredQueue = true;
+    const saved = await DataStore.get<unknown>(STORAGE_KEY);
+    if (saved !== undefined && (!Array.isArray(saved) || ![...saved].every(isScheduledMessage) || new Set(saved.map(entry => entry.id)).size !== saved.length)) {
+        stopScheduler();
+        cleanupAllPhantomMessages();
+        scheduledMessages = [];
+        throw new Error("Saved scheduled messages are invalid. The stored data has been preserved.");
+    }
+    for (const message of scheduledMessages) {
+        if (phantomMessageMap.has(`scheduled-${message.id}`) && !saved?.some(entry => entry.id === message.id))
+            removePhantomMessage(message);
+    }
+    queueLoaded = true;
+    invalidStoredQueue = false;
+    savedMessages = saved;
+    scheduledMessages = [...saved ?? []].sort((a, b) => a.scheduledTime - b.scheduledTime);
+}
+
+function runQueueOperation<T>(operation: () => Promise<T>, loading = false): Promise<T> {
+    const result = queueOperation.then(async () => {
+        if (!loading) {
+            if (invalidStoredQueue) throw new Error("Saved scheduled messages must be recovered before changing the queue.");
+            if (!queueLoaded) await readStoredQueue();
+        }
+        return operation();
+    });
+    queueOperation = result.then(() => undefined, () => undefined);
+    return result;
+}
+
+async function saveScheduledMessages(messages: ScheduledMessage[]): Promise<void> {
+    await DataStore.update<ScheduledMessage[]>(STORAGE_KEY, stored => {
+        if (!lodash.isEqual(stored, savedMessages))
+            throw new Error("Scheduled messages changed in another client. Reload the queue before trying again.");
+        return messages;
+    });
+    savedMessages = messages;
+    scheduledMessages = messages;
 }
 
 export function getScheduledMessages(): ScheduledMessage[] {
     return [...scheduledMessages];
-}
-
-export function getScheduledMessagesForChannel(channelId?: string): ScheduledMessage[] {
-    const messages = getScheduledMessages();
-    if (!channelId) return messages;
-    return messages.filter(message => message.channelId === channelId);
 }
 
 export function getChannelDisplayInfo(channelId: string): { name: string; avatar: string; } {
@@ -76,8 +144,15 @@ export function getChannelDisplayInfo(channelId: string): { name: string; avatar
 function getImageDimensions(dataUrl: string): Promise<{ width: number; height: number; }> {
     return new Promise(resolve => {
         const img = new Image();
-        img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
-        img.onerror = () => resolve({ width: 400, height: 300 });
+        const timeout = setTimeout(() => finish(), 5000);
+        function finish(dimensions = { width: 400, height: 300 }) {
+            clearTimeout(timeout);
+            img.onload = img.onerror = null;
+            img.removeAttribute("src");
+            resolve(dimensions);
+        }
+        img.onload = () => finish({ width: img.naturalWidth, height: img.naturalHeight });
+        img.onerror = () => finish();
         img.src = dataUrl;
     });
 }
@@ -89,48 +164,56 @@ function getVideoPreview(dataUrl: string): Promise<{ width: number; height: numb
         video.muted = true;
         video.playsInline = true;
 
-        const timeout = setTimeout(() => { video.src = ""; resolve(null); }, 5000);
+        const timeout = setTimeout(() => finish(), 5000);
+        function finish(preview: { width: number; height: number; previewUrl: string; } | null = null) {
+            clearTimeout(timeout);
+            video.onloadeddata = video.onerror = null;
+            video.removeAttribute("src");
+            video.load();
+            resolve(preview);
+        }
 
-        video.onloadeddata = () => { clearTimeout(timeout); video.currentTime = 0; };
-        video.onerror = () => { clearTimeout(timeout); resolve(null); };
+        video.onerror = () => finish();
+        video.onloadeddata = () => {
+            try {
+                const canvas = document.createElement("canvas");
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext("2d");
 
-        video.onseeked = () => {
-            const canvas = document.createElement("canvas");
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext("2d");
+                if (!ctx) { finish(); return; }
 
-            if (!ctx) { resolve(null); video.src = ""; return; }
+                ctx.drawImage(video, 0, 0);
+                const size = Math.min(canvas.width, canvas.height) * 0.2;
+                const cx = canvas.width / 2, cy = canvas.height / 2;
 
-            ctx.drawImage(video, 0, 0);
-            const size = Math.min(canvas.width, canvas.height) * 0.2;
-            const cx = canvas.width / 2, cy = canvas.height / 2;
+                ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+                ctx.beginPath();
+                ctx.arc(cx, cy, size, 0, Math.PI * 2);
+                ctx.fill();
 
-            ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-            ctx.beginPath();
-            ctx.arc(cx, cy, size, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.fillStyle = "white";
-            ctx.beginPath();
-            ctx.moveTo(cx - size * 0.3, cy - size * 0.4);
-            ctx.lineTo(cx - size * 0.3, cy + size * 0.4);
-            ctx.lineTo(cx + size * 0.5, cy);
-            ctx.closePath();
-            ctx.fill();
-
-            resolve({ width: video.videoWidth, height: video.videoHeight, previewUrl: canvas.toDataURL("image/png") });
-            video.src = "";
+                ctx.fillStyle = "white";
+                ctx.beginPath();
+                ctx.moveTo(cx - size * 0.3, cy - size * 0.4);
+                ctx.lineTo(cx - size * 0.3, cy + size * 0.4);
+                ctx.lineTo(cx + size * 0.5, cy);
+                ctx.closePath();
+                ctx.fill();
+                finish({ width: video.videoWidth, height: video.videoHeight, previewUrl: canvas.toDataURL("image/png") });
+            } catch {
+                finish();
+            }
         };
 
         video.src = dataUrl;
     });
 }
 
-async function buildPhantomAttachments(attachments: ScheduledAttachment[]) {
+async function buildPhantomAttachments(attachments: ScheduledAttachment[], isCurrent: () => boolean) {
     const result: { id: string; filename: string; size: number; content_type: string; url?: string; proxy_url?: string; width?: number; height?: number; }[] = [];
 
     for (let idx = 0; idx < attachments.length; idx++) {
+        if (!isCurrent()) break;
         const att = attachments[idx];
         const dataUrl = `data:${att.type};base64,${att.data}`;
         const attachment: typeof result[0] = {
@@ -167,14 +250,16 @@ export async function createPhantomMessage(msg: ScheduledMessage): Promise<void>
     if (!settings.store.showPhantomMessages) return;
 
     const currentUser = UserStore.getCurrentUser();
-    if (!currentUser) return;
+    if (!currentUser || msg.userId !== currentUser.id) return;
 
     const messageId = `scheduled-${msg.id}`;
 
-    phantomMessageMap.set(messageId, { scheduledTime: msg.scheduledTime, messageId: msg.id, channelId: msg.channelId });
-    if (msg.reactions?.length) pendingReactions.set(msg.id, [...msg.reactions]);
+    const phantom = { scheduledTime: msg.scheduledTime, messageId: msg.id, channelId: msg.channelId };
+    phantomMessageMap.set(messageId, phantom);
+    const isCurrent = () => phantomMessageMap.get(messageId) === phantom && UserStore.getCurrentUser()?.id === currentUser.id;
 
-    const attachments = msg.attachments?.length ? await buildPhantomAttachments(msg.attachments) : [];
+    const attachments = msg.attachments?.length ? await buildPhantomAttachments(msg.attachments, isCurrent) : [];
+    if (!isCurrent()) return;
 
     const initialReactions = (msg.reactions ?? []).map(r => ({
         emoji: r.emoji,
@@ -191,7 +276,8 @@ export async function createPhantomMessage(msg: ScheduledMessage): Promise<void>
         ? Promise.resolve()
         : MessageActions.fetchMessages({ channelId: msg.channelId });
 
-    messagesLoaded.then(() => {
+    return messagesLoaded.then(() => {
+        if (!isCurrent()) return;
         FluxDispatcher.dispatch({
             type: "MESSAGE_CREATE",
             channelId: msg.channelId,
@@ -229,7 +315,9 @@ export async function createPhantomMessage(msg: ScheduledMessage): Promise<void>
         });
 
         applyPhantomClassToMessage(msg.channelId, messageId);
-    }).catch(() => { });
+    }).catch(() => {
+        if (isCurrent()) logger.warn("Could not create scheduled message preview.");
+    });
 }
 
 function applyPhantomClassToMessage(channelId: string, messageId: string): void {
@@ -257,7 +345,7 @@ function removePhantomMessage(msg: ScheduledMessage): void {
     FluxDispatcher.dispatch({ type: "MESSAGE_DELETE", channelId: msg.channelId, id: messageId, mlDeleted: true });
 }
 
-function updatePhantomReactions(messageId: string, channelId: string, reactions: ScheduledReaction[]): void {
+function updatePhantomReactions(messageId: string, channelId: string): void {
     const existingTimeout = pendingRecreations.get(messageId);
     if (existingTimeout) {
         clearTimeout(existingTimeout);
@@ -268,13 +356,13 @@ function updatePhantomReactions(messageId: string, channelId: string, reactions:
         pendingRecreations.delete(messageId);
         if (generation !== phantomGeneration) return;
 
-        doRecreatePhantomMessage(messageId, channelId, reactions);
+        doRecreatePhantomMessage(messageId, channelId);
     }, RECREATE_DEBOUNCE_MS);
 
     pendingRecreations.set(messageId, timeout);
 }
 
-function doRecreatePhantomMessage(messageId: string, channelId: string, reactions: ScheduledReaction[]): void {
+function doRecreatePhantomMessage(messageId: string, channelId: string): void {
     const generation = phantomGeneration;
     const phantomData = phantomMessageMap.get(messageId);
     if (!phantomData) {
@@ -298,25 +386,26 @@ function doRecreatePhantomMessage(messageId: string, channelId: string, reaction
     setTimeout(() => {
         if (generation !== phantomGeneration) return;
 
-        msg.reactions = reactions;
-        createPhantomMessage(msg);
+        if (phantomMessageMap.get(messageId) !== phantomData) return;
+        const current = scheduledMessages.find(entry => entry.id === phantomData.messageId);
+        if (current) createPhantomMessage(current).catch(() => logger.warn("Could not refresh a scheduled message preview."));
     }, 50);
 }
 
-async function uploadAttachment(channelId: string, att: ScheduledAttachment): Promise<{ id: string; filename: string; uploaded_filename: string; } | null> {
-    return new Promise(resolve => {
+async function uploadAttachment(channelId: string, att: ScheduledAttachment): Promise<{ id: string; filename: string; uploaded_filename: string; }> {
+    return new Promise((resolve, reject) => {
         const bytes = Uint8Array.from(atob(att.data), c => c.charCodeAt(0));
         const file = new File([bytes], att.filename, { type: att.type });
         const upload = new CloudUploader({ file, platform: CloudUploadPlatform.WEB }, channelId);
 
         upload.on("complete", () => resolve({ id: "0", filename: upload.filename, uploaded_filename: upload.uploadedFilename }));
-        upload.on("error", () => resolve(null));
+        upload.on("error", () => reject(new Error("Could not upload scheduled attachment.")));
         upload.upload();
     });
 }
 
-async function postMessage(channelId: string, content: string, attachments?: { id: string; filename: string; uploaded_filename: string; }[]): Promise<void> {
-    await RestAPI.post({
+async function postMessage(channelId: string, content: string, attachments?: { id: string; filename: string; uploaded_filename: string; }[]): Promise<string> {
+    const response = await RestAPI.post({
         url: Constants.Endpoints.MESSAGES(channelId),
         body: {
             content,
@@ -324,15 +413,20 @@ async function postMessage(channelId: string, content: string, attachments?: { i
             ...(attachments?.length ? { channel_id: channelId, sticker_ids: [], type: 0, attachments } : {})
         }
     });
+    return response.body.id;
 }
 
 async function addReactionsToMessage(channelId: string, messageId: string, reactions: ScheduledReaction[]): Promise<void> {
+    const generation = schedulerGeneration;
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return;
     for (const reaction of reactions) {
         const emojiStr = reaction.emoji.id
             ? `${reaction.emoji.name}:${reaction.emoji.id}`
             : encodeURIComponent(reaction.emoji.name);
 
         for (let attempt = 0; attempt < 5; attempt++) {
+            if (generation !== schedulerGeneration || UserStore.getCurrentUser()?.id !== userId) return;
             try {
                 await RestAPI.put({ url: `/channels/${channelId}/messages/${messageId}/reactions/${emojiStr}/@me` });
                 break;
@@ -352,43 +446,37 @@ async function addReactionsToMessage(channelId: string, messageId: string, react
 }
 
 async function sendScheduledMessage(msg: ScheduledMessage): Promise<boolean> {
+    const generation = schedulerGeneration;
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return false;
+    const isCurrent = () => generation === schedulerGeneration && UserStore.getCurrentUser()?.id === userId;
     try {
         if (!ChannelStore.getChannel(msg.channelId)) return false;
 
-        const reactions = pendingReactions.get(msg.id) ?? msg.reactions ?? [];
+        const reactions = msg.reactions ?? [];
         removePhantomMessage(msg);
-        pendingReactions.delete(msg.id);
 
+        let messageId: string;
         if (msg.attachments?.length) {
-            const uploaded = (await Promise.all(msg.attachments.map((att, i) =>
-                uploadAttachment(msg.channelId, att).then(r => r ? { ...r, id: String(i) } : null)
-            ))).filter(Boolean) as { id: string; filename: string; uploaded_filename: string; }[];
+            const uploaded = await Promise.all(msg.attachments.map((att, i) =>
+                uploadAttachment(msg.channelId, att).then(result => ({ ...result, id: String(i) }))
+            ));
 
-            await postMessage(msg.channelId, msg.content, uploaded.length ? uploaded : undefined);
+            if (!isCurrent()) return false;
+            messageId = await postMessage(msg.channelId, msg.content, uploaded);
         } else {
-            await postMessage(msg.channelId, msg.content);
+            messageId = await postMessage(msg.channelId, msg.content);
         }
 
-        if (reactions.length) {
-            await new Promise(r => setTimeout(r, 1500));
-            const msgArray = (MessageStore.getMessages(msg.channelId) as { _array?: Message[]; })?._array ?? [];
-            const currentUserId = UserStore.getCurrentUser()?.id;
+        if (!isCurrent()) return true;
+        if (reactions.length) await addReactionsToMessage(msg.channelId, messageId, reactions);
 
-            for (let i = msgArray.length - 1; i >= Math.max(0, msgArray.length - 10); i--) {
-                const m = msgArray[i];
-                if (m?.author?.id === currentUserId && m?.content === msg.content && !m?.id?.startsWith("scheduled-")) {
-                    await addReactionsToMessage(msg.channelId, m.id, reactions);
-                    break;
-                }
-            }
-        }
-
-        if (settings.store.showNotifications) {
+        if (isCurrent() && settings.store.showNotifications) {
             showToast(`Scheduled message sent to ${getChannelDisplayInfo(msg.channelId).name}`, Toasts.Type.SUCCESS);
         }
         return true;
     } catch {
-        if (settings.store.showNotifications) showToast("Failed to send scheduled message", Toasts.Type.FAILURE);
+        if (isCurrent() && settings.store.showNotifications) showToast("Failed to send scheduled message", Toasts.Type.FAILURE);
         return false;
     }
 }
@@ -399,107 +487,100 @@ export async function addScheduledMessage(
     scheduledTime: number,
     attachments?: ScheduledAttachment[]
 ): Promise<{ success: boolean; error?: string; }> {
-    const minuteStart = Math.floor(scheduledTime / 60000) * 60000;
-    const count = scheduledMessages.filter(m =>
-        m.channelId === channelId && m.scheduledTime >= minuteStart && m.scheduledTime < minuteStart + 60000
-    ).length;
-
-    if (count >= settings.store.maxMessagesPerMinute) {
-        return { success: false, error: `Maximum of ${settings.store.maxMessagesPerMinute} messages per channel per minute reached` };
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return { success: false, error: "Sign in before scheduling a message." };
+    if (Number.isNaN(new Date(scheduledTime).getTime()) || scheduledTime <= Date.now()) {
+        return { success: false, error: "Please select a valid future date and time." };
     }
-
-    const newMessage: ScheduledMessage = {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-        channelId,
-        content,
-        scheduledTime,
-        createdAt: Date.now(),
-        attachments
-    };
-
-    scheduledMessages.push(newMessage);
-    scheduledMessages.sort((a, b) => a.scheduledTime - b.scheduledTime);
-    await saveScheduledMessages();
-    createPhantomMessage(newMessage);
-    scheduleNextCheck();
-
-    return { success: true };
-}
-
-export async function updateScheduledMessageTime(id: string, scheduledTime: number): Promise<{ success: boolean; error?: string; }> {
-    const message = scheduledMessages.find(entry => entry.id === id);
-    if (!message) {
-        return { success: false, error: "Scheduled message not found" };
-    }
-
-    if (scheduledTime <= Date.now()) {
-        return { success: false, error: "Please select a future date and time" };
-    }
-
-    const minuteStart = Math.floor(scheduledTime / 60000) * 60000;
-    const count = scheduledMessages.filter(entry =>
-        entry.id !== id
-        && entry.channelId === message.channelId
-        && entry.scheduledTime >= minuteStart
-        && entry.scheduledTime < minuteStart + 60000
-    ).length;
-
-    if (count >= settings.store.maxMessagesPerMinute) {
-        return { success: false, error: `Maximum of ${settings.store.maxMessagesPerMinute} messages per channel per minute reached` };
-    }
-
-    removePhantomMessage(message);
-    message.scheduledTime = scheduledTime;
-    scheduledMessages.sort((left, right) => left.scheduledTime - right.scheduledTime);
-    await saveScheduledMessages();
-    await createPhantomMessage(message);
-    scheduleNextCheck();
-    return { success: true };
+    const generation = schedulerGeneration;
+    return runQueueOperation(async () => {
+        const minuteStart = Math.floor(scheduledTime / 60000) * 60000;
+        const count = scheduledMessages.filter(m =>
+            m.userId === userId && m.channelId === channelId && m.scheduledTime >= minuteStart && m.scheduledTime < minuteStart + 60000
+        ).length;
+        if (count >= settings.store.maxMessagesPerMinute) {
+            return { success: false, error: `Maximum of ${settings.store.maxMessagesPerMinute} messages per channel per minute reached` };
+        }
+        const newMessage: ScheduledMessage = {
+            userId,
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            channelId,
+            content,
+            scheduledTime,
+            createdAt: Date.now(),
+            attachments
+        };
+        await saveScheduledMessages([...scheduledMessages, newMessage].sort((a, b) => a.scheduledTime - b.scheduledTime));
+        if (generation === schedulerGeneration && UserStore.getCurrentUser()?.id === userId)
+            createPhantomMessage(newMessage).catch(() => logger.warn("Could not create a scheduled message preview."));
+        scheduleNextCheck();
+        return { success: true };
+    });
 }
 
 export async function sendScheduledMessageNow(id: string): Promise<{ success: boolean; error?: string; }> {
-    const message = scheduledMessages.find(entry => entry.id === id);
+    let message = scheduledMessages.find(entry => entry.id === id);
     if (!message) {
         return { success: false, error: "Scheduled message not found" };
     }
 
-    await removeScheduledMessage(id);
-    const sent = await sendScheduledMessage(message);
-    if (!sent) {
-        return { success: false, error: "Failed to send scheduled message" };
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return { success: false, error: "Sign in before sending a scheduled message." };
+    if (!message.userId) return { success: false, error: "This older message has no saved account. Recreate it before sending." };
+    if (message.userId !== userId) return { success: false, error: "Switch to the account that scheduled this message." };
+    if (sendingMessages.has(id)) return { success: false, error: "Message is being sent." };
+    sendingMessages.add(id);
+    const generation = schedulerGeneration;
+    try {
+        await runQueueOperation(() => saveScheduledMessages(scheduledMessages.map(entry => entry.id === id ? { ...entry, attemptedAt: Date.now() } : entry)));
+        message = scheduledMessages.find(entry => entry.id === id);
+        if (generation !== schedulerGeneration) return { success: false, error: "Scheduled sending was stopped. The message remains saved." };
+        if (UserStore.getCurrentUser()?.id !== userId) return { success: false, error: "Account changed. The scheduled message remains saved." };
+        if (!message) return { success: false, error: "Scheduled message was removed." };
+        const sent = await sendScheduledMessage(message);
+        if (!sent) return { success: false, error: "Failed to send scheduled message. It remains saved." };
+        await removeScheduledMessage(id);
+        return { success: true };
+    } catch {
+        return { success: false, error: "Could not update the scheduled message. Check the channel before retrying." };
+    } finally {
+        sendingMessages.delete(id);
+        scheduleNextCheck();
     }
-
-    return { success: true };
 }
 
 export async function removeScheduledMessage(id: string): Promise<void> {
-    const msg = scheduledMessages.find(m => m.id === id);
-    if (msg) removePhantomMessage(msg);
-    scheduledMessages = scheduledMessages.filter(m => m.id !== id);
-    await saveScheduledMessages();
+    await runQueueOperation(async () => {
+        const msg = scheduledMessages.find(m => m.id === id);
+        await saveScheduledMessages(scheduledMessages.filter(m => m.id !== id));
+        if (msg) removePhantomMessage(msg);
+    });
     scheduleNextCheck();
 }
 
 export async function clearAllScheduledMessages(): Promise<void> {
-    for (const msg of scheduledMessages) {
-        removePhantomMessage(msg);
-    }
-    scheduledMessages = [];
-    await saveScheduledMessages();
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return;
+    await runQueueOperation(async () => {
+        const removed = scheduledMessages.filter(msg => !msg.userId || msg.userId === userId);
+        await saveScheduledMessages(scheduledMessages.filter(msg => !removed.includes(msg)));
+        for (const msg of removed) removePhantomMessage(msg);
+    });
     scheduleNextCheck();
 }
 
 async function checkAndSendMessages(): Promise<void> {
     if (isProcessingMessages) return;
     isProcessingMessages = true;
+    const generation = schedulerGeneration;
 
     try {
         const now = Date.now();
-        const dueMessages = scheduledMessages.filter(m => m.scheduledTime <= now);
+        const dueMessages = scheduledMessages.filter(m => m.attemptedAt === undefined && m.scheduledTime <= now);
 
         for (const msg of dueMessages) {
-            await removeScheduledMessage(msg.id);
-            await sendScheduledMessage(msg);
+            if (generation !== schedulerGeneration) return;
+            if (msg.attemptedAt === undefined) await sendScheduledMessageNow(msg.id);
         }
     } finally {
         isProcessingMessages = false;
@@ -514,6 +595,7 @@ export function startScheduler(): void {
 }
 
 export function stopScheduler(): void {
+    schedulerGeneration++;
     schedulerRunning = false;
     if (checkTimeout) {
         clearTimeout(checkTimeout);
@@ -521,7 +603,7 @@ export function stopScheduler(): void {
     }
 }
 
-function scheduleNextCheck(): void {
+export function scheduleNextCheck(): void {
     if (!schedulerRunning || isProcessingMessages) return;
 
     if (checkTimeout) {
@@ -529,11 +611,12 @@ function scheduleNextCheck(): void {
         checkTimeout = null;
     }
 
-    const nextMessage = scheduledMessages[0];
+    const nextMessage = scheduledMessages.find(message => message.attemptedAt === undefined);
     if (!nextMessage) return;
 
     const maxDelay = Math.max(1000, settings.store.checkIntervalSeconds * 1000);
-    const delay = Math.max(0, Math.min(maxDelay, nextMessage.scheduledTime - Date.now()));
+    const remaining = nextMessage.scheduledTime - Date.now();
+    const delay = remaining <= 0 ? maxDelay : Math.min(maxDelay, remaining);
 
     checkTimeout = setTimeout(() => {
         checkTimeout = null;
@@ -542,7 +625,13 @@ function scheduleNextCheck(): void {
 }
 
 export async function recreatePhantomMessages(): Promise<void> {
-    for (const msg of scheduledMessages) await createPhantomMessage(msg);
+    const generation = phantomGeneration;
+    const userId = UserStore.getCurrentUser()?.id;
+    for (const msg of scheduledMessages) {
+        if (generation !== phantomGeneration || UserStore.getCurrentUser()?.id !== userId) return;
+        if (scheduledMessages.includes(msg))
+            await createPhantomMessage(msg).catch(() => logger.warn("Could not recreate a scheduled message preview."));
+    }
 }
 
 export function cleanupAllPhantomMessages(): void {
@@ -556,7 +645,6 @@ export function cleanupAllPhantomMessages(): void {
     for (const msg of scheduledMessages) removePhantomMessage(msg);
 
     phantomMessageMap.clear();
-    pendingReactions.clear();
     recentReactionChanges.clear();
 }
 
@@ -575,28 +663,23 @@ function modifyReaction(messageId: string, channelId: string, emoji: { id: strin
         return;
     }
 
-    const msg = scheduledMessages.find(m => m.id === phantomData.messageId);
-    if (!msg) {
-        logger.warn("modifyReaction: No scheduled message found for id =", phantomData.messageId);
-        return;
-    }
-
-    const reactions = pendingReactions.get(phantomData.messageId) ?? [];
-    const idx = reactions.findIndex(r => r.emoji.name === emoji.name && r.emoji.id === emoji.id);
-
-    if (delta > 0) {
-        if (idx >= 0) reactions[idx].count += delta;
-        else reactions.push({ emoji: { id: emoji.id ?? null, name: emoji.name, animated: emoji.animated }, count: 1 });
-    } else if (idx >= 0) {
-        reactions[idx].count += delta;
-        if (reactions[idx].count <= 0) reactions.splice(idx, 1);
-    }
-
-    pendingReactions.set(phantomData.messageId, reactions);
-    msg.reactions = reactions;
-    void saveScheduledMessages();
-
-    updatePhantomReactions(messageId, channelId, reactions);
+    void runQueueOperation(async () => {
+        if (phantomMessageMap.get(messageId) !== phantomData) return;
+        const msg = scheduledMessages.find(m => m.id === phantomData.messageId);
+        if (!msg) return;
+        const reactions = (msg.reactions ?? []).map(reaction => ({ ...reaction }));
+        const idx = reactions.findIndex(r => r.emoji.name === emoji.name && r.emoji.id === emoji.id);
+        if (delta > 0) {
+            if (idx >= 0) reactions[idx].count += delta;
+            else reactions.push({ emoji: { id: emoji.id ?? null, name: emoji.name, animated: emoji.animated }, count: 1 });
+        } else if (idx >= 0) {
+            reactions[idx].count += delta;
+            if (reactions[idx].count <= 0) reactions.splice(idx, 1);
+        }
+        await saveScheduledMessages(scheduledMessages.map(entry => entry === msg ? { ...entry, reactions } : entry));
+        if (phantomMessageMap.get(messageId) !== phantomData) return;
+        updatePhantomReactions(messageId, channelId);
+    }).catch(() => logger.warn("Could not save scheduled message reactions."));
 }
 
 function getReactionKey(messageId: string, emoji: { id: string | null; name: string; }): string {
@@ -654,6 +737,5 @@ export function resyncPhantomReactions(messageId: string, channelId: string): vo
         return;
     }
 
-    const reactions = pendingReactions.get(phantomData.messageId) ?? [];
-    updatePhantomReactions(messageId, channelId, reactions);
+    updatePhantomReactions(messageId, channelId);
 }

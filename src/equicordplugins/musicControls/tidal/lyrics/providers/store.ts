@@ -27,14 +27,21 @@ export const TidalLrcStore = proxyLazyWebpack(() => {
     let lyrics: EnhancedLyric[] | null = null;
     let lastTrackId: string | null = null;
     let fetchGeneration = 0;
+    let subscribed = false;
 
     class TidalLrcStore extends Flux.Store {
-        init() { }
+        init() {
+            if (subscribed) return;
+            subscribed = true;
+            TidalStore.addChangeListener(handleTidalStoreChange);
+            handleTidalStoreChange();
+        }
         get lyrics() {
             return lyrics;
         }
 
         destroy() {
+            subscribed = false;
             fetchGeneration++;
             lastTrackId = null;
             lyrics = null;
@@ -72,8 +79,6 @@ export const TidalLrcStore = proxyLazyWebpack(() => {
                 store.emitChange();
             });
     }
-
-    TidalStore.addChangeListener(handleTidalStoreChange);
 
     return store;
 });

@@ -17,9 +17,9 @@ export interface Token {
 
 interface AuthorizationState {
     tokens: Record<string, Token>;
-    getToken(): Token | undefined;
-    setToken(access: string, refresh: string): void;
-    deleteTokens(): void;
+    getToken(userId?: string): Token | undefined;
+    setToken(access: string, refresh: string, userId: string): void;
+    deleteTokens(userId?: string): void;
     isAuthorized(): boolean;
 }
 
@@ -28,11 +28,10 @@ export const useAuthorizationStore: PersistedZustandStore<AuthorizationState> = 
         zustandPersist(
             ((set, get) => ({
                 tokens: {},
-                getToken() {
-                    return get().tokens[UserStore.getCurrentUser()?.id];
+                getToken(userId = UserStore.getCurrentUser()?.id) {
+                    return get().tokens[userId];
                 },
-                setToken(access, refresh) {
-                    const userId = UserStore.getCurrentUser()?.id;
+                setToken(access, refresh, userId) {
                     if (userId) {
                         set({
                             tokens: {
@@ -42,8 +41,9 @@ export const useAuthorizationStore: PersistedZustandStore<AuthorizationState> = 
                         });
                     }
                 },
-                deleteTokens() {
-                    set({ tokens: {} });
+                deleteTokens(userId = UserStore.getCurrentUser()?.id) {
+                    const { [userId]: _, ...tokens } = get().tokens;
+                    set({ tokens });
                 },
                 isAuthorized() {
                     return !!get().getToken();

@@ -55,7 +55,7 @@ export const settings = definePluginSettings({
             { label: "Google Translate", value: "google", default: true },
             { label: "DeepL Free - API key required", value: "deepl" },
             { label: "DeepL Pro - API key required", value: "deepl-pro" },
-            { label: "Kagi Translate - API key required", value: "kagi" }
+            { label: "Kagi Translate (session token required)", value: "kagi" }
         ] as const,
         onChange: resetLanguageDefaults
     },

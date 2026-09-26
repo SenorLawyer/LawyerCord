@@ -4,20 +4,13 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import type { Quest } from "@vencord/discord-types";
+import type { Quest, QuestTask } from "@vencord/discord-types";
 import { QuestTaskType } from "@vencord/discord-types/enums";
 import { QuestStore } from "@webpack/common";
 
 import { getQuestifySettings, useQuestifySettings } from "../settings/access";
 import { ignoredQuestIDsKey } from "../settings/def";
-import { getActiveAutoCompletes, getAutoCompleteQuestTarget, getQuestAutoCompleteEntry } from "./completion";
 import { type QuestIncludedTypes, questMatchesIncludedTypes } from "./filtering";
-
-export interface QuestTask {
-    type: QuestTaskType;
-    target: number;
-    applications?: { id: string; }[];
-}
 
 export enum QuestStatus {
     Claimed = "CLAIMED",
@@ -26,9 +19,6 @@ export enum QuestStatus {
     Expired = "EXPIRED",
     Unknown = "UNKNOWN"
 }
-
-const showcaseSwitchLeewaySeconds = 3;
-let showcasedAutoCompleteQuestId: string | null = null;
 
 const questProgressTaskPriority = [
     QuestTaskType.WATCH_VIDEO,
@@ -73,9 +63,7 @@ export function isVideoQuestTask(taskType: QuestTaskType): boolean {
 }
 
 function getQuestTaskByType(quest: Quest, taskType: QuestTaskType): QuestTask | null {
-    const task = quest.config.taskConfigV2?.tasks[taskType] as QuestTask | undefined;
-
-    return task ?? null;
+    return quest.config.taskConfigV2?.tasks[taskType] ?? null;
 }
 
 function getVideoQuestTask(quest: Quest): QuestTask | null {
@@ -155,52 +143,6 @@ function getCurrentIgnoredQuestIds(): string[] {
     return Array.from(getQuestifySettings().ignoredQuestIDs[ignoredQuestIDsKey] ?? []);
 }
 
-function getAutoCompleteShowcaseQuest(): Quest | null {
-    const entries = getActiveAutoCompletes();
-    const runningEntries = entries.filter(entry => entry.status === "running");
-    const showcaseEntries = runningEntries.length > 0 ? runningEntries : entries;
-    let bestQuest: Quest | null = null;
-    let bestTimeRemaining = Infinity;
-    let currentQuest: Quest | null = null;
-    let currentTimeRemaining = Infinity;
-
-    for (const entry of showcaseEntries) {
-        const quest = QuestStore.getQuest(entry.questId);
-
-        if (!quest) {
-            continue;
-        }
-
-        const progress = entry.progress ?? 0;
-        const { adjusted: target } = getAutoCompleteQuestTarget(entry.task);
-        const timeRemaining = Math.max(0, target - progress);
-
-        if (entry.questId === showcasedAutoCompleteQuestId) {
-            currentQuest = quest;
-            currentTimeRemaining = timeRemaining;
-        }
-
-        if (timeRemaining < bestTimeRemaining) {
-            bestQuest = quest;
-            bestTimeRemaining = timeRemaining;
-        }
-    }
-
-    if (!bestQuest) {
-        showcasedAutoCompleteQuestId = null;
-
-        return null;
-    }
-
-    if (currentQuest && bestQuest.id !== currentQuest.id && bestTimeRemaining >= currentTimeRemaining - showcaseSwitchLeewaySeconds) {
-        return currentQuest;
-    }
-
-    showcasedAutoCompleteQuestId = bestQuest.id;
-
-    return bestQuest;
-}
-
 function getMostRecentlyCompletedUnclaimedQuest(): Quest | null {
     return Array.from(QuestStore.quests.values())
         .filter(quest => (
@@ -230,19 +172,9 @@ export function getQuestPanelOverride(quest: Quest | null): Quest | null {
         return quest;
     }
 
-    const nextQuest = getAutoCompleteShowcaseQuest() ?? getMostRecentlyCompletedUnclaimedQuest();
+    const nextQuest = getMostRecentlyCompletedUnclaimedQuest();
 
     return nextQuest ?? (panelState.disableAccountPanelPromo ? null : quest);
-}
-
-export function shouldForceQuestPanelVisible(quest: Quest | null): boolean {
-    const settings = getQuestifySettings();
-
-    if (!quest || settings.disableQuestsEverything || settings.disableAccountPanelQuestProgress) {
-        return false;
-    }
-
-    return getQuestAutoCompleteEntry(refreshQuest(quest)) !== null;
 }
 
 export function getQuestPanelPercentComplete({
@@ -254,18 +186,14 @@ export function getQuestPanelPercentComplete({
     }
 
     const refreshedQuest = refreshQuest(quest);
-    const activeAutoComplete = getQuestAutoCompleteEntry(refreshedQuest);
-    const task: QuestTask | null = activeAutoComplete?.task ?? getQuestProgressTask(refreshedQuest);
+    const task: QuestTask | null = getQuestProgressTask(refreshedQuest);
 
     if (!task) {
         return null;
     }
 
-    const questTarget = activeAutoComplete
-        ? getAutoCompleteQuestTarget(task)
-            .adjusted
-        : task.target;
-    const questProgress = activeAutoComplete?.progress ?? getQuestStoredProgress(refreshedQuest, task);
+    const questTarget = task.target;
+    const questProgress = getQuestStoredProgress(refreshedQuest, task);
 
     if (!questTarget || questProgress === null) {
         return null;

@@ -44,20 +44,7 @@ export default definePlugin({
             };
 
             const magnetLink = matchedContent[0];
-            let filename = "unknown filename";
-
-            try {
-                const searchPart = magnetLink.split("?")[1];
-                if (searchPart) {
-                    const params = new URLSearchParams(searchPart);
-                    const dn = params.get("dn");
-                    if (dn) {
-                        filename = decodeURIComponent(dn.replace(/\+/g, " "));
-                    }
-                }
-            } catch (err) {
-                console.error("Failed to parse magnet link", err);
-            }
+            const filename = new URLSearchParams(magnetLink.slice("magnet:?".length)).get("dn") || "unknown filename";
 
             return { type: "magnet", filename, magnetLink };
         },

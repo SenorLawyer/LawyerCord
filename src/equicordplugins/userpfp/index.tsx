@@ -17,31 +17,49 @@ import { Notice } from "@components/Notice";
 import { Devs, EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import { openInviteModal } from "@utils/discord";
+import { Logger } from "@utils/Logger";
+import { isObject, parseUrl } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
-import { User } from "@vencord/discord-types";
 import { extractAndLoadChunksLazy } from "@webpack";
 import { IconUtils, Menu, openModal, UserStore } from "@webpack/common";
 
 import { SetAvatarModal } from "./AvatarModal";
 
+let loadController: AbortController | undefined;
+const logger = new Logger("UserPFP");
+
 const cl = classNameFactory("vc-userpfp-");
 const DONO_URL = "https://ko-fi.com/coolesding";
 const INVITE_LINK = "userpfp-1129784704267210844";
-const USERPFP_IMG_URL = "https://raw.githubusercontent.com/UserPFP/img";
+const USERPFP_IMG_URL = "https://raw.githubusercontent.com/UserPFP/img/";
 
-export const requireSettingsModal = extractAndLoadChunksLazy(['type:"USER_SETTINGS_MODAL_OPEN"']);
+const requireSettingsModal = extractAndLoadChunksLazy(['type:"USER_SETTINGS_MODAL_OPEN"']);
 export const KEY_DATASTORE = "vencord-custom-avatars";
-export const data = { avatars: {} as Record<string, string> };
+export const data = { avatars: {} as Record<string, string>, remoteAvatars: {} as Record<string, string> };
 
-export function clearAvatarUrlCache(_userId?: string) {
-    // This merged UserPFP variant resolves avatars directly, so there is no cache to clear.
+export function isAvatarMap(value: unknown): value is Record<string, string> {
+    return isObject(value) && Object.values(value).every(url => typeof url === "string");
+}
+
+function getCustomAvatar(userId: string, animated?: boolean) {
+    const avatarUrl = data.avatars[userId] || data.remoteAvatars[userId];
+    if (!avatarUrl) return;
+    if (avatarUrl.startsWith("data:")) return avatarUrl;
+    const url = parseUrl(avatarUrl);
+    if (!url) return;
+    if (avatarUrl.startsWith(USERPFP_IMG_URL)) {
+        url.searchParams.set("animated", animated ? "true" : "false");
+        if (!animated) url.pathname = url.pathname.replace(/\.gifv?$/, ".png");
+    }
+    return url.toString();
 }
 
 const settings = definePluginSettings({
     overrideServerAvatars: {
         type: OptionType.BOOLEAN,
         description: "Override server avatars with custom avatars or the default user avatar if no custom avatar is set.",
-        default: true
+        default: true,
+        restartNeeded: true
     },
     preferNitro: {
         description: "Which avatar to use if both default animated (Nitro) pfp and UserPFP avatars are present",
@@ -56,13 +74,7 @@ const settings = definePluginSettings({
         type: OptionType.STRING,
         default: "https://userpfp.github.io/UserPFP/source/data.json",
         hidden: !IS_DEV,
-        isValid: (value => {
-            if (!value) {
-                value = "https://userpfp.github.io/UserPFP/source/data.json";
-                return false;
-            }
-            return true;
-        })
+        isValid: value => Boolean(value)
     },
 });
 
@@ -130,57 +142,81 @@ export default definePlugin({
             );
         }
     },
-    getAvatarHook: (original: any) => (user: User, animated: boolean, size: number) => {
-        if (settings.store.preferNitro && user.avatar?.startsWith("a_")) return original(user, animated, size);
-        if (!data.avatars[user.id]) return original(user, animated, size);
-
-        const avatarUrl = data.avatars[user.id];
-
-        if (avatarUrl.startsWith("data:")) return avatarUrl;
-
-        try {
-            const res = new URL(avatarUrl);
-            if (avatarUrl.startsWith(USERPFP_IMG_URL)) {
-                res.searchParams.set("animated", animated ? "true" : "false");
-                if (!animated) {
-                    res.pathname = res.pathname.replaceAll(/\.gifv?/g, ".png");
-                }
-            }
-            return res.toString();
-        } catch {
-            return original(user, animated, size);
-        }
+    getAvatarHook: (original: typeof IconUtils.getUserAvatarURL) => (...args: Parameters<typeof original>) => {
+        const [user, animated] = args;
+        if (settings.store.preferNitro && user.avatar?.startsWith("a_")) return original(...args);
+        return getCustomAvatar(user.id, animated) ?? original(...args);
     },
-    getAvatarServerHook: (original: any) => (config: any) => {
-        const { userId, avatar, size, canAnimate } = config;
-        const { avatars } = data;
+    getAvatarServerHook: (original: typeof IconUtils.getGuildMemberAvatarURLSimple) => (config: Parameters<typeof original>[0]) => {
+        const { userId, avatar, size, canAnimate, canWebP } = config;
+        const customUrl = getCustomAvatar(userId, canAnimate);
 
-        if (avatars[userId]) {
-            const customUrl = avatars[userId];
-            try {
-                const res = new URL(customUrl);
-                if (size) res.searchParams.set("size", size.toString());
-                return res.toString();
-            } catch {
-                return customUrl;
-            }
-        }
+        if (customUrl) return customUrl;
 
         if (avatar) {
             const user = UserStore.getUser(userId);
             if (user?.avatar) {
-                return IconUtils.getUserAvatarURL(user, canAnimate, size);
+                return IconUtils.getUserAvatarURL(user, canAnimate, size, undefined, canWebP);
             }
         }
 
         return original(config);
     },
     async start() {
-        data.avatars = await get<Record<string, string>>(KEY_DATASTORE) || {};
+        loadController?.abort();
+        const controller = loadController = new AbortController();
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        try {
+            const local = await get<unknown>(KEY_DATASTORE);
+            if (controller.signal.aborted) return;
+            if (local === undefined) data.avatars = {};
+            else if (isAvatarMap(local)) data.avatars = local;
+            else logger.warn("Stored custom avatars are invalid.");
+            data.remoteAvatars = {};
 
-        await fetch(settings.store.databaseSource)
-            .then(res => res.ok && res.json())
-            .then(remote => remote?.avatars && Object.assign(data.avatars, remote.avatars))
-            .catch(() => null);
+            timeout = setTimeout(() => {
+                if (controller.signal.aborted) return;
+                logger.error("Avatar database download timed out.");
+                controller.abort();
+            }, 30_000);
+            const response = await fetch(settings.store.databaseSource, { signal: controller.signal });
+            if (!response.ok) {
+                await response.body?.cancel();
+                throw new Error("Could not download the avatar database.");
+            }
+            if (!response.body) throw new Error("Empty avatar database response.");
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let size = 0;
+            let text = "";
+            try {
+                for (;;) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    size += value.byteLength;
+                    if (size > 5 * 1024 * 1024) throw new Error("Avatar database exceeds 5 MiB.");
+                    text += decoder.decode(value, { stream: true });
+                }
+            } finally {
+                try {
+                    await reader.cancel();
+                } finally {
+                    reader.releaseLock();
+                }
+            }
+            const remote: unknown = JSON.parse(text + decoder.decode());
+            if (controller.signal.aborted) return;
+            if (!isObject(remote) || !("avatars" in remote) || !isAvatarMap(remote.avatars))
+                throw new Error("Invalid avatar database.");
+            data.remoteAvatars = remote.avatars;
+        } catch {
+            if (!controller.signal.aborted) logger.error("Could not load avatars.");
+        } finally {
+            clearTimeout(timeout);
+        }
+    },
+    stop() {
+        loadController?.abort();
+        loadController = undefined;
     }
 });

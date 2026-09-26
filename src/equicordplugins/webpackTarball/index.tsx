@@ -102,7 +102,6 @@ function TarModal({ modalProps }: { modalProps: RenderModalProps; }) {
 
     const all = Object.keys(paths).length;
     const { patched } = settings.use(["patched"]);
-    const WEBPACK_CHUNK = "webpackChunkdiscord_app";
     return (
         <Modal
             {...modalProps}
@@ -144,8 +143,7 @@ function TarModal({ modalProps }: { modalProps: RenderModalProps; }) {
                         disabled={loading === all || isLoading}
                         onClick={async () => {
                             setLoading(true);
-                            // @ts-ignore
-                            await Webpack.protectWebpack(window[WEBPACK_CHUNK], async () => {
+                            await Webpack.protectWebpack(async () => {
                                 await Webpack.forceLoadAll(webpackRequire, rerender);
                             });
                         }}

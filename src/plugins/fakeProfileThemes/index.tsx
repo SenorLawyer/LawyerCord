@@ -44,14 +44,13 @@ interface Colors {
 
 function encode(primary: number, accent: number): string {
     const message = `[#${primary.toString(16).padStart(6, "0")},#${accent.toString(16).padStart(6, "0")}]`;
-    const padding = "";
     const encoded = Array.from(message)
         .map(x => x.codePointAt(0))
         .filter(x => x! >= 0x20 && x! <= 0x7f)
         .map(x => String.fromCodePoint(x! + 0xe0000))
         .join("");
 
-    return (padding || "") + " " + encoded;
+    return " " + encoded;
 }
 
 // Courtesy of Cynthia.

@@ -40,17 +40,4 @@ export class EventEmitter<T> {
             return cb !== callback;
         });
     }
-
-    clear() {
-        this.events = {};
-    }
-
-    once(eventName: string, callback: (val: T) => void) {
-        const onceCallback = (val: T) => {
-            callback(val);
-            this.off(eventName, onceCallback);
-        };
-
-        this.on(eventName, onceCallback);
-    }
 }

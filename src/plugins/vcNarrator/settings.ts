@@ -5,7 +5,6 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
-import { Logger } from "@utils/Logger";
 import { OptionType } from "@utils/types";
 
 import { VoiceSettingSection } from "./VoiceSetting";
@@ -15,16 +14,8 @@ export const getDefaultVoice = () => window.speechSynthesis?.getVoices().find(v 
 export function getCurrentVoice(voices = window.speechSynthesis?.getVoices()) {
     if (!voices) return undefined;
 
-    if (settings.store.voice) {
-        const voice = voices.find(v => v.voiceURI === settings.store.voice);
-        if (voice) return voice;
-
-        new Logger("VcNarrator").error(`Voice "${settings.store.voice}" not found. Resetting to default.`);
-    }
-
-    const voice = voices.find(v => v.default);
-    settings.store.voice = voice?.voiceURI;
-    return voice;
+    const selectedVoice = settings.store.voice;
+    return voices.find(voice => voice.voiceURI === selectedVoice) ?? voices.find(voice => voice.default);
 }
 
 export const settings = definePluginSettings({

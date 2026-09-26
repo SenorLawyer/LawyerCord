@@ -17,18 +17,22 @@
 */
 
 import { definePluginSettings } from "@api/Settings";
-import { disableStyle, enableStyle } from "@api/Styles";
 import { Devs } from "@utils/constants";
+import { classNameToSelector } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
-import { findByPropsLazy } from "@webpack";
+import { MessageType } from "@vencord/discord-types/enums";
+import { findByPropsLazy, findCssClassesLazy } from "@webpack";
 import { ChannelStore, createRoot, MessageStore, Toasts } from "@webpack/common";
 import { Root } from "react-dom/client";
 
 import ReplyNavigator from "./ReplyNavigator";
 import styles from "./styles.css?managed";
 
-export const jumper: any = findByPropsLazy("jumpToMessage");
+export const jumper: {
+    jumpToMessage(options: { channelId: string; messageId: string; flash: boolean; jumpType: "INSTANT"; }): unknown;
+} = findByPropsLazy("jumpToMessage");
+const channelStyles = findCssClassesLazy("channelBottomBarArea");
 const FindReplyIcon = () => {
     return <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" width="18" height="18">
         <path
@@ -37,7 +41,6 @@ const FindReplyIcon = () => {
 };
 let root: Root | null = null;
 let element: HTMLDivElement | null = null;
-let madeComponent = false;
 
 type CachedMessage = Message & { deleted?: boolean; };
 
@@ -66,16 +69,17 @@ function findReplies(message: Message) {
     const nickMention = settings.store.includePings ? `<@!${authorId}>` : "";
 
     for (const other of messages) {
-        if (other.deleted || getMessageTimestamp(other) <= targetTimestamp) continue;
+        if (other.deleted) continue;
 
-        let isReply = other.messageReference?.message_id === message.id;
+        const referencedMessageId = other.type === MessageType.REPLY ? other.messageReference?.message_id : undefined;
+        let isReply = referencedMessageId === message.id;
+        if (!isReply && getMessageTimestamp(other) <= targetTimestamp) continue;
 
         if (!isReply && settings.store.includePings && (other.content?.includes(plainMention) || other.content?.includes(nickMention))) {
             isReply = true;
         }
 
         if (!isReply && messageById) {
-            const referencedMessageId = other.messageReference?.message_id;
             isReply = referencedMessageId != null && messageById.get(referencedMessageId)?.author.id === authorId;
         }
 
@@ -91,21 +95,18 @@ function findReplies(message: Message) {
 const settings = definePluginSettings({
     includePings: {
         type: OptionType.BOOLEAN,
-        description: "Will also search for messages that @ the author directly",
-        default: false,
-        restartNeeded: false
+        description: "Include messages that mention the author.",
+        default: false
     },
     includeAuthor: {
         type: OptionType.BOOLEAN,
-        description: "Will also search for messages that reply to the author in general, not just that exact message",
-        default: false,
-        restartNeeded: false
+        description: "Include replies to other messages from the same author.",
+        default: false
     },
     hideButtonIfNoReply: {
         type: OptionType.BOOLEAN,
-        description: "Hides the button if there are no replies to the message",
-        default: true,
-        restartNeeded: true
+        description: "Hide the button when no replies are found.",
+        default: true
     }
 });
 
@@ -116,18 +117,20 @@ export default definePlugin({
     tags: ["Chat", "Shortcuts"],
     authors: [Devs.newwares],
     settings,
+    managedStyle: styles,
     messagePopoverButton: {
         icon: FindReplyIcon,
         render(message) {
             if (!message.id) return null;
-            const replies = findReplies(message);
-            if (settings.store.hideButtonIfNoReply && !replies.length) return null;
+            if (settings.store.hideButtonIfNoReply && !findReplies(message).length) return null;
             return {
                 label: "Jump to Reply",
                 icon: FindReplyIcon,
                 message,
                 channel: ChannelStore.getChannel(message.channel_id),
-                onClick: async () => {
+                onClick: () => {
+                    const replies = findReplies(message);
+                    if (replies.length <= 1) root?.render(null);
                     if (replies.length) {
                         const channelId = replies[0].channel_id;
                         const messageId = replies[0].id;
@@ -138,13 +141,10 @@ export default definePlugin({
                             jumpType: "INSTANT"
                         });
                         if (replies.length > 1) {
-                            Toasts.show({
-                                id: Toasts.genId(),
-                                message: "Use the bottom panel to navigate between replies.",
-                                type: Toasts.Type.MESSAGE
-                            });
-                            const container = document.querySelector("[class*=channelBottomBarArea_]");
+                            const className = channelStyles.channelBottomBarArea;
+                            const container = className && document.querySelector(classNameToSelector(className));
                             if (!container) {
+                                root?.render(null);
                                 Toasts.show({
                                     id: Toasts.genId(),
                                     message: "Couldn't find the container element.",
@@ -153,13 +153,10 @@ export default definePlugin({
                                 return;
                             }
 
-                            if (!madeComponent) {
-                                madeComponent = true;
-                                element = document.createElement("div");
-                                container.appendChild(element);
-                                root = createRoot(element);
-                            }
-                            root!.render(<ReplyNavigator replies={replies} />);
+                            element ??= document.createElement("div");
+                            container.appendChild(element);
+                            root ??= createRoot(element);
+                            root.render(<ReplyNavigator replies={replies} />);
                         }
                     } else {
                         Toasts.show({
@@ -172,12 +169,10 @@ export default definePlugin({
             };
         }
     },
-    start() {
-        enableStyle(styles);
-    },
     stop() {
-        root && root.unmount();
+        root?.unmount();
+        root = null;
         element?.remove();
-        disableStyle(styles);
+        element = null;
     },
 });

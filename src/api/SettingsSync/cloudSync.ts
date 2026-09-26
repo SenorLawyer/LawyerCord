@@ -103,22 +103,14 @@ async function applyDownloads(downloads: SyncResponse["downloads"]) {
         const text = decoder.decode(fromBase64(dl.value));
 
         if (dl.key === "settings") {
-            try {
-                await importSettings(JSON.stringify({ settings: JSON.parse(text) }), "all", true);
-                settingsChanged = true;
-            } catch (e) {
-                logger.error("Failed to apply settings download", e);
-            }
+            await importSettings(JSON.stringify({ settings: JSON.parse(text) }), "all", true);
+            settingsChanged = true;
         } else if (dl.key === "quickCss") {
             await VencordNative.quickCss.set(text);
             settingsChanged = true;
         } else if (dl.key.startsWith("dataStore/")) {
             const dsKey = dl.key.slice("dataStore/".length);
-            try {
-                await DataStore.set(dsKey, JSON.parse(text));
-            } catch (e) {
-                logger.error(`Failed to apply dataStore download for ${dsKey}`, e);
-            }
+            await DataStore.set(dsKey, JSON.parse(text));
         }
     }
 
@@ -172,7 +164,10 @@ async function doSyncV2(uploads: SyncRequest["uploads"], clientManifest: Manifes
         return null;
     }
 
-    return await res.json();
+    const response: SyncResponse = await res.json();
+    if (response.errors.length)
+        throw new Error("The cloud server could not synchronize all data. Please try again.");
+    return response;
 }
 
 async function putV2(manual?: boolean) {
@@ -198,9 +193,6 @@ async function putV2(manual?: boolean) {
 
     const response = await doSyncV2(uploads, localManifest);
     if (!response) return;
-
-    for (const err of response.errors)
-        logger.error(`Sync error for ${err.key}: ${err.error}`);
 
     const hadDownloads = await applyDownloads(response.downloads);
     await saveLocalManifest(response.server_manifest);
@@ -230,9 +222,6 @@ async function getV2(shouldNotify: boolean, force: boolean) {
 
     const response = await doSyncV2([], localManifest);
     if (!response) return false;
-
-    for (const err of response.errors)
-        logger.error(`Sync error for ${err.key}: ${err.error}`);
 
     if (response.downloads.length === 0) {
         logger.info("Settings up to date");
@@ -292,7 +281,7 @@ async function deleteV2() {
             headers: { Authorization: auth },
         });
         if (!res.ok && res.status !== 404)
-            logger.error(`Failed to delete key ${entry.key}: ${res.status}`);
+            throw new Error(`Could not delete cloud data (API returned ${res.status}).`);
     }));
 
     await saveLocalManifest([]);
@@ -453,7 +442,7 @@ async function deleteV1() {
 }
 
 export function shouldCloudSync(direction: "push" | "pull") {
-    const localDirection = localStorage.Vencord_cloudSyncDirection;
+    const localDirection = getCloudSyncDirection();
     return localDirection === direction || localDirection === "both";
 }
 

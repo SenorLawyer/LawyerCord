@@ -51,7 +51,6 @@ export const Magnifier = ErrorBoundary.wrap<MagnifierProps>(({ instance, size: i
     const element = useRef<HTMLDivElement | null>(null);
     const currentVideoElementRef = useRef<HTMLVideoElement | null>(null);
     const originalVideoElementRef = useRef<HTMLVideoElement | null>(null);
-    const imageRef = useRef<HTMLImageElement | null>(null);
 
     // since we accessing document im gonna use useLayoutEffect
     useLayoutEffect(() => {
@@ -205,7 +204,6 @@ export const Magnifier = ErrorBoundary.wrap<MagnifierProps>(({ instance, size: i
                 ) : (
                     <img
                         className={cl("image")}
-                        ref={imageRef}
                         style={{
                             position: "absolute",
                             transform: `translate(${imagePosition.x}px, ${imagePosition.y}px)`

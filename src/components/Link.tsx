@@ -22,6 +22,8 @@ export function Link({
     target,
     className,
     children,
+    onClick,
+    tabIndex,
     ...restProps
 }: PropsWithChildren<LinkProps>) {
 
@@ -31,7 +33,9 @@ export function Link({
     return (
         <a
             role="link"
-            href={href}
+            href={disabled ? undefined : href}
+            onClick={disabled ? undefined : onClick}
+            tabIndex={disabled ? -1 : tabIndex}
             target={target ?? (needsSafeAttrs ? "_blank" : undefined)}
             rel={rel ?? (needsSafeAttrs ? "noreferrer noopener" : undefined)}
             className={classes(

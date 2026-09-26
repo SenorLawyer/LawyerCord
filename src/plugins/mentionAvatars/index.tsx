@@ -91,6 +91,7 @@ export default definePlugin({
             >
                 {user && (
                     <img
+                        alt=""
                         src={user.getAvatarURL(SelectedGuildStore.getGuildId(), 16, isHovering)}
                         className="vc-mentionAvatars-icon"
                         style={{ borderRadius: "50%" }}
@@ -106,6 +107,7 @@ export default definePlugin({
         return (
             <>
                 <img
+                    alt=""
                     src={user.getAvatarURL(SelectedGuildStore.getGuildId(), 16)}
                     className="vc-mentionAvatars-icon"
                     style={{ borderRadius: "50%" }}
@@ -125,6 +127,7 @@ export default definePlugin({
 
         return (
             <img
+                alt=""
                 className="vc-mentionAvatars-icon vc-mentionAvatars-role-icon"
                 src={`${location.protocol}//${window.GLOBAL_ENV.CDN_HOST}/role-icons/${roleId}/${role.icon}.webp?size=24&quality=lossless`}
             />

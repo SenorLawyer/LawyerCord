@@ -8,7 +8,6 @@ import "./misc/style.css";
 
 import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
-import { Button } from "@components/Button";
 import { Notice } from "@components/Notice";
 import plSettings from "@plugins/_core/settings";
 import { Devs } from "@utils/constants";
@@ -24,6 +23,8 @@ import { VariableWithCallbacks } from "./VariableWithCallbacks";
 // @ts-ignore
 export const Native = VencordNative.pluginHelpers.UserpluginInstaller as PluginNative<typeof import("./native")>;
 export const OpenSettingsModule = findByPropsLazy("openUserSettings");
+let generation = 0;
+let notificationCallback: number | undefined;
 const AppsIcon = findComponentByCodeLazy("2.95H20a2 2 0");
 
 function shouldSkipUpdateNotification(pluginName: string): boolean {
@@ -50,14 +51,7 @@ export const settings = definePluginSettings({
         description: "Never show update notifications for these plugins (you can still update them from the UserPlugins tab)",
         default: ""
     },
-    setGitPath: {
-        type: OptionType.COMPONENT,
-        component: () => <Button onClick={() => {
-            Native.openGitPathModal();
-        }} variant="secondary">
-            Set Git path
-        </Button>
-    }
+
 });
 
 export default definePlugin({
@@ -70,14 +64,15 @@ export default definePlugin({
             Only install userplugins from developers you trust. Doing so is entirely at your own risk.
         </Notice.Warning>
     ),
-    async checkPluginUpdates() {
+    async checkPluginUpdates(run: number) {
         for (const p of this.plugins.value()) {
-            if (await Native.isUpdateAvailableForPlugin(p.directory!)) {
-                const t = this.pluginsWithUpdates.value().plugins;
-                t.push(p.directory!);
+            if (run !== generation) return;
+            const available = await Native.isUpdateAvailableForPlugin(p.directory);
+            if (run !== generation) return;
+            if (available) {
                 this.pluginsWithUpdates.value({
                     finished: false,
-                    plugins: t
+                    plugins: [...this.pluginsWithUpdates.value().plugins, p.directory]
                 });
             }
         }
@@ -95,6 +90,7 @@ export default definePlugin({
         Icon: AppsIcon
     },
     async start() {
+        const run = ++generation;
         if (!VencordNative.pluginHelpers.UserpluginInstaller) return void Alerts.show({
             title: "UserpluginInstaller not fully loaded",
             body: "You need to restart to allow the native to be loaded :)",
@@ -105,34 +101,53 @@ export default definePlugin({
             cancelText: "Later"
         });
 
-        await Native.ensurePluginsDirectory();
+        try {
+            await Native.ensurePluginsDirectory();
+            if (run !== generation) return;
+            this.pluginsWithUpdates.value({ finished: false, plugins: [] });
 
-        plSettings.customEntries.push(this.section);
+            plSettings.customEntries.push(this.section);
 
-        this.pluginsWithUpdates.registerCallback((value, id) => {
-            if (value.plugins.length === 0) return;
-            if (shouldSkipUpdateNotification(value.plugins[value.plugins.length - 1]))
-                return;
-            this.pluginsWithUpdates.deregisterCallback(id);
-            if (settings.store.notifyIfUpdate)
-                showNotification({
-                    title: "Some UserPlugins are out of date!",
-                    body: "Click to open the UserPlugin Updater",
-                    noPersist: true,
-                    permanent: true,
-                    onClick() {
-                        OpenSettingsModule.openUserSettings("vencord_userplugins_panel");
-                    },
-                });
-        });
-        const pls = await Native.getUserplugins();
-        // @ts-ignore :trolley:
-        this.plugins.value(pls);
-        await this.checkPluginUpdates();
+            notificationCallback = this.pluginsWithUpdates.registerCallback((value, id) => {
+                if (value.plugins.length === 0) return;
+                if (shouldSkipUpdateNotification(value.plugins[value.plugins.length - 1]))
+                    return;
+                this.pluginsWithUpdates.deregisterCallback(id);
+                notificationCallback = undefined;
+                if (settings.store.notifyIfUpdate)
+                    showNotification({
+                        title: "Some UserPlugins are out of date!",
+                        body: "Click to open the UserPlugin Updater",
+                        noPersist: true,
+                        permanent: true,
+                        onClick() {
+                            OpenSettingsModule.openUserSettings("vencord_userplugins_panel");
+                        },
+                    });
+            });
+            const pls = await Native.getUserplugins();
+            if (run !== generation) return;
+            // @ts-ignore :trolley:
+            this.plugins.value(pls);
+            await this.checkPluginUpdates(run);
+        } catch {
+            if (run !== generation) return;
+            this.stop();
+            Alerts.show({
+                title: "Could not load userplugins",
+                body: "Check the userplugins directory and try enabling the plugin again."
+            });
+        }
     },
     stop() {
+        generation++;
+        if (notificationCallback !== undefined) {
+            this.pluginsWithUpdates.deregisterCallback(notificationCallback);
+            notificationCallback = undefined;
+        }
         // @ts-ignore
-        plSettings.customEntries.splice(plSettings.customEntries.indexOf(this.section), 1);
+        const index = plSettings.customEntries.indexOf(this.section);
+        if (index !== -1) plSettings.customEntries.splice(index, 1);
     },
     plugins: new VariableWithCallbacks<{
         name: string;
@@ -152,6 +167,6 @@ export default definePlugin({
     settings,
     authors: [Devs.nin0dev],
     renderMessageAccessory: props => {
-        return <UserpluginInstallButton props={props} />;
+        return <UserpluginInstallButton message={props.message} />;
     }
 });

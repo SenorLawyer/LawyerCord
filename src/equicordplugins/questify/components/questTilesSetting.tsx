@@ -10,7 +10,7 @@ import { QuestStore, useEffect, useMemo, useRef, useState, useStateFromStores } 
 import type { JSX, SyntheticEvent } from "react";
 
 import { getQuestifySettings, useQuestifySettings } from "../settings/access";
-import { defaultQuestTileClaimedColorSetting, defaultQuestTileExpiredColorSetting, defaultQuestTileIgnoredColorSetting, defaultQuestTileUnclaimedColorSetting, type QuestTileColorSetting, type QuestTileGradient } from "../settings/def";
+import type { QuestTileColorSetting, QuestTileGradient } from "../settings/def";
 import { rerenderQuests } from "../settings/rerender";
 import { getQuestTileClasses, getQuestTileStyle } from "../utils/questTiles";
 import { q } from "../utils/ui";
@@ -48,29 +48,24 @@ type QuestTileColorKey =
 interface QuestTileColorOption {
     key: QuestTileColorKey;
     label: string;
-    defaultValue: QuestTileColorSetting;
 }
 
 const colorOptions = [
     {
         key: "questTileUnclaimedColor",
         label: "Unclaimed",
-        defaultValue: defaultQuestTileUnclaimedColorSetting,
     },
     {
         key: "questTileClaimedColor",
         label: "Claimed",
-        defaultValue: defaultQuestTileClaimedColorSetting,
     },
     {
         key: "questTileIgnoredColor",
         label: "Ignored",
-        defaultValue: defaultQuestTileIgnoredColorSetting,
     },
     {
         key: "questTileExpiredColor",
         label: "Expired",
-        defaultValue: defaultQuestTileExpiredColorSetting,
     },
 ] as const satisfies readonly QuestTileColorOption[];
 

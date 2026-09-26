@@ -8,6 +8,7 @@ import { definePluginSettings } from "@api/Settings";
 import { BaseText } from "@components/BaseText";
 import { OptionType } from "@utils/types";
 import { useEffect, UserStore, useState } from "@webpack/common";
+import type { DragEvent } from "react";
 
 const settings = definePluginSettings({
     showEquicordDonor: {
@@ -99,7 +100,7 @@ const BadgeSettings = () => {
         { src: "https://cdn.discordapp.com/emojis/1092089799109775453.png", shown: settings.store.showVencordContributor, title: "Vencord contributor badge", key: "VencordContributer", position: settings.store.VencordContributorPosition },
         { src: "https://cdn.discordapp.com/badge-icons/bf01d1073931f921909045f3a39fd264.png", shown: settings.store.showDiscordProfile, title: "Discord profile badges (HypeSquad, Discord Staff, Early Supporter, etc.)", key: "DiscordProfile", position: settings.store.DiscordProfilePosition },
         { src: "https://cdn.discordapp.com/badge-icons/2ba85e8026a8614b640c2837bcdfe21b.png", shown: settings.store.showDiscordNitro, title: "Nitro badge", key: "DiscordNitro", position: settings.store.DiscordNitroPosition }
-    ]);
+    ].sort((a, b) => a.position - b.position));
 
     useEffect(() => {
         images.forEach(image => {
@@ -134,11 +135,11 @@ const BadgeSettings = () => {
         });
     }, [images]);
 
-    const handleDragStart = (e: any, index: number) => {
+    const handleDragStart = (e: DragEvent, index: number) => {
         if (!images[index].shown) {
             e.preventDefault();
         } else {
-            e.dataTransfer.setData("index", index);
+            e.dataTransfer.setData("vc-sbic-index", String(index));
         }
     };
 
@@ -146,25 +147,19 @@ const BadgeSettings = () => {
         e.preventDefault();
     };
 
-    const handleDrop = (e: any, dropIndex: number) => {
-        const dragIndex = e.dataTransfer.getData("index");
+    const handleDrop = (e: DragEvent, dropIndex: number) => {
+        const value = e.dataTransfer.getData("vc-sbic-index");
+        if (!/^\d+$/.test(value)) return;
+        const dragIndex = Number(value);
+        if (dragIndex >= images.length || dragIndex === dropIndex) return;
         const newImages = [...images];
-        const draggedImage = newImages[dragIndex];
-
-        newImages.splice(dragIndex, 1);
+        const [draggedImage] = newImages.splice(dragIndex, 1);
         newImages.splice(dropIndex, 0, draggedImage);
-
-        newImages.forEach((image, index) => {
-            image.position = index;
-        });
-
-        setImages(newImages);
+        setImages(newImages.map((image, position) => ({ ...image, position })));
     };
 
     const toggleDisable = (index: number) => {
-        const newImages = [...images];
-        newImages[index].shown = !newImages[index].shown;
-        setImages(newImages);
+        setImages(images.map((image, i) => i === index ? { ...image, shown: !image.shown } : image));
     };
 
     const currentUser = UserStore.getCurrentUser() as any;
@@ -180,7 +175,6 @@ const BadgeSettings = () => {
                     </>
                 )}
                 {images
-                    .sort((a, b) => a.position - b.position)
                     .map((image, index) => (
                         <div
                             key={image.key}

@@ -63,6 +63,7 @@ export const SidebarStore = proxyLazy(() => {
     };
 
     let previous = { ...current };
+    let navigation = 0;
 
     class SidebarStore extends (FluxWP as IFlux).PersistedStore {
         static persistKey = "SidebarStore";
@@ -84,22 +85,18 @@ export const SidebarStore = proxyLazy(() => {
     const store = new SidebarStore(FluxDispatcher, {
         // @ts-ignore
         async VC_SIDEBAR_CHAT_NEW({ guildId: newGId, id }: { guildId: string | null; id: string; }) {
+            const request = ++navigation;
+            const channelId = newGId ? id : await ChannelActionCreators.getOrEnsurePrivateChannel(id);
+            if (request !== navigation) return;
             previous = { ...current };
-
             current.guildId = newGId || "";
+            current.channelId = channelId;
             settings.store.sidebarWasClosed = false;
-
-            if (current.guildId) {
-                current.channelId = id;
-                store.emitChange();
-                return;
-            }
-
-            current.channelId = await ChannelActionCreators.getOrEnsurePrivateChannel(id);
             store.emitChange();
         },
 
         VC_SIDEBAR_CHAT_PREVIOUS() {
+            navigation++;
             if (previous.channelId) {
                 current.guildId = previous.guildId;
                 current.channelId = previous.channelId;
@@ -108,6 +105,7 @@ export const SidebarStore = proxyLazy(() => {
         },
 
         VC_SIDEBAR_CHAT_CLOSE() {
+            navigation++;
             previous = { ...current };
             current.guildId = "";
             current.channelId = "";

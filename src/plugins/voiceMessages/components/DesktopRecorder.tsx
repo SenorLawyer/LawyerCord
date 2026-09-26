@@ -51,14 +51,17 @@ export const VoiceRecorderDesktop: VoiceRecorder = ({ setAudioBlob, onRecordingC
             );
         } else {
             discordVoice.stopLocalAudioRecording(async (filePath: string) => {
-                if (filePath) {
-                    const buf = await Native.readRecording(filePath);
+                try {
+                    const buf = filePath ? await Native.readRecording(filePath) : null;
                     if (buf)
                         setAudioBlob(new Blob([new Uint8Array(buf)], { type: "audio/ogg; codecs=opus" }));
                     else
                         showToast("Failed to finish recording", Toasts.Type.FAILURE);
+                } catch {
+                    showToast("Failed to finish recording", Toasts.Type.FAILURE);
+                } finally {
+                    changeRecording(false);
                 }
-                changeRecording(false);
             });
         }
     }

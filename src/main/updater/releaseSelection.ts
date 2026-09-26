@@ -11,7 +11,6 @@ export interface GithubRelease {
     prerelease: boolean;
     published_at: string;
     tag_name: string;
-    target_commitish: string;
 }
 
 const STABLE_TAG = /^v(\d+)\.(\d+)\.(\d+)\.(\d+)$/;

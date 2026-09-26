@@ -48,9 +48,9 @@ export default definePlugin({
         const file = upload.filename;
         const tarMatch = tarExtMatcher.exec(file);
         const extIdx = tarMatch?.index ?? file.lastIndexOf(".");
-        const fileName = extIdx !== -1 ? file.substring(0, extIdx) : "";
+        const fileName = extIdx !== -1 ? file.substring(0, extIdx) : file;
         const ext = extIdx !== -1 ? file.slice(extIdx) : "";
-        const newExt = reverseExtensionMap[ext] || ext;
+        const newExt = reverseExtensionMap[ext.toLowerCase()] || ext;
 
         upload.filename = fileName + newExt;
     },

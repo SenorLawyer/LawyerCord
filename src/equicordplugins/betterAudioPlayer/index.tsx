@@ -13,7 +13,6 @@ import definePlugin, { OptionType } from "@utils/types";
 import { ColorUtils, React, showToast, Toasts } from "@webpack/common";
 
 const cl = classNameFactory("vc-better-audio-player-");
-const CORS_PROXY = "https://cors.keiran0.workers.dev?url=";
 const MAX_FILE_SIZE = 12e6;
 const MAX_AUDIO_BLOB_CACHE_SIZE = 12;
 const MAX_COLOR_CACHE_SIZE = 16;
@@ -127,10 +126,7 @@ function drawSpectrograph(ctx: CanvasRenderingContext2D, w: number, h: number, f
 }
 
 async function fetchAudioBlobData(src: string): Promise<Blob | null> {
-    const url = new URL(src);
-    url.searchParams.set("t", Date.now().toString());
-
-    const response = await fetch(CORS_PROXY + encodeURIComponent(url.href));
+    const response = await fetch(src);
     if (!response.ok) return null;
 
     const contentLength = response.headers.get("content-length");
@@ -159,13 +155,6 @@ async function getAudioBlob(src: string): Promise<Blob | null> {
     return blobPromise;
 }
 
-async function fetchAudioBlob(src: string): Promise<string | null> {
-    const blob = await getAudioBlob(src);
-    if (!blob) return null;
-
-    return URL.createObjectURL(blob);
-}
-
 function Visualizer({ playerRef, src }: { playerRef: React.RefObject<HTMLAudioElement>; src: string; }) {
     const canvasRef = React.useRef<HTMLCanvasElement>(null);
     const audioCtxRef = React.useRef<AudioContext | null>(null);
@@ -183,9 +172,10 @@ function Visualizer({ playerRef, src }: { playerRef: React.RefObject<HTMLAudioEl
         let cancelled = false;
 
         const init = async () => {
-            const blobUrl = await fetchAudioBlob(src).catch(() => null);
-            if (cancelled || !blobUrl) return;
+            const blob = await getAudioBlob(src).catch(() => null);
+            if (cancelled || !blob) return;
 
+            const blobUrl = URL.createObjectURL(blob);
             blobUrlRef.current = blobUrl;
 
             const wasPlaying = !audio.paused;

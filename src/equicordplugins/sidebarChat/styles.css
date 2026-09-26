@@ -2,11 +2,6 @@
     min-width: 0;
 }
 
-.vc-sidebar-chat-popout {
-    align-items: stretch;
-    background-color: var(--background-primary);
-}
-
 .vc-sidebar-chat-window {
     display: flex;
     flex: 1;

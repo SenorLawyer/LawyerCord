@@ -7,59 +7,59 @@
 /* stylelint-disable no-descending-specificity */
 
 /* Every category owns a hue, shared by the palette, the nodes, the inspector and the settings cards. */
-:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-card, .vc-automations-template) {
+:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-template) {
     --ab-hue: var(--brand-500);
     --ab-ink: #fff;
 }
 
-:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-card, .vc-automations-template).messages {
+:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-template).messages {
     --ab-hue: #3ba55d;
 }
 
-:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-card, .vc-automations-template).commands {
+:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-template).commands {
     --ab-hue: #5865f2;
 }
 
-:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-card, .vc-automations-template).client {
+:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-template).client {
     --ab-hue: #00a8fc;
 }
 
-:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-card, .vc-automations-template).data {
+:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-template).data {
     --ab-hue: #1abc9c;
 }
 
-:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-card, .vc-automations-template).ai {
+:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-template).ai {
     --ab-hue: #b47cf0;
 }
 
-:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-card, .vc-automations-template).waits {
+:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-template).waits {
     --ab-hue: #faa61a;
     --ab-ink: #1a1a1a;
 }
 
-:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-card, .vc-automations-template).interactions {
+:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-template).interactions {
     --ab-hue: #eb459e;
 }
 
-:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-card, .vc-automations-template).flow {
+:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-template).flow {
     --ab-hue: #ed4245;
 }
 
-:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-card, .vc-automations-template).variables {
+:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-template).variables {
     --ab-hue: #e6c619;
     --ab-ink: #1a1a1a;
 }
 
-:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-card, .vc-automations-template).computer {
+:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-template).computer {
     --ab-hue: #8fa3b8;
     --ab-ink: #1a1a1a;
 }
 
-:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-card, .vc-automations-template).roblox {
+:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-template).roblox {
     --ab-hue: #ff5e3a;
 }
 
-:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-card, .vc-automations-template).codex {
+:is(.vc-ab-node, .vc-ab-category, .vc-ab-palette-block, .vc-ab-panel-head, .vc-ab-step, .vc-automations-template).codex {
     --ab-hue: #16a34a;
 }
 

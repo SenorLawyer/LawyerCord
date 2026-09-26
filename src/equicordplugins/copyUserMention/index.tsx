@@ -8,12 +8,11 @@ import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { copyToClipboard } from "@utils/clipboard";
 import { Devs, EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
-import type { Channel, User } from "@vencord/discord-types";
+import type { User } from "@vencord/discord-types";
 import { Menu } from "@webpack/common";
 
 const MentionIcon = () => (
     <svg
-        className="mentionicon"
         height="20"
         width="20"
         viewBox="0 0 24 24"
@@ -26,8 +25,6 @@ const MentionIcon = () => (
 );
 
 interface UserContextProps {
-    channel: Channel;
-    guildId?: string;
     user: User;
 }
 

@@ -211,10 +211,10 @@ export default definePlugin({
                         return;
                     }
 
-                    sendMessage(ctx.channel.id, { content: formatted });
-                } catch (e: any) {
+                    await sendMessage(ctx.channel.id, { content: formatted });
+                } catch {
                     sendBotMessage(ctx.channel.id, {
-                        content: "Failed to resolve music link",
+                        content: "Failed to resolve or send the music link.",
                     });
                 }
             },

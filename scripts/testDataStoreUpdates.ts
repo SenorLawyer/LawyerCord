@@ -14,7 +14,65 @@ import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
 const { outputText } = transpileModule(readFileSync("src/api/DataStore/index.ts", "utf8"), {
     compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
 });
-const { delMany, entries, setMany, update } = runInNewContext(`${outputText}\nexports;`, { exports: {} });
+const { delMany, entries, setMany, update, updateMany } = runInNewContext(`${outputText}\nexports;`, { exports: {} });
+
+test("DataStore multi-key updates share one transaction and abort partial writes", async () => {
+    for (const outcome of ["get-error", "read-error", "updater-error", "put-error", "abort", "commit"] as const) {
+        const error = new Error(outcome);
+        const saved = new Map<string, number>([["first", 1], ["second", 2]]);
+        const pendingWrites = new Map<string, number>();
+        const requests: { result: number | undefined; onsuccess?: () => void; }[] = [];
+        let aborts = 0;
+        let transactions = 0;
+        let settled = false;
+        const transaction: { error: Error | null; abort(): void; oncomplete?: () => void; onerror?: () => void; onabort?: () => void; } = {
+            error: null,
+            abort() { aborts++; pendingWrites.clear(); this.error = error; this.onabort?.(); }
+        };
+        const pending = updateMany([
+            ["first", (value: number) => value + 10],
+            ["second", (value: number) => { if (outcome === "updater-error") throw error; return value + 20; }]
+        ], async (mode: string, callback: (store: object) => unknown) => {
+            transactions++;
+            assert.equal(mode, "readwrite");
+            return callback({
+                transaction,
+                get(key: string) {
+                    if (key === "second" && outcome === "get-error") throw error;
+                    const request = { result: saved.get(key) };
+                    requests.push(request);
+                    return request;
+                },
+                put(value: number, key: string) {
+                    if (key === "second" && outcome === "put-error") throw error;
+                    pendingWrites.set(key, value);
+                }
+            });
+        }).finally(() => { settled = true; });
+        const checked = outcome === "commit" ? pending : assert.rejects(pending, (reason: unknown) => reason === error);
+        if (outcome !== "get-error") {
+            requests[0].onsuccess?.();
+            if (outcome === "read-error" || outcome === "abort") {
+                transaction.error = error;
+                pendingWrites.clear();
+                if (outcome === "read-error") transaction.onerror?.();
+                else transaction.onabort?.();
+            } else {
+                requests[1].onsuccess?.();
+                if (outcome === "commit") {
+                    await setImmediate();
+                    assert.equal(settled, false);
+                    for (const [key, value] of pendingWrites) saved.set(key, value);
+                    transaction.oncomplete?.();
+                }
+            }
+        }
+        await checked;
+        assert.equal(transactions, 1);
+        assert.deepEqual([...saved.values()], outcome === "commit" ? [11, 22] : [1, 2]);
+        assert.equal(aborts, ["get-error", "updater-error", "put-error"].includes(outcome) ? 1 : 0);
+    }
+});
 
 test("DataStore updates settle on read failure, abort, write failure, and commit", async () => {
     for (const outcome of ["read-error", "abort", "write-error", "updater-error", "commit"] as const) {

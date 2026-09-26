@@ -6,10 +6,8 @@
 
 export class VariableWithCallbacks<T> {
     #value: T;
-    #callbacks: {
-        id: number;
-        callback: (value: T, id: number) => void;
-    }[] = [];
+    #nextId = 0;
+    #callbacks = new Map<number, (value: T, id: number) => void>();
 
     constructor(value: T) {
         this.#value = value;
@@ -18,23 +16,18 @@ export class VariableWithCallbacks<T> {
     value(newValue?: T): T {
         if (newValue !== undefined) {
             this.#value = newValue;
-            this.#callbacks.forEach(c => c.callback(this.#value, c.id));
+            this.#callbacks.forEach((callback, id) => callback(this.#value, id));
         }
         return this.#value;
     }
 
     registerCallback(callback: (value: T, id: number) => void): number {
-        const id = Date.now();
-        this.#callbacks.push({
-            id,
-            callback
-        });
+        const id = this.#nextId++;
+        this.#callbacks.set(id, callback);
         return id;
     }
 
     deregisterCallback(id: number) {
-        const possibleFallback = this.#callbacks.find(cb => cb.id === id);
-        if (!possibleFallback) return;
-        this.#callbacks.splice(this.#callbacks.indexOf(possibleFallback), 1);
+        this.#callbacks.delete(id);
     }
 }

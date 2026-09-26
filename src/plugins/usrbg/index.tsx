@@ -22,10 +22,13 @@ import { definePluginSettings } from "@api/Settings";
 import { Button } from "@components/Button";
 import { Devs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
+import { Logger } from "@utils/Logger";
+import { isObject } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 
 const cl = classNameFactory("vc-usrbg-");
-const API_URL = "https://usrbg.is-hardly.online/users";
+const logger = new Logger("USRBG");
+const API_ORIGIN = "https://usrbg.is-hardly.online";
 
 interface UsrbgApiReturn {
     endpoint: string;
@@ -36,12 +39,9 @@ interface UsrbgApiReturn {
 
 const settings = definePluginSettings({
     nitroFirst: {
-        description: "Banner to use if both Nitro and USRBG banners are present",
-        type: OptionType.SELECT,
-        options: [
-            { label: "Nitro banner", value: true, default: true },
-            { label: "USRBG banner", value: false },
-        ]
+        description: "Prefer Discord banners when both Discord and USRBG banners are available.",
+        type: OptionType.BOOLEAN,
+        default: true
     },
     voiceBackground: {
         description: "Use USRBG banners as voice chat backgrounds",
@@ -68,24 +68,31 @@ export default definePlugin({
         },
         {
             find: "\"data-selenium-video-tile\":",
-            replacement: [
-                {
-                    match: /(?<=function\((\i),\i\)\{)(?=let.{20,40},style:)/,
-                    replace: "Object.assign($1.style=$1.style||{},$self.getVoiceBackgroundStyles($1));"
-                }
-            ]
-        },
-        {
-            find: '"VideoBackground-web"',
             predicate: () => settings.store.voiceBackground,
             replacement: {
-                match: /backgroundColor:.{0,25},\{style:(?=\i\?)/,
-                replace: "$&$self.userHasBackground(arguments[0]?.userId)?null:",
+                match: /(?<=style:)\i(?=,ref:\i,"data-selenium-video-tile":)/,
+                replace: "{...$&,...$self.getVoiceBackgroundStyles(arguments[0])}"
             }
+        },
+        {
+            find: 'location:"VideoBackground"',
+            predicate: () => settings.store.voiceBackground,
+            group: true,
+            replacement: [
+                {
+                    match: /(?<=\{style:)(?=\i\?\{)/,
+                    replace: "$self.userHasBackground(arguments[0].userId)?null:"
+                },
+                {
+                    match: /(?<=className:\i\(\)\(\i\.\i,\{\[\i\]:)\i(?=\}\))/,
+                    replace: "$&&&!$self.userHasBackground(arguments[0].userId)"
+                }
+            ]
         }
     ],
 
     data: null as UsrbgApiReturn | null,
+    request: undefined as AbortController | undefined,
 
     settingsAboutComponent: () => (
         <Button
@@ -97,17 +104,16 @@ export default definePlugin({
         </Button>
     ),
 
-    getVoiceBackgroundStyles({ className, participantUserId }: any) {
-        if (className.includes("tile")) {
-            if (this.userHasBackground(participantUserId)) {
-                return {
-                    backgroundImage: `url(${this.getImageUrl(participantUserId)})`,
-                    backgroundSize: "cover",
-                    backgroundPosition: "center",
-                    backgroundRepeat: "no-repeat"
-                };
-            }
-        }
+    getVoiceBackgroundStyles({ participantUserId }: { participantUserId?: string; }) {
+        if (!participantUserId) return;
+        const imageUrl = this.getImageUrl(participantUserId);
+        if (!imageUrl) return;
+        return {
+            backgroundImage: `url(${JSON.stringify(new URL(imageUrl).href)})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat"
+        };
     },
 
     patchBannerUrl({ displayProfile }: any) {
@@ -120,17 +126,44 @@ export default definePlugin({
     },
 
     getImageUrl(userId: string): string | null {
-        if (!this.userHasBackground(userId)) return null;
-
-        // We can assert that data exists because userHasBackground returned true
-        const { endpoint, bucket, prefix, users: { [userId]: etag } } = this.data!;
+        const { data } = this;
+        if (!data) return null;
+        const { endpoint, bucket, prefix, users: { [userId]: etag } } = data;
+        if (!etag) return null;
         return `${endpoint}/${bucket}/${prefix}${userId}?${etag}`;
     },
 
     async start() {
-        const res = await fetch(API_URL);
-        if (res.ok) {
-            this.data = await res.json();
+        this.request?.abort();
+        const request = this.request = new AbortController();
+        const timeout = setTimeout(() => request.abort(), 30_000);
+        try {
+            const res = await fetch(`${API_ORIGIN}/users`, { signal: request.signal });
+            if (!res.ok || request.signal.aborted) return;
+            const data: unknown = await res.json();
+            if (request.signal.aborted) return;
+            if (!isObject(data)
+                || !("endpoint" in data) || data.endpoint !== API_ORIGIN
+                || !("bucket" in data) || typeof data.bucket !== "string"
+                || !("prefix" in data) || typeof data.prefix !== "string"
+                || !("users" in data) || !isObject(data.users)
+                || !Object.values(data.users).every(value => typeof value === "string")) {
+                logger.warn("The banner feed returned invalid data.");
+                return;
+            }
+            this.data = data as UsrbgApiReturn;
+        } catch {
+            if (!request.signal.aborted) logger.warn("Could not load the banner feed.");
+        } finally {
+            clearTimeout(timeout);
+            if (this.request === request) this.request = undefined;
         }
+    },
+
+    stop() {
+        this.request?.abort();
+        this.request = undefined;
+        this.data = null;
     }
+
 });

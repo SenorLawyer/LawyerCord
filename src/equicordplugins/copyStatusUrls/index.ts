@@ -4,21 +4,25 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { copyToClipboard } from "@utils/clipboard";
 import { Devs } from "@utils/constants";
+import { copyWithToast } from "@utils/discord";
+import { Logger } from "@utils/Logger";
+import { isObject } from "@utils/misc";
 import definePlugin from "@utils/types";
-import { User } from "@vencord/discord-types";
+import { Activity, User } from "@vencord/discord-types";
 import { findByCodeLazy } from "@webpack";
-import { Toasts } from "@webpack/common";
+import { showToast, Toasts } from "@webpack/common";
+
+const logger = new Logger("CopyStatusUrls");
 
 interface MakeContextMenuProps {
     user: User,
-    activity: any;
+    activity: Activity;
 }
 
 // This is an API call if the result is not cached
 // i looked for an hour and did not find a better way to do this
-const getMetadataFromApi: (activity: any, userId: string) => Promise<any> = findByCodeLazy("null/undefined");
+const getMetadataFromApi: (activity: Activity, userId: string) => Promise<unknown> = findByCodeLazy("null/undefined");
 
 export default definePlugin({
     name: "CopyStatusUrls",
@@ -30,7 +34,7 @@ export default definePlugin({
         {
             find: '?"PRESS_WATCH_ON_CRUNCHYROLL_BUTTON"',
             replacement: {
-                match: /(?=onClick)(?=.*index:(\i))/,
+                match: /(?=onClick:\i=>\{.{0,100}?"PRESS_WATCH_ON_CRUNCHYROLL_BUTTON".{0,100}?index:(\i)\})/g,
                 replace: "onContextMenu: $self.makeContextMenu(arguments[0], $1),"
             }
         }
@@ -39,29 +43,16 @@ export default definePlugin({
     makeContextMenu(props: MakeContextMenuProps, index: number) {
         return async () => {
             try {
-                const { button_urls } = await getMetadataFromApi(props.activity, props.user.id);
-                if (!button_urls[index]) {
-                    throw new Error("button_urls does not contain index");
+                const metadata = await getMetadataFromApi(props.activity, props.user.id);
+                const url: unknown = isObject(metadata) && "button_urls" in metadata && Array.isArray(metadata.button_urls)
+                    ? metadata.button_urls[index] : undefined;
+                if (typeof url !== "string" || !url) {
+                    throw new Error("The status button has no URL.");
                 }
-                copyToClipboard(button_urls[index]);
-                Toasts.show({
-                    id: Toasts.genId(),
-                    message: "Copied URL",
-                    type: Toasts.Type.SUCCESS,
-                    options: {
-                        position: Toasts.Position.TOP
-                    }
-                });
+                await copyWithToast(url, "Copied URL");
             } catch (e) {
-                console.error(e);
-                Toasts.show({
-                    id: Toasts.genId(),
-                    message: "Error copying URL, check console for more info",
-                    type: Toasts.Type.FAILURE,
-                    options: {
-                        position: Toasts.Position.TOP
-                    }
-                });
+                logger.error("Could not copy the status URL.", e);
+                showToast("Could not copy the status URL.", Toasts.Type.FAILURE, { position: Toasts.Position.TOP });
             }
         };
     }

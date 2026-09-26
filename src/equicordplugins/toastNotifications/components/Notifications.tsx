@@ -5,7 +5,7 @@
  */
 
 import { settings as PluginSettings } from "@equicordplugins/toastNotifications/index";
-import { Channel, Message } from "@vencord/discord-types";
+import { Channel, Message, MessageJSON } from "@vencord/discord-types";
 import { createRoot } from "@webpack/common";
 import type { JSX } from "react";
 import type { Root } from "react-dom/client";
@@ -16,7 +16,6 @@ interface QueuedNotification {
     key: string;
     element: JSX.Element;
     resolve(): void;
-    onClose?(): void;
 }
 
 let NotificationQueue: QueuedNotification[] = [];
@@ -53,11 +52,10 @@ interface BaseNotification {
     permanent?: boolean;
     dismissOnClick?: boolean;
     onClick?(): void;
-    onClose?(): void;
 }
 
 export interface MessageNotification extends BaseNotification {
-    message: Message;
+    message: MessageJSON;
     mockedMessage: Message;
     channel: Channel;
 }
@@ -84,7 +82,6 @@ export async function showNotification(notification: NotificationData) {
                     NotificationQueue = NotificationQueue.filter(n => n.key !== notificationKey);
                     if (NotificationQueue.length === oldLength) return;
 
-                    notification.onClose?.();
                     renderQueue(root);
                     resolve();
                 }}
@@ -95,16 +92,12 @@ export async function showNotification(notification: NotificationData) {
         NotificationQueue.push({
             key: notificationKey,
             element: ToastNotification,
-            resolve,
-            onClose: notification.onClose
+            resolve
         });
 
-        // If the queue exceeds the maximum number of notifications, remove the oldest one.
-        if (NotificationQueue.length > (PluginSettings.store.maxNotifications ?? 3)) {
-            const removed = NotificationQueue.shift();
-            removed?.onClose?.();
-            removed?.resolve();
-        }
+        // If the queue exceeds the maximum number of notifications, remove the oldest ones.
+        const excess = Math.max(0, NotificationQueue.length - (PluginSettings.store.maxNotifications ?? 3));
+        for (const removed of NotificationQueue.splice(0, excess)) removed.resolve();
 
         renderQueue(root);
     });
@@ -115,6 +108,7 @@ export async function showNotification(notification: NotificationData) {
  * Called when the plugin is disabled.
  */
 export function teardownNotifications() {
+    for (const notification of NotificationQueue) notification.resolve();
     NotificationQueue = [];
     RootContainer?.unmount();
     RootContainer = undefined;

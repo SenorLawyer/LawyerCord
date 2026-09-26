@@ -29,9 +29,11 @@ export let isNewer = false;
 export let updateError: any;
 export let changes: Record<"hash" | "author" | "message", string>[] = [];
 
-async function Unwrap<T>(p: Promise<IpcRes<T>>) {
-    const res = await p;
+let updateCheck = Symbol();
+let needsRebuild = false;
+let pendingUpdate: Promise<boolean> | undefined;
 
+function Unwrap<T>(res: IpcRes<T>) {
     if (res.ok) return res.value;
 
     updateError = res.error;
@@ -39,8 +41,12 @@ async function Unwrap<T>(p: Promise<IpcRes<T>>) {
 }
 
 export async function checkForUpdates() {
+    if (pendingUpdate || needsRebuild) return isOutdated;
+    const check = updateCheck = Symbol();
     updateError = undefined;
-    changes = await Unwrap(VencordNative.updater.getUpdates(Vencord.Settings.updateChannel));
+    const result = await VencordNative.updater.getUpdates(Vencord.Settings.updateChannel);
+    if (check !== updateCheck) return isOutdated;
+    changes = Unwrap(result);
 
     // we only want to check this for the git updater, not the http updater
     if (!IS_STANDALONE) {
@@ -54,6 +60,8 @@ export async function checkForUpdates() {
 }
 
 export function resetUpdateState() {
+    updateCheck = Symbol();
+    needsRebuild = false;
     isOutdated = false;
     isNewer = false;
     updateError = undefined;
@@ -61,20 +69,30 @@ export function resetUpdateState() {
 }
 
 export async function update() {
+    if (pendingUpdate) return pendingUpdate;
     if (!isOutdated) return true;
 
-    const res = await Unwrap(VencordNative.updater.update(Vencord.Settings.updateChannel));
+    const check = updateCheck = Symbol();
+    return pendingUpdate = (async () => {
+        if (!needsRebuild) {
+            const result = await VencordNative.updater.update(Vencord.Settings.updateChannel);
+            if (check !== updateCheck) return false;
+            if (!Unwrap(result)) return false;
+            needsRebuild = true;
+        }
 
-    if (res) {
-        isOutdated = false;
-        if (!await Unwrap(VencordNative.updater.rebuild()))
+        const result = await VencordNative.updater.rebuild();
+        if (check !== updateCheck) return false;
+        if (!Unwrap(result))
             throw new Error("The Build failed. Please try manually building the new update");
-    }
 
-    return res;
+        needsRebuild = false;
+        isOutdated = false;
+        return true;
+    })().finally(() => { pendingUpdate = undefined; });
 }
 
-export const getRepo = () => Unwrap(VencordNative.updater.getRepo());
+export const getRepo = async () => Unwrap(await VencordNative.updater.getRepo());
 
 export async function maybePromptToUpdate(confirmMessage: string, checkForDev = false) {
     if (IS_WEB || IS_UPDATER_DISABLED) return;
@@ -85,10 +103,7 @@ export async function maybePromptToUpdate(confirmMessage: string, checkForDev = 
         if (isOutdated) {
             const wantsUpdate = confirm(confirmMessage);
             if (wantsUpdate && isNewer) return alert("Your local copy has more recent commits. Please stash or reset them.");
-            if (wantsUpdate) {
-                await update();
-                relaunch();
-            }
+            if (wantsUpdate && await update()) relaunch();
         }
     } catch (err) {
         UpdateLogger.error(err);

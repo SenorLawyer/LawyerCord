@@ -15,7 +15,7 @@ import type { Channel } from "@vencord/discord-types";
 import { ChannelType } from "@vencord/discord-types/enums";
 import { ChannelStore, GuildStore, IconUtils, RelationshipStore, SelectedChannelStore, showToast, Toasts, UserStore } from "@webpack/common";
 
-import { beginDrag as beginSessionDrag, clearDragState, getLastDropAt, hasActiveDrag, isGuildDragActive, isInputDragSource, isUserDragActive, markDrop, markInputDragSource, scheduleGuildCleanup, shouldIgnoreDrop, startDragWatchdog, stopDragState, touchDrag } from "./dragState";
+import { beginDrag as beginSessionDrag, clearDragState, getLastDropAt, hasActiveDrag, isGuildDragActive, isInputDragSource, isUserDragActive, markDrop, markInputDragSource, scheduleGuildCleanup, shouldIgnoreDrop, startDragWatchdog, touchDrag } from "./dragState";
 import { type GhostState, hideGhost as hideDragGhost, isGhostVisible, mountGhost as mountDragGhost, scheduleGhostPosition as scheduleDragGhostPosition, showGhost as showDragGhost, unmountGhost as unmountDragGhost } from "./ghost";
 import { clearInviteCache, createInvite, isGroupMessageChannel } from "./invite";
 import { type ChannelTarget, inspectDragEvent, type ResolvedDragTarget } from "./targets";
@@ -447,7 +447,7 @@ export default definePlugin({
         window.removeEventListener("drag", this.globalDragMove, true);
         window.removeEventListener("dragover", this.globalDragMove, true);
         window.removeEventListener("dragend", this.globalDragEnd, true);
-        stopDragState();
+        clearDragState();
         clearInviteCache();
         this.unmountGhost();
         pluginInstance = null;

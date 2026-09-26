@@ -82,7 +82,6 @@ function ThemesTab() {
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [currentThemeLink, setCurrentThemeLink] = useState("");
-    const [themeLinkValid, setThemeLinkValid] = useState(false);
     const [userThemes, setUserThemes] = useState<UserThemeHeader[] | null>(null);
     const [onlineThemes, setOnlineThemes] = useState<(UserThemeHeader & { link: string; })[] | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
@@ -116,27 +115,20 @@ function ThemesTab() {
         if (!e.currentTarget?.files?.length) return;
         const { files } = e.currentTarget;
 
-        const uploads = Array.from(files, file => {
+        const uploads = Array.from(files, async file => {
             const { name } = file;
             if (!name.endsWith(".css")) return;
 
-            return new Promise<void>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => {
-                    VencordNative.themes.uploadTheme(name, reader.result as string)
-                        .then(resolve)
-                        .catch(reject);
-                };
-                reader.readAsText(file);
-            });
+            await VencordNative.themes.uploadTheme(name, await file.text());
         });
 
-        await Promise.all(uploads);
-        refreshLocalThemes();
+        const results = await Promise.allSettled(uploads);
+        if (results.some(result => result.status === "rejected"))
+            showToast("Some themes could not be uploaded.", Toasts.Type.FAILURE);
+        await refreshLocalThemes();
     }
 
     function addThemeLink(link: string) {
-        if (!themeLinkValid) return;
         if (settings.themeLinks.includes(link)) return;
 
         settings.themeLinks = [...settings.themeLinks, link];
@@ -346,8 +338,6 @@ function ThemesTab() {
                 }}
                 currentThemeLink={currentThemeLink}
                 setCurrentThemeLink={setCurrentThemeLink}
-                themeLinkValid={themeLinkValid}
-                setThemeLinkValid={setThemeLinkValid}
                 addThemeLink={addThemeLink}
             />
 
@@ -430,12 +420,15 @@ function ThemesTab() {
                                 enabled={theme.enabled}
                                 onChange={enabled => onLocalThemeChange(localTheme.fileName, enabled)}
                                 onDelete={async () => {
-                                    onLocalThemeChange(localTheme.fileName, false);
+                                    try {
+                                        await VencordNative.themes.deleteTheme(localTheme.fileName);
+                                    } catch {
+                                        showToast("Could not delete the theme.", Toasts.Type.FAILURE);
+                                        return;
+                                    }
                                     clearThemeState(localTheme.fileName);
-                                    await VencordNative.themes.deleteTheme(localTheme.fileName);
-                                    refreshLocalThemes();
+                                    await refreshLocalThemes();
                                 }}
-                                showDeleteButton
                                 onPin={() => togglePinTheme(localTheme.fileName)}
                                 isPinned={settings.pinnedThemes.includes(localTheme.fileName)}
                                 onRefresh={refreshLocalThemes}

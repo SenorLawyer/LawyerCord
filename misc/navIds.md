@@ -5,9 +5,8 @@ after it says Finished loading all chunks! in console
 you can run the snippet below to list and copy all the navIds currently available
 
 ```js
-const wp = webpackChunkdiscord_app.push([[Symbol()], {}, r => r]);
 const navIds = [...new Set(
-  Object.values(wp.m).flatMap(f =>
+  Object.values(wreq.m).flatMap(f =>
     [...Function.prototype.toString.call(f)
       .matchAll(/navId:\s*["'`]([^"'`]+)["'`]/g)]
       .map(m => m[1])

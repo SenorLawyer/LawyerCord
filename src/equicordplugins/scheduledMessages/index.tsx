@@ -10,6 +10,7 @@ import { MessageObject, SendMessageOptions } from "@api/MessageEvents";
 import { definePluginSettings } from "@api/Settings";
 import { Devs, EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
+import { FluxDispatcher, showToast, Toasts, UserStore } from "@webpack/common";
 
 import { isScheduleModeEnabled, ScheduledMessagesButton, setScheduleModeEnabled } from "./components/ChatBarButton";
 import { CalendarIcon } from "./components/Icons";
@@ -25,9 +26,12 @@ import {
     loadScheduledMessages,
     recreatePhantomMessages,
     resyncPhantomReactions,
+    scheduleNextCheck,
     startScheduler,
     stopScheduler
 } from "./utils";
+
+let lifecycleGeneration = 0;
 
 export const settings = definePluginSettings({
     maxMessagesPerMinute: {
@@ -43,10 +47,7 @@ export const settings = definePluginSettings({
         markers: [5, 10, 15, 30, 60],
         default: 10,
         stickToMarkers: true,
-        onChange: () => {
-            stopScheduler();
-            startScheduler();
-        }
+        onChange: scheduleNextCheck
     },
     showNotifications: {
         type: OptionType.BOOLEAN,
@@ -59,6 +60,20 @@ export const settings = definePluginSettings({
         default: true
     }
 });
+
+async function resetAccountSession(restart: boolean): Promise<void> {
+    const generation = ++lifecycleGeneration;
+    stopScheduler();
+    setScheduleModeEnabled(false);
+    await new Promise<void>(resolve => FluxDispatcher.wait(resolve));
+    if (generation !== lifecycleGeneration) return;
+    cleanupAllPhantomMessages();
+    if (!restart) return;
+    await loadScheduledMessages();
+    if (generation !== lifecycleGeneration) return;
+    startScheduler();
+    await recreatePhantomMessages();
+}
 
 function handleReactionEvent(event: FluxReactionEvent): void {
     const { messageId, channelId, emoji } = event;
@@ -92,6 +107,8 @@ export default definePlugin({
     settings,
 
     flux: {
+        LOGOUT: () => resetAccountSession(false),
+        CONNECTION_OPEN: () => resetAccountSession(true),
         MESSAGE_REACTION_ADD: handleReactionEvent,
         MESSAGE_REACTION_REMOVE: handleReactionEvent
     },
@@ -123,8 +140,13 @@ export default definePlugin({
         if (!isScheduleModeEnabled) return;
         if (!messageObj.content.trim() && !options.uploads?.length) return;
 
+        const userId = UserStore.getCurrentUser()?.id;
+        if (!userId) return { cancel: true };
+        const generation = lifecycleGeneration;
+        const isCurrent = () => generation === lifecycleGeneration && UserStore.getCurrentUser()?.id === userId;
         setScheduleModeEnabled(false);
 
+        const uploadIds = options.uploads?.map(upload => upload.id) ?? [];
         let attachments: ScheduledAttachment[] | undefined;
 
         if (options.uploads?.length) {
@@ -144,28 +166,33 @@ export default definePlugin({
                         reader.readAsDataURL(file);
                     });
 
+                    if (!isCurrent()) return { cancel: true };
                     attachments.push({
                         filename: upload.filename,
                         data: base64,
                         type: file.type
                     });
                 } catch {
-                    continue;
+                    if (isCurrent()) showToast("Could not read an attachment. The message was not scheduled.", Toasts.Type.FAILURE);
+                    return { cancel: true };
                 }
             }
         }
 
-        openScheduleTimeModal(channelId, messageObj.content, attachments);
+        openScheduleTimeModal(channelId, messageObj.content, attachments, uploadIds);
         return { cancel: true };
     },
 
     async start() {
+        const generation = ++lifecycleGeneration;
         await loadScheduledMessages();
+        if (generation !== lifecycleGeneration) return;
         startScheduler();
         recreatePhantomMessages();
     },
 
     stop() {
+        lifecycleGeneration++;
         stopScheduler();
         cleanupAllPhantomMessages();
     }

@@ -14,7 +14,7 @@ import { Paragraph } from "@components/Paragraph";
 import { convert as convertLineEP, getIdFromUrl as getLineEmojiPackIdFromUrl, getStickerPackById as getLineEmojiPackById, isLineEmojiPackHtml, parseHtml as getLineEPFromHtml } from "@equicordplugins/moreStickers/lineEmojis";
 import { convert as convertLineSP, getIdFromUrl as getLineStickerPackIdFromUrl, getStickerPackById as getLineStickerPackById, isLineStickerPackHtml, parseHtml as getLineSPFromHtml } from "@equicordplugins/moreStickers/lineStickers";
 import { isV1, migrate } from "@equicordplugins/moreStickers/migrate-v1";
-import { deleteStickerPack, getStickerPack, getStickerPackMetas, saveStickerPack } from "@equicordplugins/moreStickers/stickers";
+import { deleteStickerPack, getStickerPack, getStickerPackMetas, isStickerPack, saveStickerPack } from "@equicordplugins/moreStickers/stickers";
 import { SettingsTabsKey, Sticker, StickerPack, StickerPackMeta } from "@equicordplugins/moreStickers/types";
 import { cl, clPicker } from "@equicordplugins/moreStickers/utils";
 import { Button, React, TabBar, TextArea, Toasts } from "@webpack/common";
@@ -100,10 +100,21 @@ export const Packs = () => {
         setstickerPackMetas(await getStickerPackMetas());
     }
     React.useEffect(() => {
-        refreshStickerPackMetas();
-    }, []);
-    React.useEffect(() => {
-        isV1().then(setV1);
+        let active = true;
+        Promise.allSettled([getStickerPackMetas(), isV1()]).then(([packs, legacy]) => {
+            if (!active) return;
+            if (packs.status === "fulfilled") setstickerPackMetas(packs.value);
+            if (legacy.status === "fulfilled") setV1(legacy.value);
+            if (packs.status === "rejected" || legacy.status === "rejected") {
+                Toasts.show({
+                    message: "Some sticker settings could not be loaded.",
+                    type: Toasts.Type.FAILURE,
+                    id: Toasts.genId(),
+                    options: { duration: 1000 }
+                });
+            }
+        });
+        return () => { active = false; };
     }, []);
 
     return (
@@ -326,13 +337,9 @@ export const Packs = () => {
                                     if (!file) return;
 
                                     const fileText = await file.text();
-                                    const fileJson = JSON.parse(fileText);
-                                    let stickerPacks: StickerPack[] = [];
-                                    if (Array.isArray(fileJson)) {
-                                        stickerPacks = fileJson;
-                                    } else {
-                                        stickerPacks = [fileJson];
-                                    }
+                                    const fileJson: unknown = JSON.parse(fileText);
+                                    const stickerPacks: unknown[] = Array.isArray(fileJson) ? fileJson : [fileJson];
+                                    if (!stickerPacks.every(isStickerPack)) throw new Error("This file contains an invalid sticker pack.");
 
                                     for (const stickerPack of stickerPacks) {
                                         await saveStickerPack(stickerPack);
@@ -405,8 +412,19 @@ export const Packs = () => {
                         >Export Sticker Packs</Button>
                         <Button
                             size={Button.Sizes.SMALL}
-                            onClick={async e => {
-                                await migrate();
+                            onClick={async () => {
+                                try {
+                                    await migrate();
+                                    await refreshStickerPackMetas();
+                                    setV1(await isV1());
+                                } catch {
+                                    Toasts.show({
+                                        message: "Could not finish sticker migration. Try again.",
+                                        type: Toasts.Type.FAILURE,
+                                        id: Toasts.genId(),
+                                        options: { duration: 1000 }
+                                    });
+                                }
                             }}
                             style={{
                                 display: _isV1 ? "unset" : "none"
@@ -470,15 +488,7 @@ export async function getRecentStickers(key: string = KEY): Promise<Sticker[]> {
     return (await DataStore.get(key)) ?? [];
 }
 
-export async function setRecentStickers(stickers: Sticker[], key: string = KEY): Promise<void> {
-    await DataStore.set(key, stickers);
-}
-
 export async function addRecentSticker(sticker: Sticker): Promise<void> {
     await DataStore.update<Sticker[]>(KEY, stickers =>
         [sticker, ...(stickers ?? []).filter(s => s.id !== sticker.id)].slice(0, 16));
-}
-
-export async function removeRecentStickerByPackId(packId: string): Promise<void> {
-    await DataStore.update<Sticker[]>(KEY, stickers => stickers?.filter(s => s.stickerPackId !== packId) ?? []);
 }

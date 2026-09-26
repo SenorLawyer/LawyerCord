@@ -15,7 +15,7 @@ LawyerCord accepts focused security fixes, tests, documentation, upstream syncs,
 1. Open an issue before starting a broad feature or protocol change.
 2. Preserve attribution and compatibility identifiers inherited from ProtonnCord, Equicord, and Vencord.
 3. Do not add a dependency unless the pull request explains why existing platform APIs are insufficient.
-4. Keep network access explicit, narrowly scoped, and visible in the privacy inventory.
+4. Keep network access explicit, narrowly scoped, and documented in the plugin settings or source.
 5. Do not store Discord tokens, message content, encryption keys, MCP secrets, or attachment URLs in fixtures, logs, screenshots, or issue text.
 6. Add focused tests for security boundaries and failure paths.
 7. Installer changes must preserve the pinned source revision, embedded-client model, disabled self-updater, corresponding-source archive, and artifact audit.
@@ -31,11 +31,6 @@ pnpm testSecureMessaging
 pnpm lint
 pnpm lint-styles
 pnpm buildStandalone
-```
-
-If plugin source or network behavior changed, regenerate the checked-in privacy inventory:
-
-```shell
 ```
 
 ## Code standards
@@ -63,4 +58,4 @@ Well-known third-party services are acceptable only when the feature, provider, 
 
 ## Review and release
 
-Pull requests require passing CI and resolved review conversations. Merged pull requests default to nightly releases; use exactly one `release:*` label to select beta, stable, or no release. See [VERSIONING.md](./VERSIONING.md) and [CHANGELOG.md](./CHANGELOG.md).
+Pull requests require passing CI and resolved review conversations. Use exactly one `release:*` label to select nightly, beta, stable, or no release. Unlabeled pull requests do not publish a release. See [VERSIONING.md](./VERSIONING.md) and [CHANGELOG.md](./CHANGELOG.md).

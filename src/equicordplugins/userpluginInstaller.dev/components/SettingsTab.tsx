@@ -18,7 +18,7 @@ import {
     SettingsTab as STab,
     wrapTab,
 } from "@components/settings/tabs/BaseTab";
-import { classes, isObjectEmpty } from "@utils/misc";
+import { classes } from "@utils/misc";
 import { relaunch } from "@utils/native";
 import { Alerts, closeAllModals,NavigationRouter, Toasts, useEffect, useState } from "@webpack/common";
 
@@ -47,37 +47,24 @@ function UserPluginsTab() {
             description: string;
             usesPreSend: boolean;
             usesNative: boolean;
-            directory?: string;
+            directory: string;
             remote: string;
             supportChannelID?: string;
         }[]
     >([]);
     const [url, setUrl] = useState("");
     const [valid, setValid] = useState(false);
-    const [pluginsWithUpdates, setPluginsWithUpdates] = useState<
-        Record<string, string>
-    >({});
-    const [updatesLoaded, loadUpdates] = useState(false);
+    const [updates, setUpdates] = useState({ plugins: [] as string[], finished: false });
 
     useEffect(() => {
         const { plugins: plgobj, pluginsWithUpdates: pwug } =
             userpluginInstaller;
         setPlugins(plgobj.value());
         loadPlugins(true);
-        const cid2 = plgobj.registerCallback(value => setPlugins(value));
+        const cid2 = plgobj.registerCallback(setPlugins);
 
-        const setPWU = value => {
-            const pwu = value.plugins.map(pg => ({
-                [pg]: plgobj.value().find(pfjh => pfjh.directory === pg)
-                    ?.name,
-            }));
-            setPluginsWithUpdates(Object.assign({}, ...pwu));
-            loadUpdates(value.finished);
-        };
-        const cid = pwug.registerCallback(value => {
-            setPWU(value);
-        });
-        setPWU(pwug.value());
+        const cid = pwug.registerCallback(setUpdates);
+        setUpdates(pwug.value());
 
         return () => {
             pwug.deregisterCallback(cid);
@@ -85,14 +72,16 @@ function UserPluginsTab() {
         };
     }, []);
 
+    const pendingDirectories = new Set(updates.plugins);
+
     return (
         <STab
             // @ts-ignore
             title={`UserPlugins${pluginsLoaded ? ` (${plugins.length}, ${countEnabledUserPlugins(plugins)} enabled)` : ""}`}
         >
             <div className={cl("update-check-container")}>
-                {isObjectEmpty(pluginsWithUpdates) ? (
-                    !updatesLoaded && (
+                {pendingDirectories.size === 0 ? (
+                    !updates.finished && (
                         <BaseText>Checking for updates...</BaseText>
                     )
                 ) : (
@@ -105,13 +94,14 @@ function UserPluginsTab() {
                         <Paragraph className={cl("install-desc")}>
                             The following plugins are out-of-date:
                             <ul className={cl("outdated-list")}>
-                                {Object.values(pluginsWithUpdates)
-                                    .toSorted()
-                                    .map(pl => (
-                                        <li key={pl}>{pl}</li>
+                                {[...pendingDirectories]
+                                    .map(directory => ({ directory, name: plugins.find(plugin => plugin.directory === directory)?.name ?? directory }))
+                                    .toSorted((a, b) => a.name.localeCompare(b.name))
+                                    .map(plugin => (
+                                        <li key={plugin.directory}>{plugin.name}</li>
                                     ))}
                             </ul>
-                            {!updatesLoaded &&
+                            {!updates.finished &&
                                 "and possibly more, as update checking is not finished. "}
                             You can update plugins below.
                         </Paragraph>
@@ -163,20 +153,19 @@ function UserPluginsTab() {
                                 ? 1
                                 : 0;
                             try {
-                                const { name, native } = JSON.parse(
-                                    await Native.initPluginInstall(
-                                        gitLink[0],
-                                        gitLink[[1, 4][idpl]],
-                                        gitLink[[2, 5][idpl]],
-                                        gitLink[[3, 6][idpl]],
-                                    ),
+                                const { name, native } = await Native.initPluginInstall(
+                                    gitLink[0],
+                                    gitLink[[1, 4][idpl]],
+                                    gitLink[[2, 5][idpl]],
+                                    gitLink[[3, 6][idpl]],
                                 );
                                 showInstallFinishedAlert(name, native);
-                            } catch (e: any) {
-                                if (e.toString().includes("silentStop")) return;
+                            } catch (e) {
+                                const error = String(e);
+                                if (error.includes("silentStop")) return;
                                 Alerts.show({
                                     title: "Install error",
-                                    body: e.toString(),
+                                    body: error,
                                 });
                             }
                         }}
@@ -190,39 +179,34 @@ function UserPluginsTab() {
                     <div className={cl("plugins-grid")}>
                         {plugins
                             .toSorted((a, b) =>
-                                a.name.localeCompare(b.name, "en", {
-                                    sensitivity: "base",
-                                }),
+                                Number(pendingDirectories.has(b.directory)) - Number(pendingDirectories.has(a.directory))
+                                || a.name.localeCompare(b.name, "en", { sensitivity: "base" }),
                             )
-                            .toSorted((a, b) => {
-                                const updatePendingNames =
-                                    Object.keys(pluginsWithUpdates);
-                                const [aa, bb] = [
-                                    updatePendingNames.includes(a.directory!)
-                                        ? 1000
-                                        : 0,
-                                    updatePendingNames.includes(b.directory!)
-                                        ? 1000
-                                        : 0,
-                                ];
-                                return bb - aa;
-                            })
                             .map(plugin => {
 
                                 const pl = Vencord.Plugins.plugins[
                                     plugin.name
                                 ];
                                 return <AddonCard
-                                    key={pl.name}
-                                    name={pl.name}
-                                    description={pl.description}
-                                    enabled={rs.plugins[pl.name].enabled}
-                                    infoButton={<button
-                                        role="switch"
+                                    key={plugin.directory}
+                                    name={plugin.name}
+                                    description={plugin.description}
+                                    enabled={rs.plugins[plugin.name]?.enabled ?? false}
+                                    infoButton={<Button
+                                        variant="none"
+                                        size="iconOnly"
+                                        type="button"
+                                        aria-label={`Uninstall ${plugin.name}`}
                                         onClick={async () => {
-                                            await Native.rmPlugin(
-                                                plugin.directory!,
-                                            );
+                                            try {
+                                                if (!await Native.rmPlugin(plugin.directory)) return;
+                                            } catch (error) {
+                                                Alerts.show({
+                                                    title: "Uninstall error",
+                                                    body: String(error),
+                                                });
+                                                return;
+                                            }
                                             Alerts.show({
                                                 title: "Done!",
                                                 body: `${plugin.name} has been uninstalled. A ${plugin.usesNative ? "restart" : "refresh"} is needed to fully remove the plugin.`,
@@ -241,10 +225,11 @@ function UserPluginsTab() {
                                         className={cl("delete-button")}
                                     >
                                         <DeleteIcon />
-                                    </button>}
+                                    </Button>}
                                     setEnabled={t => {
-                                        Vencord.Settings.plugins[pl.name].enabled = t;
-                                        if (pluginRequiresRestart(pl)) {
+                                        Vencord.Settings.plugins[plugin.name] ??= { enabled: t };
+                                        Vencord.Settings.plugins[plugin.name].enabled = t;
+                                        if (!pl || pluginRequiresRestart(pl)) {
                                             Toasts.show({
                                                 id: Toasts.genId(),
                                                 message: "Restart to apply changes!",
@@ -256,57 +241,39 @@ function UserPluginsTab() {
                                     }}
                                     footer={(
                                         <div className={cl("plugin-footer")}>
-                                            {Object.keys(
-                                                pluginsWithUpdates,
-                                            ).includes(plugin.directory!) && (
+                                            {pendingDirectories.has(plugin.directory) && (
                                                     <Button
                                                         size="small"
                                                         onClick={async () => {
                                                             try {
-                                                                await Native.updatePlugin(
-                                                                    plugin.directory!,
+                                                                const { native } = await Native.updatePlugin(
+                                                                    plugin.directory,
                                                                 );
-                                                                const oldPWU =
-                                                                    userpluginInstaller.pluginsWithUpdates.value()
-                                                                        .plugins;
-                                                                oldPWU.splice(
-                                                                    oldPWU.indexOf(
-                                                                        plugin.directory!,
-                                                                    ),
-                                                                    1,
-                                                                );
-                                                                userpluginInstaller.pluginsWithUpdates.value(
-                                                                    {
-                                                                        finished: true,
-                                                                        plugins: oldPWU,
-                                                                    },
-                                                                );
+                                                                const updates = userpluginInstaller.pluginsWithUpdates.value();
+                                                                userpluginInstaller.pluginsWithUpdates.value({
+                                                                    ...updates,
+                                                                    plugins: updates.plugins.filter(directory => directory !== plugin.directory),
+                                                                });
                                                                 Alerts.show({
                                                                     title: "Done!",
-                                                                    body: `${plugin.name} has been updated. A ${plugin.usesNative ? "restart" : "refresh"} is needed to apply the update.`,
+                                                                    body: `${plugin.name} has been updated. A ${native ? "restart" : "refresh"} is needed to apply the update.`,
                                                                     confirmText:
-                                                                        plugin.usesNative
+                                                                        native
                                                                             ? "Restart"
                                                                             : "Refresh",
                                                                     cancelText: "Later",
                                                                     onConfirm() {
-                                                                        plugin.usesNative
+                                                                        native
                                                                             ? relaunch()
                                                                             : window.location.reload();
                                                                     },
                                                                 });
-                                                            } catch (e: any) {
-                                                                if (
-                                                                    e
-                                                                        .toString()
-                                                                        .includes(
-                                                                            "silentStop",
-                                                                        )
-                                                                )
-                                                                    return;
+                                                            } catch (e) {
+                                                                const error = String(e);
+                                                                if (error.includes("silentStop")) return;
                                                                 Alerts.show({
                                                                     title: "Update error",
-                                                                    body: e.toString(),
+                                                                    body: error,
                                                                 });
                                                             }
                                                         }}

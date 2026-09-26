@@ -5,6 +5,8 @@
  */
 
 import { settings } from "@equicordplugins/translatePlus/settings";
+import { readResponseText } from "@shared/readResponseText";
+import { isObject } from "@utils/misc";
 
 type Dictionary = Record<string, string>;
 
@@ -12,20 +14,25 @@ const SHAVIAN_DICTIONARY_URL = "https://raw.githubusercontent.com/ForkPrince/Tra
 const SITELEN_DICTIONARY_URL = "https://raw.githubusercontent.com/ForkPrince/TranslatePlus/5ca152b134ea11433971f21b2ef8d556d4306717/sitelen-pona.json";
 
 const TOKI_PONA_WORD_REGEX = /\b(?:leko|weka|pan|lete|linja|lipu|suli|nimi|akesi|misikeke|selo|ike|sijelo|sona|lili|pimeja|ante|jo|loje|telo|walo|kijetesantakalu|kasi|waso|wile|utala|lukin|sina|lape|ma|pilin|jasima|la|olin|pipi|meso|lawa|pi|pakala|oko|tan|ken|jaki|unpa|esun|seme|sitelen|len|kule|soko|open|ala|tenpo|lon|sinpin|pini|kokosila|mama|musi|monsi|mewika|taso|ona|mun|kiwen|tomo|mute|mi|nena|palisa|meli|laso|wawa|ale|kipisi|kulupu|ilo|lupa|nanpa|en|mu|jelo|kili|tonsi|moku|ni|kama|pu|poki|monsuta|sin|lasina|poka|soweli|sewi|elena|epiku|moli|pona|lanpan|alasa|anu|kute|uta|luka|suno|sama|awen|namako|suwi|noka|seli|mije|sike|jan|pali|tawa|inli|nasa|mani|wan|insa|nijon|nasin|kalama|ijo|toki|anpa|kala|kepeken|ko|kon|pana|tu|supa|kin|usawi|yupekosi)\b/gm;
-const SITELEN_REGEX = /(?:󱤀|󱤁|󱤂|󱤃|󱤄|󱤅|󱤆|󱤇|󱤈|󱤉|󱤊|󱤋|󱤌|󱤍|󱤎|󱤏|󱤐|󱤑|󱤒|󱤓|󱤔|󱤕|󱤖|󱤗|󱤘|󱤙|󱤚|󱤛|󱤜|󱤝|󱤞|󱤟|󱤠|󱤡|󱤢|󱤣|󱤤|󱤥|󱤦|󱤧|󱤨|󱤩|󱤪|󱤫|󱤬|󱤭|󱤮|󱤯|󱤰|󱤱|󱤲|󱤳|󱤴|󱤵|󱤶|󱤷|󱤸|󱤹|󱤺|󱤻|󱤼|󱤽|󱤾|󱤿|󱥀|󱥁|󱥂|󱥃|󱥄|󱥅|󱥆|󱥇|󱥈|󱥉|󱥊|󱥋|󱥌|󱥍|󱥎|󱥏|󱥐|󱥑|󱥒|󱥓|󱥔|󱥕|󱥖|󱥗|󱥘|󱥙|󱥚|󱥛|󱥜|󱥝|󱥞|󱥟|󱥠|󱥡|󱥢|󱥣|󱥤|󱥥|󱥦|󱥧|󱥨|󱥩|󱥪|󱥫|󱥬|󱥭|󱥮|󱥯|󱥰|󱥱|󱥲|󱥳|󱥴|󱥵|󱥶|󱥷|󱦠|󱦡|󱦢|󱦣|󱥸|󱥹|󱥺|󱥻|󱥼|󱥽|󱥾|󱥿|󱦀|󱦁|󱦂|󱦃|󱦄|󱦅|󱦆|󱦇|󱦈|󱦐|󱦑|󱦒|󱦓|󱦔|󱦕|󱦖|󱦗|󱦘|󱦙|󱦚|󱦛|󱦜|󱦝)/m;
+const SITELEN_REGEX = /[\u{F1900}-\u{F1988}\u{F1990}-\u{F199D}\u{F19A0}-\u{F19A3}]/u;
 const SHAVIAN_REGEX = /[\u{10450}-\u{1047F}]+/u;
 
 let shavianDictionaryPromise: Promise<Dictionary> | undefined;
-let sitelenDictionaryPromise: Promise<{ dictionary: Dictionary; pattern: RegExp; }> | undefined;
-
-function escapeRegExp(str: string) {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+let sitelenDictionaryPromise: Promise<Dictionary> | undefined;
 
 function fetchDictionary(url: string): Promise<Dictionary> {
-    return fetch(url).then(response => {
-        if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
-        return response.json();
+    return fetch(url, { signal: AbortSignal.timeout(30_000) }).then(async response => {
+        if (!response.ok) {
+            await response.body?.cancel();
+            throw new Error(`Request failed with status ${response.status}`);
+        }
+        const dictionary: unknown = await readResponseText(response, 16 * 1024 * 1024).then(JSON.parse).catch(() => null);
+        if (!isObject(dictionary) || Array.isArray(dictionary))
+            throw new Error("TranslatePlus received an invalid dictionary.");
+        const entries = Object.entries(dictionary);
+        if (!entries.length || entries.some(([key, value]: [string, unknown]) => !key || typeof value !== "string"))
+            throw new Error("TranslatePlus received an invalid dictionary.");
+        return dictionary as Dictionary;
     });
 }
 
@@ -39,23 +46,10 @@ function getShavianDictionary() {
 }
 
 function getSitelenDictionary() {
-    sitelenDictionaryPromise ??= fetchDictionary(SITELEN_DICTIONARY_URL)
-        .then(dictionary => {
-            const sorted = Object.keys(dictionary).sort((a, b) => b.length - a.length);
-            let patternSource = "";
-            for (const value of sorted) {
-                if (patternSource) patternSource += "|";
-                patternSource += escapeRegExp(value);
-            }
-
-            const pattern = new RegExp(`(${patternSource})`, "g");
-
-            return { dictionary, pattern };
-        })
-        .catch(error => {
-            sitelenDictionaryPromise = undefined;
-            throw error;
-        });
+    sitelenDictionaryPromise ??= fetchDictionary(SITELEN_DICTIONARY_URL).catch(error => {
+        sitelenDictionaryPromise = undefined;
+        throw error;
+    });
 
     return sitelenDictionaryPromise;
 }
@@ -108,7 +102,7 @@ async function translateShavian(message: string) {
 
         translated += punctuationBefore;
 
-        if (word in dictionary) translated += dictionary[word];
+        if (Object.hasOwn(dictionary, word)) translated += dictionary[word];
         else translated += word;
 
         translated += punctuationAfter + " ";
@@ -118,55 +112,43 @@ async function translateShavian(message: string) {
 }
 
 async function translateSitelen(message: string) {
-    let spacedMessage = "";
-    for (const char of message) {
-        if (spacedMessage) spacedMessage += " ";
-        spacedMessage += char;
-    }
-
-    const { dictionary, pattern } = await getSitelenDictionary();
-
-    const translate = spacedMessage.replace(pattern, match => dictionary[match]);
-
-    return translate;
+    const dictionary = await getSitelenDictionary();
+    return Array.from(message, char => Object.hasOwn(dictionary, char) ? dictionary[char] : char).join(" ");
 }
 
 async function google(target: string, text: string) {
     if (!text) return { src: "", text: "" };
-    try {
-        const res = await fetch(`https://translate.googleapis.com/translate_a/single?${new URLSearchParams({ client: "gtx", sl: "auto", tl: target, dt: "t", dj: "1", source: "input", q: text })}`);
-        if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
-        const translate = await res.json();
-        let translatedText = "";
-
-        if (translate.sentences) {
-            for (const sentence of translate.sentences) {
-                if (!sentence.trans) continue;
-                if (translatedText) translatedText += "\n";
-                translatedText += sentence.trans;
-            }
-        }
-
-        return {
-            src: translate.src,
-            text: translatedText
-        };
-    } catch (error) {
-        console.error("[TranslatePlus] Google Translate request failed:", error);
-        return { src: "en", text: "Translation failed due to an error." };
+    const res = await fetch(`https://translate.googleapis.com/translate_a/single?${new URLSearchParams({ client: "gtx", sl: "auto", tl: target, dt: "t", dj: "1", source: "input", q: text })}`, { signal: AbortSignal.timeout(30_000) });
+    if (!res.ok) {
+        await res.body?.cancel();
+        throw new Error(`Request failed with status ${res.status}`);
     }
+    const translate: unknown = await readResponseText(res, 8 * 1024 * 1024).then(JSON.parse).catch(() => null);
+    if (!isObject(translate) || !("src" in translate) || typeof translate.src !== "string"
+        || !("sentences" in translate) || !Array.isArray(translate.sentences))
+        throw new Error("Google Translate returned an invalid response.");
+    const translatedText = translate.sentences.map((sentence: unknown) => {
+        if (!isObject(sentence) || !("trans" in sentence) || typeof sentence.trans !== "string")
+            throw new Error("Google Translate returned an invalid response.");
+        return sentence.trans;
+    }).filter(Boolean).join("\n");
+
+    return {
+        src: translate.src,
+        text: translatedText
+    };
 }
 
-export async function translate(text: string): Promise<any> {
+export async function translate(text: string) {
     const { target, toki, sitelen, shavian } = settings.store;
 
-    const output = { src: "", text: "" };
-
-    if ((isTokiPona(text) || isSitelen(text)) && (toki || sitelen)) {
+    if ((toki && isTokiPona(text)) || (sitelen && isSitelen(text))) {
         if (isSitelen(text) && sitelen) text = await translateSitelen(text);
 
-        const translate = await (await fetch("https://aiapi.serversmp.xyz/toki", {
+        const response = await fetch("https://aiapi.serversmp.xyz/toki", {
             method: "POST",
+            redirect: "error",
+            signal: AbortSignal.timeout(30_000),
             headers: {
                 "Accept": "application/json",
                 "Content-Type": "application/json"
@@ -176,21 +158,27 @@ export async function translate(text: string): Promise<any> {
                 src: "tl",
                 target: "en"
             })
-        })).json();
+        });
+        if (!response.ok) {
+            await response.body?.cancel();
+            throw new Error(`Toki Pona translation request failed (${response.status}).`);
+        }
+        const translate: unknown = await readResponseText(response, 8 * 1024 * 1024).then(JSON.parse).catch(() => null);
+        if (!isObject(translate) || !("translation" in translate) || !Array.isArray(translate.translation)
+            || typeof translate.translation[0] !== "string")
+            throw new Error("Toki Pona provider returned an invalid response.");
 
-        output.src = "tp";
-        output.text = target === "en" ? translate.translation[0] : (await google(target, translate.translation[0])).text;
-    } else if (isShavian(text) && shavian) {
-        const translate = await translateShavian(text);
-
-        output.src = "sh";
-        output.text = target === "en" ? translate : (await google(target, translate)).text;
-    } else {
-        const translate = await google(target, text);
-
-        output.src = translate.src;
-        output.text = translate.text;
+        return {
+            src: "tp",
+            text: target === "en" ? translate.translation[0] : (await google(target, translate.translation[0])).text
+        };
     }
-
-    return output;
+    if (isShavian(text) && shavian) {
+        const translate = await translateShavian(text);
+        return {
+            src: "sh",
+            text: target === "en" ? translate : (await google(target, translate)).text
+        };
+    }
+    return google(target, text);
 }

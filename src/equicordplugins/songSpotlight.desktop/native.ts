@@ -18,5 +18,6 @@ export async function renderSong(_: IpcMainInvokeEvent, song: Song) {
     return handlers.renderSong(song);
 }
 export async function validateSong(_: IpcMainInvokeEvent, song: Song) {
-    return handlers.validateSong(song);
+    const service = handlers.services.find(service => service.name === song.service);
+    return service?.types.includes(song.type) ? service.validate(song.type, song.id) : false;
 }

@@ -5,7 +5,6 @@
  */
 
 import { Devs } from "@utils/constants";
-import { isNonNullish } from "@utils/guards";
 import definePlugin from "@utils/types";
 import { FluxDispatcher, LocaleStore } from "@webpack/common";
 
@@ -45,7 +44,7 @@ interface TrendingCategories {
     trendingGIFPreview: { src: string; };
 }
 
-function toDiscordGif(item: TenorResult): DiscordGif | null {
+function toDiscordGif(item: TenorResult): DiscordGif {
     const { gif, webm } = item.media[0];
 
     return {
@@ -61,7 +60,7 @@ function toDiscordGif(item: TenorResult): DiscordGif | null {
 }
 
 function mapToDiscordGifs(items: TenorResult[]) {
-    return items.map(toDiscordGif).filter(isNonNullish);
+    return items.map(toDiscordGif);
 }
 
 async function tenorFetch<TResult>(path: string, params: Record<string, string>) {

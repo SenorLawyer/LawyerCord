@@ -78,12 +78,8 @@ function hasExactKeys(value: Record<string, unknown>, expected: readonly string[
     return actual.length === sortedExpected.length && actual.every((key, index) => key === sortedExpected[index]);
 }
 
-function isTimestamp(value: unknown): value is number {
-    return Number.isSafeInteger(value) && (value as number) >= 1_700_000_000_000 && (value as number) <= 9_999_999_999_999;
-}
-
 export function isProtocolTimestamp(value: unknown): value is number {
-    return isTimestamp(value);
+    return Number.isSafeInteger(value) && (value as number) >= 1_700_000_000_000 && (value as number) <= 9_999_999_999_999;
 }
 
 export function isEnvelopeId(value: unknown): value is string {
@@ -169,7 +165,7 @@ export function parseKeyAnnouncement(content: string): KeyAnnouncement {
     const value = parseJsonAfterPrefix(content, KEY_ANNOUNCEMENT_PREFIX);
     if (!isRecord(value) || !hasExactKeys(value, ["v", "t", "u", "d", "s", "e", "z"]))
         throw new Error("Malformed key announcement");
-    if (value.v !== PROTOCOL_VERSION || value.t !== "k" || !isSnowflake(value.u) || !isTimestamp(value.d) ||
+    if (value.v !== PROTOCOL_VERSION || value.t !== "k" || !isSnowflake(value.u) || !isProtocolTimestamp(value.d) ||
         typeof value.s !== "string" || !BASE64URL_32.test(value.s) || !isCanonicalBase64Url(value.s, 32) ||
         typeof value.e !== "string" || !BASE64URL_32.test(value.e) || !isCanonicalBase64Url(value.e, 32) ||
         typeof value.z !== "string" || !BASE64URL_64.test(value.z) || !isCanonicalBase64Url(value.z, 64))
@@ -185,7 +181,7 @@ export function parseEncryptedEnvelope(content: string): EncryptedEnvelope {
     if (!isRecord(value) || !hasExactKeys(value, ["v", "t", "i", "c", "s", "d", "q", "k", "r", "n", "x", "z"]))
         throw new Error("Malformed encrypted envelope");
     if (value.v !== PROTOCOL_VERSION || value.t !== "m" || !isEnvelopeId(value.i) ||
-        !isSnowflake(value.c) || !isSnowflake(value.s) || !isTimestamp(value.d) ||
+        !isSnowflake(value.c) || !isSnowflake(value.s) || !isProtocolTimestamp(value.d) ||
         !Number.isSafeInteger(value.q) || (value.q as number) < 1 ||
         typeof value.k !== "string" || !BASE64URL_32.test(value.k) || !isCanonicalBase64Url(value.k, 32) ||
         !isCanonicalBase64Url(value.n, 12) || !isCanonicalVariableBase64Url(value.x, 17, MAX_DISCORD_MESSAGE_LENGTH) ||

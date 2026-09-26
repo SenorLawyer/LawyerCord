@@ -4,48 +4,50 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Button, closeModal, Menu, Modal,openModalLazy, Slider, TextInput, useState } from "@webpack/common";
+import { Paragraph } from "@components/Paragraph";
+import { parseUrl } from "@utils/misc";
+import { makeRange } from "@utils/types";
+import { Button, closeModal, Menu, Modal, openModalLazy, Slider, TextInput, useState } from "@webpack/common";
 
-import { folderIconsData, settings } from "./settings";
-import { folderProp, int2rgba, setFolderData } from "./util";
+import { settings } from "./settings";
+import { folderProp, int2rgba } from "./util";
 
 export function ImageModal(folderProps: folderProp) {
-    const [data, setData] = useState(((settings.store.folderIcons ?? {}) as folderIconsData)[folderProps.folderId]?.url ?? "");
-    const [size, setSize] = useState(100);
+    const saved = settings.store.folderIcons?.[folderProps.folderId];
+    const [data, setData] = useState(saved?.url ?? "");
+    const [size, setSize] = useState(saved?.size ?? 100);
+    const valid = data === "" || parseUrl(data) !== null;
     return (
         <>
             <TextInput
                 // this looks like a horrorshow
                 defaultValue={data}
-                onChange={(val, _n) => {
-                    setData(val);
-                }}
+                onChange={setData}
+                error={valid ? undefined : "Enter a complete image URL."}
+                aria-label="Folder icon URL"
                 placeholder="https://example.com/image.png"
             >
             </TextInput>
             <RenderPreview folderProps={folderProps} url={data} size={size} />
             {data && <>
-                <div style={{
-                    color: "#FFF"
-                }}>Change the size of the folder icon</div>
+                <Paragraph>Change the size of the folder icon</Paragraph>
                 <Slider
-                    initialValue={100}
-                    onValueChange={(v: number) => {
-                        setSize(v);
-                    }}
+                    aria-label="Folder icon size in percent"
+                    initialValue={size}
+                    onValueChange={setSize}
                     maxValue={200}
                     minValue={25}
                     // [25, 200]
-                    markers={Array.apply(0, Array(176)).map((_, i) => i + 25)}
+                    markers={makeRange(25, 200)}
                     stickToMarkers={true}
                     keyboardStep={1}
                     renderMarker={() => null} />
             </>}
-            <Button onClick={() => {
-                setFolderData(folderProps, {
-                    url: data,
-                    size: size
-                });
+            <Button disabled={!valid} onClick={() => {
+                settings.store.folderIcons = {
+                    ...settings.store.folderIcons,
+                    [folderProps.folderId]: { url: data, size }
+                };
                 closeModal("custom-folder-icon");
             }}
             >
@@ -54,8 +56,8 @@ export function ImageModal(folderProps: folderProp) {
             <hr />
             <Button onClick={() => {
                 // INFO: unset button
-                const folderSettings = settings.store.folderIcons as folderIconsData;
-                if (folderSettings[folderProps.folderId]) {
+                const folderSettings = settings.store.folderIcons;
+                if (folderSettings?.[folderProps.folderId]) {
                     folderSettings[folderProps.folderId] = null;
                 }
                 closeModal("custom-folder-icon");
@@ -67,9 +69,9 @@ export function ImageModal(folderProps: folderProp) {
     );
 }
 export function RenderPreview({ folderProps, url, size }: { folderProps: folderProp; url: string; size: number; }) {
-    if (!url) return null;
+    if (!parseUrl(url)) return null;
     return (
-        <div className="test1234" style={{
+        <div style={{
             width: "20vh",
             height: "20vh",
             overflow: "hidden",
@@ -100,13 +102,6 @@ export function makeContextItem(a: folderProp) {
                             title="Set a New Icon."
                         >
                             <ImageModal folderId={a.folderId} folderColor={a.folderColor} />
-                            <div style={{
-                                color: "white",
-                                margin: "2.5%",
-                                marginTop: "1%"
-                            }}>
-                                You might have to hover the folder after setting in order for it to refresh.
-                            </div>
                         </Modal>
                     );
                 },

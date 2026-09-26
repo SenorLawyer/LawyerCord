@@ -21,7 +21,8 @@ import { IpcEvents } from "@shared/IpcEvents";
 import { normalizeUpdateChannel, type UpdateChannel } from "@shared/updateChannel";
 import { VENCORD_USER_AGENT } from "@shared/vencordUserAgent";
 import { ipcMain } from "electron";
-import { writeFileSync } from "original-fs";
+import { mkdtempSync, renameSync, rmSync, writeFileSync } from "original-fs";
+import { join } from "path";
 
 import gitHash from "~git-hash";
 import gitRemote from "~git-remote";
@@ -31,6 +32,7 @@ import { type GithubRelease, selectUpdateRelease } from "./releaseSelection";
 
 const API_BASE = `https://api.github.com/repos/${gitRemote}`;
 let PendingUpdate: string | null = null;
+let updateCheck = Symbol();
 
 async function githubGet<T = any>(endpoint: string) {
     return fetchJson<T>(API_BASE + endpoint, {
@@ -54,9 +56,11 @@ async function getReleaseCommit(release: GithubRelease): Promise<string> {
 }
 
 async function fetchUpdates(channel: UpdateChannel) {
+    const check = updateCheck = Symbol();
+    PendingUpdate = null;
     const release = await getRelease(channel);
     const releaseCommit = await getReleaseCommit(release);
-    if (releaseCommit === gitHash) return null;
+    if (check !== updateCheck || releaseCommit === gitHash) return null;
 
     const asset = release.assets.find(asset => asset.name === ASAR_FILE);
     if (!asset) throw new Error(`The ${channel} release does not include ${ASAR_FILE}`);
@@ -80,8 +84,17 @@ async function calculateGitChanges(_: unknown, updateChannel: unknown) {
 async function applyUpdates() {
     if (!PendingUpdate) return true;
 
+    const check = updateCheck;
     const data = await fetchBuffer(PendingUpdate);
-    writeFileSync(__dirname, data, { flush: true });
+    if (check !== updateCheck || !PendingUpdate) return false;
+    const tempDir = mkdtempSync(`${__dirname}.update-`);
+    try {
+        const tempFile = join(tempDir, ASAR_FILE);
+        writeFileSync(tempFile, data, { flush: true });
+        renameSync(tempFile, __dirname);
+    } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+    }
 
     PendingUpdate = null;
 

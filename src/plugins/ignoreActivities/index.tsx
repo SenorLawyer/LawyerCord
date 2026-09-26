@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { definePluginSettings } from "@api/Settings";
 import { getUserSettingLazy } from "@api/UserSettings";
 import ErrorBoundary from "@components/ErrorBoundary";
@@ -14,7 +15,7 @@ import CustomRpcPlugin from "@plugins/customRPC";
 import { Devs } from "@utils/constants";
 import { Margins } from "@utils/margins";
 import definePlugin, { OptionType } from "@utils/types";
-import { Button, RunningGameStore, showToast, TextArea, Toasts, Tooltip, useEffect, useState } from "@webpack/common";
+import { Button, Menu, RunningGameStore, showToast, TextArea, Toasts, Tooltip, useEffect, useState } from "@webpack/common";
 
 const enum ActivitiesTypes {
     Game,
@@ -77,7 +78,10 @@ function ToggleIcon(activity: IgnoredActivity, tooltipText: string, path: string
             {tooltipProps => (
                 <button
                     {...tooltipProps}
-                    onClick={e => handleActivityToggle(e, activity)}
+                    onClick={e => {
+                        e.stopPropagation();
+                        toggleActivity(activity);
+                    }}
                     style={{ all: "unset", cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center" }}
                 >
                     <svg
@@ -96,17 +100,17 @@ function ToggleIcon(activity: IgnoredActivity, tooltipText: string, path: string
 const ToggleIconOn = (activity: IgnoredActivity, fill: string) => ToggleIcon(activity, "Disable activity", "M480-320q75 0 127.5-52.5T660-500q0-75-52.5-127.5T480-680q-75 0-127.5 52.5T300-500q0 75 52.5 127.5T480-320Zm0-72q-45 0-76.5-31.5T372-500q0-45 31.5-76.5T480-608q45 0 76.5 31.5T588-500q0 45-31.5 76.5T480-392Zm0 192q-146 0-266-81.5T40-500q54-137 174-218.5T480-800q146 0 266 81.5T920-500q-54 137-174 218.5T480-200Zm0-300Zm0 220q113 0 207.5-59.5T832-500q-50-101-144.5-160.5T480-720q-113 0-207.5 59.5T128-500q50 101 144.5 160.5T480-280Z", fill);
 const ToggleIconOff = (activity: IgnoredActivity, fill: string) => ToggleIcon(activity, "Enable activity", "m644-428-58-58q9-47-27-88t-93-32l-58-58q17-8 34.5-12t37.5-4q75 0 127.5 52.5T660-500q0 20-4 37.5T644-428Zm128 126-58-56q38-29 67.5-63.5T832-500q-50-101-143.5-160.5T480-720q-29 0-57 4t-55 12l-62-62q41-17 84-25.5t90-8.5q151 0 269 83.5T920-500q-23 59-60.5 109.5T772-302Zm20 246L624-222q-35 11-70.5 16.5T480-200q-151 0-269-83.5T40-500q21-53 53-98.5t73-81.5L56-792l56-56 736 736-56 56ZM222-624q-29 26-53 57t-41 67q50 101 143.5 160.5T480-280q20 0 39-2.5t39-5.5l-36-38q-11 3-21 4.5t-21 1.5q-75 0-127.5-52.5T300-500q0-11 1.5-21t4.5-21l-84-82Zm319 93Zm-151 75Z", fill);
 
-function ToggleActivityComponent(activity: IgnoredActivity, isPlaying = false) {
-    const s = settings.use(["ignoredActivities"]);
+const ACTIVITY_SETTINGS: ["ignoredActivities"] = ["ignoredActivities"];
+
+function ToggleActivityComponent(activity: IgnoredActivity) {
+    const s = settings.use(ACTIVITY_SETTINGS);
     const { ignoredActivities } = s;
 
     if (ignoredActivities.some(act => act.id === activity.id)) return ToggleIconOff(activity, "var(--status-danger)");
-    return ToggleIconOn(activity, isPlaying ? "var(--green-300)" : "var(--interactive-icon-default)");
+    return ToggleIconOn(activity, "var(--interactive-icon-default)");
 }
 
-function handleActivityToggle(e: React.MouseEvent<HTMLButtonElement, MouseEvent>, activity: IgnoredActivity) {
-    e.stopPropagation();
-
+function toggleActivity(activity: IgnoredActivity) {
     const ignoredActivityIndex = settings.store.ignoredActivities.findIndex(act => act.id === activity.id);
     if (ignoredActivityIndex === -1) settings.store.ignoredActivities.push(activity);
     else settings.store.ignoredActivities.splice(ignoredActivityIndex, 1);
@@ -183,6 +187,24 @@ function IdsListComponent(props: { setValue: (value: string) => void; }) {
         </section>
     );
 }
+
+interface RegisteredGame {
+    id?: string;
+    exePath: string;
+    name: string;
+}
+
+const registeredGameMenu: NavContextMenuPatchCallback = (children, { rawGame }: { rawGame: RegisteredGame; }) => {
+    const id = rawGame.id ?? rawGame.exePath;
+    children.push(
+        <Menu.MenuCheckboxItem
+            id="ignore-activities-toggle-activity"
+            label="Enable Activity"
+            checked={!settings.store.ignoredActivities.some(activity => activity.id === id)}
+            action={() => toggleActivity({ id, name: rawGame.name, type: ActivitiesTypes.Game })}
+        />
+    );
+};
 
 const settings = definePluginSettings({
     importCustomRPC: {
@@ -299,14 +321,6 @@ export default definePlugin({
                 replace: (m, runningGames) => `${m}${runningGames}=${runningGames}.filter(({id,name})=>$self.isActivityNotIgnored({type:0,application_id:id,name}));`
             }
         },
-        {
-            find: "#{intl::SETTINGS_GAMES_TOGGLE_OVERLAY}",
-            replacement: {
-                match: /(\i)&&!\i\|\|\i\?null(?<=(\i)\.verified&&.+?)/,
-                replace: "$self.renderToggleGameActivityButton($2,$1),$&"
-            }
-        },
-
         // Activities from the apps launcher in the bottom right of the chat bar
         {
             find: "#{intl::EMBEDDED_ACTIVITIES_DEVELOPER_ACTIVITY}",
@@ -316,6 +330,10 @@ export default definePlugin({
             }
         }
     ],
+
+    contextMenus: {
+        "registered-game-overflow-menu": registeredGameMenu
+    },
 
     async start() {
         rebuildFilteredActivityIds();
@@ -350,16 +368,6 @@ export default definePlugin({
         }
 
         return true;
-    },
-
-    renderToggleGameActivityButton(props: { id?: string; name: string, exePath: string; }, nowPlaying: boolean) {
-        return (
-            <ErrorBoundary noop>
-                <div style={{ marginLeft: 12, zIndex: 0 }}>
-                    {ToggleActivityComponent({ id: props.id ?? props.exePath, name: props.name, type: ActivitiesTypes.Game }, nowPlaying)}
-                </div>
-            </ErrorBoundary>
-        );
     },
 
     renderToggleActivityButton(props: { id: string; name: string; }) {

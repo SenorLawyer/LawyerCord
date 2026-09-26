@@ -30,6 +30,7 @@ function HotkeyRecorder() {
         setHotkeysSuspended(true);
 
         function onKeyDown(e: KeyboardEvent) {
+            if (e.isComposing) return;
             e.preventDefault();
             e.stopPropagation();
 

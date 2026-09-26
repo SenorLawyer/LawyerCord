@@ -221,14 +221,7 @@ export default definePlugin({
 
                 // check if the user is in the map
                 const existingJoinTime = userJoinTimes.get(userId);
-                if (existingJoinTime) {
-                    // check if the user is in a channel
-                    if (channelId !== existingJoinTime.channelId) {
-                        // update the user's join time
-                        addUserJoinTime(userId, channelId, guildId);
-                    }
-                } else {
-                    // user wasn't previously tracked, add the user to the map
+                if (existingJoinTime?.channelId !== channelId) {
                     addUserJoinTime(userId, channelId, guildId);
                 }
             }

@@ -16,8 +16,8 @@ import { findCssClassesLazy, findStoreLazy } from "@webpack";
 import { Clickable, ContextMenuApi, FluxDispatcher, Menu, React } from "@webpack/common";
 
 import { contextMenus } from "./components/contextMenu";
-import { openCategoryModal, requireSettingsModal } from "./components/CreateCategoryModal";
-import { DEFAULT_CHUNK_SIZE } from "./constants";
+import { openCategoryModal } from "./components/CreateCategoryModal";
+import { DEFAULT_CHUNK_SIZE, DEFAULT_COLOR } from "./constants";
 import { canMoveCategory, canMoveCategoryInDirection, Category, categoryLen, collapseCategory, getAllUncollapsedChannels, getCategoryByIndex, getCategoryChannels, getSections, init, isPinned, moveCategory, removeCategory, usePinnedDms } from "./data";
 
 interface ChannelComponentProps {
@@ -29,8 +29,6 @@ interface ChannelComponentProps {
 const headerClasses = findCssClassesLazy("privateChannelsHeaderContainer", "headerText");
 
 export const PrivateChannelSortStore = findStoreLazy("PrivateChannelSortStore") as { getPrivateChannelIds: () => string[]; };
-
-export let instance: any;
 
 export const enum PinOrder {
     LastMessage,
@@ -160,11 +158,6 @@ export default definePlugin({
 
     sections: null as number[] | null,
 
-    set _instance(i: any) {
-        this.instance = i;
-        instance = i;
-    },
-
     startAt: StartAt.WebpackReady,
     start: init,
     flux: {
@@ -176,10 +169,9 @@ export default definePlugin({
     categoryLen,
     getSections,
     getAllUncollapsedChannels,
-    requireSettingsMenu: requireSettingsModal,
 
     makeProps(instance, { sections }: { sections: number[]; }) {
-        this._instance = instance;
+        this.instance = instance;
         this.sections = sections;
 
         this.sections.splice(1, 0, ...this.getSections());
@@ -316,7 +308,7 @@ export default definePlugin({
             >
                 <h2
                     className={classes(headerClasses.privateChannelsHeaderContainer, "vc-pindms-section-container", category.collapsed ? "vc-pindms-collapsed" : "")}
-                    style={{ color: `#${category.color.toString(16).padStart(6, "0")}` }}
+                    style={{ color: `#${(category.color ?? DEFAULT_COLOR).toString(16).padStart(6, "0")}` }}
                 >
                     <span className={headerClasses.headerText}>
                         {category?.name ?? "uh oh"}
@@ -354,9 +346,5 @@ export default definePlugin({
         const channelId = getCategoryChannels(category)[index];
 
         return { channel: channels[channelId], category };
-    },
-
-    getCategoryChannels(category: Category) {
-        return getCategoryChannels(category);
     }
 });

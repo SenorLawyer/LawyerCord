@@ -115,9 +115,9 @@ function shouldShowBadge(userId: string, requirement: number, index: number) {
 
     const days = daysSince(RelationshipStore.getSince(userId));
 
-    if (ranks[index + 1] == null) return days > requirement;
+    if (ranks[index + 1] == null) return days >= requirement;
 
-    return (days > requirement && days < ranks[index + 1].requirement);
+    return (days >= requirement && days < ranks[index + 1].requirement);
 }
 
 function getBadgesToApply() {

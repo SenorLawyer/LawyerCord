@@ -107,9 +107,12 @@ export function overlaps(blocks: AutomationBlock[], x: number, y: number, type: 
 
 /** Free space at or below a preferred spot, so a new node never lands on an old one. */
 export function freeSpot(blocks: AutomationBlock[], x: number, y: number, type: AutomationBlockType): Point {
-    let top = y;
-    for (let attempt = 0; attempt < 40 && overlaps(blocks, x, top, type); attempt++) top += nodeHeight(type) + GRID * 2;
-    return { x: snap(Math.max(0, x)), y: snap(Math.max(0, top)) };
+    x = snap(Math.max(0, x));
+    y = snap(Math.max(0, y));
+    for (const block of blocks.toSorted((a, b) => nodePosition(a).y - nodePosition(b).y)) {
+        if (overlaps([block], x, y, type)) y = snap(nodePosition(block).y + nodeHeight(block.type) + GRID * 2);
+    }
+    return { x, y };
 }
 
 /** Snaps to the grid, and onto a neighbour's edge when one is within reach, so hand-placed nodes line up. */

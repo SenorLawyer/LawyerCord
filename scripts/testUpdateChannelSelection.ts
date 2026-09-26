@@ -14,7 +14,6 @@ function release(tag_name: string, published_at: string, prerelease = false): Gi
         prerelease,
         published_at,
         tag_name,
-        target_commitish: tag_name,
     };
 }
 
@@ -29,5 +28,17 @@ assert.equal(selectUpdateRelease([oldBeta, stable], "beta"), stable, "beta falls
 assert.equal(selectUpdateRelease([newBeta, stable], "beta"), newBeta, "beta selects a newer beta release");
 assert.equal(selectUpdateRelease([oldNightly, stable], "nightly"), stable, "nightly falls back to the newer stable release");
 assert.equal(selectUpdateRelease([newNightly, newBeta, stable], "nightly"), newNightly, "nightly selects the newest nightly release");
+
+const sameVersionBeta = release("v2.0.0.0-beta.9", "2026-08-31T10:00:00Z", true);
+assert.equal(selectUpdateRelease([sameVersionBeta, stable], "beta"), stable, "stable supersedes beta at the same version");
+assert.equal(selectUpdateRelease([sameVersionBeta, stable], "nightly"), stable, "nightly fallback also respects stable promotion");
+assert.equal(selectUpdateRelease([newBeta], "beta"), newBeta);
+assert.equal(selectUpdateRelease([newBeta], "nightly"), newBeta);
+assert.equal(selectUpdateRelease([stable], "beta"), stable);
+assert.equal(selectUpdateRelease([newNightly], "nightly"), newNightly);
+for (const channel of ["stable", "beta", "nightly"] as const)
+    assert.throws(() => selectUpdateRelease([], channel), new RegExp(`No ${channel} release`));
+for (const channel of ["stable", "beta"] as const)
+    assert.throws(() => selectUpdateRelease([newNightly], channel), new RegExp(`No ${channel} release`));
 
 console.log("update channel selection checks passed");

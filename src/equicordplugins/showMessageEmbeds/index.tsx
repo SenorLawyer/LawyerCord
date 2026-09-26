@@ -149,7 +149,8 @@ async function unfurlEmbed(url: string, message: Message) {
         logger.error("Failed to get embed", e);
     });
 
-    if (!resp?.body?.embeds || resp.body.embeds.length === 0) {
+    if (!resp) return;
+    if (!resp.body?.embeds || resp.body.embeds.length === 0) {
         showFailureToast("No embeds found");
         return;
     }

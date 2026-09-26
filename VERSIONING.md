@@ -13,6 +13,14 @@ major.minor.patch.packaging
 - Increment `patch` for backwards-compatible fixes, performance improvements and security hardening.
 - Increment `packaging` for rebuilds that change distribution metadata without changing source behavior.
 
+## Compatibility in 3.0.0.0
+
+Scheduled messages now record their originating account, and sending requires that account. Entries created by older versions have no trustworthy owner and remain saved but paused until recreated under the intended account. This stored-data behavior requires a major version increment.
+
+Older versions ignore account ownership and attempted-send markers. Downgrading while scheduled entries remain can send messages from another account or repeat an earlier attempt. Review and remove saved scheduled entries before downgrading.
+
+TriviaAI is also removed in `3.0.0.0` because its required API key and arbitrary endpoint conflict with the plugin policy. The Answer With AI actions are unavailable. Existing saved settings are retained but no longer used by a bundled plugin.
+
 ## Release process
 
 Releases are produced only by the GitHub Actions workflow after a protected pull-request merge or an explicit manual dispatch against current `main`. Do not push release tags manually.
@@ -35,3 +43,7 @@ For a stable release:
 5. Test the artifact on its target platform before enabling it for automatic updates.
 
 Release tags are immutable. Fix a bad release with a new version instead of moving an existing tag.
+
+## VoiceRejoin compatibility in 3.0.0.0
+
+Saved reconnect targets now include the originating account. Older targets without an owner are retained but ignored; joining a call records a new target. Older clients ignore this owner field, so disabling VoiceRejoin before downgrading avoids using a target from another account.

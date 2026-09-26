@@ -17,7 +17,7 @@
 */
 
 import { ApplicationCommandInputType, ApplicationCommandOptionType, findOption, OptionalMessageOption, RequiredMessageOption, sendBotMessage } from "@api/Commands";
-import { addMessagePreEditListener, addMessagePreSendListener, MessageObject, removeMessagePreEditListener, removeMessagePreSendListener } from "@api/MessageEvents";
+import { MessageObject } from "@api/MessageEvents";
 import { migratePluginSettings } from "@api/Settings";
 import { Devs, EquicordDevs, GUILD_IDS } from "@utils/constants";
 import { sendMessage } from "@utils/discord";
@@ -35,7 +35,6 @@ import {
     getCuteNeko,
     getFavoriteGif,
     isMorse,
-    loadFriendImage,
     loadImage,
     makeFreaky,
     mock,
@@ -564,7 +563,7 @@ export default definePlugin({
                                 ? `https://cdn.discordapp.com/avatars/${user.member.id}/${user.member?.avatar}.webp?size=256`
                                 : `https://cdn.discordapp.com/embed/avatars/${user.member.id as any as number % 5}.png`;
 
-                            const img = await loadFriendImage(avatarUrl);
+                            const img = await loadImage(avatarUrl);
                             const centerX = user.x + user.size / 2;
                             const centerY = user.y + user.size / 2;
 
@@ -893,15 +892,11 @@ export default definePlugin({
         }
     },
 
-    start() {
-        this.preSend = addMessagePreSendListener((_, msg) => this.onSend(msg));
-        this.preEdit = addMessagePreEditListener((_cid, _mid, msg) =>
-            this.onSend(msg)
-        );
+    onBeforeMessageSend(_channelId, msg) {
+        this.onSend(msg);
     },
 
-    stop() {
-        removeMessagePreSendListener(this.preSend);
-        removeMessagePreEditListener(this.preEdit);
+    onBeforeMessageEdit(_channelId, _messageId, msg) {
+        this.onSend(msg);
     },
 });

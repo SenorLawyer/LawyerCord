@@ -16,6 +16,30 @@ import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
 const filename = "src/api/Notifications/NotificationComponent.tsx";
 const root = fileURLToPath(new URL("../", import.meta.url));
 
+test("notification deletion uses its ID and preserves concurrent log updates", async () => {
+    let log = [{ id: "first", timestamp: 1 }, { id: "second", timestamp: 1 }];
+    const mocks: Record<string, unknown> = {
+        "@api/DataStore": {
+            get: async () => structuredClone(log),
+            set: async (_key: string, value: typeof log) => { log = value; },
+            update: async (_key: string, change: (value: typeof log) => typeof log) => { log = change(log); }
+        },
+        "@api/Settings": { Settings: { notifications: { logLimit: 100 } } },
+        "@utils/css": { classNameFactory: () => () => "" },
+        "nanoid": { nanoid: () => "new" }
+    };
+    const { outputText } = transpileModule(readFileSync("src/api/Notifications/notificationLog.tsx", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022, jsx: 2 }, fileName: "notificationLog.tsx"
+    });
+    const { deleteNotification, persistNotification } = runInNewContext(`${outputText}\nexports;`, {
+        exports: {}, require: (name: string) => mocks[name] ?? {}
+    });
+    await Promise.all([deleteNotification("second"), persistNotification({ title: "New", body: "New" })]);
+    assert.deepEqual(Array.from(log, entry => entry.id), ["new", "first"]);
+    await Promise.all([deleteNotification("first"), deleteNotification("new")]);
+    assert.equal(log.length, 0);
+});
+
 test("notification dismissal releases the queue even if the caller's callback throws", async () => {
     const source = readFileSync(new URL("../src/api/Notifications/Notifications.tsx", import.meta.url), "utf8");
     const code = source.slice(source.indexOf("function _showNotification"), source.indexOf("function shouldBeNative"));
@@ -136,6 +160,7 @@ function fixture(source: string, timeout = 5000, permanent = false) {
     const mocks: Record<string, object> = {
         "./styles.css": {},
         "@api/Settings": { useSettings: () => settings },
+        "@components/Button": { Button: "button" },
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@utils/misc": { classes: (...names: string[]) => names.filter(Boolean).join(" ") },
         "@webpack/common": common,
@@ -198,8 +223,15 @@ function fixture(source: string, timeout = 5000, permanent = false) {
         if (dirty) render();
     }
 
+    function focus(value: boolean, within = false) {
+        const handler = element.props[value ? "onFocus" : "onBlur"];
+        assert.equal(typeof handler, "function");
+        (handler as (event: object) => void)({ currentTarget: { contains: () => within }, relatedTarget: {} });
+        if (dirty) render();
+    }
+
     render();
-    return { settings, props, metrics, animations, timers, advance, hover, render, unmount };
+    return { settings, props, metrics, animations, timers, advance, hover, focus, render, unmount };
 }
 
 function workloads(source: string) {
@@ -299,3 +331,24 @@ if (baseline) {
 } else {
     console.log("Notification performance checks passed: one dismissal callback, zero periodic state updates, hover/timeout/cleanup preserved.");
 }
+
+
+test("keyboard focus pauses notification expiry until focus and hover both leave", () => {
+    const notification = fixture(source);
+    notification.advance(1200);
+    notification.focus(true);
+    notification.advance(7000);
+    assert.equal(notification.metrics.closedAt, null);
+    notification.focus(false, true);
+    notification.advance(1000);
+    assert.equal(notification.metrics.closedAt, null);
+    notification.hover(true);
+    notification.focus(false);
+    notification.advance(1000);
+    assert.equal(notification.metrics.closedAt, null);
+    notification.hover(false);
+    notification.advance(3799);
+    assert.equal(notification.metrics.closedAt, null);
+    notification.advance(1);
+    assert.equal(notification.metrics.closedAt, 14000);
+});

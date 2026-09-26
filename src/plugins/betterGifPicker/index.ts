@@ -13,6 +13,7 @@ const settings = definePluginSettings({
     keepOpen: {
         description: "Keeps the gif picker open after selecting a gif",
         type: OptionType.BOOLEAN,
+        restartNeeded: true,
         default: false
     },
 });

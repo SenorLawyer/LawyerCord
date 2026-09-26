@@ -4,9 +4,16 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { readResponseText } from "@shared/readResponseText";
 import { IpcMainInvokeEvent } from "electron";
 
-export async function makeDeeplTranslateRequest(_: IpcMainInvokeEvent, pro: boolean, apiKey: string, payload: string) {
+export async function makeDeeplTranslateRequest(_: IpcMainInvokeEvent, pro: unknown, apiKey: unknown, payload: unknown) {
+    if (typeof pro !== "boolean" || typeof apiKey !== "string" || typeof payload !== "string")
+        return { status: -1, data: "" };
+
+    if (Buffer.byteLength(payload, "utf8") > 128 * 1024)
+        return { status: 413, data: "" };
+
     const url = pro
         ? "https://api.deepl.com/v2/translate"
         : "https://api-free.deepl.com/v2/translate";
@@ -14,6 +21,8 @@ export async function makeDeeplTranslateRequest(_: IpcMainInvokeEvent, pro: bool
     try {
         const res = await fetch(url, {
             method: "POST",
+            redirect: "error",
+            signal: AbortSignal.timeout(30_000),
             headers: {
                 "Content-Type": "application/json",
                 "Authorization": `DeepL-Auth-Key ${apiKey}`
@@ -21,19 +30,29 @@ export async function makeDeeplTranslateRequest(_: IpcMainInvokeEvent, pro: bool
             body: payload
         });
 
-        const data = await res.text();
+        if (res.status !== 200) {
+            await res.body?.cancel();
+            return { status: res.status, data: "" };
+        }
+
+        const data = await readResponseText(res, 8 * 1024 * 1024);
         return { status: res.status, data };
-    } catch (e) {
-        return { status: -1, data: String(e) };
+    } catch {
+        return { status: -1, data: "" };
     }
 }
 
-export async function makeKagiTranslateRequest(_: IpcMainInvokeEvent, token: string, text: string, sourceLang: string, targetLang: string) {
+export async function makeKagiTranslateRequest(_: IpcMainInvokeEvent, token: unknown, text: unknown, sourceLang: unknown, targetLang: unknown) {
+    if (typeof token !== "string" || typeof text !== "string" || typeof sourceLang !== "string" || typeof targetLang !== "string")
+        return { status: -1, data: null };
+
     const url = "https://translate.kagi.com/api/translate";
 
     try {
         const res = await fetch(url, {
             method: "POST",
+            redirect: "error",
+            signal: AbortSignal.timeout(30_000),
             headers: {
                 "Content-Type": "application/json",
                 "Cookie": `kagi_session=${token}`
@@ -46,9 +65,14 @@ export async function makeKagiTranslateRequest(_: IpcMainInvokeEvent, token: str
             }),
         });
 
-        const data = await res.json();
+        if (res.status !== 200) {
+            await res.body?.cancel();
+            return { status: res.status, data: null };
+        }
+
+        const data: unknown = JSON.parse(await readResponseText(res, 8 * 1024 * 1024));
         return { status: res.status, data };
-    } catch (e) {
-        return { status: -1, data: String(e) };
+    } catch {
+        return { status: -1, data: null };
     }
 }

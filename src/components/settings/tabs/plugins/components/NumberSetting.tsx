@@ -22,18 +22,16 @@ import { React, TextInput, useState } from "@webpack/common";
 
 import { resolveError, SettingProps, SettingsSection } from "./Common";
 
-const MAX_SAFE_NUMBER = BigInt(Number.MAX_SAFE_INTEGER);
-
 export function NumberSetting({ setting, pluginSettings, definedSettings, id, onChange }: SettingProps<PluginSettingNumberDef | PluginSettingBigIntDef>) {
-    function serialize(value: any) {
+    function serialize(value: string) {
         if (setting.type === OptionType.BIGINT) return BigInt(value);
         return Number(value);
     }
 
-    const [state, setState] = useState<any>(`${pluginSettings[id] ?? setting.default ?? 0}`);
+    const [state, setState] = useState(`${pluginSettings[id] ?? setting.default ?? 0}`);
     const [error, setError] = useState<string | null>(null);
 
-    function handleChange(newValue: any) {
+    function handleChange(newValue: string) {
         const isValid = setting.isValid?.call(definedSettings, newValue) ?? true;
 
         setError(resolveError(isValid));
@@ -42,11 +40,7 @@ export function NumberSetting({ setting, pluginSettings, definedSettings, id, on
             onChange(serialize(newValue));
         }
 
-        if (setting.type === OptionType.NUMBER && BigInt(newValue) >= MAX_SAFE_NUMBER) {
-            setState(`${Number.MAX_SAFE_INTEGER}`);
-        } else {
-            setState(newValue);
-        }
+        setState(newValue);
     }
 
     return (

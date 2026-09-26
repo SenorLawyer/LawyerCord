@@ -77,7 +77,6 @@ const messageContextMenuPatch: NavContextMenuPatchCallback = (
 const expressionPickerPatch: NavContextMenuPatchCallback = (children, props: { target: HTMLElement; }) => {
     const id = props?.target?.dataset?.id;
     if (!id) return;
-    if (props.target.className?.includes("lottieCanvas")) return;
 
     const sticker = StickersStore.getStickerById(id);
     if (sticker) {

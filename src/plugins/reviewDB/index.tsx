@@ -28,7 +28,7 @@ import { useAwaiter } from "@utils/react";
 import definePlugin from "@utils/types";
 import { Guild, User } from "@vencord/discord-types";
 import { findCssClassesLazy } from "@webpack";
-import { Clickable, ConfirmModal, IconUtils, Menu, openModal, Parser } from "@webpack/common";
+import { Clickable, ConfirmModal, IconUtils, Menu, openModal, Parser, UserStore } from "@webpack/common";
 
 import { Auth, initAuth, updateAuth } from "./auth";
 import { openReviewsModal } from "./components/ReviewModal";
@@ -41,6 +41,8 @@ const DMSideBarClasses = findCssClassesLazy("widgetPreviews");
 const ProfileCardClasses = findCssClassesLazy("cardsList", "firstCardContainer", "card", "container");
 const ProfileCardContainerClasses = findCssClassesLazy("innerContainer", "icons", "icon", "displayCount", "displayCountText", "displayCountTextColor", "breadcrumb");
 const ProfileCardOverlayClasses = findCssClassesLazy("overlay", "isPrivate", "outer");
+let startupGeneration = 0;
+let startupTimer: ReturnType<typeof setTimeout> | undefined;
 
 const guildPopoutPatch: NavContextMenuPatchCallback = (children, { guild }: { guild: Guild, onClose(): void; }) => {
     if (!guild) return;
@@ -88,15 +90,22 @@ export default definePlugin({
     },
 
     async start() {
+        const generation = ++startupGeneration;
+        const userId = UserStore.getCurrentUser()?.id;
         const s = settings.store;
         const { lastReviewId, notifyReviews } = s;
 
         await initAuth();
+        if (generation !== startupGeneration || UserStore.getCurrentUser()?.id !== userId) return;
 
-        setTimeout(async () => {
-            if (!Auth.token) return;
+        startupTimer = setTimeout(async () => {
+            if (generation !== startupGeneration || UserStore.getCurrentUser()?.id !== userId) return;
+            startupTimer = undefined;
+            const { token } = Auth;
+            if (!token) return;
 
             const user = await getCurrentUserInfo();
+            if (generation !== startupGeneration || UserStore.getCurrentUser()?.id !== userId) return;
             if (user) {
                 updateAuth({ user });
 
@@ -113,14 +122,16 @@ export default definePlugin({
                     const props = notification.type === NotificationType.Ban ? {
                         cancelText: "Appeal",
                         confirmText: "Ok",
-                        onCancel: async () =>
-                            VencordNative.native.openExternal(
+                        onCancel: async () => {
+                            if (generation !== startupGeneration || UserStore.getCurrentUser()?.id !== userId) return;
+                            await VencordNative.native.openExternal(
                                 "https://reviewdb.mantikafasi.dev/api/redirect?"
                                 + new URLSearchParams({
-                                    token: Auth.token!,
+                                    token,
                                     page: "dashboard/appeal"
                                 })
-                            )
+                            );
+                        }
                     } : {};
 
                     openModal(modalProps => (
@@ -143,6 +154,12 @@ export default definePlugin({
                 }
             }
         }, 4000);
+    },
+
+    stop() {
+        startupGeneration++;
+        clearTimeout(startupTimer);
+        startupTimer = undefined;
     },
 
     renderProfileCollection: {

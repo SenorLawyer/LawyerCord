@@ -101,10 +101,6 @@ export function clearChannelFromGhost(channelId: string): void {
 
 }
 
-export function isChannelCleared(channelId: string): boolean {
-    return clearedChannels.has(channelId);
-}
-
 const ChannelWrapperStyles = findCssClassesLazy("muted", "wrapper");
 
 export function Boo({ channel }: { channel: Channel; }) {

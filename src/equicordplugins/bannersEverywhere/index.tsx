@@ -4,14 +4,15 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import * as DataStore from "@api/DataStore";
 import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
+import ErrorBoundary from "@components/ErrorBoundary";
 import usrbg from "@plugins/usrbg";
 import { Devs } from "@utils/constants";
+import { useAwaiter } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
 import { User } from "@vencord/discord-types";
-import { UserProfileStore } from "@webpack/common";
+import { IconUtils, UserProfileStore,useStateFromStores } from "@webpack/common";
 
 import style from "./style.css?managed";
 
@@ -38,7 +39,33 @@ const settings = definePluginSettings({
     },
 });
 
-const DATASTORE_KEY = "bannersEverywhere";
+interface StaticBannerProps {
+    url: string;
+    convert: (url: string) => Promise<string>;
+}
+
+const StaticBanner = ErrorBoundary.wrap(({ url, convert }: StaticBannerProps) => {
+    const [converted] = useAwaiter(() => convert(url), { fallbackValue: url });
+    return <img alt="" src={converted ?? url} className="vc-banners-everywhere-memberlist" />;
+}, { noop: true });
+
+interface MemberListBannerProps {
+    userId: string;
+    preferNameplate: boolean;
+    nameplate?: Nameplate;
+    getBanner: (userId: string) => string | undefined;
+    convert: (url: string) => Promise<string>;
+}
+
+const BANNER_SETTINGS: "animate"[] = ["animate"];
+const MemberListBanner = ErrorBoundary.wrap(({ userId, nameplate, preferNameplate, getBanner, convert }: MemberListBannerProps) => {
+    const { animate } = settings.use(BANNER_SETTINGS);
+    const url = useStateFromStores([UserProfileStore], () => getBanner(userId), [userId, animate]);
+    if (!url || (preferNameplate && nameplate)) return null;
+    if (!animate) return <StaticBanner key={url} url={url} convert={convert} />;
+    return <img alt="" src={url} className="vc-banners-everywhere-memberlist" />;
+}, { noop: true });
+
 const MAX_PNG_CACHE_SIZE = 100;
 
 export default definePlugin({
@@ -53,8 +80,8 @@ export default definePlugin({
             replacement: [
                 {
                     // We add the banner as a property while we can still access the user id
-                    match: /user:(\i).{0,150}nameplate:(\i).*?name:null.*?(?=avatar:)/,
-                    replace: "$&banner:$self.memberListBannerHook($1, $2),",
+                    match: /(?=avatar:\(0,\i\.jsx\)\(\i,\{user:)/,
+                    replace: "banner:$self.memberListBannerHook(arguments[0].user,arguments[0].nameplate),",
                 },
                 {
                     match: /(?<=\),nameplate:)(\i)/,
@@ -63,7 +90,7 @@ export default definePlugin({
             ]
         },
         {
-            find: "role:\"listitem\",innerRef",
+            find: ".MEMBER_LIST}),(0,",
             replacement: {
                 // We cant access the user id here, so we take the banner property we set earlier
                 match: /children:\[(?=.{0,100}\.MEMBER_LIST)/,
@@ -72,31 +99,12 @@ export default definePlugin({
         }
     ],
 
-    data: {},
     managedStyle: style,
     pngCache: new Map<string, Promise<string>>(),
-    persistTimeout: undefined as ReturnType<typeof setTimeout> | undefined,
-
-    async start() {
-        this.data = await DataStore.get(DATASTORE_KEY) || {};
-    },
-
+    pendingConversions: new Map<string, () => void>(),
     stop() {
-        if (this.persistTimeout) {
-            clearTimeout(this.persistTimeout);
-            this.persistTimeout = undefined;
-        }
+        for (const cancel of this.pendingConversions.values()) cancel();
         this.pngCache.clear();
-        void DataStore.set(DATASTORE_KEY, this.data);
-    },
-
-    queuePersist() {
-        if (this.persistTimeout) return;
-
-        this.persistTimeout = setTimeout(() => {
-            this.persistTimeout = undefined;
-            void DataStore.set(DATASTORE_KEY, this.data);
-        }, 2_000);
     },
 
     nameplate(nameplate: Nameplate | undefined) {
@@ -104,58 +112,64 @@ export default definePlugin({
     },
 
     memberListBannerHook(user: User, nameplate: Nameplate | undefined) {
-        let url = this.getBanner(user.id);
-        if (!url) return;
-        if (settings.store.preferNameplate && nameplate) return;
-        if (!settings.store.animate) {
-            // Discord Banners
-            url = url.replace(".gif", ".png");
-            // Usrbg Banners
-            this.gifToPng(url)
-                .then(pngUrl => {
-                    const imgElement = document.getElementById(`vc-banners-everywhere-${user.id}`) as HTMLImageElement;
-                    if (imgElement) {
-                        imgElement.src = pngUrl;
-                    }
-                })
-                .catch();
-        }
-
-        return (
-            <img alt="" id={`vc-banners-everywhere-${user.id}`} src={url} className="vc-banners-everywhere-memberlist"></img>
-        );
+        return <MemberListBanner userId={user.id} nameplate={nameplate} preferNameplate={settings.store.preferNameplate} getBanner={this.getBanner} convert={this.gifToPng} />;
     },
 
     async gifToPng(url: string): Promise<string> {
         const cached = this.pngCache.get(url);
         if (cached) return cached;
 
-        const promise = new Promise<string>((resolve, reject) => {
+        const promise = new Promise<string>(resolve => {
             const img = new Image();
             img.crossOrigin = "anonymous";
+            const finish = (value: string) => {
+                if (this.pendingConversions.get(url) !== cancel) return;
+                clearTimeout(timeout);
+                img.onload = null;
+                img.onerror = null;
+                this.pendingConversions.delete(url);
+                resolve(value);
+            };
+            const cancel = () => {
+                finish(url);
+                img.removeAttribute("src");
+            };
+            const timeout = setTimeout(cancel, 30_000);
+            this.pendingConversions.set(url, cancel);
             img.onload = () => {
-                const canvas = document.createElement("canvas");
-                canvas.width = img.width;
-                canvas.height = img.height;
-                const ctx = canvas.getContext("2d");
-                if (ctx) {
-                    ctx.drawImage(img, 0, 0);
-                    resolve(canvas.toDataURL("image/png"));
-                } else {
-                    reject(new Error("Failed to get canvas context."));
+                if (this.pendingConversions.get(url) !== cancel) return;
+                try {
+                    const canvas = document.createElement("canvas");
+                    const scale = Math.min(1, 1024 / img.width, 1024 / img.height);
+                    canvas.width = Math.max(1, Math.round(img.width * scale));
+                    canvas.height = Math.max(1, Math.round(img.height * scale));
+                    const ctx = canvas.getContext("2d");
+                    if (!ctx) {
+                        finish(url);
+                        return;
+                    }
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    finish(canvas.toDataURL("image/png"));
+                } catch {
+                    finish(url);
                 }
             };
-            img.onerror = () => resolve("");
+            img.onerror = () => finish(url);
             img.src = url;
         });
         this.pngCache.set(url, promise);
 
         if (this.pngCache.size > MAX_PNG_CACHE_SIZE) {
             const oldestKey = this.pngCache.keys().next().value;
-            if (oldestKey) this.pngCache.delete(oldestKey);
+            if (oldestKey) {
+                this.pendingConversions.get(oldestKey)?.();
+                this.pngCache.delete(oldestKey);
+            }
         }
 
-        return promise;
+        const converted = await promise;
+        if (converted === url && this.pngCache.get(url) === promise) this.pngCache.delete(url);
+        return converted;
     },
 
     getBanner(userId: string): string | undefined {
@@ -164,14 +178,9 @@ export default definePlugin({
             if (banner === null) banner = "";
             return banner;
         }
+        // Discord Banners
         const userProfile = UserProfileStore.getUserProfile(userId);
-        if (userProfile?.banner) {
-            const banner = `https://cdn.discordapp.com/banners/${userId}/${userProfile.banner}.${userProfile.banner.startsWith("a_") ? "gif" : "png"}`;
-            if (this.data[userId] !== banner) {
-                this.data[userId] = banner;
-                this.queuePersist();
-            }
-        }
-        return this.data[userId];
+        if (userProfile?.banner)
+            return IconUtils.getUserBannerURL({ id: userId, banner: userProfile.banner, canAnimate: settings.store.animate, size: 1024 });
     },
 });

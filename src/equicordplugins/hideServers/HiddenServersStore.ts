@@ -16,17 +16,18 @@ export const HiddenServersStore = proxyLazyWebpack(() => {
     const DB_KEY = "HideServers_servers";
     const SAVE_DEBOUNCE_MS = 250;
 
+    let loadGeneration = 0;
+    let saveTimeout: ReturnType<typeof setTimeout> | undefined;
+
     class HiddenServersStore extends Store {
         public _hiddenGuilds: Set<string> = new Set();
-        private loadGeneration = 0;
-        private saveTimeout: ReturnType<typeof setTimeout> | undefined;
 
         public get hiddenGuilds() { return this._hiddenGuilds; }
 
         public async load() {
-            const generation = ++this.loadGeneration;
+            const generation = ++loadGeneration;
             const data = await DataStore.get<Set<string> | string[]>(DB_KEY);
-            if (generation !== this.loadGeneration) return;
+            if (generation !== loadGeneration) return;
 
             if (data instanceof Set) {
                 this._hiddenGuilds = new Set(Array.from(data).filter(id => typeof id === "string"));
@@ -40,29 +41,14 @@ export const HiddenServersStore = proxyLazyWebpack(() => {
         }
 
         public unload() {
-            this.loadGeneration++;
-            this.flushSave();
+            loadGeneration++;
+            flushSave();
             this._hiddenGuilds = new Set();
         }
 
         public save() {
-            if (this.saveTimeout) clearTimeout(this.saveTimeout);
-            this.saveTimeout = setTimeout(() => this.flushSave(), SAVE_DEBOUNCE_MS);
-        }
-
-        private flushSave() {
-            if (this.saveTimeout) {
-                clearTimeout(this.saveTimeout);
-                this.saveTimeout = undefined;
-            }
-
-            void DataStore.set(DB_KEY, Array.from(this._hiddenGuilds));
-        }
-
-        private replaceHiddenGuilds(next: Set<string>) {
-            this._hiddenGuilds = next;
-            this.save();
-            this.emitChange();
+            if (saveTimeout) clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(flushSave, SAVE_DEBOUNCE_MS);
         }
 
         public addHiddenGuild(id: string) {
@@ -70,7 +56,7 @@ export const HiddenServersStore = proxyLazyWebpack(() => {
 
             const next = new Set(this._hiddenGuilds);
             next.add(id);
-            this.replaceHiddenGuilds(next);
+            replaceHiddenGuilds(next);
         }
 
         public removeHiddenGuild(id: string) {
@@ -78,27 +64,27 @@ export const HiddenServersStore = proxyLazyWebpack(() => {
 
             const next = new Set(this._hiddenGuilds);
             next.delete(id);
-            this.replaceHiddenGuilds(next);
+            replaceHiddenGuilds(next);
         }
 
         public addHiddenFolder(id: string, guildIds: string[]) {
             const next = new Set(this._hiddenGuilds);
             next.add(`folder-${id}`);
             guildIds.forEach(gid => next.add(gid));
-            this.replaceHiddenGuilds(next);
+            replaceHiddenGuilds(next);
         }
 
         public removeHiddenFolder(id: string, guildIds: string[]) {
             const next = new Set(this._hiddenGuilds);
             next.delete(`folder-${id}`);
             guildIds.forEach(gid => next.delete(gid));
-            this.replaceHiddenGuilds(next);
+            replaceHiddenGuilds(next);
         }
 
         public clearHidden() {
-            if (this.saveTimeout) {
-                clearTimeout(this.saveTimeout);
-                this.saveTimeout = undefined;
+            if (saveTimeout) {
+                clearTimeout(saveTimeout);
+                saveTimeout = undefined;
             }
 
             this._hiddenGuilds = new Set();
@@ -116,5 +102,20 @@ export const HiddenServersStore = proxyLazyWebpack(() => {
         }
     }
 
-    return new HiddenServersStore(FluxDispatcher);
+    function flushSave() {
+        if (saveTimeout === undefined) return;
+        clearTimeout(saveTimeout);
+        saveTimeout = undefined;
+
+        void DataStore.set(DB_KEY, Array.from(store._hiddenGuilds));
+    }
+
+    function replaceHiddenGuilds(next: Set<string>) {
+        store._hiddenGuilds = next;
+        store.save();
+        store.emitChange();
+    }
+
+    const store = new HiddenServersStore(FluxDispatcher);
+    return store;
 });

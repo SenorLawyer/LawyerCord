@@ -12,13 +12,10 @@ import { EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
 import { User } from "@vencord/discord-types";
-import { findByCodeLazy } from "@webpack";
 import { React, UserProfileStore } from "@webpack/common";
 
 import { ProfilePopoutComponent } from "./components/ProfilePopoutComponent";
 import { ProfileTabComponent } from "./components/ProfileTabComponent";
-
-const getProfileThemeProps = findByCodeLazy(".getPreviewThemeColors", "primaryColor:");
 
 export const cl = classNameFactory("vc-github-repos-");
 
@@ -80,7 +77,6 @@ export default definePlugin({
             <ProfileTabComponent
                 {...props}
                 id={props.user.id}
-                theme={getProfileThemeProps(props).theme}
             />
         );
     }, { noop: true }),

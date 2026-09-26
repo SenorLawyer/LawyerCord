@@ -6,10 +6,8 @@
 
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { runInNewContext } from "node:vm";
 
 import { strToU8, zipSync } from "fflate";
-import { createSourceFile, isFunctionDeclaration, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import {
     extractZipArchiveEntry,

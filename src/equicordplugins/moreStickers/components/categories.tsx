@@ -45,17 +45,9 @@ export function CategoryImage({ src, alt, isActive }: CategoryImageProps) {
 }
 
 export function CategoryScroller(props: { children: React.ReactNode, categoryLength: number; }) {
-    const children = Array.isArray(props.children) ? props.children : [props.children];
-
     return (
         <div className={cl("category-scroller")}>
-            <div>{
-                children.map(child => (
-                    <div role="listitem" key={cl("category-scroller")}>
-                        {child}
-                    </div>
-                ))
-            }</div>
+            <div>{props.children}</div>
             <div style={{ height: `${Math.round(41.75 * (props.categoryLength + 1))}px` }}></div>
             <div aria-hidden="true"></div>
         </div>

@@ -127,7 +127,6 @@ export default definePlugin({
         "gdm-context": channelContextMenuPatch,
     },
     settings,
-    requireSettingsMenu,
     getCustomColorString,
 
     async start() {

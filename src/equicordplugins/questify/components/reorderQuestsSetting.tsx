@@ -73,13 +73,7 @@ function sanitizeQuestOrder(order: unknown): QuestOrderStatus[] {
         ? order.filter((status): status is QuestOrderStatus => validStatuses.has(status as QuestOrderStatus))
         : [];
 
-    for (const status of defaultQuestOrder) {
-        if (!sanitized.includes(status)) {
-            sanitized.push(status);
-        }
-    }
-
-    return sanitized.slice(0, defaultQuestOrder.length);
+    return Array.from(new Set([...sanitized, ...defaultQuestOrder]));
 }
 
 export function ReorderQuestsSetting(): JSX.Element {

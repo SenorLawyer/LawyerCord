@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { addMessagePreSendListener, MessageSendListener, removeMessagePreSendListener } from "@api/MessageEvents";
+import { MessageSendListener } from "@api/MessageEvents";
 import { definePluginSettings } from "@api/Settings";
 import { Devs, EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
@@ -63,13 +63,9 @@ export default definePlugin({
     tags: ["Appearance", "Customisation", "Chat"],
     authors: [Devs.Samwich, EquicordDevs.KrystalSkull],
     settings,
+    onBeforeMessageSend: presendObject,
 
     start() {
         blockedWordPrefixes = parseBlockedWords(settings.store.blockedWords);
-        addMessagePreSendListener(presendObject);
-    },
-    stop() {
-        removeMessagePreSendListener(presendObject);
-        blockedWordPrefixes = [];
     }
 });

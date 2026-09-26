@@ -151,13 +151,6 @@ function getNextMessage(isUp: boolean, isReply: boolean) {
     };
 
     const findNextNonDeleted = (id: string | null) => {
-        if (id === null) {
-            for (let i = messages.length - 1; i >= 0; i--) {
-                if (isEligibleMessage(messages[i])) return messages[i];
-            }
-            return null;
-        }
-
         const idx = messages.findIndex(m => m.id === id);
         if (idx === -1) {
             for (let i = messages.length - 1; i >= 0; i--) {

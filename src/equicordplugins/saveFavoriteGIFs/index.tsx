@@ -127,12 +127,6 @@ async function saveWorkingGifs() {
     const content = workingUrls.join("\n");
 
     await saveContentToFile(content, filename);
-
-    showNotification({
-        title: "Save Favorite GIFs",
-        body: `Filtered ${gifUrls.length - workingUrls.length} possibly broken GIFs. Saved ${workingUrls.length} working GIFs.`,
-        color: "var(--text-positive)",
-    });
 }
 
 const settings = definePluginSettings({

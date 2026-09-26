@@ -5,43 +5,39 @@
  */
 
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
-import { DataStore } from "@api/index";
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
 import { classes } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import { findCssClassesLazy } from "@webpack";
-import { Button, Menu } from "@webpack/common";
-import React, { ReactNode } from "react";
+import { Button, Menu, React, StickersStore } from "@webpack/common";
+import type { ReactNode } from "react";
 
 const CodeContainerClasses = findCssClassesLazy("markup", "codeContainer");
 const MessageContentClasses = findCssClassesLazy("messageContent", "messageContentTrailingIcon");
-let blockedStickerIds = new Set<string>();
+const BLOCK_SETTINGS: "blockedStickers"[] = ["blockedStickers"];
+const DISPLAY_SETTINGS: ("showGif" | "showMessage" | "showButton")[] = ["showGif", "showMessage", "showButton"];
 
 const settings = definePluginSettings({
     showGif: {
         type: OptionType.BOOLEAN,
         description: "Whether to show a snazzy cat gif",
-        default: true,
-        restartNeeded: true
+        default: true
     },
     showMessage: {
         type: OptionType.BOOLEAN,
         description: "Whether to show a message detailing which id was blocked",
-        default: false,
-        restartNeeded: true
+        default: false
     },
     showButton: {
         type: OptionType.BOOLEAN,
         description: "Whether to show a button to unblock the gif",
-        default: true,
-        restartNeeded: true
+        default: true
     },
     blockedStickers: {
         type: OptionType.STRING,
         description: "The list of blocked sticker IDs (don't edit unless you know what you're doing)",
-        onChange: value => { blockedStickerIds = parseStickerIds(value); },
         default: ""
     }
 });
@@ -58,13 +54,8 @@ function parseStickerIds(value: string | null | undefined): Set<string> {
     return ids;
 }
 
-function updateBlockedStickers(nextBlockedStickerIds: Set<string>) {
-    blockedStickerIds = nextBlockedStickerIds;
-    settings.store.blockedStickers = [...nextBlockedStickerIds].join(", ");
-}
-
 function blockedComponentRender(sticker) {
-    const { showGif, showMessage, showButton } = settings.store;
+    const { showGif, showMessage, showButton } = settings.use(DISPLAY_SETTINGS);
     const elements = [] as ReactNode[];
 
     if (showGif) {
@@ -75,7 +66,7 @@ function blockedComponentRender(sticker) {
 
     if (showMessage) {
         elements.push(
-            <div key="message" id="vc-blocked-sticker" className={classes(CodeContainerClasses.markup, MessageContentClasses.messageContent)}><span>Blocked Sticker. ID: {sticker.id}, NAME: {sticker.name}</span></div>
+            <div key="message" className={classes(CodeContainerClasses.markup, MessageContentClasses.messageContent)}><span>Blocked Sticker. ID: {sticker.id}, NAME: {sticker.name}</span></div>
         );
     }
 
@@ -91,29 +82,21 @@ function blockedComponentRender(sticker) {
 const messageContextMenuPatch: NavContextMenuPatchCallback = (children, props) => {
     const { favoriteableId, favoriteableType } = props ?? {};
 
-    if (!favoriteableId) return;
+    if (!favoriteableId || favoriteableType !== "sticker") return;
 
-    const menuItem = (() => {
-        switch (favoriteableType) {
-            case "sticker":
-                const sticker = props.message.stickerItems.find(s => s.id === favoriteableId);
-                if (sticker?.format_type === 3 /* LOTTIE */) return;
+    const sticker = props.message.stickerItems.find(s => s.id === favoriteableId);
+    if (sticker?.format_type === 3 /* LOTTIE */) return;
 
-                return buildMenuItem(favoriteableId);
-        }
-    })();
-
-    if (menuItem)
-        findGroupChildrenByChildId("copy-link", children)?.push(menuItem);
+    findGroupChildrenByChildId("copy-link", children)?.push(buildMenuItem(favoriteableId));
 };
 
 const expressionPickerPatch: NavContextMenuPatchCallback = (children, props: { target: HTMLElement; }) => {
     const { id, type } = props?.target?.dataset ?? {};
-    if (!id) return;
+    if (!id || type !== "sticker") return;
 
-    if (type === "sticker" && !props.target.className?.includes("lottieCanvas")) {
-        children.push(buildMenuItem(id));
-    }
+    const sticker = StickersStore.getStickerById(id);
+    if (!sticker || sticker.format_type === 3) return;
+    children.push(buildMenuItem(id));
 };
 
 function buildMenuItem(name) {
@@ -121,14 +104,14 @@ function buildMenuItem(name) {
         <Menu.MenuItem
             id="add-sticker-block"
             key="add-sticker-block"
-            label={(isStickerBlocked(name)) ? "Unblock Sticker" : "Block Sticker"}
+            label={parseStickerIds(settings.store.blockedStickers).has(name) ? "Unblock Sticker" : "Block Sticker"}
             action={() => toggleBlock(name)}
         />
     );
 }
 
 function toggleBlock(name) {
-    const nextBlockedStickerIds = new Set(blockedStickerIds);
+    const nextBlockedStickerIds = parseStickerIds(settings.store.blockedStickers);
     const excepted = nextBlockedStickerIds.has(name);
 
     if (excepted) {
@@ -137,11 +120,7 @@ function toggleBlock(name) {
         nextBlockedStickerIds.add(name);
     }
 
-    updateBlockedStickers(nextBlockedStickerIds);
-}
-
-function isStickerBlocked(name) {
-    return blockedStickerIds.has(name);
+    settings.store.blockedStickers = [...nextBlockedStickerIds].join(", ");
 }
 
 export default definePlugin({
@@ -162,12 +141,9 @@ export default definePlugin({
         "message": messageContextMenuPatch,
         "expression-picker": expressionPickerPatch,
     },
-    start() {
-        DataStore.createStore("StickerBlocker", "data");
-        blockedStickerIds = parseStickerIds(settings.store.blockedStickers);
-    },
-    isBlocked(stickerId) {
-        return blockedStickerIds.has(stickerId);
+    isBlocked(stickerId: string) {
+        const { blockedStickers } = settings.use(BLOCK_SETTINGS);
+        return parseStickerIds(blockedStickers).has(stickerId);
     },
     blockedComponent: ErrorBoundary.wrap(blockedComponentRender, { fallback: () => <p style={{ color: "red" }}>Failed to render :(</p> }),
     settings,

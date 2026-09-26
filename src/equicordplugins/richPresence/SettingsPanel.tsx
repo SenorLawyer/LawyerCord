@@ -27,12 +27,12 @@ function SwitchSetting({ name, description, settingsKey }: { name: string; descr
     );
 }
 
-function TextSetting({ name, description, settingsKey, placeholder }: { name: string; description: string; settingsKey: SettingsKey; placeholder?: string; }) {
+function TextSetting({ name, description, settingsKey, placeholder, secret = false }: { name: string; description: string; settingsKey: SettingsKey; placeholder?: string; secret?: boolean; }) {
     const [value, setValue] = useState(settings.store[settingsKey] ?? "");
     return (
         <SettingsSection id={name} name={name} description={description}>
             <TextInput
-                type="text"
+                type={secret ? "password" : "text"}
                 value={String(value)}
                 onChange={v => { setValue(v); (settings.store[settingsKey] as string) = v; }}
                 placeholder={placeholder ?? "Enter a value"}
@@ -63,7 +63,7 @@ function AudioBookShelfSettings() {
             <SettingsSection id="audiobookshelf-settings" name="" description="Display your currently playing audiobooks as Discord Rich Presence. Requires your AudioBookShelf server URL, username, and password." />
             <TextSetting name="Server URL" description="AudioBookShelf server URL." settingsKey="abs_serverUrl" placeholder="https://abs.example.com" />
             <TextSetting name="Username" description="AudioBookShelf username." settingsKey="abs_username" />
-            <TextSetting name="Password" description="AudioBookShelf password." settingsKey="abs_password" />
+            <TextSetting name="Password" description="AudioBookShelf password." settingsKey="abs_password" secret />
         </>
     );
 }
@@ -110,7 +110,7 @@ function JellyfinSettings() {
         <>
             <SettingsSection id="jellyfin-settings" name="" description="Show what you're playing on Jellyfin. To get your API key: open your Jellyfin web UI, press F12 to open Developer Tools, go to the Network tab, look for requests to your server, find the Authorization header (Ctrl+F to search), and You need the part from Token='this'. Your user ID can be found in your profile page URL." />
             <TextSetting name="Server URL" description="Jellyfin server URL." settingsKey="jf_serverUrl" placeholder="https://jellyfin.example.com" />
-            <TextSetting name="API Key" description="Jellyfin API key." settingsKey="jf_apiKey" placeholder="Authorization" />
+            <TextSetting name="API Key" description="Jellyfin API key." settingsKey="jf_apiKey" secret placeholder="Authorization" />
             <TextSetting name="User ID" description="Jellyfin user ID." settingsKey="jf_userId" placeholder="User ID from profile URL" />
             <SelectSetting name="Name Display" description="Name display format." settingsKey="jf_nameDisplay" options={[
                 { label: "Series/Movie Name", value: "default" },
@@ -169,15 +169,14 @@ function NavidromeSettings() {
             <SettingsSection id="navidrome-settings" name="" description="Show what you're currently listening to via Navidrome." />
             <TextSetting name="Server URL" description="Navidrome Server URL (must be a public domain, e.g. https://navidrome.example.com)." settingsKey="nd_serverUrl" placeholder="https://navidrome.example.com" />
             <TextSetting name="Username" description="Navidrome username." settingsKey="nd_username" />
-            <TextSetting name="Password" description="Navidrome password." settingsKey="nd_password" />
+            <TextSetting name="Password" description="Navidrome password." settingsKey="nd_password" secret />
             <TextSetting name="Client ID" description="Optional Discord Application Client ID." settingsKey="nd_clientId" placeholder="1470554657506984069" />
             <SelectSetting name="Album Art Mode" description="How to fetch album art." settingsKey="nd_albumArtMode" options={[
                 { label: "None", value: "none" },
-                { label: "Navidrome Instance (Exposes Server URL. One-time auth sent.)", value: "instance" },
                 { label: "Last.fm API (Sends Metadata to last.fm)", value: "lastfm" },
             ]} />
             {nd_albumArtMode === "lastfm" && (
-                <TextSetting name="Last.fm API Key" description="Optional: Provide your own Last.fm API Key (leaves default if empty)." settingsKey="nd_lastfmApiKey" placeholder="feff915bf5987580c9dc354d523dc6b9" />
+                <TextSetting name="Last.fm API Key" description="Optional: Provide your own Last.fm API Key (leaves default if empty)." settingsKey="nd_lastfmApiKey" secret placeholder="feff915bf5987580c9dc354d523dc6b9" />
             )}
             <SwitchSetting name="Show Small Image" description="Show Navidrome logo in bottom right of album art." settingsKey="nd_showSmallImage" />
             <SwitchSetting name="Show Album" description="Show album name in presence." settingsKey="nd_showAlbum" />

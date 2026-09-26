@@ -19,7 +19,7 @@ import { Margins } from "@utils/margins";
 import { classes } from "@utils/misc";
 import { IconComponent } from "@utils/types";
 import { RenderModalProps } from "@vencord/discord-types";
-import { Clickable, Modal,openModal } from "@webpack/common";
+import { Clickable, Modal, openModal } from "@webpack/common";
 
 const cl = classNameFactory("vc-plugin-ui-elements-");
 
@@ -62,9 +62,10 @@ function Section(props: {
                 <Icon height={20} width={20} />
                 {name}
                 <Switch
+                    aria-label={name}
                     checked={settings[name]?.enabled ?? true}
                     onChange={v => {
-                        settings[name] ??= {} as any;
+                        settings[name] ??= { enabled: v };
                         settings[name].enabled = v;
                     }}
                 />

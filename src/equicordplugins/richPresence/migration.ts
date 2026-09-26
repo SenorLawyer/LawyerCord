@@ -77,6 +77,10 @@ function setStoreValue(key: SettingsKey, value: boolean | string | number) {
 }
 
 export function migrateOldSettings() {
+    if (Settings.plugins.RichPresence.nd_albumArtMode === "instance") {
+        settings.store.nd_albumArtMode = "none";
+    }
+
     if (Settings.plugins.RichPresence._migrated) return;
 
     migratePluginSettings("RichPresence", "AudioBookShelfRichPresence", "GensokyoRadioRPC", "JellyfinRichPresence", "StatsfmPresence", "TosuRPC");

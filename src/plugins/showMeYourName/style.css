@@ -44,10 +44,6 @@
     transition: opacity .1s ease-in-out;
 }
 
-.smyn-modal-footer-container button {
-    width: 100%;
-}
-
 .smyn-reset-button {
     margin-top: 8px;
     font-size: 14px;

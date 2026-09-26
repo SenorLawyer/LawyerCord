@@ -6,15 +6,17 @@
 
 import "./styles.css";
 
+import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { settings as PluginSettings } from "@equicordplugins/toastNotifications/index";
 import { classNameFactory } from "@utils/css";
 import { findComponentByCodeLazy } from "@webpack";
-import { FluxDispatcher, GuildStore, IconUtils, React, useEffect, useMemo, useState } from "@webpack/common";
+import { FluxDispatcher, GuildStore, IconUtils, React, useEffect, useState } from "@webpack/common";
 
 import { MessageNotification, NotificationData } from "./Notifications";
 
 export const cl = classNameFactory("vc-toast-notifications-");
+const NOTIFICATION_SETTINGS: ("timeout" | "opacity")[] = ["timeout", "opacity"];
 const MessageComponent = findComponentByCodeLazy("childrenExecutedCommand:", ".hideAccessories");
 
 function isMessageNotification(props: NotificationData): props is MessageNotification {
@@ -66,22 +68,27 @@ function renderContextHeader(channel: MessageNotification["channel"]): React.Rea
     return null;
 }
 
-export default ErrorBoundary.wrap(function NotificationComponent(props: NotificationData) {
-    const [isHover, setIsHover] = useState(false);
+type NotificationProps = NotificationData & { onClose(): void; };
 
-    const timeout = (PluginSettings.store.timeout ?? 5) * 1000;
-    const opacity = PluginSettings.store.opacity / 100;
+export default ErrorBoundary.wrap(function NotificationComponent(props: NotificationProps) {
+    const [isHover, setIsHover] = useState(false);
+    const [isFocused, setIsFocused] = useState(false);
+    const isPaused = isHover || isFocused;
+
+    const { timeout: duration, opacity: opacityPercent } = PluginSettings.use(NOTIFICATION_SETTINGS);
+    const timeout = (duration ?? 5) * 1000;
+    const opacity = opacityPercent / 100;
 
     useEffect(() => {
-        if (isHover || props.permanent) return;
+        if (isPaused || props.permanent) return;
 
-        const closeTimeout = setTimeout(() => props.onClose!(), timeout);
+        const closeTimeout = setTimeout(() => props.onClose(), timeout);
         return () => clearTimeout(closeTimeout);
-    }, [isHover, props.permanent, timeout]);
+    }, [isPaused, props.permanent, timeout]);
 
     const handleClick = () => {
         props.onClick?.();
-        if (props.dismissOnClick !== false) props.onClose!();
+        if (props.dismissOnClick !== false) props.onClose();
     };
 
     const handleContextMenu = (e: React.MouseEvent) => {
@@ -101,24 +108,25 @@ export default ErrorBoundary.wrap(function NotificationComponent(props: Notifica
             });
         }
 
-        props.onClose!();
+        props.onClose();
     };
 
-    const closeButton = useMemo(() => (
+    const closeButton = (
         <button
+            type="button"
+            aria-label="Dismiss notification"
             className={cl("notification-close-btn")}
             onClick={e => {
                 e.preventDefault();
                 e.stopPropagation();
-                props.onClose!();
+                props.onClose();
             }}
         >
-            <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-labelledby="vc-toast-notifications-dismiss-title">
-                <title id="vc-toast-notifications-dismiss-title">Dismiss Notification</title>
+            <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
                 <path fill="currentColor" d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />
             </svg>
         </button>
-    ), [props.onClose]);
+    );
 
     let content: React.ReactNode;
     if (isMessageNotification(props)) {
@@ -153,26 +161,38 @@ export default ErrorBoundary.wrap(function NotificationComponent(props: Notifica
     }
 
     return (
-        <button
+        <div
+            role="group"
+            aria-label="Notification"
             style={{ opacity }}
             className={cl("notification-root")}
             onClick={handleClick}
             onContextMenu={handleContextMenu}
+            onFocus={() => setIsFocused(true)}
+            onBlur={event => {
+                if (!event.currentTarget.contains(event.relatedTarget)) setIsFocused(false);
+            }}
             onMouseEnter={() => setIsHover(true)}
             onMouseLeave={() => setIsHover(false)}
         >
+            <Button
+                variant="none"
+                type="button"
+                className={cl("notification-action")}
+                aria-label={props.onClick ? "Open notification" : "Dismiss notification"}
+            />
             {closeButton}
             {content}
             {timeout !== 0 && !props.permanent && (
                 <div
                     className={cl("notification-progressbar")}
-                    style={isHover
+                    style={isPaused
                         ? { animationName: "none", transform: "scaleX(1)" }
                         : { animationDuration: `${timeout}ms` }}
                 />
             )}
-        </button>
+        </div>
     );
 }, {
-    onError: ({ props }) => props.onClose!()
+    onError: ({ props }) => props.onClose()
 });

@@ -180,7 +180,7 @@ export default definePlugin({
 
     modify(message, child) {
         if (hasTriggerWord(message.content)) {
-            return <TriggerContainer child={child} />;
+            return <TriggerContainer key={`${message.id}:${message.content}`} child={child} />;
         } else {
             return child;
         }

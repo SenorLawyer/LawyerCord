@@ -7872,7 +7872,7 @@ test("sound imports validate overrides and invalidate pending playback data", as
     const store: Record<string, string> = { message1: "original message", mute: "original mute" };
     let resolveRead: (value: string) => void = () => assert.fail("Audio read was not started");
     let reads = 0;
-    const { importOverrides, ensureDataURICached, getCustomSoundURL, plugin } = loadSource("src/equicordplugins/customSounds/index.tsx", {
+    const { importOverrides, getOverride, ensureDataURICached, getCustomSoundURL, plugin } = loadSource("src/equicordplugins/customSounds/index.tsx", {
         "@api/DataStore": {},
         "@api/Settings": { definePluginSettings: () => ({ store }) },
         "@components/Button": {}, "@components/Heading": {},
@@ -7887,7 +7887,21 @@ test("sound imports validate overrides and invalidate pending playback data", as
             return new Promise<string>(resolve => { resolveRead = resolve; });
         } },
         "./types": { soundTypes, makeEmptyOverride, seasonalSounds }
-    }, {}, "({ importOverrides, ensureDataURICached, getCustomSoundURL, plugin: exports.default })");
+    }, {}, "({ importOverrides, getOverride, ensureDataURICached, getCustomSoundURL, plugin: exports.default })");
+    for (const value of [null, 1, [], "sound", { enabled: "yes" }, { enabled: true, volume: -1 }, { enabled: true, selectedSound: "constructor" }, { selectedFileId: {} }]) {
+        store.message1 = JSON.stringify(value);
+        assert.deepEqual(JSON.parse(JSON.stringify(getOverride("message1"))), makeEmptyOverride());
+        assert.equal(store.message1, JSON.stringify(value), "Reading invalid settings must not overwrite saved data");
+    }
+    store.message1 = JSON.stringify({ enabled: true, volume: 0 });
+    assert.deepEqual(JSON.parse(JSON.stringify(getOverride("message1"))), { ...makeEmptyOverride(), enabled: true, volume: 0 });
+    const legacy = { ...makeEmptyOverride(), enabled: true, selectedSound: "winter", volume: 65 };
+    Object.assign(store, { message1: legacy });
+    const read = getOverride("message1");
+    assert.equal(read.selectedSound, "winter");
+    read.volume = 20;
+    assert.equal(legacy.volume, 65, "Reading legacy object settings must not expose stored objects to unsaved edits");
+    store.message1 = JSON.stringify(legacy);
     const original = { ...store };
     for (const text of ["{", "null", "{}", '{"overrides":[null]}', ...[
         { id: "unknown" }, { id: "__proto__" }, { id: "mute", volume: -1 },

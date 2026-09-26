@@ -40,14 +40,23 @@ export async function deleteCustomAudio(fileId: string) {
     pendingDataUris.delete(fileId);
 }
 
+function readOverride(value: unknown): SoundOverride {
+    if (!isObject(value)) throw new Error("Invalid sound override.");
+    const { enabled = false, selectedSound = "default", selectedFileId, volume = 100 } = value as Record<string, unknown>;
+    if (typeof enabled !== "boolean" || typeof selectedSound !== "string"
+        || (!["default", "custom", "halloween", "winter"].includes(selectedSound) && !Object.hasOwn(seasonalSounds, selectedSound))
+        || (selectedFileId != null && typeof selectedFileId !== "string")
+        || typeof volume !== "number" || !Number.isFinite(volume) || volume < 0 || volume > 100) {
+        throw new Error("Invalid sound override.");
+    }
+    return { enabled, selectedSound, selectedFileId: selectedFileId ?? undefined, volume, useFile: false };
+}
+
 function getOverride(id: string): SoundOverride {
     const stored = settings.store[id];
     if (!stored) return makeEmptyOverride();
-
-    if (typeof stored === "object") return stored;
-
     try {
-        return JSON.parse(stored);
+        return readOverride(typeof stored === "string" ? JSON.parse(stored) : stored);
     } catch {
         return makeEmptyOverride();
     }
@@ -65,16 +74,12 @@ function importOverrides(text: string) {
 
     const overrides = new Map(soundTypes.map(type => [type.id, makeEmptyOverride()]));
     for (const value of imported.overrides as unknown[]) {
-        if (!isObject(value)) throw new Error("Invalid sound override.");
-        const { id, enabled = false, selectedSound = "default", selectedFileId, volume = 100 } = value as Record<string, unknown>;
-        if (typeof id !== "string" || !overrides.has(id)
-            || typeof enabled !== "boolean" || typeof selectedSound !== "string"
-            || (!["default", "custom", "halloween", "winter"].includes(selectedSound) && !Object.hasOwn(seasonalSounds, selectedSound))
-            || (selectedFileId != null && typeof selectedFileId !== "string")
-            || typeof volume !== "number" || !Number.isFinite(volume) || volume < 0 || volume > 100) {
+        if (!isObject(value) || !("id" in value)) throw new Error("Invalid sound override.");
+        const { id } = value;
+        if (typeof id !== "string" || !overrides.has(id)) {
             throw new Error("Invalid sound override.");
         }
-        overrides.set(id, { enabled, selectedSound, selectedFileId: selectedFileId ?? undefined, volume, useFile: false });
+        overrides.set(id, readOverride(value));
     }
 
     for (const [id, override] of overrides) setOverride(id, override);
@@ -90,7 +95,7 @@ export const getCustomSoundURL: AudioProcessor = (data: PreprocessAudioData) => 
 
     const override = getOverride(audioOverride);
 
-    if (!override?.enabled) {
+    if (!override.enabled) {
         return;
     }
 
@@ -156,7 +161,7 @@ async function preloadDataURIs() {
     for (const soundType of soundTypes) {
         if (version !== cacheVersion) return;
         const override = getOverride(soundType.id);
-        if (override?.enabled && override.selectedSound === "custom" && override.selectedFileId) {
+        if (override.enabled && override.selectedSound === "custom" && override.selectedFileId) {
             await ensureDataURICached(override.selectedFileId);
         }
     }

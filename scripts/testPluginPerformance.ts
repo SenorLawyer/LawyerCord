@@ -7872,6 +7872,9 @@ test("sound imports validate overrides and invalidate pending playback data", as
     const store: Record<string, string> = { message1: "original message", mute: "original mute" };
     let resolveRead: (value: string) => void = () => assert.fail("Audio read was not started");
     let reads = 0;
+    let snapshotsRead = 0;
+    const snapshots: unknown[] = [];
+    const pendingReads: Array<(value: string) => void> = [];
     const { importOverrides, getOverride, ensureDataURICached, getCustomSoundURL, plugin } = loadSource("src/equicordplugins/customSounds/index.tsx", {
         "@utils/web": {},
         "@api/DataStore": {},
@@ -7883,9 +7886,10 @@ test("sound imports validate overrides and invalidate pending playback data", as
         "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {}, StartAt: {} },
         "@webpack/common": {}, "./SoundOverrideComponent": {},
-        "./audioStore": { getAudioDataURI: () => {
+        "./audioStore": { getAllAudio: async () => { snapshotsRead++; return {}; }, getAudioDataURI: (_id: string, files?: unknown) => {
             reads++;
-            return new Promise<string>(resolve => { resolveRead = resolve; });
+            snapshots.push(files);
+            return new Promise<string>(resolve => { resolveRead = resolve; pendingReads.push(resolve); });
         } },
         "./types": { soundTypes, makeEmptyOverride, seasonalSounds }
     }, {}, "({ importOverrides, getOverride, ensureDataURICached, getCustomSoundURL, plugin: exports.default })");
@@ -7950,6 +7954,25 @@ test("sound imports validate overrides and invalidate pending playback data", as
         getCustomSoundURL(data);
         assert.equal(data.audio, "message1");
     }
+    for (const id of ["message1", "mute"]) store[id] = JSON.stringify({ ...makeEmptyOverride(), enabled: true, selectedSound: "custom", selectedFileId: id });
+    const stoppedBatch = plugin.start();
+    assert.equal(snapshotsRead, 1);
+    assert.ok(snapshots.at(-1));
+    assert.equal(snapshots.at(-1), snapshots.at(-2), "Preloaded files must share one database snapshot");
+    plugin.stop();
+    for (const resolve of pendingReads.slice(-2)) resolve("data:audio/ogg;base64,AA==");
+    await stoppedBatch;
+    for (const audio of ["message1", "mute"]) {
+        const data = { audio, volume: 100 };
+        getCustomSoundURL(data);
+        assert.equal(data.audio, audio, "Stopped batches must not restore cached sounds");
+    }
+    const activeBatch = plugin.start();
+    for (const resolve of pendingReads.slice(-2)) resolve("data:audio/ogg;base64,AQ==");
+    await activeBatch;
+    assert.equal(snapshotsRead, 2);
+    await plugin.start();
+    assert.equal(snapshotsRead, 2, "Already cached files must not reread storage");
 });
 
 test("custom timestamps expand explicit placeholders without altering shared formatting", () => {

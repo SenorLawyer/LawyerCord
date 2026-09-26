@@ -27,10 +27,8 @@ const cl = classNameFactory("vc-custom-sounds-");
 const dataUriCache = new Map<string, string>();
 const pendingDataUris = new Map<string, Promise<string | null>>();
 export const logger = new Logger("CustomSounds");
-let cacheVersion = 0;
 
 function clearAudioCache() {
-    cacheVersion++;
     dataUriCache.clear();
     pendingDataUris.clear();
 }
@@ -137,13 +135,13 @@ export const getCustomSoundURL: AudioProcessor = (data: PreprocessAudioData) => 
     return;
 };
 
-export function ensureDataURICached(fileId: string): Promise<string | null> {
+export function ensureDataURICached(fileId: string, files?: ReturnType<typeof getAllAudio>): Promise<string | null> {
     const cached = dataUriCache.get(fileId);
     if (cached !== undefined) return Promise.resolve(cached);
     const pending = pendingDataUris.get(fileId);
     if (pending) return pending;
 
-    const request = getAudioDataURI(fileId).then(dataUri => {
+    const request = getAudioDataURI(fileId, files).then(dataUri => {
         if (pendingDataUris.get(fileId) !== request) return null;
         if (dataUri) dataUriCache.set(fileId, dataUri);
         return dataUri ?? null;
@@ -158,14 +156,16 @@ export function ensureDataURICached(fileId: string): Promise<string | null> {
 }
 
 async function preloadDataURIs() {
-    const version = cacheVersion;
+    let files: ReturnType<typeof getAllAudio> | undefined;
+    const pending: Promise<string | null>[] = [];
     for (const soundType of soundTypes) {
-        if (version !== cacheVersion) return;
         const override = getOverride(soundType.id);
         if (override.enabled && override.selectedSound === "custom" && override.selectedFileId) {
-            await ensureDataURICached(override.selectedFileId);
+            if (!dataUriCache.has(override.selectedFileId) && !pendingDataUris.has(override.selectedFileId)) files ??= getAllAudio();
+            pending.push(ensureDataURICached(override.selectedFileId, files));
         }
     }
+    await Promise.all(pending);
 }
 
 const soundSettings = Object.fromEntries(

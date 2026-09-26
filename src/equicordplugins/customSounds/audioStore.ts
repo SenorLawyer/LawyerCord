@@ -64,8 +64,8 @@ async function generateDataURI(buffer: ArrayBuffer, type: string, name: string):
     });
 }
 
-export async function getAudioDataURI(id: string): Promise<string | undefined> {
-    const all = await getAllAudio();
+export async function getAudioDataURI(id: string, files = getAllAudio()): Promise<string | undefined> {
+    const all = await files;
     const entry = all[id];
     if (!entry) return undefined;
 

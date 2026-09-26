@@ -27,6 +27,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Changing cloud backends preserves saved credentials. Disabling cloud integration cancels pending authorization. Reauthorize still clears the selected backend's credential before reconnecting.
 - ImageFilename targets the image link directly, and NoRPC removes only its native transport registration callback. Both patches avoid unbounded searches across surrounding code.
 - CustomSounds applies seasonal overrides to incoming seasonal sounds and ignores inherited object names in saved sound selections.
 - CustomSounds saves selections before loading playback data, so pending selection loads cannot undo Reset All.

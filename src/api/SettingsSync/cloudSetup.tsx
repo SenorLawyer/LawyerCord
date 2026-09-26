@@ -49,8 +49,13 @@ export async function getAuthorization() {
     return secrets[key];
 }
 
-export async function deauthorizeCloud() {
+export function cancelCloudAuthorization() {
     authorizationAttempt++;
+    Settings.cloud.authenticated = false;
+}
+
+export async function deauthorizeCloud() {
+    cancelCloudAuthorization();
     const key = `${getCloudUrlOrigin()}:${getUserId()}`;
     await DataStore.update<Record<string, string>>("Vencord_cloudSecret", secrets => {
         secrets ??= {};

@@ -104,11 +104,81 @@ test("cloud authentication rejects missing or changed owners and deauthorizes th
     }
 });
 
+test("cloud backend controls retain saved credentials and reserve deletion for reauthorization", async () => {
+    const settings = { cloud: { url: "https://first.invalid", authenticated: true, settingsSync: false } };
+    let records: Record<string, string> = { "https://first.invalid:first": "one", "https://second.invalid:first": "two" };
+    let requests = 0;
+    const modules: Record<string, unknown> = {
+        "@api/Settings": { Settings: settings, useSettings: () => settings },
+        "@api/DataStore": {
+            get: async () => ({ ...records }),
+            update: async (_key: string, change: (value: Record<string, string>) => Record<string, string>) => { records = change(records); }
+        },
+        "@api/Notifications": { showNotification() {} },
+        "@shared/readResponseText": { readResponseText },
+        "@utils/Logger": { Logger: class { info() {} error() {} } },
+        "@utils/misc": { parseUrl: (value: string) => new URL(value) },
+        "@utils/react": { useForceUpdater: () => () => {} },
+        "@utils/localStorage": { localStorage: {} },
+        "@utils/margins": { Margins: {} },
+        "@webpack": { findComponentByCodeLazy: () => "Icon" },
+        "@webpack/common": {
+            UserStore: { getCurrentUser: () => ({ id: "first" }) },
+            useState: () => [0, () => {}], SearchableSelect: "SearchableSelect", Select: "Select",
+            openModal() {}, OAuth2AuthorizeModal: "Modal"
+        },
+        "@components/settings/tabs/BaseTab": { SettingsTab: "SettingsTab", wrapTab: (component: unknown) => component }
+    };
+    type Control = { type: unknown; props: { onChange?: (value: string | boolean) => Promise<void> | void; onClick?: () => Promise<void> | void; children?: unknown; title?: string; }; };
+    const controls: Control[] = [];
+    const globals = {
+        URL, AbortSignal,
+        React: { createElement: (type: unknown, props: Control["props"] | null, ...children: unknown[]) => {
+            const control = { type, props: { ...props, children: children.length === 1 ? children[0] : children } };
+            controls.push(control);
+            return control;
+        } },
+        fetch: async () => { requests++; return Response.json({ clientId: "test", redirectUri: "https://second.invalid/callback" }); }
+    };
+    function load(file: string) {
+        const compiled = transpileModule(readFileSync(file, "utf8"), {
+            compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022, jsx: JsxEmit.React }, fileName: file
+        }).outputText;
+        return runInNewContext(`${compiled}\nexports;`, {
+            ...globals, exports: {}, require: (name: string) => modules[name] ?? new Proxy({}, { get: (_target, key) => key })
+        });
+    }
+    modules["@api/SettingsSync/cloudSetup"] = load("src/api/SettingsSync/cloudSetup.tsx");
+    load("src/components/settings/tabs/sync/CloudTab.tsx").default();
+    const select = controls.find(control => control.type === "SearchableSelect");
+    const input = controls.find(control => control.type === "CheckedTextInput");
+    const toggle = controls.find(control => control.props.title === "Enable Cloud Integration");
+    const reauthorize = controls.find(control => control.type === "Button" && JSON.stringify(control.props.children).includes("Reauthorize"));
+    assert.ok(select?.props.onChange);
+    assert.ok(input?.props.onChange);
+    assert.ok(reauthorize?.props.onClick);
+    assert.ok(toggle?.props.onChange);
+    await select.props.onChange("https://second.invalid");
+    assert.equal(settings.cloud.authenticated, true);
+    assert.equal(requests, 0);
+    assert.deepEqual(records, { "https://first.invalid:first": "one", "https://second.invalid:first": "two" });
+    await toggle.props.onChange(false);
+    assert.equal(settings.cloud.authenticated, false);
+    assert.deepEqual(records, { "https://first.invalid:first": "one", "https://second.invalid:first": "two" });
+    await input.props.onChange("https://first.invalid");
+    await input.props.onChange("https://second.invalid");
+    assert.equal(settings.cloud.authenticated, false);
+    assert.deepEqual(records, { "https://first.invalid:first": "one", "https://second.invalid:first": "two" });
+    await reauthorize.props.onClick();
+    assert.deepEqual(records, { "https://first.invalid:first": "one" });
+    assert.equal(requests, 1);
+});
+
 test("obsolete cloud authorization callbacks cannot save credentials or change authentication", async () => {
     const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSetup.tsx", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022, jsx: JsxEmit.React }, fileName: "cloudSetup.tsx"
     }).outputText;
-    for (const change of ["storage", "config-timeout", "callback-timeout", "config-status", "config-shape", "config-protocol", "callback-origin", "callback-path", "callback-status", "read", "configuration", "account", "service", "deauthorize", "newer", "invalid", "none"]) {
+    for (const change of ["storage", "config-timeout", "callback-timeout", "config-status", "config-shape", "config-protocol", "callback-origin", "callback-path", "callback-status", "read", "configuration", "account", "service", "deauthorize", "cancel", "newer", "invalid", "none"]) {
         let userId = "first";
         const settings = { cloud: { url: "https://first.invalid", authenticated: false } };
         const requests: ((value: unknown) => void)[] = [];
@@ -125,7 +195,7 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
             "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } },
             "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) }, OAuth2AuthorizeModal: "modal", openModal: (render: (props: object) => typeof modal) => { modal = render({}); } }
         };
-        const { authorizeCloud, deauthorizeCloud } = runInNewContext(`${compiled}\nexports;`, {
+        const { authorizeCloud, deauthorizeCloud, cancelCloudAuthorization } = runInNewContext(`${compiled}\nexports;`, {
             exports: {}, require: (name: string) => modules[name] ?? {}, URL,
             AbortSignal: { timeout: (ms: number) => { assert.equal(ms, 30_000); const controller = new AbortController(); controllers.push(controller); return controller.signal; } },
             React: { createElement: (_type: unknown, props: unknown) => props },
@@ -194,6 +264,7 @@ test("obsolete cloud authorization callbacks cannot save credentials or change a
         if (change === "account") userId = "second";
         if (change === "service") settings.cloud.url = "https://second.invalid";
         if (change === "deauthorize") await deauthorizeCloud();
+        if (change === "cancel") cancelCloudAuthorization();
         if (change === "newer") {
             newer = authorizeCloud();
             await new Promise<void>(resolve => setImmediate(resolve));

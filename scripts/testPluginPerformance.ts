@@ -28,6 +28,56 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("message send patches await asynchronous hooks inside the validation callback", async () => {
+    const { default: plugin } = loadSource("src/plugins/_api/messageEvents.ts", {
+        "@utils/constants": { Devs: {} }, "@utils/types": { __esModule: true, default: (value: unknown) => value }
+    });
+    const { canonicalizeMatch } = loadSource("src/utils/patches.ts", { "./intlHash": {} });
+    const patch = plugin.patches.find((patch: { find: string }) => patch.find === ".handleSendMessage,onResize:");
+    assert.equal(patch.group, true);
+    let source = `class Composer {
+        props = { chatInputType: 0 };
+        setState() {}
+        handleSendMessage() {
+            return Promise.resolve({valid:true}).then(e=>{let{valid:s,failureReason:r}=e;if(!s)return{shouldClear:false};let E=parser.A.parse(h,t);let I={...sender.A.getSendMessageOptions({content:t,uploads:n,stickers:l}),location:locations.A.INPUT};return sender.A.sendMessage(h.id,E,undefined,I)});
+        }
+    }; new Composer()`;
+    for (const replacement of patch.replacement) {
+        const match = canonicalizeMatch(replacement.match);
+        assert.equal([...source.matchAll(new RegExp(match.source, "g"))].length, 1);
+        source = source.replace(match, replacement.replace);
+    }
+    for (const stop of [true, false]) {
+        let finish: ((stop: boolean) => void) | undefined;
+        let sends = 0;
+        const composer = runInNewContext(source, {
+            h: { id: "channel" }, t: "synthetic", n: [], l: [], locations: { A: { INPUT: "chat" } },
+            parser: { A: { parse: (_channel: unknown, content: string) => ({ content }) } },
+            sender: { A: { getSendMessageOptions: () => ({}), sendMessage: () => { sends++; return "sent"; } } },
+            Vencord: { Api: { MessageEvents: { _handlePreSend: (id: string, message: { content: string }, _options: unknown, props: { channel: { id: string }; hasStickers: boolean; hasAttachments: boolean }, contentOptions: { content: string }) => {
+                assert.equal(id, "channel");
+                assert.equal(message.content, "synthetic");
+                assert.equal(props.channel.id, id);
+                assert.equal(props.hasStickers, false);
+                assert.equal(props.hasAttachments, false);
+                assert.equal(contentOptions.content, message.content);
+                return new Promise<boolean>(resolve => { finish = resolve; });
+            } } } }
+        });
+        const pending = composer.handleSendMessage();
+        await setImmediate();
+        assert.ok(finish);
+        assert.equal(sends, 0);
+        finish(stop);
+        const result = await pending;
+        assert.equal(sends, stop ? 0 : 1);
+        if (stop) {
+            assert.equal(result.shouldClear, false);
+            assert.equal(result.shouldRefocus, true);
+        } else assert.equal(result, "sent");
+    }
+});
+
 test("local DM hiding leaves group and system conversations alone", () => {
     const user = "111111111111111111";
     const store = { usersToBlock: user, guildBlackList: "", guildWhiteList: "", hideBlockedUsers: true };

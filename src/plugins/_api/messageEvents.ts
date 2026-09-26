@@ -36,7 +36,11 @@ export default definePlugin({
         },
         {
             find: ".handleSendMessage,onResize:",
-            replacement: {
+            group: true,
+            replacement: [{
+                match: /(?<=\.then\()\i(?==>\{let\{[^{}]{0,100}\bfailureReason:)/,
+                replace: "async $&"
+            }, {
                 match: /let (\i)=\i\.\i\.parse\((\i),\i\);.{0,100}?let (\i)=\{\.\.\.\i\.\i\.getSendMessageOptions\((\{.{0,300}?\})\),location:\i\.\i\.\i\};/,
                 replace: (match, parsedMessage, channel, options, contentOptions) => match +
                     `const vcContentOptions=${contentOptions},vcProps={` +
@@ -47,7 +51,7 @@ export default definePlugin({
                     `channel:${channel}};` +
                     `if(await Vencord.Api.MessageEvents._handlePreSend(${channel}.id,${parsedMessage},${options},vcProps,vcContentOptions))` +
                     "return{shouldClear:false,shouldRefocus:true};"
-            }
+            }]
         },
         {
             find: '("interactionUsernameProfile',

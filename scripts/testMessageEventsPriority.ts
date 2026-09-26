@@ -92,12 +92,19 @@ function handleEdit(events: MessageEventsModule): Promise<boolean> {
 function testCurrentDiscordSendPatch(): void {
     const patch = messageEventsPlugin.patches?.find(candidate => candidate.find === ".handleSendMessage,onResize:");
     assert(patch, "the MessageEvents chat-input patch exists");
-    const replacement = Array.isArray(patch.replacement) ? patch.replacement[0] : patch.replacement;
-    assert(replacement, "the MessageEvents chat-input replacement exists");
-    assert.equal(typeof replacement.replace, "function");
+    const replacements = Array.isArray(patch.replacement) ? patch.replacement : [patch.replacement];
+    assert.equal(patch.group, true);
 
-    const source = `class ChatInput {handleSendMessage=async e=>{let _=tU.Ay.parse(h,t);_.tts=_.tts||A,null!=o&&(_.content="",_.components=o);let I={...x.A.getSendMessageOptions({content:t,channelId:h.id,uploads:n,stickers:l,command:i,isGif:a,pendingReply:m,alsoForwardToChannelId:p?h.parent_id??void 0:void 0,scheduledTimestamp:this.props.pendingScheduledMessage?.scheduledTimestamp}),location:nB.Hx.CHAT_INPUT};if(null!=n&&n.length>0)I.attachmentsToUpload=n;return{shouldClear:true}}};const chatInput=new ChatInput(),view={handleSendMessage:chatInput.handleSendMessage,onResize:null};`;
-    const patched = source.replace(canonicalizeMatch(replacement.match), replacement.replace);
+    const source = `class ChatInput {handleSendMessage=async e=>Promise.resolve({valid:true}).then(v=>{let{valid:s,failureReason:r}=v;let _=tU.Ay.parse(h,t);_.tts=_.tts||A,null!=o&&(_.content="",_.components=o);let I={...x.A.getSendMessageOptions({content:t,channelId:h.id,uploads:n,stickers:l,command:i,isGif:a,pendingReply:m,alsoForwardToChannelId:p?h.parent_id??void 0:void 0,scheduledTimestamp:this.props.pendingScheduledMessage?.scheduledTimestamp}),location:nB.Hx.CHAT_INPUT};if(null!=n&&n.length>0)I.attachmentsToUpload=n;return{shouldClear:true}})};const chatInput=new ChatInput(),view={handleSendMessage:chatInput.handleSendMessage,onResize:null};`;
+    let patched = source;
+    for (const replacement of replacements) {
+        const match = canonicalizeMatch(replacement.match);
+        const next = typeof replacement.replace === "string"
+            ? patched.replace(match, replacement.replace)
+            : patched.replace(match, replacement.replace);
+        assert.notEqual(next, patched, "each grouped replacement must match");
+        patched = next;
+    }
 
     assert.notEqual(patched, source, "the current Discord chat-input source must match the MessageEvents patch");
     assert.equal(

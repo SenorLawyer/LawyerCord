@@ -14,6 +14,7 @@ export const logger = new Logger("SettingsSync:CloudSetup", "#39b7e0");
 
 export const getCloudUrl = () => new URL(Settings.cloud.url);
 const getCloudUrlOrigin = () => getCloudUrl().origin;
+let authorizationAttempt = 0;
 
 const getUserId = () => {
     const id = UserStore.getCurrentUser()?.id;
@@ -45,16 +46,8 @@ export async function getAuthorization() {
     return secrets[key];
 }
 
-async function setAuthorization(secret: string) {
-    const key = `${getCloudUrlOrigin()}:${getUserId()}`;
-    await DataStore.update<Record<string, string>>("Vencord_cloudSecret", secrets => {
-        secrets ??= {};
-        secrets[key] = secret;
-        return secrets;
-    });
-}
-
 export async function deauthorizeCloud() {
+    authorizationAttempt++;
     const key = `${getCloudUrlOrigin()}:${getUserId()}`;
     await DataStore.update<Record<string, string>>("Vencord_cloudSecret", secrets => {
         secrets ??= {};
@@ -64,7 +57,15 @@ export async function deauthorizeCloud() {
 }
 
 export async function authorizeCloud() {
-    if (await getAuthorization() !== undefined) {
+    const attempt = ++authorizationAttempt;
+    const userId = getUserId();
+    const service = Settings.cloud.url;
+    const key = `${getCloudUrlOrigin()}:${userId}`;
+    const isCurrent = () => attempt === authorizationAttempt
+        && UserStore.getCurrentUser()?.id === userId && Settings.cloud.url === service;
+    const authorization = await getAuthorization();
+    if (!isCurrent()) return;
+    if (typeof authorization === "string" && authorization) {
         Settings.cloud.authenticated = true;
         return;
     }
@@ -72,7 +73,9 @@ export async function authorizeCloud() {
     try {
         const oauthConfiguration = await fetch(new URL("/v1/oauth/settings", getCloudUrl()));
         var { clientId, redirectUri } = await oauthConfiguration.json();
+        if (!isCurrent()) return;
     } catch {
+        if (!isCurrent()) return;
         showNotification({
             title: "Cloud Integration",
             body: "Setup failed (couldn't retrieve OAuth configuration)."
@@ -81,7 +84,7 @@ export async function authorizeCloud() {
         return;
     }
 
-    openModal((props: any) => <OAuth2AuthorizeModal
+    openModal(props => <OAuth2AuthorizeModal
         {...props}
         scopes={["identify"]}
         responseType="code"
@@ -89,8 +92,10 @@ export async function authorizeCloud() {
         permissions={0n}
         clientId={clientId}
         cancelCompletesFlow={false}
-        callback={async ({ location }: any) => {
+        callback={async ({ location }: { location?: string; }) => {
+            if (!isCurrent()) return;
             if (!location) {
+                authorizationAttempt++;
                 Settings.cloud.authenticated = false;
                 return;
             }
@@ -100,16 +105,22 @@ export async function authorizeCloud() {
                     headers: { Accept: "application/json" }
                 });
                 const data = await res.json();
-                if (data.secret) {
+                if (!isCurrent()) return;
+                if (typeof data.secret === "string" && data.secret) {
+                    await DataStore.update<Record<string, string>>("Vencord_cloudSecret", secrets => {
+                        secrets ??= {};
+                        if (isCurrent()) secrets[key] = data.secret;
+                        return secrets;
+                    });
+                    if (!isCurrent()) return;
                     logger.info("Authorized with cloud");
-                    await setAuthorization(data.secret);
                     showNotification({
                         title: "Cloud Integration",
                         body: "Cloud integrations enabled!"
                     });
                     Settings.cloud.authenticated = true;
                 } else {
-                    logger.error("OAuth callback returned no secret", data);
+                    logger.error("OAuth callback returned no secret");
                     showNotification({
                         title: "Cloud Integration",
                         body: data.error
@@ -118,11 +129,12 @@ export async function authorizeCloud() {
                     });
                     Settings.cloud.authenticated = false;
                 }
-            } catch (e: any) {
+            } catch (e: unknown) {
+                if (!isCurrent()) return;
                 logger.error("Failed to authorize", e);
                 showNotification({
                     title: "Cloud Integration",
-                    body: `Setup failed (${e.toString()}).`
+                    body: `Setup failed (${String(e)}).`
                 });
                 Settings.cloud.authenticated = false;
             }

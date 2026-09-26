@@ -87,6 +87,83 @@ test("cloud authentication rejects missing or changed owners and deauthorizes th
     }
 });
 
+test("obsolete cloud authorization callbacks cannot save credentials or change authentication", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSetup.tsx", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022, jsx: JsxEmit.React }, fileName: "cloudSetup.tsx"
+    }).outputText;
+    for (const change of ["read", "configuration", "account", "service", "deauthorize", "newer", "invalid", "none"]) {
+        let userId = "first";
+        const settings = { cloud: { url: "https://first.invalid", authenticated: false } };
+        const requests: ((value: unknown) => void)[] = [];
+        const notifications: unknown[] = [];
+        let modal: { callback: (value: { location: string }) => Promise<void> } | undefined;
+        let records: Record<string, string> = {};
+        const modules: Record<string, unknown> = {
+            "@api/DataStore": { get: async () => ({ ...records }), update: async (_key: string, fn: (value: Record<string, string>) => Record<string, string>) => { records = fn(records); } },
+            "@api/Settings": { Settings: settings },
+            "@api/Notifications": { showNotification: (value: unknown) => notifications.push(value) },
+            "@utils/Logger": { Logger: class { info() {} error() {} } },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) }, OAuth2AuthorizeModal: "modal", openModal: (render: (props: object) => typeof modal) => { modal = render({}); } }
+        };
+        const { authorizeCloud, deauthorizeCloud } = runInNewContext(`${compiled}\nexports;`, {
+            exports: {}, require: (name: string) => modules[name] ?? {}, URL,
+            React: { createElement: (_type: unknown, props: unknown) => props },
+            fetch: () => new Promise(resolve => requests.push(resolve))
+        });
+        const configuration = { json: async () => ({ clientId: "test", redirectUri: "https://first.invalid/callback" }) };
+        const begin = authorizeCloud();
+        if (change === "read") userId = "second";
+        await new Promise<void>(resolve => setImmediate(resolve));
+        if (change === "read") {
+            await begin;
+            assert.equal(requests.length, 0);
+            assert.equal(modal, undefined);
+            continue;
+        }
+        if (change === "configuration") userId = "second";
+        requests.shift()?.(configuration);
+        await begin;
+        if (change === "configuration") {
+            assert.equal(modal, undefined);
+            assert.equal(notifications.length, 0);
+            continue;
+        }
+        assert.ok(modal);
+        const pending = modal.callback({ location: "https://first.invalid/callback" });
+        const finishResponse = requests.shift();
+        assert.ok(finishResponse);
+        let newer: Promise<void> | undefined;
+        if (change === "account") userId = "second";
+        if (change === "service") settings.cloud.url = "https://second.invalid";
+        if (change === "deauthorize") await deauthorizeCloud();
+        if (change === "newer") {
+            newer = authorizeCloud();
+            await new Promise<void>(resolve => setImmediate(resolve));
+        }
+        finishResponse({ json: async () => ({ secret: change === "invalid" ? 17 : "synthetic" }) });
+        await pending;
+        if (change === "none") {
+            assert.deepEqual(records, { "https://first.invalid:first": "synthetic" });
+            assert.equal(settings.cloud.authenticated, true);
+            assert.equal(notifications.length, 1);
+            continue;
+        }
+        if (change === "invalid") {
+            assert.deepEqual(records, {});
+            assert.equal(settings.cloud.authenticated, false);
+            assert.equal(notifications.length, 1);
+            continue;
+        }
+        assert.deepEqual(records, {}, change);
+        assert.equal(settings.cloud.authenticated, false, change);
+        assert.equal(notifications.length, 0, change);
+        if (newer) {
+            requests.shift()?.(configuration);
+            await newer;
+        }
+    }
+});
+
 test("desktop settings saves preserve the previous file and store when disk writes fail", () => {
     const directory = fs.mkdtempSync(join(tmpdir(), "lawyercord-settings-"));
     const file = join(directory, "settings.json");

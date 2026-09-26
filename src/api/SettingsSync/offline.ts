@@ -14,7 +14,8 @@ import { DataStore } from "..";
 
 type BackupType = "all" | "plugins" | "css" | "datastore";
 const LOCAL_DATASTORE_KEYS = new Set<unknown>(["Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions"]);
-export const isLocalDataStoreKey = (key: unknown) => LOCAL_DATASTORE_KEYS.has(key);
+export const isLocalDataStoreKey = (key: unknown) => LOCAL_DATASTORE_KEYS.has(key)
+    || (typeof key === "string" && key.startsWith("Vencord_cloudManifest:"));
 
 export const omitCloudSettings = (settings: object) => Object.fromEntries(Object.entries(settings).filter(([key]) => key !== "cloud"));
 

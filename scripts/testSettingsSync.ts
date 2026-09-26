@@ -423,7 +423,7 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
     const nativeSettings = { plugins: {}, cloud: { url: "https://local.invalid", authenticated: true, settingsSyncVersion: 1 } };
     const records: [string, unknown][] = [["CustomSounds", { saved: true }], ["VoiceStats", { seconds: 42 }]];
     const syncedRecords = records.slice();
-    const localKeys = ["Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions"];
+    const localKeys = ["Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions", "Vencord_cloudManifest:https://first.invalid:first", "Vencord_cloudManifest:https://second.invalid:second"];
     for (const key of localKeys) records.push([key, { local: true }]);
     const writes: unknown[] = [];
     const css: string[] = [];
@@ -771,6 +771,56 @@ test("obsolete cloud failures cannot deauthorize another account or start fallba
         assert.equal(versions["https://second.invalid"], undefined);
         if (during === "fallback") assert.equal(versions["https://first.invalid"], "v1");
     }
+});
+
+test("cloud manifests belong to one account and service without claiming the ownerless legacy record", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    let userId = "first";
+    let service = "https://first.invalid";
+    const legacy = [{ key: "settings", version: 999, checksum: "ownerless" }];
+    const records = new Map<string, unknown>([["Vencord_cloudManifest", legacy]]);
+    const observed: unknown[] = [];
+    const contexts = [["first", "https://first.invalid"], ["second", "https://first.invalid"], ["first", "https://second.invalid"]];
+    const modules: Record<string, unknown> = {
+        "@api/DataStore": { get: async (key: string) => records.get(key), set: async (key: string, value: unknown) => { records.set(key, value); } },
+        "@api/Notifications": { showNotification: () => {} },
+        "@api/Settings": { PlainSettings: { cloud: {} } },
+        "@utils/localStorage": { localStorage: {} },
+        "@utils/Logger": { Logger: class { info() {} error() {} } },
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
+        "./cloudSetup": { getCloudUrl: () => new URL(service), getCloudAuth: async () => "synthetic" },
+        "./offline": { importSettings: async () => {} }
+    };
+    const manifest = () => [{ key: "settings", version: 1, checksum: `${service}/${userId}` }];
+    const { getCloudSettings, deleteCloudSettings } = runInNewContext(`${compiled}\nexports;`, {
+        exports: {}, require: (name: string) => modules[name] ?? {}, URL, TextDecoder, atob, IS_WEB: true,
+        VencordNative: { settings: { set: async () => {} } },
+        fetch: async (url: URL, init: RequestInit) => {
+            if (url.pathname === "/v2/sync") {
+                observed.push(JSON.parse(String(init.body)).client_manifest);
+                return { ok: true, json: async () => ({ errors: [], uploaded: [], server_manifest: manifest(), downloads: [{ key: "settings", value: btoa("{}") }] }) };
+            }
+            return { ok: true, json: async () => ({ entries: [] }) };
+        }
+    });
+    for (const expectedExisting of [false, true]) for (const [user, url] of contexts) {
+        userId = user;
+        service = url;
+        assert.equal(await getCloudSettings(false), true);
+        assert.deepEqual(observed.at(-1), expectedExisting ? manifest() : []);
+    }
+    userId = "first";
+    service = "https://first.invalid";
+    await deleteCloudSettings();
+    for (const [user, url] of contexts) {
+        userId = user;
+        service = url;
+        await getCloudSettings(false);
+        assert.deepEqual(observed.at(-1), user === "first" && url === "https://first.invalid" ? [] : manifest());
+    }
+    assert.equal(records.get("Vencord_cloudManifest"), legacy, "The old record has no known account owner and must remain untouched");
 });
 
 test("cloud deletion stops when its account or service changes", async () => {

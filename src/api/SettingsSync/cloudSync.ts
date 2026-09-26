@@ -47,6 +47,7 @@ function getCloudSyncContext() {
     const isCurrent = () => userId !== undefined && UserStore.getCurrentUser()?.id === userId && getCloudUrl().href === url.href;
     return {
         url,
+        manifestKey: `${MANIFEST_STORE_KEY}:${url.origin}:${userId}`,
         isCurrent,
         assertCurrent: () => {
             if (!isCurrent()) throw new Error("Cloud sync account or service changed.");
@@ -83,12 +84,12 @@ async function computeChecksum(data: Uint8Array): Promise<string> {
     return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function getLocalManifest(): Promise<ManifestEntry[]> {
-    return await DataStore.get<ManifestEntry[]>(MANIFEST_STORE_KEY) ?? [];
+async function getLocalManifest(context: ReturnType<typeof getCloudSyncContext>): Promise<ManifestEntry[]> {
+    return await DataStore.get<ManifestEntry[]>(context.manifestKey) ?? [];
 }
 
-async function saveLocalManifest(manifest: ManifestEntry[]) {
-    await DataStore.set(MANIFEST_STORE_KEY, manifest);
+async function saveLocalManifest(context: ReturnType<typeof getCloudSyncContext>, manifest: ManifestEntry[]) {
+    await DataStore.set(context.manifestKey, manifest);
 }
 
 async function buildLocalData(): Promise<Map<string, Uint8Array>> {
@@ -194,7 +195,7 @@ async function doSyncV2(uploads: SyncRequest["uploads"], clientManifest: Manifes
 }
 
 async function putV2(context: ReturnType<typeof getCloudSyncContext>, manual?: boolean) {
-    const localManifest = await getLocalManifest();
+    const localManifest = await getLocalManifest(context);
     context.assertCurrent();
     const manifestMap = new Map(localManifest.map(e => [e.key, e]));
 
@@ -227,7 +228,7 @@ async function putV2(context: ReturnType<typeof getCloudSyncContext>, manual?: b
     PlainSettings.cloud.settingsSyncVersion = Date.now();
     await VencordNative.settings.set(PlainSettings);
     context.assertCurrent();
-    await saveLocalManifest(response.server_manifest);
+    await saveLocalManifest(context, response.server_manifest);
     context.assertCurrent();
 
     logger.info(`Sync complete: ${response.uploaded.length} uploaded, ${response.downloads.length} downloaded`);
@@ -248,7 +249,7 @@ async function putV2(context: ReturnType<typeof getCloudSyncContext>, manual?: b
 }
 
 async function getV2(context: ReturnType<typeof getCloudSyncContext>, shouldNotify: boolean, force: boolean) {
-    const localManifest = force ? [] : await getLocalManifest();
+    const localManifest = force ? [] : await getLocalManifest(context);
     context.assertCurrent();
 
     const response = await doSyncV2([], localManifest, context);
@@ -272,7 +273,7 @@ async function getV2(context: ReturnType<typeof getCloudSyncContext>, shouldNoti
     PlainSettings.cloud.settingsSyncVersion = Date.now();
     await VencordNative.settings.set(PlainSettings);
     context.assertCurrent();
-    await saveLocalManifest(response.server_manifest);
+    await saveLocalManifest(context, response.server_manifest);
     context.assertCurrent();
 
     logger.info(`Pulled ${response.downloads.length} keys from cloud`);
@@ -323,7 +324,7 @@ async function deleteV2(context: ReturnType<typeof getCloudSyncContext>) {
     }));
     if (!context.isCurrent()) return;
 
-    await saveLocalManifest([]);
+    await saveLocalManifest(context, []);
     if (!context.isCurrent()) return;
 
     PlainSettings.cloud.settingsSyncVersion = 0;
@@ -597,7 +598,7 @@ export async function eraseAllCloudData() {
         Settings.cloud.authenticated = false;
         await deauthorizeCloud();
         context.assertCurrent();
-        await saveLocalManifest([]);
+        await saveLocalManifest(context, []);
         context.assertCurrent();
 
         showNotification({

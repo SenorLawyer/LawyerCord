@@ -9,7 +9,7 @@ import { copyToClipboard } from "@utils/clipboard";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
 import type { User } from "@vencord/discord-types";
-import { Menu, SelectedGuildStore, Toasts, UserProfileStore } from "@webpack/common";
+import { IconUtils, Menu, SelectedGuildStore, Toasts, UserProfileStore } from "@webpack/common";
 
 interface UserContextProps {
     guildId?: string;
@@ -62,12 +62,10 @@ function getBannerUrl(userId: string, guildId?: string) {
     const banner = profile?.banner;
     if (!banner) return null;
 
-    const extension = banner.startsWith("a_") ? "gif" : "png";
-    const path = guildId
-        ? `guilds/${guildId}/users/${userId}/banners`
-        : `banners/${userId}`;
-
-    return `https://cdn.discordapp.com/${path}/${banner}.${extension}?size=${CDN_SIZE}`;
+    const data = { id: userId, banner, canAnimate: true, size: CDN_SIZE };
+    return (guildId
+        ? IconUtils.getGuildMemberBannerURL({ ...data, guildId })
+        : IconUtils.getUserBannerURL(data)) ?? null;
 }
 
 const userContextPatch: NavContextMenuPatchCallback = (children, { guildId, user }: UserContextProps) => {

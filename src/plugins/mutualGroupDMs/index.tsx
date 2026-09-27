@@ -139,12 +139,11 @@ export default definePlugin({
                     replace: "$&||$self.getMutualGroupDms(arguments[0].user.id).length>0"
                 },
                 {
-                    match: /\.openUserProfileModal.+?\)}\)}\)(?<=,(\i)&&(\i)&&(\(0,\i\.jsxs?\)\(\i\.\i,{className:(\i)\.\i}\)).{0,50}?"MUTUAL_FRIENDS".+?)/,
-                    replace: (m, hasMutualGuilds, hasMutualFriends, Divider, classes) => "" +
-                        `${m},$self.renderDMPageList({user:arguments[0].user,hasDivider:${hasMutualGuilds}||${hasMutualFriends},Divider:${Divider},listStyle:${classes}.list})`
+                    match: /,(\i)&&(\i)&&(\(0,\i\.jsxs?\)\(\i\.\i,\{className:\i\.\i\}\)),\i&&\(0,\i\.jsxs?\)\(\i,\{(?=.{0,500}?section:"MUTUAL_FRIENDS")(?=.{0,500}?listClassName:(\i\.\i)(?:,|})).{0,500}?\}\)\}\)(?=\]\})/,
+                    replace: "$&,$self.renderDMPageList({user:arguments[0].user,hasDivider:$1||$2,Divider:$3,listStyle:$4})"
                 },
                 {
-                    match: /(?=function (\i)\(\i\){let{section:\i,header:\i[^}]+?onExpand:)/,
+                    match: /(?=function (\i)\(\i\){let{section:\i,header:\i[^}]{0,150}?onExpand:)/,
                     replace: "$self.ExpandableList=$1;"
                 }
             ]

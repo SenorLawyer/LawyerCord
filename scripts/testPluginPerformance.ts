@@ -9811,6 +9811,41 @@ test("Decor public lookups check HTTP and response shapes and never request the 
     }
 });
 
+test("MutualGroupDMs sidebar uses the native list class and preserves divider conditions", () => {
+    const source = readFileSync("src/plugins/mutualGroupDMs/index.tsx", "utf8");
+    const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);
+    let patchSource = "";
+    const visit = (node: typescript.Node) => {
+        if (typescript.isPropertyAssignment(node) && node.name.getText(ast) === "patches") patchSource = node.initializer.getText(ast);
+        typescript.forEachChild(node, visit);
+    };
+    visit(ast);
+    const replacement = runInNewContext(`(${patchSource})`)[2].replacement[1];
+    const original = 'function render(props){let guilds=props.guilds,friends=props.friends,users=[];return(0,j.jsxs)(Overlay,{children:[guilds&&(0,j.jsx)(List,{section:"MUTUAL_GUILDS"}),guilds&&friends&&(0,j.jsx)(components.Divider,{className:styles.divider}),friends&&(0,j.jsx)(List,{section:"MUTUAL_FRIENDS",listClassName:styles.native,items:users.map(user=>{return(0,j.jsx)(Row,{onSelect:()=>{actions.openUserProfileModal({id:user.id})}},user.id)})})]})}';
+    const styles = { native: "native-list", divider: "native-divider" };
+    for (const reordered of [false, true]) {
+        const fixture = reordered ? original.replace('section:"MUTUAL_FRIENDS",listClassName:styles.native', 'listClassName:styles.native,section:"MUTUAL_FRIENDS"') : original;
+        const patched = fixture.replace(canonicalizeMatch(replacement.match), typeof replacement.replace === "string"
+            ? replacement.replace.replaceAll("$self", "plugin")
+            : (...args: unknown[]) => replacement.replace(...args).replaceAll("$self", "plugin"));
+        assert.notEqual(patched, fixture);
+        const render = runInNewContext(`(${patched})`, {
+            j: { jsx: (type: unknown, props: unknown) => ({ type, props }), jsxs: (type: unknown, props: unknown) => ({ type, props }) },
+            Overlay: "overlay", List: "list", Row: "row", components: { Divider: "divider" }, styles,
+            plugin: { renderDMPageList: (props: unknown) => ({ type: "groups", props }) }
+        });
+        for (const guilds of [false, true]) for (const friends of [false, true]) {
+            const user = { id: "user" };
+            const groups = render({ user, guilds, friends }).props.children.at(-1);
+            assert.equal(groups.type, "groups");
+            assert.equal(groups.props.user, user);
+            assert.equal(groups.props.hasDivider, guilds || friends);
+            assert.equal(groups.props.Divider.props.className, styles.divider);
+            assert.equal(groups.props.listStyle, styles.native);
+        }
+    }
+});
+
 test("MutualGroupDMs adds and renders profile tabs without modifying wishlist items", () => {
     const source = readFileSync("src/plugins/mutualGroupDMs/index.tsx", "utf8");
     const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);

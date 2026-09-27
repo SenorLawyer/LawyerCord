@@ -26,6 +26,10 @@ The previous anchor had role=button but no href, tab stop or keyboard handler. C
 
 The tracked regression covers success and rejection, pending cleanup, unchanged checkbox state while waiting and preserved guild features. A Chromium check of the actual shared component's native button output verifies Tab, Enter and Space. This is isolated browser verification, not signed-in modal or visual acceptance. Evidence is `.git/audit/pause-invites-interaction-{before,after}.cjs` and their JSON results. All 671 broader tests and timezone checks, TypeScript, focused lint, desktop/web builds and artifact scanning pass. Logs use `.git/audit/pause-invites-interaction-*`.
 
+## PinDMs patch bounds
+
+Four PinDMs searches now stay within bounded sections, renderer declarations, row-height logic and the scroll expression. The row-height insertion no longer copies surrounding code. All nine replacements match once in captured module 593065, and the complete patched output is byte-identical to fac4c7edf and compiles. Four distant-target decoys match the previous patterns but are rejected by the new ones. The renderDM-to-renderRow span is 416 characters, covered by two bounded 250-character gaps. Evidence is `.git/audit/pin-dms-patches.{cjs,json}` and `pin-dms-capture-verify.{cjs,json}`. This does not establish signed-in DM-list scrolling acceptance. Prior instance-mirror cleanup 3bbdcf6c4 was inspected and remains intact. Focused lint, desktop/web builds and artifact scanning pass; logs use `.git/audit/pin-dms-capture-*`. Patch lint reports 65 warnings and no errors. All four CI checks passed on fac4c7edf, whose 671 broader tests and timezone checks remain the latest full local run.
+
 ## Scope and source
 
 - Baseline: `6e664e03ba3d0b7746ce34740ca444f5112b04bc`, published as `nightly-20260905-1918-6e664e03`.

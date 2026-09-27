@@ -49,6 +49,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Bound PinDMs' section, renderer, row-height and scroll captures to their nearby code while preserving its generated patch output.
+
 - Make Pause Indefinitely keyboard accessible and wait for the server before checking the paused state. Report failed requests and allow retrying.
 
 - Remove PauseInvitesForever's extra setter patch and use the adjacent checkbox's setter directly.

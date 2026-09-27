@@ -83,13 +83,13 @@ export default definePlugin({
                 },
                 {
                     // Insert the pinned channels to sections
-                    match: /(?<=renderRow:this\.renderRow,)sections:\[.+?1\)]/,
+                    match: /(?<=renderRow:this\.renderRow,)sections:\[[^\]]{1,150}?1\)]/,
                     replace: "...$self.makeProps(this,{$&})"
                 },
 
                 // Rendering
                 {
-                    match: /renderRow(?:",|=)(\i)=>{(?<=renderDM(?:",|=).+?(\i\.\i),\{channel:.+?)/,
+                    match: /renderRow(?:",|=)(\i)=>{(?<=renderDM(?:",|=).{0,250}?(\i\.\i),\{channel:.{0,250}?)/,
                     replace: "$&if($self.isChannelIndex($1.section, $1.row))return $self.renderChannel($1.section,$1.row,$2)();"
                 },
                 {
@@ -103,8 +103,8 @@ export default definePlugin({
 
                 // Fix Row Height
                 {
-                    match: /(\.startsWith\("section-divider"\).+?return 1===)(\i)/,
-                    replace: "$1($2-$self.categoryLen())"
+                    match: /(?<=\.startsWith\("section-divider"\).{0,150}?return 1===)\i/,
+                    replace: "($&-$self.categoryLen())"
                 },
                 {
                     match: /getRowHeight(?:",|=)\((\i),(\i)\)=>{/,
@@ -114,7 +114,7 @@ export default definePlugin({
                 // Fix ScrollTo
                 {
                     // Override scrollToChannel to properly account for pinned channels
-                    match: /(?<=scrollTo\(\{to:\i\}\):\(\i\+=)(\d+)\*\(.+?(?=,)/,
+                    match: /(?<=scrollTo\(\{to:\i\}\):\(\i\+=)(\d+)\*\([^,;{}]{1,100}(?=,)/,
                     replace: "$self.getScrollOffset(arguments[0],$1,this?.props?.padding,this?.state?.preRenderedChildren,$&)"
                 },
                 {

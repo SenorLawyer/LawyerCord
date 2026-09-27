@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Avoid overwriting newer saved channels when an idle window stops KeepCurrentChannel or logs out. Pending selections still save immediately.
+
 - Ignore malformed saved KeepCurrentChannel records during restoration without rewriting them.
 
 - Reset KeepCurrentChannel’s in-memory state on startup so a failed read cannot overwrite newer saved data and a previous account switch cannot disable tracking.

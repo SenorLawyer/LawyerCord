@@ -99,6 +99,26 @@ test("KeepCurrentChannel cancels stale restoration and handles storage failures"
         assert.deepEqual(state.routes, []);
         assert.equal(state.saved()?.channelId, action === "clear" ? undefined : action === "select" ? "new" : "old");
     }
+    for (const action of ["stop", "logout"]) {
+        for (const changed of [false, true]) {
+            const state = setup();
+            await state.plugin.start();
+            if (changed) { state.select(); await state.flush(); }
+            state.replaceSaved({ guildId: "guild", channelId: "other-window" });
+            if (action === "stop") state.plugin.stop();
+            else state.plugin.flux.LOGOUT({ type: "LOGOUT", isSwitchingAccount: true });
+            await state.flush();
+            assert.equal(state.saved()?.channelId, "other-window", `${action} must not resave an unchanged channel`);
+        }
+        const pending = setup();
+        await pending.plugin.start();
+        pending.select();
+        if (action === "stop") pending.plugin.stop();
+        else pending.plugin.flux.LOGOUT({ type: "LOGOUT", isSwitchingAccount: true });
+        assert.equal(pending.timers.size, 0);
+        await pending.flush();
+        assert.equal(pending.saved()?.channelId, "new");
+    }
     const restarted = setup();
     await restarted.plugin.start();
     restarted.plugin.stop();

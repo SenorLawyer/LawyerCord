@@ -103,7 +103,7 @@ export default definePlugin({
         LOGOUT(e: LogoutEvent) {
             restoreVersion++;
             ({ isSwitchingAccount } = e);
-            void savePreviousChannelNow();
+            if (previousSaveTimeout !== undefined) void savePreviousChannelNow();
         },
 
         CONNECTION_OPEN() {
@@ -163,6 +163,6 @@ export default definePlugin({
 
     stop() {
         restoreVersion++;
-        void savePreviousChannelNow();
+        if (previousSaveTimeout !== undefined) void savePreviousChannelNow();
     }
 });

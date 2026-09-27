@@ -137,14 +137,15 @@ export default definePlugin({
         },
         { // Disable fade animations for settings menu
             find: '"data-mana-component":"layer-modal"',
+            group: true,
             replacement: [
                 {
-                    match: /(\i)\.animated\.div(?=,\{"data-mana-component":"layer-modal")/,
+                    match: /\i\.animated\.div(?=,\{[^{}]{0,150}"data-mana-component":"layer-modal")/,
                     replace: '"div"'
                 },
                 {
-                    match: /(?<="data-mana-component":"layer-modal"[^}]*?)style:\i,/,
-                    replace: "style:{},"
+                    match: /(?<=\{(?=[^{}]{0,150}"data-mana-component":"layer-modal")[^{}]{0,150})style:\i(?=[,}]),?/,
+                    replace: ""
                 }
             ],
             predicate: () => settings.store.disableFade

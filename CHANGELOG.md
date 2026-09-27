@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Apply BetterSettings modal animation changes together, tolerate reordered properties and remove the unused style prop.
+
 - Narrow BlurNSFW message matching while preserving its existing restricted-preview behavior.
 
 - CallTimer expands only the containers holding its connection timer, preventing overflow without resizing unrelated panels.

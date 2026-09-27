@@ -2225,6 +2225,31 @@ test("reply mention exceptions match whole user and role IDs", () => {
     assert.equal(plugin.shouldMention(message, false), true);
 });
 
+test("hidden channel user overflow receives its channel in each component", () => {
+    const source = readFileSync("src/plugins/showHiddenChannels/index.tsx", "utf8");
+    const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);
+    let patchSource = "";
+    const visit = (node: typescript.Node) => {
+        if (typescript.isPropertyAssignment(node) && node.name.getText(ast) === "patches") patchSource = node.initializer.getText(ast);
+        typescript.forEachChild(node, visit);
+    };
+    visit(ast);
+    const patch = runInNewContext(`(${patchSource})`)[17];
+    let code = 'function Avatars(e){let{users:a,maxUsers:l,guildId:t}=e;return a.slice(0,l)}function Count(e){let{count:a,textVariant:l,color:t}=e;return `+${a}`}function Users(e){let{users:r,maxUsers:s,overflowCountVariant:m,overflowCountColor:g="interactive-text-default",overflowCountClassName:v,hideOverflowCount:k=false,"aria-hidden":q}=e,L=r.length-s,O=L+1,V=L>0&&!k&&!q;return V?{"aria-label":S.intl.formatToPlainString(S.t.R8Z8Qr,{count:O}),text:(0,j.jsx)(Count,{count:O,textVariant:m,color:g,className:v})}:null}';
+    for (const replacement of patch.replacement) code = code.replace(canonicalizeMatch(replacement.match), replacement.replace);
+    const render = runInNewContext(code + ";Users", {
+        $self: { isHiddenChannel: (channel?: { hidden: boolean; }) => channel?.hidden ?? false },
+        j: { jsx: (component: (props: object) => unknown, props: object) => component(props) },
+        S: { t: { R8Z8Qr: "viewAll" }, intl: { formatToPlainString: (_key: string, values: { count: number; }) => values.count } }
+    });
+    for (const hidden of [false, true]) for (const count of [1, 2, 3, 4, 8]) {
+        const result = render({ users: Array(count).fill({}), maxUsers: 3, shcChannel: { hidden } });
+        assert.equal(result?.text ?? null, hidden && count <= 3 ? "+" : count > 3 ? `+${count - 2}` : null);
+        if (result) assert.equal(result["aria-label"], hidden ? count : count - 2);
+    }
+    assert.equal(render({ users: Array(4).fill({}), maxUsers: 3 }).text, "+2");
+});
+
 test("hidden app channels keep only the supported notification toolbar control", () => {
     const source = readFileSync("src/plugins/showHiddenChannels/index.tsx", "utf8");
     const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);

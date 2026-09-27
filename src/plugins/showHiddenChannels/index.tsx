@@ -338,23 +338,26 @@ export default definePlugin({
         },
         {
             find: '="interactive-text-default",overflowCountClassName:',
+            group: true,
             replacement: [
                 {
-                    // Create a variable for the channel prop
-                    match: /let{users:\i,maxUsers:\i,/,
-                    replace: "let{shcChannel}=arguments[0];$&"
+                    match: /(?<=\(\i,{count:\i,textVariant:\i,)/,
+                    replace: "shcChannel:arguments[0].shcChannel,"
                 },
                 {
                     // Make Discord always render the plus button if the component is used inside the HiddenChannelLockScreen
                     match: /\i>0(?=&&!\i&&!\i)/,
-                    replace: m => `($self.isHiddenChannel(typeof shcChannel!=="undefined"?shcChannel:void 0,true)?true:${m})`
+                    replace: "($self.isHiddenChannel(arguments[0].shcChannel,true)?true:$&)"
+                },
+                {
+                    match: /(?<=#{intl::VIDEO_CALL_VIEW_ALL_COUNT},{count:)\i/,
+                    replace: "$self.isHiddenChannel(arguments[0].shcChannel,true)?arguments[0].users.length:$&"
                 },
                 {
                     // Show only the plus text without overflowed children amount
                     // if the overflow amount is <= 0 and the component is used inside the HiddenChannelLockScreen
                     match: /(?<=`\+\$\{)\i(?=\})/,
-                    replace: overflowTextAmount => "" +
-                        `$self.isHiddenChannel(typeof shcChannel!=="undefined"?shcChannel:void 0,true)&&(${overflowTextAmount}-1)<=0?"":${overflowTextAmount}`
+                    replace: '$self.isHiddenChannel(arguments[0].shcChannel,true)&&($&-1)<=0?"":$&'
                 }
             ]
         },

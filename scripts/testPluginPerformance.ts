@@ -28,6 +28,34 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("unread thread badges render without voice or mention counters", () => {
+    const { default: plugin } = loadSource("src/equicordplugins/unreadBadgeCount/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({}) },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack": { findComponentByCodeLazy() {}, findStoreLazy() {} }, "@webpack/common": {}
+    });
+    const { canonicalizeMatch } = loadSource("src/utils/patches.ts", { "./intlHash": {} });
+    const replacement = plugin.patches[1].replacement[0];
+    for (const fields of ["thread:channel,countInVoice:voice,mentionsCount:mentions", "mentionsCount:mentions,countInVoice:voice,thread:channel"]) {
+        const source = `function counters(props){let{thread:t,countInVoice:v,mentionsCount:m}=props;return v||m?{type:"counter"}:null}({children:[(0,r.jsx)(counters,{${fields}})]})`;
+        const patched = source.replace(canonicalizeMatch(replacement.match), replacement.replace.replaceAll("$self", "plugin"));
+        assert.notEqual(patched, source);
+        for (const voice of [0, 1]) for (const mentions of [0, 1]) {
+            const channel = { id: "thread" };
+            const result = runInNewContext(patched, {
+                channel, voice, mentions,
+                r: { jsx: (component: (props: object) => unknown, props: object) => component(props) },
+                plugin: { CountBadge: ({ channel: value }: { channel: object }) => ({ type: "badge", channel: value }) }
+            });
+            assert.equal(result.children.length, 2);
+            assert.equal(result.children[1].type, "badge");
+            assert.equal(result.children[1].channel, channel);
+        }
+    }
+});
+
 test("extra sticker buttons preserve picker callbacks and selection scope", () => {
     const { default: plugin } = loadSource("src/equicordplugins/moreStickers/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({}) },

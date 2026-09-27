@@ -27,6 +27,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- UnreadCountBadge shows thread badges even when there are no mentions or voice users.
+
 - MoreStickers keeps channel and composer checks when highlighting its extra picker button and bounds the picker-panel patch.
 - MoreUserTags removes a discarded native label lookup and unbounded patch searches. MessageLoggerEnhanced locates its fetch callback and image state directly.
 - MoreStickers changes the correct click handler so its extra button opens the added sticker picker instead of Discord's normal picker.

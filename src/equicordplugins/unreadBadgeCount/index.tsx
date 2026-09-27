@@ -42,7 +42,7 @@ export default definePlugin({
             find: "UNREAD_IMPORTANT:",
             replacement: [
                 {
-                    match: /\.Children\.count.+?:null(?<=,channel:\i.+?)/,
+                    match: /\.Children\.count.{0,150}?:null(?<=,channel:\i.{0,150}?)/,
                     replace: "$&,$self.CountBadge({channel: arguments[0].channel})",
                 },
             ]
@@ -53,8 +53,8 @@ export default definePlugin({
             find: "M0 15H2c0 1.6569",
             replacement: [
                 {
-                    match: /mentionsCount:\i.{0,50}?null/,
-                    replace: "$&,$self.CountBadge({channel: arguments[0].thread})",
+                    match: /(?<=children:\[)(\(0,\i\.jsx\)\(\i,\{(?=[^}]{0,150}\bthread:(\i)[,}])(?=[^}]{0,150}\bcountInVoice:)[^}]{1,150}\}\))/,
+                    replace: "$1,$self.CountBadge({channel:$2})",
                 },
             ]
         },

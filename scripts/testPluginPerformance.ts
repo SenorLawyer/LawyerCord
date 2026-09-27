@@ -2225,6 +2225,33 @@ test("reply mention exceptions match whole user and role IDs", () => {
     assert.equal(plugin.shouldMention(message, false), true);
 });
 
+test("synced default volumes preserve local boosts", () => {
+    const source = readFileSync("src/plugins/volumeBooster/index.ts", "utf8");
+    const ast = typescript.createSourceFile("index.ts", source, ScriptTarget.Latest, true);
+    let patchSource = "";
+    const visit = (node: typescript.Node) => {
+        if (typescript.isPropertyAssignment(node) && node.name.getText(ast) === "patches") patchSource = node.initializer.getText(ast);
+        typescript.forEachChild(node, visit);
+    };
+    visit(ast);
+    const replacements = runInNewContext(`(${patchSource})`)[4].replacement;
+    let original = 'function sync(config,local,mutes,connections,reset){let rows=config.settings.audioContextSettings,standard=100;for(let id of Object.keys(rows)){let row=rows[id];row.volume!==standard?local[id]=row.volume:delete local[id],connections.eachConnection(connection=>{connection.setLocalVolume(id,row.volume)})}if(reset)for(let id of new Set([...Object.keys(mutes),...Object.keys(local)]))null==rows[id]&&(delete mutes[id],delete local[id],connections.eachConnection(connection=>{connection.setLocalVolume(id,standard),connection.setLocalMute(id,false)}))}';
+    for (const replacement of replacements) original = original.replace(canonicalizeMatch(replacement.match), replacement.replace);
+    const sync = runInNewContext(original + ";sync");
+    for (const saved of [undefined, 50, 200, 720]) for (const incoming of [undefined, 50, 100, 200]) for (const reset of [false, true]) {
+        const local: Record<string, number | undefined> = { user: saved };
+        const mutes: Record<string, boolean> = { user: true };
+        const calls: unknown[][] = [];
+        const connection = { setLocalVolume: (id: string, volume: number) => calls.push([id, volume]), setLocalMute() {} };
+        sync({ settings: { audioContextSettings: incoming === undefined ? {} : { user: { volume: incoming } } } }, local, mutes, { eachConnection: (callback: (value: typeof connection) => void) => callback(connection) }, reset);
+        const boosted = saved !== undefined && saved > 200;
+        const untouched = incoming === undefined && !reset;
+        assert.equal(local.user, boosted || untouched ? saved : incoming === 100 ? undefined : incoming);
+        assert.deepEqual(calls, untouched ? [] : [["user", boosted ? saved : incoming ?? 100]]);
+        if (incoming === undefined && reset) assert.equal(mutes.user, undefined);
+    }
+});
+
 test("super reactions default only in the reaction picker", () => {
     const store = { superReactByDefault: true };
     let premiumTypeActual: number | null = 2;

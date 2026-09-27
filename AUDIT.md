@@ -8,6 +8,14 @@ Earlier broad verification checkpoint `080e17609`: all 654 broader tests and tim
 
 A fresh September 27 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,655 files, fourteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-sep27-current.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
 
+## Local boosts during remote volume resets
+
+VolumeBooster guarded assignments for nondefault synced volumes but allowed the default branch to delete boosted values. Full sync also deleted boosts when remote settings omitted a user. Both paths now preserve local volumes above 200 and pass that retained value to each connection. Native mute updates and ordinary-volume resets remain intact. The two local replacements form an atomic group, and the old broad search and callback are removed. Historical e07a4e19e introduced the protection against remote overwrites; the missing default cases are within that existing intent.
+
+The tracked regression first fails with a lost 720% boost on an explicit default, then separately fails for an omitted record during full sync. Captured module 25578 compiles and differs only in its actual nP sync function. Four hundred executions cover user/stream contexts, ordinary/boosted/absent local values, omitted/zero/default/nondefault remote values, initial/full sync, temporary overrides and mute states. Sixteen cases recover lost boosts. Native mute calls, normal-volume state and persistence are preserved; two connections per context receive the selected volume. Evidence is `.git/audit/volume-sync-verify.{cjs,json}` and both failing-before logs. These controlled checks do not establish live audio playback or remote service acceptance.
+
+All 683 broader tests and timezone checks, TypeScript, plugin ESLint, sequential desktop/web builds and artifact scanning pass. Patch lint reports 11 warnings and no errors. Logs use `.git/audit/volume-sync-*`. All four preceding e79914854 CI checks passed. Remaining findings and release acceptance are unfinished.
+
 ## Super-reaction playback limit
 
 The playback patch now replaces only the native limit beside the count function's invocation. It uses the configured limit or Infinity for unlimited playback. The copied handler prefix, copied count function, replacement callback and three-branch plugin helper are removed. Historical f32b68e37 confirms the inlined count function was introduced as a bundler compatibility change.

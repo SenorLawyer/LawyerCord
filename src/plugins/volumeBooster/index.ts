@@ -115,13 +115,15 @@ export default definePlugin({
         // Prevent the MediaEngineStore from overwriting our LocalVolumes above 200 with the ones the Discord Audio Context Settings sync sends
         {
             find: '="MediaEngineStore",',
+            group: true,
             replacement: [
                 {
-                    match: /(\.settings\.audioContextSettings.+?)(\i\[\i\])=(\i\.volume)(.+?setLocalVolume\(\i,).+?\)/,
-                    replace: (_, rest1, localVolume, syncVolume, rest2) => rest1
-                        + `(${localVolume}>200?void 0:${localVolume}=${syncVolume})`
-                        + rest2
-                        + `${localVolume}??${syncVolume})`
+                    match: /((\i\.volume)!==\i\?(\i\[\i\])=\2:delete \3),(\i\.eachConnection\(\i=>\{\i\.setLocalVolume\(\i,)\2\)/,
+                    replace: "($3>200||($1)),$4$3??$2)"
+                },
+                {
+                    match: /delete (\i\[\i\]),delete (\i\[\i\]),(\i\.eachConnection\(\i=>\{\i\.setLocalVolume\(\i,)(\i)(?=\),\i\.setLocalMute)/,
+                    replace: "delete $1,($2>200||delete $2),$3$2??$4"
                 }
             ]
         }

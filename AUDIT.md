@@ -26,6 +26,16 @@ The allowed-role reducer used its first callback to select everyone or the origi
 
 TypeScript, focused ESLint, desktop/web builds and artifact scanning pass. Patch lint reports 38 warnings and no errors. Logs use `.git/audit/hidden-channel-permission-local-*`. All four CI checks passed on f26da56df, which remains the latest full 674-test and timezone run. The permission-header duplication and remaining voice/stage patches still require disposition.
 
+## ShowHiddenChannels header and voice captures
+
+The permission-panel copy is retained because the hidden-channel path must return native allowed-user/role markup before rendering the normal header. Replacing it with a child-index wrapper or several header-suppression patches would add assumptions. Its search is now bounded: the captured module has 570 characters before the panel and a 921-character panel, which explains the 650-character prefix and 900-character post-condition limits. Its replacement callback is removed. Voice content and gradient guards now match adjacent properties instead of copying 1,391- and 1,354-character method prefixes. Both complete captured modules remain byte-identical and compile. Evidence is `.git/audit/hidden-channel-header-voice-verify.{cjs,json}`, comparing b121e90b3.
+
+## ShowHiddenChannels visible stage divider
+
+The stage-header replacement wrapped the divider and count title in a comma expression. Visible channels consequently lost their divider. A conditional array spread now preserves both native elements for visible channels and omits both for hidden channels. The match stays within the divider/title pair, and the channel comes from the ordinary component's props, inherited by its theme callback. The tracked regression fails before the fix with a missing visible divider. The complete captured stage module changes only at this pair and compiles; 32 executions of its actual header expression preserve native visible output and remove hidden counts. Evidence is `.git/audit/hidden-stage-divider-verify.{cjs,json}` and the failing-before log. Signed-in visual acceptance remains separate.
+
+CI on b121e90b3 caught two test-fixture failures: evaluating the complete patch array now requires the CONNECT constant after the previous callback-to-string change. The fixtures now provide that production value. The initial new stage regression encountered the same fixture error before correction, then demonstrated the actual missing-divider failure. The failed CI log is `.git/audit/permission-local-ci-failure.log`. All 675 broader tests and timezone checks, TypeScript, focused lint, desktop/web builds and artifact scanning now pass locally. Patch lint reports 34 warnings and no errors. Logs use `.git/audit/hidden-stage-divider-*`. This revision still requires its own CI.
+
 ## NewGuildSettings invite target
 
 The invite patch crossed 2,446 characters into the unrelated openApp method and passed its parsed invite object instead of a guild ID. Commit 515340a07 changed the capture to this shape while refreshing its anchor. The replacement now ends at the INVITE_ACCEPT_SUCCESS dispatch and reads the accepted payload's guild_id or nested guild.id. Its capture-copy callback is removed.

@@ -2225,6 +2225,27 @@ test("reply mention exceptions match whole user and role IDs", () => {
     assert.equal(plugin.shouldMention(message, false), true);
 });
 
+test("stage channel headers preserve visible dividers and hide private counts", () => {
+    const source = readFileSync("src/plugins/showHiddenChannels/index.tsx", "utf8");
+    const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);
+    let patchSource = "";
+    const visit = (node: typescript.Node) => {
+        if (typescript.isPropertyAssignment(node) && node.name.getText(ast) === "patches") patchSource = node.initializer.getText(ast);
+        typescript.forEachChild(node, visit);
+    };
+    visit(ast);
+    const replacement = runInNewContext(`(${patchSource})`, { CONNECT: 1048576n })[21].replacement[0];
+    const original = 'function Header(e){let{channel:t}=e;return{children:["topic",(0,i.jsx)(eo.Ay.Divider,{className:tn.yF}),(0,i.jsxs)(eo.Ay.Title,{children:[(0,i.jsx)(Count,{count:2})]})],guildId:t.guild_id}}';
+    const render = runInNewContext(original.replace(canonicalizeMatch(replacement.match), replacement.replace) + ";Header", {
+        i: { jsx: (type: string) => type, jsxs: (type: string) => type },
+        eo: { Ay: { Divider: "divider", Title: "counts" } }, tn: { yF: "class" }, Count: "count",
+        $self: { isHiddenChannel: (channel: { hidden: boolean; }) => channel.hidden }
+    });
+    for (const hidden of [false, true]) {
+        assert.deepEqual([...render({ channel: { hidden, guild_id: "guild" } }).children], hidden ? ["topic"] : ["topic", "divider", "counts"]);
+    }
+});
+
 test("hidden channel user overflow receives its channel in each component", () => {
     const source = readFileSync("src/plugins/showHiddenChannels/index.tsx", "utf8");
     const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);
@@ -2234,7 +2255,7 @@ test("hidden channel user overflow receives its channel in each component", () =
         typescript.forEachChild(node, visit);
     };
     visit(ast);
-    const patch = runInNewContext(`(${patchSource})`)[17];
+    const patch = runInNewContext(`(${patchSource})`, { CONNECT: 1048576n })[17];
     let code = 'function Avatars(e){let{users:a,maxUsers:l,guildId:t}=e;return a.slice(0,l)}function Count(e){let{count:a,textVariant:l,color:t}=e;return `+${a}`}function Users(e){let{users:r,maxUsers:s,overflowCountVariant:m,overflowCountColor:g="interactive-text-default",overflowCountClassName:v,hideOverflowCount:k=false,"aria-hidden":q}=e,L=r.length-s,O=L+1,V=L>0&&!k&&!q;return V?{"aria-label":S.intl.formatToPlainString(S.t.R8Z8Qr,{count:O}),text:(0,j.jsx)(Count,{count:O,textVariant:m,color:g,className:v})}:null}';
     for (const replacement of patch.replacement) code = code.replace(canonicalizeMatch(replacement.match), replacement.replace);
     const render = runInNewContext(code + ";Users", {
@@ -2259,7 +2280,7 @@ test("hidden app channels keep only the supported notification toolbar control",
         typescript.forEachChild(node, visit);
     };
     visit(ast);
-    const replacement = runInNewContext(`(${patchSource})`)[12].replacement[0];
+    const replacement = runInNewContext(`(${patchSource})`, { CONNECT: 1048576n })[12].replacement[0];
     const original = 'class Toolbar{constructor(props){this.props=props}renderHeaderToolbar=()=>{let{channel:e,isLurking:t}=this.props,r=[];switch(e.type){case ed.rbe.GUILD_APP:r.push((0,l.jsx)(nf,{channel:e},"popout")),r.push((0,l.jsx)(sX,{channel:e},"browser")),t||r.push((0,l.jsx)(iV.A,{channel:e},"notifications")),r.push((0,l.jsx)(iY,{channel:e},"pins")),r.push((0,l.jsx)(iB,{channelId:e.id},"members")),r.push((0,l.jsx)(iG,{channelId:e.id},"chat")),r.push((0,l.jsx)(nu,{channel:e},"overflow"));break}return r}}';
     const patched = original.replace(canonicalizeMatch(replacement.match), replacement.replace);
     const Toolbar = runInNewContext(patched + ";Toolbar", {

@@ -321,8 +321,8 @@ export default definePlugin({
                 },
                 {
                     // Patch the header to only return allowed users and roles if it's a hidden channel or locked channel (Like when it's used on the HiddenChannelLockScreen)
-                    match: /return\(0,\i\.jsxs?\)\(\i\.\i,{channelId:(\i)\.id,children:\[(?=.{0,1000}?(\(0,\i\.jsxs?\)\("div",{className:\i\.\i,children:\[.{0,100}\i\.length>0.+?\]}\)),)/,
-                    replace: (m, channel, allowedUsersAndRolesComponent) => `if($self.isHiddenChannel(${channel},true)){return${allowedUsersAndRolesComponent};}${m}`
+                    match: /return\(0,\i\.jsxs?\)\(\i\.\i,{channelId:(\i)\.id,children:\[(?=.{0,650}?(\(0,\i\.jsxs?\)\("div",{className:\i\.\i,children:\[.{0,100}\i\.length>0.{0,900}?\]}\)),)/,
+                    replace: "if($self.isHiddenChannel($1,true)){return$2;}$&"
                 },
                 {
                     // Export the channel for the users allowed component patch
@@ -376,12 +376,12 @@ export default definePlugin({
             replacement: [
                 {
                     // Render our HiddenChannelLockScreen component instead of the main voice channel component
-                    match: /renderContent\(\i\){.+?this\.renderVoiceChannelEffects.+?children:/,
+                    match: /(?<=hideControls:\i,idle:\i,children:)/,
                     replace: "$&!this?.props?.inCall&&$self.isHiddenChannel(this?.props?.channel,true)?$self.HiddenChannelLockScreen(this?.props?.channel):"
                 },
                 {
                     // Disable gradients for the HiddenChannelLockScreen of voice channels
-                    match: /renderContent\(\i\){.+?disableGradients:/,
+                    match: /(?<=screenMessage:this\.screenMessage,disableGradients:)/,
                     replace: "$&!this?.props?.inCall&&$self.isHiddenChannel(this?.props?.channel,true)||"
                 },
                 {
@@ -426,8 +426,8 @@ export default definePlugin({
             replacement: [
                 {
                     // Remove the divider and amount of users in stage channel components for the HiddenChannelLockScreen
-                    match: /\(0,\i\.jsx\)\(\i\.\i\.Divider.+?}\)]}\)(?=.+?:(\i)\.guild_id)/,
-                    replace: (m, channel) => `$self.isHiddenChannel(${channel})?null:(${m})`
+                    match: /\(0,\i\.jsx\)\(\i\.\i\.Divider,{[^{}]{0,100}}\),\(0,\i\.jsxs?\)\(\i\.\i\.Title,{children:\[.{0,500}?\]}\)/,
+                    replace: "...($self.isHiddenChannel(arguments[0].channel)?[]:[$&])"
                 },
                 {
                     // Remove the open chat button for the HiddenChannelLockScreen

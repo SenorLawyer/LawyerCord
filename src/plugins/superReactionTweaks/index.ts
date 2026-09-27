@@ -7,6 +7,7 @@
 import { definePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
+import { EmojiIntention } from "@vencord/discord-types/enums";
 import { OverridePremiumTypeStore } from "@webpack/common";
 
 export const settings = definePluginSettings({
@@ -53,8 +54,8 @@ export default definePlugin({
         {
             find: ".EMOJI_PICKER_CONSTANTS_EMOJI_CONTAINER_PADDING_HORIZONTAL)",
             replacement: {
-                match: /(openPopoutType:void 0(?=.+?isBurstReaction:(\i).+?;(\i===\i\.\i\.REACTION)&&\i\.push\().+?\[\2,\i\]=\i\.useState\()!1\)/,
-                replace: (_, rest, _isBurstReactionVariable, isReactionIntention) => `${rest}$self.shouldSuperReactByDefault&&${isReactionIntention})`
+                match: /(?<=getGuildId\(\)\?\?\i\?\?null,\[\i,\i\]=\i\.useState\()!1/,
+                replace: "$self.shouldSuperReactByDefault(arguments[0].pickerIntention)"
             }
         }
     ],
@@ -66,7 +67,7 @@ export default definePlugin({
         return false;
     },
 
-    get shouldSuperReactByDefault() {
-        return settings.store.superReactByDefault && (OverridePremiumTypeStore.getState().premiumTypeActual != null);
+    shouldSuperReactByDefault(pickerIntention: EmojiIntention) {
+        return pickerIntention === EmojiIntention.REACTION && settings.store.superReactByDefault && OverridePremiumTypeStore.getState().premiumTypeActual != null;
     }
 });

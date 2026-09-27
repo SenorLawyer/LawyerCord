@@ -2225,6 +2225,28 @@ test("reply mention exceptions match whole user and role IDs", () => {
     assert.equal(plugin.shouldMention(message, false), true);
 });
 
+test("super reactions default only in the reaction picker", () => {
+    const store = { superReactByDefault: true };
+    let premiumTypeActual: number | null = 2;
+    const { default: plugin } = loadSource("src/plugins/superReactionTweaks/index.ts", {
+        "@api/Settings": { definePluginSettings: () => ({ store }) },
+        "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@vencord/discord-types/enums": { EmojiIntention: { REACTION: 0 } },
+        "@webpack/common": { OverridePremiumTypeStore: { getState: () => ({ premiumTypeActual }) } }
+    });
+    const original = 'function Picker(e){let{channel:l,guildId:d}=e,[other,setOther]=React.useState(!1);let guild=l?.getGuildId()??d??null,[burst,setBurst]=React.useState(!1);return[other,burst]}';
+    const replacement = plugin.patches[1].replacement;
+    const Picker = runInNewContext(original.replace(canonicalizeMatch(replacement.match), replacement.replace) + ";Picker", {
+        React: { useState: (value: unknown) => [value, () => {}] }, $self: plugin
+    });
+    for (const enabled of [true, false]) for (const premium of [2, null]) for (const pickerIntention of [0, 1, 3]) {
+        store.superReactByDefault = enabled;
+        premiumTypeActual = premium;
+        assert.deepEqual(Array.from(Picker({ pickerIntention })), [false, enabled && premium !== null && pickerIntention === 0]);
+    }
+});
+
 test("thread typing indicators do not depend on voice or mention badges", () => {
     const source = readFileSync("src/plugins/typingIndicator/index.tsx", "utf8");
     const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);

@@ -64,6 +64,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Use the correct friend when showing friendship dates, and apply dates to both regular and anniversary rows.
 - Restore voice indicators on regular and anniversary friend rows, using each row's own user and hover state.
 - Show thread typing indicators even when the thread has no mention or voice-count badge.
+- Restore the default super-reaction toggle in the current reaction picker while leaving other emoji pickers unchanged.
 
 - Replace hidden-channel toolbar method-prefix searches with local button matches and keep the nested row guard tied to its mouse handler's channel.
 

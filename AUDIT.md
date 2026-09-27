@@ -2,9 +2,19 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Current source checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning pass. Patch lint reports 107 warnings and no errors. The full repository lints were refreshed after the BetterSessions changes; logs use `.git/audit/reconciliation-sep27-*`. CI for this revision was still running when checked, so local results are not a claim of completed CI.
+Latest local verification: all 682 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass after the super-reaction default fix. Patch lint reports 13 warnings and no errors. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding d3468332e; the new change requires its own CI.
+
+Earlier broad verification checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning passed. Patch lint then reported 107 warnings and no errors. Full repository lint logs use `.git/audit/reconciliation-sep27-*`; later focused runs do not replace final combined validation.
 
 A fresh September 27 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,655 files, fourteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-sep27-current.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
+
+## Super-reaction picker default
+
+The old default-state patch no longer matches either captured picker module: it depends on a distant reaction comparison followed by an obsolete push expression. The replacement targets the adjacent guild/state initializer directly. A typed helper uses the existing EmojiIntention constant and the existing setting/premium check, keeping the default limited to reaction pickers. The broad searches and replacement callback are removed. Historical 3505adad6 was inspected; its intent remains the default reaction toggle. The captured enum module confirms REACTION is zero, matching the reused constant.
+
+The tracked regression fails before the fix because the toggle stays false. Both complete module 267889 copies now match once, compile, and differ only at the initial state value. Forty-eight executions of their actual component prefixes verify enabled/disabled settings, present/absent premium state, reaction/status/chat intentions, and present/absent channels. The first unrelated state remains null and the burst state alone changes. The nearest owner is the ordinary forwardRef function, so arguments[0] supplies its props. Dependencies are mocked; live picker visuals and subscription behavior remain separate. Evidence is `.git/audit/super-reaction-default-verify.{cjs,json}` and the failing-before log.
+
+All 682 broader tests and timezone checks, TypeScript, plugin ESLint, sequential desktop/web builds and artifact scanning pass. Patch lint reports 13 warnings and no errors. Logs use `.git/audit/super-reaction-default-*`; current patch diagnostics are in `remaining-patches-current.log`. All four preceding d3468332e CI checks passed. Remaining findings and release acceptance are unfinished.
 
 ## Local typing, pronoun and mention matches
 

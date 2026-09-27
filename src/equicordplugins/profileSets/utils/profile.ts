@@ -8,7 +8,7 @@ import { getUserSettingLazy } from "@api/UserSettings";
 import { parseUrl } from "@utils/misc";
 import { AvatarDecorationData, CustomStatus, DisplayNameStyles, Nameplate, ProfileEffect, ProfilePreset } from "@vencord/discord-types";
 import { findStoreLazy } from "@webpack";
-import { FluxDispatcher, GuildMemberStore, IconUtils, ImageUtils, UserProfileStore, UserStore } from "@webpack/common";
+import { FluxDispatcher, GuildMemberStore, IconUtils, ImageUtils, lodash, UserProfileStore, UserStore } from "@webpack/common";
 
 const UserProfileSettingsStore = findStoreLazy("UserProfileSettingsStore");
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -305,11 +305,6 @@ export async function getCurrentProfile(guildId?: string, options: CurrentProfil
     };
 }
 
-function jsonEq(a: unknown, b: unknown): boolean {
-    if (a === b) return true;
-    return JSON.stringify(a) === JSON.stringify(b);
-}
-
 function customStatusEq(a: CustomStatus | null | undefined, b: CustomStatus | null | undefined): boolean {
     if (a == null || b == null) return a == null && b == null;
     return a.text === b.text
@@ -426,12 +421,12 @@ export async function loadPresetAsPending(preset: ProfilePreset, guildId?: strin
 
     if (preset.displayNameStyles !== undefined) {
         const presetDisplayNameStyles = normalizeDisplayNameStyles(preset.displayNameStyles);
-        if (!jsonEq(presetDisplayNameStyles, current.displayNameStyles)) {
+        if (!lodash.isEqual(presetDisplayNameStyles, current.displayNameStyles)) {
             setPending({ pendingDisplayNameStyles: presetDisplayNameStyles });
         }
     }
 
-    if (preset.themeColors !== undefined && !jsonEq(preset.themeColors, current.themeColors)) {
+    if (preset.themeColors !== undefined && !lodash.isEqual(preset.themeColors, current.themeColors)) {
         setPending({ pendingThemeColors: preset.themeColors });
     }
 

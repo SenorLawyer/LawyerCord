@@ -2,11 +2,21 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Latest full local verification: all 696 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the native USRBG feed subscription fix. Patch lint reports zero warnings and no errors. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding d40ee5c5e; the feed subscription fix requires its own CI.
+Latest full local verification: all 696 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the ProfileSets equality simplification. Patch lint last reported zero warnings and no errors at the native USRBG checkpoint; this simplification changes no patches. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding e6d7b0be0; the equality simplification requires its own CI.
 
 Earlier broad verification checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning passed. Patch lint then reported 107 warnings and no errors. Full repository lint logs use `.git/audit/reconciliation-sep27-*`; later focused runs do not replace final combined validation.
 
 A fresh September 28 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,656 files, fifteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-patches-complete.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
+
+## ProfileSets comparison and allocation decisions
+
+Removed the private JSON equality helper and reused the existing shared lodash.isEqual for normalized display-name styles and theme-color arrays. A comparison of the old and current production apply paths with captured native Lodash module 435558 produces identical dispatches in 256 combinations of omitted, null, equal and changed values, including reordered style properties and ordered color arrays. Evidence is `.git/audit/profile-equality.{cjs,json}`. The existing appearance regression now supplies the shared comparison dependency; no replacement helper or new dependency was added.
+
+The local import path intentionally still reads and parses the selected JSON file as a whole. Existing exports have no total preset-count or file-size ceiling, so an arbitrary import cap would reject some supported exports without a matching product constraint or migration plan. The audit retains that behavior and records its memory cost as a limitation. Per-image encoded/download byte checks remain in place; they do not bound decoded pixel memory or the aggregate list. Adding a separate image parser or silently resizing saved assets is not justified by the reviewed behavior. Shared native decoding remains in use, including its inability to interrupt a decode already started.
+
+This decision does not claim large imports are memory-safe or change the user's confirmed avatar/banner inheritance choice. Other profile-field semantics and signed-in preview acceptance remain separate from the equality simplification.
+
+All 67 focused profile checks, 696 broader regressions and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass in `.git/audit/profile-equality-*` logs. All four preceding e6d7b0be0 CI checks passed.
 
 ## Native USRBG feed subscriptions
 

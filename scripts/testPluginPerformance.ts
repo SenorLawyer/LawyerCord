@@ -7243,6 +7243,7 @@ test("profile appearance removals survive apply and snapshot without clearing om
         "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null }) },
         "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => pending }) },
         "@webpack/common": {
+            lodash: { isEqual: (a: unknown, b: unknown) => isDeepStrictEqual(structuredClone(a), structuredClone(b)) },
             UserStore: { getCurrentUser: () => ({ id: "me", avatarDecorationData: { asset: "decoration", skuId: "1" },
                 collectibles: { nameplate: { asset: "plate", skuId: "2" } },
                 displayNameStyles: { font_id: 1, effect_id: 2, colors: [3] }, primaryGuild: { identityGuildId: "guild" } }) },

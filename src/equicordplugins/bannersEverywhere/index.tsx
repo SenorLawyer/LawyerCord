@@ -58,6 +58,7 @@ interface MemberListBannerProps {
 }
 
 const BANNER_SETTINGS: "animate"[] = ["animate"];
+const NAMEPLATE_SETTINGS: "preferNameplate"[] = ["preferNameplate"];
 const MemberListBanner = ErrorBoundary.wrap(({ userId, nameplate, preferNameplate, getBanner, convert }: MemberListBannerProps) => {
     const { animate } = settings.use(BANNER_SETTINGS);
     const { data } = useUsrbgData();
@@ -79,6 +80,10 @@ export default definePlugin({
         {
             find: "#{intl::GUILD_OWNER}),",
             replacement: [
+                {
+                    match: /(?=return null==\i\?\(0,\i\.jsx\)\(\i,\{avatarSize:\i\.\i\.SIZE_32,className:)/,
+                    replace: "$self.useNameplatePreference();"
+                },
                 {
                     // We add the banner as a property while we can still access the user id
                     match: /(?=avatar:\(0,\i\.jsx\)\(\i,\{user:)/,
@@ -110,6 +115,10 @@ export default definePlugin({
 
     nameplate(nameplate: Nameplate | undefined) {
         if (settings.store.preferNameplate) return nameplate;
+    },
+
+    useNameplatePreference() {
+        settings.use(NAMEPLATE_SETTINGS);
     },
 
     memberListBannerHook(user: User, nameplate: Nameplate | undefined) {

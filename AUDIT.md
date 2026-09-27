@@ -2,11 +2,19 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Latest full local verification: all 694 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the delayed banner feed fix. Patch lint reports zero warnings and no errors. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding 5d88fac24; the feed fix requires its own CI.
+Latest full local verification: all 695 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the member nameplate preference fix. Patch lint reports zero warnings and no errors. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding 88fc6896d; the nameplate fix requires its own CI.
 
 Earlier broad verification checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning passed. Patch lint then reported 107 warnings and no errors. Full repository lint logs use `.git/audit/reconciliation-sep27-*`; later focused runs do not replace final combined validation.
 
 A fresh September 28 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,656 files, fifteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-patches-complete.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
+
+## Member nameplate preference ownership
+
+Changing the nameplate preference did not refresh an already mounted member row. The native component creates both the banner and nameplate inside a popover render callback. Subscribing only the banner child cannot update the native nameplate prop. A bounded patch now subscribes the owning component before its conditional return, keeping both outputs in the same render and preserving hook order for placeholder rows.
+
+The baseline and fixed fixtures execute captured member component 589158 with actual React and production banner children. The baseline remains on its banner after the preference changes. The fix shows the nameplate immediately, restores the banner when toggled back, handles a transition to the placeholder, and removes subscriptions on unmount. Each replacement matches once and the complete patched module compiles. Settings subscriptions and surrounding Discord dependencies are controlled; this is not signed-in visual acceptance. Evidence is `.git/audit/banner-nameplate-owner.cjs` and `banner-nameplate-{before,after}.json`.
+
+A tracked regression checks that subscription happens in the owner before either conditional render and outside the deferred row callback. All 15 focused checks, 695 broader regressions and timezone checks, TypeScript, focused plugin ESLint, patch lint, sequential desktop/web builds and artifact scanning pass. Logs use `.git/audit/banner-nameplate-*`. The first TypeScript run rejected a readonly key tuple; the final annotation matches the settings API's mutable array parameter without changing runtime output. The test script is outside ESLint's configured files. All four preceding 88fc6896d CI checks passed.
 
 ## Reactive USRBG feed for member banners
 
@@ -20,7 +28,7 @@ All 14 focused feed/banner tests, 694 broader regressions and timezone checks, T
 
 An actual React reproduction confirms the remaining banner startup finding. With no Discord banner, the member row initially renders null. Production USRBG start then validates and publishes a controlled successful response. The row still renders null until its parent is explicitly rendered again, at which point it shows the correct feed URL. The plugin manager calls asynchronous start without awaiting it, so mounting before feed completion is a supported startup ordering.
 
-Evidence is `.git/audit/banner-feed-late-before.{cjs,json}` at 221e016fb. The fixture runs the production feed loader, bounded reader and banner components with actual React; the Discord store adapter and HTTP response are controlled. No production fix is claimed yet. The feed is not Discord-owned data and currently has no reactive publication path. The next change should expose its existing value through a shared subscription without polling or retaining a second feed copy. Existing request cancellation and validation must remain intact.
+Evidence is `.git/audit/banner-feed-late-before.{cjs,json}` at 221e016fb. The fixture runs the production feed loader, bounded reader and banner components with actual React; the Discord store adapter and HTTP response are controlled. This is the historical failing case resolved by 88fc6896d and the reactive feed verification above. Request cancellation and validation remain intact.
 
 ## Callback receiver follow-up
 

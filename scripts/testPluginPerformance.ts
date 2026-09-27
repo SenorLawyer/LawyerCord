@@ -7852,6 +7852,38 @@ test("BannersEverywhere retries failed conversions and retains successful ones",
     assert.equal(await joined, "converted");
 });
 
+test("BannersEverywhere subscribes the member owner before its conditional render", () => {
+    const calls: string[] = [];
+    let subscribedKeys: unknown;
+    const { default: plugin } = loadSource("src/equicordplugins/bannersEverywhere/index.tsx", {
+        "@api/PluginManager": {}, "@utils/react": {}, "@webpack/common": {}, "./style.css?managed": {},
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/constants": { Devs: {} }, "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@api/Settings": { definePluginSettings: () => ({ use: (keys: unknown) => {
+            if (subscribedKeys) assert.equal(keys, subscribedKeys);
+            subscribedKeys = keys;
+            assert.deepEqual(Array.from(keys as string[]), ["preferNameplate"]);
+            calls.push("subscribe");
+        } }) }
+    });
+    const source = "(function(user){return null==user?(0,jsx.jsx)(Placeholder,{avatarSize:Sizes.Avatar.SIZE_32,className:classes.placeholder}):(0,jsx.jsx)(Popover,{children:()=>renderRow()})})";
+    let patched = source;
+    for (const replacement of plugin.patches[0].replacement)
+        patched = patched.replace(canonicalizeMatch(replacement.match), replacement.replace.replaceAll("$self", "plugin"));
+    const render = runInNewContext(patched, {
+        plugin,
+        jsx: { jsx: (type: string, props: object) => ({ type, props }) },
+        Placeholder: "placeholder", Popover: "popover", Sizes: { Avatar: { SIZE_32: 32 } }, classes: {},
+        renderRow: () => calls.push("row")
+    });
+    const row = render({ id: "user" });
+    assert.deepEqual(calls, ["subscribe"]);
+    row.props.children();
+    assert.deepEqual(calls, ["subscribe", "row"]);
+    assert.equal(render(null).type, "placeholder");
+    assert.deepEqual(calls, ["subscribe", "row", "subscribe"]);
+});
+
 test("BannersEverywhere subscribes its banner to profile and setting changes", () => {
     const store = {};
     const values = { animate: false, preferNameplate: false };

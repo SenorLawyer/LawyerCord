@@ -10,7 +10,7 @@ import { FormSwitch } from "@components/FormSwitch";
 import { Heading, HeadingSecondary } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
 import { Margins } from "@utils/margins";
-import { identity } from "@utils/misc";
+import { identity, parseUrl } from "@utils/misc";
 import { Activity } from "@vencord/discord-types";
 import { ActivityFlags, ActivityType } from "@vencord/discord-types/enums";
 import { PresenceStore, React, Select, SnowflakeUtils, TextInput, UserStore } from "@webpack/common";
@@ -134,7 +134,12 @@ export function ReplaceSettings({ appIds, update, save }: SettingsProps) {
                                                 onChange(v, i, "newStreamUrl");
                                             }}
                                             validate={v => {
-                                                return /https?:\/\/(www\.)?(twitch\.tv|youtube\.com)\/\w+/.test(v) || "Invalid stream URL";
+                                                if (!v) return true;
+                                                const url = parseUrl(v);
+                                                return !!url && ["http:", "https:"].includes(url.protocol)
+                                                    && ["twitch.tv", "www.twitch.tv", "youtube.com", "www.youtube.com"].includes(url.hostname)
+                                                    && !url.username && !url.password && url.pathname.length > 1
+                                                    || "Invalid stream URL.";
                                             }}
                                         />
 

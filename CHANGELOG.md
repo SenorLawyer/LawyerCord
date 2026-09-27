@@ -27,6 +27,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- RPCEditor validates the actual stream-link destination and allows clearing an optional stream URL.
+
 - RPCEditor preserves newer settings saved by another window and processes local saves in order. Conflicting edits report that a reload is needed.
 
 - RPCEditor reports failed saves while retaining edits for another save attempt.

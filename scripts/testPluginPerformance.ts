@@ -28,6 +28,32 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { makeLazy, proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("RPCEditor stream input validates its parsed destination and can be cleared", () => {
+    const { ReplaceSettings } = loadSource("src/equicordplugins/rpcEditor/ReplaceSettings.tsx", {
+        "@components/Card": { Card: "card" }, "@components/CheckedTextInput": { CheckedTextInput: "checked" },
+        "@components/FormSwitch": {}, "@components/Heading": {}, "@components/Paragraph": {},
+        "@utils/margins": { Margins: {} }, "@utils/misc": { identity: (value: unknown) => value, parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } },
+        "@vencord/discord-types/enums": { ActivityType: { STREAMING: 1 }, ActivityFlags: {} },
+        "@webpack/common": { React: { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props, children }) }, SnowflakeUtils: { extractTimestamp: () => 0 } },
+        ".": {}
+    });
+    const tree = ReplaceSettings({ appIds: [{ appId: "123456789012345678", newActivityType: 1, enabled: true, disableAssets: true }], update() {}, save() {} });
+    const inputs: { props: { validate: (value: string) => true | string } }[] = [];
+    function visit(node: unknown) {
+        if (Array.isArray(node)) { node.forEach(visit); return; }
+        if (!node || typeof node !== "object") return;
+        if ("type" in node && node.type === "checked" && "props" in node) inputs.push(node as typeof inputs[number]);
+        if ("children" in node) visit(node.children);
+    }
+    visit(tree);
+    assert.equal(inputs.length, 2);
+    const validate = inputs[1].props.validate;
+    for (const value of ["text https://twitch.tv/channel", "https://example.com/?url=https://twitch.tv/channel", "https://twitch.tv.evil.test/channel", "https://user:password@twitch.tv/channel", "ftp://twitch.tv/channel", "https://twitch.tv/"])
+        assert.notEqual(validate(value), true, value);
+    for (const value of ["", "https://twitch.tv/channel", "https://www.youtube.com/watch?v=example", "http://youtube.com/live/example"])
+        assert.equal(validate(value), true, value);
+});
+
 test("RPCEditor rejects malformed saved lists without changing activities or storage", async () => {
     const valid = { appId: "app", enabled: true, newActivityType: 0, newName: "", newDetails: "", newState: "", newLargeImageUrl: "", newLargeImageText: "", newSmallImageUrl: "", newSmallImageText: "", newStreamUrl: "", disableAssets: false, disableTimestamps: false };
     const invalid = [{}, [null], ...Object.keys(valid).map(key => [{ ...valid, [key]: null }]), ...[-1, 4, 1.5, NaN].map(newActivityType => [{ ...valid, newActivityType }])];

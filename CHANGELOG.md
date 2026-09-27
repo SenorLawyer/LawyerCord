@@ -36,6 +36,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Pass Emoji Studio props to context-menu plugins while preserving its popout close and reset callbacks.
+
 - Pass inbox reminder and channel menu props to context-menu plugins instead of inherited webpack module arguments.
 
 - Bound ContextMenuAPI's argument-injection search while preserving its captured matches and removing redundant callback-source checks.

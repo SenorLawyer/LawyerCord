@@ -10001,7 +10001,7 @@ test("console previews can retry after root creation fails", () => {
     assert.equal(state.unmounts, 1);
 });
 
-test("inbox context menus expose their render props instead of webpack arguments", () => {
+test("arrow context menus expose their render props instead of webpack arguments", () => {
     const { default: plugin } = loadSource("src/plugins/_api/contextMenu.ts", {
         "@utils/constants": { Devs: {} },
         "@utils/patches": { canonicalizeMatch },
@@ -10011,6 +10011,7 @@ test("inbox context menus expose their render props instead of webpack arguments
     let source = `(function(module,exports,require){return {
         reminder:{Menu:props=>{return jsx(Menu,{navId:"message-reminder-create",children:[]})}},
         channel:{Menu:props=>{return jsx(Menu,{navId:props.channel.isThread()?"thread-context":"channel-context",children:[]})}},
+        studio:props=>{const image="userImage"in props?props.userImage:null;return {renderPopout:popout=>{return jsx(Menu,{navId:"emoji-studio-context-menu",onClose:popout.closePopout,children:[]})}}},
         nested:function(props){return ()=>jsx(Menu,{navId:"nested-menu",children:[]})}
     }})`;
     for (const patch of plugin.patches) {
@@ -10027,6 +10028,10 @@ test("inbox context menus expose their render props instead of webpack arguments
             assert.equal(result.contextMenuAPIArguments[1], "second argument");
         }
         assert.equal(menus.nested(props)().contextMenuAPIArguments[0], props);
+        const closePopout = () => {};
+        const studioMenu = menus.studio(props).renderPopout({ closePopout });
+        assert.equal(studioMenu.contextMenuAPIArguments[0], props);
+        assert.equal(studioMenu.onClose, closePopout);
     }
 });
 

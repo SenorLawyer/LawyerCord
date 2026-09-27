@@ -111,6 +111,13 @@ export default definePlugin({
                 match: /Menu:(\i)=>\{/g,
                 replace: "Menu:function($1){"
             }
+        },
+        {
+            find: '"emoji-studio-context-menu"',
+            replacement: {
+                match: /(\i)=>\{(?=.{0,100}?"userImage"in \1)/,
+                replace: "function($1){"
+            }
         }
     ],
 

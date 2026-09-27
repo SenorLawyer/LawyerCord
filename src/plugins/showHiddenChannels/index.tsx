@@ -401,23 +401,23 @@ export default definePlugin({
             replacement: [
                 {
                     // Render our HiddenChannelLockScreen component instead of the main stage channel component
-                    match: /screenMessage:(\i)\?.+?children:(?=!\1)(?<=let \i,{channel:(\i).+?)/,
-                    replace: (m, _isPopoutOpen, channel) => `${m}$self.isHiddenChannel(${channel})?$self.HiddenChannelLockScreen(${channel}):`
+                    match: /(?<=screenMessage:(\i)\?{[^{}]{0,100}}:null,\.\.\.\i,children:)(?=!\1&&)/,
+                    replace: "$self.isHiddenChannel(arguments[0].channel)?$self.HiddenChannelLockScreen(arguments[0].channel):"
                 },
                 {
                     // Disable useless components for the HiddenChannelLockScreen of stage channels
-                    match: /render(?:BottomLeft|BottomCenter|BottomRight|ChatToasts):\(\)=>(?<=let \i,{channel:(\i).+?)/g,
-                    replace: (m, channel) => `${m}$self.isHiddenChannel(${channel})?null:`
+                    match: /(?<=render(?:BottomLeft|BottomCenter|BottomRight|ChatToasts):(?:\(\)=>|function\(\){return))(?=.{0,150}?channel(?:Id)?:(\i)(?=[,}.]))/g,
+                    replace: " $self.isHiddenChannel($1)?null:"
                 },
                 {
                     // Disable gradients for the HiddenChannelLockScreen of stage channels
-                    match: /"124px".+?disableGradients:(?<=let \i,{channel:(\i).+?)/,
-                    replace: (m, channel) => `${m}$self.isHiddenChannel(${channel})||`
+                    match: /(?<=paddingTop:\i},disableGradients:)/,
+                    replace: "$self.isHiddenChannel(arguments[0].channel)||"
                 },
                 {
                     // Disable strange styles applied to the header for the HiddenChannelLockScreen of stage channels
-                    match: /"124px".+?style:(?<=let \i,{channel:(\i).+?)/,
-                    replace: (m, channel) => `${m}$self.isHiddenChannel(${channel})?void 0:`
+                    match: /(?<=style:)(?={height:`calc\(100% - \$\{\i}\)`,paddingTop:\i},disableGradients:)/,
+                    replace: "$self.isHiddenChannel(arguments[0].channel)?void 0:"
                 }
             ]
         },

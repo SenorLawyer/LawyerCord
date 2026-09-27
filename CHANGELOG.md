@@ -54,6 +54,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Restore the allowed-user list button in hidden channels and announce its actual user count, passing the channel to the components that need it.
 - Simplify hidden-channel role selection and keep permission-list captures local, preserving which allowed roles and users are displayed.
 - Preserve the native divider in visible stage-channel headers while hiding counts in hidden stages, and narrow voice-content and permission-header patch searches.
+- Hide chat toasts when viewing hidden stage channels, and simplify stage-rendering patches to use local channel references.
 
 - Replace hidden-channel toolbar method-prefix searches with local button matches and keep the nested row guard tied to its mouse handler's channel.
 

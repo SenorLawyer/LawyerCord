@@ -2225,6 +2225,28 @@ test("reply mention exceptions match whole user and role IDs", () => {
     assert.equal(plugin.shouldMention(message, false), true);
 });
 
+test("hidden stage controls and chat toasts use their enclosing channel", () => {
+    const source = readFileSync("src/plugins/showHiddenChannels/index.tsx", "utf8");
+    const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);
+    let patchSource = "";
+    const visit = (node: typescript.Node) => {
+        if (typescript.isPropertyAssignment(node) && node.name.getText(ast) === "patches") patchSource = node.initializer.getText(ast);
+        typescript.forEachChild(node, visit);
+    };
+    visit(ast);
+    const replacement = runInNewContext(`(${patchSource})`, { CONNECT: 1048576n })[20].replacement[1];
+    const original = 'function Stage(e){let{channel:n,showToasts:d}=e;return{renderBottomCenter:()=>(0,i.jsx)(Controls,{channel:n}),renderChatToasts:function(){return!d?null:(0,i.jsx)(Toasts,{channelId:n.id})}}}';
+    const render = runInNewContext(original.replace(canonicalizeMatch(replacement.match), replacement.replace) + ";Stage", {
+        i: { jsx: (type: string, props: object) => ({ type, props }) }, Controls: "controls", Toasts: "toasts",
+        $self: { isHiddenChannel: (channel: { hidden: boolean; }) => channel.hidden }
+    });
+    for (const hidden of [false, true]) for (const showToasts of [false, true]) {
+        const controls = render({ channel: { id: "stage", hidden }, showToasts });
+        assert.equal(controls.renderBottomCenter()?.type ?? null, hidden ? null : "controls");
+        assert.equal(controls.renderChatToasts({ channel: { hidden: !hidden } })?.type ?? null, hidden || !showToasts ? null : "toasts");
+    }
+});
+
 test("stage channel headers preserve visible dividers and hide private counts", () => {
     const source = readFileSync("src/plugins/showHiddenChannels/index.tsx", "utf8");
     const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);

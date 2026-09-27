@@ -28,6 +28,73 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("fast channel deletion renders thread actions independently of counters", async () => {
+    let hooks = 0;
+    let allowed = true;
+    let fail = false;
+    const listeners = new Map<string, (event: object) => void>();
+    const requests: string[] = [];
+    const notifications: string[] = [];
+    const { default: plugin } = loadSource("src/equicordplugins/fastDeleteChannels/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: { keyBind: "KeyZ", reqCtrl: true, reqShift: true, reqAlt: false } }) },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (type: unknown) => (props: object) => ({ type, props }) } },
+        "@utils/constants": { Devs: {} }, "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": {
+            React: { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props: { ...props, children } }) },
+            useState: (value: boolean) => { hooks++; return [value, () => {}]; }, useEffect() {},
+            PermissionStore: { can: () => allowed }, PermissionsBits: { MANAGE_CHANNELS: 1n },
+            Constants: { Endpoints: { CHANNEL: (id: string) => `/channels/${id}` } },
+            Button: { Looks: { LINK: "link" }, Sizes: { NONE: "none" } },
+            RestAPI: { del: async ({ url }: { url: string }) => { if (fail) throw new Error("Synthetic failure"); requests.push(url); } },
+            showToast: (message: string) => notifications.push(message), Toasts: { Type: { FAILURE: "failure" } }
+        }
+    }, { window: { addEventListener: (name: string, callback: (event: object) => void) => listeners.set(name, callback), removeEventListener: (name: string) => listeners.delete(name) } });
+    const { canonicalizeMatch } = loadSource("src/utils/patches.ts", { "./intlHash": {} });
+    const replacement = plugin.patches[1].replacement;
+    const jsx = (type: (props: object) => unknown, props: object) => type(props);
+    const channel = { id: "thread", userLimit: 5 };
+    for (const voice of [0, 1]) for (const mentions of [0, 1]) for (const props of [
+        "thread:t,countInVoice:v,mentionCount:m",
+        "countInVoice:v,mentionCount:m,thread:t"
+    ]) {
+        const source = `function counts(e){let{thread:t,countInVoice:v,mentionCount:m}=e;return v||m?{children:[v?{channel:t}:null,m?{mentionsCount:m}:null]}:null}({children:[(0,s.jsx)(counts,{${props}})]})`;
+        const match = canonicalizeMatch(replacement.match);
+        assert.equal([...source.matchAll(new RegExp(match.source, "g"))].length, 1);
+        const output = runInNewContext(source.replace(match, replacement.replace), { s: { jsx }, $self: plugin, t: channel, v: voice, m: mentions });
+        assert.equal(output.children.length, 2);
+        assert.equal(output.children[1].props.channel, channel);
+        assert.equal(hooks, 0, "Injected callbacks must leave hooks inside their own component");
+    }
+    plugin.start();
+    const keyDown = listeners.get("keydown");
+    assert.ok(keyDown);
+    const render = () => {
+        const element = plugin.TrashIcon({ channel });
+        return element.type(element.props);
+    };
+    assert.equal(render(), null);
+    keyDown({ code: "KeyZ", ctrlKey: true, shiftKey: true, altKey: false });
+    assert.notEqual(render(), null);
+    const blur = listeners.get("blur");
+    assert.ok(blur);
+    blur({});
+    assert.equal(render(), null);
+    keyDown({ code: "KeyZ", ctrlKey: true, shiftKey: true, altKey: false });
+    allowed = false;
+    assert.equal(render(), null);
+    allowed = true;
+    assert.equal(render().props["aria-label"], "Delete channel");
+    await render().props.onClick();
+    assert.deepEqual(requests, ["/channels/thread"]);
+    assert.deepEqual(notifications, []);
+    fail = true;
+    await render().props.onClick();
+    assert.deepEqual(notifications, ["Failed to delete the channel."]);
+    plugin.stop();
+    assert.equal(render(), null);
+    assert.equal(listeners.size, 0);
+});
+
 test("message send patches await asynchronous hooks inside the validation callback", async () => {
     const { default: plugin } = loadSource("src/plugins/_api/messageEvents.ts", {
         "@utils/constants": { Devs: {} }, "@utils/types": { __esModule: true, default: (value: unknown) => value }

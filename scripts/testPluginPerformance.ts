@@ -18082,3 +18082,33 @@ test("BetterSessions retained rename callbacks respect account changes and newer
         assert.deepEqual(titles, []);
     }
 });
+
+
+test("DataStore retains committed changes until its first listener can attach", async () => {
+    for (const mode of ["writes", "clear", "failed", "custom"]) {
+        const fixtureStore = async (_mode: string, callback: (store: object) => Promise<void>) => {
+            const transaction: { oncomplete?: () => void } = {};
+            const pending = callback({ transaction, put() { if (mode === "failed") throw new Error("Write failed"); }, clear() {} });
+            queueMicrotask(() => transaction.oncomplete?.());
+            return pending;
+        };
+        const api = loadSource("src/api/DataStore/index.ts", {}, { fixtureStore, EventTarget, CustomEvent, queueMicrotask }, "(defaultGetStoreFunc = fixtureStore, exports)");
+        if (mode === "failed") await assert.rejects(api.set("saved", true), /Write failed/);
+        else if (mode === "custom") await api.set("saved", true, (kind: string, callback: (store: object) => Promise<void>) => fixtureStore(kind, callback));
+        else {
+            await api.set("saved", true);
+            await api.set("saved", false);
+            await api.set("other", true);
+            if (mode === "clear") await api.clear();
+        }
+        const events: unknown[] = [];
+        const target: EventTarget = api.getChangeEvents();
+        target.addEventListener("change", event => events.push((event as CustomEvent).detail));
+        assert.deepEqual(events, [], "Replay must wait until the caller has attached its listener");
+        await Promise.resolve();
+        assert.deepEqual(structuredClone(events), mode === "writes" ? [["saved", "other"]] : mode === "clear" ? [null] : []);
+        assert.equal(api.getChangeEvents(), target);
+        await Promise.resolve();
+        assert.equal(events.length, mode === "writes" || mode === "clear" ? 1 : 0, "Reading the event target again must not replay old changes");
+    }
+});

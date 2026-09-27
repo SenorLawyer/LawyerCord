@@ -32,6 +32,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Retain committed plugin-data changes made before cloud sync starts, so initialization does not miss an automatic upload.
+
 - Schedule automatic cloud sync after committed plugin-data changes in the current window. Failed writes, custom databases and local-only records do not trigger uploads.
 
 - Keep automation workflows and execution state local during cloud sync so another device cannot start copied workflows automatically. Use the existing workflow export/import or an explicit offline backup to transfer them.

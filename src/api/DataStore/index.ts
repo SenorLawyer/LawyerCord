@@ -47,14 +47,24 @@ export type UseStore = <T>(
 
 let defaultGetStoreFunc: UseStore | undefined;
 let changeEvents: EventTarget | undefined;
+let pendingChanges: Set<IDBValidKey> | null = new Set();
 
 export function getChangeEvents() {
-    return changeEvents ??= new EventTarget();
+    if (!changeEvents) {
+        const events = changeEvents = new EventTarget();
+        const keys = pendingChanges === null ? null : [...pendingChanges];
+        pendingChanges = new Set();
+        if (keys === null || keys.length)
+            queueMicrotask(() => events.dispatchEvent(new CustomEvent("change", { detail: keys })));
+    }
+    return changeEvents;
 }
 
 function notifyChange(customStore: UseStore, keys: IDBValidKey[] | null) {
-    if (customStore === defaultGetStoreFunc)
-        changeEvents?.dispatchEvent(new CustomEvent("change", { detail: keys }));
+    if (customStore !== defaultGetStoreFunc) return;
+    if (changeEvents) changeEvents.dispatchEvent(new CustomEvent("change", { detail: keys }));
+    else if (keys === null) pendingChanges = null;
+    else for (const key of keys) pendingChanges?.add(key);
 }
 
 function defaultGetStore() {

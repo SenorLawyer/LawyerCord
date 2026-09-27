@@ -2616,6 +2616,7 @@ test("cloud settings keep service credentials and connection bindings local", as
 
 test("cloud sync preserves device-local RelationshipNotifier observations", async () => {
     let userId = "first";
+    let icon: string | null | undefined;
     const records = new Map<string, unknown>([["ordinaryPreference", true], ["relationship-notifier-guilds", new Map([["legacy", { name: "Legacy guild" }]])]]);
     const store = {
         entries: async () => structuredClone([...records]),
@@ -2631,9 +2632,9 @@ test("cloud sync preserves device-local RelationshipNotifier observations", asyn
         "@webpack": { findStoreLazy: () => ({}) },
         "@webpack/common": {
             UserStore: { getCurrentUser: () => ({ id: userId }) },
-            GuildStore: { getGuilds: () => ({ [userId]: { name: userId } }) },
+            GuildStore: { getGuilds: () => ({ [userId]: { name: userId, icon } }) },
             GuildMemberStore: { isMember: () => true },
-            ChannelStore: { getSortedPrivateChannels: () => [{ id: userId, name: userId, type: 3, rawRecipients: [] }] },
+            ChannelStore: { getSortedPrivateChannels: () => [{ id: userId, name: userId, type: 3, rawRecipients: [], icon }] },
             RelationshipStore: { getMutableRelationships: () => new Map([[`${userId}-friend`, 1], [`${userId}-request`, 3]]) }
         }
     };
@@ -2664,7 +2665,17 @@ test("cloud sync preserves device-local RelationshipNotifier observations", asyn
     await applyDownloads([{ key: "dataStore", value: Buffer.from(JSON.stringify(remoteEntries)).toString("base64") }]);
     await applyDownloads(remoteEntries.map(([key]) => ({ key: `dataStore/${key}`, value: Buffer.from("{}").toString("base64") })));
     assert.deepEqual([...records], observed, "Cloud imports must not replace this device's offline-change baseline");
-    await assert.rejects(offline.exportSettings({ type: "datastore" }), /JSON backup format cannot preserve/, "Offline JSON backups must not silently drop Map contents");
+    await assert.rejects(offline.exportSettings({ type: "datastore" }), /JSON backup format cannot preserve/, "Undefined icon fields must not be silently discarded");
+    for (icon of [null, "saved-icon"]) {
+        for (userId of ["first", "second"]) await Promise.all([notifier.syncGuilds(), notifier.syncGroups(), notifier.syncFriends()]);
+        const before = structuredClone([...records]);
+        const backup = await offline.exportSettings({ type: "datastore" });
+        assert.equal(JSON.parse(backup).dataStore.version, 1);
+        records.clear();
+        await offline.importSettings(backup, "datastore");
+        assert.deepEqual([...records], before, "Supported observation Maps must survive explicit offline backup and restore");
+        assert.deepEqual(JSON.parse(await offline.exportSettings({ type: "datastore", cloud: true })).dataStore, expected);
+    }
 });
 
 

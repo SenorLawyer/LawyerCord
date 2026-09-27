@@ -17,7 +17,9 @@ const LOCAL_DATASTORE_KEYS = new Set<unknown>([
     "Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions", "VencordQuickCss",
     "ThemeLibrary_uniqueToken", "decor-auth", "songspotlight-auth", "vc-streaks-auth", "rdb-auth",
     "ScheduledMessages_queue", "VCLastVoiceChannel", "VCLastVoiceChannelSession", "KeepCurrentChannel_previousData",
-    "ChannelTabs_openChannels_v2", "ChannelTabs_unreadFallbacks_v1"
+    "ChannelTabs_openChannels_v2", "ChannelTabs_unreadFallbacks_v1",
+    "LawyerCord_automations", "LawyerCord_automations_v2", "LawyerCord_automations_v1_backup",
+    "LawyerCord_automationLogs", "LawyerCord_automationGuilds", "LawyerCord_automationCommands"
 ]);
 const LOCAL_PLUGIN_SETTINGS = new Map<string, readonly string[]>([
     ["FileUpload", [
@@ -40,6 +42,7 @@ export function isLocalDataStoreKey(key: unknown) {
     if (LOCAL_DATASTORE_KEYS.has(key)) return true;
     if (typeof key !== "string") return false;
     if (key.startsWith("Vencord_cloudManifest:") || key.startsWith("VoiceMessageTranscriber_") || key.startsWith("relationship-notifier-")) return true;
+    if (key.startsWith("LawyerCord_automationDraft_") || key.startsWith("LawyerCord_automationValues_")) return true;
     if (key.startsWith("BetterSessions_savedSessions_")) {
         const userId = UserStore.getCurrentUser()?.id;
         return !userId || key !== `BetterSessions_savedSessions_${userId}`;

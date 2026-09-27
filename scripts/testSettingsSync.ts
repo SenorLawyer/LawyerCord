@@ -687,6 +687,9 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
     const localKeys = [
         "Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions", "Vencord_cloudManifest:https://first.invalid:first", "Vencord_cloudManifest:https://second.invalid:second",
         "ThemeLibrary_uniqueToken", "decor-auth", "songspotlight-auth", "vc-streaks-auth", "rdb-auth",
+        "LawyerCord_automations", "LawyerCord_automations_v2", "LawyerCord_automations_v1_backup",
+        "LawyerCord_automationLogs", "LawyerCord_automationGuilds", "LawyerCord_automationCommands",
+        "LawyerCord_automationDraft_workflow", "LawyerCord_automationValues_workflow",
         "VoiceStats_totals", "ProfileDataset", "ProfilePresets_v2_Main", "ProfilePresets_v2_Server", "BetterSessions_savedSessions_undefined", ...accountKeys("second"),
         "ScheduledMessages_queue", "VCLastVoiceChannel", "VCLastVoiceChannelSession", "KeepCurrentChannel_previousData", "VoiceMessageTranscriber_https://fixture.invalid/model.bin"
     ];

@@ -36,6 +36,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Reject Kagi translation request bodies larger than 128 KiB before sending them, matching the existing DeepL payload limit.
+
 - Cancel obsolete TranslatePlus provider requests when replaced, when their last view closes, on logout, or when the plugin stops. Keep shared dictionary downloads available to surviving requests.
 
 - Preserve session names saved in another window when renaming, discovering sessions, or dismissing new-session badges. Apply each operation to the latest stored Map instead of replacing it with the local cache.

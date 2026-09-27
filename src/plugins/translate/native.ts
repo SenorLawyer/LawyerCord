@@ -46,6 +46,10 @@ export async function makeKagiTranslateRequest(_: IpcMainInvokeEvent, token: unk
     if (typeof token !== "string" || typeof text !== "string" || typeof sourceLang !== "string" || typeof targetLang !== "string")
         return { status: -1, data: null };
 
+    const body = JSON.stringify({ text, from: sourceLang, to: targetLang, model: "standard" });
+    if (Buffer.byteLength(body, "utf8") > 128 * 1024)
+        return { status: 413, data: null };
+
     const url = "https://translate.kagi.com/api/translate";
 
     try {
@@ -57,12 +61,7 @@ export async function makeKagiTranslateRequest(_: IpcMainInvokeEvent, token: unk
                 "Content-Type": "application/json",
                 "Cookie": `kagi_session=${token}`
             },
-            body: JSON.stringify({
-                text,
-                from: sourceLang,
-                to: targetLang,
-                model: "standard"
-            }),
+            body,
         });
 
         if (res.status !== 200) {

@@ -18372,3 +18372,28 @@ test("TranslatePlus cancellation preserves a shared dictionary for surviving req
     assert.equal((await second).text, "hello");
     assert.equal(requests, 1);
 });
+
+
+test("Kagi native requests enforce the serialized UTF-8 payload limit", async () => {
+    const sent: string[] = [];
+    const native = loadSource("src/plugins/translate/native.ts", {}, {
+        Buffer, fetch: async (_url: string, options: { body: string }) => { sent.push(options.body); return new Response("{}"); }
+    });
+    const limit = 128 * 1024;
+    const payload = (text: string, from = "auto", to = "en") => JSON.stringify({ text, from, to, model: "standard" });
+    const overhead = Buffer.byteLength(payload(""));
+    for (const character of ["x", "é", "\""]) {
+        const unit = Buffer.byteLength(payload(character)) - overhead;
+        const text = character.repeat(Math.floor((limit - overhead) / unit)) + "x".repeat((limit - overhead) % unit);
+        assert.equal(Buffer.byteLength(payload(text)), limit);
+        assert.equal((await native.makeKagiTranslateRequest({}, "fixture", text, "auto", "en")).status, 200);
+        const before = sent.length;
+        assert.equal((await native.makeKagiTranslateRequest({}, "fixture", text + "x", "auto", "en")).status, 413);
+        assert.equal(sent.length, before);
+    }
+    for (const [from, to] of [["x".repeat(limit), "en"], ["auto", "x".repeat(limit)]]) {
+        const before = sent.length;
+        assert.equal((await native.makeKagiTranslateRequest({}, "fixture", "text", from, to)).status, 413);
+        assert.equal(sent.length, before);
+    }
+});

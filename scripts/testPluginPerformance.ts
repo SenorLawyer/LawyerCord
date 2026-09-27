@@ -17950,3 +17950,42 @@ test("FriendTags keeps duplicate tags distinct in menus and deletion", async () 
     items[1].props.action();
     assert.equal(writes.length, count);
 });
+
+
+test("BetterSessions saves retain their captured account data while storage opens", async () => {
+    for (const change of ["switch", "logout", "edit"]) {
+        let userId: string | undefined = "first";
+        const opened = Promise.withResolvers<void>();
+        const saved = new Map<string, unknown>();
+        const dataStore = loadSource("src/api/DataStore/index.ts", {});
+        const utils = loadSource("src/plugins/betterSessions/utils.ts", {
+            "@api/DataStore": {
+                set: (key: string, value: unknown) => dataStore.set(key, value, (_mode: string, callback: (store: object) => Promise<void>) => opened.promise.then(() => {
+                    const transaction: { oncomplete?: () => void } = {};
+                    const result = callback({ transaction, put: (data: unknown, id: string) => saved.set(id, structuredClone(data)) });
+                    queueMicrotask(() => transaction.oncomplete?.());
+                    return result;
+                }))
+            },
+            "@utils/css": { classNameFactory: () => () => "" },
+            "@webpack/common": { UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined } },
+            "./components/icons": {}
+        }, { structuredClone });
+        const original = { name: "First account name", isNew: true };
+        utils.savedSessionsCache.set("first-session", original);
+        const first = utils.saveSessionsToDataStore();
+        original.isNew = false;
+        let second: Promise<void> | undefined;
+        if (change !== "edit") {
+            utils.savedSessionsCache.clear();
+            userId = change === "switch" ? "second" : undefined;
+            if (userId) utils.savedSessionsCache.set("second-session", { name: "Second account name", isNew: false });
+            second = utils.saveSessionsToDataStore();
+        }
+        opened.resolve();
+        await Promise.all([first, second]);
+        assert.deepEqual(saved.get("BetterSessions_savedSessions_first"), new Map([["first-session", { name: "First account name", isNew: true }]]));
+        assert.equal(saved.size, change === "switch" ? 2 : 1);
+        if (change === "switch") assert.deepEqual(saved.get("BetterSessions_savedSessions_second"), new Map([["second-session", { name: "Second account name", isNew: false }]]));
+    }
+});

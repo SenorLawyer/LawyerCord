@@ -39,7 +39,7 @@ export function saveSessionsToDataStore() {
     const dataKey = getDataKey();
     if (!dataKey) return Promise.resolve();
 
-    return DataStore.set(dataKey, savedSessionsCache);
+    return DataStore.set(dataKey, structuredClone(savedSessionsCache));
 }
 
 export async function fetchNamesFromDataStore(shouldApply = () => true) {

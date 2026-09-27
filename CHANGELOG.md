@@ -30,6 +30,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Snapshot BetterSessions data before saving so account switches, logout, or later edits cannot change an already queued save.
+
 - Keep RelationshipNotifier observation history local so its saved maps cannot block cloud sync or overwrite another device's offline-change baseline.
 
 - Keep plugin credentials, saved decryption passwords, ShareX configurations, and their service connection settings local during cloud sync. Older cloud backups cannot replace them or redirect retained credentials to another server.

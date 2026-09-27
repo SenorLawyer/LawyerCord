@@ -233,25 +233,25 @@ export default definePlugin({
         {
             find: '["aria-hidden"],"aria-label":',
             replacement: {
-                match: /null==\i\.icon\?.+?src:(\(0,\i\.\i\).+?\))(?=[,}])/,
+                match: /(?<=,src:)(\(0,\i\.\i\)\(\i,\d+,\i\))(?=[,}])/,
                 // We have to check that icon is not an unread GDM in the server bar
-                replace: (m, iconUrl) => `${m},onClick:()=>arguments[0]?.size!=="SIZE_48"&&$self.openAvatar(${iconUrl})`
+                replace: '$&,onClick:()=>arguments[0]?.size!=="SIZE_48"&&$self.openAvatar($1)'
             }
         },
         // User DMs top small icon
         {
             find: ".channel.getRecipientId(),",
             replacement: {
-                match: /(?=,src:(\i.getAvatarURL\(.+?[)]))/,
-                replace: (_, avatarUrl) => `,onClick:()=>$self.openAvatar(${avatarUrl})`
+                match: /(?=,src:(\i\.getAvatarURL\([^()]{0,100}\)))/,
+                replace: ",onClick:()=>$self.openAvatar($1)"
             }
         },
         // User Dms top large icon
         {
             find: ".EMPTY_GROUP_DM)",
             replacement: {
-                match: /(?<=SIZE_80,)(?=src:(.+?\))[,}])/,
-                replace: (_, avatarUrl) => `onClick:()=>$self.openAvatar(${avatarUrl}),`
+                match: /(?<=SIZE_80,)(?=src:(\(0,\i\.\i\)\(\i,\d+,\i\))[,}])/,
+                replace: "onClick:()=>$self.openAvatar($1),"
             }
         }
     ]

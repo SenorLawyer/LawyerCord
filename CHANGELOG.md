@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Remove three direct-message icon replacement callbacks and match their avatar URLs locally.
+
 - Remove the super-reaction playback helper and callback by changing the native limit directly.
 - Remove broad outgoing-volume and typing searches, two slider replacement callbacks, and disabled native checks in web image menus.
 

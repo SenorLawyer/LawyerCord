@@ -2,11 +2,15 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Latest full local verification: all 685 broader tests and timezone checks, TypeScript, focused plugin ESLint, CSS lint, sequential desktop/web builds and artifact scanning pass at the profile-banner fix. Patch lint reports five warnings and no errors. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding b2f0362c4; the banner fix requires its own CI.
+Latest full local verification: all 685 broader tests and timezone checks, TypeScript, focused plugin ESLint, CSS lint, sequential desktop/web builds and artifact scanning pass at the profile-banner fix. The subsequent icon cleanup passes focused lint, sequential builds and artifact scanning. Patch lint now reports two warnings and no errors. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding b2f0362c4; the banner fix requires its own CI.
 
 Earlier broad verification checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning passed. Patch lint then reported 107 warnings and no errors. Full repository lint logs use `.git/audit/reconciliation-sep27-*`; later focused runs do not replace final combined validation.
 
 A fresh September 27 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,655 files, fourteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-sep27-current.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
+
+## Local direct-message icon matches
+
+The remaining ViewIcons URL patches now match the adjacent avatar URL expressions. Three replacement callbacks and their broad searches are removed. All four captured complete modules retain byte-identical output and compile against 2dab73fee, preserving the server-bar exclusion and existing click behavior. Evidence is `.git/audit/view-icons-local-verify.{cjs,json}`. Focused ESLint, sequential desktop/web builds and artifact scanning pass. Patch lint reports two warnings and no errors. Logs use `.git/audit/view-icons-local-*`. The latest full regression and TypeScript run remains the 685-test banner checkpoint. Live client acceptance and broader findings remain open.
 
 ## Native profile-banner actions
 

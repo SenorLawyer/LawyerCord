@@ -339,9 +339,11 @@ test("BlurNSFW can change blur settings before startup and after stopping", () =
     const styles: { textContent: string; removed: boolean; remove: () => void }[] = [];
     const store = { blurAmount: 10 };
     let change: () => void = () => assert.fail("Missing setting callback");
+    let validate: (value: string) => boolean | string = () => assert.fail("Missing setting validation");
     const { default: plugin } = loadSource("src/plugins/blurNsfw/index.ts", {
-        "@api/Settings": { definePluginSettings: (definition: { blurAmount: { onChange: () => void } }) => {
+        "@api/Settings": { definePluginSettings: (definition: { blurAmount: { onChange: () => void; isValid: typeof validate; } }) => {
             change = definition.blurAmount.onChange;
+            validate = definition.blurAmount.isValid;
             return { store };
         } },
         "@api/Styles": {}, "@utils/constants": { Devs: {} },
@@ -367,6 +369,14 @@ test("BlurNSFW can change blur settings before startup and after stopping", () =
     assert.match(styles[0].textContent, /blur\(20px\)/);
     plugin.start();
     assert.match(styles[1].textContent, /blur\(5px\)/);
+    for (const value of [-1, NaN, Infinity, -Infinity, 0, 2.5, 10]) {
+        store.blurAmount = value;
+        change();
+        const valid = Number.isFinite(value) && value >= 0;
+        assert.equal(validate(String(value)) === true, valid);
+        assert.ok(styles[1].textContent.includes(`blur(${valid ? value : 10}px)`));
+        assert.ok(Object.is(store.blurAmount, value), "Rendering must not rewrite stored values");
+    }
     plugin.stop();
 });
 

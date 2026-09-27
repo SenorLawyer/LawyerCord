@@ -59,6 +59,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Reject invalid blur amounts and use the default blur for invalid saved values instead of silently showing media unblurred.
 - Cancel stalled Picture in Picture metadata loads after 30 seconds while leaving the original video playing.
 - Refresh member banners and nameplates together when the nameplate preference changes.
 - Update mounted member banners when the USRBG feed loads or clears.

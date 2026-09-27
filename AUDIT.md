@@ -2,11 +2,19 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Latest full local verification: all 695 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the Picture in Picture metadata timeout fix. Patch lint last reported zero warnings and no errors at the nameplate checkpoint; this fix changes no patches. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding a14211db6; the timeout fix requires its own CI.
+Latest full local verification: all 695 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the blur amount validation fix. Patch lint last reported zero warnings and no errors at the nameplate checkpoint; this fix changes no patches. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding fd9516286; the amount fix requires its own CI.
 
 Earlier broad verification checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning passed. Patch lint then reported 107 warnings and no errors. Full repository lint logs use `.git/audit/reconciliation-sep27-*`; later focused runs do not replace final combined validation.
 
 A fresh September 28 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,656 files, fifteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-patches-complete.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
+
+## BlurNSFW invalid numeric settings
+
+The shared number setting forwards raw input to optional plugin validation and otherwise saves Number(input). BlurNSFW had no validator, so a negative blur amount produced an invalid CSS filter and left media unblurred. Actual Chromium also drops the generated rule for NaN and Infinity. The setting now rejects negative or nonfinite input; CSS generation falls back to the existing ten-pixel default for invalid saved values without rewriting storage. Zero and fractional amounts remain valid.
+
+The actual production stylesheet in Chromium yields no filter before the fix for those invalid values and blur(10px) afterward. Zero, 2.5 and ten pixels retain their requested filters. The fixture disables transitions on its test element to measure the target filter rather than an intermediate animation frame. Evidence is `.git/audit/blur-number-browser.cjs` and `blur-number-{before,after}.json`. The tracked lifecycle regression also covers negative infinity, validation results and unchanged stored values. This fixes amount handling; the separate media-selector ownership finding remains open.
+
+All 695 broader regressions and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass, recorded in `.git/audit/blur-number-*`. All four preceding fd9516286 CI checks passed. The shared webpack moduleListeners Set can observe lazy module exports and supports paired registration/removal; waitFor resolves only once. No listener was added because resolving classes as they load does not establish which semantic renderers belong in this plugin's media coverage.
 
 ## BlurNSFW image-selector consumer inventory
 

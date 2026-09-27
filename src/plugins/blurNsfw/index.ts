@@ -17,6 +17,7 @@ const settings = definePluginSettings({
         type: OptionType.NUMBER,
         description: "Blur Amount (in pixels)",
         default: 10,
+        isValid: value => Number.isFinite(Number(value)) && Number(value) >= 0 || "Enter a number of zero or greater.",
         onChange: setCss
     },
     blurAllChannels: {
@@ -28,10 +29,11 @@ const settings = definePluginSettings({
 
 function setCss() {
     if (!style) return;
+    const { blurAmount } = settings.store;
     style.textContent = `
         .vc-nsfw-img [class*=imageContainer],
         .vc-nsfw-img [class*=wrapperPaused] {
-            filter: blur(${settings.store.blurAmount}px);
+            filter: blur(${Number.isFinite(blurAmount) && blurAmount >= 0 ? blurAmount : 10}px);
             transition: filter 0.2s;
 
             &:hover {

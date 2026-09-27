@@ -19,6 +19,10 @@ Changes are accumulated in [PR #47](https://github.com/SenorLawyer/LawyerCord/pu
 
 ## Latest local verification
 
+GreetStickerPicker's context-menu callback now reads its owning component's arguments instead of capturing a distant props variable. The captured component is an ordinary function and the injected handler is an arrow, so the handler retains the component's arguments. The complete module compiles and differs only in that props reference. Four captured render/callback cases preserve output, event identity and the entire props object, including reordered channel/message fields. Evidence is in `.git/audit/greet-picker-capture-verify.cjs` and its result JSON.
+
+Focused lint, desktop/web builds, and artifact scanning pass. Patch lint reports zero errors and 85 warnings. The latest full 666-test, timezone and TypeScript run is at preceding `b14e04914`; this change only alters the verified patch. Logs use `.git/audit/greet-picker-*`. No real greeting messages were sent.
+
 FakeProfileThemes now discovers the profile store by its display-name assignment. Captured consumer module 758873 also mentions `UserProfileStore`; through the actual shared patcher, loading that consumer first previously consumed the patch without effect. Both module orders now patch store 321191 with no reported failure. The store replacement matches its local Map lookup, and the older theme editor's forward search is bounded. Both retained captured modules preserve byte-identical output and compile.
 
 The newer profile-editor injection is deleted. Captured module 808261 called `addCopy3y3Button()` without colors. The actual button's click handler throws in that case, while supplied colors still encode and copy correctly. Plugin settings and the older theme editor retain their copy controls. A failing-before regression covers discovery, present/missing profile lookup, and all four disabled/saving combinations of the unaffected native editor action. History review confirms the broken newer-editor anchor was revised in `5d731a3ba`; there was no color argument in either version.

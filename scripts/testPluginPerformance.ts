@@ -68,7 +68,7 @@ test("BetterSettings preserves native layer dialog metadata", () => {
         "@api/Settings": { definePluginSettings: () => ({}) }, "@api/Styles": {},
         "@components/Icons": {}, "@equicordplugins/equicordToolbox/menu": {},
         "@utils/constants": { Devs: {} }, "@utils/css": { classNameFactory: () => () => "layer" },
-        "@utils/discord": { getIntlMessage: (key: string) => `Localized ${key}` }, "@utils/Logger": {},
+        "@utils/discord": { getIntlMessage: (key: string) => `Localized ${key}` }, "@utils/Logger": { Logger: class { warn() {} error() {} } },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
         "@webpack": { findCssClassesLazy: () => ({ layer: "layer", baseLayer: "base" }) },
         "@webpack/common": { FocusLock: "focus-lock", useRef: () => ({ current: null }), useEffect: () => {} },
@@ -99,12 +99,13 @@ test("BetterSettings preserves native layer dialog metadata", () => {
     assert.equal(overridden.children[0].props["aria-label"], "Custom label");
 });
 
-test("BetterSettings keeps the collectibles shop lazy while preloading settings", () => {
+test("BetterSettings keeps the shop lazy and handles failed settings preloads", async () => {
+    const failures: unknown[] = [];
     const { default: plugin } = loadSource("src/plugins/betterSettings/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({}) }, "@api/Styles": {},
         "@components/Icons": {}, "@equicordplugins/equicordToolbox/menu": {},
         "@utils/constants": { Devs: {} }, "@utils/css": { classNameFactory: () => () => "" },
-        "@utils/discord": {}, "@utils/Logger": {},
+        "@utils/discord": {}, "@utils/Logger": { Logger: class { warn(_message: string, error: unknown) { failures.push(error); } error() {} } },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
         "@webpack": { findCssClassesLazy: () => ({}) }, "@webpack/common": {},
         "./fullHeightContext.css?managed": {}
@@ -115,11 +116,36 @@ test("BetterSettings keeps the collectibles shop lazy while preloading settings"
             `{createPromise:()=>load("${name}"),webpackId:${webpackId},name:"${name}"}`
         ).join(",")}]`;
         const loaded: string[] = [];
-        const entries = runInNewContext(source.replace(match, replace), { load: (name: string) => { loaded.push(name); } });
+        const entries = runInNewContext(source.replace(match, replace), { $self: plugin, load: (name: string) => { loaded.push(name); return Promise.resolve(); } });
         assert.deepEqual(loaded, ["AccountSettings", "PrivacySettings"]);
         entries[1].createPromise();
         assert.deepEqual(loaded, ["AccountSettings", "PrivacySettings", "CollectiblesShop"]);
     }
+    const { canonicalizeMatch } = loadSource("src/utils/patches.ts", { "./intlHash": {} });
+    for (const menu of [false, true]) {
+        const failure = new Error("Offline");
+        let attempts = 0;
+        let retried: Promise<unknown> | undefined;
+        const load = () => ++attempts === 1 ? Promise.reject(failure) : Promise.resolve("loaded");
+        const replacement = menu ? plugin.patches[4].replacement : plugin.patches[0].replacement[1];
+        const source = menu
+            ? 'new(class{handleOpenSettingsContextMenu=e=>{null!=user&&open(e,async()=>{let{default:entry}=await Promise.all([loader.e("settings")]).then(loader.bind(loader,42));return entry})}})'
+            : '({createPromise:()=>load(),webpackId:42,name:"AccountSettings"})';
+        const entry = runInNewContext(source.replace(canonicalizeMatch(replacement.match), replacement.replace), {
+            $self: plugin, load, user: {},
+            loader: Object.assign(() => ({ default: "loaded" }), { e: load }),
+            open: (_event: unknown, render: () => Promise<unknown>) => { retried = render(); }
+        });
+        await assert.doesNotReject(menu ? entry._vencordBetterSettingsEagerLoad : entry._);
+        assert.equal(failures.at(-1), failure);
+        assert.equal(attempts, 1);
+        if (menu) entry.handleOpenSettingsContextMenu(null);
+        else retried = entry.createPromise();
+        assert.ok(retried);
+        assert.equal(await retried, "loaded");
+        assert.equal(attempts, 2);
+    }
+    assert.equal(failures.length, 2);
 });
 
 test("AlwaysAnimate preserves class names and destructuring while overriding flags", () => {

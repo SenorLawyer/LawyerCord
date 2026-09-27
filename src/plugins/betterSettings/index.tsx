@@ -20,6 +20,7 @@ import type { HTMLAttributes, ReactNode } from "react";
 
 import fullHeightStyle from "./fullHeightContext.css?managed";
 
+const logger = new Logger("BetterSettings");
 const cl = classNameFactory("");
 const Classes = findCssClassesLazy("animating", "baseLayer", "bg", "layer", "layers");
 
@@ -127,7 +128,7 @@ export default definePlugin({
                 },
                 { // Lazy-load contents
                     match: /createPromise:\(\)=>([^:}]*?),webpackId:"?\d+"?,name:(?!"CollectiblesShop")"[^"]+"/g,
-                    replace: "$&,_:$1",
+                    replace: "$&,_:$self.preload($1)",
                     predicate: () => settings.store.eagerLoad
                 }
             ]
@@ -173,7 +174,7 @@ export default definePlugin({
             find: "handleOpenSettingsContextMenu=",
             replacement: {
                 match: /(?=handleOpenSettingsContextMenu=.{0,100}?null!=\i&&.{0,100}?(await [^};]*?\)\)))/,
-                replace: "_vencordBetterSettingsEagerLoad=(async ()=>$1)();"
+                replace: "_vencordBetterSettingsEagerLoad=$self.preload((async ()=>$1)());"
             },
             predicate: () => settings.store.eagerLoad
         },
@@ -197,11 +198,15 @@ export default definePlugin({
         try {
             [FocusLock.$$vencordGetWrappedComponent(), ComponentDispatch, Classes.layer].forEach(e => e.test);
         } catch {
-            new Logger("BetterSettings").error("Failed to find some components");
+            logger.error("Failed to find some components");
             return props.children;
         }
 
         return <Layer {...props} />;
+    },
+
+    preload(promise: Promise<unknown>) {
+        return promise.catch((error: unknown) => logger.warn("Could not preload settings.", error));
     },
 
     transformSettingsEntries(list) {

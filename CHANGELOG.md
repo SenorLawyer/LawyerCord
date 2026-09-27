@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Report failed BetterSettings preloads without unhandled promise rejections, while preserving retries when settings are opened.
+
 - Preserve native dialog roles, localized labels and layer identifiers when BetterSettings disables fades.
 
 - Apply BetterSettings modal animation changes together, tolerate reordered properties and remove the unused style prop.

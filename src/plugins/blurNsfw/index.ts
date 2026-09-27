@@ -54,8 +54,8 @@ export default definePlugin({
             find: "}renderStickersAccessories(",
             replacement: [
                 {
-                    match: /(\.renderReactions\(\i\).+?className:)/,
-                    replace: '$&(this?.props?.channel?.nsfw || $self.settings.store.blurAllChannels ? "vc-nsfw-img ": "")+'
+                    match: /(?<=\.jsxs\)\("div",\{(?=[^{}]{0,150}\bid:\(0,\i\.\i\)\(\i\))[^{}]{0,150}\bclassName:)/,
+                    replace: '(this?.props?.channel?.nsfw || $self.settings.store.blurAllChannels ? "vc-nsfw-img ": "")+'
                 }
             ]
         }

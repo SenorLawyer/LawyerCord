@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Narrow BlurNSFW message matching while preserving its existing restricted-preview behavior.
+
 - CallTimer expands only the containers holding its connection timer, preventing overflow without resizing unrelated panels.
 
 - CallTimer resolves the current voice-row color classes instead of using obsolete hardcoded names.

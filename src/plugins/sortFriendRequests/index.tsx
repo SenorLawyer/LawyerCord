@@ -72,7 +72,7 @@ export default definePlugin({
             find: "peopleListItemRef",
             replacement: {
                 predicate: () => settings.store.showDates,
-                match: /(?<=children:.*user:(\i),.*subText:).+?(?=,hovered:\i,showAccountIdentifier)/,
+                match: /(?<=user:(\i),status:\i,isMobile:\i,isVR:\i,subText:).{1,500}?(?=,hovered:\i,showAccountIdentifier)/g,
                 replace: "$self.makeSubtext($1, $&)"
             }
         },

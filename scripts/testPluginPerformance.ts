@@ -2225,6 +2225,27 @@ test("reply mention exceptions match whole user and role IDs", () => {
     assert.equal(plugin.shouldMention(message, false), true);
 });
 
+test("friend date patches use each row's user and preserve its status", () => {
+    const source = readFileSync("src/plugins/sortFriendRequests/index.tsx", "utf8");
+    const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);
+    let patchSource = "";
+    const visit = (node: typescript.Node) => {
+        if (typescript.isPropertyAssignment(node) && node.name.getText(ast) === "patches") patchSource = node.initializer.getText(ast);
+        typescript.forEachChild(node, visit);
+    };
+    visit(ast);
+    const replacement = runInNewContext(`(${patchSource})`)[1].replacement;
+    const original = 'function rows(n,a,b){return{children:[{user:n},{user:a,status:s,isMobile:m,isVR:v,subText:"first",hovered:h,showAccountIdentifier:false},{user:b,status:s,isMobile:m,isVR:v,subText:"second",hovered:h,showAccountIdentifier:false}]}}';
+    const users: string[] = [];
+    const render = runInNewContext(original.replace(canonicalizeMatch(replacement.match), replacement.replace) + ";rows", {
+        s: "online", m: false, v: false, h: false,
+        $self: { makeSubtext: (user: { id: string; }, status: string) => { users.push(user.id); return status; } }
+    });
+    const result = render({ id: "unrelated" }, { id: "anniversary" }, { id: "regular" });
+    assert.deepEqual(users, ["anniversary", "regular"]);
+    assert.deepEqual(Array.from(result.children.slice(1), (row: { subText: string; }) => row.subText), ["first", "second"]);
+});
+
 test("mod view highest role does not depend on loading enhanced members", () => {
     const source = readFileSync("src/plugins/showHiddenThings/index.ts", "utf8");
     const ast = typescript.createSourceFile("index.ts", source, ScriptTarget.Latest, true);

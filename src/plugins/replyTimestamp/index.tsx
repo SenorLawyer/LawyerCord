@@ -20,13 +20,7 @@ function Sep(props: HTMLAttributes<HTMLElement>) {
     return <i className={MessageClasses.separator} aria-hidden={true} {...props} />;
 }
 
-const enum ReferencedMessageState {
-    LOADED = 0,
-    NOT_LOADED = 1,
-    DELETED = 2,
-}
-
-type ReferencedMessage = { state: ReferencedMessageState.LOADED; message: Message; } | { state: ReferencedMessageState.NOT_LOADED | ReferencedMessageState.DELETED; };
+type ReferencedMessage = { state: 0; message: Message; } | { state: 1 | 2; };
 
 function ReplyTimestamp({
     referencedMessage,
@@ -35,18 +29,19 @@ function ReplyTimestamp({
     referencedMessage: ReferencedMessage,
     baseMessage: Message;
 }) {
-    if (referencedMessage.state !== ReferencedMessageState.LOADED) return null;
-    const refTimestamp = referencedMessage.message.timestamp as any;
-    const baseTimestamp = baseMessage.timestamp as any;
+    if (referencedMessage.state !== 0) return null;
+    const refTimestamp = referencedMessage.message.timestamp;
+    const baseTimestamp = baseMessage.timestamp;
+    const sameDay = DateUtils.isSameDay(refTimestamp, baseTimestamp);
     return (
         <Timestamp
             className="vc-reply-timestamp"
-            compact={DateUtils.isSameDay(refTimestamp, baseTimestamp)}
+            compact={sameDay}
             timestamp={refTimestamp}
             isInline={false}
         >
             <Sep>[</Sep>
-            {DateUtils.isSameDay(refTimestamp, baseTimestamp)
+            {sameDay
                 ? DateUtils.dateFormat(refTimestamp, "LT")
                 : DateUtils.calendarFormat(refTimestamp)
             }

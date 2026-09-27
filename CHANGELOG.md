@@ -19,7 +19,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
-- Replace FakeNitro's message-accessory and emoji-eligibility capture-copy callbacks with direct replacement strings.
+- Replace FakeNitro's message-accessory, emoji-eligibility and gradient-theme capture-copy callbacks with direct replacement strings.
 
 - Remove ContextMenuAPI's special exception that hid patch syntax failures from logs and companion reports. Failed replacements still roll back.
 
@@ -41,6 +41,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ### Fixed
 
 - Bound FakeNitro's embed, sticker, attachment and soundboard patch searches. Keep emoji-eligibility captures within their owning function.
+- Match FakeNitro's gradient-theme update at the local call instead of searching forward from a function declaration.
 
 - Bound Decor's purchase-label and current-user captures to their local render code.
 

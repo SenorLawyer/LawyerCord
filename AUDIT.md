@@ -19,6 +19,10 @@ Changes are accumulated in [PR #47](https://github.com/SenorLawyer/LawyerCord/pu
 
 ## Latest local verification
 
+FakeNitro's gradient-theme wrapper now matches the local appearance update and reads both captured values from that call. It no longer copies a function prefix through a replacement callback. The complete captured module retains byte-identical output and compiles; reversing the two client-theme fields still preserves output, and an unrelated function's appearance update is rejected. Evidence is in `.git/audit/fake-nitro-gradient-verify.cjs` and its result JSON.
+
+Focused lint, desktop/web builds, and artifact scanning pass. Patch lint reports zero errors and 91 warnings. Logs use `.git/audit/fake-nitro-gradient-*`. Full-suite and signed-in acceptance claims remain unchanged.
+
 FakeNitro now captures emoji intention from the adjacent comparison and inserts the subscription bypass at the owning function's opening brace. Two capture-copy callbacks are removed, and the subscription search cannot cross a closing brace into another function. Soundboard availability searches are bounded to 250 characters after their action type. All three complete captured modules retain byte-identical patched output and compile. A separate-function decoy and four distant soundboard captures are rejected. Evidence is in `.git/audit/fake-nitro-eligibility-verify.cjs` and its result JSON.
 
 Focused lint, desktop/web builds, and artifact scanning pass. Patch lint reports zero errors and 92 warnings. All four CI checks pass on preceding `54829812a`. The latest full 665-test, timezone and TypeScript run remains at `f3ae7a542`; these changes alter only verified patch patterns and replacement construction. Logs use `.git/audit/fake-nitro-eligibility-*`. Captured-module equivalence does not establish signed-in client acceptance.

@@ -309,8 +309,8 @@ export default definePlugin({
         {
             find: ",updateTheme(",
             replacement: {
-                match: /(function \i\(\i\){let{backgroundGradientPresetId:(\i).+?)(\i\.\i\.updateAsync.+?theme=(.+?),.+?},\i\))/,
-                replace: (_, rest, backgroundGradientPresetId, originalCall, theme) => `${rest}$self.handleGradientThemeSelect(${backgroundGradientPresetId},${theme},()=>${originalCall});`
+                match: /\i\.\i\.updateAsync\("appearance",\i=>\{\i\.theme=(\i\(\i\)),\i\.clientThemeSettings=\i\(\{(?=[^{}]{0,150}?backgroundGradientPresetId:(\i)(?:,|}))[^{}]{0,150}\}\)\},\i\)/,
+                replace: "$self.handleGradientThemeSelect($2,$1,()=>$&);"
             }
         },
         // Allow users to use custom client themes

@@ -27,6 +27,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- BetterSettings keeps the collectibles shop lazy instead of loading it with settings.
 - BetterRoleContext and BetterSettings identify their popout and fade-layer exports locally instead of searching through surrounding functions and classes.
 
 - BetterFolders matches its guild-bar dependency entry directly, reads expanded state from existing folder props, and bounds its surrounding patch searches.

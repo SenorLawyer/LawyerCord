@@ -28,6 +28,29 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { makeLazy, proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("BetterSettings keeps the collectibles shop lazy while preloading settings", () => {
+    const { default: plugin } = loadSource("src/plugins/betterSettings/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({}) }, "@api/Styles": {},
+        "@components/Icons": {}, "@equicordplugins/equicordToolbox/menu": {},
+        "@utils/constants": { Devs: {} }, "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/discord": {}, "@utils/Logger": {},
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack": { findCssClassesLazy: () => ({}) }, "@webpack/common": {},
+        "./fullHeightContext.css?managed": {}
+    });
+    const { match, replace } = plugin.patches[0].replacement[1];
+    for (const webpackId of ["42", '"42"']) {
+        const source = `[${["AccountSettings", "CollectiblesShop", "PrivacySettings"].map(name =>
+            `{createPromise:()=>load("${name}"),webpackId:${webpackId},name:"${name}"}`
+        ).join(",")}]`;
+        const loaded: string[] = [];
+        const entries = runInNewContext(source.replace(match, replace), { load: (name: string) => { loaded.push(name); } });
+        assert.deepEqual(loaded, ["AccountSettings", "PrivacySettings"]);
+        entries[1].createPromise();
+        assert.deepEqual(loaded, ["AccountSettings", "PrivacySettings", "CollectiblesShop"]);
+    }
+});
+
 test("AlwaysAnimate preserves class names and destructuring while overriding flags", () => {
     const { default: plugin } = loadSource("src/plugins/alwaysAnimate/index.ts", {
         "@api/Settings": { definePluginSettings: () => ({}) }, "@utils/constants": { Devs: {} },

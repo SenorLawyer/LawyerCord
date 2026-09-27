@@ -115,7 +115,7 @@ export default definePlugin({
                     predicate: () => settings.store.disableFade
                 },
                 { // Lazy-load contents
-                    match: /createPromise:\(\)=>([^:}]*?),webpackId:"?\d+"?,name:(?!="CollectiblesShop")"[^"]+"/g,
+                    match: /createPromise:\(\)=>([^:}]*?),webpackId:"?\d+"?,name:(?!"CollectiblesShop")"[^"]+"/g,
                     replace: "$&,_:$1",
                     predicate: () => settings.store.eagerLoad
                 }

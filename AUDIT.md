@@ -2,9 +2,9 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Current source checkpoint `a57ed592c`: all 650 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, focused ESLint, desktop/web builds, and artifact scanning pass. All four GitHub checks also pass for this source revision. Patch lint was rerun at this checkpoint and reports 112 warnings and no errors. Repository-wide ESLint, CSS lint, and internationalization lint last passed at the earlier checkpoints recorded below; focused checks do not replace those final gates.
+Current source checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning pass. Patch lint reports 107 warnings and no errors. The full repository lints were refreshed after the BetterSessions changes; logs use `.git/audit/reconciliation-sep27-*`. CI for this revision was still running when checked, so local results are not a claim of completed CI.
 
-A fresh September 27 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,655 files, fourteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-cloud-current.json`.
+A fresh September 27 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,655 files, fourteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-sep27-current.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
 
 ## Scope and source
 

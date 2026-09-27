@@ -10,11 +10,12 @@ import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { Channel } from "@vencord/discord-types";
 import { findComponentByCodeLazy, findStoreLazy } from "@webpack";
-import { ReadStateStore, useStateFromStores } from "@webpack/common";
+import { ReadStateStore, UserGuildSettingsStore, useStateFromStores } from "@webpack/common";
 
-const UserGuildSettingsStore = findStoreLazy("UserGuildSettingsStore");
 const JoinedThreadsStore = findStoreLazy("JoinedThreadsStore");
 const NumberBadge = findComponentByCodeLazy("BADGE_NOTIFICATION_BACKGROUND", "let{count:");
+
+const SETTING_KEYS: ("showOnMutedChannels" | "notificationCountLimit")[] = ["showOnMutedChannels", "notificationCountLimit"];
 
 const settings = definePluginSettings({
     showOnMutedChannels: {
@@ -61,17 +62,19 @@ export default definePlugin({
     ],
 
     CountBadge: ErrorBoundary.wrap(({ channel }: { channel: Channel; }) => {
-        const unreadCount = useStateFromStores([ReadStateStore], () => ReadStateStore.getUnreadCount(channel.id));
+        const { showOnMutedChannels, notificationCountLimit } = settings.use(SETTING_KEYS);
+        const unreadCount = useStateFromStores([ReadStateStore, UserGuildSettingsStore, JoinedThreadsStore], () => {
+            if (!showOnMutedChannels && (UserGuildSettingsStore.isChannelMuted(channel.guild_id, channel.id) || JoinedThreadsStore.isMuted(channel.id)))
+                return 0;
+            return ReadStateStore.getUnreadCount(channel.id);
+        }, [channel.id, channel.guild_id, showOnMutedChannels]);
         if (!unreadCount) return null;
-
-        if (!settings.store.showOnMutedChannels && (UserGuildSettingsStore.isChannelMuted(channel.guild_id, channel.id) || JoinedThreadsStore.isMuted(channel.id)))
-            return null;
 
         return (
             <NumberBadge
                 color="var(--brand-500)"
                 count={
-                    unreadCount > 99 && settings.store.notificationCountLimit
+                    unreadCount > 99 && notificationCountLimit
                         ? "+99"
                         : unreadCount
                 }

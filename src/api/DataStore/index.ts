@@ -46,6 +46,16 @@ export type UseStore = <T>(
 ) => Promise<T>;
 
 let defaultGetStoreFunc: UseStore | undefined;
+let changeEvents: EventTarget | undefined;
+
+export function getChangeEvents() {
+    return changeEvents ??= new EventTarget();
+}
+
+function notifyChange(customStore: UseStore, keys: IDBValidKey[] | null) {
+    if (customStore === defaultGetStoreFunc)
+        changeEvents?.dispatchEvent(new CustomEvent("change", { detail: keys }));
+}
 
 function defaultGetStore() {
     if (!defaultGetStoreFunc) {
@@ -82,7 +92,7 @@ export function set(
     return customStore("readwrite", store => {
         store.put(value, key);
         return promisifyRequest(store.transaction);
-    });
+    }).then(() => notifyChange(customStore, [key]));
 }
 
 /**
@@ -104,7 +114,7 @@ export function setMany(
             throw err;
         }
         return promisifyRequest(store.transaction);
-    });
+    }).then(() => notifyChange(customStore, entries.map(([key]) => key)));
 }
 
 /**
@@ -150,7 +160,7 @@ export function update<T = any>(
                     }
                 };
             }),
-    );
+    ).then(() => notifyChange(customStore, [key]));
 }
 
 export function updateMany<T extends unknown[]>(
@@ -177,7 +187,7 @@ export function updateMany<T extends unknown[]>(
         } catch (error) {
             fail(error);
         }
-    }));
+    })).then(() => notifyChange(customStore, entries.map(([key]) => key)));
 }
 
 /**
@@ -193,7 +203,7 @@ export function del(
     return customStore("readwrite", store => {
         store.delete(key);
         return promisifyRequest(store.transaction);
-    });
+    }).then(() => notifyChange(customStore, [key]));
 }
 
 /**
@@ -214,7 +224,7 @@ export function delMany(
             throw err;
         }
         return promisifyRequest(store.transaction);
-    });
+    }).then(() => notifyChange(customStore, keys));
 }
 
 /**
@@ -226,7 +236,7 @@ export function clear(customStore = defaultGetStore()): Promise<void> {
     return customStore("readwrite", store => {
         store.clear();
         return promisifyRequest(store.transaction);
-    });
+    }).then(() => notifyChange(customStore, null));
 }
 
 function eachCursor(

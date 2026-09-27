@@ -29,6 +29,8 @@ export * as Webpack from "./webpack";
 export * as WebpackPatcher from "./webpack/patchWebpack";
 export { PlainSettings, Settings };
 
+import * as DataStore from "@api/DataStore";
+import { isLocalDataStoreKey } from "@api/SettingsSync/offline";
 import { coreStyleRootNode, initStyles } from "@api/Styles";
 import { openSettingsTabModal, UpdaterTab } from "@components/settings";
 import { debounce } from "@shared/debounce";
@@ -66,6 +68,13 @@ async function syncSettings() {
     });
 
     VencordNative.quickCss.addChangeListener(() => {
+        markLocalDataDirty();
+        saveSettingsOnFrequentAction();
+    });
+
+    DataStore.getChangeEvents().addEventListener("change", event => {
+        const keys = (event as CustomEvent<IDBValidKey[] | null>).detail;
+        if (keys !== null && keys.every(isLocalDataStoreKey)) return;
         markLocalDataDirty();
         saveSettingsOnFrequentAction();
     });

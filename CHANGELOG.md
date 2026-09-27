@@ -32,6 +32,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Schedule automatic cloud sync after committed plugin-data changes in the current window. Failed writes, custom databases and local-only records do not trigger uploads.
+
 - Keep automation workflows and execution state local during cloud sync so another device cannot start copied workflows automatically. Use the existing workflow export/import or an explicit offline backup to transfer them.
 
 - Preserve top-level DataStore Maps, including BetterSessions names, through offline and cloud backups. Reject malformed Map metadata before importing any section, and reject older empty-object session records instead of overwriting current names.

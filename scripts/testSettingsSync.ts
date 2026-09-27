@@ -1235,6 +1235,7 @@ test("startup tracks edits before credential lookup and after initially disconne
         const listeners: ((data: unknown, path: string) => void)[] = [];
         const settings = { cloud: { authenticated: false, settingsSync: true } };
         const syncSettings = runInNewContext(`${compiled}\nsyncSettings;`, {
+            DataStore: { getChangeEvents: () => new EventTarget() }, isLocalDataStoreKey: () => false,
             VencordNative: { quickCss: { addChangeListener() {} } },
             Settings: settings,
             SettingsStore: { addGlobalChangeListener: (callback: (data: unknown, path: string) => void) => listeners.push(callback) },
@@ -1283,6 +1284,7 @@ test("automatic cloud upload retries a busy operation and rechecks sync preferen
     let signedIn = false;
     const settings = { cloud: { authenticated: false, settingsSync: true } };
     const syncSettings = runInNewContext(`${compiled}\nsyncSettings;`, {
+            DataStore: { getChangeEvents: () => new EventTarget() }, isLocalDataStoreKey: () => false,
             VencordNative: { quickCss: { addChangeListener() {} } },
         Settings: settings, SettingsStore: { addGlobalChangeListener() {} },
         UserStore: { getCurrentUser: () => signedIn ? { id: "first" } : undefined },
@@ -1328,6 +1330,7 @@ test("startup uses the current account credential and discards lookup results af
             return secret;
         };
         const syncSettings = runInNewContext(`${compiled}\nsyncSettings;`, {
+            DataStore: { getChangeEvents: () => new EventTarget() }, isLocalDataStoreKey: () => false,
             VencordNative: { quickCss: { addChangeListener() {} } },
             Settings: settings, SettingsStore: { addGlobalChangeListener: () => {} },
             UserStore: { getCurrentUser: () => ({ id: userId }) },
@@ -2358,7 +2361,7 @@ test("cloud completion preserves CSS and stored edits during responses and check
 });
 
 
-test("QuickCSS edits mark data dirty and use the existing automatic upload preferences", async () => {
+test("QuickCSS and DataStore edits mark data dirty and use the existing automatic upload preferences", async () => {
     const source = createSourceFile("Vencord.ts", readFileSync("src/Vencord.ts", "utf8"), ScriptTarget.Latest, true);
     const declaration = source.statements.find(node => isFunctionDeclaration(node) && node.name?.text === "syncSettings");
     assert.ok(declaration);
@@ -2372,6 +2375,7 @@ test("QuickCSS edits mark data dirty and use the existing automatic upload prefe
         let queued = 0;
         let flush: (() => Promise<void>) | undefined;
         const listeners: (() => void)[] = [];
+        const dataStoreEvents = new EventTarget();
         const storage: Record<string, unknown> = { Vencord_cloudSyncDirection: direction };
         storage.getItem = (key: string) => storage[key] ?? null;
         storage.setItem = (key: string, value: string) => { storage[key] = value; };
@@ -2388,6 +2392,7 @@ test("QuickCSS edits mark data dirty and use the existing automatic upload prefe
             exports: {}, require: (name: string) => modules[name] ?? {}, URL
         });
         const syncSettings = runInNewContext(`${startup}\nsyncSettings;`, {
+            DataStore: { getChangeEvents: () => dataStoreEvents }, isLocalDataStoreKey: (key: string) => key === "Vencord_cloudManifest",
             ...api, Settings: settings, SettingsStore: { addGlobalChangeListener() {} }, UserStore: userStore,
             VencordNative: { quickCss: { addChangeListener: (listener: () => void) => listeners.push(listener) } },
             debounce: (callback: () => Promise<void>, delay: number) => { assert.equal(delay, 60_000); flush = callback; return () => queued++; },
@@ -2400,6 +2405,12 @@ test("QuickCSS edits mark data dirty and use the existing automatic upload prefe
         listeners[0]();
         assert.equal(storage.Vencord_settingsDirty, "true");
         assert.equal(queued, 1);
+        dataStoreEvents.dispatchEvent(new CustomEvent("change", { detail: ["Vencord_cloudManifest"] }));
+        assert.equal(queued, 1, "Local-only storage must not schedule an upload");
+        dataStoreEvents.dispatchEvent(new CustomEvent("change", { detail: ["saved-data"] }));
+        assert.equal(queued, 2);
+        dataStoreEvents.dispatchEvent(new CustomEvent("change", { detail: null }));
+        assert.equal(queued, 3, "Clearing storage must schedule a fresh snapshot");
         assert.doesNotThrow(() => context.assertCurrent(), "A CSS notification must not invalidate settings-only ownership checks during a cloud import");
         assert.ok(flush);
         await flush();

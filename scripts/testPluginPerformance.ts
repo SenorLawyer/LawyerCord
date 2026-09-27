@@ -28,6 +28,24 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("RPCEditor template variables preserve literal activity text", () => {
+    const { default: plugin } = loadSource("src/equicordplugins/rpcEditor/index.tsx", {
+        "@api/index": {}, "@api/Settings": { definePluginSettings: () => ({}) },
+        "@utils/constants": { Devs: {} }, "@utils/react": {},
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@vencord/discord-types/enums": { ActivityType: { PLAYING: 0 } },
+        "@webpack/common": {}, "./ReplaceSettings": {}
+    });
+    const literal = "$& $$ $` $'";
+    const activity = { name: literal, details: literal, state: literal, assets: { large_image: literal, large_text: literal, small_image: literal, small_text: literal } };
+    for (const field of ["name", "details", "state", "large_image", "large_text", "small_image", "small_text"]) {
+        assert.equal(plugin.parseField(`before :${field}: after`, activity), `before ${literal} after`);
+    }
+    assert.equal(plugin.parseField("null", activity), "");
+    assert.equal(plugin.parseField(":details:/:large_text:", { name: "name" }), "/");
+    assert.equal(plugin.parseField(":name:/:name:", { name: "name" }), "name/name");
+});
+
 test("unread thread badges render without voice or mention counters", () => {
     const { default: plugin } = loadSource("src/equicordplugins/unreadBadgeCount/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({}) },

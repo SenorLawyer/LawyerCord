@@ -93,13 +93,13 @@ export default definePlugin({
     parseField(text: string, originalActivity: Activity): string {
         if (text === "null") return "";
         return text
-            .replaceAll(":name:", originalActivity.name)
-            .replaceAll(":details:", originalActivity.details ?? "")
-            .replaceAll(":state:", originalActivity.state ?? "")
-            .replaceAll(":large_image:", originalActivity.assets?.large_image ?? "")
-            .replaceAll(":large_text:", originalActivity.assets?.large_text ?? "")
-            .replaceAll(":small_image:", originalActivity.assets?.small_image ?? "")
-            .replaceAll(":small_text:", originalActivity.assets?.small_text ?? "");
+            .replaceAll(":name:", () => originalActivity.name)
+            .replaceAll(":details:", () => originalActivity.details ?? "")
+            .replaceAll(":state:", () => originalActivity.state ?? "")
+            .replaceAll(":large_image:", () => originalActivity.assets?.large_image ?? "")
+            .replaceAll(":large_text:", () => originalActivity.assets?.large_text ?? "")
+            .replaceAll(":small_image:", () => originalActivity.assets?.small_image ?? "")
+            .replaceAll(":small_text:", () => originalActivity.assets?.small_text ?? "");
     },
     patchActivity(activity: Activity) {
         if (!activity) return;

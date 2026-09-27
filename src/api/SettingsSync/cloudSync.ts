@@ -12,7 +12,7 @@ import { localStorage } from "@utils/localStorage";
 import { Logger } from "@utils/Logger";
 import { isObject } from "@utils/misc";
 import { relaunch } from "@utils/native";
-import { SettingsRouter, UserStore } from "@webpack/common";
+import { lodash, SettingsRouter, UserStore } from "@webpack/common";
 import { deflateSync } from "fflate";
 
 import { deauthorizeCloud, getCloudAuth, getCloudUrl } from "./cloudSetup";
@@ -66,6 +66,18 @@ async function getCloudSyncContext(checkLocalEdits = false) {
                 throw new Error("Local settings changed during sync. Try again to include your latest changes.");
         }
     };
+}
+
+async function checkLocalData(context: Awaited<ReturnType<typeof getCloudSyncContext>>, syncDataStore = true) {
+    context.assertCurrent();
+    const { expected } = context;
+    if (!expected) return;
+    const current = await captureCloudImportState(syncDataStore);
+    context.assertCurrent();
+    if (current.quickCss !== expected.quickCss || (syncDataStore && !lodash.isEqual(current.dataStore, expected.dataStore))) {
+        markLocalSettingsDirty();
+        throw new Error("Local data changed during sync. Try again to include your latest changes.");
+    }
 }
 
 async function setApiVersion(version: ApiVersion, origin: string) {
@@ -256,6 +268,7 @@ async function putV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>, m
     }
 
     if (uploads.length === 0 && !manual) {
+        await checkLocalData(context);
         logger.info("No changes to push");
         delete localStorage.Vencord_settingsDirty;
         return;
@@ -265,6 +278,7 @@ async function putV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>, m
     context.assertCurrent();
     if (!response) return;
 
+    await checkLocalData(context);
     const receiveDownloads = getCloudSyncDirection() !== "push";
     const hadDownloads = receiveDownloads && await applyDownloads(response.downloads, context);
     context.assertCurrent();
@@ -274,6 +288,7 @@ async function putV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>, m
     if (receiveDownloads) await saveLocalManifest(context, response.server_manifest);
     context.assertCurrent();
 
+    await checkLocalData(context);
     logger.info(`Sync complete: ${response.uploaded.length} uploaded, ${response.downloads.length} downloaded`);
 
     if (manual) {
@@ -310,6 +325,7 @@ async function getV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>, s
         return false;
     }
 
+    await checkLocalData(context);
     const settingsChanged = await applyDownloads(response.downloads, context);
     context.assertCurrent();
 
@@ -318,6 +334,7 @@ async function getV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>, s
     await saveLocalManifest(context, response.server_manifest);
     context.assertCurrent();
 
+    await checkLocalData(context);
     logger.info(`Pulled ${response.downloads.length} keys from cloud`);
 
     if (shouldNotify)
@@ -419,9 +436,11 @@ async function putV1(context: Awaited<ReturnType<typeof getCloudSyncContext>>, m
     context.assertCurrent();
     if (!isObject(response) || !("written" in response) || !isSyncVersion(response.written))
         throw new Error("The cloud server returned an invalid sync timestamp.");
+    await checkLocalData(context, false);
     await saveSyncVersion(context, response.written);
     context.assertCurrent();
 
+    await checkLocalData(context, false);
     logger.info("Settings uploaded to cloud successfully");
 
     if (manual) {
@@ -516,12 +535,14 @@ async function getV1(context: Awaited<ReturnType<typeof getCloudSyncContext>>, s
     const expanded = compressed.pipeThrough(new DecompressionStream("deflate-raw"));
     const settings = await readResponseText(new Response(expanded), MAX_SYNC_RESPONSE_BYTES);
     context.assertCurrent();
+    await checkLocalData(context);
     await importSettings(settings, "all", true, context.assertCurrent, context.expected);
     context.assertCurrent();
 
     await saveSyncVersion(context, written);
     context.assertCurrent();
 
+    await checkLocalData(context);
     logger.info("Settings loaded from cloud successfully");
     if (shouldNotify)
         showNotification({

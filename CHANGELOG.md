@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep CSS and stored-data changes made during cloud sync dirty instead of reporting an older upload as current.
+
 - Retain accepted cloud upload versions after concurrent settings edits or partial server failures so retries use the correct checkpoint.
 
 - Preserve local data during upload-only cloud sync and keep skipped remote changes available for an explicit download.

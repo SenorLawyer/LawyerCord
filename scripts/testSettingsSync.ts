@@ -11,10 +11,13 @@ import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
+import { isDeepStrictEqual } from "node:util";
 import { runInNewContext } from "node:vm";
 import { createSourceFile, isCallExpression, isFunctionDeclaration, isPropertyAccessExpression, isVariableStatement, JsxEmit, ModuleKind, type Node, ScriptTarget, transpileModule } from "typescript";
 
 import { readResponseText } from "../src/shared/readResponseText";
+
+const lodash = { isEqual: (a: unknown, b: unknown) => isDeepStrictEqual(structuredClone(a), structuredClone(b)) };
 
 const jsonResponseReader = {
     readResponseText: async (response: Response | { json(): Promise<unknown>; }, maxBytes: number) =>
@@ -693,7 +696,7 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
         "@utils/native": {},
         "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
         "@utils/web": {},
-        "@webpack/common": {},
+        "@webpack/common": { lodash,},
         fflate: {},
         "./cloudSetup": {},
         "..": { DataStore: { setMany: async (entries: unknown) => writes.push(entries) } }
@@ -773,7 +776,7 @@ test("cloud checkpoints preserve persisted fields and reject intervening setting
             "@utils/localStorage": { localStorage: storage },
             "@utils/Logger": { Logger: class { info() {} error() {} } },
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
-            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: "first" }) } },
             "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" },
             fflate: { deflateSync: (value: Uint8Array) => value }
         };
@@ -840,7 +843,7 @@ test("cloud JSON failures do not copy response contents into logs or notificatio
             "@utils/localStorage": { localStorage: storage },
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
             "@utils/Logger": { Logger: class { info() {} error(...args: unknown[]) { logs.push(args.map(String).join(" ")); } } },
-            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: "first" }) } },
             "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" },
             "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), exportSettings: async () => "{}", omitCloudSettings: () => ({}), serializeDataStore: JSON.stringify, isLocalDataStoreKey: () => false, importSettings: async () => writes.push("import") },
             fflate: { deflateSync: (value: Uint8Array) => value }
@@ -888,7 +891,7 @@ test("cloud JSON responses stop oversized streams before writes and allow retry"
             "@utils/localStorage": { localStorage: storage },
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
             "@utils/Logger": { Logger: class { info() {} error() {} } },
-            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: "first" }) } },
             "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" },
             "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), exportSettings: async () => "{}", omitCloudSettings: () => ({}), serializeDataStore: JSON.stringify },
             fflate: { deflateSync: (value: Uint8Array) => value }
@@ -961,7 +964,7 @@ test("legacy downloads bound compressed and expanded bytes before importing", as
             "@api/Notifications": { showNotification: (value: { color?: string }) => notifications.push(value) },
             "@utils/localStorage": { localStorage: storage },
             "@utils/Logger": { Logger: class { info() {} error() {} } },
-            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: "first" }) } },
             "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" },
             "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), importSettings: async (value: string) => { JSON.parse(value); imports.push(value); } },
         };
@@ -1065,7 +1068,7 @@ test("legacy cloud sync waits for local settings persistence before reporting su
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
             "@utils/Logger": { Logger: class { info() {} error() {} } },
             "@utils/native": {},
-            "@webpack/common": {},
+            "@webpack/common": { lodash,},
             fflate: { deflateSync: (value: Uint8Array) => value },
             "./cloudSetup": { getCloudUrl: () => new URL("https://sync.invalid"), getCloudAuth: async () => "test" },
             "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), exportSettings: async (options: { cloud?: boolean }) => { assert.equal(options.cloud, true); return "{}"; }, importSettings: async () => {} }
@@ -1115,7 +1118,7 @@ test("legacy sync rejects invalid timestamps without treating local edit times a
             "@utils/localStorage": { localStorage: storage },
             "@utils/Logger": { Logger: class { info() {} error() {} } },
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
-            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: "first" }) } },
             "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" },
             "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), exportSettings: async () => "{}", importSettings: async () => imports++ },
             fflate: { deflateSync: (value: Uint8Array) => value }
@@ -1386,7 +1389,7 @@ test("failed cloud downloads and deletions do not advance the manifest or report
         "@api/Settings": { PlainSettings: { cloud: {} } },
         "@utils/localStorage": { localStorage: {} },
         "@utils/Logger": { Logger: class { info() { } error() { } } },
-        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+        "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: "first" }) } },
         "./cloudSetup": { getCloudUrl: () => new URL("https://cloud.example"), getCloudAuth: async () => "test" },
         "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), omitCloudSettings: (settings: object) => settings, serializeDataStore: JSON.stringify, importSettings: async () => { if (importFails) throw new Error("Import failed"); } }
     };
@@ -1462,12 +1465,13 @@ test("cloud uploads and downloads discard obsolete responses and stop subsequent
                 }
             };
             const bundle = { settings: { plugins: { Sound: { enabled: false } } }, quickCss: "", dataStore: [["plugin", 1]] };
+            let records: [unknown, unknown][] = [];
             const store = {
                 get: async (key: string) => { if (key === "Vencord_cloudApiVersions") { await pause("version"); return { "https://first.invalid": version }; } },
-                entries: async () => [],
+                entries: async () => structuredClone(records),
                 set: async () => pause("manifest-save"),
                 setMany: async () => pause("datastore"),
-                updateMany: async (entries: [unknown, (value: unknown) => unknown][]) => { entries.forEach(([, update]) => update(undefined)); await pause("datastore"); }
+                updateMany: async (entries: [unknown, (value: unknown) => unknown][]) => { records = entries.map(([key, update]) => [key, update(undefined)]); await pause("datastore"); }
             };
             const modules: Record<string, unknown> = {
                 "@shared/readResponseText": jsonResponseReader,
@@ -1478,7 +1482,7 @@ test("cloud uploads and downloads discard obsolete responses and stop subsequent
                 "@utils/localStorage": { localStorage: storage },
                 "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
                 "@utils/Logger": { Logger: class { info() {} error() {} } },
-                "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
+                "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: userId }) } },
                 fflate: { deflateSync: (value: Uint8Array) => value },
                 "./cloudSetup": { getCloudUrl: () => new URL(service), getCloudAuth: async () => { await pause("auth"); return "synthetic"; } }
             };
@@ -1545,7 +1549,7 @@ test("cloud sync preserves edits made while responses or local saves are pending
             "@utils/localStorage": { localStorage: storage },
             "@utils/Logger": { Logger: class { info() {} error() {} } },
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
-            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: "first" }) } },
             "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" },
             fflate: { deflateSync: (value: Uint8Array) => value }
         };
@@ -1608,7 +1612,7 @@ test("cloud operations cannot overlap and a completed or failed operation releas
             "@utils/localStorage": { localStorage: {} },
             "@utils/Logger": { Logger: class { info() {} error() {} } },
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
-            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: "first" }) } },
             "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic", deauthorizeCloud: async () => {} },
             "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), omitCloudSettings: (value: object) => value, serializeDataStore: JSON.stringify }
         };
@@ -1665,7 +1669,7 @@ test("cloud request timeouts cover response bodies and release the operation for
             "@utils/localStorage": { localStorage: {} },
             "@utils/Logger": { Logger: class { info() {} error() {} } },
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
-            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: "first" }) } },
             "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic", deauthorizeCloud: async () => {} },
             "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), omitCloudSettings: (value: object) => value, serializeDataStore: JSON.stringify, exportSettings: async () => "{}", importSettings: async () => writes++ },
             fflate: { deflateSync: (value: Uint8Array) => value }
@@ -1726,7 +1730,7 @@ test("obsolete cloud failures cannot deauthorize another account or start fallba
             "@api/Notifications": { showNotification: () => notifications++ },
             "@api/Settings": { PlainSettings: plain, Settings: plain },
             "@utils/Logger": { Logger: class { info() {} error() {} } },
-            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: "first" }) } },
             "./cloudSetup": { getCloudUrl: () => new URL(service), getCloudAuth: async () => "synthetic" },
             "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }) }
         };
@@ -1770,7 +1774,7 @@ test("invalid cloud response envelopes fail before local writes or manifest ackn
             "@utils/localStorage": { localStorage: storage },
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
             "@utils/Logger": { Logger: class { info() {} error() {} } },
-            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: "first" }) } },
             "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" },
             "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), importSettings: async () => writes.push("import") }
         };
@@ -1804,7 +1808,7 @@ test("cloud manifests belong to one account and service without claiming the own
         "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
         "@utils/localStorage": { localStorage: {} },
         "@utils/Logger": { Logger: class { info() {} error() {} } },
-        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
+        "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: userId }) } },
         "./cloudSetup": { getCloudUrl: () => new URL(service), getCloudAuth: async () => "synthetic" },
         "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), importSettings: async () => {} }
     };
@@ -1866,7 +1870,7 @@ test("cloud deletion stops when its account or service changes", async () => {
                 "@api/Settings": { PlainSettings: plain, Settings: plain },
                 "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
                 "@utils/Logger": { Logger: class { info() {} error() {} } },
-                "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
+                "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: userId }) } },
                 "./cloudSetup": { getCloudUrl: () => new URL(service), getCloudAuth: async () => { await pause("auth"); return "synthetic"; } }
             };
             const { deleteCloudSettings } = runInNewContext(`${compiled}\nexports;`, {
@@ -1901,7 +1905,7 @@ test("cloud deletion validates the complete manifest before deleting any entries
             "@api/Notifications": { showNotification: () => notifications++ },
             "@utils/Logger": { Logger: class { info() {} error() {} } },
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
-            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: "first" }) } },
             "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" }
         };
         const { deleteCloudSettings } = runInNewContext(`${compiled}\nexports;`, {
@@ -1935,7 +1939,7 @@ test("cloud deletion sends one request at a time and stops after failure or owne
             "@api/Notifications": { showNotification: (value: { color?: string }) => notifications.push(value) },
             "@utils/Logger": { Logger: class { info() {} error() {} } },
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
-            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
+            "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: userId }) } },
             "./cloudSetup": { getCloudUrl: () => new URL(service), getCloudAuth: async () => "synthetic" },
             "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }) }
         };
@@ -2014,7 +2018,7 @@ test("cloud erasure stops after account or service changes without affecting the
             "@api/Settings": { Settings: settings },
             "@api/Notifications": { showNotification: () => events.push("notification") },
             "@utils/Logger": { Logger: class { info() {} error() {} } },
-            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
+            "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: userId }) } },
             "./cloudSetup": {
                 getCloudUrl: () => new URL(service),
                 getCloudAuth: async () => { await pause("auth"); return "synthetic"; },
@@ -2151,7 +2155,7 @@ test("upload-only cloud sync preserves local data and leaves skipped downloads a
             "@utils/localStorage": { localStorage: storage },
             "@utils/Logger": { Logger: class { info() {} error(...args: unknown[]) { assert.fail(args.map(String).join(" ")); } } },
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
-            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: "first" }) } },
             "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" }
         };
         const globals = {
@@ -2207,7 +2211,7 @@ test("cloud uploads retain acknowledged versions after local edits or partial se
             "@utils/localStorage": { localStorage: { setItem() {} } },
             "@utils/Logger": { Logger: class {} },
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
-            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
+            "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: userId }) } },
             "./offline": { captureCloudImportState: async () => undefined },
             "./cloudSetup": { getCloudUrl: () => new URL(origin), getCloudAuth: async () => "synthetic" }
         };
@@ -2236,4 +2240,84 @@ test("cloud uploads retain acknowledged versions after local edits or partial se
         assert.equal(manifest.find(entry => entry.key === "settings")?.version, writes ? 2 : 1);
         assert.equal(manifest.find(entry => entry.key === "quickCss")?.version, 1);
     }
+});
+
+
+test("cloud completion preserves CSS and stored edits during responses and checkpoints", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const version of ["v1", "v2"]) for (const operation of ["putCloudSettings", "getCloudSettings"])
+        for (const section of ["css", "data"]) for (const stage of ["none", "response", "checkpoint"]) {
+            const plain = { cloud: { settingsSyncVersion: 1 }, plugins: { Sound: { value: "original" } } };
+            let persisted = structuredClone(plain);
+            let css = "original CSS";
+            let records: [string, unknown][] = [["plugin", "original data"]];
+            if (operation === "getCloudSettings") records.push(["cache", new Uint8Array([1, 2]).buffer]);
+            const storage = { Vencord_settingsDirty: "true", setItem(key: string, value: string) { Reflect.set(this, key, value); } };
+            const notifications: { color?: string }[] = [];
+            const edit = () => {
+                if (section === "css") css = "newer CSS";
+                else records[0] = ["plugin", "newer data"];
+            };
+            const store = {
+                get: async (key: string) => key === "Vencord_cloudApiVersions" ? { "https://first.invalid": version } : undefined,
+                entries: async () => structuredClone(records), set: async () => {},
+                updateMany: async (entries: [string, (value: unknown) => unknown][]) => {
+                    const next = new Map(records);
+                    for (const [key, update] of entries) next.set(key, update(next.get(key)));
+                    records = [...next];
+                }
+            };
+            const modules: Record<string, unknown> = {
+                "@shared/readResponseText": jsonResponseReader,
+                "@api/DataStore": store, "..": { DataStore: store },
+                "@api/Settings": { PlainSettings: plain, Settings: plain, DefaultSettings: defaultSettings },
+                "@api/Notifications": { showNotification: (value: { color?: string }) => notifications.push(value) },
+                "@utils/localStorage": { localStorage: storage },
+                "@utils/Logger": { Logger: class { info() {} error() {} } },
+                "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+                "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+                "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" },
+                fflate: { deflateSync: (value: Uint8Array) => value }
+            };
+            const bundle = { quickCss: "remote CSS", dataStore: [["plugin", "remote data"], ["added", 1]] };
+            const globals = {
+                require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextEncoder, TextDecoder, TransformStream, DecompressionStream, Response, atob, btoa, crypto, structuredClone, IS_WEB: true,
+                VencordNative: {
+                    settings: {
+                        get: () => structuredClone(persisted),
+                        set: async (next: typeof persisted, _path: string | undefined, expected: string) => {
+                            assert.equal(JSON.stringify(persisted), expected);
+                            persisted = structuredClone(next);
+                            if (stage === "checkpoint") edit();
+                        }
+                    },
+                    quickCss: { get: async () => css, set: async (next: string, expected: string) => { assert.equal(css, expected); css = next; } }
+                },
+                fetch: async () => {
+                    if (stage === "response") edit();
+                    return { ok: true, status: 200, headers: { get: () => "2" },
+                        body: compressedBody(async () => JSON.stringify(bundle)),
+                        json: async () => ({ written: 2, errors: [], uploaded: [], server_manifest: [],
+                            downloads: operation === "putCloudSettings" ? [] : Object.entries(bundle).map(([key, value]) => ({
+                                key, version: 2, checksum: "synthetic", value: btoa(key === "quickCss" ? String(value) : JSON.stringify(value))
+                            })) }) };
+                }
+            };
+            modules["./offline"] = runInNewContext(`${outputText}\nexports;`, { ...globals, exports: {} });
+            const api = runInNewContext(`${compiled}\nexports;`, { ...globals, exports: {} });
+            await api[operation](true);
+            const edited = stage !== "none";
+            const syncsSection = !(version === "v1" && operation === "putCloudSettings" && section === "data");
+            assert.equal(storage.Vencord_settingsDirty, edited && syncsSection ? "true" : undefined, `${version}/${operation}/${section}/${stage}`);
+            assert.equal(notifications.some(value => value.color === "var(--red-360)"), edited && syncsSection);
+            if (edited) assert.equal(section === "css" ? css : records[0][1], section === "css" ? "newer CSS" : "newer data");
+            else if (operation === "getCloudSettings") {
+                assert.equal(css, "remote CSS");
+                assert.equal(records.find(([key]) => key === "plugin")?.[1], "remote data");
+                assert.equal(records.find(([key]) => key === "added")?.[1], 1);
+                assert.deepEqual(records.find(([key]) => key === "cache")?.[1], new Uint8Array([1, 2]).buffer);
+            }
+        }
 });

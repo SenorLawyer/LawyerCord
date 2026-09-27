@@ -85,10 +85,10 @@ function validateSettingTypes(settings: object, defaults: object) {
     }
 }
 
-export async function captureCloudImportState() {
+export async function captureCloudImportState(syncDataStore = true) {
     const settings = JSON.stringify(VencordNative.settings.get());
     const quickCss = await VencordNative.quickCss.get();
-    const entries = await DataStore.entries<IDBValidKey, unknown>();
+    const entries = syncDataStore ? await DataStore.entries<IDBValidKey, unknown>() : [];
     return {
         settings,
         quickCss,
@@ -152,7 +152,10 @@ export async function importSettings(data: string, type: BackupType = "all", clo
             if (expected) expected.settings = JSON.stringify(next);
         }
         checkCurrent?.();
-        if (quickCss !== undefined) await VencordNative.quickCss.set(quickCss, expected?.quickCss);
+        if (quickCss !== undefined) {
+            await VencordNative.quickCss.set(quickCss, expected?.quickCss);
+            if (expected) expected.quickCss = quickCss;
+        }
         checkCurrent?.();
         if (dataStore) {
             if (expected) {
@@ -165,6 +168,7 @@ export async function importSettings(data: string, type: BackupType = "all", clo
                         throw new Error("Stored data changed during sync. Try again to include your latest changes.");
                     return value;
                 }]));
+                for (const [key, value] of entries.values()) expected.dataStore.set(JSON.stringify(key), value);
             } else {
                 await DataStore.setMany(dataStore);
             }

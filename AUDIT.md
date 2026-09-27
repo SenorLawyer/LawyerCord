@@ -8,6 +8,14 @@ Earlier broad verification checkpoint `080e17609`: all 654 broader tests and tim
 
 A fresh September 28 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,656 files, fifteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-patches-complete.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
 
+## BlurNSFW image-selector consumer inventory
+
+The captured client contains sixteen distinct CSS modules exporting an imageContainer class. A full chunk scan now records their direct importing modules and each use of the actual exported class. This extends the earlier two-renderer investigation. The ordinary attachment path is 959760 through 85935; embedded artwork uses 978253 through 623671. System-message module 352043 also uses separate imageContainer classes for a boost illustration and a poll-result emoji. Other consumers include confirmation dialogs, image editing, configurable content, channel artwork and boost screens.
+
+This rejects both a single first-match CSS lookup and an unqualified descendant img selector as equivalent replacements. The first drops existing class coverage; the second includes image elements outside the existing containers. Whether each consumer can appear beneath the patched message wrapper still requires ancestor/render-path tracing. No production selector change is made on the strength of a class-name match alone.
+
+Evidence is `.git/audit/blur-all-consumers.{cjs,json}` and `blur-consumer-sites.{cjs,json}`, with complete consumers saved in the captured-client directory. The scanner initially retained a global regular expression's lastIndex between the file prefilter and module scans, yielding empty consumer lists; resetting it per module corrected the inventory. These are scratch audit tools, not shipped dependencies or runtime machinery. Existing paused-video state selection and composed-class constraints remain recorded in `blur-style-disposition.json`.
+
 ## Picture in Picture stalled metadata cleanup
 
 The final pending video clone previously had no deadline if its metadata request stalled. Its existing failure cleanup now runs after 30 seconds, removes the source, resets loading and releases the hidden clone while leaving the original video playing. Success, failure and replacement clear the timer. An obsolete metadata callback cannot launch the cancelled clone. No retry mechanism or change to an already playing PiP video was added.

@@ -40,6 +40,10 @@ export function isLocalDataStoreKey(key: unknown) {
     if (LOCAL_DATASTORE_KEYS.has(key)) return true;
     if (typeof key !== "string") return false;
     if (key.startsWith("Vencord_cloudManifest:") || key.startsWith("VoiceMessageTranscriber_") || key.startsWith("relationship-notifier-")) return true;
+    if (key.startsWith("BetterSessions_savedSessions_")) {
+        const userId = UserStore.getCurrentUser()?.id;
+        return !userId || key !== `BetterSessions_savedSessions_${userId}`;
+    }
     if (!/^(?:VoiceStats_totals|ProfileDataset|ProfilePresets_v2_Main|ProfilePresets_v2_Server)(?::|$)/.test(key)) return false;
     const userId = UserStore.getCurrentUser()?.id;
     return !userId || ![

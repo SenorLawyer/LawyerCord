@@ -681,13 +681,13 @@ test("backups reject DataStore values that JSON would silently discard or change
 test("cloud data round trips the aggregate DataStore record and empty CSS", async () => {
     const nativeSettings = { plugins: {}, cloud: { url: "https://local.invalid", authenticated: true, settingsSyncVersion: 1 } };
     let currentUserId: string | undefined = "first";
-    const accountKeys = (id: string) => [`VoiceStats_totals:${id}`, `VoiceStats_totals:recovered:${id}`, `ProfileDataset:${id}:main`, `ProfilePresets_v2_Main:${id}`, `ProfilePresets_v2_Server:${id}`];
+    const accountKeys = (id: string) => [`VoiceStats_totals:${id}`, `VoiceStats_totals:recovered:${id}`, `ProfileDataset:${id}:main`, `ProfilePresets_v2_Main:${id}`, `ProfilePresets_v2_Server:${id}`, `BetterSessions_savedSessions_${id}`];
     const records: [string, unknown][] = [["CustomSounds", { saved: true }], ["VoiceStats", { seconds: 42 }], ...accountKeys("first").map(key => [key, { owned: true }] as [string, unknown])];
     const syncedRecords = records.slice();
     const localKeys = [
         "Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions", "Vencord_cloudManifest:https://first.invalid:first", "Vencord_cloudManifest:https://second.invalid:second",
         "ThemeLibrary_uniqueToken", "decor-auth", "songspotlight-auth", "vc-streaks-auth", "rdb-auth",
-        "VoiceStats_totals", "ProfileDataset", "ProfilePresets_v2_Main", "ProfilePresets_v2_Server", ...accountKeys("second"),
+        "VoiceStats_totals", "ProfileDataset", "ProfilePresets_v2_Main", "ProfilePresets_v2_Server", "BetterSessions_savedSessions_undefined", ...accountKeys("second"),
         "ScheduledMessages_queue", "VCLastVoiceChannel", "VCLastVoiceChannelSession", "KeepCurrentChannel_previousData", "VoiceMessageTranscriber_https://fixture.invalid/model.bin"
     ];
     for (const key of localKeys) records.push([key, { local: true }]);

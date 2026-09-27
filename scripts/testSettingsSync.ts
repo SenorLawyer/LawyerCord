@@ -2663,3 +2663,86 @@ test("cloud sync preserves device-local RelationshipNotifier observations", asyn
     assert.deepEqual([...records], observed, "Cloud imports must not replace this device's offline-change baseline");
     await assert.rejects(offline.exportSettings({ type: "datastore" }), /JSON backup format cannot preserve/, "Offline JSON backups must not silently drop Map contents");
 });
+
+
+test("versioned DataStore backups preserve top-level Maps across offline and cloud imports", async () => {
+    let userId = "first";
+    const firstKey = "BetterSessions_savedSessions_first";
+    const secondKey = "BetterSessions_savedSessions_second";
+    const names = new Map([["session", { name: "Work laptop", isNew: false }], ["other", { name: "", isNew: true }]]);
+    const source = new Map<string, unknown>([["ordinary", { enabled: true }], [firstKey, names], [secondKey, new Map([["private", { name: "Other account", isNew: false }]])], ["emptyMap", new Map()]]);
+    let records = structuredClone(source);
+    let writes = 0;
+    const store = {
+        entries: async () => structuredClone([...records]),
+        get: async (key: string) => structuredClone(records.get(key)),
+        setMany: async (entries: [string, unknown][]) => { writes++; for (const [key, value] of entries) records.set(key, structuredClone(value)); },
+        updateMany: async (entries: [string, (current: unknown) => unknown][]) => {
+            const next = new Map(records);
+            for (const [key, update] of entries) next.set(key, structuredClone(update(records.get(key))));
+            writes++;
+            records = next;
+        }
+    };
+    const modules: Record<string, unknown> = {
+        "..": { DataStore: store }, "@api/DataStore": store,
+        "@api/Settings": { PlainSettings: {}, DefaultSettings: defaultSettings },
+        "@utils/Logger": { Logger: class {} },
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } }
+    };
+    const globals = { exports: {}, require: (name: string) => modules[name] ?? {}, structuredClone, TextEncoder, TextDecoder, atob,
+        VencordNative: { settings: { get: () => ({}), set: async () => { writes++; } }, quickCss: { get: async () => "", set: async () => { writes++; } } }
+    };
+    const offline = runInNewContext(`${outputText}\nexports;`, globals);
+    modules["./offline"] = offline;
+    const cloudSource = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;
+    const cloud = runInNewContext(`${cloudSource}\n({ buildLocalData, apply: (downloads, expected) => applyDownloads(downloads, { assertCurrent() {}, expected }) });`, { ...globals, exports: {} });
+    const utilsSource = transpileModule(readFileSync("src/plugins/betterSessions/utils.ts", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;
+    const utils = runInNewContext(`${utilsSource}\nexports;`, { ...globals, exports: {} });
+    const offlineBackup = await offline.exportSettings({ type: "datastore" });
+    const cloudBackup = await offline.exportSettings({ type: "datastore", cloud: true });
+    assert.equal(JSON.parse(offlineBackup).dataStore.version, 1);
+    assert.deepEqual(JSON.parse(cloudBackup).dataStore.entries.map(([key]: [string, unknown]) => key), ["ordinary", firstKey, "emptyMap"]);
+    assert.deepEqual(records, source, "Encoding must not mutate stored Maps");
+    const aggregate = new TextDecoder().decode((await cloud.buildLocalData()).get("dataStore"));
+    assert.deepEqual(JSON.parse(aggregate), JSON.parse(cloudBackup).dataStore);
+    for (const format of ["offline", "legacy", "v2"]) for (const snapshot of format === "offline" ? [false] : [false, true]) {
+        records = new Map([[secondKey, source.get(secondKey)]]);
+        const expected = snapshot ? await offline.captureCloudImportState() : undefined;
+        if (format === "v2") await cloud.apply([{ key: "dataStore", value: Buffer.from(aggregate).toString("base64") }, { key: "dataStore/extra", value: Buffer.from("true").toString("base64") }], expected);
+        else await offline.importSettings(format === "offline" ? offlineBackup : cloudBackup, "datastore", format !== "offline", undefined, expected);
+        assert.deepEqual(records.get(firstKey), names);
+        assert.deepEqual(records.get(secondKey), source.get(secondKey));
+        assert.deepEqual(records.get("emptyMap"), new Map());
+        await utils.fetchNamesFromDataStore();
+        assert.equal(utils.savedSessionsCache.get("session").name, "Work laptop");
+        if (expected) assert.deepEqual(structuredClone(expected.dataStore.get(JSON.stringify(firstKey))), names);
+    }
+    const before = await offline.captureCloudImportState();
+    records.set(firstKey, new Map([["session", { name: "Newer", isNew: false }]]));
+    await assert.rejects(offline.importSettings(cloudBackup, "datastore", true, undefined, before), /did not finish/);
+    assert.equal((records.get(firstKey) as Map<string, { name: string }>).get("session")?.name, "Newer");
+    for (const malformed of [
+        { version: 2, entries: [], maps: [] }, { version: 1, entries: [], maps: [0] },
+        { version: 1, entries: [["x", []]], maps: [-1] }, { version: 1, entries: [["x", []]], maps: [0, 0] },
+        { version: 1, entries: [["x", {}]], maps: [0] }, { version: 1, entries: [["x", [["a"]]]], maps: [0] },
+        { version: 1, entries: [["x", [["a", 1], ["a", 2]]]], maps: [0] }
+    ]) {
+        const count = writes;
+        await assert.rejects(offline.importSettings(JSON.stringify({ settings: {}, quickCss: "new", dataStore: malformed })));
+        await assert.rejects(cloud.apply([{ key: "settings", value: Buffer.from("{}").toString("base64") }, { key: "dataStore", value: Buffer.from(JSON.stringify(malformed)).toString("base64") }]));
+        assert.equal(writes, count, "Malformed metadata must fail before any section is written");
+    }
+    for (const cloudMode of [false, true]) {
+        const count = writes;
+        await assert.rejects(offline.importSettings(JSON.stringify({ settings: {}, quickCss: "new", dataStore: [[firstKey, {}]] }), "all", cloudMode), /backup cannot restore BetterSessions names/);
+        assert.equal(writes, count);
+        assert.equal((records.get(firstKey) as Map<string, { name: string }>).get("session")?.name, "Newer");
+    }
+    userId = "second";
+    await offline.importSettings(cloudBackup, "datastore", true);
+    assert.equal((records.get(firstKey) as Map<string, { name: string }>).get("session")?.name, "Newer");
+    assert.equal(offline.serializeDataStore([["ordinary", [1, true]]]), '[["ordinary",[1,true]]]');
+});

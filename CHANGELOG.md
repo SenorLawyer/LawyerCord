@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Compatibility
 
+- Backups containing top-level DataStore Maps now use a versioned format requiring LawyerCord 3.0.0.0 or later. Existing IndexedDB records and backups without Maps keep their format. Older clients cannot restore these Map backups; the previous nightly may apply settings and CSS before rejecting their DataStore section. Keep an older compatible backup if downgrading.
+
 - VoiceStats keeps new totals separately for each Discord account. Recover Old Voice Statistics adds ownerless old totals to the chosen account once and retains the original record. Older versions continue using the old record and do not read new account totals.
 
 - ProfileSets no longer assigns ownerless legacy profiles automatically. Use Recover Old Profiles in the main profile panel to import them explicitly; the original records remain saved.
@@ -29,6 +31,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Remove TriviaAI, which required a user-supplied API key and arbitrary AI endpoint. Its Answer With AI actions are no longer available.
 
 ### Fixed
+
+- Preserve top-level DataStore Maps, including BetterSessions names, through offline and cloud backups. Reject malformed Map metadata before importing any section, and reject older empty-object session records instead of overwriting current names.
 
 - Restrict BetterSessions cloud transfers to the signed-in account and preserve other accounts’ stored session records.
 

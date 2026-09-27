@@ -192,11 +192,12 @@ export async function importSettings(data: string, type: BackupType = "all", clo
     if (type === "all" || type === "datastore") {
         const value = "dataStore" in parsed ? parsed.dataStore : undefined;
         if (value !== undefined || type === "datastore") {
-            if (!Array.isArray(value) || !value.every((entry: unknown): entry is [IDBValidKey, unknown] =>
-                Array.isArray(entry) && entry.length === 2 && isDataStoreKey(entry[0]))) {
-                throw new Error("DataStore must contain valid key and value pairs.");
+            const entries = deserializeDataStore(value);
+            dataStore = cloud ? getCloudDataStoreEntries(entries) : entries;
+            if (dataStore.some(([key, value]) => typeof key === "string" && key.startsWith("BetterSessions_savedSessions_")
+                && isObject(value) && Object.prototype.toString.call(value) === "[object Object]" && Object.keys(value).length === 0)) {
+                throw new Error("This backup cannot restore BetterSessions names. Remove that record from the backup to preserve your current names.");
             }
-            dataStore = cloud ? getCloudDataStoreEntries(value) : value;
         }
     }
 
@@ -248,11 +249,11 @@ export async function exportSettings({ syncDataStore = true, type = "all", minif
     const quickCss = type === "all" || type === "css" ? await VencordNative.quickCss.get() : undefined;
     let dataStore = syncDataStore && (type === "all" || type === "datastore") ? await DataStore.entries() : undefined;
     if (cloud && dataStore) dataStore = getCloudDataStoreEntries(dataStore);
-    if (dataStore) serializeDataStore(dataStore);
+    const serializedDataStore: unknown = dataStore ? JSON.parse(serializeDataStore(dataStore)) : undefined;
 
     switch (type) {
         case "all": {
-            return JSON.stringify({ settings, quickCss, ...(dataStore && { dataStore }) }, null, minify ? undefined : 4);
+            return JSON.stringify({ settings, quickCss, ...(dataStore && { dataStore: serializedDataStore }) }, null, minify ? undefined : 4);
         }
         case "plugins": {
             return JSON.stringify({ settings }, null, minify ? undefined : 4);
@@ -261,14 +262,48 @@ export async function exportSettings({ syncDataStore = true, type = "all", minif
             return JSON.stringify({ quickCss }, null, minify ? undefined : 4);
         }
         case "datastore": {
-            return JSON.stringify({ dataStore }, null, minify ? undefined : 4);
+            return JSON.stringify({ dataStore: serializedDataStore }, null, minify ? undefined : 4);
         }
     }
 }
 
+export function deserializeDataStore(value: unknown): [IDBValidKey, unknown][] {
+    let maps: number[] = [];
+    if (isObject(value)) {
+        if (!("version" in value) || value.version !== 1 || !("entries" in value) || !("maps" in value) || !Array.isArray(value.maps)
+            || !value.maps.every((index: unknown): index is number => typeof index === "number" && Number.isSafeInteger(index) && index >= 0)
+            || new Set(value.maps).size !== value.maps.length) {
+            throw new Error("Unsupported or invalid DataStore backup format.");
+        }
+        maps = value.maps;
+        value = value.entries;
+    }
+    if (!Array.isArray(value) || !value.every((entry: unknown): entry is [IDBValidKey, unknown] =>
+        Array.isArray(entry) && entry.length === 2 && isDataStoreKey(entry[0]))) {
+        throw new Error("DataStore must contain valid key and value pairs.");
+    }
+    const entries: [IDBValidKey, unknown][] = value.map(([key, data]) => [key, data]);
+    for (const index of maps) {
+        const entry = entries[index];
+        if (!entry || !Array.isArray(entry[1]) || !entry[1].every((pair: unknown) => Array.isArray(pair) && pair.length === 2)) {
+            throw new Error("DataStore contains an invalid Map.");
+        }
+        const map = new Map(entry[1]);
+        if (map.size !== entry[1].length) throw new Error("DataStore contains duplicate Map keys.");
+        entry[1] = map;
+    }
+    return entries;
+}
+
 export function serializeDataStore(entries: [IDBValidKey, unknown][]): string {
     try {
-        return JSON.stringify(entries, function (this: Record<string, unknown>, key: string) {
+        const maps: number[] = [];
+        const encoded = entries.map(([key, value], index) => {
+            if (Object.prototype.toString.call(value) !== "[object Map]") return [key, value];
+            maps.push(index);
+            return [key, Array.from(Map.prototype.entries.call(value))];
+        });
+        return JSON.stringify(maps.length ? { version: 1, entries: encoded, maps } : encoded, function (this: Record<string, unknown>, key: string) {
             const value = this[key];
             if (value === null || typeof value === "string" || typeof value === "boolean"
                 || (typeof value === "number" && Number.isFinite(value))

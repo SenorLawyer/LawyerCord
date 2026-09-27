@@ -16,7 +16,7 @@ import { lodash, SettingsRouter, UserStore } from "@webpack/common";
 import { deflateSync } from "fflate";
 
 import { deauthorizeCloud, getCloudAuth, getCloudUrl } from "./cloudSetup";
-import { captureCloudImportState, exportSettings, getCloudDataStoreEntries, importSettings, isLocalDataStoreKey, omitCloudSettings, serializeDataStore } from "./offline";
+import { captureCloudImportState, deserializeDataStore, exportSettings, getCloudDataStoreEntries, importSettings, isLocalDataStoreKey, omitCloudSettings, serializeDataStore } from "./offline";
 import { ManifestEntry, SyncRequest, SyncResponse } from "./types";
 
 const logger = new Logger("SettingsSync:Cloud", "#39b7e0");
@@ -146,7 +146,7 @@ async function applyDownloads(downloads: SyncResponse["downloads"], context: Awa
     if (new Set(downloads.map(({ key }) => key)).size !== downloads.length)
         throw new Error("The cloud server returned duplicate download records.");
 
-    const backup: { settings?: unknown; quickCss?: string; dataStore?: unknown[]; } = {};
+    const backup: { settings?: unknown; quickCss?: string; dataStore?: [IDBValidKey, unknown][]; } = {};
     const decoder = new TextDecoder();
 
     for (const dl of downloads) {
@@ -158,8 +158,7 @@ async function applyDownloads(downloads: SyncResponse["downloads"], context: Awa
         } else if (dl.key === "quickCss") {
             backup.quickCss = text;
         } else if (dl.key === "dataStore") {
-            const entries: unknown = JSON.parse(text);
-            if (!Array.isArray(entries)) throw new Error("Cloud DataStore must contain key and value pairs.");
+            const entries = deserializeDataStore(JSON.parse(text));
             backup.dataStore = (backup.dataStore ?? []).concat(entries);
         } else if (dl.key.startsWith("dataStore/")) {
             (backup.dataStore ??= []).push([dl.key.slice("dataStore/".length), JSON.parse(text)]);
@@ -167,7 +166,7 @@ async function applyDownloads(downloads: SyncResponse["downloads"], context: Awa
     }
 
     if (Object.keys(backup).length === 0) return false;
-    await importSettings(JSON.stringify(backup), "all", true, context.assertCurrent, context.expected);
+    await importSettings(JSON.stringify({ ...backup, ...(backup.dataStore && { dataStore: JSON.parse(serializeDataStore(backup.dataStore)) }) }), "all", true, context.assertCurrent, context.expected);
     return true;
 }
 

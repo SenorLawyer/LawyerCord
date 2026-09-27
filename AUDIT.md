@@ -2,11 +2,19 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Latest full local verification: all 695 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the blur amount validation fix. Patch lint last reported zero warnings and no errors at the nameplate checkpoint; this fix changes no patches. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding fd9516286; the amount fix requires its own CI.
+Latest full local verification: all 696 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the native USRBG feed subscription fix. Patch lint reports zero warnings and no errors. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding d40ee5c5e; the feed subscription fix requires its own CI.
 
 Earlier broad verification checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning passed. Patch lint then reported 107 warnings and no errors. Full repository lint logs use `.git/audit/reconciliation-sep27-*`; later focused runs do not replace final combined validation.
 
 A fresh September 28 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,656 files, fifteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-patches-complete.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
+
+## Native USRBG feed subscriptions
+
+The captured profile banner hook, voice tile and themed background stayed unchanged when the feed arrived. Each now subscribes to the existing feed store. The background subscription runs before its null-image return, preserving hook order; the profile helper also subscribes to the Discord-banner preference. Its input now has a specific type and its duplicate presence lookup is removed. Network behavior and feed storage are unchanged.
+
+The fixture executes actual React, captured native Zustand and complete patched modules 686189, 272812 and 72755. Publishing the feed alone now updates the profile source and tile style while removing the overlaid native background style. Changing the preference restores the Discord banner, and stop restores the native background. A simultaneously mounted null-image background remains safe. Every replacement matches once and each complete module compiles. Native image loading, theme dependencies and settings subscriptions are controlled; this proves source/style publication, not signed-in visual loading or native image status transitions.
+
+Evidence is `.git/audit/usrbg-native-feed.cjs` and `usrbg-native-feed-{before,after}.json`. The tracked regression checks subscriptions before missing-user/preference guards and stable setting keys. All 696 broader regressions and timezone checks, TypeScript, plugin ESLint, patch lint, sequential desktop/web builds and artifact scanning pass in `usrbg-native-feed-*` logs. All four preceding d40ee5c5e CI checks passed. This resolves the native feed-publication finding left open by the member-list fix.
 
 ## Completion evidence checkpoint
 

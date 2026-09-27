@@ -60,6 +60,8 @@ const settings = definePluginSettings({
     }
 });
 
+const BANNER_SETTINGS: "nitroFirst"[] = ["nitroFirst"];
+
 export default definePlugin({
     name: "USRBG",
     description: "Displays user banners from USRBG, allowing anyone to get a banner without Nitro",
@@ -89,6 +91,10 @@ export default definePlugin({
             group: true,
             replacement: [
                 {
+                    match: /\i\.useConfig\(\{location:"VideoBackground"\}\)/,
+                    replace: "($self.useData(),$&)"
+                },
+                {
                     match: /(?<=\{style:)(?=\i\?\{)/,
                     replace: "$self.userHasBackground(arguments[0].userId)?null:"
                 },
@@ -102,6 +108,7 @@ export default definePlugin({
 
     get data() { return useUsrbgData.getState().data; },
     set data(data: UsrbgApiReturn | null) { useUsrbgData.setState({ data }); },
+    useData: useUsrbgData,
     request: undefined as AbortController | undefined,
 
     settingsAboutComponent: () => (
@@ -115,6 +122,7 @@ export default definePlugin({
     ),
 
     getVoiceBackgroundStyles({ participantUserId }: { participantUserId?: string; }) {
+        useUsrbgData();
         if (!participantUserId) return;
         const imageUrl = this.getImageUrl(participantUserId);
         if (!imageUrl) return;
@@ -126,9 +134,11 @@ export default definePlugin({
         };
     },
 
-    patchBannerUrl({ displayProfile }: any) {
-        if (displayProfile?.banner && settings.store.nitroFirst) return;
-        if (this.userHasBackground(displayProfile?.userId)) return this.getImageUrl(displayProfile?.userId);
+    patchBannerUrl({ displayProfile }: { displayProfile?: { banner?: string | null; userId: string; } | null; }) {
+        useUsrbgData();
+        const { nitroFirst } = settings.use(BANNER_SETTINGS);
+        if (!displayProfile || displayProfile.banner && nitroFirst) return;
+        return this.getImageUrl(displayProfile.userId) ?? undefined;
     },
 
     userHasBackground(userId: string) {

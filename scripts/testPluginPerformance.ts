@@ -8146,6 +8146,34 @@ test("BannersEverywhere evicts pending image work with its cache entry", async (
     assert.equal(plugin.pngCache.size, 0);
 });
 
+test("USRBG render helpers subscribe before missing-user and preference guards", () => {
+    let feedReads = 0;
+    let keys: unknown;
+    const settings = { nitroFirst: true };
+    const { default: plugin } = loadSource("src/plugins/usrbg/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: settings, use: (nextKeys: string[]) => {
+            if (keys) assert.equal(keys, nextKeys);
+            keys = nextKeys;
+            assert.deepEqual(Array.from(nextKeys), ["nitroFirst"]);
+            return settings;
+        } }) },
+        "@webpack/common": { zustandCreate: () => Object.assign(() => { feedReads++; }, { getState: () => ({ data: null }) }) },
+        "@components/Button": {}, "@utils/constants": { Devs: {} }, "@utils/misc": {},
+        "@utils/css": { classNameFactory: () => () => "" }, "@utils/Logger": { Logger: class {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} }
+    });
+    plugin.getImageUrl = () => "feed.png";
+    assert.equal(plugin.getVoiceBackgroundStyles({}), undefined);
+    assert.equal(plugin.patchBannerUrl({ displayProfile: null }), undefined);
+    const displayProfile = { userId: "user", banner: "native" };
+    assert.equal(plugin.patchBannerUrl({ displayProfile }), undefined);
+    settings.nitroFirst = false;
+    assert.equal(plugin.patchBannerUrl({ displayProfile }), "feed.png");
+    assert.equal(feedReads, 4);
+    plugin.useData();
+    assert.equal(feedReads, 5);
+});
+
 test("USRBG voice backgrounds keep feed URLs inside one quoted image", () => {
     const { default: plugin } = loadSource("src/plugins/usrbg/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({ store: {} }) },

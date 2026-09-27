@@ -44,8 +44,8 @@ export default definePlugin({
                 match: /(children:\(0,\i\.jsx\)\()(.{0,10})({className:\i\(\)\(\i\.\i,\i\.\i)/,
                 replace: "$1arguments[0]?.stickersType?$self.stickerButton:$2$3"
             }, {
-                match: /(\i=)((\i\.useCallback\(\(\)=>\{\(.*?\)\().*?\.STICKER,(\i.{0,25}\]\)))/,
-                replace: '$1arguments[0]?.stickersType?$3"stickers+",$4:$2'
+                match: /(?<=\.useCallback\(\(\)=>\{\(0,\i\.\i\)\()\i\.\i\.STICKER(?=,)/,
+                replace: "arguments[0]?.stickersType||$&"
             }, {
                 match: /(\i)=((\i)===\i\.\i\.STICKER)/,
                 replace: "$1=arguments[0].stickersType?($3===arguments[0].stickersType):($2)"

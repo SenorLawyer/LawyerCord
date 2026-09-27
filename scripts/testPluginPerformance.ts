@@ -28,6 +28,37 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("extra sticker buttons change only their picker callback argument", () => {
+    const { default: plugin } = loadSource("src/equicordplugins/moreStickers/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({}) },
+        "@utils/constants": { Devs: {}, EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@utils/react": {}, "@webpack/common": {}, "./components": {}, "./stickers": {}, "./utils": {}
+    });
+    const { canonicalizeMatch } = loadSource("src/utils/patches.ts", { "./intlHash": {} });
+    const source = `function emoji(props){let s="chat",r="channel",h=R.useCallback(()=>{(0,dispatcher.open)(view.Type.EMOJI,s,r)},[s,r]);return h}
+        function gif(props){let d="chat",h={id:"channel"},C=R.useCallback(()=>{(0,dispatcher.open)(view.Type.GIF,d,h.id)},[d,h.id]);return C}
+        function sticker(props){let d="chat",h={id:"channel"},C=R.useCallback(()=>{(0,dispatcher.open)(view.Type.STICKER,d,h.id)},[d,h.id]);return C}
+        ({emoji,gif,sticker})`;
+    const { match, replace } = plugin.patches[0].replacement[1];
+    const compiledMatch = canonicalizeMatch(match);
+    assert.equal([...source.matchAll(new RegExp(compiledMatch.source, "g"))].length, 1);
+    const calls: unknown[][] = [];
+    const buttons = runInNewContext(source.replace(compiledMatch, replace), {
+        R: { useCallback: (callback: unknown) => callback },
+        dispatcher: { open: (...args: unknown[]) => calls.push(args) },
+        view: { Type: { EMOJI: "emoji", GIF: "gif", STICKER: "sticker" } }
+    });
+    buttons.emoji({})();
+    buttons.gif({})();
+    buttons.sticker({})();
+    buttons.sticker({ stickersType: "stickers+" })();
+    assert.deepEqual(calls, [
+        ["emoji", "chat", "channel"], ["gif", "chat", "channel"],
+        ["sticker", "chat", "channel"], ["stickers+", "chat", "channel"]
+    ]);
+});
+
 test("fast channel deletion renders thread actions independently of counters", async () => {
     let hooks = 0;
     let allowed = true;

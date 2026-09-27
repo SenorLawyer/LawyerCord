@@ -32,6 +32,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Prevent cloud uploads, downloads, and deletion from overlapping across windows that share browser storage. Busy automatic syncs retry through the existing scheduler.
+
 - Preserve the actual written or deleted keys in DataStore change notifications when callers mutate their key arrays before a transaction finishes.
 
 - Retain committed plugin-data changes made before cloud sync starts, so initialization does not miss an automatic upload.

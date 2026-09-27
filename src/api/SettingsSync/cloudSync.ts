@@ -590,146 +590,147 @@ export function shouldCloudSync(direction: "push" | "pull") {
     return localDirection === direction || localDirection === "both";
 }
 
-let cloudOperationPending = false;
-
-function beginCloudOperation(shouldNotify: boolean) {
-    if (cloudOperationPending) {
+async function runCloudOperation<T>(shouldNotify: boolean, operation: () => Promise<T>): Promise<T | false> {
+    if (!navigator.locks) {
+        showNotification({
+            title: "Cloud Settings",
+            body: "This browser cannot safely synchronize cloud settings. Update your browser and try again.",
+            noPersist: true,
+        });
+        return false;
+    }
+    return navigator.locks.request("LawyerCordCloudSync", { ifAvailable: true }, lock => {
+        if (lock) return operation();
         if (shouldNotify) showNotification({
             title: "Cloud Settings",
             body: "Another cloud operation is still running. Try again when it finishes.",
             noPersist: true,
         });
         return false;
-    }
-    cloudOperationPending = true;
-    return true;
+    });
 }
 
 export async function putCloudSettings(manual?: boolean) {
-    if (!beginCloudOperation(Boolean(manual))) return false;
-    let context: Awaited<ReturnType<typeof getCloudSyncContext>> | undefined;
-    try {
-        context = await getCloudSyncContext(true);
-        const version = await getApiVersion(context.url.origin);
-        context.assertCurrent();
-        if (version === "v2") {
-            await putV2(context, manual);
+    return runCloudOperation(Boolean(manual), async () => {
+        let context: Awaited<ReturnType<typeof getCloudSyncContext>> | undefined;
+        try {
+            context = await getCloudSyncContext(true);
+            const version = await getApiVersion(context.url.origin);
             context.assertCurrent();
-            const nextVersion = await getApiVersion(context.url.origin);
-            context.assertCurrent();
-            if (nextVersion === "v1")
+            if (version === "v2") {
+                await putV2(context, manual);
+                context.assertCurrent();
+                const nextVersion = await getApiVersion(context.url.origin);
+                context.assertCurrent();
+                if (nextVersion === "v1")
+                    await putV1(context, manual);
+            } else {
                 await putV1(context, manual);
-        } else {
-            await putV1(context, manual);
+            }
+        } catch (e: unknown) {
+            if (context && !context.isCurrent()) return;
+            if (e instanceof SyntaxError) e = new Error("The cloud server returned invalid JSON.");
+            logger.error("Failed to sync up", e);
+            showNotification({
+                title: "Cloud Settings",
+                body: `Could not synchronize settings to the cloud (${String(e)}).`,
+                color: "var(--red-360)",
+            });
         }
-    } catch (e: unknown) {
-        if (context && !context.isCurrent()) return;
-        if (e instanceof SyntaxError) e = new Error("The cloud server returned invalid JSON.");
-        logger.error("Failed to sync up", e);
-        showNotification({
-            title: "Cloud Settings",
-            body: `Could not synchronize settings to the cloud (${String(e)}).`,
-            color: "var(--red-360)",
-        });
-    } finally {
-        cloudOperationPending = false;
-    }
+    });
 }
 
 export async function getCloudSettings(shouldNotify = true, force = false) {
-    if (!beginCloudOperation(shouldNotify)) return false;
-    let context: Awaited<ReturnType<typeof getCloudSyncContext>> | undefined;
-    try {
-        context = await getCloudSyncContext(true);
-        const version = await getApiVersion(context.url.origin);
-        context.assertCurrent();
-        if (version === "v2") {
-            const result = await getV2(context, shouldNotify, force);
+    return runCloudOperation(shouldNotify, async () => {
+        let context: Awaited<ReturnType<typeof getCloudSyncContext>> | undefined;
+        try {
+            context = await getCloudSyncContext(true);
+            const version = await getApiVersion(context.url.origin);
             context.assertCurrent();
-            const nextVersion = await getApiVersion(context.url.origin);
-            context.assertCurrent();
-            if (nextVersion === "v1")
-                return await getV1(context, shouldNotify, force);
-            return result;
+            if (version === "v2") {
+                const result = await getV2(context, shouldNotify, force);
+                context.assertCurrent();
+                const nextVersion = await getApiVersion(context.url.origin);
+                context.assertCurrent();
+                if (nextVersion === "v1")
+                    return await getV1(context, shouldNotify, force);
+                return result;
+            }
+            return await getV1(context, shouldNotify, force);
+        } catch (e: unknown) {
+            if (context && !context.isCurrent()) return false;
+            if (e instanceof SyntaxError) e = new Error("The cloud server returned invalid JSON.");
+            logger.error("Failed to sync down", e);
+            showNotification({
+                title: "Cloud Settings",
+                body: `Could not synchronize settings from the cloud (${String(e)}).`,
+                color: "var(--red-360)",
+            });
+            return false;
         }
-        return await getV1(context, shouldNotify, force);
-    } catch (e: unknown) {
-        if (context && !context.isCurrent()) return false;
-        if (e instanceof SyntaxError) e = new Error("The cloud server returned invalid JSON.");
-        logger.error("Failed to sync down", e);
-        showNotification({
-            title: "Cloud Settings",
-            body: `Could not synchronize settings from the cloud (${String(e)}).`,
-            color: "var(--red-360)",
-        });
-        return false;
-    } finally {
-        cloudOperationPending = false;
-    }
+    });
 }
 
 export async function deleteCloudSettings() {
-    if (!beginCloudOperation(true)) return;
-    let context: Awaited<ReturnType<typeof getCloudSyncContext>> | undefined;
-    try {
-        context = await getCloudSyncContext();
-        const version = await getApiVersion(context.url.origin);
-        if (!context.isCurrent()) return;
-        if (version === "v2")
-            await deleteV2(context);
-        else
-            await deleteV1(context);
-    } catch (e: unknown) {
-        if (context && !context.isCurrent()) return;
-        if (e instanceof SyntaxError) e = new Error("The cloud server returned invalid JSON.");
-        logger.error("Failed to delete", e);
-        showNotification({
-            title: "Cloud Settings",
-            body: `Could not delete settings (${String(e)}).`,
-            color: "var(--red-360)",
-        });
-    } finally {
-        cloudOperationPending = false;
-    }
+    return runCloudOperation(true, async () => {
+        let context: Awaited<ReturnType<typeof getCloudSyncContext>> | undefined;
+        try {
+            context = await getCloudSyncContext();
+            const version = await getApiVersion(context.url.origin);
+            if (!context.isCurrent()) return;
+            if (version === "v2")
+                await deleteV2(context);
+            else
+                await deleteV1(context);
+        } catch (e: unknown) {
+            if (context && !context.isCurrent()) return;
+            if (e instanceof SyntaxError) e = new Error("The cloud server returned invalid JSON.");
+            logger.error("Failed to delete", e);
+            showNotification({
+                title: "Cloud Settings",
+                body: `Could not delete settings (${String(e)}).`,
+                color: "var(--red-360)",
+            });
+        }
+    });
 }
 
 export async function eraseAllCloudData() {
-    if (!beginCloudOperation(true)) return;
-    let context: Awaited<ReturnType<typeof getCloudSyncContext>> | undefined;
-    try {
-        context = await getCloudSyncContext();
-        const auth = await getCloudAuth();
-        context.assertCurrent();
-        const res = await fetch(new URL("/v1/", context.url), {
-            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-            method: "DELETE",
-            headers: { Authorization: auth },
-        });
-        context.assertCurrent();
+    return runCloudOperation(true, async () => {
+        let context: Awaited<ReturnType<typeof getCloudSyncContext>> | undefined;
+        try {
+            context = await getCloudSyncContext();
+            const auth = await getCloudAuth();
+            context.assertCurrent();
+            const res = await fetch(new URL("/v1/", context.url), {
+                signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+                method: "DELETE",
+                headers: { Authorization: auth },
+            });
+            context.assertCurrent();
 
-        if (!res.ok)
-            throw new Error(`API returned ${res.status}.`);
+            if (!res.ok)
+                throw new Error(`API returned ${res.status}.`);
 
-        Settings.cloud.authenticated = false;
-        await deauthorizeCloud();
-        context.assertCurrent();
-        await saveLocalManifest(context, []);
-        context.assertCurrent();
+            Settings.cloud.authenticated = false;
+            await deauthorizeCloud();
+            context.assertCurrent();
+            await saveLocalManifest(context, []);
+            context.assertCurrent();
 
-        showNotification({
-            title: "Cloud Integrations",
-            body: "Successfully erased all data.",
-            color: "var(--green-360)",
-        });
-    } catch (error: unknown) {
-        if (context && !context.isCurrent()) return;
-        logger.error("Failed to erase cloud data", error);
-        showNotification({
-            title: "Cloud Integrations",
-            body: `Could not finish erasing cloud data (${String(error)}).`,
-            color: "var(--red-360)",
-        });
-    } finally {
-        cloudOperationPending = false;
-    }
+            showNotification({
+                title: "Cloud Integrations",
+                body: "Successfully erased all data.",
+                color: "var(--green-360)",
+            });
+        } catch (error: unknown) {
+            if (context && !context.isCurrent()) return;
+            logger.error("Failed to erase cloud data", error);
+            showNotification({
+                title: "Cloud Integrations",
+                body: `Could not finish erasing cloud data (${String(error)}).`,
+                color: "var(--red-360)",
+            });
+        }
+    });
 }

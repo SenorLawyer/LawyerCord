@@ -842,7 +842,7 @@ test("cloud checkpoints preserve persisted fields and reject intervening setting
             }
         };
         modules["./offline"] = runInNewContext(`${outputText}\nexports;`, { ...globals, exports: {}, structuredClone });
-        const api = runInNewContext(`${compiled}\nexports;`, { ...globals, exports: {} });
+        const api = runInNewContext(`${compiled}\nexports;`, { navigator, ...globals, exports: {} });
         await api[direction](true);
         assert.equal(persisted.otherWindow, true);
         assert.equal(persisted.cloud.otherWindow, true);
@@ -881,6 +881,7 @@ test("cloud JSON failures do not copy response contents into logs or notificatio
             fflate: { deflateSync: (value: Uint8Array) => value }
         };
         const api = runInNewContext(`${compiled}\nexports;`, {
+            navigator,
             exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextEncoder, TextDecoder, Uint8Array, btoa, atob, crypto,
             VencordNative: { settings: { get: () => plain, set: async () => writes.push("settings") }, quickCss: { get: async () => "" } },
             fetch: async () => ["settings", "dataStore", "dataStore/legacy"].includes(scenario)
@@ -929,6 +930,7 @@ test("cloud JSON responses stop oversized streams before writes and allow retry"
             fflate: { deflateSync: (value: Uint8Array) => value }
         };
         const api = runInNewContext(`${compiled}\nexports;`, {
+            navigator,
             exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextEncoder, TextDecoder, Uint8Array, btoa, crypto,
             VencordNative: { settings: { get: () => plain, set: async () => writes.push("settings") }, quickCss: { get: async () => "" } },
             fetch: async () => {
@@ -1001,6 +1003,7 @@ test("legacy downloads bound compressed and expanded bytes before importing", as
             "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), importSettings: async (value: string) => { JSON.parse(value); imports.push(value); } },
         };
         const { getCloudSettings } = runInNewContext(`${compiled}\nexports;`, {
+            navigator,
             exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextDecoder, Uint8Array, TransformStream, DecompressionStream, Response, IS_WEB: true,
             VencordNative: { settings: { get: () => ({}), set: async () => saves++ } },
             fetch: async () => {
@@ -1106,6 +1109,7 @@ test("legacy cloud sync waits for local settings persistence before reporting su
             "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), exportSettings: async (options: { cloud?: boolean }) => { assert.equal(options.cloud, true); return "{}"; }, importSettings: async () => {} }
         };
         const entry = runInNewContext(`${compiled}\n({ putV1, getV1 });`, {
+            navigator,
             exports: {}, require: (name: string) => modules[name], URL, AbortSignal, TextEncoder, TextDecoder, TransformStream, DecompressionStream, Response, Uint8Array, IS_WEB: true,
             fetch: async () => ({ ok: true, status: 200, json: async () => ({ written: 2 }), headers: { get: () => "2" }, body: compressedBody(async () => "{}") }),
             VencordNative: { settings: { get: () => ({}), set: () => new Promise<void>((_resolve, reject) => { rejectSave = reject; saveStarted.resolve(); }) } }
@@ -1156,6 +1160,7 @@ test("legacy sync rejects invalid timestamps without treating local edit times a
             fflate: { deflateSync: (value: Uint8Array) => value }
         };
         const api = runInNewContext(`${compiled}\nexports;`, {
+            navigator,
             exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextEncoder, TextDecoder, TransformStream, DecompressionStream, Response, IS_WEB: true,
             VencordNative: { settings: { get: () => ({}), set: async () => saves++ } },
             fetch: async (_url: URL, init: RequestInit) => {
@@ -1432,6 +1437,7 @@ test("failed cloud downloads and deletions do not advance the manifest or report
         "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), omitCloudSettings: (settings: object) => settings, serializeDataStore: JSON.stringify, getCloudDataStoreEntries: (entries: unknown) => entries, importSettings: async () => { if (importFails) throw new Error("Import failed"); } }
     };
     const { getCloudSettings, putCloudSettings, deleteCloudSettings } = runInNewContext(`${outputText}\nexports;`, {
+        navigator,
         exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextEncoder, TextDecoder, atob, btoa, crypto, IS_WEB: true,
         fetch: async (_url: URL, init: RequestInit) => init.method === "DELETE"
             ? { ok: false, status: 500 }
@@ -1544,7 +1550,7 @@ test("cloud uploads and downloads discard obsolete responses and stop subsequent
                 }
             };
             modules["./offline"] = runInNewContext(`${outputText}\nexports;`, { structuredClone, ...globals, exports: {} });
-            const api = runInNewContext(`${compiled}\nexports;`, { ...globals, exports: {} });
+            const api = runInNewContext(`${compiled}\nexports;`, { navigator, ...globals, exports: {} });
             await api[direction]();
             assert.ok(events.includes(stage), `${version}/${direction}/${stage} must be exercised`);
             if (change !== "none") {
@@ -1612,7 +1618,7 @@ test("cloud sync preserves edits made while responses or local saves are pending
             }
         };
         modules["./offline"] = runInNewContext(`${outputText}\nexports;`, { structuredClone, ...globals, exports: {} });
-        const api = runInNewContext(`${compiled}\nexports;`, { ...globals, exports: {} });
+        const api = runInNewContext(`${compiled}\nexports;`, { navigator, ...globals, exports: {} });
         markChanged = api.markLocalSettingsDirty;
         await api[direction](true);
         assert.equal(edited, true);
@@ -1629,12 +1635,12 @@ test("cloud sync preserves edits made while responses or local saves are pending
     }
 });
 
-test("cloud operations cannot overlap and a completed or failed operation releases the next attempt", async () => {
+test("cloud operations cannot overlap across contexts and completion or failure releases the next attempt", async () => {
     const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
     }).outputText;
     const operations = ["getCloudSettings", "putCloudSettings", "deleteCloudSettings", "eraseAllCloudData"];
-    for (const first of operations) for (const second of operations) for (const fail of [false, true]) {
+    for (const first of operations) for (const second of operations) for (const fail of [false, true]) for (const separateContext of [false, true]) {
         let requests = 0;
         let signalStarted = () => {};
         const started = new Promise<void>(resolve => { signalStarted = resolve; });
@@ -1655,7 +1661,8 @@ test("cloud operations cannot overlap and a completed or failed operation releas
             "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), omitCloudSettings: (value: object) => value, serializeDataStore: JSON.stringify, getCloudDataStoreEntries: (entries: unknown) => entries }
         };
         const response = { ok: true, json: async () => ({ errors: [], uploaded: [], downloads: [], server_manifest: [], entries: [] }) };
-        const api = runInNewContext(`${compiled}\nexports;`, {
+        const createApi = () => runInNewContext(`${compiled}\nexports;`, {
+            navigator,
             exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextEncoder, crypto, btoa,
             VencordNative: { settings: { get: () => plain, set: async () => {} }, quickCss: { get: async () => "" } },
             fetch: async () => {
@@ -1663,11 +1670,13 @@ test("cloud operations cannot overlap and a completed or failed operation releas
                 return requests === 1 ? new Promise((resolve, fail) => { finish = resolve; reject = fail; signalStarted(); }) : response;
             }
         });
+        const api = createApi();
+        const other = separateContext ? createApi() : api;
         const pending = api[first](first !== "getCloudSettings");
         await started;
         assert.ok(finish);
         assert.ok(reject);
-        const blocked = await api[second](true);
+        const blocked = await other[second](true);
         if (second === "putCloudSettings") assert.equal(blocked, false);
         assert.equal(requests, 1, second);
         assert.equal(notifications.length, 1);
@@ -1675,7 +1684,7 @@ test("cloud operations cannot overlap and a completed or failed operation releas
         if (fail) reject(new Error("Synthetic network failure"));
         else finish(response);
         await pending;
-        await api.getCloudSettings(false);
+        await other.getCloudSettings(false);
         assert.equal(requests, 2, "The operation must release its slot even after failure");
     }
 });
@@ -1713,6 +1722,7 @@ test("cloud request timeouts cover response bodies and release the operation for
             fflate: { deflateSync: (value: Uint8Array) => value }
         };
         const api = runInNewContext(`${compiled}\nexports;`, {
+            navigator,
             exports: {}, require: (name: string) => modules[name] ?? {}, URL, TextEncoder, TextDecoder, TransformStream, DecompressionStream, Response, crypto, btoa,
             AbortSignal: { timeout: (milliseconds: number) => { assert.equal(milliseconds, 120_000); const controller = new AbortController(); controllers.push(controller); return controller.signal; } },
             VencordNative: { settings: { get: () => plain, set: async () => writes++ }, quickCss: { get: async () => "" } },
@@ -1773,6 +1783,7 @@ test("obsolete cloud failures cannot deauthorize another account or start fallba
             "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }) }
         };
         const { getCloudSettings } = runInNewContext(`${compiled}\nexports;`, {
+            navigator,
             exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal,
             fetch: async () => { requests++; if (during === "response") service = "https://second.invalid"; return { status, ok: false }; }
         });
@@ -1817,6 +1828,7 @@ test("invalid cloud response envelopes fail before local writes or manifest ackn
             "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), importSettings: async () => writes.push("import") }
         };
         const { getCloudSettings } = runInNewContext(`${compiled}\nexports;`, {
+            navigator,
             exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextDecoder, atob, IS_WEB: true,
             VencordNative: { settings: { set: async () => writes.push("settings") } },
             fetch: async () => ({ ok: true, json: async () => response })
@@ -1852,6 +1864,7 @@ test("cloud manifests belong to one account and service without claiming the own
     };
     const manifest = () => [{ key: "settings", version: 1, checksum: `${service}/${userId}` }];
     const { getCloudSettings, deleteCloudSettings } = runInNewContext(`${compiled}\nexports;`, {
+        navigator,
         exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextDecoder, atob, IS_WEB: true,
         VencordNative: { settings: { get: () => ({}), set: async () => {} } },
         fetch: async (url: URL, init: RequestInit) => {
@@ -1912,6 +1925,7 @@ test("cloud deletion stops when its account or service changes", async () => {
                 "./cloudSetup": { getCloudUrl: () => new URL(service), getCloudAuth: async () => { await pause("auth"); return "synthetic"; } }
             };
             const { deleteCloudSettings } = runInNewContext(`${compiled}\nexports;`, {
+                navigator,
                 exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal,
                 VencordNative: { settings: { get: () => ({}), set: async () => pause("settings-save") } },
                 fetch: async (url: URL, init: RequestInit) => {
@@ -1947,6 +1961,7 @@ test("cloud deletion validates the complete manifest before deleting any entries
             "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" }
         };
         const { deleteCloudSettings } = runInNewContext(`${compiled}\nexports;`, {
+            navigator,
             exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal,
             fetch: async (_url: URL, init: RequestInit) => { if (init.method === "DELETE") deletes++; return { ok: true, json: async () => manifest }; }
         });
@@ -1982,6 +1997,7 @@ test("cloud deletion sends one request at a time and stops after failure or owne
             "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }) }
         };
         const api = runInNewContext(`${compiled}\nexports;`, {
+            navigator,
             exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal,
             VencordNative: { settings: { get: () => ({}), set: async () => writes.push("settings") } },
             fetch: async (url: URL, init: RequestInit) => {
@@ -2064,6 +2080,7 @@ test("cloud erasure stops after account or service changes without affecting the
             }
         };
         const { eraseAllCloudData } = runInNewContext(`${compiled}\nexports;`, {
+            navigator,
             exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal,
             fetch: async (url: URL) => { assert.equal(url.origin, "https://first.invalid"); await pause("response"); return { ok: fail !== "http", status: fail === "http" ? 500 : 200 }; }
         });
@@ -2218,7 +2235,7 @@ test("upload-only cloud sync preserves local data and leaves skipped downloads a
             }
         };
         modules["./offline"] = runInNewContext(`${outputText}\nexports;`, { ...globals, exports: {} });
-        const api = runInNewContext(`${compiled}\nexports;`, { ...globals, exports: {} });
+        const api = runInNewContext(`${compiled}\nexports;`, { navigator, ...globals, exports: {} });
         await api.putCloudSettings(manual);
         assert.deepEqual(requests[0].uploads.map(entry => entry.key), ["settings"]);
         assert.equal(css, direction === "push" ? originalCss : remoteCss);
@@ -2254,6 +2271,7 @@ test("cloud uploads retain acknowledged versions after local edits or partial se
             "./cloudSetup": { getCloudUrl: () => new URL(origin), getCloudAuth: async () => "synthetic" }
         };
         const api = runInNewContext(`${compiled}\n({ getCloudSyncContext, doSyncV2, markLocalSettingsDirty: exports.markLocalSettingsDirty });`, {
+            navigator,
             exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal,
             fetch: async () => ({
                 ok: true, status: 200,
@@ -2344,7 +2362,7 @@ test("cloud completion preserves CSS and stored edits during responses and check
                 }
             };
             modules["./offline"] = runInNewContext(`${outputText}\nexports;`, { ...globals, exports: {} });
-            const api = runInNewContext(`${compiled}\nexports;`, { ...globals, exports: {} });
+            const api = runInNewContext(`${compiled}\nexports;`, { navigator, ...globals, exports: {} });
             await api[operation](true);
             const edited = stage !== "none";
             const syncsSection = !(version === "v1" && operation === "putCloudSettings" && section === "data");
@@ -2389,6 +2407,7 @@ test("QuickCSS and DataStore edits mark data dirty and use the existing automati
             "./offline": { captureCloudImportState: async () => undefined }
         };
         const api = runInNewContext(`${compiled}\n({ ...exports, getCloudSyncContext });`, {
+            navigator,
             exports: {}, require: (name: string) => modules[name] ?? {}, URL
         });
         const syncSettings = runInNewContext(`${startup}\nsyncSettings;`, {
@@ -2770,4 +2789,22 @@ test("versioned DataStore backups preserve top-level Maps across offline and clo
     await offline.importSettings(cloudBackup, "datastore", true);
     assert.equal((records.get(firstKey) as Map<string, { name: string }>).get("session")?.name, "Newer");
     assert.equal(offline.serializeDataStore([["ordinary", [1, true]]]), '[["ordinary",[1,true]]]');
+});
+
+test("cloud operations without browser locks stop before accessing account data", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    const notifications: { body: string }[] = [];
+    const modules: Record<string, unknown> = {
+        "@api/Notifications": { showNotification: (value: { body: string }) => notifications.push(value) },
+        "@utils/Logger": { Logger: class {} }
+    };
+    const api = runInNewContext(`${compiled}\nexports;`, {
+        navigator: {}, exports: {}, require: (name: string) => modules[name] ?? {}
+    });
+    for (const operation of ["getCloudSettings", "putCloudSettings", "deleteCloudSettings", "eraseAllCloudData"])
+        assert.equal(await api[operation](), false);
+    assert.equal(notifications.length, 4);
+    assert.ok(notifications.every(note => note.body.includes("Update your browser")));
 });

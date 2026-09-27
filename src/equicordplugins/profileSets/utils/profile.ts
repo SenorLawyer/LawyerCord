@@ -262,7 +262,7 @@ export async function getCurrentProfile(guildId?: string, options: CurrentProfil
     } : null;
 
     const savedDisplayNameStyles = isGuildProfile
-        ? (guildMember?.displayNameStyles ?? currentUser.displayNameStyles)
+        ? guildMember?.displayNameStyles
         : currentUser.displayNameStyles;
     const displayNameStylesToUse = pendingChanges.pendingDisplayNameStyles !== undefined ? pendingChanges.pendingDisplayNameStyles : savedDisplayNameStyles;
     const displayNameStyles = normalizeDisplayNameStyles(displayNameStylesToUse);

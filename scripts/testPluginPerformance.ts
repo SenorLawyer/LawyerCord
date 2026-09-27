@@ -7290,6 +7290,31 @@ test("profile effect snapshots preserve direct and collectible resolution", asyn
     }
 });
 
+test("server profile snapshots preserve inherited display name styles", async () => {
+    for (const absent of [undefined, null]) {
+        const member = { displayNameStyles: absent as unknown };
+        const events: Record<string, unknown>[] = [];
+        const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null }) },
+            "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
+            "@webpack/common": {
+                lodash: { isEqual: (a: unknown, b: unknown) => isDeepStrictEqual(structuredClone(a), structuredClone(b)) },
+                UserStore: { getCurrentUser: () => ({ id: "me", displayNameStyles: { font_id: 1, effect_id: 2, colors: [3] } }) },
+                UserProfileStore: { getUserProfile: () => ({}), getGuildMemberProfile: () => ({}) },
+                GuildMemberStore: { getMember: () => member },
+                FluxDispatcher: { dispatch: (event: Record<string, unknown>) => events.push(event) }
+            }
+        });
+        const inherited = await api.getCurrentProfile("guild");
+        assert.equal(inherited.displayNameStyles, null);
+        const global = await api.getCurrentProfile();
+        assert.equal(global.displayNameStyles.font_id, 1);
+        member.displayNameStyles = { font_id: 4, effect_id: 5, colors: [6] };
+        await api.loadPresetAsPending({ name: "Inherited", timestamp: 0, displayNameStyles: inherited.displayNameStyles }, "guild");
+        assert.deepEqual(events.map(event => ({ ...event })), [{ type: "USER_PROFILE_SETTINGS_SET_PENDING_CHANGES", guildId: "guild", pendingDisplayNameStyles: null }]);
+    }
+});
+
 test("profile snapshots preserve default images and server inheritance", async () => {
     for (const guildId of [undefined, "guild"]) for (const absent of [undefined, null]) {
         const globalImage = "data:image/png;base64,Z2xvYmFs";

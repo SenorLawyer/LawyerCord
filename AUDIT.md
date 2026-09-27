@@ -2,11 +2,21 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Latest full local verification: all 696 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the ProfileSets equality simplification. Patch lint last reported zero warnings and no errors at the native USRBG checkpoint; this simplification changes no patches. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding e6d7b0be0; the equality simplification requires its own CI.
+Latest full local verification: all 697 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the server display-name inheritance fix. Repository-wide ESLint, CSS lint, internationalization lint, zero-warning patch lint and 49 SettingsSync tests passed at preceding 522816af0. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on 522816af0; the inheritance fix requires its own CI.
 
 Earlier broad verification checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning passed. Patch lint then reported 107 warnings and no errors. Full repository lint logs use `.git/audit/reconciliation-sep27-*`; later focused runs do not replace final combined validation.
 
 A fresh September 28 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,656 files, fifteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-patches-complete.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
+
+## Server display-name style inheritance
+
+Discord's captured settings action 84540 compares server display-name styles against the raw guild member override. ProfileSets instead substituted global styles when the server override was absent. Removing that fallback preserves null inheritance in a new server preset, while global snapshots and explicit server overrides retain their existing behavior. This follows the native raw-override semantics rather than freezing the currently displayed global formatting.
+
+The tracked regression fails on 522816af0 with copied global style data instead of null. It now covers both null and absent server styles, unchanged global snapshots, and restoring inheritance after a server override is added. The current plugin with actual captured settings store 836602 and Lodash 435558 verifies that the null pending style targets only the server and leaves newer global formatting intact. Evidence is `.git/audit/profile-style-inheritance-native.{cjs,json}` and `profile-style-inheritance-before.log`. These checks use a controlled Flux base and do not establish signed-in visual acceptance.
+
+Repository-wide ESLint, CSS lint, internationalization lint, zero-warning patch lint and all 49 SettingsSync tests passed on the preceding 522816af0 source before this one-line profile change. Those logs use `.git/audit/final-reconciliation-*`. They are a combined-source verification checkpoint, not a claim that all audit findings are closed.
+
+After the change, all 68 focused profile checks, 697 broader regressions and timezone checks, TypeScript, focused ESLint, sequential desktop/web builds and artifact scanning pass in `.git/audit/profile-style-inheritance-*` logs. All four preceding 522816af0 CI checks passed.
 
 ## ProfileSets comparison and allocation decisions
 

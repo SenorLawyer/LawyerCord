@@ -38,6 +38,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Bound Decor's purchase-label and current-user captures to their local render code.
+
 - Keep Experiments' toolbar-handler and experiment-name patches within their nearby code instead of searching into later functions.
 
 - Preserve explicit empty avatar-decoration previews in Decor. Custom decorations apply only when no override was supplied.

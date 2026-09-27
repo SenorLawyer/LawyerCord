@@ -64,7 +64,7 @@ export default definePlugin({
                 },
                 // Remove NEW label from decor avatar decorations
                 {
-                    match: /(?<=\i\.PURCHASE)(?=,)(?<=avatarDecoration:(\i).+?)/,
+                    match: /(?<=\i\.PURCHASE)(?=,)(?<=avatarDecoration:(\i).{0,500}?)/,
                     replace: "||$1.skuId===$self.SKU_ID"
                 }
             ]
@@ -96,7 +96,7 @@ export default definePlugin({
             replacement: [
                 // Use Decor avatar decoration hook
                 {
-                    match: /(?<=\i\)\({avatarDecoration:)\i(?=,)(?<=currentUser:(\i).+?)/,
+                    match: /(?<=\i\)\({avatarDecoration:)\i(?=,)(?<=currentUser:(\i).{0,250}?)/,
                     replace: "$self.useUserDecorAvatarDecoration($1)??$&"
                 }
             ]

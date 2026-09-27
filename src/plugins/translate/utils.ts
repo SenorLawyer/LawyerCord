@@ -48,7 +48,7 @@ export const getLanguages = () => {
     }
 };
 
-export async function translateText(text: string, sourceLang: string, targetLang: string, shouldNotify: () => boolean = () => true): Promise<TranslationValue> {
+export async function translateText(text: string, sourceLang: string, targetLang: string, shouldNotify: () => boolean = () => true, signal?: AbortSignal): Promise<TranslationValue> {
     const service = IS_WEB ? "google" : settings.store.service;
     const translateImpl = service === "google" ? googleTranslate : service === "kagi" ? kagiTranslate : deeplTranslate;
 
@@ -56,13 +56,16 @@ export async function translateText(text: string, sourceLang: string, targetLang
         sourceLang = "";
 
     try {
-        return await translateImpl(text, sourceLang, targetLang);
+        signal?.throwIfAborted();
+        const result = await translateImpl(text, sourceLang, targetLang, signal);
+        signal?.throwIfAborted();
+        return result;
     } catch (e) {
         const userMessage = typeof e === "string"
             ? e
             : "Something went wrong. If this issue persists, please check the console or ask for help in the support server.";
 
-        if (shouldNotify()) showToast(userMessage, Toasts.Type.FAILURE);
+        if (!signal?.aborted && shouldNotify()) showToast(userMessage, Toasts.Type.FAILURE);
 
         throw e instanceof Error
             ? e
@@ -70,16 +73,17 @@ export async function translateText(text: string, sourceLang: string, targetLang
     }
 }
 
-export function translate(kind: "received" | "sent", text: string, shouldNotify?: () => boolean): Promise<TranslationValue> {
+export function translate(kind: "received" | "sent", text: string, shouldNotify?: () => boolean, signal?: AbortSignal): Promise<TranslationValue> {
     return translateText(
         text,
         settings.store[`${kind}Input`],
         settings.store[`${kind}Output`],
-        shouldNotify
+        shouldNotify,
+        signal
     );
 }
 
-async function googleTranslate(text: string, sourceLang: string, targetLang: string): Promise<TranslationValue> {
+async function googleTranslate(text: string, sourceLang: string, targetLang: string, signal?: AbortSignal): Promise<TranslationValue> {
     const url = "https://translate-pa.googleapis.com/v1/translate?" + new URLSearchParams({
         "params.client": "gtx",
         "dataTypes": "TRANSLATION",
@@ -89,7 +93,7 @@ async function googleTranslate(text: string, sourceLang: string, targetLang: str
         "query.text": text,
     });
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+    const res = await fetch(url, { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000) });
     if (!res.ok) {
         await res.body?.cancel();
         throw new Error(`Google Translate request failed (${res.status}).`);

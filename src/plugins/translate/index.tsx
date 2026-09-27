@@ -55,24 +55,33 @@ function getMessageContent(message: Message) {
         || message.embeds?.find(embed => embed.type === "auto_moderation_message")?.rawDescription || "";
 }
 
-let translationGeneration = 0;
-const pendingTranslations = new Map<string, ReturnType<typeof translate>>();
+const pendingTranslations = new Map<string, AbortController>();
+let translationController = new AbortController();
 let tooltipTimeout: ReturnType<typeof setTimeout> | undefined;
 
 async function translateReceivedMessage(messageId: string, content: string) {
     const userId = UserStore.getCurrentUser()?.id;
     if (!userId) return;
-    const generation = translationGeneration;
-    const isCurrent = () => pendingTranslations.get(messageId) === request && generation === translationGeneration && UserStore.getCurrentUser()?.id === userId;
-    const request = translate("received", content, isCurrent);
+    const { signal } = translationController;
+    pendingTranslations.get(messageId)?.abort();
+    const request = new AbortController();
+    const isCurrent = () => pendingTranslations.get(messageId) === request && !signal.aborted && UserStore.getCurrentUser()?.id === userId;
     pendingTranslations.set(messageId, request);
     try {
-        const trans = await request;
+        const trans = await translate("received", content, isCurrent, AbortSignal.any([request.signal, signal]));
         if (isCurrent())
             handleTranslate(messageId, trans, content);
+    } catch (error) {
+        if (!signal.aborted && !request.signal.aborted) throw error;
     } finally {
         if (pendingTranslations.get(messageId) === request) pendingTranslations.delete(messageId);
     }
+}
+
+function cancelTranslations() {
+    translationController.abort();
+    translationController = new AbortController();
+    pendingTranslations.clear();
 }
 
 function clearTranslateTooltipTimeout() {
@@ -121,10 +130,7 @@ export default definePlugin({
     },
 
     flux: {
-        LOGOUT() {
-            translationGeneration++;
-            pendingTranslations.clear();
-        }
+        LOGOUT: cancelTranslations
     },
 
     async onBeforeMessageSend(_, message) {
@@ -133,9 +139,9 @@ export default definePlugin({
 
         const userId = UserStore.getCurrentUser()?.id;
         if (!userId) return { cancel: true };
-        const generation = translationGeneration;
+        const { signal } = translationController;
         const { content } = message;
-        const isCurrent = () => generation === translationGeneration && UserStore.getCurrentUser()?.id === userId
+        const isCurrent = () => !signal.aborted && UserStore.getCurrentUser()?.id === userId
             && settings.store.autoTranslate && message.content === content;
 
         setShouldShowTranslateEnabledTooltip?.(true);
@@ -146,7 +152,7 @@ export default definePlugin({
         }, 2000);
 
         try {
-            const trans = await translate("sent", content, isCurrent);
+            const trans = await translate("sent", content, isCurrent, signal);
             if (!isCurrent())
                 return { cancel: true };
             message.content = trans.text;
@@ -156,8 +162,7 @@ export default definePlugin({
     },
 
     stop() {
-        translationGeneration++;
-        pendingTranslations.clear();
+        cancelTranslations();
         clearTranslateTooltipTimeout();
         setShouldShowTranslateEnabledTooltip?.(false);
     }

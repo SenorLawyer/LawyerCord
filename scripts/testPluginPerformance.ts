@@ -10104,6 +10104,7 @@ test("source fixtures reject recoverable syntax errors before execution", () => 
 
 function loadSource(path: string, mocks: Record<string, object>, globals: Record<string, unknown> = {}, result = "exports") {
     mocks = { "@shared/readResponseText": { readResponseText }, ...mocks };
+    if (path === "src/plugins/translate/index.tsx") globals = { AbortController, AbortSignal, ...globals };
     if (path === "src/plugins/betterSessions/utils.ts") globals = { Map, ...globals };
     if (path === "src/equicordplugins/translatePlus/utils/accessory.tsx") globals = { AbortController, ...globals };
     if (path.endsWith("profileSets/utils/profile.ts"))
@@ -16499,7 +16500,7 @@ test("translation failure toasts respect the requesting session and message", as
         const message = { id: "message", channel_id: "channel", content: "Original" };
         const click = () => plugin.messagePopoverButton.render(message).onClick();
         const pending = kind === "received" ? click() : plugin.onBeforeMessageSend("channel", message);
-        const settled = kind === "received" ? assert.rejects(pending) : pending;
+        const settled = kind === "received" && !["logout", "stop", "replacement"].includes(phase) ? assert.rejects(pending) : pending;
         let replacement: Promise<unknown> | undefined;
         if (phase === "account") userId = "other";
         if (phase === "logout") plugin.flux.LOGOUT();
@@ -16540,7 +16541,7 @@ test("received translations keep the latest request per message", async () => {
     assert.deepEqual(delivered, [["first", { text: "Latest" }, "Original"], ["second", { text: "Other" }, "Original"]]);
     const failing = click("first"), replacement = click("first");
     requests[3].reject(new Error("Failed request"));
-    await assert.rejects(failing);
+    await failing;
     requests[4].resolve({ text: "Replacement" });
     await replacement;
     assert.deepEqual(delivered.at(-1), ["first", { text: "Replacement" }, "Original"]);
@@ -18396,4 +18397,43 @@ test("Kagi native requests enforce the serialized UTF-8 payload limit", async ()
         assert.equal((await native.makeKagiTranslateRequest({}, "fixture", "text", from, to)).status, 413);
         assert.equal(sent.length, before);
     }
+});
+
+
+test("Translate cancels replaced and lifecycle-owned Google requests", async () => {
+    const signals: AbortSignal[] = [];
+    const store = { service: "google", autoTranslate: true, receivedInput: "auto", receivedOutput: "fr", sentInput: "auto", sentOutput: "fr" };
+    const common = { UserStore: { getCurrentUser: () => ({ id: "first" }) }, ChannelStore: { getChannel: () => ({}) }, showToast: () => assert.fail("Cancelled request showed a toast"), Toasts: { Type: { FAILURE: 2 } } };
+    const utils = loadSource("src/plugins/translate/utils.ts", {
+        "@utils/css": { classNameFactory: () => () => "" }, "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
+        "@webpack/common": common, "./settings": { settings: { store } }, "./languages": { GoogleLanguages: {} }
+    }, { IS_WEB: true, VencordNative: { pluginHelpers: { Translate: {} } }, URLSearchParams,
+        fetch: (_url: string, options: { signal: AbortSignal }) => new Promise((_resolve, reject) => {
+            signals.push(options.signal);
+            options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+        })
+    });
+    const { default: plugin } = loadSource("src/plugins/translate/index.tsx", {
+        "@api/ContextMenu": {}, "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value }, "@webpack/common": common,
+        "./settings": { settings: { store } }, "./TranslateIcon": {},
+        "./TranslationAccessory": { handleTranslate: () => assert.fail("Cancelled request delivered") }, "./utils": utils
+    }, { setTimeout: () => 1, clearTimeout() {} });
+    const action = plugin.messagePopoverButton.render({ id: "message", channel_id: "channel", content: "Hello" }).onClick;
+    const first = action();
+    const second = action();
+    assert.equal(signals[0].aborted, true);
+    assert.equal(signals[1].aborted, false);
+    const outgoing = { content: "Original" };
+    const sending = plugin.onBeforeMessageSend("channel", outgoing);
+    plugin.flux.LOGOUT();
+    assert.ok(signals.every(signal => signal.aborted));
+    await Promise.all([first, second]);
+    assert.equal((await sending).cancel, true);
+    assert.equal(outgoing.content, "Original");
+    const afterLogout = action();
+    assert.equal(signals[3].aborted, false);
+    plugin.stop();
+    assert.equal(signals[3].aborted, true);
+    await afterLogout;
 });

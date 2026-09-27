@@ -8,6 +8,14 @@ Earlier broad verification checkpoint `080e17609`: all 654 broader tests and tim
 
 A fresh September 28 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,656 files, fifteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-patches-complete.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
 
+## Callback receiver follow-up
+
+The banner binding failure prompted a scan of all 1,164 tracked TypeScript source files under src. The AST check identifies receiver-dependent methods passed as values and also checks plugin method references inside replacement strings. Running it against the pre-fix banner source identifies the detached gifToPng callback. The current tree has no further detached receiver-dependent method candidate in ordinary code.
+
+The replacement-string check reports FavouriteAnything.renderEmbed.call(this). This is intentional: the method declares this as EmbedComponent and reads its native props and preserved __render method. Binding it to the plugin would break that behavior. Inspected DOM/render callback sites in F8Break, WebKeybinds, Dragify, ReadAllNotificationsButton and ServerListIndicators either do not use this, use arrow functions or pass a wrapped component. They are unchanged.
+
+Evidence is `.git/audit/receiver-callback-candidates.{cjs,json}` and `receiver-callback-baseline.json`. The scan does not resolve arbitrary aliases, computed method names or cross-file dynamic dispatch. It narrows the regression follow-up rather than proving every callback correct. No production change or new shipped checker was needed; the prior 694-test/build checkpoint remains applicable.
+
 ## Banner conversion in Chromium
 
 The current production converter now has real browser evidence in addition to controlled callbacks. An isolated Chromium page loads a local GIF through Image and produces PNG output. A 2048 by 1024 canvas input converts to 1024 by 512, preserving a sampled red pixel. With a local image response stalled before headers, stop settles the conversion with its original URL and empties both pending work and cache. The local HTTP server observes the connection closing within the 1.5-second observation window.

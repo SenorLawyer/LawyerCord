@@ -60,6 +60,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Resolve BlurNSFW's attachment, post-preview and paused-video classes explicitly, including late-loaded media, and clean up pending class lookups when stopped.
 - Reject profile preset snapshots and restores when the selected profile has not loaded, instead of substituting global values for a missing server profile.
 - Preserve inherited display-name styles in saved server profiles instead of copying global formatting into a server override.
 - Refresh USRBG profile banners and voice backgrounds when the feed loads or clears, and apply the Discord-banner preference immediately.

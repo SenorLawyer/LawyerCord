@@ -337,6 +337,8 @@ test("KeepCurrentChannel leaves malformed saved records untouched", async () => 
 
 test("BlurNSFW can change blur settings before startup and after stopping", () => {
     const styles: { textContent: string; removed: boolean; remove: () => void }[] = [];
+    const waiting = new Map<string, () => void>();
+    const loaded = new Set(["imageContainer,imageContent"]);
     const store = { blurAmount: 10 };
     let change: () => void = () => assert.fail("Missing setting callback");
     let validate: (value: string) => boolean | string = () => assert.fail("Missing setting validation");
@@ -348,7 +350,13 @@ test("BlurNSFW can change blur settings before startup and after stopping", () =
         } },
         "@api/Styles": {}, "@utils/constants": { Devs: {} },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
-        "@utils/css": { createAndAppendStyle: () => {
+        "@webpack": {
+            filters: { byClassNames: (...names: string[]) => names.join(",") },
+            findCssClassesLazy: (...names: string[]) => ({ [names[0]]: `${names[0]}_${names[1]} common` }),
+            waitForSubscriptions: waiting,
+            waitFor: (filter: string, callback: () => void) => { if (loaded.has(filter)) callback(); else waiting.set(filter, callback); }
+        },
+        "@utils/css": { classNameToSelector: (value: string) => `.${value.split(" ").join(".")}`, createAndAppendStyle: () => {
             const style = { textContent: "", removed: false, remove() { this.removed = true; } };
             styles.push(style);
             return style;
@@ -359,15 +367,25 @@ test("BlurNSFW can change blur settings before startup and after stopping", () =
     assert.equal(styles.length, 0);
     plugin.start();
     assert.match(styles[0].textContent, /blur\(15px\)/);
+    assert.ok(styles[0].textContent.includes(".imageContainer_imageContent.common"));
+    assert.equal(waiting.size, 2);
+    const post = "imageContainer,backgroundImage";
+    loaded.add(post);
+    waiting.get(post)?.();
+    waiting.delete(post);
+    assert.ok(styles[0].textContent.includes(".imageContainer_backgroundImage.common"));
+    assert.ok(!styles[0].textContent.includes("[class*="));
     store.blurAmount = 20;
     change();
     assert.match(styles[0].textContent, /blur\(20px\)/);
     plugin.stop();
+    assert.equal(waiting.size, 0);
     assert.equal(styles[0].removed, true);
     store.blurAmount = 5;
     assert.doesNotThrow(change);
     assert.match(styles[0].textContent, /blur\(20px\)/);
     plugin.start();
+    assert.equal(waiting.size, 1);
     assert.match(styles[1].textContent, /blur\(5px\)/);
     for (const value of [-1, NaN, Infinity, -Infinity, 0, 2.5, 10]) {
         store.blurAmount = value;

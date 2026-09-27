@@ -7,10 +7,17 @@
 import { definePluginSettings } from "@api/Settings";
 import { managedStyleRootNode } from "@api/Styles";
 import { Devs } from "@utils/constants";
-import { createAndAppendStyle } from "@utils/css";
+import { classNameToSelector, createAndAppendStyle } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
+import { filters, findCssClassesLazy, waitFor, waitForSubscriptions } from "@webpack";
 
 let style: HTMLStyleElement | undefined;
+const selectors = new Set<string>();
+const mediaClasses = [
+    ["imageContainer", "imageContent"],
+    ["imageContainer", "backgroundImage"],
+    ["wrapperPaused", "wrapperPlaying"]
+].map(names => ({ name: names[0], classes: findCssClassesLazy(...names), filter: filters.byClassNames(...names) }));
 
 const settings = definePluginSettings({
     blurAmount: {
@@ -28,11 +35,10 @@ const settings = definePluginSettings({
 });
 
 function setCss() {
-    if (!style) return;
+    if (!style || !selectors.size) return;
     const { blurAmount } = settings.store;
     style.textContent = `
-        .vc-nsfw-img [class*=imageContainer],
-        .vc-nsfw-img [class*=wrapperPaused] {
+        ${Array.from(selectors, selector => `.vc-nsfw-img ${selector}`).join(",\n")} {
             filter: blur(${Number.isFinite(blurAmount) && blurAmount >= 0 ? blurAmount : 10}px);
             transition: filter 0.2s;
 
@@ -66,10 +72,17 @@ export default definePlugin({
     start() {
         style = createAndAppendStyle("VcBlurNsfw", managedStyleRootNode);
 
-        setCss();
+        for (const { name, classes, filter } of mediaClasses) {
+            waitFor(filter, () => {
+                selectors.add(classNameToSelector(classes[name]));
+                setCss();
+            });
+        }
     },
 
     stop() {
+        for (const { filter } of mediaClasses) waitForSubscriptions.delete(filter);
+        selectors.clear();
         style?.remove();
         style = undefined;
     }

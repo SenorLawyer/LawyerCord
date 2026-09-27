@@ -2,9 +2,9 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-September 27 verification checkpoint at `b16e13007`: all 636 broader tests and timezone checks, 38 SettingsSync tests, repository-wide ESLint, CSS lint and internationalization lint pass. TypeScript, both standalone builds and artifact scanning passed for the same code revision in the preceding batch. All four GitHub checks now pass for that revision. Patch lint remains at 129 warnings and no errors; the remaining warnings and other findings are not declared resolved.
+Current source checkpoint `a57ed592c`: all 650 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, focused ESLint, desktop/web builds, and artifact scanning pass. All four GitHub checks also pass for this source revision. Patch lint was rerun at this checkpoint and reports 112 warnings and no errors. Repository-wide ESLint, CSS lint, and internationalization lint last passed at the earlier checkpoints recorded below; focused checks do not replace those final gates.
 
-A fresh fetch confirms no missing commits from main, and the latest published nightly remains the September 5 baseline. The baseline ledger paths exactly match all 1,661 baseline files, each recorded as reviewed. At that checkpoint, the source had 1,656 tracked files, with fourteen additions, nineteen removals and 552 modifications. Reading coverage remains separate from finding closure and live acceptance. Verification logs are `.git/audit/reconciliation-latest-{tests,sync,eslint,styles,intl}.log`.
+A fresh September 27 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,655 files, fourteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-cloud-current.json`.
 
 ## Scope and source
 
@@ -565,15 +565,23 @@ Mocked Discord requests do not establish live account-switch, message-send, or p
 
 ## Remaining work
 
-The reproduced CSS/DataStore download conflict is addressed by conditional writes described above. The settings-object conflict is also addressed above. Remaining cloud work includes cross-window cloud-control ownership, automatic dirty tracking for non-settings edits, account-transition behavior and live acceptance. The import spans separate persistence mechanisms and is not an all-or-nothing transaction across all sections.
+The following cloud and session findings have concrete fixes and regression evidence. Their stated scope is deliberate.
 
-The settings-object reproduction now returns failure while preserving both the newer persisted value and the original renderer value. Its baseline mode still demonstrates the overwrite in the preceding commit. Settings, CSS and DataStore use separate persistence operations, so a later conflict can still follow an already applied earlier section.
+| Finding | Verified disposition | Remaining boundary |
+| --- | --- | --- |
+| DataStore edits did not schedule automatic sync | Committed default-store changes feed the existing scheduler, including writes before listener setup and mutated caller keys. Failed and custom-store writes are excluded. | Separate-window plugin cache refresh and native external edits. |
+| Concurrent cloud operations regressed manifest versions | A shared browser lock excludes all four operation types across windows in the same storage partition. Success, failure, and retry are covered. | Separate browser partitions and separate native clients. |
+| Account changes during upload collection selected another owner's records | Account and service checks run after storage reads and before account filtering. The controlled switch-away-and-back reproduction sends no request. | Signed-in Discord account-switch behavior and other asynchronous plugin paths. |
+| JSON backups could not preserve session Maps | Versioned Map encoding round-trips through current offline and cloud paths. Older readers remain incompatible with that format. | Other unsupported stored value types and malformed records. |
+| An older backup's empty session object broke startup | The actual published-nightly exporter and importer reproduce the record; the current loader accepts it without storage writes. | Names already lost are not recoverable. Nonempty malformed records remain separate. |
+
+Settings, CSS, and DataStore imports each reject conflicting local writes in the covered cases. They remain separate persistence operations: a later conflict can follow an already applied earlier section. These checks do not prove an atomic import or live-client acceptance.
 
 The full finding ledger is still being worked through. This list identifies major open areas and is not an assertion that other findings are closed:
 
 - Scheduled-message legacy recovery, remaining persisted-data constraints, media cancellation, and coordination between separate client contexts.
 - Remaining plugin account, cancellation, network-response, storage, and resource-lifecycle findings across the broader codebase.
-- Runtime validation of patch anchors. At `b16e13007`, the patch validator reports 129 warnings; those warnings have not all been resolved or justified against current Discord modules. The latest source passes removed the sole replacement-level try/catch warning and refreshed FriendCodes, MoreUserTags, FakeNitro, RPCEditor, NewGuildSettings, OnePingPerDM, Timezones, ClientSideBlock, StatusPresets, and MessageLoggerEnhanced against current upstream module shapes. Broader behavioral rewrites remain separate review work. Remaining regex warnings are being reviewed against current code rather than mechanically bounded.
+- Runtime validation of patch anchors. At `a57ed592c`, the patch validator reports 112 warnings; those warnings have not all been resolved or justified against current Discord modules. The latest source passes removed the sole replacement-level try/catch warning and refreshed FriendCodes, MoreUserTags, FakeNitro, RPCEditor, NewGuildSettings, OnePingPerDM, Timezones, ClientSideBlock, StatusPresets, and MessageLoggerEnhanced against current upstream module shapes. Broader behavioral rewrites remain separate review work. Remaining regex warnings are being reviewed against current code rather than mechanically bounded.
 - Native and provider behavior that mocked tests cannot establish, including target-platform installer and live-client acceptance.
 - Final release checks and live acceptance against the combined source. Main at `8fc182ba7` has been integrated and its release history preserved.
 - A final finding-by-finding disposition, current-head CI, and final audit report before removing draft status.

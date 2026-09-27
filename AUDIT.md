@@ -8,6 +8,14 @@ Earlier broad verification checkpoint `080e17609`: all 654 broader tests and tim
 
 A fresh September 28 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,656 files, fifteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-patches-complete.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
 
+## Banner conversion in Chromium
+
+The current production converter now has real browser evidence in addition to controlled callbacks. An isolated Chromium page loads a local GIF through Image and produces PNG output. A 2048 by 1024 canvas input converts to 1024 by 512, preserving a sampled red pixel. With a local image response stalled before headers, stop settles the conversion with its original URL and empties both pending work and cache. The local HTTP server observes the connection closing within the 1.5-second observation window.
+
+Evidence is `.git/audit/banner-browser-sep28.{cjs,json}` at 9be21e7b4. The fixture uses actual Image, canvas and networking with the production converter; plugin setup dependencies are controlled. No additional production change was needed. This proves those conversion and stop cases, not signed-in member-list rendering, all transport conditions, preference propagation or aggregate decoded-image limits.
+
+A fresh origin/main fetch has zero commits missing from this branch. The latest published nightly remains nightly-20260905-1918-6e664e03, published September 5. Full audit closure and release verification remain unfinished.
+
 ## Banner conversion callback ownership
 
 BannersEverywhere passed gifToPng directly through its React props. StaticBanner called it without a receiver, but the method reads the plugin's pngCache and pendingConversions through this. The plugin manager binds only its listed public callbacks, not gifToPng. This made the real rendered conversion reject before loading an image. The callback now calls the method through its plugin owner. No cache or conversion rewrite is needed.

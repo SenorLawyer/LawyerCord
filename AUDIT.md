@@ -52,6 +52,14 @@ The tracked regression fails before the fix with no action where a join was expe
 
 All 677 broader tests and timezone checks, TypeScript, focused lint, sequential desktop/web builds and artifact scanning pass. Patch lint remains at 30 warnings and no errors. Logs use `.git/audit/hidden-mention-*`. All four preceding 665ab1359 CI checks passed. The discovery scan also captured queryChannels, GuildChannelStore and NowPlayingViewStore for the next pass in `.git/audit/hidden-channel-discovery-patches.{cjs,json}`. The existing voice/stage chat-button guards were checked against their AST scopes: module 416528 function z and module 67319 function ti both read their own component props without an intervening function. No change was needed there.
 
+## ShowHiddenChannels discovery and store filtering
+
+Channel discovery now matches its adjacent getChannels-to-map expression and permission condition instead of searching backward to queryChannels. NowPlayingViewStore removes its permission predicate directly beside the voice-state lookup. Both complete captured modules remain byte-identical and compile. The GuildChannelStore wrapper is bounded and uses a replacement string instead of a callback.
+
+The store's population filter was already disabled with an injected false conjunct, but still evaluated preceding permission checks. That dead filter is now removed while preserving the count increment inside its original comma expression. The initial candidate assumed the increment was a separate statement and matched nothing; the complete-module check caught this before validation. The final module differs only by removal of the disabled filter, and 64 executions of the actual population callback preserve counts, channel categories and directory entries across type, permission, gating and selected-channel combinations. Evidence is `.git/audit/hidden-discovery-local-verify.{cjs,json}`, comparing 5fe7f159f. Two callbacks are removed. Historical 9820b79df was inspected for the active-status intent.
+
+All 677 broader tests and timezone checks, TypeScript, focused lint, sequential desktop/web builds and artifact scanning pass. Logs use `.git/audit/hidden-discovery-local-*`. Patch lint reports 25 warnings and no errors, with no remaining unbounded-match warnings in ShowHiddenChannels. The current warning list is `.git/audit/remaining-patches-current.log`. All four preceding 5fe7f159f CI checks passed. Captured-code checks do not close live client acceptance or the broader outstanding audit findings.
+
 ## NewGuildSettings invite target
 
 The invite patch crossed 2,446 characters into the unrelated openApp method and passed its parsed invite object instead of a guild ID. Commit 515340a07 changed the capture to this shape while refreshing its anchor. The replacement now ends at the INVITE_ACCEPT_SUCCESS dispatch and reads the accepted payload's guild_id or nested guild.id. Its capture-copy callback is removed.

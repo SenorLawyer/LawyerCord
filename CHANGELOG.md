@@ -56,6 +56,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Preserve the native divider in visible stage-channel headers while hiding counts in hidden stages, and narrow voice-content and permission-header patch searches.
 - Hide chat toasts when viewing hidden stage channels, and simplify stage-rendering patches to use local channel references.
 - Fix voice-channel mentions so visible channels can join normally and hidden channels navigate without joining instead of doing nothing.
+- Remove a disabled channel-store filter while retaining channel counts, and simplify discovery and active-status patches without changing their output.
 
 - Replace hidden-channel toolbar method-prefix searches with local button matches and keep the nested row guard tied to its mouse handler's channel.
 

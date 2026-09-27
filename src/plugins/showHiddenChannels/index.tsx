@@ -442,12 +442,12 @@ export default definePlugin({
             replacement: [
                 {
                     // Make the getChannels call to GuildChannelStore return hidden channels
-                    match: /(?<=queryChannels\(\i\){.+?getChannels\(\i)(?=\))/,
+                    match: /(?<=getChannels\(\i)(?=\)\[\i\]\)\.map\(\i=>\i\.channel\))/,
                     replace: ",true"
                 },
                 {
                     // Avoid filtering out hidden channels from the channel list
-                    match: /(?<=queryChannels\(\i\){.+?\)\((\i)\.type\))(?=&&!\i\.\i\.can\()/,
+                    match: /(?<=\)\((\i)\.type\))(?=&&!\i\.\i\.can\(\i\?\1\.accessPermissions:\i\.\i\.VIEW_CHANNEL,\1\))/,
                     replace: "&&!$self.isHiddenChannel($1)"
                 }
             ]
@@ -473,13 +473,13 @@ export default definePlugin({
             replacement: [
                 {
                     // Make GuildChannelStore contain hidden channels
-                    match: /isChannelGated\(.+?\)(?=&&)/,
-                    replace: m => `${m}&&false`
+                    match: /if\((\i\.count\+=1),\i\.\i\.has\((\i)\.type\)&&!\i\.\i\.can\(\i\.\i\.VIEW_CHANNEL,\2\)&&!\i\.\i\.isChannelGated\(\2\.guild_id,\2\.id\)&&\2\.id!==\i\)return;/,
+                    replace: "$1;"
                 },
                 {
                     // Filter hidden channels from GuildChannelStore.getChannels unless told otherwise
-                    match: /(?<=getChannels\(\i)(\){.*?)return (.+?)}/,
-                    replace: (_, rest, channels) => `,shouldIncludeHidden${rest}return $self.resolveGuildChannels(${channels},shouldIncludeHidden??arguments[0]==="@favorites");}`
+                    match: /(?<=getChannels\(\i)(\){[^{}]{0,100}return )([^{};]{0,150})(?=})/,
+                    replace: ',shouldIncludeHidden$1$self.resolveGuildChannels($2,shouldIncludeHidden??arguments[0]==="@favorites");'
                 },
             ]
         },
@@ -495,8 +495,8 @@ export default definePlugin({
             find: '"NowPlayingViewStore"',
             replacement: {
                 // Make active now voice states on hidden channels
-                match: /(getVoiceStateForUser.{0,150}?)&&\i\.\i\.canWithPartialContext.{0,20}VIEW_CHANNEL.+?}\)(?=\?)/,
-                replace: "$1"
+                match: /(?<=getVoiceStateForUser\(\i\);return \i\?\.channelId!=null)&&\i\.\i\.canWithPartialContext\(\i\.\i\.VIEW_CHANNEL,{channelId:\i\.channelId}\)(?=\?)/,
+                replace: ""
             }
         },
         {

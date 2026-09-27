@@ -2,9 +2,9 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-September 26 patch review: ImageFilename now adds the tooltip directly after the image link's `href`, using the image role as its module anchor. NoRPC removes only the native transport registration callback, with a bounded match that cannot cross nested braces. The previous patterns searched across arbitrary surrounding code. Controlled execution of both captured image modules preserves the rendered output across sixteen URL/preference cases; the captured RPC method remains identical after patching, still requesting the module without registering its native transports. All three patched modules compile. These checks use captured code and mocked dependencies, not signed-in client acceptance. Evidence is in `.git/audit/patch-simplification-check.cjs` and `patch-simplification-result.json`.
+September 27 verification checkpoint at `b16e13007`: all 636 broader tests and timezone checks, 38 SettingsSync tests, repository-wide ESLint, CSS lint and internationalization lint pass. TypeScript, both standalone builds and artifact scanning passed for the same code revision in the preceding batch. All four GitHub checks now pass for that revision. Patch lint remains at 129 warnings and no errors; the remaining warnings and other findings are not declared resolved.
 
-After these changes, all 624 broader regression tests and timezone checks, TypeScript, focused ESLint, both standalone builds, and release artifact scanning pass. Patch lint reports 165 warnings and no errors. Logs are `.git/audit/patch-simplification-{tests,lint,desktop,web}.log`. All four GitHub checks passed on preceding commit `46d4e7377`; CI for the new changes is separate.
+A fresh fetch confirms no missing commits from main, and the latest published nightly remains the September 5 baseline. The baseline ledger paths exactly match all 1,661 baseline files, each recorded as reviewed. Current source has 1,656 tracked files, with fourteen additions, nineteen removals and 552 modifications. Reading coverage remains separate from finding closure and live acceptance. Verification logs are `.git/audit/reconciliation-latest-{tests,sync,eslint,styles,intl}.log`.
 
 ## Scope and source
 
@@ -1149,3 +1149,10 @@ The mapped popover list put its stable key on the inner button rather than the o
 The fixture uses React 18.3.1, the actual MessagePopover API and actual ErrorBoundary implementation. It verifies healthy-button visibility and retained component state while a failed neighbor is hidden, restored and removed, with no missing-key warning. Evidence is `.git/audit/message-popover-keys.cjs` and `message-popover-keys.log`. All 628 broader regressions and timezone checks, TypeScript, focused ESLint, desktop/web builds and artifact scanning pass. Logs are `.git/audit/message-popover-keys-{tests,desktop,web}.log`. Signed-in hover-menu and focus acceptance remain separate.
 
 A fresh September 27 fetch confirms that origin/main is already integrated. The latest published release remains nightly-20260905-1918-6e664e03.
+
+## Earlier patch checkpoint
+
+September 26 patch review: ImageFilename now adds the tooltip directly after the image link's `href`, using the image role as its module anchor. NoRPC removes only the native transport registration callback, with a bounded match that cannot cross nested braces. The previous patterns searched across arbitrary surrounding code. Controlled execution of both captured image modules preserves the rendered output across sixteen URL/preference cases; the captured RPC method remains identical after patching, still requesting the module without registering its native transports. All three patched modules compile. These checks use captured code and mocked dependencies, not signed-in client acceptance. Evidence is in `.git/audit/patch-simplification-check.cjs` and `patch-simplification-result.json`.
+
+After these changes, all 624 broader regression tests and timezone checks, TypeScript, focused ESLint, both standalone builds, and release artifact scanning pass. Patch lint reports 165 warnings and no errors. Logs are `.git/audit/patch-simplification-{tests,lint,desktop,web}.log`. All four GitHub checks passed on preceding commit `46d4e7377`; CI for the new changes is separate.
+

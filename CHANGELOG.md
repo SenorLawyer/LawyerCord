@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Prevent pending channel saves or startup reads from undoing crash cleanup. KeepCurrentChannel now ignores stale restoration after navigation, logout or shutdown and reports storage failures.
+
 - Preserve nested crash-state expressions in CrashHandler and narrow ConsoleJanitor’s deprecated-log match.
 
 - Report failed BetterSettings preloads without unhandled promise rejections, while preserving retries when settings are opened.

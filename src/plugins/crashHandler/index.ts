@@ -16,9 +16,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { DataStore } from "@api/index";
 import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
+import { clearPreviousChannel } from "@plugins/keepCurrentChannel";
 import { Devs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
@@ -76,7 +76,7 @@ export default definePlugin({
     ],
 
     handleCrash(_this: any, errorState: any) {
-        DataStore.del("KeepCurrentChannel_previousData");
+        void clearPreviousChannel();
 
         if (IS_DEV) {
             try {

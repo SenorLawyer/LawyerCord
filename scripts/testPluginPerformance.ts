@@ -28,6 +28,87 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { makeLazy, proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("KeepCurrentChannel cancels stale restoration and handles storage failures", async () => {
+    type PreviousChannel = { guildId: string | null; channelId: string | null; };
+    function setup(deferred = false) {
+        let saved: PreviousChannel | undefined = { guildId: "guild", channelId: "old" };
+        let finishRead: (value: PreviousChannel | undefined) => void = () => assert.fail("No pending read");
+        let failure: "read" | "write" | "delete" | undefined;
+        let timerId = 0;
+        const timers = new Map<number, () => void>();
+        const routes: string[] = [];
+        const errors: unknown[] = [];
+        const { default: plugin, clearPreviousChannel } = loadSource("src/plugins/keepCurrentChannel/index.ts", {
+            "@api/DataStore": {
+                get: () => failure === "read" ? Promise.reject(new Error("Read failed"))
+                    : deferred ? new Promise<PreviousChannel | undefined>(resolve => { finishRead = resolve; }) : Promise.resolve(saved),
+                set: async (_key: string, value: PreviousChannel) => {
+                    if (failure === "write") throw new Error("Write failed");
+                    saved = value;
+                },
+                del: async () => {
+                    if (failure === "delete") throw new Error("Delete failed");
+                    saved = undefined;
+                }
+            },
+            "@utils/constants": { Devs: {} },
+            "@utils/Logger": { Logger: class {
+                warn(_message: string, error: unknown) { errors.push(error); }
+                error(_message: string, error: unknown) { errors.push(error); }
+            } },
+            "@utils/types": { __esModule: true, default: (value: unknown) => value },
+            "@webpack/common": {
+                ChannelRouter: { transitionToChannel: (id: string) => routes.push(id) },
+                ChannelStore: { hasChannel: () => true }, NavigationRouter: { transitionToGuild() {} },
+                SelectedChannelStore: { getChannelId: () => "current" }, SelectedGuildStore: { getGuildId: () => "guild" }
+            }
+        }, {
+            setTimeout: (callback: () => void) => { timers.set(++timerId, callback); return timerId; },
+            clearTimeout: (id: number) => timers.delete(id)
+        });
+        return {
+            plugin, clearPreviousChannel, routes, errors, timers,
+            saved: () => saved,
+            finish: () => finishRead({ guildId: "guild", channelId: "old" }),
+            fail: (operation: typeof failure) => { failure = operation; },
+            select: () => plugin.flux.CHANNEL_SELECT({ guildId: "guild", channelId: "new" }),
+            flush: async () => { const callbacks = [...timers.values()]; timers.clear(); callbacks.forEach(callback => callback()); await setImmediate(); }
+        };
+    }
+    const active = setup();
+    await active.plugin.start();
+    active.select();
+    await active.clearPreviousChannel();
+    assert.equal(active.timers.size, 0);
+    active.plugin.stop();
+    await active.flush();
+    assert.equal(active.saved(), undefined);
+
+    for (const action of ["clear", "stop", "select", "logout"]) {
+        const state = setup(true);
+        const loading = state.plugin.start();
+        if (action === "clear") await state.clearPreviousChannel();
+        else if (action === "stop") state.plugin.stop();
+        else if (action === "select") state.select();
+        else state.plugin.flux.LOGOUT({ type: "LOGOUT", isSwitchingAccount: true });
+        state.finish();
+        await loading;
+        await state.flush();
+        assert.deepEqual(state.routes, []);
+        assert.equal(state.saved()?.channelId, action === "clear" ? undefined : action === "select" ? "new" : "old");
+    }
+    for (const operation of ["read", "write", "delete"] as const) {
+        const state = setup();
+        if (operation !== "read") await state.plugin.start();
+        state.fail(operation);
+        if (operation === "read") await state.plugin.start();
+        else if (operation === "write") { state.select(); await state.flush(); }
+        else await state.clearPreviousChannel();
+        assert.equal(state.errors.length, 1);
+        assert.equal(state.saved()?.channelId, "old");
+    }
+});
+
 test("BlurNSFW can change blur settings before startup and after stopping", () => {
     const styles: { textContent: string; removed: boolean; remove: () => void }[] = [];
     const store = { blurAmount: 10 };

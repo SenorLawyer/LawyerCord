@@ -18,6 +18,7 @@
 
 import * as DataStore from "@api/DataStore";
 import { Devs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { ChannelRouter, ChannelStore, NavigationRouter, SelectedChannelStore, SelectedGuildStore } from "@webpack/common";
 
@@ -37,6 +38,8 @@ interface PreviousChannel {
     channelId: string | null;
 }
 
+const logger = new Logger("KeepCurrentChannel");
+let restoreVersion = 0;
 let isSwitchingAccount = false;
 let previousCache: PreviousChannel | undefined;
 let previousSaveTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -56,12 +59,21 @@ async function savePreviousChannelNow() {
     clearPreviousSaveTimeout();
     if (!previousCache) return;
 
-    await DataStore.set("KeepCurrentChannel_previousData", previousCache);
+    await DataStore.set("KeepCurrentChannel_previousData", previousCache).catch((error: unknown) =>
+        logger.warn("Could not save the previous channel.", error));
 }
 
 function schedulePreviousChannelSave() {
     clearPreviousSaveTimeout();
     previousSaveTimeout = setTimeout(() => void savePreviousChannelNow(), 500);
+}
+
+export function clearPreviousChannel() {
+    restoreVersion++;
+    clearPreviousSaveTimeout();
+    previousCache = undefined;
+    return DataStore.del("KeepCurrentChannel_previousData").catch((error: unknown) =>
+        logger.warn("Could not clear the previous channel.", error));
 }
 
 export default definePlugin({
@@ -82,6 +94,7 @@ export default definePlugin({
 
     flux: {
         LOGOUT(e: LogoutEvent) {
+            restoreVersion++;
             ({ isSwitchingAccount } = e);
             void savePreviousChannelNow();
         },
@@ -101,6 +114,7 @@ export default definePlugin({
 
         CHANNEL_SELECT({ guildId, channelId }: ChannelSelectEvent) {
             if (isSwitchingAccount) return;
+            restoreVersion++;
 
             const nextPrevious: PreviousChannel = {
                 guildId,
@@ -115,20 +129,27 @@ export default definePlugin({
     },
 
     async start() {
-        previousCache = await DataStore.get<PreviousChannel>("KeepCurrentChannel_previousData");
-        if (!previousCache) {
-            previousCache = {
-                guildId: SelectedGuildStore.getGuildId(),
-                channelId: SelectedChannelStore.getChannelId() ?? null
-            };
-
-            await DataStore.set("KeepCurrentChannel_previousData", previousCache);
-        } else if (previousCache.channelId) {
-            ChannelRouter.transitionToChannel(previousCache.channelId);
+        const version = ++restoreVersion;
+        try {
+            const previous = await DataStore.get<PreviousChannel>("KeepCurrentChannel_previousData");
+            if (version !== restoreVersion) return;
+            previousCache = previous;
+            if (!previousCache) {
+                previousCache = {
+                    guildId: SelectedGuildStore.getGuildId(),
+                    channelId: SelectedChannelStore.getChannelId() ?? null
+                };
+                await savePreviousChannelNow();
+            } else if (previousCache.channelId) {
+                ChannelRouter.transitionToChannel(previousCache.channelId);
+            }
+        } catch (error) {
+            logger.error("Could not restore the previous channel.", error);
         }
     },
 
     stop() {
+        restoreVersion++;
         void savePreviousChannelNow();
     }
 });

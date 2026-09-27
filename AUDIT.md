@@ -8,6 +8,12 @@ Earlier broad verification checkpoint `080e17609`: all 654 broader tests and tim
 
 A fresh September 28 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,656 files, fifteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-patches-complete.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
 
+## Delayed USRBG feed publication
+
+An actual React reproduction confirms the remaining banner startup finding. With no Discord banner, the member row initially renders null. Production USRBG start then validates and publishes a controlled successful response. The row still renders null until its parent is explicitly rendered again, at which point it shows the correct feed URL. The plugin manager calls asynchronous start without awaiting it, so mounting before feed completion is a supported startup ordering.
+
+Evidence is `.git/audit/banner-feed-late-before.{cjs,json}` at 221e016fb. The fixture runs the production feed loader, bounded reader and banner components with actual React; the Discord store adapter and HTTP response are controlled. No production fix is claimed yet. The feed is not Discord-owned data and currently has no reactive publication path. The next change should expose its existing value through a shared subscription without polling or retaining a second feed copy. Existing request cancellation and validation must remain intact.
+
 ## Callback receiver follow-up
 
 The banner binding failure prompted a scan of all 1,164 tracked TypeScript source files under src. The AST check identifies receiver-dependent methods passed as values and also checks plugin method references inside replacement strings. Running it against the pre-fix banner source identifies the detached gifToPng callback. The current tree has no further detached receiver-dependent method candidate in ordinary code.

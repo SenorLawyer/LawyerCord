@@ -30,10 +30,12 @@ import { makeLazy, proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 import { canonicalizeMatch } from "../src/utils/patches";
 
 test("PictureInPicture keeps original playback after rejected requests", async () => {
-    for (const failure of ["request", "play", "metadata", "replaced", "request-replaced", "play-replaced", undefined]) {
+    for (const failure of ["timeout", "request", "play", "metadata", "replaced", "request-replaced", "play-replaced", undefined]) {
         const events: string[] = [];
+        const timers = new Map<number, () => Promise<void>>();
+        let timerId = 0;
         const clone = {
-            readyState: failure === "metadata" || failure === "replaced" ? 0 : 4, currentTime: 0, style: {}, isConnected: true, muted: false, volume: 1, playbackRate: 1,
+            readyState: failure === "metadata" || failure === "timeout" || failure === "replaced" ? 0 : 4, currentTime: 0, style: {}, isConnected: true, muted: false, volume: 1, playbackRate: 1,
             onleavepictureinpicture: null as (() => void) | null,
             onerror: null as (() => Promise<void>) | null,
             onloadedmetadata: null as (() => Promise<void>) | null,
@@ -55,11 +57,22 @@ test("PictureInPicture keeps original playback after rejected requests", async (
             "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
             "@webpack/common": { Button: { Colors: { CUSTOM: "CUSTOM" }, Sizes: { NONE: "min" } }, Tooltip: "tooltip", showToast: () => events.push("toast"), Toasts: { Type: { FAILURE: "failure" } } }
         }, {
+            setTimeout: (callback: () => Promise<void>, delay: number) => { assert.equal(delay, 30_000); timers.set(++timerId, callback); return timerId; },
+            clearTimeout: (id: number) => timers.delete(id),
             React: { createElement: (type: unknown, props: Record<string, unknown>, ...children: unknown[]) => ({ type, props: { ...props, children } }) },
             document: { body: { appendChild: (node: unknown) => node } }
         });
         const button = plugin.PictureInPictureButton().props.children[0]({});
         button.props.onClick({ currentTarget: { parentNode: { parentNode: { querySelector: () => original } } } });
+        if (failure === "timeout") {
+            assert.equal(timers.size, 1);
+            const obsoleteMetadata = clone.onloadedmetadata;
+            for (const callback of [...timers.values()]) await callback();
+            await obsoleteMetadata?.();
+            assert.equal(clone.isConnected, false);
+            assert.equal(clone.onloadedmetadata, null);
+            assert.equal(clone.onerror, null);
+        }
         if (failure === "metadata") await clone.onerror?.();
         if (failure === "replaced") {
             const obsoleteCallback = clone.onloadedmetadata;
@@ -69,13 +82,14 @@ test("PictureInPicture keeps original playback after rejected requests", async (
             assert.equal(clone.onerror, null);
         }
         await setImmediate();
+        assert.equal(timers.size, 0);
         assert.equal(clone.muted, true);
         assert.equal(clone.volume, 0.23);
         assert.equal(clone.playbackRate, 1.5);
-        assert.equal(clone.currentTime, failure === "metadata" || failure === "replaced" ? 0 : 12);
+        assert.equal(clone.currentTime, failure === "metadata" || failure === "timeout" || failure === "replaced" ? 0 : 12);
         assert.deepEqual(events, failure === "request-replaced" ? ["request", "pause clone", "remove clone"]
             : failure === "play-replaced" ? ["request", "play", "pause clone", "remove clone", "pause clone"]
-                : failure === "replaced" ? ["clear source", "reset load", "remove clone", "request", "play", "pause original"] : failure === "metadata" ? ["pause clone", "remove clone", "toast"] : failure === "request" ? ["request", "pause clone", "remove clone", "toast"]
+                : failure === "replaced" ? ["clear source", "reset load", "remove clone", "request", "play", "pause original"] : failure === "metadata" || failure === "timeout" ? ["clear source", "reset load", "pause clone", "remove clone", "toast"] : failure === "request" ? ["request", "pause clone", "remove clone", "toast"]
             : failure === "play" ? ["request", "play", "pause clone", "remove clone", "toast"]
                 : ["request", "play", "pause original"]);
     }

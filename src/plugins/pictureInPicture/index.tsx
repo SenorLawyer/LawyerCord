@@ -22,6 +22,7 @@ interface MediaActionProps {
 
 const logger = new Logger("PictureInPicture");
 let pendingVideo: HTMLVideoElement | undefined;
+let pendingTimeout: ReturnType<typeof setTimeout> | undefined;
 
 const settings = definePluginSettings({
     loop: {
@@ -70,6 +71,7 @@ export default definePlugin({
                         onClick={e => {
                             const video = e.currentTarget.parentNode!.parentNode!.querySelector("video")!;
                             if (pendingVideo) {
+                                clearTimeout(pendingTimeout);
                                 pendingVideo.onloadedmetadata = null;
                                 pendingVideo.onerror = null;
                                 pendingVideo.removeAttribute("src");
@@ -90,10 +92,15 @@ export default definePlugin({
                             };
 
                             async function failPiP() {
-                                if (pendingVideo === videoClone) pendingVideo = undefined;
                                 if (!videoClone.isConnected) return;
                                 videoClone.onloadedmetadata = null;
                                 videoClone.onerror = null;
+                                if (pendingVideo === videoClone) {
+                                    pendingVideo = undefined;
+                                    clearTimeout(pendingTimeout);
+                                    videoClone.removeAttribute("src");
+                                    videoClone.load();
+                                }
                                 videoClone.pause();
                                 videoClone.remove();
                                 if (document.pictureInPictureElement === videoClone) {
@@ -105,6 +112,7 @@ export default definePlugin({
                             async function launchPiP() {
                                 if (pendingVideo !== videoClone) return;
                                 pendingVideo = undefined;
+                                clearTimeout(pendingTimeout);
                                 videoClone.onloadedmetadata = null;
                                 videoClone.onerror = null;
                                 try {
@@ -125,8 +133,10 @@ export default definePlugin({
                             videoClone.onerror = failPiP;
                             if (videoClone.readyState === 4 /* HAVE_ENOUGH_DATA */)
                                 launchPiP();
-                            else
+                            else {
                                 videoClone.onloadedmetadata = launchPiP;
+                                pendingTimeout = setTimeout(failPiP, 30_000);
+                            }
                         }}
                     >
                         <svg width="24px" height="24px" viewBox="0 0 24 24">

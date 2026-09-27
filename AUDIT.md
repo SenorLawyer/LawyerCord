@@ -2,11 +2,19 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Latest full local verification: all 695 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the member nameplate preference fix. Patch lint reports zero warnings and no errors. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding 88fc6896d; the nameplate fix requires its own CI.
+Latest full local verification: all 695 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the Picture in Picture metadata timeout fix. Patch lint last reported zero warnings and no errors at the nameplate checkpoint; this fix changes no patches. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding a14211db6; the timeout fix requires its own CI.
 
 Earlier broad verification checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning passed. Patch lint then reported 107 warnings and no errors. Full repository lint logs use `.git/audit/reconciliation-sep27-*`; later focused runs do not replace final combined validation.
 
 A fresh September 28 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,656 files, fifteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-patches-complete.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
+
+## Picture in Picture stalled metadata cleanup
+
+The final pending video clone previously had no deadline if its metadata request stalled. Its existing failure cleanup now runs after 30 seconds, removes the source, resets loading and releases the hidden clone while leaving the original video playing. Success, failure and replacement clear the timer. An obsolete metadata callback cannot launch the cancelled clone. No retry mechanism or change to an already playing PiP video was added.
+
+The tracked timeout case fails on a14211db6 and passes with the fix, alongside the existing request/play rejection, replacement and successful-playback cases. Actual Chromium with a held local HTTP response verifies the production 30-second timer, closed transport, removed clone/source/handlers, one toast, no unhandled rejection and continued original playback. Existing real-browser replacement and normal playback/exit checks also pass. Evidence is `.git/audit/pip-timeout-browser.{cjs,json,log}`, `pip-timeout-before.log`, `pip-timeout-focused.log`, `pip-timeout-replacement.log` and `pip-timeout-success.log`.
+
+All 695 broader regressions and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass. Logs use `.git/audit/pip-timeout-*`. The older PiP disposition record is reconciled with already completed metadata replacement, request/play races, keyboard access and patch narrowing. Signed-in layout and screen-reader output remain unverified; they are not claimed by the local browser checks. The clone remains necessary for the previously demonstrated source-reuse behavior.
 
 ## Member nameplate preference ownership
 

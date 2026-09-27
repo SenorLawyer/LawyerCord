@@ -227,7 +227,7 @@ export default definePlugin({
         {
             find: ".ROLE_MENTION)",
             replacement: {
-                match: /function (\i)(?=.+?renderPopout:.{0,20}\1,\{guildId:\i,channelId:\i)/,
+                match: /function (\i)(?=\(\i\)\{let\{(?=[^}]{0,150}\bpopoutProps:)(?=[^}]{0,150}\broleId:))/,
                 replace: "$self.RoleMembers=$1;$&"
             }
         },

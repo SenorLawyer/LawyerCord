@@ -2225,6 +2225,45 @@ test("reply mention exceptions match whole user and role IDs", () => {
     assert.equal(plugin.shouldMention(message, false), true);
 });
 
+test("pause invites waits for the server and reports rejected requests", async () => {
+    for (const failed of [false, true]) {
+        let resolveRequest: () => void = () => assert.fail("missing request");
+        let rejectRequest: (error: Error) => void = () => assert.fail("missing request");
+        const request = new Promise<void>((resolve, reject) => { resolveRequest = resolve; rejectRequest = reject; });
+        const checked: boolean[] = [];
+        const pending: boolean[] = [];
+        const toasts: string[] = [];
+        const calls: unknown[] = [];
+        const { default: plugin } = loadSource("src/plugins/pauseInvitesForever/index.tsx", {
+            "@components/Button": { TextButton: "shared-text-button" },
+            "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+            "@utils/constants": { Devs: {} },
+            "@utils/discord": { getIntlMessage: () => "Description", hasGuildFeature: () => false },
+            "@utils/types": { __esModule: true, default: (value: unknown) => value },
+            "@webpack/common": {
+                Constants: { Endpoints: { GUILD: (id: string) => `/guilds/${id}` } },
+                GuildStore: { getGuild: () => ({ features: new Set(["COMMUNITY"]) }) },
+                PermissionStore: { getGuildPermissionProps: () => ({ canManageRoles: true }) },
+                RestAPI: { patch: (value: unknown) => { calls.push(value); return request; } },
+                useState: () => [false, (value: boolean) => pending.push(value)],
+                showToast: (message: string) => toasts.push(message), Toasts: { Type: { FAILURE: "failure" } }
+            }
+        }, { React: { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props: { ...props, children } }) } });
+        const button = plugin.renderInvitesLabel({ guildId: "guild", setChecked: (value: boolean) => checked.push(value) }).props.children[1];
+        assert.equal(button.type, "shared-text-button");
+        const click = button.props.onClick();
+        assert.deepEqual(checked, []);
+        assert.deepEqual(pending, [true]);
+        assert.equal(JSON.stringify(calls), JSON.stringify([{ url: "/guilds/guild", body: { features: ["COMMUNITY", "INVITES_DISABLED"] } }]));
+        if (failed) rejectRequest(new Error("Denied"));
+        else resolveRequest();
+        await click;
+        assert.deepEqual(checked, failed ? [] : [true]);
+        assert.deepEqual(pending, [true, false]);
+        assert.deepEqual(toasts, failed ? ["Could not pause invites. Try again."] : []);
+    }
+});
+
 test("new guild defaults target accepted invites without modifying app opening", () => {
     const source = readFileSync("src/plugins/newGuildSettings/index.tsx", "utf8");
     const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);

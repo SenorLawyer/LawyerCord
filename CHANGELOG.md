@@ -49,6 +49,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Make Pause Indefinitely keyboard accessible and wait for the server before checking the paused state. Report failed requests and allow retrying.
+
 - Remove PauseInvitesForever's extra setter patch and use the adjacent checkbox's setter directly.
 
 - Keep OnePingPerDM's sound capture and OpenInApp's account capture inside their target callbacks instead of searching unrelated code.

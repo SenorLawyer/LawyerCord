@@ -20,6 +20,12 @@ OnePingPerDM now finds its sound call within the current statement and matches i
 
 The label patch now captures the adjacent checkbox setter within 250 characters. The separate state-hook search, injected setter alias and two-patch grouping are deleted. The complete captured module differs only by removal of that alias and direct use of the same lexical setter. Its ordinary component owner is verified, the module compiles, and a distant-setter decoy is rejected. Evidence is `.git/audit/pause-invites-capture-verify.cjs` and `pause-invites-capture-verify.json`, comparing baseline dab04c58a. Historical a3b2ee48f only changed plugin metadata. Focused lint, desktop/web builds and artifact scanning pass; logs use `.git/audit/pause-invites-capture-*`. Patch lint reports 69 warnings and no errors. The latest broader run remains 670 passing tests plus timezone checks at fba874a10. This does not close the separate keyboard interaction and rejected-request behavior review.
 
+## PauseInvitesForever interaction
+
+The previous anchor had role=button but no href, tab stop or keyboard handler. Chromium confirmed Tab skipped it. Executing the actual component also confirmed that the checkbox changed before the request settled and remained checked after rejection. The control now uses the existing shared TextButton, disables while pending, waits for the server before setting the checkbox and reports failure with one toast. Its one-use request helper is folded into the component.
+
+The tracked regression covers success and rejection, pending cleanup, unchanged checkbox state while waiting and preserved guild features. A Chromium check of the actual shared component's native button output verifies Tab, Enter and Space. This is isolated browser verification, not signed-in modal or visual acceptance. Evidence is `.git/audit/pause-invites-interaction-{before,after}.cjs` and their JSON results. All 671 broader tests and timezone checks, TypeScript, focused lint, desktop/web builds and artifact scanning pass. Logs use `.git/audit/pause-invites-interaction-*`.
+
 ## Scope and source
 
 - Baseline: `6e664e03ba3d0b7746ce34740ca444f5112b04bc`, published as `nightly-20260905-1918-6e664e03`.

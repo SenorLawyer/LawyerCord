@@ -29,17 +29,21 @@ import { readResponseText } from "../src/shared/readResponseText";
 import { makeLazy, proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
 test("PictureInPicture keeps original playback after rejected requests", async () => {
-    for (const failure of ["request", "play", "metadata", undefined]) {
+    for (const failure of ["request", "play", "metadata", "replaced", undefined]) {
         const events: string[] = [];
         const clone = {
-            readyState: failure === "metadata" ? 0 : 4, currentTime: 0, style: {}, isConnected: true, muted: false, volume: 1, playbackRate: 1,
+            readyState: failure === "metadata" || failure === "replaced" ? 0 : 4, currentTime: 0, style: {}, isConnected: true, muted: false, volume: 1, playbackRate: 1,
             onerror: null as (() => Promise<void>) | null,
+            onloadedmetadata: null as (() => Promise<void>) | null,
+            removeAttribute() { events.push("clear source"); },
+            load() { events.push("reset load"); },
             async requestPictureInPicture() { events.push("request"); if (failure === "request") throw new Error("Denied"); },
             async play() { events.push("play"); if (failure === "play") throw new Error("Playback failed"); },
             pause() { events.push("pause clone"); },
             remove() { this.isConnected = false; events.push("remove clone"); }
         };
-        const original = { muted: true, volume: 0.23, playbackRate: 1.5, currentTime: 12, cloneNode: () => clone, pause() { events.push("pause original"); } };
+        let clones = 0;
+        const original = { muted: true, volume: 0.23, playbackRate: 1.5, currentTime: 12, cloneNode: () => failure === "replaced" && clones++ > 0 ? { ...clone, readyState: 4, isConnected: true } : clone, pause() { events.push("pause original"); } };
         const { default: plugin } = loadSource("src/plugins/pictureInPicture/index.tsx", {
             "./styles.css": {},
             "@api/Settings": { definePluginSettings: () => ({ store: { loop: true } }) },
@@ -55,12 +59,19 @@ test("PictureInPicture keeps original playback after rejected requests", async (
         const button = plugin.PictureInPictureButton().props.children[0]({});
         button.props.onClick({ currentTarget: { parentNode: { parentNode: { querySelector: () => original } } } });
         if (failure === "metadata") await clone.onerror?.();
+        if (failure === "replaced") {
+            const obsoleteCallback = clone.onloadedmetadata;
+            button.props.onClick({ currentTarget: { parentNode: { parentNode: { querySelector: () => original } } } });
+            await obsoleteCallback?.();
+            assert.equal(clone.onloadedmetadata, null);
+            assert.equal(clone.onerror, null);
+        }
         await setImmediate();
         assert.equal(clone.muted, true);
         assert.equal(clone.volume, 0.23);
         assert.equal(clone.playbackRate, 1.5);
-        assert.equal(clone.currentTime, failure === "metadata" ? 0 : 12);
-        assert.deepEqual(events, failure === "metadata" ? ["pause clone", "remove clone", "toast"] : failure === "request" ? ["request", "pause clone", "remove clone", "toast"]
+        assert.equal(clone.currentTime, failure === "metadata" || failure === "replaced" ? 0 : 12);
+        assert.deepEqual(events, failure === "replaced" ? ["clear source", "reset load", "remove clone", "request", "play", "pause original"] : failure === "metadata" ? ["pause clone", "remove clone", "toast"] : failure === "request" ? ["request", "pause clone", "remove clone", "toast"]
             : failure === "play" ? ["request", "play", "pause clone", "remove clone", "toast"]
                 : ["request", "play", "pause original"]);
     }

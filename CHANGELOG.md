@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Discard an older pending Picture in Picture metadata load when another video is requested, preventing it from replacing the newer video.
+
 - Preserve mute, volume and playback speed when opening a video in Picture in Picture.
 
 - Remove failed Picture in Picture clones when video metadata cannot load and report the failure without interrupting the original.

@@ -14,6 +14,7 @@ import definePlugin, { OptionType } from "@utils/types";
 import { showToast, Toasts, Tooltip } from "@webpack/common";
 
 const logger = new Logger("PictureInPicture");
+let pendingVideo: HTMLVideoElement | undefined;
 
 const settings = definePluginSettings({
     loop: {
@@ -64,8 +65,16 @@ export default definePlugin({
                         }}
                         onClick={e => {
                             const video = e.currentTarget.parentNode!.parentNode!.querySelector("video")!;
+                            if (pendingVideo) {
+                                pendingVideo.onloadedmetadata = null;
+                                pendingVideo.onerror = null;
+                                pendingVideo.removeAttribute("src");
+                                pendingVideo.load();
+                                pendingVideo.remove();
+                            }
                             const videoClone = document.body.appendChild(video.cloneNode(true)) as HTMLVideoElement;
 
+                            pendingVideo = videoClone;
                             videoClone.loop = settings.store.loop;
                             videoClone.muted = video.muted;
                             videoClone.volume = video.volume;
@@ -74,6 +83,7 @@ export default definePlugin({
                             videoClone.onleavepictureinpicture = () => videoClone.remove();
 
                             async function failPiP() {
+                                if (pendingVideo === videoClone) pendingVideo = undefined;
                                 if (!videoClone.isConnected) return;
                                 videoClone.onloadedmetadata = null;
                                 videoClone.onerror = null;
@@ -86,6 +96,8 @@ export default definePlugin({
                             }
 
                             async function launchPiP() {
+                                if (pendingVideo !== videoClone) return;
+                                pendingVideo = undefined;
                                 videoClone.onloadedmetadata = null;
                                 videoClone.onerror = null;
                                 try {

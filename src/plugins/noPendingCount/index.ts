@@ -86,10 +86,8 @@ export default definePlugin({
             find: "showProgressBadge:",
             predicate: () => settings.store.hidePremiumOffersCount,
             replacement: {
-                // The two groups inside the first group grab the minified names of the variables,
-                // they are then referenced later to find unviewedTrialCount + unviewedDiscountCount.
-                match: /(\{unviewedTrialCount:(\i),unviewedDiscountCount:(\i)\}.+?)\2\+\3/,
-                replace: (_, rest) => `${rest}0`
+                match: /(?<=\.fractionalState===\i\.\i\.NONE\?)\i\+\i(?=:0)/,
+                replace: "0"
             }
         }
     ],

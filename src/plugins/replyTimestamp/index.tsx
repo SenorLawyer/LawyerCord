@@ -66,8 +66,8 @@ export default definePlugin({
             // Same find as in ValidReply
             find: "#{intl::REPLY_QUOTE_MESSAGE_NOT_LOADED}",
             replacement: {
-                match: /\.onClickReply,.+?}\),(?=\i,\i,\i\])/,
-                replace: "$&$self.ReplyTimestamp(arguments[0]),"
+                match: /(?<=\.onClickReply,[^{}]{0,150}\}\),)(?=\i,\i,\i\])/,
+                replace: "$self.ReplyTimestamp(arguments[0]),"
             }
         }
     ],

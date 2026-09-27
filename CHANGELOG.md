@@ -34,6 +34,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep premium-offer and reply-timestamp patches local to their target expressions, without relying on offer field order or crossing unrelated objects.
+
 - Keep IrcColors hash results as CSS colors, including a zero hash, while preserving nullable inputs used by name mentions.
 
 - Update visible IrcColors names immediately when either color-filter setting changes, without waiting for another Discord render.

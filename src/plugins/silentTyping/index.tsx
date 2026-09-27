@@ -421,8 +421,8 @@ export default definePlugin({
         {
             find: '.dispatch({type:"TYPING_START_LOCAL"',
             replacement: {
-                match: /startTyping\(\i\){.+?},stop/,
-                replace: "startTyping:$self.startTyping,stop"
+                match: /startTyping\(\i\)\{\i\.\i\.dispatch\(\{type:"TYPING_START_LOCAL",channelId:\i\}\)\}/,
+                replace: "startTyping:$self.startTyping"
             }
         },
         {

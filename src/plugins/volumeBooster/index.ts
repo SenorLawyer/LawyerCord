@@ -60,7 +60,7 @@ export default definePlugin({
             find: "#{intl::USER_VOLUME}",
             replacement: {
                 match: /(?<=maxValue:)\i\.isPlatformEmbedded\?(\i\.\i):\i\.\i(?=,)/,
-                replace: (_, higherMaxVolume) => `${higherMaxVolume}*$self.settings.store.multiplier`
+                replace: "$1*$self.settings.store.multiplier"
             }
         },
         // Change the max volume for sliders to allow for values above 200
@@ -68,7 +68,7 @@ export default definePlugin({
             find: "currentVolume:",
             replacement: {
                 match: /(?<=maxValue:)\i\.\i\?(\d+?):\d+?(?=,)/,
-                replace: (_, higherMaxVolume) => `${higherMaxVolume}*$self.settings.store.multiplier`
+                replace: "$1*$self.settings.store.multiplier"
             }
         },
         // Patches needed for web/vesktop
@@ -99,15 +99,15 @@ export default definePlugin({
             find: "AudioContextSettingsMigrated",
             replacement: [
                 {
-                    match: /(?<=isLocalMute\(\i,\i\),volume:(\i).+?\(0,\i\.\i\)\(\i,\i,\{volume:)\1(?=\}\))/,
+                    match: /(?<=isLocalMute\(\i,\i\),volume:(\i)\}\),\(0,\i\.\i\)\(\i,\i,\{volume:)\1(?=\}\))/,
                     replace: "$&>200?200:$&"
                 },
                 {
-                    match: /(?<=Object\.entries\(\i\.localMutes\).+?volume:).+?(?=,)/,
+                    match: /(?<=Object\.entries\(\i\.localMutes\)\)\i\[\i\]=\{[^{}]{0,100}volume:)\i\(\i\)(?=,)/,
                     replace: "$&>200?200:$&"
                 },
                 {
-                    match: /(?<=Object\.entries\(\i\.localVolumes\).+?volume:).+?(?=})/,
+                    match: /(?<=Object\.entries\(\i\.localVolumes\)\)\i\[\i\]=\{[^{}]{0,100}volume:)\(0,\i\.\i\)\(\i,\i\)(?=\})/,
                     replace: "$&>200?200:$&"
                 }
             ]

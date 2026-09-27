@@ -131,12 +131,12 @@ export default definePlugin({
             find: "Copy image not supported",
             replacement: [
                 {
-                    match: /(?<=(?:canSaveImage|canCopyImage)\(.{0,120}?)!\i\.isPlatformEmbedded/g,
-                    replace: "false"
+                    match: /(?<=canSaveImage\(\i,\i\)\{if\(null==\i)\|\|!\i\.isPlatformEmbedded/,
+                    replace: ""
                 },
                 {
-                    match: /(?<=canCopyImage\(.+?)typeof \i\.clipboard\.copyImage/,
-                    replace: '"function"'
+                    match: /if\(!\i\.isPlatformEmbedded\|\|"function"!=typeof \i\.clipboard\.copyImage\)return!1;/,
+                    replace: ""
                 }
             ]
         },

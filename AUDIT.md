@@ -2,11 +2,19 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Latest local verification: all 682 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass after the super-reaction default fix. Patch lint reports 13 warnings and no errors. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding d3468332e; the new change requires its own CI.
+Latest full local verification: all 683 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the volume-sync fix. The subsequent volume/typing/image cleanup passes its focused checks and builds. Patch lint now reports six warnings and no errors. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding 5e0f68e7f; the new cleanup requires its own CI.
 
 Earlier broad verification checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning passed. Patch lint then reported 107 warnings and no errors. Full repository lint logs use `.git/audit/reconciliation-sep27-*`; later focused runs do not replace final combined validation.
 
 A fresh September 27 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,655 files, fourteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-sep27-current.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
+
+## Local volume, typing and image-menu patches
+
+Outgoing volume clamps now match their adjacent setting update or the corresponding migration object. SilentTyping replaces only the dispatch method, leaving stopTyping untouched. Both volume slider callbacks become direct replacement strings. All six captured module copies retain byte-identical output and compile against 5e0f68e7f. Evidence is `.git/audit/volume-typing-local-verify.{cjs,json}`.
+
+Web image menus now delete the disabled native platform check and clipboard-availability condition instead of replacing their operands with constants. The complete module changes only by removing these dead conditions and compiles. Forty-eight executions of the actual canSaveImage and canCopyImage methods preserve decisions across platforms, missing images and supported/unsupported formats. A throwing native-clipboard stub confirms neither path reads it. Evidence is `.git/audit/web-image-gates-verify.{cjs,json}`.
+
+Focused ESLint, sequential desktop/web builds and artifact scanning pass. Patch lint reports six warnings and no errors. Logs use `.git/audit/volume-typing-image-local-*`. The latest full regression and TypeScript run remains the preceding 683-test volume-sync checkpoint, whose four CI checks passed. Signed-in clipboard and media acceptance remain separate.
 
 ## Local boosts during remote volume resets
 

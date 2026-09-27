@@ -42,7 +42,7 @@ import { showNotification } from "./api/Notifications";
 import { initPluginManager, PMLogger, startAllPlugins } from "./api/PluginManager";
 import { PlainSettings, Settings, SettingsStore } from "./api/Settings";
 import { getAuthorization } from "./api/SettingsSync/cloudSetup";
-import { areLocalSettingsDirty, getCloudSettings, getCloudSyncDirection, markLocalSettingsDirty, putCloudSettings, shouldCloudSync } from "./api/SettingsSync/cloudSync";
+import { areLocalSettingsDirty, getCloudSettings, getCloudSyncDirection, markLocalDataDirty, markLocalSettingsDirty, putCloudSettings, shouldCloudSync } from "./api/SettingsSync/cloudSync";
 import { relaunch } from "./utils/native";
 import { checkForUpdates, isOutdated as getIsOutdated, update, UpdateLogger } from "./utils/updater";
 import { onceReady } from "./webpack";
@@ -62,6 +62,11 @@ async function syncSettings() {
     SettingsStore.addGlobalChangeListener((_, path) => {
         if (path === "cloud" || path.startsWith("cloud.")) return;
         markLocalSettingsDirty();
+        saveSettingsOnFrequentAction();
+    });
+
+    VencordNative.quickCss.addChangeListener(() => {
+        markLocalDataDirty();
         saveSettingsOnFrequentAction();
     });
 

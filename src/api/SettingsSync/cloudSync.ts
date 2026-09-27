@@ -35,9 +35,10 @@ let localSettingsRevision = 0;
 export const getCloudSyncDirection = () => localStorage[SYNC_DIRECTION_KEY] || "both";
 export const setCloudSyncDirection = (direction: "push" | "pull" | "both" | "manual") => localStorage.setItem(SYNC_DIRECTION_KEY, direction);
 export const areLocalSettingsDirty = () => localStorage.getItem(SETTINGS_DIRTY_KEY) === "true";
+export const markLocalDataDirty = () => localStorage.setItem(SETTINGS_DIRTY_KEY, "true");
 export const markLocalSettingsDirty = () => {
     localSettingsRevision++;
-    localStorage.setItem(SETTINGS_DIRTY_KEY, "true");
+    markLocalDataDirty();
 };
 export const markLocalSettingsClean = () => localStorage.removeItem(SETTINGS_DIRTY_KEY);
 
@@ -75,7 +76,7 @@ async function checkLocalData(context: Awaited<ReturnType<typeof getCloudSyncCon
     const current = await captureCloudImportState(syncDataStore);
     context.assertCurrent();
     if (current.quickCss !== expected.quickCss || (syncDataStore && !lodash.isEqual(current.dataStore, expected.dataStore))) {
-        markLocalSettingsDirty();
+        markLocalDataDirty();
         throw new Error("Local data changed during sync. Try again to include your latest changes.");
     }
 }

@@ -1203,6 +1203,7 @@ test("startup tracks edits before credential lookup and after initially disconne
         const listeners: ((data: unknown, path: string) => void)[] = [];
         const settings = { cloud: { authenticated: false, settingsSync: true } };
         const syncSettings = runInNewContext(`${compiled}\nsyncSettings;`, {
+            VencordNative: { quickCss: { addChangeListener() {} } },
             Settings: settings,
             SettingsStore: { addGlobalChangeListener: (callback: (data: unknown, path: string) => void) => listeners.push(callback) },
             UserStore: { getCurrentUser: () => ({ id: "first" }) },
@@ -1250,6 +1251,7 @@ test("automatic cloud upload retries a busy operation and rechecks sync preferen
     let signedIn = false;
     const settings = { cloud: { authenticated: false, settingsSync: true } };
     const syncSettings = runInNewContext(`${compiled}\nsyncSettings;`, {
+            VencordNative: { quickCss: { addChangeListener() {} } },
         Settings: settings, SettingsStore: { addGlobalChangeListener() {} },
         UserStore: { getCurrentUser: () => signedIn ? { id: "first" } : undefined },
         getAuthorization: async () => "synthetic", areLocalSettingsDirty: () => true, getCloudSyncDirection: () => "both",
@@ -1294,6 +1296,7 @@ test("startup uses the current account credential and discards lookup results af
             return secret;
         };
         const syncSettings = runInNewContext(`${compiled}\nsyncSettings;`, {
+            VencordNative: { quickCss: { addChangeListener() {} } },
             Settings: settings, SettingsStore: { addGlobalChangeListener: () => {} },
             UserStore: { getCurrentUser: () => ({ id: userId }) },
             dsGet: async () => { await lookup(); return { "https://other.invalid:other": "unrelated" }; },
@@ -2320,4 +2323,54 @@ test("cloud completion preserves CSS and stored edits during responses and check
                 assert.deepEqual(records.find(([key]) => key === "cache")?.[1], new Uint8Array([1, 2]).buffer);
             }
         }
+});
+
+
+test("QuickCSS edits mark data dirty and use the existing automatic upload preferences", async () => {
+    const source = createSourceFile("Vencord.ts", readFileSync("src/Vencord.ts", "utf8"), ScriptTarget.Latest, true);
+    const declaration = source.statements.find(node => isFunctionDeclaration(node) && node.name?.text === "syncSettings");
+    assert.ok(declaration);
+    const startup = transpileModule(declaration.getText(source), { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const direction of ["push", "both", "pull", "manual"]) for (const enabled of [false, true]) for (const authenticated of [false, true]) {
+        let userId: string | undefined;
+        let uploads = 0;
+        let queued = 0;
+        let flush: (() => Promise<void>) | undefined;
+        const listeners: (() => void)[] = [];
+        const storage: Record<string, unknown> = { Vencord_cloudSyncDirection: direction };
+        storage.getItem = (key: string) => storage[key] ?? null;
+        storage.setItem = (key: string, value: string) => { storage[key] = value; };
+        const settings = { cloud: { settingsSync: enabled, authenticated } };
+        const userStore = { getCurrentUser: () => userId ? { id: userId } : undefined };
+        const modules: Record<string, unknown> = {
+            "@utils/Logger": { Logger: class {} },
+            "@utils/localStorage": { localStorage: storage },
+            "@webpack/common": { UserStore: userStore },
+            "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid") },
+            "./offline": { captureCloudImportState: async () => undefined }
+        };
+        const api = runInNewContext(`${compiled}\n({ ...exports, getCloudSyncContext });`, {
+            exports: {}, require: (name: string) => modules[name] ?? {}, URL
+        });
+        const syncSettings = runInNewContext(`${startup}\nsyncSettings;`, {
+            ...api, Settings: settings, SettingsStore: { addGlobalChangeListener() {} }, UserStore: userStore,
+            VencordNative: { quickCss: { addChangeListener: (listener: () => void) => listeners.push(listener) } },
+            debounce: (callback: () => Promise<void>, delay: number) => { assert.equal(delay, 60_000); flush = callback; return () => queued++; },
+            putCloudSettings: async () => { uploads++; }
+        });
+        await syncSettings();
+        assert.equal(listeners.length, 1, "CSS tracking must be installed even before login");
+        userId = "first";
+        const context = await api.getCloudSyncContext(true);
+        listeners[0]();
+        assert.equal(storage.Vencord_settingsDirty, "true");
+        assert.equal(queued, 1);
+        assert.doesNotThrow(() => context.assertCurrent(), "A CSS notification must not invalidate settings-only ownership checks during a cloud import");
+        assert.ok(flush);
+        await flush();
+        assert.equal(uploads, enabled && authenticated && (direction === "push" || direction === "both") ? 1 : 0);
+    }
 });

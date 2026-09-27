@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Include QuickCSS edits in automatic cloud uploads using the existing sync preferences and debounce.
+
 - Keep CSS and stored-data changes made during cloud sync dirty instead of reporting an older upload as current.
 
 - Retain accepted cloud upload versions after concurrent settings edits or partial server failures so retries use the correct checkpoint.

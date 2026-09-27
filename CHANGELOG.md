@@ -36,6 +36,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Cancel transcript translation on replacement, Cancel, unmount, logout, and plugin stop. Pass its own signal to Google translation without reusing the terminated speech worker.
+
 - Cancel replaced Translate Google requests and abort received/outgoing Google requests on logout or plugin stop. Cancelled sends retain their original text without failure feedback.
 
 - Reject Kagi translation request bodies larger than 128 KiB before sending them, matching the existing DeepL payload limit.

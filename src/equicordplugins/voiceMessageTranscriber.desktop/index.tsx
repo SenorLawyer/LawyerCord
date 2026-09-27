@@ -43,6 +43,7 @@ interface CachedResult {
 const resultCache = new Map<string, CachedResult>();
 let cacheGeneration = 0;
 const activeWorkers = new Set<TranscriptionWorker>();
+const activeTranslations = new Set<AbortController>();
 interface PreparedAudio {
     blob: Blob;
     samples: Float32Array;
@@ -268,6 +269,7 @@ function VoiceMessageTranscriptionAccessory({ userId, duration, cacheKey, needsP
     const [playbackSrc, setPlaybackSrc] = useState(src);
     const [resolvedWaveform, setResolvedWaveform] = useState(waveform || DEFAULT_WAVEFORM);
     const workerRef = useRef<TranscriptionWorker | null>(null);
+    const translationRef = useRef<AbortController | null>(null);
     const jobIdRef = useRef(0);
     const autoStartedRef = useRef(false);
 
@@ -282,17 +284,26 @@ function VoiceMessageTranscriptionAccessory({ userId, duration, cacheKey, needsP
         }
     }, []);
 
+    const cancelTranslation = useCallback(() => {
+        translationRef.current?.abort();
+        translationRef.current = null;
+    }, []);
+
     const translateTranscript = useCallback(async (value: TranscriptionResult, language: LanguageOption, jobId: number) => {
         const generation = cacheGeneration;
         if (!isCurrentJob(jobId, generation)) return;
+        cancelTranslation();
+        const controller = new AbortController();
+        translationRef.current = controller;
+        activeTranslations.add(controller);
         setStatus("translating");
         setError(null);
         setTargetLanguage(language.value);
         setTargetLanguageLabel(language.label);
 
         try {
-            const translated = await translateText(value.text, "auto", language.value, () => false);
-            if (!isCurrentJob(jobId, generation)) return;
+            const translated = await translateText(value.text, "auto", language.value, () => false, controller.signal);
+            if (controller.signal.aborted || !isCurrentJob(jobId, generation)) return;
 
             setTranslation(translated);
             setStatus("complete");
@@ -303,18 +314,22 @@ function VoiceMessageTranscriptionAccessory({ userId, duration, cacheKey, needsP
                 targetLanguageLabel: language.label
             });
         } catch (caught) {
-            if (!isCurrentJob(jobId, generation)) return;
+            if (controller.signal.aborted || !isCurrentJob(jobId, generation)) return;
             setError(`Translation failed: ${caught instanceof Error ? caught.message : String(caught)}`);
             setStatus("complete");
             cacheResult(cacheKey, { transcript: value });
+        } finally {
+            activeTranslations.delete(controller);
+            if (translationRef.current === controller) translationRef.current = null;
         }
-    }, [cacheKey, isCurrentJob]);
+    }, [cacheKey, cancelTranslation, isCurrentJob]);
 
     const startTranscription = useCallback((language?: LanguageOption) => {
         if (UserStore.getCurrentUser()?.id !== userId) return;
         const generation = cacheGeneration;
         const jobId = ++jobIdRef.current;
         stopWorker();
+        cancelTranslation();
         setStatus("downloading_audio");
         setError(null);
         setProgress(null);
@@ -382,7 +397,7 @@ function VoiceMessageTranscriptionAccessory({ userId, duration, cacheKey, needsP
                 setStatus("idle");
             }
         })();
-    }, [cacheKey, isCurrentJob, src, stopWorker, translateTranscript, userId]);
+    }, [cacheKey, cancelTranslation, isCurrentJob, src, stopWorker, translateTranscript, userId]);
 
     const startTranslation = useCallback((language: LanguageOption) => {
         if (!transcript) {
@@ -397,14 +412,16 @@ function VoiceMessageTranscriptionAccessory({ userId, duration, cacheKey, needsP
     const cancel = useCallback(() => {
         ++jobIdRef.current;
         stopWorker();
+        cancelTranslation();
         setProgress(null);
         setStatus(transcript ? "complete" : "idle");
-    }, [stopWorker, transcript]);
+    }, [cancelTranslation, stopWorker, transcript]);
 
     useEffect(() => () => {
         ++jobIdRef.current;
         stopWorker();
-    }, [stopWorker]);
+        cancelTranslation();
+    }, [cancelTranslation, stopWorker]);
 
     useEffect(() => {
         if (!needsPlaybackFallback || waveform) return;
@@ -567,6 +584,8 @@ export default definePlugin({
         cacheGeneration++;
         for (const worker of activeWorkers) worker.terminate();
         activeWorkers.clear();
+        for (const controller of activeTranslations) controller.abort();
+        activeTranslations.clear();
         preparedAudioCache.clear();
         resultCache.clear();
     }

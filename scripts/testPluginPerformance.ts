@@ -15934,6 +15934,7 @@ test("stopped transcription translations discard delayed success and failure", a
         const update = () => updates++;
         const context = {
             userId: "first", UserStore: { getCurrentUser: () => activeUser ? { id: activeUser } : undefined },
+            AbortController, activeTranslations: new Set(), translationRef: { current: null }, cancelTranslation() {},
             cacheGeneration: 0, jobIdRef: { current: 1 }, cacheKey: "message",
             useCallback: (fn: unknown) => fn, translateText,
             setStatus: update, setError: (error: unknown) => { errors.push(error); update(); }, setTargetLanguage: update, setTargetLanguageLabel: update, setTranslation: update,
@@ -15963,9 +15964,11 @@ test("transcription plugin stop terminates every active worker and clears caches
     let terminated = 0;
     const context = {
         cacheGeneration: 0,
+        activeTranslations: new Set([new AbortController(), new AbortController()]),
         activeWorkers: new Set([{ terminate: () => terminated++ }, { terminate: () => terminated++ }]),
         preparedAudioCache: new Map([["audio", 1]]), resultCache: new Map([["result", 1]])
     };
+    const translationControllers = [...context.activeTranslations];
     const stop = runInNewContext("(() => {" + source.slice(start + "    stop() {".length, end) + "})", context);
     const logoutBody = source.match(/LOGOUT\(this: \{ stop\(\): void; \}\) \{([^}]+)\}/)?.[1];
     assert.ok(logoutBody);
@@ -15973,6 +15976,8 @@ test("transcription plugin stop terminates every active worker and clears caches
     logout.call({ stop });
     stop();
     assert.equal(terminated, 2);
+    assert.ok(translationControllers.every(controller => controller.signal.aborted));
+    assert.equal(context.activeTranslations.size, 0);
     assert.equal(context.activeWorkers.size, 0);
     assert.equal(context.preparedAudioCache.size, 0);
     assert.equal(context.resultCache.size, 0);
@@ -18436,4 +18441,52 @@ test("Translate cancels replaced and lifecycle-owned Google requests", async () 
     plugin.stop();
     assert.equal(signals[3].aborted, true);
     await afterLogout;
+});
+
+
+test("transcript translation replacement and Cancel abort only their owned requests", async () => {
+    const source = readFileSync("src/equicordplugins/voiceMessageTranscriber.desktop/index.tsx", "utf8");
+    const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true, typescript.ScriptKind.TSX);
+    const declarations: string[] = [];
+    const names = new Set(["isCurrentJob", "cancelTranslation", "translateTranscript", "cancel"]);
+    function visit(node: typescript.Node) {
+        if (typescript.isVariableDeclaration(node) && names.has(node.name.getText(ast))) declarations.push(`const ${node.getText(ast)};`);
+        typescript.forEachChild(node, visit);
+    }
+    visit(ast);
+    const code = transpileModule(declarations.join("\n"), { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
+    const pending: { signal: AbortSignal; resolve: (value: object) => void }[] = [];
+    const errors: unknown[] = [];
+    let deliveries = 0;
+    let writes = 0;
+    const context = {
+        AbortController, useCallback: (fn: unknown) => fn, userId: "first", UserStore: { getCurrentUser: () => ({ id: "first" }) },
+        cacheGeneration: 0, jobIdRef: { current: 1 }, translationRef: { current: null as AbortController | null }, activeTranslations: new Set<AbortController>(), cacheKey: "message",
+        setStatus() {}, setError: (error: unknown) => { if (error) errors.push(error); }, setTargetLanguage() {}, setTargetLanguageLabel() {},
+        setTranslation: () => deliveries++, cacheResult: () => writes++, stopWorker() {}, setProgress() {}, transcript: {},
+        translateText: (_text: string, _from: string, _to: string, _notify: () => boolean, signal: AbortSignal) => new Promise((resolve, reject) => {
+            pending.push({ signal, resolve });
+            signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+        })
+    };
+    const callbacks = runInNewContext(code + ";({translateTranscript,cancel})", context);
+    const args = [{ text: "Hello" }, { value: "fr", label: "French" }, 1];
+    const first = callbacks.translateTranscript(...args);
+    const second = callbacks.translateTranscript(...args);
+    assert.equal(pending[0].signal?.aborted, true);
+    assert.equal(pending[1].signal.aborted, false);
+    await first;
+    assert.equal(context.translationRef.current?.signal, pending[1].signal);
+    callbacks.cancel();
+    assert.equal(pending[1].signal.aborted, true);
+    await second;
+    assert.equal(context.activeTranslations.size, 0);
+    const third = callbacks.translateTranscript(args[0], args[1], context.jobIdRef.current);
+    pending[2].resolve({ text: "Bonjour", sourceLanguage: "English" });
+    await third;
+    assert.equal(deliveries, 1);
+    assert.equal(writes, 1);
+    assert.deepEqual(errors, []);
+    assert.equal(context.activeTranslations.size, 0);
+    assert.equal(context.translationRef.current, null);
 });

@@ -39,7 +39,11 @@ export function saveSessionsToDataStore(sessions: typeof savedSessionsCache = sa
     const dataKey = getDataKey();
     if (!dataKey) return Promise.resolve();
 
-    return DataStore.set(dataKey, structuredClone(sessions));
+    const snapshot = structuredClone(sessions);
+    return DataStore.update<unknown>(dataKey, current => {
+        readSavedSessions(current);
+        return snapshot;
+    });
 }
 
 export async function fetchNamesFromDataStore(shouldApply = () => true) {
@@ -48,14 +52,28 @@ export async function fetchNamesFromDataStore(shouldApply = () => true) {
     const dataKey = getDataKey();
     if (!dataKey) return;
 
-    const savedSessions = await DataStore.get<Map<string, { name: string, isNew: boolean; }>>(dataKey) || new Map();
+    const record = await DataStore.get<unknown>(dataKey);
     if (!shouldApply()) return;
-    if (Object.prototype.toString.call(savedSessions) === "[object Object]" && Object.keys(savedSessions).length === 0) return;
+    const savedSessions = readSavedSessions(record);
 
     savedSessionsCache.clear();
     savedSessions.forEach((data, idHash) => {
         savedSessionsCache.set(idHash, data);
     });
+}
+
+function readSavedSessions(value: unknown): typeof savedSessionsCache {
+    if (value === undefined || (Object.prototype.toString.call(value) === "[object Object]" && Object.keys(value as object).length === 0)) return new Map();
+    if (!(value instanceof Map)) throw new Error("Saved session names are invalid. The original record has been preserved.");
+    const sessions: Map<unknown, unknown> = value;
+    for (const [id, data] of sessions) {
+        if (typeof id !== "string" || !data || typeof data !== "object"
+            || !("name" in data) || typeof data.name !== "string"
+            || !("isNew" in data) || typeof data.isNew !== "boolean") {
+            throw new Error("Saved session names are invalid. The original record has been preserved.");
+        }
+    }
+    return value;
 }
 
 export function GetOsColor(os: string) {

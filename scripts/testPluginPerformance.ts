@@ -10104,6 +10104,7 @@ test("source fixtures reject recoverable syntax errors before execution", () => 
 
 function loadSource(path: string, mocks: Record<string, object>, globals: Record<string, unknown> = {}, result = "exports") {
     mocks = { "@shared/readResponseText": { readResponseText }, ...mocks };
+    if (path === "src/plugins/betterSessions/utils.ts") globals = { Map, ...globals };
     if (path.endsWith("profileSets/utils/profile.ts"))
         mocks = { "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } }, ...mocks };
     if (path.endsWith("plugins/translate/native.ts") || path.endsWith("plugins/translate/utils.ts") || path.endsWith("translatePlus/utils/translator.ts"))
@@ -17961,9 +17962,15 @@ test("BetterSessions saves retain their captured account data while storage open
         const dataStore = loadSource("src/api/DataStore/index.ts", {}, { structuredClone });
         const utils = loadSource("src/plugins/betterSessions/utils.ts", {
             "@api/DataStore": {
-                set: (key: string, value: unknown) => dataStore.set(key, value, (_mode: string, callback: (store: object) => Promise<void>) => opened.promise.then(() => {
+                update: (key: string, updater: (value: unknown) => unknown) => dataStore.update(key, updater, (_mode: string, callback: (store: object) => Promise<void>) => opened.promise.then(() => {
                     const transaction: { oncomplete?: () => void } = {};
-                    const result = callback({ transaction, put: (data: unknown, id: string) => saved.set(id, structuredClone(data)) });
+                    const result = callback({ transaction,
+                        get: (id: string) => {
+                            const request = { result: saved.get(id), onsuccess: undefined as (() => void) | undefined };
+                            queueMicrotask(() => request.onsuccess?.());
+                            return request;
+                        },
+                        put: (data: unknown, id: string) => saved.set(id, structuredClone(data)) });
                     queueMicrotask(() => transaction.oncomplete?.());
                     return result;
                 }))
@@ -18241,4 +18248,28 @@ test("IrcColors produces CSS strings for a zero hash and keeps missing users unc
     assert.equal(result.colorStrings.tertiaryColor, undefined);
     assert.equal(props.colorStrings.secondaryColor, "second");
 
+});
+
+
+test("BetterSessions preserves malformed records when loading and saving", async () => {
+    const malformed = [null, false, 0, "", [], { retained: "data" }, new Map([["session", { name: 42, isNew: false }]]), new Map([[1, { name: "Name", isNew: false }]]), new Map([["session", null]]), new Map([["session", { name: "Name" }]])];
+    for (const record of malformed) {
+        let stored: unknown = record;
+        let writes = 0;
+        const utils = loadSource("src/plugins/betterSessions/utils.ts", {
+            "@api/DataStore": {
+                get: async () => stored,
+                update: async (_key: string, updater: (value: unknown) => unknown) => { const next = updater(stored); writes++; stored = next; }
+            },
+            "@utils/css": { classNameFactory: () => () => "" },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "./components/icons": {}
+        }, { structuredClone });
+        await assert.rejects(utils.fetchNamesFromDataStore(), /Saved session names are invalid/);
+        assert.equal(utils.savedSessionsCache.size, 0);
+        utils.savedSessionsCache.set("new-session", { name: "New", isNew: false });
+        await assert.rejects(utils.saveSessionsToDataStore(), /Saved session names are invalid/);
+        assert.equal(stored, record);
+        assert.equal(writes, 0);
+    }
 });

@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Narrow the badge, emoji autocomplete and message-button patches so they no longer scan arbitrary code spans.
+
 - Look up CrashHandler's modal and draft modules independently so a temporarily missing module remains retryable.
 
 - Limit crash-recovery draft clearing to channel and first-thread messages. Preserve polls, commands, thread settings, interaction-modal and scheduled-message drafts.

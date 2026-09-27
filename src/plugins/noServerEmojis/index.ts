@@ -33,7 +33,7 @@ export default definePlugin({
         {
             find: "}searchWithoutFetchingLatest(",
             replacement: {
-                match: /\.nameMatchesChain\(\i\)\.reduce\(\((\i),(\i)\)=>\{(?<=channel:(\i).+?)/,
+                match: /\.nameMatchesChain\(\i\)\.reduce\(\((\i),(\i)\)=>\{(?=[^{}]{0,150}\.getEmojiUnavailableReason\(\{[^{}]{0,150}\bchannel:(\i)[,}])/,
                 replace: "$&if($self.shouldSkip($3,$2))return $1;"
             }
         }

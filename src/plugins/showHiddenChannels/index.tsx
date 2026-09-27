@@ -197,13 +197,13 @@ export default definePlugin({
             replacement: [
                 // Make the channel appear as muted if it's hidden
                 {
-                    match: /Children\.count.+?;(?=return\(0,\i\.jsxs?\)\(\i\.\i,{focusTarget:)(?<={channel:(\i),name:\i,muted:(\i).+?;)/,
-                    replace: (m, channel, muted) => `${m}${muted}=$self.isHiddenChannel(${channel})?true:${muted};`
+                    match: /(?=return\(0,\i\.jsxs?\)\(\i\.\i,{focusTarget:.{0,350}?if\((\i)\)return \i\.MUTED)/,
+                    replace: "$1=$self.isHiddenChannel(arguments[0].channel)?true:$1;"
                 },
                 // Make voice channels also appear as muted if they are muted
                 {
                     match: /(?<=\?\i\.\i:\i\.\i,)(.{0,150}?)if\((\i)(?:\)return |\?)(\i\.MUTED)/,
-                    replace: (_, otherClasses, isMuted, mutedClassExpression) => `${isMuted}?${mutedClassExpression}:"",${otherClasses}if(${isMuted})return ""`
+                    replace: '$2?$3:"",$1if($2)return ""'
                 }
             ]
         },
@@ -217,8 +217,8 @@ export default definePlugin({
                 },
                 {
                     // Hide unreads
-                    match: /Children\.count.+?;(?=return\(0,\i\.jsxs?\)\(\i\.\i,{focusTarget:)(?<={channel:(\i),name:\i,.+?unread:(\i).+?)/,
-                    replace: (m, channel, unread) => `${m}${unread}=$self.isHiddenChannel(${channel})?false:${unread};`
+                    match: /(?=return\(0,\i\.jsxs?\)\(\i\.\i,{focusTarget:.{0,450}?if\((\i)\)if\(\i\)return \i\.UNREAD_IMPORTANT)/,
+                    replace: "$1=$self.isHiddenChannel(arguments[0].channel)?false:$1;"
                 }
             ]
         },

@@ -49,6 +49,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Use local row-return matches for hidden-channel muted and unread assignments, removing their backward searches and three replacement callbacks.
+
 - Keep hidden-channel eye and lock icon captures near their channel label and remove their replacement callbacks.
 
 - Bound ShowHiddenChannels' render-level matches and keep voice navigation tied to the adjacent selection call, removing five replacement callbacks.

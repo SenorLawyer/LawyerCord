@@ -66,6 +66,12 @@ Focused lint, desktop/web builds and artifact scanning pass; logs use `.git/audi
 
 The eye/lock icon patches now bound both their children expression and backward channel reference to the nearby label. Their two replacement callbacks are removed. All twelve combinations of icon selection, muted styling and unread suppression preserve byte-identical complete module output and compile. A valid-code distant-channel decoy is rejected. Evidence is `.git/audit/hidden-channel-row-patches.{cjs,json}` and `hidden-channel-icons-verify.{cjs,json}`, comparing c9cfaef26. The separate muted/unread bindings remain under review; their class condition is inside a nested function, so replacing it with arguments[0] would use the wrong owner. Focused lint, desktop/web builds and artifact scanning pass; logs use `.git/audit/hidden-channel-icons-*`. Patch lint reports 52 warnings and no errors. The latest full local regression run remains 672 tests plus timezone checks at 621c1286e. Captured output equivalence does not establish signed-in row rendering.
 
+## ShowHiddenChannels row-state assignments
+
+Muted/unread assignments now use bounded lookaheads from the outer row return to the relevant class branches. They read the channel from that ordinary function's props instead of searching backward through the component. The assignment positions stay unchanged. Three callbacks become replacement strings, including the existing muted-class relocation. The separate nested class guard remains unchanged.
+
+All twelve combined patch configurations compile and differ only in the two channel references. Executing the captured row component across hidden, muted, unread, selected, connected, locked and voice flags produces identical output in 1,536 controlled cases. Dependencies are mocked, so this does not establish live store updates or signed-in rendering. Evidence is `.git/audit/hidden-channel-state-verify.{cjs,json}`, comparing cd8f2d291. Focused lint, desktop/web builds and artifact scanning pass; logs use `.git/audit/hidden-channel-state-*`. Patch lint reports 50 warnings and no errors. The latest full local regression run remains 672 tests plus timezone checks at 621c1286e.
+
 ## Scope and source
 
 - Baseline: `6e664e03ba3d0b7746ce34740ca444f5112b04bc`, published as `nightly-20260905-1918-6e664e03`.

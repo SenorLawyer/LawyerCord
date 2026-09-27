@@ -157,8 +157,8 @@ export default definePlugin({
         {
             find: ",acceptInvite(",
             replacement: {
-                match: /INVITE_ACCEPT_SUCCESS.+?,(\i)=null!=.+?;/,
-                replace: (m, guildId) => `${m}$self.applyDefaultSettings(${guildId});`
+                match: /(?<=\.dispatch\(\{type:"INVITE_ACCEPT_SUCCESS",invite:)(\i)\.body,code:\i}\);/,
+                replace: "$&$self.applyDefaultSettings($1.body.guild_id??$1.body.guild?.id);"
             }
         },
         {

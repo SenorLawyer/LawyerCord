@@ -2225,6 +2225,36 @@ test("reply mention exceptions match whole user and role IDs", () => {
     assert.equal(plugin.shouldMention(message, false), true);
 });
 
+test("new guild defaults target accepted invites without modifying app opening", () => {
+    const source = readFileSync("src/plugins/newGuildSettings/index.tsx", "utf8");
+    const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);
+    let patchSource = "";
+    const visit = (node: typescript.Node) => {
+        if (typescript.isPropertyAssignment(node) && node.name.getText(ast) === "patches") patchSource = node.initializer.getText(ast);
+        typescript.forEachChild(node, visit);
+    };
+    visit(ast);
+    const replacement = runInNewContext(`(${patchSource})`)[0].replacement;
+    const original = '({acceptInvite(e){let d="code";dispatcher.dispatch({type:"INVITE_ACCEPT_SUCCESS",invite:e.body,code:d});let c={...e.body},guild=c?.guild_id??c?.guild?.id;return e.body},openApp(e){let l,o=null!=e?parse(e):null,code=o?.baseCode;return code}})';
+    const patched = original.replace(canonicalizeMatch(replacement.match), replacement.replace);
+    const calls: unknown[] = [];
+    const dispatched: unknown[] = [];
+    const methods = runInNewContext(patched, {
+        dispatcher: { dispatch: (event: unknown) => dispatched.push(event) },
+        $self: { applyDefaultSettings: (guildId: unknown) => calls.push(guildId) },
+        parse: (value: unknown) => value
+    });
+    for (const body of [{ guild_id: "direct", guild: { id: "nested" } }, { guild: { id: "nested" } }, {}]) {
+        assert.equal(methods.acceptInvite({ body }), body);
+        assert.equal(calls.at(-1), "guild_id" in body ? body.guild_id : body.guild?.id);
+    }
+    assert.equal(calls.length, 3);
+    assert.equal(dispatched.length, 3);
+    assert.equal(methods.openApp({ baseCode: "app" }), "app");
+    assert.equal(methods.openApp(null), undefined);
+    assert.equal(calls.length, 3);
+});
+
 test("new guild defaults use one notification update and preserve server defaults", () => {
     const source = readFileSync("src/plugins/newGuildSettings/index.tsx", "utf8");
     const handler = source.slice(source.indexOf("function applyDefaultSettings("), source.indexOf("export default definePlugin"));

@@ -6,6 +6,12 @@ Current source checkpoint `080e17609`: all 654 broader tests and timezone checks
 
 A fresh September 27 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,655 files, fourteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-sep27-current.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
 
+## NewGuildSettings invite target
+
+The invite patch crossed 2,446 characters into the unrelated openApp method and passed its parsed invite object instead of a guild ID. Commit 515340a07 changed the capture to this shape while refreshing its anchor. The replacement now ends at the INVITE_ACCEPT_SUCCESS dispatch and reads the accepted payload's guild_id or nested guild.id. Its capture-copy callback is removed.
+
+A tracked regression fails before the change because accepted invites never receive defaults. The captured complete Discord module compiles and differs only in its success callback; openApp is unchanged. Five controlled callback cases preserve dispatch, callback payloads and return identity while forwarding the expected guild ID. Evidence is `.git/audit/new-guild-target-verify.cjs` and `new-guild-target-verify.json`. These checks do not establish signed-in server-join acceptance. All 670 broader tests and timezone checks, TypeScript, focused lint, desktop/web builds and artifact scanning pass. Patch lint reports 72 warnings and no errors. Logs use `.git/audit/new-guild-target-*`. All four CI checks passed on preceding commit fb907b514; this change requires its own CI.
+
 ## Scope and source
 
 - Baseline: `6e664e03ba3d0b7746ce34740ca444f5112b04bc`, published as `nightly-20260905-1918-6e664e03`.

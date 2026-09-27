@@ -49,6 +49,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Apply new-server defaults in the accepted invite handler using its guild ID. Stop the patch from modifying the unrelated app-opening method.
+
 - Use Discord's native list class for MutualGroupDMs' sidebar and replace its long cross-function capture with a bounded section match.
 
 - Add MutualGroupDMs to the actual profile tabs before initial selection and render its selected section correctly. Stop its tab patch from injecting into a wishlist card.

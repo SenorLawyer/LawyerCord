@@ -15,7 +15,7 @@ import { useAwaiter, useForceUpdater } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
 import { Activity } from "@vencord/discord-types";
 import { ActivityType } from "@vencord/discord-types/enums";
-import { React } from "@webpack/common";
+import { React, showToast, Toasts } from "@webpack/common";
 
 import { ReplaceSettings, ReplaceTutorial } from "./ReplaceSettings";
 
@@ -75,7 +75,13 @@ function AppSettings() {
     if (pending) return <Paragraph>Loading saved activities...</Paragraph>;
     if (error) return <Paragraph>Could not load saved activities. Reload Discord to try again.</Paragraph>;
 
-    return <ReplaceSettings appIds={appIds} update={update} save={async () => DataStore.set(APP_IDS_KEY, appIds)} />;
+    return <ReplaceSettings appIds={appIds} update={update} save={async () => {
+        try {
+            await DataStore.set(APP_IDS_KEY, appIds);
+        } catch {
+            showToast("Failed to save activity settings.", Toasts.Type.FAILURE);
+        }
+    }} />;
 }
 
 const settings = definePluginSettings({

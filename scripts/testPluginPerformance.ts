@@ -57,12 +57,14 @@ test("RPCEditor settings load saved entries before allowing edits", async () => 
     let finishRead: (value: object[]) => void = () => {};
     let reads = 0;
     let saved: unknown;
+    let failSave = false;
+    const notices: string[] = [];
     let loading: Promise<void> | undefined;
     let pending = true;
     const persisted = new Promise<object[]>(resolve => { finishRead = resolve; });
     const { default: plugin, makeEmptyAppId: makeEntry } = loadSource("src/equicordplugins/rpcEditor/index.tsx", {
         "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
-        "@api/index": { DataStore: { get: () => { reads++; return persisted; }, set: async (_key: string, value: unknown) => { saved = value; } } },
+        "@api/index": { DataStore: { get: () => { reads++; return persisted; }, set: async (_key: string, value: unknown) => { if (failSave) throw new Error("Private storage detail"); saved = structuredClone(value); } } },
         "@api/Settings": { definePluginSettings: (definition: unknown) => ({ definition }) },
         "@components/Paragraph": { Paragraph: "paragraph" }, "@utils/lazy": { makeLazy },
         "@utils/Logger": { Logger: class { error() {} } }, "@utils/constants": { Devs: {} },
@@ -72,7 +74,7 @@ test("RPCEditor settings load saved entries before allowing edits", async () => 
         } },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
         "@vencord/discord-types/enums": { ActivityType: { PLAYING: 0 } },
-        "@webpack/common": { React: { createElement: (type: unknown, props: object) => ({ type, props }) } },
+        "@webpack/common": { showToast: (text: string) => notices.push(text), Toasts: { Type: { FAILURE: "failure" } }, React: { createElement: (type: unknown, props: object) => ({ type, props }) } },
         "./ReplaceSettings": { ReplaceSettings: "editor" }
     });
     const render = plugin.settings.definition.replacedAppIds.component;
@@ -85,7 +87,16 @@ test("RPCEditor settings load saved entries before allowing edits", async () => 
     assert.equal(editor.type, "editor");
     assert.equal(editor.props.appIds, entries);
     await editor.props.save();
-    assert.equal(saved, entries);
+    assert.deepEqual(saved, entries);
+    failSave = true;
+    entries[0].newName = "Unsaved edit";
+    await editor.props.save();
+    assert.deepEqual(notices, ["Failed to save activity settings."]);
+    assert.equal((saved as { newName: string }[])[0].newName, "Saved name");
+    failSave = false;
+    await editor.props.save();
+    assert.equal((saved as { newName: string }[])[0].newName, "Unsaved edit");
+    assert.equal(notices.length, 1);
     plugin.start();
     await loading;
     assert.equal(reads, 1);

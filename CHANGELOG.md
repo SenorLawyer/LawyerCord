@@ -27,6 +27,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- RPCEditor reports failed saves while retaining edits for another save attempt.
+
 - RPCEditor rejects malformed saved lists without overwriting them or breaking activity updates, and allows adding an entry to an empty saved list.
 
 - RPCEditor loads saved entries before allowing edits while disabled, preventing an empty settings view from replacing the saved list. Failed reads keep editing unavailable and report the failure.

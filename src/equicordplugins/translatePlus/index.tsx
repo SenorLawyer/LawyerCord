@@ -24,7 +24,7 @@ import definePlugin from "@utils/types";
 import { ChannelStore, Menu, UserStore, useStateFromStores } from "@webpack/common";
 
 import { settings } from "./settings";
-import { Accessory, handleTranslate } from "./utils/accessory";
+import { Accessory, cancelPendingTranslations, handleTranslate } from "./utils/accessory";
 import { Icon } from "./utils/icon";
 
 const messageCtxPatch: NavContextMenuPatchCallback = (children, { message }) => {
@@ -50,6 +50,8 @@ export default definePlugin({
     tags: ["Chat", "Utility"],
     authors: [Devs.Ven, EquicordDevs.Prince527],
     settings,
+    stop: cancelPendingTranslations,
+    flux: { LOGOUT: cancelPendingTranslations },
     contextMenus: {
         "message": messageCtxPatch
     },

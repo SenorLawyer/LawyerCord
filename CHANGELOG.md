@@ -36,6 +36,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Cancel obsolete TranslatePlus provider requests when replaced, when their last view closes, on logout, or when the plugin stops. Keep shared dictionary downloads available to surviving requests.
+
 - Preserve session names saved in another window when renaming, discovering sessions, or dismissing new-session badges. Apply each operation to the latest stored Map instead of replacing it with the local cache.
 
 - Preserve malformed BetterSessions records instead of treating them as empty or overwriting them during later saves. Validate stored session names again inside the write transaction.

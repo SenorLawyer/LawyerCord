@@ -10105,6 +10105,7 @@ test("source fixtures reject recoverable syntax errors before execution", () => 
 function loadSource(path: string, mocks: Record<string, object>, globals: Record<string, unknown> = {}, result = "exports") {
     mocks = { "@shared/readResponseText": { readResponseText }, ...mocks };
     if (path === "src/plugins/betterSessions/utils.ts") globals = { Map, ...globals };
+    if (path === "src/equicordplugins/translatePlus/utils/accessory.tsx") globals = { AbortController, ...globals };
     if (path.endsWith("profileSets/utils/profile.ts"))
         mocks = { "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } }, ...mocks };
     if (path.endsWith("plugins/translate/native.ts") || path.endsWith("plugins/translate/utils.ts") || path.endsWith("translatePlus/utils/translator.ts"))
@@ -18312,4 +18313,62 @@ test("BetterSessions discovery and settings close preserve names saved by anothe
     assert.equal(stored.get("b")?.name, "Latest B");
     assert.equal(stored.get("a")?.isNew, false);
     assert.equal(stored.get("c")?.isNew, false);
+});
+
+
+test("TranslatePlus aborts replaced and detached provider requests without failure feedback", async () => {
+    const signals: AbortSignal[] = [];
+    const cleanups: (() => void)[] = [];
+    const translator = loadSource("src/equicordplugins/translatePlus/utils/translator.ts", {
+        "@equicordplugins/translatePlus/settings": { settings: { store: { target: "fr", toki: false, sitelen: false, shavian: false } } },
+        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" }
+    }, { URLSearchParams, fetch: (_url: string, options: { signal: AbortSignal }) => new Promise((_resolve, reject) => {
+        signals.push(options.signal);
+        options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+    }) });
+    const accessory = loadSource("src/equicordplugins/translatePlus/utils/accessory.tsx", {
+        "@components/Button": {}, "@plugins/translate/languages": {}, "./icon": {}, "./translator": translator,
+        "@webpack/common": {
+            UserStore: { getCurrentUser: () => ({ id: "account" }) },
+            useState: () => [undefined, () => assert.fail("Cancelled request delivered")],
+            useEffect: (effect: () => () => void) => cleanups.push(effect()),
+            showToast: () => assert.fail("Cancelled request showed failure"), Toasts: { Type: { FAILURE: 2 } }
+        }
+    });
+    const message = { id: "message", content: "Hello" };
+    accessory.Accessory({ message });
+    accessory.Accessory({ message });
+    const first = accessory.handleTranslate(message);
+    const second = accessory.handleTranslate(message);
+    assert.equal(signals[0].aborted, true);
+    assert.equal(signals[1].aborted, false);
+    cleanups[0]();
+    assert.equal(signals[1].aborted, false);
+    cleanups[1]();
+    assert.equal(signals[1].aborted, true);
+    await Promise.all([first, second]);
+    accessory.Accessory({ message });
+    const third = accessory.handleTranslate(message);
+    accessory.cancelPendingTranslations();
+    assert.equal(signals[2].aborted, true);
+    await third;
+});
+
+
+test("TranslatePlus cancellation preserves a shared dictionary for surviving requests", async () => {
+    const response = Promise.withResolvers<Response>();
+    let requests = 0;
+    const translator = loadSource("src/equicordplugins/translatePlus/utils/translator.ts", {
+        "@equicordplugins/translatePlus/settings": { settings: { store: { target: "en", toki: false, sitelen: false, shavian: true } } },
+        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" }
+    }, { fetch: () => { requests++; return response.promise; } });
+    const controller = new AbortController();
+    const first = translator.translate("𐑣", controller.signal);
+    const second = translator.translate("𐑣");
+    controller.abort(new Error("Stopped"));
+    const rejected = assert.rejects(first, /Stopped/);
+    response.resolve(new Response(JSON.stringify({ "𐑣": "hello" })));
+    await rejected;
+    assert.equal((await second).text, "hello");
+    assert.equal(requests, 1);
 });

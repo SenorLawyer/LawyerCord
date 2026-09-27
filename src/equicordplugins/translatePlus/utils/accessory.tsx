@@ -15,7 +15,7 @@ import { translate } from "./translator";
 type Translation = Awaited<ReturnType<typeof translate>>;
 
 const languages = { ...GoogleLanguages, tp: "Toki Pona", sh: "Shavian" };
-const setters = new Map<string, { listeners: Set<(translation: Translation | undefined) => void>; request?: symbol; }>();
+const setters = new Map<string, { listeners: Set<(translation: Translation | undefined) => void>; request?: AbortController; }>();
 
 export function Accessory({ message }: { message: Message & { vencordEmbeddedBy?: string[]; }; }) {
     const key = `${message.id}:${message.content}`;
@@ -24,13 +24,16 @@ export function Accessory({ message }: { message: Message & { vencordEmbeddedBy?
     useEffect(() => {
         if (message.vencordEmbeddedBy) return;
 
-        const entry = setters.get(key) ?? { listeners: new Set<(translation: Translation | undefined) => void>() };
+        const entry = setters.get(key) ?? { listeners: new Set<(translation: Translation | undefined) => void>(), request: undefined };
         entry.listeners.add(setTranslation);
         setters.set(key, entry);
 
         return () => {
             entry.listeners.delete(setTranslation);
-            if (!entry.listeners.size) setters.delete(key);
+            if (!entry.listeners.size) {
+                entry.request?.abort();
+                setters.delete(key);
+            }
         };
     }, [key]);
 
@@ -54,14 +57,19 @@ export async function handleTranslate(message: Message) {
     if (!entry) return;
     const userId = UserStore.getCurrentUser()?.id;
     if (!userId) return;
-    const request = entry.request = Symbol();
+    entry.request?.abort();
+    const request = entry.request = new AbortController();
 
     try {
-        const translation = await translate(message.content);
-        if (setters.get(key) === entry && entry.request === request && UserStore.getCurrentUser()?.id === userId)
+        const translation = await translate(message.content, request.signal);
+        if (!request.signal.aborted && setters.get(key) === entry && entry.request === request && UserStore.getCurrentUser()?.id === userId)
             for (const setter of entry.listeners) setter(translation);
     } catch {
-        if (setters.get(key) === entry && entry.request === request && UserStore.getCurrentUser()?.id === userId)
+        if (!request.signal.aborted && setters.get(key) === entry && entry.request === request && UserStore.getCurrentUser()?.id === userId)
             showToast("Could not translate this message.", Toasts.Type.FAILURE);
     }
+}
+
+export function cancelPendingTranslations() {
+    for (const entry of setters.values()) entry.request?.abort();
 }

@@ -116,9 +116,10 @@ async function translateSitelen(message: string) {
     return Array.from(message, char => Object.hasOwn(dictionary, char) ? dictionary[char] : char).join(" ");
 }
 
-async function google(target: string, text: string) {
+async function google(target: string, text: string, signal?: AbortSignal) {
+    signal?.throwIfAborted();
     if (!text) return { src: "", text: "" };
-    const res = await fetch(`https://translate.googleapis.com/translate_a/single?${new URLSearchParams({ client: "gtx", sl: "auto", tl: target, dt: "t", dj: "1", source: "input", q: text })}`, { signal: AbortSignal.timeout(30_000) });
+    const res = await fetch(`https://translate.googleapis.com/translate_a/single?${new URLSearchParams({ client: "gtx", sl: "auto", tl: target, dt: "t", dj: "1", source: "input", q: text })}`, { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000) });
     if (!res.ok) {
         await res.body?.cancel();
         throw new Error(`Request failed with status ${res.status}`);
@@ -139,16 +140,18 @@ async function google(target: string, text: string) {
     };
 }
 
-export async function translate(text: string) {
+export async function translate(text: string, signal?: AbortSignal) {
+    signal?.throwIfAborted();
     const { target, toki, sitelen, shavian } = settings.store;
 
     if ((toki && isTokiPona(text)) || (sitelen && isSitelen(text))) {
         if (isSitelen(text) && sitelen) text = await translateSitelen(text);
 
+        signal?.throwIfAborted();
         const response = await fetch("https://aiapi.serversmp.xyz/toki", {
             method: "POST",
             redirect: "error",
-            signal: AbortSignal.timeout(30_000),
+            signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
             headers: {
                 "Accept": "application/json",
                 "Content-Type": "application/json"
@@ -170,15 +173,16 @@ export async function translate(text: string) {
 
         return {
             src: "tp",
-            text: target === "en" ? translate.translation[0] : (await google(target, translate.translation[0])).text
+            text: target === "en" ? translate.translation[0] : (await google(target, translate.translation[0], signal)).text
         };
     }
     if (isShavian(text) && shavian) {
         const translate = await translateShavian(text);
+        signal?.throwIfAborted();
         return {
             src: "sh",
-            text: target === "en" ? translate : (await google(target, translate)).text
+            text: target === "en" ? translate : (await google(target, translate, signal)).text
         };
     }
-    return google(target, text);
+    return google(target, text, signal);
 }

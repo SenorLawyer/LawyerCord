@@ -9811,6 +9811,49 @@ test("Decor public lookups check HTTP and response shapes and never request the 
     }
 });
 
+test("MutualGroupDMs adds and renders profile tabs without modifying wishlist items", () => {
+    const source = readFileSync("src/plugins/mutualGroupDMs/index.tsx", "utf8");
+    const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);
+    let patchSource = "";
+    const visit = (node: typescript.Node) => {
+        if (typescript.isPropertyAssignment(node) && node.name.getText(ast) === "patches") patchSource = node.initializer.getText(ast);
+        typescript.forEachChild(node, visit);
+    };
+    visit(ast);
+    const patch = runInNewContext(`(${patchSource})`)[1];
+    let fixture = 'function wishlist(e){let{items:w,profileOwner:p}=e;return(0,j.jsx)("div",{items:w})}function tabs(e){let{items:t,user:u,initialSection:i}=e;let[a,set]=R.useState(()=>(t.find(e=>e.section===i)??t[0]).section),current=t.find(e=>e.section===a)??t[0];return(0,j.jsx)("div",{children:[(0,j.jsx)(Tabs,{type:"top",items:t,selectedItem:current.section}),(0,j.jsx)(Panel,{children:(0,j.jsx)(Boundary,{component:null,children:(0,j.jsx)(Content,{section:current.section})})})]})}';
+    for (const replacement of patch.replacement)
+        fixture = fixture.replace(canonicalizeMatch(replacement.match), replacement.replace.replaceAll("$self", "plugin"));
+    const user = { id: "friend" };
+    const calls: unknown[] = [];
+    const { wishlist, tabs } = runInNewContext(`${fixture};({wishlist,tabs})`, {
+        j: { jsx: (type: unknown, props: unknown) => ({ type, props }) },
+        R: { useState: (initial: () => string) => [initial(), () => {}] },
+        Tabs: "tabs", Panel: "panel", Boundary: "boundary", Content: "content",
+        plugin: {
+            pushSection: (items: { section: string; }[], owner: unknown) => {
+                calls.push(owner);
+                items.push({ section: "MUTUAL_GDMS" });
+            },
+            renderMutualGDMs: (props: unknown) => ({ type: "groups", props })
+        }
+    });
+    const wishItems = [{ section: "wishlist item" }];
+    wishlist({ items: wishItems });
+    assert.equal(calls.length, 0);
+    assert.equal(wishItems.length, 1);
+    for (const initialSection of ["ABOUT", "MUTUAL_GDMS"]) {
+        const props = { user, initialSection, items: [{ section: "ABOUT" }], onClose() {} };
+        const tree = tabs(props);
+        assert.equal(calls.at(-1), user);
+        assert.equal(props.items.filter(item => item.section === "MUTUAL_GDMS").length, 1);
+        assert.equal(tree.props.children[0].props.selectedItem, initialSection);
+        const content = tree.props.children[1].props.children;
+        assert.equal(content.type, initialSection === "MUTUAL_GDMS" ? "groups" : "boundary");
+        if (initialSection === "MUTUAL_GDMS") assert.equal(content.props, props);
+    }
+});
+
 test("ImplicitRelationships preserves existing friend headings when adding implicit counts", () => {
     const source = readFileSync("src/plugins/implicitRelationships/index.ts", "utf8");
     const ast = typescript.createSourceFile("index.ts", source, ScriptTarget.Latest, true);

@@ -114,13 +114,14 @@ export default definePlugin({
         // User Profile Modal v2
         {
             find: ".WIDGETS?",
+            group: true,
             replacement: [
                 {
-                    match: /items:(\i),.+?(?=return\(0,\i\.jsxs?\)\("div)/,
-                    replace: "$&$self.pushSection($1,arguments[0].user);"
+                    match: /(?=let\[\i,\i\]=\i\.useState\(\(\)=>\((\i)\.find\()/,
+                    replace: "$self.pushSection($1,arguments[0].user);"
                 },
                 {
-                    match: /children:(?=.{0,100}?component:.+?section:(\i))/,
+                    match: /children:(?=.{0,100}?component:.{0,200}?section:(\i(?:\.\i)?)(?=,|}))/,
                     replace: "$&$1==='MUTUAL_GDMS'?$self.renderMutualGDMs(arguments[0]):"
                 },
                 // Make the gap between each item smaller so our tab can fit.

@@ -59,6 +59,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep discarded reaction fetches retryable and ignore replies after stopping, reconnecting or changing accounts. Failed requests no longer leave the cache marked as fetched.
+
 - Restore Unicode reaction avatars by sharing Discord's native reaction cache key format.
 
 - Restore profile banner viewing through the native clickable control with keyboard support. Empty and color-only banners remain noninteractive.

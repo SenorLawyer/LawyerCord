@@ -2,11 +2,21 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Latest full local verification: all 686 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the reaction-cache fix. Patch lint reports zero warnings and no errors. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding 77c4320cb; the cache fix requires its own CI.
+Latest full local verification: all 688 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the reaction-queue fix. Patch lint reports zero warnings and no errors. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding 7234f4188; the queue fix requires its own CI.
 
 Earlier broad verification checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning passed. Patch lint then reported 107 warnings and no errors. Full repository lint logs use `.git/audit/reconciliation-sep27-*`; later focused runs do not replace final combined validation.
 
 A fresh September 27 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,656 files, fifteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-patches-complete.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
+
+## Reaction queue ownership and discarded work
+
+WhoReacted marked cache entries fetched before the bounded queue ran them. When the queue discarded an older task, its entry stayed marked fetched although no request occurred, also preventing Discord's native store from fetching it. The marker now changes only when the task starts. A second check skips duplicates and work already fetched by Discord.
+
+Pending replies also continued dispatching after stop. Queued work and replies now check their captured account and generation; replacing the native cache invalidates the old generation. Failed and obsolete requests clear their fetched marker so they can be retried. The single-use fetch helper and direct console catch are removed. The existing queue logs failures, and requests retain their 250 ms spacing. The native HTTP request itself is not cancelled.
+
+Two tracked regressions fail before the fixes. The real Queue test fills all fifty pending slots behind a held request, verifies eviction leaves an unfetched entry, and verifies a later retry and duplicate suppression. Eleven ownership cases cover stop, cache replacement, account changes, logout, rejection and retry, successful replies, skipped queued work, native completion and signed-out calls. Six additional executions combine the actual Queue and captured MessageReactionsStore with controlled HTTP promises: stale replies leave user/reaction stores untouched, successful replies populate them, and a rejection is logged once. The twelve cache-key cases still pass. Evidence is `.git/audit/reaction-queue-native-verify.{cjs,json}`, `reaction-cache-key-verify.{cjs,json}` and both failing-before logs.
+
+All 688 broader tests and timezone checks, TypeScript, focused ESLint, sequential desktop/web builds and artifact scanning pass. Patch lint reports zero warnings and errors. Logs use `.git/audit/reaction-queue-*`. All four preceding 7234f4188 CI checks passed. Signed-in behavior, native request timeouts and the remaining UI subscription findings are separate from these verified queue cases.
 
 ## Unicode reaction cache keys
 

@@ -44,37 +44,6 @@ const queue = new Queue(MAX_PENDING_REACTION_FETCHES);
 let fetchGeneration = 0;
 let reactions: Record<string, ReactionCacheEntry> = {};
 
-function fetchReactions(msg: Message, emoji: ReactionEmoji, type: number) {
-    const key = getEmojiKey(emoji);
-    return RestAPI.get({
-        url: Constants.Endpoints.REACTIONS(msg.channel_id, msg.id, key),
-        query: {
-            limit: 100,
-            type
-        },
-        oldFormErrors: true
-    })
-        .then(res => {
-            for (const user of res.body) {
-                FluxDispatcher.dispatch({
-                    type: "USER_UPDATE",
-                    user
-                });
-            }
-
-            FluxDispatcher.dispatch({
-                type: "MESSAGE_REACTION_ADD_USERS",
-                channelId: msg.channel_id,
-                messageId: msg.id,
-                users: res.body,
-                emoji,
-                reactionType: type
-            });
-        })
-        .catch(console.error)
-        .finally(() => sleep(250));
-}
-
 function getEmojiKey(emoji: Pick<ReactionEmoji, "id" | "name">) {
     return emoji.name + (emoji.id ? `:${emoji.id}` : "");
 }
@@ -82,13 +51,40 @@ function getEmojiKey(emoji: Pick<ReactionEmoji, "id" | "name">) {
 function getReactionsWithQueue(msg: Message, e: ReactionEmoji, type: number) {
     const key = `${msg.id}:${e.name}:${e.id ?? ""}:${type}`;
     const cache = reactions[key] ??= { fetched: false, users: new Map() };
-    if (!cache.fetched) {
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!cache.fetched && userId) {
         const generation = fetchGeneration;
-        queue.unshift(() => {
-            if (generation !== fetchGeneration) return;
-            return fetchReactions(msg, e, type);
+        queue.unshift(async () => {
+            if (generation !== fetchGeneration || userId !== UserStore.getCurrentUser()?.id || cache.fetched) return;
+            cache.fetched = true;
+            try {
+                const res = await RestAPI.get({
+                    url: Constants.Endpoints.REACTIONS(msg.channel_id, msg.id, getEmojiKey(e)),
+                    query: { limit: 100, type },
+                    oldFormErrors: true
+                });
+                if (generation !== fetchGeneration || userId !== UserStore.getCurrentUser()?.id) {
+                    cache.fetched = false;
+                    return;
+                }
+                for (const user of res.body) {
+                    FluxDispatcher.dispatch({ type: "USER_UPDATE", user });
+                }
+                FluxDispatcher.dispatch({
+                    type: "MESSAGE_REACTION_ADD_USERS",
+                    channelId: msg.channel_id,
+                    messageId: msg.id,
+                    users: res.body,
+                    emoji: e,
+                    reactionType: type
+                });
+            } catch (error) {
+                cache.fetched = false;
+                throw error;
+            } finally {
+                await sleep(250);
+            }
         });
-        cache.fetched = true;
     }
 
     return cache.users;
@@ -199,7 +195,8 @@ export default definePlugin({
         Scroll = scroll;
     },
 
-    set reactions(value: any) {
+    set reactions(value: Record<string, ReactionCacheEntry>) {
+        fetchGeneration++;
         reactions = value;
     },
 

@@ -2225,6 +2225,102 @@ test("reply mention exceptions match whole user and role IDs", () => {
     assert.equal(plugin.shouldMention(message, false), true);
 });
 
+test("reaction requests discard obsolete replies and leave failures retryable", async () => {
+    for (const mode of ["stop", "replace", "account", "logout", "reject", "success", "queued-stop", "queued-replace", "queued-account", "native-filled", "signed-out"]) {
+        const tasks: (() => Promise<void> | undefined)[] = [];
+        const events: unknown[] = [];
+        let userId: string | undefined = "first-account";
+        let requests = 0;
+        let resolve: (value: { body: { id: string; }[]; }) => void = () => {};
+        let reject: (error: Error) => void = () => {};
+        const pending = new Promise<{ body: { id: string; }[]; }>((accept, fail) => { resolve = accept; reject = fail; });
+        const { plugin, getReactionsWithQueue } = loadSource("src/plugins/whoReacted/index.tsx", {
+            "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+            "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+            "@utils/constants": { Devs: {} }, "@utils/misc": { sleep: async () => {} },
+            "@utils/Queue": { Queue: class { unshift(task: () => Promise<void> | undefined) { tasks.push(task); } } },
+            "@utils/react": {}, "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+            "@webpack/common": {
+                Constants: { Endpoints: { REACTIONS: () => "reaction" } },
+                RestAPI: { get: () => { requests++; return pending; } },
+                UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined },
+                FluxDispatcher: { dispatch: (event: unknown) => events.push(event) }
+            }
+        }, { console: { error() {} } }, "({ plugin: exports.default, getReactionsWithQueue })");
+        const cache: Record<string, { fetched: boolean; }> = {};
+        plugin.reactions = cache;
+        if (mode === "signed-out") userId = undefined;
+        getReactionsWithQueue({ id: "message", channel_id: "channel" }, { name: "wave" }, 0);
+        if (mode === "signed-out") {
+            assert.equal(tasks.length, 0);
+            assert.equal(cache["message:wave::0"].fetched, false);
+            continue;
+        }
+        if (mode === "queued-stop") plugin.stop();
+        if (mode === "queued-replace") plugin.reactions = {};
+        if (mode === "queued-account") userId = "second-account";
+        if (mode === "native-filled") cache["message:wave::0"].fetched = true;
+        const execution = Promise.resolve(tasks[0]()).then(() => null, error => error);
+        if (mode === "stop") plugin.stop();
+        if (mode === "replace") plugin.reactions = {};
+        if (mode === "account") userId = "second-account";
+        if (mode === "logout") userId = undefined;
+        if (mode === "reject") reject(new Error("Request failed"));
+        else resolve({ body: [{ id: "reactor" }] });
+        const error = await execution;
+        assert.equal(events.length, mode === "success" ? 2 : 0, mode);
+        assert.equal(cache["message:wave::0"].fetched, mode === "success" || mode === "native-filled", mode);
+        assert.equal(requests, mode.startsWith("queued-") || mode === "native-filled" ? 0 : 1, mode);
+        assert.equal(error instanceof Error, mode === "reject", mode);
+        if (mode === "reject") {
+            getReactionsWithQueue({ id: "message", channel_id: "channel" }, { name: "wave" }, 0);
+            assert.equal(tasks.length, 2);
+            await assert.rejects(async () => tasks[1](), /Request failed/);
+            assert.equal(requests, 2);
+        }
+    }
+});
+
+test("discarded reaction fetches stay available to the native store", async () => {
+    const { Queue } = loadSource("src/utils/Queue.ts", { "./Logger": { Logger: class { error() {} } } });
+    const requested: string[] = [];
+    let release: (value: { body: unknown[]; }) => void = () => {};
+    const first = new Promise<{ body: unknown[]; }>(resolve => { release = resolve; });
+    const { plugin, getReactionsWithQueue } = loadSource("src/plugins/whoReacted/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/constants": { Devs: {} }, "@utils/misc": { sleep: async () => {} },
+        "@utils/Queue": { Queue }, "@utils/react": {},
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": {
+            Constants: { Endpoints: { REACTIONS: (_channel: string, message: string) => message } },
+            RestAPI: { get: ({ url }: { url: string; }) => { requested.push(url); return url === "first" ? first : Promise.resolve({ body: [] }); } },
+            UserStore: { getCurrentUser: () => ({ id: "account" }) },
+            FluxDispatcher: { dispatch() {} }
+        }
+    }, {}, "({ plugin: exports.default, getReactionsWithQueue })");
+    const cache: Record<string, { fetched: boolean; }> = {};
+    plugin.reactions = cache;
+    const get = (id: string) => getReactionsWithQueue({ id, channel_id: "channel" }, { name: "wave" }, 0);
+    get("first");
+    await setImmediate();
+    for (let i = 1; i <= 51; i++) get(`queued-${i}`);
+    try {
+        assert.equal(cache["queued-1:wave::0"].fetched, false);
+        assert.deepEqual(requested, ["first"]);
+    } finally {
+        release({ body: [] });
+        await setImmediate();
+    }
+    assert.equal(requested.length, 51);
+    assert.equal(requested.includes("queued-1"), false);
+    get("queued-1");
+    get("queued-1");
+    await setImmediate();
+    assert.equal(requested.filter(id => id === "queued-1").length, 1);
+    assert.equal(cache["queued-1:wave::0"].fetched, true);
+});
+
 test("reaction avatars share native cache entries for Unicode and custom emoji", () => {
     const tasks: (() => void)[] = [];
     const { plugin, getReactionsWithQueue } = loadSource("src/plugins/whoReacted/index.tsx", {
@@ -2233,7 +2329,7 @@ test("reaction avatars share native cache entries for Unicode and custom emoji",
         "@utils/constants": { Devs: {} }, "@utils/misc": { sleep: async () => {} },
         "@utils/Queue": { Queue: class { unshift(task: () => void) { tasks.push(task); } } },
         "@utils/react": {}, "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
-        "@webpack/common": {}
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) } }
     }, {}, "({ plugin: exports.default, getReactionsWithQueue })");
     for (const id of [undefined, null, "custom"]) for (const type of [0, 1]) {
         const emoji = { name: "wave", id };

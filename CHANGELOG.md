@@ -27,6 +27,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CustomUserColors locates message color props without depending on field order or searching across arbitrary surrounding code.
 - FastDeleteChannels shows the shortcut action on threads without mentions or voice users, clears it when the window loses focus, and uses an accessible button with failure feedback. Its hooks are isolated from Discord renderers.
 - Cloud sync preserves backend changes saved by another window and advances the renderer sync timestamp only after persistence succeeds.
 - Cloud imports reject newer persisted settings instead of overwriting them. Failed saves leave renderer settings unchanged, and sync checkpoints preserve unrelated saved fields. Web settings writes share a lock across windows.

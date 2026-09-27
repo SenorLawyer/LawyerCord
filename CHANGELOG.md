@@ -27,6 +27,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- AlwaysAnimate preserves CSS class-name strings instead of replacing them with animation flags. Its generic replacements now use bounded searches.
+
 - AccountPanelServerProfile matches its popout callbacks directly, and AlwaysAnimate bounds its status-emoji patch search.
 
 - ShowMessageEmbeds targets the attachment parser instead of unrelated attachment renderers. Its context-menu match and the Timezones message-header match now use bounded searches.

@@ -67,12 +67,8 @@ export default definePlugin({
             // Some modules match the find but the replacement is returned untouched
             noWarn: true,
             replacement: {
-                match: /canAnimate:.+?([,}].*?\))/g,
-                replace: (m, rest) => {
-                    const destructuringMatch = rest.match(/}=.+/);
-                    if (destructuringMatch == null) return `canAnimate:!0${rest}`;
-                    return m;
-                }
+                match: /canAnimate:(?!["'`]).{1,150}?([,}].{0,300}?\))/g,
+                replace: (match, rest) => rest.includes("}=") ? match : `canAnimate:!0${rest}`
             }
         },
         {
@@ -127,12 +123,8 @@ export default definePlugin({
             all: true,
             noWarn: true,
             replacement: {
-                match: /animateGradient:.+?([,}].*?\))/g,
-                replace: (m, rest) => {
-                    const destructuringMatch = rest.match(/}=.+/);
-                    if (destructuringMatch == null) return `animateGradient:!0${rest}`;
-                    return m;
-                }
+                match: /animateGradient:(?!["'`]).{1,150}?([,}].{0,300}?\))/g,
+                replace: (match, rest) => rest.includes("}=") ? match : `animateGradient:!0${rest}`
             }
         },
     ]

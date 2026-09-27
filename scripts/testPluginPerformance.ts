@@ -28,6 +28,23 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { makeLazy, proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("AlwaysAnimate preserves class names and destructuring while overriding flags", () => {
+    const { default: plugin } = loadSource("src/plugins/alwaysAnimate/index.ts", {
+        "@api/Settings": { definePluginSettings: () => ({}) }, "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} }
+    });
+    for (const [index, field] of [[0, "canAnimate"], [6, "animateGradient"]] as const) {
+        const replacement = plugin.patches[index].replacement;
+        const apply = (source: string) => source.replace(replacement.match, replacement.replace);
+        for (const quote of ["\"", "'", "`"])
+            assert.equal(apply(`({${field}:${quote}animation-class${quote},tail:"tail"})`), `({${field}:${quote}animation-class${quote},tail:"tail"})`);
+        const binding = `function read(props){let{${field}:flag}=props;return Boolean(flag)}`;
+        assert.equal(apply(binding), binding);
+        for (const value of ["!1", "enabled", "hovered||focused", "enabled?hovered:focused"])
+            assert.equal(runInNewContext(apply(`({${field}:${value},tail:42})`))[field], true);
+    }
+});
+
 test("RPCEditor stream input validates its parsed destination and can be cleared", () => {
     const { ReplaceSettings } = loadSource("src/equicordplugins/rpcEditor/ReplaceSettings.tsx", {
         "@components/Card": { Card: "card" }, "@components/CheckedTextInput": { CheckedTextInput: "checked" },

@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Replace FakeNitro's message-accessory capture-copy callbacks with direct replacement strings.
+
 - Remove ContextMenuAPI's special exception that hid patch syntax failures from logs and companion reports. Failed replacements still roll back.
 
 - Remove redundant ReplyTimestamp date casts, its single-use state enum, and the repeated same-day calculation.
@@ -37,6 +39,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Remove TriviaAI, which required a user-supplied API key and arbitrary AI endpoint. Its Answer With AI actions are no longer available.
 
 ### Fixed
+
+- Bound FakeNitro's embed, sticker and attachment patch searches to their local statements.
 
 - Bound Decor's purchase-label and current-user captures to their local render code.
 

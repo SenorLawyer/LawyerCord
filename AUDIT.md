@@ -19,6 +19,12 @@ Changes are accumulated in [PR #47](https://github.com/SenorLawyer/LawyerCord/pu
 
 ## Latest local verification
 
+FakeNitro's embed, sticker and attachment patch searches now have local bounds. The latter two cannot cross a semicolon, and all three replacement callbacks that only copied captures are replaced with strings. The complete captured module, including its separate sticker-notice patch, retains byte-identical output and compiles under all four emoji/sticker transform combinations. Three valid distant-capture fixtures are rejected by the new patterns. Evidence is in `.git/audit/fake-nitro-accessories-verify.cjs` and its result JSON. The remaining broad FakeNitro matches were captured in `.git/audit/fake-nitro-patches.json` and still require review.
+
+Experiments' keyboard class lookup was also checked and retained. Captured stylesheet 846066 still exports `key` and `combo` under those names, so the suspected mangling issue does not justify a change. Its captured values and disposition are saved in `.git/audit/experiments-keyboard-disposition.json`; signed-in chunk loading was not tested.
+
+Focused lint, desktop/web builds, and artifact scanning pass. Patch lint reports zero errors and 95 warnings. All four CI checks pass on preceding `c5f227533`. The latest local full 665-test, timezone and TypeScript run remains at `f3ae7a542`; this change alters only patch patterns and equivalent replacement construction. Logs use `.git/audit/fake-nitro-accessories-*`.
+
 Decor's remaining purchase-label and current-user backward searches now have bounds of 500 and 250 characters. The captured spans are 449 and 169 characters respectively. All three complete captured modules retain byte-identical patched output and compile. Valid source with 600 characters of added whitespace between capture and use still matches the old patterns but is rejected by the bounded ones. Evidence is in `.git/audit/decor-bounded-verify.cjs` and its result JSON. This changes search scope, not decoration rendering or purchase checks.
 
 Focused lint, desktop/web builds, and artifact scanning pass. Patch lint reports zero errors and 98 warnings. The latest full 665-test, timezone and TypeScript checks remain at `f3ae7a542`; the two subsequent changes alter only verified patch patterns/replacement construction. CI on preceding `f30a56e50` was running when checked. Logs use `.git/audit/decor-bounded-*`. Signed-in rendering remains outside these captured-module checks.

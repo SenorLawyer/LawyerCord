@@ -344,20 +344,20 @@ export default definePlugin({
                 {
                     // Call our function to decide whether the embed should be ignored or not
                     predicate: () => settings.store.transformEmojis || settings.store.transformStickers,
-                    match: /(renderEmbeds\((\i)\){)(.+?embeds\.map\(\((\i),\i\)?=>{)/,
-                    replace: (_, rest1, message, rest2, embed) => `${rest1}const fakeNitroMessage=${message};${rest2}if($self.shouldIgnoreEmbed(${embed},fakeNitroMessage))return null;`
+                    match: /(renderEmbeds\((\i)\){)(.{0,150}?embeds\.map\(\((\i),\i\)?=>{)/,
+                    replace: "$1const fakeNitroMessage=$2;$3if($self.shouldIgnoreEmbed($4,fakeNitroMessage))return null;"
                 },
                 {
                     // Patch the stickers array to add fake nitro stickers
                     predicate: () => settings.store.transformStickers,
-                    match: /renderStickersAccessories\((\i)\){let (\i)=\(0,\i\.\i\)\(\i\).+?;/,
-                    replace: (m, message, stickers) => `${m}${stickers}=$self.patchFakeNitroStickers(${stickers},${message});`
+                    match: /renderStickersAccessories\((\i)\){let (\i)=\(0,\i\.\i\)\(\i\)[^;]{0,100};/,
+                    replace: "$&$2=$self.patchFakeNitroStickers($2,$1);"
                 },
                 {
                     // Filter attachments to remove fake nitro stickers or emojis
                     predicate: () => settings.store.transformStickers,
-                    match: /renderAttachments\(\i\){.+?{attachments:(\i).+?;/,
-                    replace: (m, attachments) => `${m}${attachments}=$self.filterAttachments(${attachments});`
+                    match: /renderAttachments\(\i\){[^;]{0,200}{attachments:(\i)[^;]{0,50};/,
+                    replace: "$&$1=$self.filterAttachments($1);"
                 }
             ]
         },

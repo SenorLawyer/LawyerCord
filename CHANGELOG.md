@@ -47,6 +47,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Preserve Pending and other Discord friend headings when ImplicitRelationships adds its own count. Keep its section and sorting patches local.
+
 - Target FakeProfileThemes' store patch at the actual profile store so another module cannot consume it first, and bound the older theme editor's button search.
 
 - Bound FakeNitro's embed, sticker, attachment and soundboard patch searches. Keep emoji-eligibility captures within their owning function.

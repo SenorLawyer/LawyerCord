@@ -19,6 +19,12 @@ Changes are accumulated in [PR #47](https://github.com/SenorLawyer/LawyerCord/pu
 
 ## Latest local verification
 
+ImplicitRelationships now inserts its count case without replacing Discord's Pending case. History identifies the regression in `b5ef858e71`: the match changed from Blocked to Pending while the replacement still emitted Blocked. The captured header function previously diverged from Discord in 36 controlled cases. The fixed patch preserves all 90 existing heading cases and produces the expected Implicit label in 18 additional cases. A tracked regression fails before the fix with `All 0` instead of `Pending 0`.
+
+Its section-header search is bounded to 350 characters and its capture-copy callback is removed. Sorting now wraps only the local comparator expression. The combined header/section module differs only in the corrected Pending case; both captured sort modules retain byte-identical output and compile. A distant section capture is rejected. Evidence is in `.git/audit/implicit-relationship-capture-verify.cjs` and its result JSON.
+
+All 667 broader regressions and timezone checks, TypeScript, focused lint, desktop/web builds, and artifact scanning pass. Patch lint reports zero errors and 80 warnings. All four CI checks pass on preceding `a1317c526`. Logs use `.git/audit/implicit-relationship-*`. These captured and controlled checks do not establish signed-in Friends-tab acceptance.
+
 IgnoreActivities now captures the activity list at its listening-activity push and the running-games list at its assignment. Two capture-copy callbacks are replaced with strings. Its app-launcher application capture is bounded to 150 characters. All three complete captured modules retain byte-identical patched output and compile; distant running-game and launcher captures are rejected. Evidence is in `.git/audit/ignore-activity-capture-verify.cjs` and its result JSON.
 
 Focused lint, desktop/web builds, and artifact scanning pass. Patch lint reports zero errors and 82 warnings. Logs use `.git/audit/ignore-activity-*`. The last full 666-test, timezone and TypeScript run remains at `b14e04914`; these edits change only verified patch construction. At the preceding `af1961b8a`, three CI checks had passed and Windows smoke was still running when checked.

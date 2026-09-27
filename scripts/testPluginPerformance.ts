@@ -9811,6 +9811,30 @@ test("Decor public lookups check HTTP and response shapes and never request the 
     }
 });
 
+test("ImplicitRelationships preserves existing friend headings when adding implicit counts", () => {
+    const source = readFileSync("src/plugins/implicitRelationships/index.ts", "utf8");
+    const ast = typescript.createSourceFile("index.ts", source, ScriptTarget.Latest, true);
+    let patchSource = "";
+    const visit = (node: typescript.Node) => {
+        if (typescript.isPropertyAssignment(node) && node.name.getText(ast) === "patches") patchSource = node.initializer.getText(ast);
+        typescript.forEachChild(node, visit);
+    };
+    visit(ast);
+    const patch = runInNewContext(`(${patchSource})`)[0];
+    const original = 'function header(type,count){switch(type){case types.values.ONLINE:return format({count:count.toString()});case types.values.PENDING:return "Pending "+count;case types.values.BLOCKED:return "Blocked "+count;default:return "All "+count}}';
+    const replacement = patch.replacement;
+    const patched = original.replace(canonicalizeMatch(replacement.match), replacement.replace);
+    assert.notEqual(patched, original);
+    const types = { values: { ONLINE: "online", PENDING: "pending", BLOCKED: "blocked", IMPLICIT: "implicit" } };
+    const globals = { types, format: ({ count }: { count: string; }) => `Online ${count}` };
+    const before = runInNewContext(`(${original})`, globals);
+    const after = runInNewContext(`(${patched})`, globals);
+    for (const count of [0, 1, 17]) {
+        for (const type of ["online", "pending", "blocked", "all"]) assert.equal(after(type, count), before(type, count));
+        assert.equal(after("implicit", count), `Implicit — ${count}`);
+    }
+});
+
 test("FakeProfileThemes targets the profile store and leaves colorless editor actions usable", () => {
     const source = readFileSync("src/plugins/fakeProfileThemes/index.tsx", "utf8");
     const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);

@@ -59,6 +59,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Preserve default avatars and server avatar/banner inheritance in new profile presets. Existing saved image presets keep their behavior.
+
 - Stop preparing further preset images after profile loading is cancelled.
 
 - Retry failed session-discovery saves on later checks without caching unsaved sessions or notifying after stop or account changes.

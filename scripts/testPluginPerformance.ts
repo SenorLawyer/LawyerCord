@@ -7265,6 +7265,42 @@ test("profile effect snapshots preserve direct and collectible resolution", asyn
     }
 });
 
+test("profile snapshots preserve default images and server inheritance", async () => {
+    for (const guildId of [undefined, "guild"]) for (const absent of [undefined, null]) {
+        const globalImage = "data:image/png;base64,Z2xvYmFs";
+        const currentUser = { id: "me", avatar: guildId ? globalImage : absent };
+        const member = { avatar: absent as string | null | undefined };
+        const globalProfile = { banner: guildId ? globalImage : absent };
+        const guildProfile = { banner: absent as string | null | undefined };
+        const events: Record<string, unknown>[] = [];
+        const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null }) },
+            "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => currentUser },
+                UserProfileStore: { getUserProfile: () => globalProfile, getGuildMemberProfile: () => guildProfile },
+                GuildMemberStore: { getMember: () => member },
+                IconUtils: { getUserAvatarURL: () => globalImage, getDefaultAvatarURL: () => globalImage },
+                FluxDispatcher: { dispatch: (event: Record<string, unknown>) => events.push(event) }
+            }
+        });
+        const snapshot = await api.getCurrentProfile(guildId);
+        assert.equal(snapshot.avatarDataUrl, null);
+        assert.equal(snapshot.bannerDataUrl, null);
+        member.avatar = "data:image/png;base64,b3ZlcnJpZGU=";
+        guildProfile.banner = member.avatar;
+        currentUser.avatar = "data:image/png;base64,bmV3Z2xvYmFs";
+        globalProfile.banner = currentUser.avatar;
+        await api.loadPresetAsPending({ avatarDataUrl: snapshot.avatarDataUrl, bannerDataUrl: snapshot.bannerDataUrl }, guildId);
+        assert.equal(events.length, 2);
+        assert.deepEqual(events.map(event => ({ ...event })), [
+            { type: "USER_PROFILE_SETTINGS_SET_PENDING_CHANGES", ...(guildId ? { guildId } : {}), pendingAvatar: null },
+            { type: "USER_PROFILE_SETTINGS_SET_PENDING_CHANGES", ...(guildId ? { guildId } : {}), pendingBanner: null }
+        ]);
+        assert.equal(currentUser.avatar, "data:image/png;base64,bmV3Z2xvYmFs");
+    }
+});
+
 test("profile image snapshots preserve explicit pending removals", async () => {
     for (const guildId of [undefined, "guild"]) for (const pending of [undefined, null, "data:image/png;base64,bmV3"]) {
         const saved = "data:image/png;base64,c2F2ZWQ=";

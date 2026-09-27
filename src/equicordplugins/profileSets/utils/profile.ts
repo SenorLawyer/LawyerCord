@@ -83,12 +83,6 @@ function isNonEmptyString(value: unknown): value is string {
     return typeof value === "string" && value.length > 0;
 }
 
-function hasImageInput(value: ImageInput): boolean {
-    if (!value) return false;
-    if (typeof value === "string") return value.length > 0;
-    return typeof value === "object" && isNonEmptyString(value?.imageUri);
-}
-
 function hasAvatarDecoration(value: unknown): value is AvatarDecorationLike {
     return typeof value === "object"
         && value != null
@@ -276,26 +270,22 @@ export async function getCurrentProfile(guildId?: string, options: CurrentProfil
     const { pendingAvatar } = pendingChanges;
     const avatarToUse: ImageInput = pendingAvatar !== undefined
         ? pendingAvatar
-        : (isGuildProfile ? (guildMember?.avatar ?? currentUser.avatar ?? null) : (currentUser.avatar ?? null));
+        : (isGuildProfile ? guildMember?.avatar ?? null : currentUser.avatar ?? null);
 
     const useGuildAvatar = !!(effectiveGuildId && isGuildProfile && guildMember?.avatar && avatarToUse === guildMember.avatar);
 
-    const avatarInput: ImageInput = options.skipAvatar ? undefined : pendingAvatar === null || hasImageInput(avatarToUse)
-        ? avatarToUse
-        : IconUtils.getUserAvatarURL(currentUser, true, 512);
-    const avatarDataUrl = await processImage(avatarInput, currentUser.id, "avatar", effectiveGuildId, useGuildAvatar, options.signal);
-    const resolvedAvatarDataUrl = options.skipAvatar ? undefined : pendingAvatar === null ? null : avatarDataUrl ?? IconUtils.getDefaultAvatarURL(currentUser.id);
+    const avatarDataUrl = options.skipAvatar ? undefined : await processImage(avatarToUse, currentUser.id, "avatar", effectiveGuildId, useGuildAvatar, options.signal);
 
     const { pendingBanner } = pendingChanges;
     const bannerToUse: ImageInput = pendingBanner !== undefined
         ? pendingBanner
-        : (isGuildProfile ? (guildProfile?.banner ?? baseProfile?.banner) : baseProfile?.banner);
+        : (isGuildProfile ? guildProfile?.banner : baseProfile?.banner);
     const useGuildBanner = !!(effectiveGuildId && isGuildProfile && guildProfile?.banner && bannerToUse === guildProfile?.banner);
 
     const bannerDataUrl = options.skipBanner ? undefined : await processImage(bannerToUse, currentUser.id, "banner", effectiveGuildId, useGuildBanner, options.signal);
 
     return {
-        avatarDataUrl: resolvedAvatarDataUrl,
+        avatarDataUrl,
         bannerDataUrl,
         bio: pendingChanges.pendingBio !== undefined ? pendingChanges.pendingBio : userProfile?.bio ?? null,
         accentColor: pendingChanges.pendingAccentColor !== undefined ? pendingChanges.pendingAccentColor : userProfile?.accentColor ?? null,

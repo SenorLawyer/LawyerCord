@@ -775,7 +775,7 @@ export default definePlugin({
                 },
                 {
                     // Add current cached content + new edit time to cached message's editHistory
-                    match: /(MESSAGE_UPDATE:function\((\i)\).+?)\.update\((\i)/,
+                    match: /(MESSAGE_UPDATE:function\((\i)\)\{[^{}]{0,200}?)\.update\((\i)/,
                     replace: `
                         $1
                         .update($3, m =>
@@ -853,9 +853,9 @@ export default definePlugin({
             replacement: [
                 {
                     // Append messagelogger-deleted to classNames if deleted
-                    match: /\)\("li",\{(.+?),className:/,
+                    match: /(?<=\)\("li",\{[^{}]{0,100},className:)/,
                     replace:
-                        ')("li",{$1,className:(arguments[0].message.deleted ? "messagelogger-deleted " : "")+',
+                        '(arguments[0].message.deleted ? "messagelogger-deleted " : "")+',
                 },
             ],
         },
@@ -900,8 +900,8 @@ export default definePlugin({
             replacement: [
                 {
                     // Remove the first section if message is deleted
-                    match: /children:(\[""===.+?\])/,
-                    replace: "children:arguments[0].message.deleted?[]:$1",
+                    match: /(?<=children:)(?=\[""===)/,
+                    replace: "arguments[0].message.deleted?[]:",
                 },
             ],
         },
@@ -923,7 +923,7 @@ export default definePlugin({
                     replace: '$&$1.type==="MESSAGE_GROUP_DELETED"||',
                 },
                 {
-                    match: /(\i).type===\i\.\i\.MESSAGE_GROUP_BLOCKED\?(\i)=.*?:/,
+                    match: /(\i).type===\i\.\i\.MESSAGE_GROUP_BLOCKED\?(\i)=[^?:;]{1,100}:/,
                     replace: '$&$1.type==="MESSAGE_GROUP_DELETED"?$2=$self.DELETED_MESSAGE_COUNT:',
                 },
             ],

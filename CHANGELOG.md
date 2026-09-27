@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Remove MessageLogger's broad renderer captures and keep its edit-handler and group-label searches within local code.
+
 - Replace IgnoreActivities' capture-copy callbacks and broad activity searches with local bounded patterns.
 
 - Remove GreetStickerPicker's backward props search and use its owning component's arguments for the context-menu callback.

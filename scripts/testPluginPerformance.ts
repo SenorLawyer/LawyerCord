@@ -2225,6 +2225,32 @@ test("reply mention exceptions match whole user and role IDs", () => {
     assert.equal(plugin.shouldMention(message, false), true);
 });
 
+test("thread typing indicators do not depend on voice or mention badges", () => {
+    const source = readFileSync("src/plugins/typingIndicator/index.tsx", "utf8");
+    const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);
+    let patchSource = "";
+    const visit = (node: typescript.Node) => {
+        if (typescript.isPropertyAssignment(node) && node.name.getText(ast) === "patches") patchSource = node.initializer.getText(ast);
+        typescript.forEachChild(node, visit);
+    };
+    visit(ast);
+    const replacement = runInNewContext(`(${patchSource})`)[1].replacement;
+    const original = 'function Badge(e){let{mentionsCount:t,isMentionLowImportance:n}=e;return t}function Badges(e){let{thread:t,countInVoice:n,hasVideo:l,mentionCount:i,isMentionLowImportance:r}=e,a=n>0&&t.userLimit>0,o=i>0;return a||o?(0,s.jsxs)("div",{children:[a?(0,s.jsx)(Voice,{userCount:n,video:l,channel:t}):null,o?(0,s.jsx)(Badge,{mentionsCount:i,isMentionLowImportance:r}):null]}):null}function row(t,n,m){let l=false,r=false;return [(0,s.jsx)(Badges,{thread:t,countInVoice:n,hasVideo:l,mentionCount:m,isMentionLowImportance:r})]}';
+    const calls: string[][] = [];
+    const jsx = (type: unknown, props: unknown) => typeof type === "function" ? type(props) : { type, props };
+    const row = runInNewContext(original.replace(canonicalizeMatch(replacement.match), replacement.replace) + ";row", {
+        s: { jsx, jsxs: jsx }, Voice: "voice",
+        $self: { TypingIndicator: (channelId: string, guildId: string) => { calls.push([channelId, guildId]); return "typing"; } }
+    });
+    for (const userLimit of [0, 5]) for (const voiceCount of [0, 2]) for (const mentionCount of [0, 1]) {
+        const previousCalls = calls.length;
+        const result = row({ id: "thread", userLimit, getGuildId: () => "guild" }, voiceCount, mentionCount);
+        assert.equal(calls.length, previousCalls + 1);
+        assert.deepEqual(calls.at(-1), ["thread", "guild"]);
+        assert.equal(result[1], "typing");
+    }
+});
+
 test("friend voice indicators use each row's user and hover state", () => {
     const source = readFileSync("src/plugins/userVoiceShow/index.tsx", "utf8");
     const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);

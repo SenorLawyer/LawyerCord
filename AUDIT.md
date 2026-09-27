@@ -6,6 +6,14 @@ Current source checkpoint `080e17609`: all 654 broader tests and timezone checks
 
 A fresh September 27 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,655 files, fourteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-sep27-current.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
 
+## Thread typing without native badges
+
+The thread typing patch began at an unrelated mention-badge function and inserted inside the voice/mention badge component. That component returns null when neither badge is present, preventing the typing component from mounting. The patch now inserts beside the parent row's badge call using its adjacent thread prop. The broad cross-function search is removed. Historical 2f1e86f33 introduced this expression for general thread support, with no intended badge requirement.
+
+The tracked regression fails before the fix with no typing call on a thread without badges. Captured module 542308 compiles and changes only at the new sibling insertion. Thirty-two cases execute the actual badge functions and parent child array across voice limits/counts, absent/zero/nonzero mentions and visible/empty typing output. Eighteen cases recover previously skipped mounts, and all preserve native controls. The badge functions retain their original lexical theme binding while the parent keeps its separate video flag. Dependencies are mocked; signed-in layout and store subscription acceptance remain separate. Evidence is `.git/audit/thread-typing-verify.{cjs,json}` and `thread-typing-before.log`.
+
+All 681 broader tests and timezone checks, TypeScript, plugin ESLint, sequential desktop/web builds and artifact scanning pass. Patch lint reports 18 warnings and no errors. Logs use `.git/audit/thread-typing-*`. All four CI checks passed on preceding 096aeb3db. A fresh fetch confirms no missing main commits and the same September 5 published nightly baseline. Remaining findings and final release acceptance are unfinished.
+
 ## Voice indicators on friend rows
 
 The voice-indicator patch only changed the first anniversary row and read `this.props.user` from its function component. That receiver is absent, so the injected indicator had no user ID. The regular class-based row was not patched at all. The patch now captures the adjacent user and hovered props and deliberately applies to both layouts. This also removes the backward focus search and the optional receiver chain.

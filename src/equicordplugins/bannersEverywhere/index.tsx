@@ -112,7 +112,7 @@ export default definePlugin({
     },
 
     memberListBannerHook(user: User, nameplate: Nameplate | undefined) {
-        return <MemberListBanner userId={user.id} nameplate={nameplate} preferNameplate={settings.store.preferNameplate} getBanner={this.getBanner} convert={this.gifToPng} />;
+        return <MemberListBanner userId={user.id} nameplate={nameplate} preferNameplate={settings.store.preferNameplate} getBanner={this.getBanner} convert={url => this.gifToPng(url)} />;
     },
 
     async gifToPng(url: string): Promise<string> {

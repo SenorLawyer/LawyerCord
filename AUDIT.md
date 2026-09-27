@@ -2,11 +2,23 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Latest full local verification: all 693 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the profile image inheritance fix. Patch lint reports zero warnings and no errors. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding b3e744cda; the inheritance fix requires its own CI.
+Latest full local verification: all 694 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the banner conversion binding fix. Patch lint reports zero warnings and no errors. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding 5b7aba556; the banner fix requires its own CI.
 
 Earlier broad verification checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning passed. Patch lint then reported 107 warnings and no errors. Full repository lint logs use `.git/audit/reconciliation-sep27-*`; later focused runs do not replace final combined validation.
 
 A fresh September 28 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,656 files, fifteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-patches-complete.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
+
+## Banner conversion callback ownership
+
+BannersEverywhere passed gifToPng directly through its React props. StaticBanner called it without a receiver, but the method reads the plugin's pngCache and pendingConversions through this. The plugin manager binds only its listed public callbacks, not gifToPng. This made the real rendered conversion reject before loading an image. The callback now calls the method through its plugin owner. No cache or conversion rewrite is needed.
+
+The new tracked test follows the rendered wrapper and StaticBanner into the actual conversion method. Before the fix it throws while reading pngCache; afterward the controlled image/canvas completes, the converted value is cached and pending ownership clears. Previous rendering tests substituted the converter and did not cover this boundary. An initially omitted USRBG fixture import was supplied before capturing the failing baseline. All nine banner tests pass. The three current patch replacements also match once and compile in captured modules 589158 and 193663; the first fixture attempt needed canonicalized internationalization anchors. This checks intended captured modules, not fresh live-client matching or global uniqueness. Evidence is `.git/audit/banner-binding-before.log` and `banner-reconciliation-sep28.{cjs,json}`.
+
+All 694 broader tests and timezone checks, TypeScript, focused ESLint, sequential desktop/web builds and artifact scanning pass. Logs use `.git/audit/banner-binding-*`. All four preceding 5b7aba556 CI checks passed. Live rendering, preference propagation, delayed USRBG availability and aggregate decoded-image memory remain separate findings.
+
+## Translation cancellation reconciliation
+
+The older translation disposition omitted later fixes. Current source includes TranslatePlus replacement/detachment cancellation, Google lifecycle cancellation, bounded Kagi request bodies, separate transcript-job cancellation and native cancellation scoped by frame/request. All 53 focused translation/transcript tests pass in `.git/audit/translation-reconciliation-sep28-tests.log`. The native handler, bounded reader and both fixture files exactly match the recorded Electron cancellation evidence, including line-ending normalization. That result proves real isolated IPC frame ownership and local transport cleanup; it does not prove signed-in Discord or credentialed provider behavior. No additional cancellation machinery was added. The translation disposition and caller review now distinguish these resolved boundaries from live acceptance.
 
 ## Profile image inheritance
 

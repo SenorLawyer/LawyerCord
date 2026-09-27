@@ -59,6 +59,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep the banner conversion callback bound to its plugin cache so static banner rendering can complete.
+
 - Preserve default avatars and server avatar/banner inheritance in new profile presets. Existing saved image presets keep their behavior.
 
 - Stop preparing further preset images after profile loading is cancelled.

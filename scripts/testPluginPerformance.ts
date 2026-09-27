@@ -7898,6 +7898,36 @@ test("BannersEverywhere subscribes its banner to profile and setting changes", (
     assert.equal(subscriptions, 6);
 });
 
+test("BannersEverywhere rendered conversion keeps its plugin cache owner", async () => {
+    let conversion: Promise<string> | undefined;
+    let image: { onload: (() => void) | null; } | undefined;
+    const { default: plugin } = loadSource("src/equicordplugins/bannersEverywhere/index.tsx", {
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/react": { useAwaiter: (run: () => Promise<string>) => { conversion = run(); return [undefined]; } },
+        "@plugins/usrbg": {}, "@api/PluginManager": {}, "@api/Settings": { definePluginSettings: () => ({ store: {}, use: () => ({ animate: false }) }) },
+        "@utils/constants": { Devs: {} }, "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack/common": { useStateFromStores: (_stores: unknown, select: () => unknown) => select() }, "./style.css?managed": {}
+    }, {
+        React: { createElement: (type: unknown, props: object) => ({ type, props }) },
+        Image: class {
+            onload: (() => void) | null = null;
+            width = 32;
+            height = 16;
+            constructor() { image = this; }
+        },
+        document: { createElement: () => ({ getContext: () => ({ drawImage() {} }), toDataURL: () => "converted-banner" }) },
+        setTimeout: () => 1, clearTimeout() {}
+    });
+    plugin.getBanner = () => "original-banner";
+    const wrapper = plugin.memberListBannerHook({ id: "user" });
+    const banner = wrapper.type(wrapper.props);
+    banner.type(banner.props);
+    image?.onload?.();
+    assert.equal(await conversion, "converted-banner");
+    assert.equal(await plugin.pngCache.get("original-banner"), "converted-banner");
+    assert.equal(plugin.pendingConversions.size, 0);
+});
+
 test("BannersEverywhere conversion results belong to their mounted URL", async () => {
     let cleanup = () => {};
     let updates = 0;

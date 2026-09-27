@@ -2,11 +2,19 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Latest full local verification: all 688 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the reaction-queue fix. Patch lint reports zero warnings and no errors. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding 7234f4188; the queue fix requires its own CI.
+Latest full local verification: all 689 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the reaction-subscription fix. Patch lint reports zero warnings and no errors. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding 77f64e42f; the subscription fix requires its own CI.
 
 Earlier broad verification checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning passed. Patch lint then reported 107 warnings and no errors. Full repository lint logs use `.git/audit/reconciliation-sep27-*`; later focused runs do not replace final combined validation.
 
 A fresh September 27 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,656 files, fifteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-patches-complete.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
+
+## Reaction-avatar store subscriptions
+
+WhoReacted listened only for fetched-user events. With its parent held unchanged, the actual React component stayed stale when the captured reaction store added a user. The component now subscribes to the native reaction, user and channel stores. Its selector reads only snapshots, including the native user-store version and the existing connection generation. Fetch scheduling moves from render to an effect. The manual Flux listener and force-update hook are removed.
+
+The tracked regression verifies pure selection, deferred scheduling, cache/user/guild changes and connection-generation changes. A React fixture using the actual captured reaction store reproduces the old stale output and now updates after add/remove events, user replacement and guild changes. Other emoji and reaction types remain isolated. Two consecutive empty cache resets each schedule their new generation, and unmount removes all subscriptions. The store-hook adapter and surrounding components are controlled, so this is not signed-in UI acceptance. Evidence is `.git/audit/reaction-reactivity-verify.{cjs,json}` and `reaction-reactivity-before.log`. The captured UserStore confirms a version counter and no MESSAGE_REACTION_ADD_USERS handler; its required user updates are retained.
+
+The twelve native cache-key cases and six actual-queue/native-store ownership cases still pass. All 689 broader tests and timezone checks, TypeScript, focused ESLint, sequential desktop/web builds and artifact scanning pass. Patch lint reports zero warnings and errors. Logs use `.git/audit/reaction-reactivity-*`. All four preceding 77f64e42f CI checks passed. Avatar interaction settings, scrolling ownership and signed-in acceptance remain separate review items.
 
 ## Reaction queue ownership and discarded work
 

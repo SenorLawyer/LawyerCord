@@ -2225,6 +2225,62 @@ test("reply mention exceptions match whole user and role IDs", () => {
     assert.equal(plugin.shouldMention(message, false), true);
 });
 
+test("reaction avatar selectors stay pure and observe cache, user and guild updates", () => {
+    interface Snapshot { userIds: string[]; guildId: string; generation: number; userVersion: number; }
+    const selectors: (() => Snapshot)[] = [];
+    const effects: (() => void)[] = [];
+    const tasks: unknown[] = [];
+    const reactionStore = {};
+    let guildId = "guild";
+    let version = 0;
+    const user = { id: "user", username: "Reactor" };
+    const UserStore = { getCurrentUser: () => ({ id: "account" }), getUser: () => user, getUserStoreVersion: () => version };
+    const ChannelStore = { getChannel: () => ({ guild_id: guildId }) };
+    const React = { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props: { ...props, children } }) };
+    const { plugin, ReactionUsers } = loadSource("src/plugins/whoReacted/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/constants": { Devs: {} }, "@utils/misc": {},
+        "@utils/Queue": { Queue: class { unshift(task: unknown) { tasks.push(task); } } },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack": { findStoreLazy: () => reactionStore },
+        "@webpack/common": {
+            React, UserStore, ChannelStore, UserSummaryItem: "summary", lodash: { isEqual: isDeepStrictEqual },
+            useEffect: (effect: () => void) => effects.push(effect), useLayoutEffect() {},
+            useStateFromStores: (stores: unknown[], select: () => Snapshot, _deps: unknown[], equal: (a: Snapshot, b: Snapshot) => boolean) => {
+                assert.deepEqual(Array.from(stores), [reactionStore, UserStore, ChannelStore]);
+                assert.equal(equal(select(), select()), true);
+                selectors.push(select);
+                return select();
+            }
+        }
+    }, {}, "({ plugin: exports.default, ReactionUsers })");
+    const cache: Record<string, { users: Map<string, typeof user>; }> = {};
+    plugin.reactions = cache;
+    const props = { message: { id: "message", channel_id: "channel" }, emoji: { name: "wave" }, type: 0 };
+    ReactionUsers(props);
+    assert.equal(tasks.length, 0);
+    assert.deepEqual(Object.keys(cache), []);
+    effects[0]();
+    assert.equal(tasks.length, 1);
+    const select = selectors[0];
+    const initial = select();
+    cache["message:wave::0"].users.set("user", user);
+    assert.deepEqual(Array.from(select().userIds), ["user"]);
+    version++;
+    guildId = "replacement";
+    assert.equal(select().userVersion, version);
+    assert.equal(select().guildId, guildId);
+    const tree = ReactionUsers(props);
+    const summary = tree.props.children[0].props.children[0];
+    assert.equal(summary.props.users[0], user);
+    assert.equal(summary.props.guildId, guildId);
+    plugin.reactions = {};
+    assert.deepEqual(Array.from(select().userIds), []);
+    assert.notEqual(select().generation, initial.generation);
+    assert.equal(tasks.length, 1);
+});
+
 test("reaction requests discard obsolete replies and leave failures retryable", async () => {
     for (const mode of ["stop", "replace", "account", "logout", "reject", "success", "queued-stop", "queued-replace", "queued-account", "native-filled", "signed-out"]) {
         const tasks: (() => Promise<void> | undefined)[] = [];
@@ -2239,7 +2295,7 @@ test("reaction requests discard obsolete replies and leave failures retryable", 
             "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
             "@utils/constants": { Devs: {} }, "@utils/misc": { sleep: async () => {} },
             "@utils/Queue": { Queue: class { unshift(task: () => Promise<void> | undefined) { tasks.push(task); } } },
-            "@utils/react": {}, "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+            "@webpack": { findStoreLazy: () => ({}) }, "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
             "@webpack/common": {
                 Constants: { Endpoints: { REACTIONS: () => "reaction" } },
                 RestAPI: { get: () => { requests++; return pending; } },
@@ -2290,7 +2346,7 @@ test("discarded reaction fetches stay available to the native store", async () =
         "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@utils/constants": { Devs: {} }, "@utils/misc": { sleep: async () => {} },
-        "@utils/Queue": { Queue }, "@utils/react": {},
+        "@utils/Queue": { Queue }, "@webpack": { findStoreLazy: () => ({}) },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
         "@webpack/common": {
             Constants: { Endpoints: { REACTIONS: (_channel: string, message: string) => message } },
@@ -2328,7 +2384,7 @@ test("reaction avatars share native cache entries for Unicode and custom emoji",
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@utils/constants": { Devs: {} }, "@utils/misc": { sleep: async () => {} },
         "@utils/Queue": { Queue: class { unshift(task: () => void) { tasks.push(task); } } },
-        "@utils/react": {}, "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack": { findStoreLazy: () => ({}) }, "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
         "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) } }
     }, {}, "({ plugin: exports.default, getReactionsWithQueue })");
     for (const id of [undefined, null, "custom"]) for (const type of [0, 1]) {

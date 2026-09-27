@@ -21,10 +21,10 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
 import { sleep } from "@utils/misc";
 import { Queue } from "@utils/Queue";
-import { useForceUpdater } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
 import { CustomEmoji, Message, ReactionEmoji, User } from "@vencord/discord-types";
-import { ChannelStore, Constants, FluxDispatcher, React, RestAPI, useEffect, useLayoutEffect, UserStore, UserSummaryItem } from "@webpack/common";
+import { findStoreLazy } from "@webpack";
+import { ChannelStore, Constants, FluxDispatcher, lodash, React, RestAPI, useEffect, useLayoutEffect, UserStore, UserSummaryItem, useStateFromStores } from "@webpack/common";
 
 interface ReactionCacheEntry {
     fetched: boolean;
@@ -38,6 +38,7 @@ interface ReactionProps {
 }
 
 const MAX_PENDING_REACTION_FETCHES = 50;
+const MessageReactionsStore = findStoreLazy("MessageReactionsStore");
 
 let Scroll: any = null;
 const queue = new Queue(MAX_PENDING_REACTION_FETCHES);
@@ -95,8 +96,14 @@ function handleClickAvatar(event: React.UIEvent<HTMLElement, Event>) {
 }
 
 function ReactionUsers({ message, emoji, type }: ReactionProps) {
-    const forceUpdate = useForceUpdater();
-    const emojiKey = getEmojiKey(emoji);
+    const key = `${message.id}:${emoji.name}:${emoji.id ?? ""}:${type}`;
+    const { userIds, guildId, generation, userId } = useStateFromStores([MessageReactionsStore, UserStore, ChannelStore], () => ({
+        userIds: Array.from(reactions[key]?.users.keys() ?? []),
+        guildId: ChannelStore.getChannel(message.channel_id)?.guild_id,
+        generation: fetchGeneration,
+        userId: UserStore.getCurrentUser()?.id,
+        userVersion: UserStore.getUserStoreVersion()
+    }), [key, message.channel_id], lodash.isEqual);
 
     useLayoutEffect(() => { // bc need to prevent autoscrolling
         if (Scroll?.scrollCounter > 0) {
@@ -105,19 +112,12 @@ function ReactionUsers({ message, emoji, type }: ReactionProps) {
     });
 
     useEffect(() => {
-        const cb = (e: any) => {
-            if (e?.messageId === message.id && e.reactionType === type && e.emoji && getEmojiKey(e.emoji) === emojiKey)
-                forceUpdate();
-        };
-        FluxDispatcher.subscribe("MESSAGE_REACTION_ADD_USERS", cb);
+        getReactionsWithQueue(message, emoji, type);
+    }, [message.id, message.channel_id, emoji.id, emoji.name, type, generation, userId]);
 
-        return () => FluxDispatcher.unsubscribe("MESSAGE_REACTION_ADD_USERS", cb);
-    }, [message.id, type, emojiKey, forceUpdate]);
-
-    const reactions = getReactionsWithQueue(message, emoji, type);
     const users: User[] = [];
 
-    for (const id of reactions.keys()) {
+    for (const id of userIds) {
         const user = UserStore.getUser(id);
         if (user) users.push(user);
     }
@@ -133,7 +133,7 @@ function ReactionUsers({ message, emoji, type }: ReactionProps) {
             >
                 <UserSummaryItem
                     users={users}
-                    guildId={ChannelStore.getChannel(message.channel_id)?.guild_id}
+                    guildId={guildId}
                     renderIcon={false}
                     max={5}
                     showDefaultAvatarsForNullUsers

@@ -191,7 +191,7 @@ export default definePlugin({
             // Normal channel.
             find: "UNREAD_IMPORTANT:",
             replacement: {
-                match: /\.Children\.count.+?:null(?<=,channel:(\i).+?)/,
+                match: /(?<=channel:(\i),name:[^{}]{0,100}\}\)\}\),\i)\.Children\.count\(\i\)>0\?\(0,\i\.jsx\)\("div",\{[^{}]{0,150}\}\):null/,
                 replace: "$&,$self.TypingIndicator($1.id,$1.getGuildId())"
             }
         },

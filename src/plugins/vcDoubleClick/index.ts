@@ -59,9 +59,8 @@ export default definePlugin({
             // channel mentions
             find: 'className:"channelMention",children:[null!=',
             replacement: {
-                match: /onClick:(\i)(?=,.{0,30}className:"channelMention".+?(\i)\.inContent)/,
-                replace: (_, onClick, props) => ""
-                    + `onClick:(vcDoubleClickEvt)=>$self.shouldRunOnClick(vcDoubleClickEvt,${props})&&${onClick}()`,
+                match: /onClick:(\i)(?=,onContextMenu:\i,className:"channelMention",children:\[null!=(\i)\.inContent)/,
+                replace: "onClick:(vcDoubleClickEvt)=>$self.shouldRunOnClick(vcDoubleClickEvt,$2)&&$1()",
             }
         },
         // Voice channels in the active now section

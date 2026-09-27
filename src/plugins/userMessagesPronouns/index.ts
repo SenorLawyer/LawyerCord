@@ -37,8 +37,8 @@ export default definePlugin({
             find: "showCommunicationDisabledStyles",
             replacement: {
                 // Add next to timestamp (normal mode)
-                match: /(?<=return\s*\(0,\i\.jsxs?\)\(.+!\i&&)(\(0,\i.jsxs?\)\(.+?\{.+?\}\))/,
-                replace: "[$1, $self.PronounsChatComponentWrapper(arguments[0])]"
+                match: /(?<=!\i&&)\(0,\i\.jsxs?\)\(\i\.\i,\{[^{}]{0,100}timestamp:\i\.timestamp,[^{}]{0,100}\}\)/,
+                replace: "[$&, $self.PronounsChatComponentWrapper(arguments[0])]"
             }
         },
         {

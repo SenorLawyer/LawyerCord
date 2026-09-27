@@ -6,6 +6,12 @@ Current source checkpoint `080e17609`: all 654 broader tests and timezone checks
 
 A fresh September 27 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,655 files, fourteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-sep27-current.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
 
+## Local typing, pronoun and mention matches
+
+The normal-channel typing patch now uses the adjacent channel/name and native action-count expression. Pronouns match the timestamp JSX call directly instead of searching backward to the enclosing return. Voice double-click uses the adjacent context-menu, channel-mention class and inline-content props, removing its replacement callback. ValidUser bounds the gap through the role-mention props at 150 characters.
+
+All six captured module copies produce byte-identical complete output and compile against 992e3c9f6. Evidence is `.git/audit/typing-mentions-local-verify.{cjs,json}`. Focused ESLint, sequential desktop/web builds and artifact scanning pass; patch lint reports 14 warnings and no errors. Logs use `.git/audit/typing-mentions-local-*`. The latest full regression and TypeScript results remain the preceding 681-test thread checkpoint. Signed-in acceptance and other findings remain open.
+
 ## Thread typing without native badges
 
 The thread typing patch began at an unrelated mention-badge function and inserted inside the voice/mention badge component. That component returns null when neither badge is present, preventing the typing component from mounting. The patch now inserts beside the parent row's badge call using its adjacent thread prop. The broad cross-function search is removed. Historical 2f1e86f33 introduced this expression for general thread support, with no intended badge requirement.

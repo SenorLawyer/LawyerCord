@@ -2079,7 +2079,8 @@ test("IRC colors preserve existing DM colors when replacement is disabled", () =
     const { default: plugin } = loadSource("src/plugins/ircColors/index.ts", {
         "@api/Settings": { Settings: { plugins: { CustomUserColors: { enabled: false } } }, definePluginSettings: () => ({ store, use: () => store }) },
         "@equicordplugins/customUserColors": {}, "@intrnl/xxhash64": { hash: () => 10n },
-        "@utils/constants": { Devs: {} }, "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@utils/constants": { Devs: {} },
+        "@utils/Logger": { Logger: class { error() {} } }, "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
         "@webpack/common": { useMemo: (fn: () => unknown) => fn(), UserStore: { getCurrentUser: () => ({ id: "self" }) } },
     });
     const context = { message: { author: { id: "other" } }, author: { colorString: "#123456" }, channel: { isPrivate: () => true } };
@@ -18188,6 +18189,7 @@ test("IrcColors updates rendered names when live filtering settings change", () 
             "@equicordplugins/customUserColors": { getCustomColorString: () => undefined },
             "@intrnl/xxhash64": { hash: () => 123n },
             "@utils/constants": { Devs: {} },
+            "@utils/Logger": { Logger: class { error() {} } },
             "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
             "@webpack/common": { useMemo: (calculate: () => unknown) => calculate(), UserStore: { getCurrentUser: () => undefined } }
         }).default;
@@ -18213,4 +18215,30 @@ test("IrcColors updates rendered names when live filtering settings change", () 
         change("applyColorOnlyInDms", false);
         assert.equal(color, "hsl(123, 100%, 50%)");
     }
+});
+
+
+test("IrcColors produces CSS strings for a zero hash and keeps missing users uncolored", () => {
+    const store = { lightness: 70, applyColorOnlyToUsersWithoutColor: false, applyColorOnlyInDms: false };
+    const plugin = loadSource("src/plugins/ircColors/index.ts", {
+        "@api/Settings": { Settings: { plugins: { CustomUserColors: { enabled: false } } }, definePluginSettings: () => ({ store, use: () => store }) },
+        "@equicordplugins/customUserColors": { getCustomColorString: () => undefined },
+        "@intrnl/xxhash64": { hash: () => 0n },
+        "@utils/constants": { Devs: {} },
+        "@utils/Logger": { Logger: class { error() {} } },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": { useMemo: (calculate: () => unknown) => calculate(), UserStore: { getCurrentUser: () => undefined } }
+    }).default;
+    assert.equal(plugin.calculateNameColorForMessageContext({ message: { author: { id: "user" } } }), "hsl(0, 100%, 70%)");
+    assert.equal(plugin.calculateNameColorForListContext({ user: { id: "user" } }), "hsl(0, 100%, 70%)");
+    assert.equal(plugin.calculateNameColorForMessageContext({ message: { author: null }, author: null, channel: null }), null);
+    assert.equal(plugin.calculateNameColorForListContext({ user: null }), null);
+    const props = { colorString: "original", colorStrings: { primaryColor: "first", secondaryColor: "second", tertiaryColor: "third" } };
+    const result = plugin.wrapMessageColorProps(props, { message: { author: { id: "user" } } });
+    assert.equal(result.colorString, "hsl(0, 100%, 70%)");
+    assert.equal(result.colorStrings.primaryColor, result.colorString);
+    assert.equal(result.colorStrings.secondaryColor, undefined);
+    assert.equal(result.colorStrings.tertiaryColor, undefined);
+    assert.equal(props.colorStrings.secondaryColor, "second");
+
 });

@@ -20,17 +20,31 @@ import { definePluginSettings, Settings } from "@api/Settings";
 import { getCustomColorString } from "@equicordplugins/customUserColors";
 import { hash as h64 } from "@intrnl/xxhash64";
 import { Devs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
+import type { Channel } from "@vencord/discord-types";
 import { useMemo, UserStore } from "@webpack/common";
 
+interface ColorAuthor {
+    id?: string;
+    colorString?: string | null;
+}
+
+interface MessageColorContext {
+    message?: { author?: ColorAuthor | null; channel_id?: string; };
+    author?: ColorAuthor | null;
+    channel?: Pick<Channel, "isPrivate"> | null;
+}
+
+const logger = new Logger("IrcColors");
 const COLOR_SETTINGS = ["lightness", "applyColorOnlyToUsersWithoutColor", "applyColorOnlyInDms"] satisfies (keyof typeof settings.def)[];
 
 // Calculate a CSS color string based on the user ID
-function calculateNameColorForUser(id?: string) {
+function calculateNameColorForUser(id?: string): string | null {
     const { lightness } = settings.use(COLOR_SETTINGS);
     const idHash = useMemo(() => id ? h64(id) : null, [id]);
 
-    return idHash && `hsl(${idHash % 360n}, 100%, ${lightness}%)`;
+    return idHash === null ? null : `hsl(${idHash % 360n}, 100%, ${lightness}%)`;
 }
 
 const settings = definePluginSettings({
@@ -86,7 +100,7 @@ export default definePlugin({
         }
     ],
 
-    wrapMessageColorProps(colorProps: { colorString: string, colorStrings?: Record<"primaryColor" | "secondaryColor" | "tertiaryColor", string>; }, context: any) {
+    wrapMessageColorProps(colorProps: { colorString: string, colorStrings?: Record<"primaryColor" | "secondaryColor" | "tertiaryColor", string>; }, context: MessageColorContext) {
         try {
             const colorString = this.calculateNameColorForMessageContext(context);
             if (colorString === colorProps.colorString) {
@@ -103,14 +117,14 @@ export default definePlugin({
                 }
             };
         } catch (e) {
-            console.error("Failed to calculate message color strings:", e);
+            logger.error("Failed to calculate message color strings:", e);
             return colorProps;
         }
     },
 
-    calculateNameColorForMessageContext(context: any) {
-        const userId: string | undefined = context?.message?.author?.id;
-        const colorString = context?.author?.colorString;
+    calculateNameColorForMessageContext(context: MessageColorContext): string | null | undefined {
+        const userId: string | undefined = context.message?.author?.id;
+        const colorString = context.author?.colorString;
         const color = calculateNameColorForUser(userId);
 
         if (Settings.plugins.CustomUserColors.enabled) {
@@ -118,17 +132,17 @@ export default definePlugin({
             if (customColor) return customColor;
         }
 
-        if (context?.message?.channel_id === "1337" && userId === "313337")
+        if (context.message?.channel_id === "1337" && userId === "313337")
             return colorString;
 
-        if (settings.store.applyColorOnlyInDms && !context?.channel?.isPrivate()) {
+        if (settings.store.applyColorOnlyInDms && !context.channel?.isPrivate()) {
             return colorString;
         }
 
         if (settings.store.applyColorOnlyToUsersWithoutColor && colorString) return colorString;
 
         // guarantee minimum difference in dms
-        if (context?.channel?.isPrivate?.() && color && userId) {
+        if (context.channel?.isPrivate() && color && userId) {
             const currentUserId = UserStore.getCurrentUser()?.id;
             if (currentUserId && userId !== currentUserId) {
                 const currentUserColor = Number(h64(currentUserId) % 360n);
@@ -144,10 +158,10 @@ export default definePlugin({
         return color;
     },
 
-    calculateNameColorForListContext(context: any) {
+    calculateNameColorForListContext(context: { user?: ColorAuthor | null; colorString?: string | null; guildId?: string; }): string | null | undefined {
         try {
-            const id = context?.user?.id;
-            const colorString = context?.colorString;
+            const id = context.user?.id;
+            const { colorString } = context;
             const color = calculateNameColorForUser(id);
 
             if (Settings.plugins.CustomUserColors.enabled) {
@@ -155,7 +169,7 @@ export default definePlugin({
                 if (customColor) return customColor;
             }
 
-            if (settings.store.applyColorOnlyInDms && context?.guildId !== undefined) {
+            if (settings.store.applyColorOnlyInDms && context.guildId !== undefined) {
                 return colorString;
             }
 
@@ -163,7 +177,7 @@ export default definePlugin({
                 ? color
                 : colorString;
         } catch (e) {
-            console.error("Failed to calculate name color for list context:", e);
+            logger.error("Failed to calculate name color for list context:", e);
         }
     }
 });

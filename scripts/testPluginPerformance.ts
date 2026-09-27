@@ -32,14 +32,14 @@ test("PictureInPicture keeps original playback after rejected requests", async (
     for (const failure of ["request", "play", "metadata", undefined]) {
         const events: string[] = [];
         const clone = {
-            readyState: failure === "metadata" ? 0 : 4, currentTime: 0, style: {}, isConnected: true,
+            readyState: failure === "metadata" ? 0 : 4, currentTime: 0, style: {}, isConnected: true, muted: false, volume: 1, playbackRate: 1,
             onerror: null as (() => Promise<void>) | null,
             async requestPictureInPicture() { events.push("request"); if (failure === "request") throw new Error("Denied"); },
             async play() { events.push("play"); if (failure === "play") throw new Error("Playback failed"); },
             pause() { events.push("pause clone"); },
             remove() { this.isConnected = false; events.push("remove clone"); }
         };
-        const original = { currentTime: 12, cloneNode: () => clone, pause() { events.push("pause original"); } };
+        const original = { muted: true, volume: 0.23, playbackRate: 1.5, currentTime: 12, cloneNode: () => clone, pause() { events.push("pause original"); } };
         const { default: plugin } = loadSource("src/plugins/pictureInPicture/index.tsx", {
             "./styles.css": {},
             "@api/Settings": { definePluginSettings: () => ({ store: { loop: true } }) },
@@ -56,6 +56,9 @@ test("PictureInPicture keeps original playback after rejected requests", async (
         button.props.onClick({ currentTarget: { parentNode: { parentNode: { querySelector: () => original } } } });
         if (failure === "metadata") await clone.onerror?.();
         await setImmediate();
+        assert.equal(clone.muted, true);
+        assert.equal(clone.volume, 0.23);
+        assert.equal(clone.playbackRate, 1.5);
         assert.equal(clone.currentTime, failure === "metadata" ? 0 : 12);
         assert.deepEqual(events, failure === "metadata" ? ["pause clone", "remove clone", "toast"] : failure === "request" ? ["request", "pause clone", "remove clone", "toast"]
             : failure === "play" ? ["request", "play", "pause clone", "remove clone", "toast"]

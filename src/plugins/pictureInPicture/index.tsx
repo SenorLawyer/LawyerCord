@@ -67,6 +67,9 @@ export default definePlugin({
                             const videoClone = document.body.appendChild(video.cloneNode(true)) as HTMLVideoElement;
 
                             videoClone.loop = settings.store.loop;
+                            videoClone.muted = video.muted;
+                            videoClone.volume = video.volume;
+                            videoClone.playbackRate = video.playbackRate;
                             videoClone.style.display = "none";
                             videoClone.onleavepictureinpicture = () => videoClone.remove();
 

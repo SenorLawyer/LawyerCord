@@ -60,9 +60,9 @@ async function getCloudSyncContext(checkLocalEdits = false) {
         url,
         manifestKey: `${MANIFEST_STORE_KEY}:${url.origin}:${userId}`,
         isCurrent,
-        assertCurrent: () => {
+        assertCurrent: (checkEdits = true) => {
             if (!isCurrent()) throw new Error("Cloud sync account or service changed.");
-            if (checkLocalEdits && localSettingsRevision !== revision)
+            if (checkEdits && checkLocalEdits && localSettingsRevision !== revision)
                 throw new Error("Local settings changed during sync. Try again to include your latest changes.");
         }
     };
@@ -199,7 +199,7 @@ async function doSyncV2(uploads: SyncRequest["uploads"], clientManifest: Manifes
         body: JSON.stringify({ client_manifest: clientManifest, uploads } satisfies SyncRequest),
     });
 
-    context.assertCurrent();
+    context.assertCurrent(false);
     if (res.status === 404) {
         logger.info("Server does not support v2, falling back to v1");
         await setApiVersion("v1", context.url.origin);
@@ -222,9 +222,16 @@ async function doSyncV2(uploads: SyncRequest["uploads"], clientManifest: Manifes
     }
 
     const response: unknown = JSON.parse(await readResponseText(res, MAX_SYNC_RESPONSE_BYTES));
-    context.assertCurrent();
+    context.assertCurrent(false);
     if (!isSyncResponse(response))
         throw new Error("The cloud server returned invalid or unsupported sync data.");
+    if (uploads.length && response.uploaded.length) {
+        await saveLocalManifest(context, [
+            ...clientManifest.filter(entry => !response.uploaded.some(upload => upload.key === entry.key)),
+            ...response.uploaded
+        ]);
+        context.assertCurrent(false);
+    }
     if (response.errors.length)
         throw new Error("The cloud server could not synchronize all data. Please try again.");
     return response;
@@ -264,10 +271,7 @@ async function putV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>, m
 
     await saveSyncVersion(context, Date.now());
     context.assertCurrent();
-    await saveLocalManifest(context, receiveDownloads ? response.server_manifest : [
-        ...localManifest.filter(entry => !response.uploaded.some(upload => upload.key === entry.key)),
-        ...response.uploaded
-    ]);
+    if (receiveDownloads) await saveLocalManifest(context, response.server_manifest);
     context.assertCurrent();
 
     logger.info(`Sync complete: ${response.uploaded.length} uploaded, ${response.downloads.length} downloaded`);

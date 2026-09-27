@@ -2188,3 +2188,52 @@ test("upload-only cloud sync preserves local data and leaves skipped downloads a
         assert.equal(manifest.find(entry => entry.key === "quickCss")?.version, 2);
     }
 });
+
+
+test("cloud uploads retain acknowledged versions after local edits or partial server failure", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const change of ["none", "edit", "partial", "account", "service"]) {
+        let userId = "first";
+        let origin = "https://first.invalid";
+        let manifest = [{ key: "settings", version: 1, checksum: "previous" }, { key: "quickCss", version: 1, checksum: "unchanged" }];
+        let writes = 0;
+        let markChanged = () => {};
+        const modules: Record<string, unknown> = {
+            "@shared/readResponseText": jsonResponseReader,
+            "@api/DataStore": { set: async (_key: string, value: typeof manifest) => { manifest = value; writes++; } },
+            "@api/Settings": {}, "@api/Notifications": {},
+            "@utils/localStorage": { localStorage: { setItem() {} } },
+            "@utils/Logger": { Logger: class {} },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
+            "./offline": { captureCloudImportState: async () => undefined },
+            "./cloudSetup": { getCloudUrl: () => new URL(origin), getCloudAuth: async () => "synthetic" }
+        };
+        const api = runInNewContext(`${compiled}\n({ getCloudSyncContext, doSyncV2, markLocalSettingsDirty: exports.markLocalSettingsDirty });`, {
+            exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal,
+            fetch: async () => ({
+                ok: true, status: 200,
+                json: async () => {
+                    if (change === "edit") markChanged();
+                    if (change === "account") userId = "second";
+                    if (change === "service") origin = "https://second.invalid";
+                    return { uploaded: [{ key: "settings", version: 2, checksum: "accepted" }],
+                        downloads: [], server_manifest: [],
+                        errors: change === "partial" ? [{ key: "quickCss", error: "Synthetic conflict" }] : [] };
+                }
+            })
+        });
+        markChanged = api.markLocalSettingsDirty;
+        const context = await api.getCloudSyncContext(true);
+        const pending = api.doSyncV2([{ key: "settings", value: "e30=", checksum: "accepted" }], manifest, context);
+        if (change === "partial") await assert.rejects(pending, /could not synchronize all data/);
+        else if (change === "account" || change === "service") await assert.rejects(pending, /account or service changed/);
+        else await pending;
+        if (change === "edit") assert.throws(() => context.assertCurrent(), /Local settings changed/);
+        assert.equal(writes, change === "account" || change === "service" ? 0 : 1);
+        assert.equal(manifest.find(entry => entry.key === "settings")?.version, writes ? 2 : 1);
+        assert.equal(manifest.find(entry => entry.key === "quickCss")?.version, 1);
+    }
+});

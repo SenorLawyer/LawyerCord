@@ -2225,6 +2225,29 @@ test("reply mention exceptions match whole user and role IDs", () => {
     assert.equal(plugin.shouldMention(message, false), true);
 });
 
+test("hidden app channels keep only the supported notification toolbar control", () => {
+    const source = readFileSync("src/plugins/showHiddenChannels/index.tsx", "utf8");
+    const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);
+    let patchSource = "";
+    const visit = (node: typescript.Node) => {
+        if (typescript.isPropertyAssignment(node) && node.name.getText(ast) === "patches") patchSource = node.initializer.getText(ast);
+        typescript.forEachChild(node, visit);
+    };
+    visit(ast);
+    const replacement = runInNewContext(`(${patchSource})`)[12].replacement[0];
+    const original = 'class Toolbar{constructor(props){this.props=props}renderHeaderToolbar=()=>{let{channel:e,isLurking:t}=this.props,r=[];switch(e.type){case ed.rbe.GUILD_APP:r.push((0,l.jsx)(nf,{channel:e},"popout")),r.push((0,l.jsx)(sX,{channel:e},"browser")),t||r.push((0,l.jsx)(iV.A,{channel:e},"notifications")),r.push((0,l.jsx)(iY,{channel:e},"pins")),r.push((0,l.jsx)(iB,{channelId:e.id},"members")),r.push((0,l.jsx)(iG,{channelId:e.id},"chat")),r.push((0,l.jsx)(nu,{channel:e},"overflow"));break}return r}}';
+    const patched = original.replace(canonicalizeMatch(replacement.match), replacement.replace);
+    const Toolbar = runInNewContext(patched + ";Toolbar", {
+        ed: { rbe: { GUILD_APP: "app" } }, l: { jsx: (_type: unknown, _props: unknown, key: string) => key },
+        nf: "popout", sX: "browser", iV: { A: "notifications" }, iY: "pins", iB: "members", iG: "chat", nu: "overflow",
+        $self: { isHiddenChannel: (channel: { hidden: boolean; }) => channel.hidden }
+    });
+    for (const hidden of [false, true]) for (const isLurking of [false, true]) {
+        const buttons = [...new Toolbar({ channel: { id: "channel", type: "app", hidden }, isLurking }).renderHeaderToolbar()];
+        assert.deepEqual(buttons, hidden && !isLurking ? ["notifications"] : ["popout", "browser", ...isLurking ? [] : ["notifications"], "pins", "members", "chat", "overflow"]);
+    }
+});
+
 test("pause invites waits for the server and reports rejected requests", async () => {
     for (const failed of [false, true]) {
         let resolveRequest: () => void = () => assert.fail("missing request");

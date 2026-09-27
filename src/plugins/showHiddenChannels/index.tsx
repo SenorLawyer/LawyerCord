@@ -251,7 +251,7 @@ export default definePlugin({
             find: "Missing channel in Channel.renderHeaderToolbar",
             replacement: [
                 {
-                    match: /case \i\.\i\.GUILD_(?:TEXT|MEDIA):(?=.{0,150}?(\i)\|\|.{0,150}?(\i\.push.{0,50}?channel:(\i)},"notifications"\)\)))/g,
+                    match: /case \i\.\i\.GUILD_(?:TEXT|MEDIA|APP):(?=.{0,150}?(\i)\|\|.{0,150}?(\i\.push.{0,50}?channel:(\i)},"notifications"\)\)))/g,
                     replace: "$&if(!$1&&$self.isHiddenChannel($3)){$2;break;}"
                 },
                 {

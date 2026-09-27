@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Limit crash-recovery draft clearing to channel and first-thread messages. Preserve polls, commands, thread settings, interaction-modal and scheduled-message drafts.
+
 - Release CrashHandler's recovery guard after disabled, failed or rate-limited attempts so later crashes can recover.
 
 - Save changed channels immediately and remove KeepCurrentChannel's delayed saves and shutdown flushes, preventing an older window timer from undoing crash cleanup. Repeated selections remain skipped.

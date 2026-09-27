@@ -34,6 +34,7 @@ test("CrashHandler releases recovery guards after skipped or failed attempts", (
         const timers: { callback: () => void; delay: number }[] = [];
         const immediates: (() => void)[] = [];
         let recovered = 0;
+        const cleared: number[] = [];
         const { default: plugin } = loadSource("src/plugins/crashHandler/index.ts", {
             "@api/Notifications": { showNotification() {} },
             "@api/Settings": { definePluginSettings: () => ({ store: settings }) },
@@ -42,9 +43,9 @@ test("CrashHandler releases recovery guards after skipped or failed attempts", (
             "@utils/Logger": { Logger: class { error() {} debug() {} } },
             "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
             "@utils/updater": { maybePromptToUpdate() {} },
-            "@webpack": { proxyLazyWebpack: () => ({ ModalStack: { popAll() {} }, DraftManager: { clearDraft() {} } }) },
+            "@webpack": { proxyLazyWebpack: () => ({ ModalStack: { popAll() {} }, DraftManager: { clearDraft(_channelId: string, draftType: number) { cleared.push(draftType); } } }) },
             "@webpack/common": {
-                closeAllModals() {}, DraftType: {}, ExpressionPickerStore: { closeExpressionPicker() {} },
+                closeAllModals() {}, DraftType: { ChannelMessage: 0, ThreadSettings: 1, FirstThreadMessage: 2, Poll: 4, SlashCommand: 5, InteractionModal: 7, ScheduledMessage: 8 }, ExpressionPickerStore: { closeExpressionPicker() {} },
                 FluxDispatcher: { dispatch() {} }, SelectedChannelStore: { getChannelId: () => "channel" }
             }
         }, {
@@ -77,6 +78,7 @@ test("CrashHandler releases recovery guards after skipped or failed attempts", (
         plugin.handleCrash(component, { error: new Error("Later crash") });
         run(1);
         assert.equal(recovered, before + 1, `Recovery remains available after ${scenario} attempt`);
+        assert.deepEqual(cleared, Array.from({ length: recovered }, () => [0, 2]).flat(), "Recovery clears only message composer drafts");
     }
 });
 

@@ -16,8 +16,8 @@ import { makeRange } from "@utils/types";
 import { chooseFile } from "@utils/web";
 import { React, Select, showToast, Slider } from "@webpack/common";
 
-import { saveAudio } from "./audioStore";
-import { deleteCustomAudio, ensureDataURICached, logger } from "./index";
+import { getAudioDataURI, saveAudio } from "./audioStore";
+import { deleteCustomAudio, logger } from "./index";
 import { SoundOverride, SoundType } from "./types";
 
 const AUDIO_EXTENSIONS = ["mp3", "wav", "ogg", "m4a", "aac", "flac", "webm", "wma", "mp4"];
@@ -64,10 +64,10 @@ export function SoundOverrideComponent({ type, override, onChange, files, refres
 
         if (override.enabled && override.selectedSound === "custom") {
             try {
-                const dataUri = override.selectedFileId ? await ensureDataURICached(override.selectedFileId) : null;
+                const dataUri = override.selectedFileId ? await getAudioDataURI(override.selectedFileId) : null;
                 if (version !== previewVersion.current) return;
 
-                if (!dataUri) {
+                if (!dataUri?.startsWith("data:")) {
                     showToast("No custom sound file available for preview");
                     return;
                 }

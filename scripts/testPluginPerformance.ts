@@ -8371,6 +8371,45 @@ test("custom sound conversion infers MIME types and rejects failed reads before 
     assert.equal(writes, 1);
 });
 
+test("custom sound previews read current storage while the plugin is disabled", async () => {
+    let stored: string | undefined = "data:audio/ogg;base64,AA==";
+    const plays: string[] = [];
+    const notices: string[] = [];
+    interface Element { type: unknown; props: { onClick?: () => Promise<void> }; children: unknown[]; }
+    const { SoundOverrideComponent } = loadSource("src/equicordplugins/customSounds/SoundOverrideComponent.tsx", {
+        "@api/AudioPlayer": { playAudio: (data: string) => { plays.push(data); return { stop() {} }; } },
+        "@components/Button": { Button: "button" }, "@components/Card": {}, "@components/FormSwitch": {}, "@components/Heading": {},
+        "@utils/css": { classNameFactory: () => () => "" }, "@utils/margins": { Margins: {} },
+        "@utils/react": { useForceUpdater: () => () => {} }, "@utils/types": { makeRange: () => [] }, "@utils/web": {},
+        "@webpack/common": { showToast: (message: string) => notices.push(message), React: {
+            createElement: (type: unknown, props: Element["props"], ...children: unknown[]) => ({ type, props, children }),
+            useRef: (current: unknown) => ({ current }), useEffect() {}
+        } },
+        "./audioStore": { getAudioDataURI: async () => stored }, "./index": { logger: { error() {} } }
+    });
+    const tree = SoundOverrideComponent({ type: { id: "message", name: "Message" }, override: {
+        enabled: true, selectedSound: "custom", selectedFileId: "file", volume: 50
+    }, files: { file: "audio.ogg" }, onChange: async () => {}, refreshFiles: async () => {} });
+    let preview: (() => Promise<void>) | undefined;
+    function visit(node: unknown) {
+        if (Array.isArray(node)) { node.forEach(visit); return; }
+        if (!node || typeof node !== "object" || !("children" in node)) return;
+        const element = node as Element;
+        if (element.type === "button" && element.children.includes("Preview")) preview = element.props.onClick;
+        element.children.forEach(visit);
+    }
+    visit(tree);
+    assert.ok(preview);
+    await preview();
+    assert.deepEqual(plays, ["data:audio/ogg;base64,AA=="]);
+    stored = undefined;
+    await preview();
+    stored = "https://fixture.invalid/sound.mp3";
+    await preview();
+    assert.equal(plays.length, 1, "Deleted or malformed audio must not replay from a stale cache");
+    assert.equal(notices.length, 2);
+});
+
 test("sound imports validate overrides and invalidate pending playback data", async () => {
     const soundTypes = [{ id: "message1", name: "Message", seasonal: ["halloween_message1", "winter_message1"] }, { id: "mute", name: "Mute" }];
     const seasonalSounds = { halloween_message1: "https://fixture.invalid/halloween.mp3", winter_message1: "https://fixture.invalid/winter.mp3" };
@@ -8380,6 +8419,7 @@ test("sound imports validate overrides and invalidate pending playback data", as
     let reads = 0;
     let snapshotsRead = 0;
     const snapshots: unknown[] = [];
+    const channels: { onmessage?: (event: { data: unknown }) => void; closed: boolean }[] = [];
     const pendingReads: Array<(value: unknown) => void> = [];
     const { importOverrides, getOverride, ensureDataURICached, getCustomSoundURL, plugin } = loadSource("src/equicordplugins/customSounds/index.tsx", {
         "@utils/web": {},
@@ -8398,7 +8438,11 @@ test("sound imports validate overrides and invalidate pending playback data", as
             return new Promise<unknown>(resolve => { resolveRead = resolve; pendingReads.push(resolve); });
         } },
         "./types": { soundTypes, makeEmptyOverride, seasonalSounds }
-    }, {}, "({ importOverrides, getOverride, ensureDataURICached, getCustomSoundURL, plugin: exports.default })");
+    }, { BroadcastChannel: class {
+        closed = false;
+        constructor() { channels.push(this); }
+        close() { this.closed = true; }
+    } }, "({ importOverrides, getOverride, ensureDataURICached, getCustomSoundURL, plugin: exports.default })");
     for (const value of [null, 1, [], "sound", { enabled: "yes" }, { enabled: true, volume: -1 }, { enabled: true, selectedSound: "constructor" }, { selectedFileId: {} }]) {
         store.message1 = JSON.stringify(value);
         assert.deepEqual(JSON.parse(JSON.stringify(getOverride("message1"))), makeEmptyOverride());
@@ -8477,8 +8521,19 @@ test("sound imports validate overrides and invalidate pending playback data", as
     for (const resolve of pendingReads.slice(-2)) resolve("data:audio/ogg;base64,AQ==");
     await activeBatch;
     assert.equal(snapshotsRead, 2);
-    await plugin.start();
-    assert.equal(snapshotsRead, 2, "Already cached files must not reread storage");
+    assert.equal(channels.filter(channel => !channel.closed).length, 1);
+    const stale = ensureDataURICached("deleted");
+    channels.at(-1)?.onmessage?.({ data: "deleted" });
+    resolveRead("data:audio/ogg;base64,AA==");
+    assert.equal(await stale, null, "Deletion notifications must invalidate pending reads");
+    channels.at(-1)?.onmessage?.({ data: "message1" });
+    const deleted = { audio: "message1", volume: 100 };
+    getCustomSoundURL(deleted);
+    assert.equal(deleted.audio, "message1");
+    channels.at(-1)?.onmessage?.({ data: null });
+    const retained = { audio: "mute", volume: 100 };
+    getCustomSoundURL(retained);
+    assert.equal(retained.audio, "data:audio/ogg;base64,AQ==");
     for (const value of [123, {}, "https://fixture.invalid/audio.mp3", "invalid", null]) {
         const invalid = ensureDataURICached("invalid");
         resolveRead(value);
@@ -8487,6 +8542,8 @@ test("sound imports validate overrides and invalidate pending playback data", as
     const video = ensureDataURICached("video");
     resolveRead("data:video/mp4;base64,AAAA");
     assert.equal(await video, "data:video/mp4;base64,AAAA");
+    plugin.stop();
+    assert.ok(channels.every(channel => channel.closed));
 });
 
 test("custom timestamps expand explicit placeholders without altering shared formatting", () => {

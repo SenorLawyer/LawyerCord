@@ -26,6 +26,7 @@ const cl = classNameFactory("vc-custom-sounds-");
 
 const dataUriCache = new Map<string, string>();
 const pendingDataUris = new Map<string, Promise<string | null>>();
+let audioChanges: BroadcastChannel | undefined;
 export const logger = new Logger("CustomSounds");
 
 function clearAudioCache() {
@@ -37,6 +38,9 @@ export async function deleteCustomAudio(fileId: string) {
     await deleteAudio(fileId);
     dataUriCache.delete(fileId);
     pendingDataUris.delete(fileId);
+    const changes = new BroadcastChannel("CustomSounds_audioDeleted");
+    changes.postMessage(fileId);
+    changes.close();
 }
 
 function readOverride(value: unknown): SoundOverride {
@@ -323,6 +327,13 @@ export default definePlugin({
 
     async start() {
         try {
+            clearAudioCache();
+            audioChanges = new BroadcastChannel("CustomSounds_audioDeleted");
+            audioChanges.onmessage = ({ data }: MessageEvent<unknown>) => {
+                if (typeof data !== "string") return;
+                dataUriCache.delete(data);
+                pendingDataUris.delete(data);
+            };
             await preloadDataURIs();
         } catch (error) {
             logger.error("Could not preload custom sounds.", error);
@@ -330,6 +341,8 @@ export default definePlugin({
     },
 
     stop() {
+        audioChanges?.close();
+        audioChanges = undefined;
         clearAudioCache();
     }
 });

@@ -59,6 +59,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Stop preparing further preset images after profile loading is cancelled.
+
 - Retry failed session-discovery saves on later checks without caching unsaved sessions or notifying after stop or account changes.
 
 - Keep reaction-avatar scroll adjustments in their own conversation view instead of changing the most recently opened view.

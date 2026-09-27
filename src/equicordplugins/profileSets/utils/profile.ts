@@ -345,6 +345,7 @@ export async function loadPresetAsPending(preset: ProfilePreset, guildId?: strin
     if (!userId) throw new Error("No account is signed in.");
     const images = [preset.avatarDataUrl, preset.bannerDataUrl];
     for (let index = 0; index < images.length; index++) {
+        options.signal?.throwIfAborted();
         let image = images[index];
         if (image != null && !image.startsWith("data:")) {
             const url = parseUrl(image);

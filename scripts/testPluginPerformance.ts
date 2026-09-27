@@ -7528,6 +7528,30 @@ test("profile presets prepare historical image URLs before applying changes", as
     }
 });
 
+test("cancelled profile presets do not start another image decode", async () => {
+    for (const beforeStart of [true, false]) {
+        const controller = new AbortController();
+        const decoding = Promise.withResolvers<void>();
+        const started = Promise.withResolvers<void>();
+        let decodes = 0;
+        const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+            "@api/UserSettings": { getUserSettingLazy: () => ({}) },
+            "@webpack": { findStoreLazy: () => ({}) },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: "me" }) },
+                ImageUtils: { loadImage: async () => { decodes++; started.resolve(); await decoding.promise; } },
+                FluxDispatcher: { dispatch: () => assert.fail("Cancelled preset changed the profile") }
+            }
+        });
+        if (beforeStart) { controller.abort(); decoding.resolve(); }
+        const applying = api.loadPresetAsPending({ avatarDataUrl: "data:image/png;base64,AQ==", bannerDataUrl: "data:image/png;base64,Ag==" }, undefined, { signal: controller.signal });
+        const rejected = assert.rejects(applying);
+        if (!beforeStart) { await started.promise; controller.abort(); decoding.resolve(); }
+        await rejected;
+        assert.equal(decodes, beforeStart ? 0 : 1);
+    }
+});
+
 test("profile preset image validation finishes before any changes are applied", async () => {
     for (const outcome of ["invalid", "account", "closed", "success"]) {
         let userId = "me";

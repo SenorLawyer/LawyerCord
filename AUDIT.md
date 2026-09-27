@@ -2,11 +2,19 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Latest full local verification: all 691 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the session discovery persistence fix. Patch lint reports zero warnings and no errors. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding 9e60b5275; the session discovery fix requires its own CI.
+Latest full local verification: all 692 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the profile decode cancellation fix. Patch lint reports zero warnings and no errors. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding 9e60b5275; the session discovery fix requires its own CI.
 
 Earlier broad verification checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning passed. Patch lint then reported 107 warnings and no errors. Full repository lint logs use `.git/audit/reconciliation-sep27-*`; later focused runs do not replace final combined validation.
 
 A fresh September 28 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,656 files, fifteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-patches-complete.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
+
+## Profile decode cancellation
+
+ProfileSets checked cancellation when downloading or capturing the current profile, but not before validating embedded preset images. A preset cancelled before application still decoded both images. A cancellation during the first decode also allowed the second to start. The preparation loop now checks its existing signal before each image. The tracked regression fails before the change with two decodes instead of zero and passes both cancellation timings afterward, with no profile dispatch.
+
+The captured ImageUtils module 515718 implements loadImage by attaching load/error listeners to a new Image. It exposes no cancellation parameter. The shared decoder is retained; this fix prevents subsequent work but does not interrupt a decode already running. Historical 01a36d1e1 handles the separate FileReader conversion path and remains necessary. The native module is recorded in `.git/audit/public-discord-client/profile-image-utils-515718.txt`.
+
+All 66 focused profile/preset tests, 692 broader regressions and timezone checks, TypeScript, focused ESLint, sequential desktop/web builds and artifact scanning pass. Evidence and logs use `.git/audit/profile-decode-*`, including the failing-before result. Signed-in image previews and native decoder resource release remain unverified. No stored-format or image-size policy changes were made.
 
 ## September 28 verification and finding reconciliation
 

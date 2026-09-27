@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Remove FakeProfileThemes' broken copy button from the newer profile editor. It received no colors and failed when clicked. The plugin settings and older theme editor retain their copy controls.
+
 - Replace FakeNitro's message-accessory, emoji-eligibility and gradient-theme capture-copy callbacks with direct replacement strings.
 - Remove FakeNitro's broad emoji/sticker notice searches and their capture-copy callbacks. Keep the sticker marker in the outer component's props binding.
 
@@ -40,6 +42,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Remove TriviaAI, which required a user-supplied API key and arbitrary AI endpoint. Its Answer With AI actions are no longer available.
 
 ### Fixed
+
+- Target FakeProfileThemes' store patch at the actual profile store so another module cannot consume it first, and bound the older theme editor's button search.
 
 - Bound FakeNitro's embed, sticker, attachment and soundboard patch searches. Keep emoji-eligibility captures within their owning function.
 - Match FakeNitro's gradient-theme update at the local call instead of searching forward from a function declaration.

@@ -9811,6 +9811,48 @@ test("Decor public lookups check HTTP and response shapes and never request the 
     }
 });
 
+test("FakeProfileThemes targets the profile store and leaves colorless editor actions usable", () => {
+    const source = readFileSync("src/plugins/fakeProfileThemes/index.tsx", "utf8");
+    const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);
+    let patchSource = "";
+    const visit = (node: typescript.Node) => {
+        if (typescript.isPropertyAssignment(node) && node.name.getText(ast) === "patches") patchSource = node.initializer.getText(ast);
+        typescript.forEachChild(node, visit);
+    };
+    visit(ast);
+    const patches = runInNewContext(`(${patchSource})`);
+    const matches = (find: string | RegExp, code: string) => typeof find === "string" ? code.includes(find) : canonicalizeMatch(find).test(code);
+    const store = 'class Store{static displayName="UserProfileStore";getUserProfile(id){return profiles.get(id)}}';
+    const storePatch = patches.find((patch: { find: string | RegExp; }) => matches(patch.find, store));
+    assert.ok(storePatch);
+    assert.equal(matches(storePatch.find, "const stores={UserProfileStore:profiles};function read(id){return stores.UserProfileStore.getUserProfile(id)}"), false);
+    const replacement = storePatch.replacement;
+    const patchedStore = store.replace(canonicalizeMatch(replacement.match), replacement.replace.replaceAll("$self", "plugin"));
+    const profile = { bio: "encoded colors" };
+    const profiles = new Map([["user", profile]]);
+    const instance = runInNewContext(`new (${patchedStore})()`, { profiles, plugin: { colorDecodeHook: (value: unknown) => ({ decoded: value }) } });
+    assert.equal(instance.getUserProfile("user").decoded, profile);
+    assert.equal(instance.getUserProfile("missing").decoded, undefined);
+    let editor = 'function editor(disabled,saving){label("UserProfileModalV2EditingPanel");return [jsx(Button,{disabled:disabled||saving})]}';
+    for (const patch of patches) {
+        if (!matches(patch.find, editor)) continue;
+        for (const replacement of [patch.replacement].flat())
+            editor = editor.replace(canonicalizeMatch(replacement.match), replacement.replace.replaceAll("$self", "plugin"));
+    }
+    const render = runInNewContext(`(${editor})`, {
+        label: () => {}, Button: "native action", jsx: (type: string, props: { disabled: boolean; }) => ({ type, props }),
+        plugin: { addCopy3y3Button: (colors: { primary: number; accent: number; }) => ({
+            props: { onClick: () => colors.primary.toString(16) + colors.accent.toString(16) }
+        }) }
+    });
+    for (const disabled of [false, true]) for (const saving of [false, true]) {
+        const actions = render(disabled, saving);
+        for (const action of actions) action.props.onClick?.();
+        assert.equal(actions.length, 1);
+        assert.equal(actions[0].props.disabled, disabled || saving);
+    }
+});
+
 test("Decor preserves explicit null and object overrides before falling back to custom decorations", () => {
     const source = readFileSync("src/plugins/decor/index.tsx", "utf8");
     const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);

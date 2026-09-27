@@ -210,28 +210,18 @@ export default definePlugin({
     authors: [Devs.Alyxia, Devs.Remty],
     patches: [
         {
-            find: "UserProfileStore",
+            find: 'displayName="UserProfileStore"',
             replacement: {
-                match: /(?<=getUserProfile\(\i\){return )(.+?)(?=})/,
-                replace: "$self.colorDecodeHook($1)"
+                match: /(?<=getUserProfile\(\i\){return )\i\.get\(\i\)(?=})/,
+                replace: "$self.colorDecodeHook($&)"
             },
         },
         {
             find: "#{intl::USER_SETTINGS_RESET_PROFILE_THEME}),onClick:",
             replacement: {
-                match: /#{intl::USER_SETTINGS_RESET_PROFILE_THEME}\).+?}\)(?=\])(?<=color:(\i),.{0,500}?color:(\i),.{0,500}?)/,
+                match: /#{intl::USER_SETTINGS_RESET_PROFILE_THEME}\).{0,100}?}\)(?=\])(?<=color:(\i),.{0,500}?color:(\i),.{0,500}?)/,
                 replace: "$&,$self.addCopy3y3Button({primary:$1,accent:$2})"
             }
-        },
-        // 2026-03-wysiwyg-user-profile-editing
-        {
-            find: '("UserProfileModalV2EditingPanel")',
-            replacement: [
-                {
-                    match: /disabled:\i\|\|\i\}\)/,
-                    replace: "$&,$self.addCopy3y3Button()"
-                }
-            ]
         }
     ],
 

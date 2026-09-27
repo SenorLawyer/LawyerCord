@@ -7290,6 +7290,34 @@ test("profile effect snapshots preserve direct and collectible resolution", asyn
     }
 });
 
+test("profile snapshots reject missing records instead of guessing inherited values", async () => {
+    for (const guildId of [undefined, "guild"]) for (const missing of [undefined, null]) {
+        let profile: unknown = missing;
+        const events: unknown[] = [];
+        const api = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
+            "@api/UserSettings": { getUserSettingLazy: () => ({ getSetting: () => null }) },
+            "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: "me" }) },
+                UserProfileStore: {
+                    getUserProfile: () => guildId ? { bio: "Global bio", pronouns: "Global pronouns", themeColors: [1, 2] } : profile,
+                    getGuildMemberProfile: () => profile
+                },
+                GuildMemberStore: { getMember: () => ({}) },
+                FluxDispatcher: { dispatch: (event: unknown) => events.push(event) }
+            }
+        });
+        await assert.rejects(api.getCurrentProfile(guildId), /Your profile has not loaded/);
+        await assert.rejects(api.loadPresetAsPending({ name: "Saved", timestamp: 0, bio: "Saved bio" }, guildId), /Your profile has not loaded/);
+        assert.equal(events.length, 0);
+        profile = {};
+        const inherited = await api.getCurrentProfile(guildId);
+        assert.equal(inherited.bio, null);
+        assert.equal(inherited.pronouns, null);
+        assert.equal(inherited.themeColors, null);
+    }
+});
+
 test("server profile snapshots preserve inherited display name styles", async () => {
     for (const absent of [undefined, null]) {
         const member = { displayNameStyles: absent as unknown };
@@ -7681,7 +7709,7 @@ test("profile preset status clearing distinguishes null from omission", async ()
             "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
             "@webpack/common": {
                 UserStore: { getCurrentUser: () => ({ id: "me" }) },
-                UserProfileStore: { getUserProfile: () => null, getGuildMemberProfile: () => null },
+                UserProfileStore: { getUserProfile: () => ({}), getGuildMemberProfile: () => ({}) },
                 GuildMemberStore: { getMember: () => null },
                 IconUtils: { getUserAvatarURL: () => null, getDefaultAvatarURL: () => "default" },
                 FluxDispatcher: { dispatch: () => assert.fail("Unexpected profile mutation") }
@@ -7703,7 +7731,7 @@ test("profile presets wait for custom status updates and propagate failure", asy
         "@webpack": { findStoreLazy: () => ({ getPendingChanges: () => ({}) }) },
         "@webpack/common": {
             UserStore: { getCurrentUser: () => currentId ? { id: currentId } : undefined },
-            UserProfileStore: { getUserProfile: () => null },
+            UserProfileStore: { getUserProfile: () => ({}) },
             IconUtils: { getUserAvatarURL: () => null, getDefaultAvatarURL: () => "default" },
             FluxDispatcher: { dispatch() { staged++; } }
         }

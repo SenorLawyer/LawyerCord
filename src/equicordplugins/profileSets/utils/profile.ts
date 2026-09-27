@@ -208,7 +208,8 @@ export async function getCurrentProfile(guildId?: string, options: CurrentProfil
     const isGuildProfile = options.isGuildProfile ?? Boolean(guildId);
     const effectiveGuildId = isGuildProfile ? guildId : undefined;
     const guildProfile = effectiveGuildId ? UserProfileStore.getGuildMemberProfile(currentUser.id, effectiveGuildId) : null;
-    const userProfile = guildProfile ?? baseProfile;
+    const userProfile = isGuildProfile ? guildProfile : baseProfile;
+    if (!userProfile) throw new Error("Your profile has not loaded. Reopen profile settings and try again.");
     const guildMember = effectiveGuildId ? GuildMemberStore.getMember(effectiveGuildId, currentUser.id) : null;
 
     const pendingChanges: PendingChanges = UserProfileSettingsStore.getPendingChanges(effectiveGuildId) ?? {};

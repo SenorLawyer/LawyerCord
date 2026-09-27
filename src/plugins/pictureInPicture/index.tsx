@@ -9,8 +9,11 @@ import "./styles.css";
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
-import { Tooltip } from "@webpack/common";
+import { showToast, Toasts, Tooltip } from "@webpack/common";
+
+const logger = new Logger("PictureInPicture");
 
 const settings = definePluginSettings({
     loop: {
@@ -67,11 +70,20 @@ export default definePlugin({
                             videoClone.style.display = "none";
                             videoClone.onleavepictureinpicture = () => videoClone.remove();
 
-                            function launchPiP() {
-                                videoClone.currentTime = video.currentTime;
-                                videoClone.requestPictureInPicture();
-                                video.pause();
-                                videoClone.play();
+                            async function launchPiP() {
+                                try {
+                                    videoClone.currentTime = video.currentTime;
+                                    await videoClone.requestPictureInPicture();
+                                    await videoClone.play();
+                                    video.pause();
+                                } catch {
+                                    videoClone.pause();
+                                    videoClone.remove();
+                                    if (document.pictureInPictureElement === videoClone) {
+                                        await document.exitPictureInPicture().catch((error: unknown) => logger.warn("Could not close Picture in Picture.", error));
+                                    }
+                                    showToast("Could not open Picture in Picture.", Toasts.Type.FAILURE);
+                                }
                             }
 
                             if (videoClone.readyState === 4 /* HAVE_ENOUGH_DATA */)

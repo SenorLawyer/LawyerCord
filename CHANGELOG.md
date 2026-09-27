@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep the original video playing when Picture in Picture or cloned playback fails. Remove failed clones, close an already-open PiP window and report the failure.
+
 - Narrow the badge, emoji autocomplete and message-button patches so they no longer scan arbitrary code spans.
 
 - Look up CrashHandler's modal and draft modules independently so a temporarily missing module remains retryable.

@@ -28,6 +28,39 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { makeLazy, proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("PictureInPicture keeps original playback after rejected requests", async () => {
+    for (const failure of ["request", "play", undefined]) {
+        const events: string[] = [];
+        const clone = {
+            readyState: 4, currentTime: 0, style: {},
+            async requestPictureInPicture() { events.push("request"); if (failure === "request") throw new Error("Denied"); },
+            async play() { events.push("play"); if (failure === "play") throw new Error("Playback failed"); },
+            pause() { events.push("pause clone"); },
+            remove() { events.push("remove clone"); }
+        };
+        const original = { currentTime: 12, cloneNode: () => clone, pause() { events.push("pause original"); } };
+        const { default: plugin } = loadSource("src/plugins/pictureInPicture/index.tsx", {
+            "./styles.css": {},
+            "@api/Settings": { definePluginSettings: () => ({ store: { loop: true } }) },
+            "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+            "@utils/constants": { Devs: {} },
+            "@utils/Logger": { Logger: class { warn() {} } },
+            "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+            "@webpack/common": { Tooltip: "tooltip", showToast: () => events.push("toast"), Toasts: { Type: { FAILURE: "failure" } } }
+        }, {
+            React: { createElement: (type: unknown, props: Record<string, unknown>, ...children: unknown[]) => ({ type, props: { ...props, children } }) },
+            document: { body: { appendChild: (node: unknown) => node } }
+        });
+        const button = plugin.PictureInPictureButton().props.children[0]({});
+        button.props.onClick({ currentTarget: { parentNode: { parentNode: { querySelector: () => original } } } });
+        await setImmediate();
+        assert.equal(clone.currentTime, 12);
+        assert.deepEqual(events, failure === "request" ? ["request", "pause clone", "remove clone", "toast"]
+            : failure === "play" ? ["request", "play", "pause clone", "remove clone", "toast"]
+                : ["request", "play", "pause original"]);
+    }
+});
+
 test("CrashHandler releases recovery guards after skipped or failed attempts", () => {
     for (const scenario of ["disabled", "failed", "rapid", "late-drafts"]) {
         const settings = { attemptToPreventCrashes: scenario !== "disabled", attemptToNavigateToHome: false };

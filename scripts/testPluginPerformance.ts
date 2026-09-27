@@ -18174,3 +18174,43 @@ test("BetterSessions loads empty legacy backup records without discarding valid 
         assert.deepEqual(Array.from(named), [["session", { name: "Saved name", isNew: false }]]);
     }
 });
+
+
+test("IrcColors updates rendered names when live filtering settings change", () => {
+    for (const list of [false, true]) for (const privateChannel of [false, true]) {
+        const store = { lightness: 70, applyColorOnlyToUsersWithoutColor: false, applyColorOnlyInDms: false };
+        let subscribed: readonly string[] = [];
+        const plugin = loadSource("src/plugins/ircColors/index.ts", {
+            "@api/Settings": {
+                Settings: { plugins: { CustomUserColors: { enabled: false } } },
+                definePluginSettings: () => ({ store, use: (keys: readonly string[]) => { subscribed = keys; return store; } })
+            },
+            "@equicordplugins/customUserColors": { getCustomColorString: () => undefined },
+            "@intrnl/xxhash64": { hash: () => 123n },
+            "@utils/constants": { Devs: {} },
+            "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+            "@webpack/common": { useMemo: (calculate: () => unknown) => calculate(), UserStore: { getCurrentUser: () => undefined } }
+        }).default;
+        const context = list
+            ? { user: { id: "user" }, colorString: "original", ...(privateChannel ? {} : { guildId: "guild" }) }
+            : { message: { author: { id: "user" } }, author: { colorString: "original" }, channel: { isPrivate: () => privateChannel } };
+        let color = "";
+        const render = () => { color = list ? plugin.calculateNameColorForListContext(context) : plugin.calculateNameColorForMessageContext(context); };
+        const change = <K extends keyof typeof store>(key: K, value: typeof store[K]) => {
+            store[key] = value;
+            if (subscribed.includes(key)) render();
+        };
+        render();
+        assert.equal(color, "hsl(123, 100%, 70%)");
+        change("applyColorOnlyToUsersWithoutColor", true);
+        assert.equal(color, "original");
+        change("applyColorOnlyToUsersWithoutColor", false);
+        assert.equal(color, "hsl(123, 100%, 70%)");
+        change("applyColorOnlyInDms", true);
+        assert.equal(color, privateChannel ? "hsl(123, 100%, 70%)" : "original");
+        change("lightness", 50);
+        assert.equal(color, privateChannel ? "hsl(123, 100%, 50%)" : "original");
+        change("applyColorOnlyInDms", false);
+        assert.equal(color, "hsl(123, 100%, 50%)");
+    }
+});

@@ -34,6 +34,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Update visible IrcColors names immediately when either color-filter setting changes, without waiting for another Discord render.
+
 - Make the IrcColors message-color patch independent of destructuring property order and prevent it from scanning into another scope.
 
 - Keep LoadingQuotes patches local to each quote selection so a changed normal initializer cannot redirect the patch into event quotes.

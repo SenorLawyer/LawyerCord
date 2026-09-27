@@ -23,9 +23,11 @@ import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { useMemo, UserStore } from "@webpack/common";
 
+const COLOR_SETTINGS = ["lightness", "applyColorOnlyToUsersWithoutColor", "applyColorOnlyInDms"] satisfies (keyof typeof settings.def)[];
+
 // Calculate a CSS color string based on the user ID
 function calculateNameColorForUser(id?: string) {
-    const { lightness } = settings.use(["lightness"]);
+    const { lightness } = settings.use(COLOR_SETTINGS);
     const idHash = useMemo(() => id ? h64(id) : null, [id]);
 
     return idHash && `hsl(${idHash % 360n}, 100%, ${lightness}%)`;

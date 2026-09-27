@@ -57,12 +57,19 @@ const settings = definePluginSettings({
 });
 
 interface LayerProps extends HTMLAttributes<HTMLDivElement> {
+    name?: string;
     mode: "SHOWN" | "HIDDEN";
     baseLayer?: boolean;
 }
 
-function Layer({ mode, baseLayer = false, ...props }: LayerProps) {
+function Layer({ name, mode, baseLayer = false, ...props }: LayerProps) {
     const hidden = mode === "HIDDEN";
+    const modal = !hidden && !baseLayer;
+    let label = "";
+    if (name === "CHANNEL_SETTINGS" || name === "COLLECTIBLES_SHOP")
+        label = getIntlMessage(name);
+    else if (name === "COMPONENT_PLAYGROUND")
+        label = "Component Playground";
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => () => {
@@ -73,7 +80,11 @@ function Layer({ mode, baseLayer = false, ...props }: LayerProps) {
     const node = (
         <div
             ref={containerRef}
+            data-layer={name ?? "base"}
             aria-hidden={hidden}
+            aria-modal={modal}
+            aria-label={modal ? label : undefined}
+            role={modal ? "dialog" : undefined}
             className={cl({
                 [Classes.layer]: true,
                 [Classes.baseLayer]: baseLayer,

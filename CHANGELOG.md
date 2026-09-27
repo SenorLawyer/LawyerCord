@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Preserve native dialog roles, localized labels and layer identifiers when BetterSettings disables fades.
+
 - Apply BetterSettings modal animation changes together, tolerate reordered properties and remove the unused style prop.
 
 - Narrow BlurNSFW message matching while preserving its existing restricted-preview behavior.

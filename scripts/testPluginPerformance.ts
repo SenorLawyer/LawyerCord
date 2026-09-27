@@ -63,6 +63,42 @@ test("BlurNSFW can change blur settings before startup and after stopping", () =
     plugin.stop();
 });
 
+test("BetterSettings preserves native layer dialog metadata", () => {
+    const { Layer } = loadSource("src/plugins/betterSettings/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({}) }, "@api/Styles": {},
+        "@components/Icons": {}, "@equicordplugins/equicordToolbox/menu": {},
+        "@utils/constants": { Devs: {} }, "@utils/css": { classNameFactory: () => () => "layer" },
+        "@utils/discord": { getIntlMessage: (key: string) => `Localized ${key}` }, "@utils/Logger": {},
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack": { findCssClassesLazy: () => ({ layer: "layer", baseLayer: "base" }) },
+        "@webpack/common": { FocusLock: "focus-lock", useRef: () => ({ current: null }), useEffect: () => {} },
+        "./fullHeightContext.css?managed": {}
+    }, {
+        React: { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props, children }) }
+    }, "({ Layer })");
+    for (const name of [undefined, "CHANNEL_SETTINGS", "COLLECTIBLES_SHOP", "COMPONENT_PLAYGROUND", "GUILD_SETTINGS", "custom"]) {
+        for (const mode of ["SHOWN", "HIDDEN"]) {
+            for (const baseLayer of [false, true]) {
+                const rendered = Layer({ name, mode, baseLayer, children: "content" });
+                assert.equal(rendered.type, baseLayer ? "div" : "focus-lock");
+                const node = baseLayer ? rendered : rendered.children[0];
+                const modal = mode === "SHOWN" && !baseLayer;
+                const label = name === "CHANNEL_SETTINGS" || name === "COLLECTIBLES_SHOP"
+                    ? `Localized ${name}` : name === "COMPONENT_PLAYGROUND" ? "Component Playground" : "";
+                assert.equal(node.props["data-layer"], name ?? "base");
+                assert.equal(node.props["aria-hidden"], mode === "HIDDEN");
+                assert.equal(node.props["aria-modal"], modal);
+                assert.equal(node.props["aria-label"], modal ? label : undefined);
+                assert.equal(node.props.role, modal ? "dialog" : undefined);
+                assert.equal(node.props.name, undefined);
+                assert.equal(node.props.children, "content");
+            }
+        }
+    }
+    const overridden = Layer({ mode: "SHOWN", name: "CHANNEL_SETTINGS", "aria-label": "Custom label" });
+    assert.equal(overridden.children[0].props["aria-label"], "Custom label");
+});
+
 test("BetterSettings keeps the collectibles shop lazy while preloading settings", () => {
     const { default: plugin } = loadSource("src/plugins/betterSettings/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({}) }, "@api/Styles": {},

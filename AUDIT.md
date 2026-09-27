@@ -42,6 +42,14 @@ PlatformIndicators now bounds its mobile-mask lookup to 400 characters without c
 
 Evidence is `.git/audit/platform-image-capture-verify.cjs` and `platform-image-capture-verify.json`, comparing 621c1286e. Historical f26db471f changed only a branding label. Focused lint, desktop/web builds and artifact scanning pass; logs use `.git/audit/platform-image-capture-*`. Patch lint reports 63 warnings and no errors. All four CI checks passed on 621c1286e, whose 672 broader tests and timezone checks remain the latest full local run. Captured behavior is not signed-in client acceptance.
 
+## RoleColorEverywhere local captures
+
+The role heading patch previously consumed 5,510 or 5,469 characters beginning in another function, then retained that prefix. It now matches only the title/count pair after the optional role icon. History ae72ab6a5 fixed an icon-loss regression, and 7a75cd64d added escaped-dash compatibility; both behaviors are preserved. Two complete captured heading modules remain byte-identical after patching, compile, and pass 32 controlled render cases covering icons, absent/zero/large counts and the unknown-role placeholder. Three alternate separator forms per module retain equivalent output.
+
+The mention match now bounds destructuring and excludes braces from the following gap, preventing a search through another function. The poll-label style insertion no longer copies an avatar prefix. Both captured mention modules and the poll module retain byte-identical complete output and compile. Distant mention decoys are rejected. Potential second global scanner matches were never second production replacements. Evidence is `.git/audit/role-heading-verify.{cjs,json}` and `role-mention-poll-verify.{cjs,json}`, comparing 10fa42cec.
+
+Focused lint, desktop/web builds and artifact scanning pass; logs use `.git/audit/role-local-captures-*`. Patch lint reports 60 warnings and no errors. All four CI checks passed on preceding 10fa42cec. The latest full local regression run remains 672 tests plus timezone checks at 621c1286e. These captured-code checks do not establish signed-in rendering acceptance.
+
 ## Scope and source
 
 - Baseline: `6e664e03ba3d0b7746ce34740ca444f5112b04bc`, published as `nightly-20260905-1918-6e664e03`.

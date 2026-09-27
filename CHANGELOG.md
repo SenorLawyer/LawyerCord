@@ -49,6 +49,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Match role headings and poll labels directly, preserving role icons and accessibility text, and bound role-color mention captures to their own function.
+
 - Keep PlatformIndicators' mobile-mask search inside the status switch and remove ReverseImageSearch's backward target lookup.
 
 - Make the collapsible Direct Messages heading reachable by keyboard, support Enter and Space, and expose its expanded state.

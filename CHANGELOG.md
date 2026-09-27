@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Remove redundant outer exception handling from CrashHandler while preserving recovery when Discord notifications or APIs fail.
+
 - Remove the ineffective RichPresence settings rename call. Existing per-service settings migration is unchanged.
 
 - Remove CallTimer’s single-use text wrapper and move its static styles into the existing stylesheet.

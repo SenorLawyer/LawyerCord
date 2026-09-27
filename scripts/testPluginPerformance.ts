@@ -81,7 +81,7 @@ test("PictureInPicture keeps original playback after rejected requests", async (
 });
 
 test("CrashHandler releases recovery guards after skipped or failed attempts", () => {
-    for (const scenario of ["disabled", "failed", "rapid", "late-drafts"]) {
+    for (const scenario of ["disabled", "failed", "rapid", "late-drafts"]) for (const notificationsFail of [false, true]) for (const dev of [false, true]) {
         const settings = { attemptToPreventCrashes: scenario !== "disabled", attemptToNavigateToHome: false };
         const timers: { callback: () => void; delay: number }[] = [];
         const immediates: (() => void)[] = [];
@@ -91,7 +91,7 @@ test("CrashHandler releases recovery guards after skipped or failed attempts", (
         const modalStack = { popAll() {} };
         const draftManager = { clearDraft(_channelId: string, draftType: number) { cleared.push(draftType); } };
         const { default: plugin } = loadSource("src/plugins/crashHandler/index.ts", {
-            "@api/Notifications": { showNotification() {} },
+            "@api/Notifications": { showNotification() { if (notificationsFail) throw new Error("Notification UI failed"); } },
             "@api/Settings": { definePluginSettings: () => ({ store: settings }) },
             "@plugins/keepCurrentChannel": { clearPreviousChannel: async () => {} },
             "@utils/constants": { Devs: {} },
@@ -109,7 +109,7 @@ test("CrashHandler releases recovery guards after skipped or failed attempts", (
                 FluxDispatcher: { dispatch() {} }, SelectedChannelStore: { getChannelId: () => "channel" }
             }
         }, {
-            IS_DEV: false,
+            IS_DEV: dev,
             setTimeout: (callback: () => void, delay: number) => timers.push({ callback, delay }),
             setImmediate: (callback: () => void) => immediates.push(callback)
         });
@@ -123,7 +123,7 @@ test("CrashHandler releases recovery guards after skipped or failed attempts", (
         }
         const recover = plugin.handlePreventCrash;
         if (scenario === "failed") plugin.handlePreventCrash = () => { throw new Error("Recovery failed"); };
-        plugin.handleCrash(component, { error: new Error("First crash") });
+        plugin.handleCrash(component, { error: new Error("First crash"), info: dev ? { componentStack: "Fixture stack" } : undefined });
         run(1);
         if (scenario === "rapid") {
             assert.equal(recovered, 1);

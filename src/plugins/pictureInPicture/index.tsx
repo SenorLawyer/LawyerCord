@@ -80,7 +80,10 @@ export default definePlugin({
                             videoClone.volume = video.volume;
                             videoClone.playbackRate = video.playbackRate;
                             videoClone.style.display = "none";
-                            videoClone.onleavepictureinpicture = () => videoClone.remove();
+                            videoClone.onleavepictureinpicture = () => {
+                                videoClone.pause();
+                                videoClone.remove();
+                            };
 
                             async function failPiP() {
                                 if (pendingVideo === videoClone) pendingVideo = undefined;
@@ -103,7 +106,12 @@ export default definePlugin({
                                 try {
                                     videoClone.currentTime = video.currentTime;
                                     await videoClone.requestPictureInPicture();
+                                    if (!videoClone.isConnected) return;
                                     await videoClone.play();
+                                    if (!videoClone.isConnected) {
+                                        videoClone.pause();
+                                        return;
+                                    }
                                     video.pause();
                                 } catch {
                                     await failPiP();

@@ -29,16 +29,17 @@ import { readResponseText } from "../src/shared/readResponseText";
 import { makeLazy, proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
 test("PictureInPicture keeps original playback after rejected requests", async () => {
-    for (const failure of ["request", "play", "metadata", "replaced", undefined]) {
+    for (const failure of ["request", "play", "metadata", "replaced", "request-replaced", "play-replaced", undefined]) {
         const events: string[] = [];
         const clone = {
             readyState: failure === "metadata" || failure === "replaced" ? 0 : 4, currentTime: 0, style: {}, isConnected: true, muted: false, volume: 1, playbackRate: 1,
+            onleavepictureinpicture: null as (() => void) | null,
             onerror: null as (() => Promise<void>) | null,
             onloadedmetadata: null as (() => Promise<void>) | null,
             removeAttribute() { events.push("clear source"); },
             load() { events.push("reset load"); },
-            async requestPictureInPicture() { events.push("request"); if (failure === "request") throw new Error("Denied"); },
-            async play() { events.push("play"); if (failure === "play") throw new Error("Playback failed"); },
+            async requestPictureInPicture() { events.push("request"); if (failure === "request") throw new Error("Denied"); if (failure === "request-replaced") this.onleavepictureinpicture?.(); },
+            async play() { events.push("play"); if (failure === "play") throw new Error("Playback failed"); if (failure === "play-replaced") this.onleavepictureinpicture?.(); },
             pause() { events.push("pause clone"); },
             remove() { this.isConnected = false; events.push("remove clone"); }
         };
@@ -71,7 +72,9 @@ test("PictureInPicture keeps original playback after rejected requests", async (
         assert.equal(clone.volume, 0.23);
         assert.equal(clone.playbackRate, 1.5);
         assert.equal(clone.currentTime, failure === "metadata" || failure === "replaced" ? 0 : 12);
-        assert.deepEqual(events, failure === "replaced" ? ["clear source", "reset load", "remove clone", "request", "play", "pause original"] : failure === "metadata" ? ["pause clone", "remove clone", "toast"] : failure === "request" ? ["request", "pause clone", "remove clone", "toast"]
+        assert.deepEqual(events, failure === "request-replaced" ? ["request", "pause clone", "remove clone"]
+            : failure === "play-replaced" ? ["request", "play", "pause clone", "remove clone", "pause clone"]
+                : failure === "replaced" ? ["clear source", "reset load", "remove clone", "request", "play", "pause original"] : failure === "metadata" ? ["pause clone", "remove clone", "toast"] : failure === "request" ? ["request", "pause clone", "remove clone", "toast"]
             : failure === "play" ? ["request", "play", "pause clone", "remove clone", "toast"]
                 : ["request", "play", "pause original"]);
     }

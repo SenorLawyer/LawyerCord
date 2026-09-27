@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Reset KeepCurrentChannel’s in-memory state on startup so a failed read cannot overwrite newer saved data and a previous account switch cannot disable tracking.
+
 - Prevent pending channel saves or startup reads from undoing crash cleanup. KeepCurrentChannel now ignores stale restoration after navigation, logout or shutdown and reports storage failures.
 
 - Preserve nested crash-state expressions in CrashHandler and narrow ConsoleJanitor’s deprecated-log match.

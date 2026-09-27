@@ -69,6 +69,7 @@ test("KeepCurrentChannel cancels stale restoration and handles storage failures"
         return {
             plugin, clearPreviousChannel, routes, errors, timers,
             saved: () => saved,
+            replaceSaved: (value: PreviousChannel) => { saved = value; },
             finish: () => finishRead({ guildId: "guild", channelId: "old" }),
             fail: (operation: typeof failure) => { failure = operation; },
             select: () => plugin.flux.CHANNEL_SELECT({ guildId: "guild", channelId: "new" }),
@@ -97,6 +98,27 @@ test("KeepCurrentChannel cancels stale restoration and handles storage failures"
         assert.deepEqual(state.routes, []);
         assert.equal(state.saved()?.channelId, action === "clear" ? undefined : action === "select" ? "new" : "old");
     }
+    const restarted = setup();
+    await restarted.plugin.start();
+    restarted.plugin.stop();
+    await restarted.flush();
+    restarted.replaceSaved({ guildId: "guild", channelId: "external" });
+    restarted.fail("read");
+    await restarted.plugin.start();
+    restarted.plugin.stop();
+    await restarted.flush();
+    assert.equal(restarted.saved()?.channelId, "external");
+
+    const switched = setup();
+    await switched.plugin.start();
+    switched.plugin.flux.LOGOUT({ type: "LOGOUT", isSwitchingAccount: true });
+    switched.plugin.stop();
+    await switched.flush();
+    await switched.plugin.start();
+    switched.select();
+    await switched.flush();
+    assert.equal(switched.saved()?.channelId, "new");
+
     for (const operation of ["read", "write", "delete"] as const) {
         const state = setup();
         if (operation !== "read") await state.plugin.start();

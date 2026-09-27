@@ -129,6 +129,8 @@ export default definePlugin({
     },
 
     async start() {
+        isSwitchingAccount = false;
+        previousCache = undefined;
         const version = ++restoreVersion;
         try {
             const previous = await DataStore.get<PreviousChannel>("KeepCurrentChannel_previousData");

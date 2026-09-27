@@ -71,8 +71,8 @@ export default definePlugin({
             find: "{isSidebarVisible:",
             replacement: [
                 {
-                    match: /children:\[(\i\.useMemo[^}]+"aria-multiselectable")(?<=className:(\i),.+?)/,
-                    replace: "children:[$2?.includes('members')?$self.render():null,$1",
+                    match: /(?<=className:\i\(\)\((\i),.{0,200}?)children:\[(?=\i\.useMemo[^}]{0,150}"aria-multiselectable")/,
+                    replace: "children:[$1?.includes('members')?$self.render():null,",
                 },
             ],
             predicate: () => settings.store.memberList

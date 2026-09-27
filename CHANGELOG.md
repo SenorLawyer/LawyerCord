@@ -36,6 +36,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep MemberCount and MentionAvatars patch searches near their target expressions, preserving ShowMeYourName integration.
+
 - Forward translation cancellation to DeepL and Kagi native requests. Scope cancellation by invoking frame and request ID so another window cannot cancel unrelated work.
 
 - Cancel transcript translation on replacement, Cancel, unmount, logout, and plugin stop. Pass its own signal to Google translation without reusing the terminated speech worker.

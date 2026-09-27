@@ -55,7 +55,7 @@ export default definePlugin({
         // HEY THOR UPDATE SHOW ME YOUR NAME IF THIS SHIT CHANGES TY :)
         find: ".USER_MENTION)",
         replacement: {
-            match: /children:`@\$\{(\i\?\?\i)\}`(?<=\.useName\((\i)\).+?)/,
+            match: /children:`@\$\{(\i\?\?\i)\}`(?<=\.useName\((\i)\).{0,350}?)/,
             replace: "children:$self.renderUsername({username:$1,user:$2,showMeYourNameMention:typeof showMeYourNameMention!=='undefined'?showMeYourNameMention:undefined})"
         }
     },

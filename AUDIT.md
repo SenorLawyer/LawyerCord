@@ -8,6 +8,21 @@ Earlier broad verification checkpoint `080e17609`: all 654 broader tests and tim
 
 A fresh September 28 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,656 files, fifteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-patches-complete.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
 
+## Completion evidence checkpoint
+
+Fresh source and GitHub checks at 0457090e6 establish the following status. This table separates review coverage from completed behavior and release delivery.
+
+| Requirement | Current evidence | Status |
+| --- | --- | --- |
+| Start from the latest published nightly and include current main | Latest release is nightly-20260905-1918-6e664e03; fresh origin/main fetch has zero commits missing from HEAD. | Verified at this checkpoint. |
+| Account for the entire tracked project | All 1,661 baseline paths have reviewed ledger entries; current tree has 1,656 files, fifteen additions and twenty removals. Current file fingerprints are captured. | Baseline reading coverage recorded; finding closure remains separate. |
+| Reconcile findings with current source | All forty file hashes across banner, blur, profiles, translation, sounds, timestamps, content warnings, extension installation and PiP records match current source. | Source continuity verified for those records; other findings still need reconciliation. |
+| Review PR49 for useful work | PR49 is closed. Its SVGO upgrade is superseded by this PR's removal of the unused dependency. | Completed and rechecked on GitHub. |
+| Keep changes in PR47 for a nightly release | PR47 is open against main, has only release:nightly, and points to the current pushed branch. | Draft; auto-merge is not enabled. |
+| Validate the combined change and release it | Latest local checkpoint passes 695 regressions and timezone checks, TypeScript, focused lint, both builds and artifact scanning. Broader checks and CI have their own dated evidence. | Final combined gate, final report, merge and published-nightly verification remain incomplete. |
+
+The source inventory is `.git/audit/completion-inventory.{cjs,json,log}`. The checker accepts raw or LF-normalized hashes and handles the timestamp record's separate sources field and uppercase hashes. It does not reinterpret matching hashes as runtime proof. Source-backed issues still include BlurNSFW media-selector ownership and native USRBG profile/voice feed reactivity. Profile import allocation and remaining inheritance semantics require a disposition; signed-in, platform and provider acceptance limits remain explicitly unverified. Historical paragraphs below describe their own checkpoints rather than an authoritative current to-do list.
+
 ## BlurNSFW invalid numeric settings
 
 The shared number setting forwards raw input to optional plugin validation and otherwise saves Number(input). BlurNSFW had no validator, so a negative blur amount produced an invalid CSS filter and left media unblurred. Actual Chromium also drops the generated rule for NaN and Infinity. The setting now rejects negative or nonfinite input; CSS generation falls back to the existing ten-pixel default for invalid saved values without rewriting storage. Zero and fractional amounts remain valid.
@@ -1117,7 +1132,7 @@ The full finding ledger is still being worked through. This list identifies majo
 
 - Scheduled-message legacy recovery, remaining persisted-data constraints, media cancellation, and coordination between separate client contexts.
 - Remaining plugin account, cancellation, network-response, storage, and resource-lifecycle findings across the broader codebase.
-- Runtime validation of patch anchors. After the MemberCount and MentionAvatars review, the patch validator reports 105 warnings; those warnings have not all been resolved or justified against current Discord modules. The latest source passes removed the sole replacement-level try/catch warning and refreshed FriendCodes, MoreUserTags, FakeNitro, RPCEditor, NewGuildSettings, OnePingPerDM, Timezones, ClientSideBlock, StatusPresets, and MessageLoggerEnhanced against current upstream module shapes. Broader behavioral rewrites remain separate review work. Remaining regex warnings are being reviewed against current code rather than mechanically bounded.
+- Runtime validation of patch anchors. The historical 105-warning checkpoint is superseded by the zero-warning nameplate checkpoint. Individual captured-module and behavior comparisons are recorded above. Clean lint does not establish signed-in compatibility or close unrelated findings.
 - Native and provider behavior that mocked tests cannot establish, including target-platform installer and live-client acceptance.
 - Final release checks and live acceptance against the combined source. Main at `8fc182ba7` has been integrated and its release history preserved.
 - A final finding-by-finding disposition, current-head CI, and final audit report before removing draft status.

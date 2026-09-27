@@ -19,6 +19,10 @@ Changes are accumulated in [PR #47](https://github.com/SenorLawyer/LawyerCord/pu
 
 ## Latest local verification
 
+FakeNitro now captures emoji intention from the adjacent comparison and inserts the subscription bypass at the owning function's opening brace. Two capture-copy callbacks are removed, and the subscription search cannot cross a closing brace into another function. Soundboard availability searches are bounded to 250 characters after their action type. All three complete captured modules retain byte-identical patched output and compile. A separate-function decoy and four distant soundboard captures are rejected. Evidence is in `.git/audit/fake-nitro-eligibility-verify.cjs` and its result JSON.
+
+Focused lint, desktop/web builds, and artifact scanning pass. Patch lint reports zero errors and 92 warnings. All four CI checks pass on preceding `54829812a`. The latest full 665-test, timezone and TypeScript run remains at `f3ae7a542`; these changes alter only verified patch patterns and replacement construction. Logs use `.git/audit/fake-nitro-eligibility-*`. Captured-module equivalence does not establish signed-in client acceptance.
+
 FakeNitro's embed, sticker and attachment patch searches now have local bounds. The latter two cannot cross a semicolon, and all three replacement callbacks that only copied captures are replaced with strings. The complete captured module, including its separate sticker-notice patch, retains byte-identical output and compiles under all four emoji/sticker transform combinations. Three valid distant-capture fixtures are rejected by the new patterns. Evidence is in `.git/audit/fake-nitro-accessories-verify.cjs` and its result JSON. The remaining broad FakeNitro matches were captured in `.git/audit/fake-nitro-patches.json` and still require review.
 
 Experiments' keyboard class lookup was also checked and retained. Captured stylesheet 846066 still exports `key` and `combo` under those names, so the suspected mangling issue does not justify a change. Its captured values and disposition are saved in `.git/audit/experiments-keyboard-disposition.json`; signed-in chunk loading was not tested.

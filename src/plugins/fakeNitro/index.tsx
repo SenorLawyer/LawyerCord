@@ -239,8 +239,8 @@ export default definePlugin({
             replacement: [
                 {
                     // Create a variable for the intention of using the emoji
-                    match: /(?<=\.USE_EXTERNAL_EMOJIS.+?;)(?<=intention:(\i).+?)/,
-                    replace: (_, intention) => `const fakeNitroIntention=${intention};`
+                    match: /(?<=\.USE_EXTERNAL_EMOJIS,\i\);)(?=if\((\i)===\i\.EmojiIntention\.COMMUNITY_CONTENT\))/,
+                    replace: "const fakeNitroIntention=$1;"
                 },
                 {
                     // Disallow the emoji for external if the intention doesn't allow it
@@ -268,8 +268,8 @@ export default definePlugin({
         {
             find: ".getUserIsAdmin(",
             replacement: {
-                match: /(function \i\(\i,\i)\){(.{0,250}.getUserIsAdmin\(.+?return!1})/,
-                replace: (_, rest1, rest2) => `${rest1},fakeNitroOriginal){if(!fakeNitroOriginal)return false;${rest2}`
+                match: /(function \i\(\i,\i)\)\{(?=[^}]{0,250}\.getUserIsAdmin\()/,
+                replace: "$1,fakeNitroOriginal){if(!fakeNitroOriginal)return false;"
             }
         },
         // Make stickers always available
@@ -407,7 +407,7 @@ export default definePlugin({
         {
             find: 'type:"GUILD_SOUNDBOARD_SOUND_CREATE"',
             replacement: {
-                match: /(?<=type:"(?:SOUNDBOARD_SOUNDS_RECEIVED|GUILD_SOUNDBOARD_SOUND_CREATE|GUILD_SOUNDBOARD_SOUND_UPDATE|GUILD_SOUNDBOARD_SOUNDS_UPDATE)".+?available:)\i\.available/g,
+                match: /(?<=type:"(?:SOUNDBOARD_SOUNDS_RECEIVED|GUILD_SOUNDBOARD_SOUND_CREATE|GUILD_SOUNDBOARD_SOUND_UPDATE|GUILD_SOUNDBOARD_SOUNDS_UPDATE)".{0,250}?available:)\i\.available/g,
                 replace: "true"
             }
         },

@@ -36,6 +36,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Match MemberCount's member-list class exactly instead of accepting unrelated class names containing "members".
+
 - Keep MemberCount and MentionAvatars patch searches near their target expressions, preserving ShowMeYourName integration.
 
 - Forward translation cancellation to DeepL and Kagi native requests. Scope cancellation by invoking frame and request ID so another window cannot cancel unrelated work.

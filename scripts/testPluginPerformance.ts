@@ -10000,6 +10000,30 @@ test("console previews can retry after root creation fails", () => {
     assert.equal(state.unmounts, 1);
 });
 
+test("member count injection accepts only the resolved member list class", () => {
+    const { default: plugin } = loadSource("src/plugins/memberCount/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: object) => component } },
+        "@utils/constants": { Devs: {} },
+        "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+        "@webpack": {
+            findStoreLazy: () => ({}),
+            findCssClassesLazy: (...names: string[]) => {
+                assert.deepEqual(names, ["members", "membersWrap"]);
+                return { members: "members_fixture", membersWrap: "membersWrap_fixture" };
+            }
+        },
+        "./MemberCount": { MemberCount: "MemberCount" }
+    }, { React: { createElement: (component: string) => component } });
+    const expression = plugin.patches[0].replacement[0].replace
+        .replace("children:[", "").replace(/,$/, "").replaceAll("$1", "className").replaceAll("$self", "plugin");
+    for (const className of [undefined, "", "members_other", "membersWrap_fixture", "prefix_members_fixture", "members_fixture_suffix"])
+        assert.equal(runInNewContext(expression, { plugin, className }), null, String(className));
+    for (const className of ["members_fixture", "extra members_fixture", "members_fixture extra"])
+        assert.equal(runInNewContext(expression, { plugin, className }), "MemberCount", className);
+});
+
 test("member counts subscribe to scalar values and tooltip renders skip channel work", () => {
     const selectors: { select: () => unknown; value: unknown; stores: unknown[]; deps: unknown[]; }[] = [];
     let channelReads = 0;

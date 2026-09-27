@@ -9811,6 +9811,41 @@ test("Decor public lookups check HTTP and response shapes and never request the 
     }
 });
 
+test("Decor preserves explicit null and object overrides before falling back to custom decorations", () => {
+    const source = readFileSync("src/plugins/decor/index.tsx", "utf8");
+    const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);
+    let patchSource = "";
+    const visit = (node: typescript.Node) => {
+        if (typescript.isObjectLiteralExpression(node) && node.properties.some(property => typescript.isPropertyAssignment(property)
+            && property.name.getText(ast) === "find" && typescript.isStringLiteral(property.initializer)
+            && property.initializer.text === "isAvatarDecorationAnimating:")) patchSource = node.getText(ast);
+        typescript.forEachChild(node, visit);
+    };
+    visit(ast);
+    assert.ok(patchSource);
+    const patch = runInNewContext(`(${patchSource})`);
+    let fixture = "function render(e){let{user:t,guildId:n,size:v,avatarDecorationOverride:E}=e,m=e.guild,T=resolve(merge({userValue:t?.avatarDecoration,guildValue:m?.avatarDecoration,guildId:n})),I=React.useMemo(()=>getUrl({avatarDecoration:void 0!==E?E:T,size:v}),[E,T,v]);return I;}";
+    for (const replacement of patch.replacement)
+        fixture = fixture.replace(canonicalizeMatch(replacement.match), replacement.replace.replaceAll("$self", "plugin"));
+    const custom = { asset: "custom" }, ordinary = { asset: "ordinary" }, override = { asset: "override" }, guild = { avatarDecoration: { asset: "guild" } };
+    for (const decoration of [custom, null]) {
+        for (const avatarDecorationOverride of [undefined, null, override]) {
+            for (const member of [undefined, guild]) {
+                const user = { id: "user", avatarDecoration: ordinary };
+                const render = runInNewContext(`(${fixture})`, {
+                    resolve: (value: unknown) => value,
+                    merge: ({ userValue, guildValue }: { userValue: unknown; guildValue: unknown; }) => guildValue ?? userValue,
+                    getUrl: ({ avatarDecoration }: { avatarDecoration: unknown; }) => avatarDecoration,
+                    React: { useMemo: (calculate: () => unknown, deps: unknown[]) => { assert.ok(deps.includes(decoration)); return calculate(); } },
+                    plugin: { useUserDecorAvatarDecoration: (value: unknown) => { assert.equal(value, user); return decoration; } }
+                });
+                assert.equal(render({ user, guild: member, size: 32, avatarDecorationOverride }), avatarDecorationOverride !== undefined
+                    ? avatarDecorationOverride : decoration ?? member?.avatarDecoration ?? ordinary);
+            }
+        }
+    }
+});
+
 test("Decor lifecycle keeps initialization and connection work obsolete after logout or stop", async () => {
     const { store, scheduled } = decorFixture();
     const pending: ((configured: boolean) => void)[] = [];

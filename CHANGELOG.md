@@ -38,6 +38,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Preserve explicit empty avatar-decoration previews in Decor. Custom decorations apply only when no override was supplied.
+
 - Restrict the inbox menu patch to its arrow-renderer module so another reminder menu cannot consume it first.
 
 - Pass Emoji Studio props to context-menu plugins while preserving its popout close and reset callbacks.

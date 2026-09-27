@@ -265,7 +265,7 @@ export default definePlugin({
             find: "_tryFetchMessagesCached",
             replacement: [
                 {
-                    match: /(?<=\.get\({url.+?then\()(\i)=>\(/,
+                    match: /(?<=\.then\()(\i)=>\((?=\i\.\i\.fetchMessages\.recordEnd\(\))/,
                     replace: "async $1=>(await $self.processMessageFetch($1),"
                 },
                 {
@@ -294,7 +294,7 @@ export default definePlugin({
         {
             find: ".handleImageLoad)",
             replacement: {
-                match: /(componentDidMount\(\){)(.{1,150}===(.+?)\.LOADING)/,
+                match: /(componentDidMount\(\){)(.{1,150}===(\i\.\i)\.LOADING)/,
                 replace:
                     "$1if(this.props?.src?.startsWith('blob:') && this.props?.item?.type === 'VIDEO')" +
                     "return this.setState({readyState: $3.READY});$2"

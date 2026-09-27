@@ -64,8 +64,8 @@ export default definePlugin({
         {
             find: "getRelationshipCounts(){",
             replacement: {
-                match: /\}\)\.sortBy\((.+?)\)\.value\(\)/,
-                replace: "}).sortBy(row => $self.wrapSort(($1), row)).value()"
+                match: /(?<=\}\)\.sortBy\()\i=>\i\.comparator(?=\)\.value\(\))/,
+                replace: "row => $self.wrapSort(($&), row)"
             }
         },
         {
@@ -80,8 +80,8 @@ export default definePlugin({
             find: "#{intl::FRIEND_REQUEST_CANCEL}",
             replacement: {
                 predicate: () => settings.store.showDates,
-                match: /(?<=children:\[)\(0,.{0,100}user:\i,hovered:\i.+?(?=,\(0)(?<=user:(\i).+?)/,
-                replace: (children, user) => `$self.WrapperDateComponent({user:${user},children:${children}})`
+                match: /(?<=children:\[)\(0,\i\.jsx\)\(\i(?:\.\i)?,\{user:(\i),hovered:\i,[^{}]{0,150}\}\)/,
+                replace: "$self.WrapperDateComponent({user:$1,children:$&})"
             }
         }
     ],

@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Remove broad friend sorting, request-date, Spotify profile and member mod-view searches. Use adjacent expressions and remove two replacement callbacks.
+
 - Remove MessageLogger's broad renderer captures and keep its edit-handler and group-label searches within local code.
 
 - Replace IgnoreActivities' capture-copy callbacks and broad activity searches with local bounded patterns.

@@ -6,6 +6,12 @@ Current source checkpoint `080e17609`: all 654 broader tests and timezone checks
 
 A fresh September 27 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,655 files, fourteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-sep27-current.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
 
+## Friend and profile patch simplification
+
+Friend sorting now wraps only the adjacent comparator expression. Request dates capture the user in the same bounded JSX call instead of searching backward. Spotify's profile update inserts at the adjacent premium comparison, and the member mod-view module anchor uses its complete current-user/permission expression. Two replacement callbacks and all four broad searches are removed.
+
+Compared with aa992056b, all five captured module copies retain byte-identical patched output and compile. Evidence is `.git/audit/friends-profile-local-verify.{cjs,json}`. Focused ESLint, sequential desktop/web builds and artifact scanning pass; patch lint reports 20 warnings and no errors. Logs use `.git/audit/friends-profile-local-*`. The latest full regression and TypeScript results remain the preceding 679-test friend-date checkpoint. This proof covers preserved captured output, not signed-in acceptance or future Discord changes.
+
 ## Friendship dates in both row layouts
 
 The date patch searched backward across the module and captured `n` instead of the anniversary row's actual user `E`. Its nonglobal replacement also skipped the regular friend row. It now captures the adjacent user prop and deliberately applies to both layouts, with a 500-character limit around the status expression. Historical c36716744 introduced dates for friend rows as well as requests, so both layouts belong to the existing feature.

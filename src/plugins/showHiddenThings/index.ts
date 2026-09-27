@@ -59,7 +59,7 @@ export default definePlugin({
             },
         },
         {
-            find: /,checkElevated:!1}\),\i\.\i\)}(?<=getCurrentUser\(\);return.+?)/,
+            find: /getCurrentUser\(\);return \i\.\i\(\i\.\i\(\{user:\i,context:\i,checkElevated:!1\}\),\i\.\i\)\}/,
             predicate: () => settings.store.showModView,
             replacement: {
                 match: /return \i\.\i\(\i\.\i\(\{user:\i,context:\i,checkElevated:!1\}\),\i\.\i\)/,

@@ -8,6 +8,14 @@ Earlier broad verification checkpoint `080e17609`: all 654 broader tests and tim
 
 A fresh September 27 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,655 files, fourteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-sep27-current.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
 
+## Native profile-avatar actions
+
+The avatar patch no longer matches either captured module 718019 copy because its backward search is too short. Increasing that distance would retain its inaccessible div click handler. The replacement instead supplies an avatar action only when both native profile and avatar actions are absent, causing Discord to render its existing interactive control. The adjacent plain-avatar branch provides the image props, with no backward search or event-handler mutation. Existing actions retain their precedence. Historical 88b718f1e was inspected alongside the current component.
+
+The tracked regression fails before the fix because it renders a div. Both complete captured modules compile and change only by adding the fallback action. Sixty-four executions cover supplied actions, custom/default/guild avatars and animation; twenty recover missing controls, while existing interactive output and events remain unchanged. Chromium checks use the actual captured profile control wrapper and Clickable implementation: the original is skipped by Tab, while the replacement supports Tab, Enter and Space with exactly one open per activation. Event attachment and unrelated dependencies are controlled by the fixture, so this is not signed-in layout acceptance. Evidence is `.git/audit/profile-avatar-verify.{cjs,json}`, `profile-avatar-keyboard.{cjs,json}` and the failing-before log.
+
+All 684 broader tests and timezone checks, TypeScript, plugin ESLint, sequential desktop/web builds and artifact scanning pass. Patch lint remains at six warnings and no errors. Logs use `.git/audit/profile-avatar-*`. All four preceding 0381db961 CI checks passed. The separately broken banner patch and remaining findings are unfinished.
+
 ## Local volume, typing and image-menu patches
 
 Outgoing volume clamps now match their adjacent setting update or the corresponding migration object. SilentTyping replaces only the dispatch method, leaving stopTyping untouched. Both volume slider callbacks become direct replacement strings. All six captured module copies retain byte-identical output and compile against 5e0f68e7f. Evidence is `.git/audit/volume-typing-local-verify.{cjs,json}`.

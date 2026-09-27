@@ -200,8 +200,8 @@ export default definePlugin({
         {
             find: "return{avatarProps:{",
             replacement: {
-                match: /(?<=avatarProps:(\i),eventHandlers:(\i).{0,100}?)return null==/,
-                replace: 'Object.assign($2,{style:{cursor:"pointer"},onClick:()=>$self.openAvatar($1.src)});$&',
+                match: /return null==(\i)&&null==(\i)(?=\?\(0,\i\.jsx\)\("div",\{\.\.\.\i,className:\i,children:\(0,\i\.jsx\)\(\i,\{\.\.\.(\i),)/,
+                replace: "if(null==$1&&null==$2)$2=()=>$self.openAvatar($3.src);$&",
             }
         },
         // Banners

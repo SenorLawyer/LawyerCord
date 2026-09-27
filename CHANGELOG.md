@@ -69,6 +69,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Show thread typing indicators even when the thread has no mention or voice-count badge.
 - Restore the default super-reaction toggle in the current reaction picker while leaving other emoji pickers unchanged.
 - Preserve local volume boosts above 200% when remote settings reset a volume to its default or omit the user during a full sync. Mute changes still apply.
+- Restore profile avatar viewing through Discord's native clickable control, including keyboard activation and default avatars, while preserving supplied profile and avatar actions.
 
 - Replace hidden-channel toolbar method-prefix searches with local button matches and keep the nested row guard tied to its mouse handler's channel.
 

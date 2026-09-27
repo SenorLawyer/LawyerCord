@@ -2225,6 +2225,32 @@ test("reply mention exceptions match whole user and role IDs", () => {
     assert.equal(plugin.shouldMention(message, false), true);
 });
 
+test("profile avatar viewing uses the native clickable and preserves supplied actions", () => {
+    const source = readFileSync("src/plugins/viewIcons/index.tsx", "utf8");
+    const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);
+    let patchSource = "";
+    const visit = (node: typescript.Node) => {
+        if (typescript.isPropertyAssignment(node) && node.name.getText(ast) === "patches") patchSource = node.initializer.getText(ast);
+        typescript.forEachChild(node, visit);
+    };
+    visit(ast);
+    const replacement = runInNewContext(`(${patchSource})`)[0].replacement;
+    const original = 'function Avatar(props){let{onOpenProfile:t,onOpenAvatar:n}=props,{avatarProps:u,eventHandlers:A}=getAvatar(props),I="avatar",T=n;return null==t&&null==T?(0,i.jsx)("div",{...A,className:I,children:(0,i.jsx)(Image,{...u,animated:false})}):(0,i.jsx)(Clickable,{...A,onClick:()=>null!=T?T():t(),children:(0,i.jsx)(Image,{...u,animated:false})})}';
+    const actions: string[] = [];
+    const Avatar = runInNewContext(original.replace(canonicalizeMatch(replacement.match), replacement.replace) + ";Avatar", {
+        i: { jsx: (type: unknown, props: unknown) => ({ type, props }) }, Image: "image", Clickable: "clickable",
+        getAvatar: () => ({ avatarProps: { src: "avatar.png" }, eventHandlers: { onMouseEnter() {} } }),
+        $self: { openAvatar: (url: string) => actions.push(url) }
+    });
+    for (const profile of [false, true]) for (const avatar of [false, true]) {
+        const result = Avatar({ onOpenProfile: profile ? () => actions.push("profile") : undefined, onOpenAvatar: avatar ? () => actions.push("avatar") : undefined });
+        assert.equal(result.type, "clickable");
+        assert.equal(typeof result.props.onMouseEnter, "function");
+        result.props.onClick();
+        assert.equal(actions.at(-1), avatar ? "avatar" : profile ? "profile" : "avatar.png");
+    }
+});
+
 test("synced default volumes preserve local boosts", () => {
     const source = readFileSync("src/plugins/volumeBooster/index.ts", "utf8");
     const ast = typescript.createSourceFile("index.ts", source, ScriptTarget.Latest, true);

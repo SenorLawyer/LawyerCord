@@ -226,7 +226,7 @@ export default definePlugin({
                 // If we are rendering the normal GuildsBar sidebar, we make Discord think the folder is always collapsed to show better icons (the mini guild icons) and avoid transitions
                 {
                     predicate: () => settings.store.keepIcons,
-                    match: /let ?(?:\i,)*?{folderNode:\i,setNodeRef:\i,.+?expanded:(\i),.+?;(?=let)/,
+                    match: /let ?(?:\i,)*?{folderNode:\i,setNodeRef:\i,.{1,150}?expanded:(\i),.{1,450}?;(?=let)/,
                     replace: (m, isExpanded) => `${m}${isExpanded}=!!arguments[0]?.isBetterFolders&&${isExpanded};`
                 },
                 // Disable expanding and collapsing folders transition in the normal GuildsBar sidebar
@@ -238,8 +238,8 @@ export default definePlugin({
                 // If we are rendering the normal GuildsBar sidebar, we avoid rendering guilds from folders that are expanded
                 {
                     predicate: () => !settings.store.keepIcons,
-                    match: /"--custom-folder-color".+?(?=\i\(\(\i,\i,\i\)=>{let{key:.{0,70}"ul")(?<=selected:\i,expanded:(\i),.+?)/,
-                    replace: (m, isExpanded) => `${m}$self.shouldRenderContents(arguments[0],${isExpanded})?null:`
+                    match: /"--custom-folder-color".{1,150}?(?=\i\(\(\i,\i,\i\)=>{let{key:.{0,70}"ul")/,
+                    replace: "$&$self.shouldRenderContents(arguments[0])?null:"
                 },
                 // Decide if we should render the expanded folder background if we are rendering the Better Folders sidebar
                 {
@@ -250,7 +250,7 @@ export default definePlugin({
                 // Decide if we should render the expanded folder icon if we are rendering the Better Folders sidebar
                 {
                     predicate: () => settings.store.showFolderIcon !== FolderIconDisplay.Always,
-                    match: /"--custom-folder-color".+?className:\i\.\i}\),(?=\i,)/,
+                    match: /"--custom-folder-color".{1,300}?className:\i\.\i}\),(?=\i,)/,
                     replace: "$&!$self.shouldShowFolderIconAndBackground(!!arguments[0]?.isBetterFolders,arguments[0]?.betterFoldersExpandedIds)?null:"
                 }
             ]
@@ -411,10 +411,10 @@ export default definePlugin({
         return !!props?.isBetterFolders;
     },
 
-    shouldRenderContents(props: any, isExpanded: boolean) {
+    shouldRenderContents(props: { folderNode: { id: string | number }; isBetterFolders?: boolean; expanded: boolean }) {
         // Pending guilds
-        if (props?.folderNode?.id === 1) return false;
+        if (props.folderNode.id === 1) return false;
 
-        return !props?.isBetterFolders && isExpanded;
+        return !props.isBetterFolders && props.expanded;
     }
 });

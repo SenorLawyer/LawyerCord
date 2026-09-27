@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Remove the super-reaction playback helper and callback by changing the native limit directly.
+
 - Remove broad friend sorting, request-date, Spotify profile and member mod-view searches. Use adjacent expressions and remove two replacement callbacks.
 - Remove broad typing, pronoun and mention searches, preserving their existing output and deleting the double-click replacement callback.
 

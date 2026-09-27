@@ -46,8 +46,8 @@ export default definePlugin({
             replacement: [
                 {
                     // if (inlinedCalculatePlayingCount(a,b) >= limit) return;
-                    match: /(BURST_REACTION_EFFECT_PLAY:(?:\i=>|function\(\i\)){.+?if\()(\(?(?:function)?\(\i,\i\)(?:=>)?{.+?\(\i,\i\))>=5+?(?=\))/,
-                    replace: (_, rest, playingCount) => `${rest}!$self.shouldPlayBurstReaction(${playingCount})`
+                    match: /(?<=\}\)?\(\i,\i\)>=)5(?=\)return;)/,
+                    replace: "($self.settings.store.unlimitedSuperReactionPlaying?Infinity:$self.settings.store.superReactionPlayingLimit)"
                 }
             ]
         },
@@ -60,12 +60,6 @@ export default definePlugin({
         }
     ],
     settings,
-
-    shouldPlayBurstReaction(playingCount: number) {
-        if (settings.store.unlimitedSuperReactionPlaying) return true;
-        if (settings.store.superReactionPlayingLimit > playingCount) return true;
-        return false;
-    },
 
     shouldSuperReactByDefault(pickerIntention: EmojiIntention) {
         return pickerIntention === EmojiIntention.REACTION && settings.store.superReactByDefault && OverridePremiumTypeStore.getState().premiumTypeActual != null;

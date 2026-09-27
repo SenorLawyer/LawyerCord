@@ -8,6 +8,12 @@ Earlier broad verification checkpoint `080e17609`: all 654 broader tests and tim
 
 A fresh September 27 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,655 files, fourteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-sep27-current.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
 
+## Super-reaction playback limit
+
+The playback patch now replaces only the native limit beside the count function's invocation. It uses the configured limit or Infinity for unlimited playback. The copied handler prefix, copied count function, replacement callback and three-branch plugin helper are removed. Historical f32b68e37 confirms the inlined count function was introduced as a bundler compatibility change.
+
+Captured module 900210 compiles and differs from native code only at that limit. Compared with 8dc2a027d, 336 executions of its actual handler preserve playing and animation state across finite supported limits, unlimited playback, boundary counts, hover/random/external triggers and live/stale animation entries. Evidence is `.git/audit/super-reaction-limit-verify.{cjs,json}`. Focused ESLint, sequential desktop/web builds and artifact scanning pass; patch lint reports 12 warnings and no errors. Logs use `.git/audit/super-reaction-limit-*`. The latest full regression and TypeScript results remain the preceding 682-test default-picker checkpoint. Live animation acceptance remains separate.
+
 ## Super-reaction picker default
 
 The old default-state patch no longer matches either captured picker module: it depends on a distant reaction comparison followed by an obsolete push expression. The replacement targets the adjacent guild/state initializer directly. A typed helper uses the existing EmojiIntention constant and the existing setting/premium check, keeping the default limited to reaction pickers. The broad searches and replacement callback are removed. Historical 3505adad6 was inspected; its intent remains the default reaction toggle. The captured enum module confirms REACTION is zero, matching the reused constant.

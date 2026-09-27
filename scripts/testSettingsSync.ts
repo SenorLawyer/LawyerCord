@@ -2545,3 +2545,67 @@ test("cloud ChannelTabs transfers preserve other accounts and device sessions", 
     await offline.importSettings(JSON.stringify({ dataStore: sourceRecords }), "datastore");
     assert.deepEqual([...records].filter(([key]) => keys.includes(key)), sourceRecords, "Explicit offline restores still replace complete records");
 });
+
+
+test("cloud settings keep service credentials and connection bindings local", async () => {
+    const privateFields: Record<string, string[]> = {
+        FileUpload: ["serviceUrl", "ziplineToken", "folderId", "ezHostKey", "nestToken", "encryptingHostKey", "catboxUserhash", "sharexConfig", "gofileToken", "pixelVaultKey", "pixelDrainKey", "corsProxyUrl", "s3Endpoint", "s3Bucket", "s3Region", "s3AccessKeyId", "s3SecretAccessKey", "s3SessionToken", "s3PublicUrl", "s3Prefix", "s3ForcePathStyle", "webdavUrl", "webdavUsername", "webdavPassword", "webdavDirectory", "webdavServerType", "webdavShareType"],
+        RichPresence: ["abs_serverUrl", "abs_username", "abs_password", "jf_serverUrl", "jf_apiKey", "jf_userId", "nd_serverUrl", "nd_username", "nd_password", "nd_lastfmApiKey", "serverUrl", "username", "password", "apiKey", "userId", "_migrated"],
+        Translate: ["deeplApiKey", "kagiSession"],
+        InvisibleChat: ["savedPasswords"],
+        MusicRichPresence: ["apiKey"],
+        AudioBookShelfRichPresence: ["serverUrl", "username", "password"],
+        JellyfinRichPresence: ["serverUrl", "apiKey", "userId"]
+    };
+    const makeSettings = (prefix: string) => ({ plugins: {
+        ...Object.fromEntries(Object.entries(privateFields).map(([name, keys]) => [name, {
+            enabled: true, ordinaryPreference: prefix, ...Object.fromEntries(keys.map(key => [key, `${prefix}:${name}:${key}`]))
+        }])),
+        Unrelated: { enabled: true, tokenDisplay: prefix }
+    } });
+    const source = makeSettings("source");
+    const original = structuredClone(source);
+    const target = makeSettings("target");
+    let persisted = structuredClone(source);
+    const settingsModule = { PlainSettings: structuredClone(source), DefaultSettings: defaultSettings };
+    const store = { entries: async () => [] };
+    const modules: Record<string, unknown> = {
+        "@api/DataStore": store, "..": { DataStore: store }, "@api/Settings": settingsModule,
+        "@utils/Logger": { Logger: class {} },
+        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) }
+    };
+    const globals = {
+        exports: {}, require: (name: string) => modules[name] ?? {}, structuredClone, TextEncoder, TextDecoder, atob,
+        VencordNative: { settings: { get: () => persisted, set: async (value: typeof persisted) => { persisted = structuredClone(value); } }, quickCss: { get: async () => "" } }
+    };
+    const offline = runInNewContext(`${outputText}\nexports;`, globals);
+    modules["./offline"] = offline;
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    const { buildLocalData, applyDownloads } = runInNewContext(`${compiled}\n({ buildLocalData, applyDownloads: (downloads, expected) => applyDownloads(downloads, { assertCurrent() {}, expected }) });`, { ...globals, exports: {} });
+    const expectedExport = { plugins: {
+        ...Object.fromEntries(Object.keys(privateFields).map(name => [name, { enabled: true, ordinaryPreference: "source" }])),
+        Unrelated: source.plugins.Unrelated
+    } };
+    for (const type of ["plugins", "all"]) assert.deepEqual(JSON.parse(await offline.exportSettings({ type, cloud: true })).settings, expectedExport);
+    assert.deepEqual(JSON.parse(new TextDecoder().decode((await buildLocalData()).get("settings"))), expectedExport);
+    assert.deepEqual(persisted, original, "Cloud filtering must not mutate stored or live credentials");
+    assert.deepEqual(JSON.parse(await offline.exportSettings({ type: "plugins" })).settings, original);
+    for (const format of ["v2", "legacy"]) for (const useSnapshot of [true, false]) {
+        persisted = structuredClone(target);
+        settingsModule.PlainSettings = structuredClone(target);
+        const expected = useSnapshot ? await offline.captureCloudImportState() : undefined;
+        if (format === "v2") await applyDownloads([{ key: "settings", value: Buffer.from(JSON.stringify(source)).toString("base64") }], expected);
+        else await offline.importSettings(JSON.stringify({ settings: source }), "plugins", true, undefined, expected);
+        for (const [name, keys] of Object.entries(privateFields)) {
+            for (const key of keys) assert.equal(persisted.plugins[name][key], target.plugins[name][key], `${name}.${key} must remain local`);
+            assert.equal(persisted.plugins[name].ordinaryPreference, "source");
+        }
+        assert.deepEqual(structuredClone(settingsModule.PlainSettings), persisted);
+        assert.equal(persisted.plugins.Unrelated.tokenDisplay, "source");
+        if (expected) assert.equal(expected.settings, JSON.stringify(persisted));
+    }
+    await offline.importSettings(JSON.stringify({ settings: source }), "plugins");
+    assert.deepEqual(persisted, source, "Explicit offline restoration retains credentials and connection settings");
+});

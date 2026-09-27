@@ -19,6 +19,23 @@ const LOCAL_DATASTORE_KEYS = new Set<unknown>([
     "ScheduledMessages_queue", "VCLastVoiceChannel", "VCLastVoiceChannelSession", "KeepCurrentChannel_previousData",
     "ChannelTabs_openChannels_v2", "ChannelTabs_unreadFallbacks_v1"
 ]);
+const LOCAL_PLUGIN_SETTINGS = new Map<string, readonly string[]>([
+    ["FileUpload", [
+        "serviceUrl", "ziplineToken", "folderId", "ezHostKey", "nestToken", "encryptingHostKey", "catboxUserhash", "sharexConfig",
+        "gofileToken", "pixelVaultKey", "pixelDrainKey", "corsProxyUrl", "s3Endpoint", "s3Bucket", "s3Region", "s3AccessKeyId",
+        "s3SecretAccessKey", "s3SessionToken", "s3PublicUrl", "s3Prefix", "s3ForcePathStyle", "webdavUrl", "webdavUsername",
+        "webdavPassword", "webdavDirectory", "webdavServerType", "webdavShareType"
+    ]],
+    ["RichPresence", [
+        "abs_serverUrl", "abs_username", "abs_password", "jf_serverUrl", "jf_apiKey", "jf_userId", "nd_serverUrl", "nd_username",
+        "nd_password", "nd_lastfmApiKey", "serverUrl", "username", "password", "apiKey", "userId", "_migrated"
+    ]],
+    ["Translate", ["deeplApiKey", "kagiSession"]],
+    ["InvisibleChat", ["savedPasswords"]],
+    ["MusicRichPresence", ["apiKey"]],
+    ["AudioBookShelfRichPresence", ["serverUrl", "username", "password"]],
+    ["JellyfinRichPresence", ["serverUrl", "apiKey", "userId"]]
+]);
 export function isLocalDataStoreKey(key: unknown) {
     if (LOCAL_DATASTORE_KEYS.has(key)) return true;
     if (typeof key !== "string") return false;
@@ -45,9 +62,14 @@ export function getCloudDataStoreEntries(entries: [IDBValidKey, unknown][]): [ID
 
 export function omitCloudSettings(settings: object) {
     const filtered = Object.fromEntries(Object.entries(settings).filter(([key]) => key !== "cloud"));
-    const { plugins } = filtered;
-    if (isObject(plugins) && "ChannelTabs" in plugins && isObject(plugins.ChannelTabs) && "tabSet" in plugins.ChannelTabs) {
-        filtered.plugins = { ...plugins, ChannelTabs: { ...plugins.ChannelTabs, tabSet: scopeAccountData(plugins.ChannelTabs.tabSet) } };
+    if (isObject(filtered.plugins)) {
+        const plugins = Object.fromEntries(Object.entries(filtered.plugins).map(([name, values]) => [name,
+            isObject(values) ? Object.fromEntries(Object.entries(values).filter(([key]) => !LOCAL_PLUGIN_SETTINGS.get(name)?.includes(key))) : values
+        ]));
+        if (isObject(plugins.ChannelTabs) && "tabSet" in plugins.ChannelTabs) {
+            plugins.ChannelTabs = { ...plugins.ChannelTabs, tabSet: scopeAccountData(plugins.ChannelTabs.tabSet) };
+        }
+        filtered.plugins = plugins;
     }
     return filtered;
 }

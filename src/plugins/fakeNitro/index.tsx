@@ -363,17 +363,22 @@ export default definePlugin({
         },
         {
             find: "#{intl::STICKER_POPOUT_UNJOINED_PRIVATE_GUILD_DESCRIPTION}",
+            group: true,
             predicate: () => settings.store.transformStickers,
             replacement: [
                 {
                     // Export the renderable sticker to be used in the fake nitro sticker notice
                     match: /let{renderableSticker:(\i).{0,270}sticker:\i,channel:\i,/,
-                    replace: (m, renderableSticker) => `${m}fakeNitroRenderableSticker:${renderableSticker},`
+                    replace: "$&fakeNitroRenderableSticker:$1,"
+                },
+                {
+                    match: /(?<=let \i,\{)(?=[^{}]{0,150}sticker:\i(?:,|}))(?=[^{}]{0,150}closePopout:\i(?:,|}))/,
+                    replace: "fakeNitroRenderableSticker,"
                 },
                 {
                     // Add the fake nitro sticker notice
-                    match: /(let \i,{sticker:\i,channel:\i,closePopout:\i.+?}=(\i).+?;)(.+?description:)(\i)(?=,sticker:\i)/,
-                    replace: (_, rest, props, rest2, reactNode) => `${rest}let{fakeNitroRenderableSticker}=${props};${rest2}$self.addFakeNotice(${FakeNoticeType.Sticker},${reactNode},!!fakeNitroRenderableSticker?.fake)`
+                    match: /(?<=description:)\i(?=,sticker:\i)/,
+                    replace: `$self.addFakeNotice(${FakeNoticeType.Sticker},$&,!!fakeNitroRenderableSticker?.fake)`
                 }
             ]
         },
@@ -382,8 +387,8 @@ export default definePlugin({
             predicate: () => settings.store.transformEmojis,
             replacement: {
                 // Export the emoji node to be used in the fake nitro emoji notice
-                match: /isDiscoverable:\i,shouldHideRoleSubscriptionCTA:\i,(?<={node:(\i),.+?)/,
-                replace: (m, node) => `${m}fakeNitroNode:${node},`
+                match: /shouldHideRoleSubscriptionCTA:\i(?=,|})/,
+                replace: "$&,fakeNitroNode:arguments[0].node"
             }
         },
         {
@@ -391,8 +396,8 @@ export default definePlugin({
             predicate: () => settings.store.transformEmojis,
             replacement: {
                 // Add the fake nitro emoji notice
-                match: /(?<=emojiDescription:)(\i)(?<=\1=function\(\i\)\{let\{sourceType:.+?)/,
-                replace: (_, reactNode) => `$self.addFakeNotice(${FakeNoticeType.Emoji},${reactNode},!!arguments[0]?.fakeNitroNode?.fake)`
+                match: /(?<=emojiDescription:)\i(?=,|})/,
+                replace: `$self.addFakeNotice(${FakeNoticeType.Emoji},$&,!!arguments[0]?.fakeNitroNode?.fake)`
             }
         },
         // Separate patch for allowing using custom app icons

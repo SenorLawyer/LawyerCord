@@ -20,6 +20,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ### Removed
 
 - Replace FakeNitro's message-accessory, emoji-eligibility and gradient-theme capture-copy callbacks with direct replacement strings.
+- Remove FakeNitro's broad emoji/sticker notice searches and their capture-copy callbacks. Keep the sticker marker in the outer component's props binding.
 
 - Remove ContextMenuAPI's special exception that hid patch syntax failures from logs and companion reports. Failed replacements still roll back.
 

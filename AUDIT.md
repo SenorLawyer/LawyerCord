@@ -19,6 +19,10 @@ Changes are accumulated in [PR #47](https://github.com/SenorLawyer/LawyerCord/pu
 
 ## Latest local verification
 
+FakeNitro's emoji notices now match local properties and forward the owning component's node prop directly. Both captured caller modules preserve the forwarded data across twelve cases each; both description modules retain byte-identical patched output. The sticker notice keeps its marker in the outer component's props binding, preserving access from its nested ordinary function. Twelve controlled captured-component renders, including reordered props fields, preserve the rendered output and notice flags. The sticker patch is grouped so failed replacements roll back together. Four capture-copy callbacks and three broad searches are removed.
+
+The combined accessory/sticker module compiles under all four transform settings; its only output difference is the marker binding's placement when sticker transforms are enabled. Evidence is in `.git/audit/fake-nitro-emoji-notices-verify.cjs`, `.git/audit/fake-nitro-sticker-notice-verify.cjs`, `.git/audit/fake-nitro-notices-combined-verify.cjs`, and their result JSON files. Focused lint, desktop/web builds, and artifact scanning pass. Patch lint reports zero errors and 88 warnings. Logs use `.git/audit/fake-nitro-notices-*`. These controlled checks do not establish signed-in popout acceptance.
+
 FakeNitro's gradient-theme wrapper now matches the local appearance update and reads both captured values from that call. It no longer copies a function prefix through a replacement callback. The complete captured module retains byte-identical output and compiles; reversing the two client-theme fields still preserves output, and an unrelated function's appearance update is rejected. Evidence is in `.git/audit/fake-nitro-gradient-verify.cjs` and its result JSON.
 
 Focused lint, desktop/web builds, and artifact scanning pass. Patch lint reports zero errors and 91 warnings. Logs use `.git/audit/fake-nitro-gradient-*`. Full-suite and signed-in acceptance claims remain unchanged.

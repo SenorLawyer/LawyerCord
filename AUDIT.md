@@ -36,6 +36,12 @@ Chromium confirmed that Tab skipped the previous collapsible heading: its span h
 
 The complete captured DM-list module differs only at the heading replacement. The tracked regression verifies native props, disabled behavior, both collapse states and toggling. Chromium runs the actual captured Clickable implementation from module 939249 with the actual new header output, confirming Tab, Enter, Space and retained text. The fixture manually rerenders header props after the setting changes; it does not establish signed-in subscription, visual or screen-reader acceptance. Evidence is `.git/audit/pin-dms-heading-{before,after}.cjs` and their JSON results. All 672 broader tests and timezone checks, TypeScript, focused lint, repository CSS lint, desktop/web builds and artifact scanning pass; logs use `.git/audit/pin-dms-heading-*`. All four CI checks passed on preceding 5ac693309. A fresh fetch confirms main is fully integrated and the latest published nightly remains the September 5 baseline.
 
+## Platform and image-search captures
+
+PlatformIndicators now bounds its mobile-mask lookup to 400 characters without crossing a closing brace. Complete captured module 935154 retains byte-identical patched output and compiles; a distant-mask decoy is rejected. ReverseImageSearch removes its backward target lookup and capture-copy callback. Its target is the ordinary owning function's first argument, as verified in captured module 720882. The complete module differs only in that target reference, and six controlled callback cases preserve all output across image/video/missing roles and media-item presence. Potential scanner matches after the first are not additional production replacements.
+
+Evidence is `.git/audit/platform-image-capture-verify.cjs` and `platform-image-capture-verify.json`, comparing 621c1286e. Historical f26db471f changed only a branding label. Focused lint, desktop/web builds and artifact scanning pass; logs use `.git/audit/platform-image-capture-*`. Patch lint reports 63 warnings and no errors. All four CI checks passed on 621c1286e, whose 672 broader tests and timezone checks remain the latest full local run. Captured behavior is not signed-in client acceptance.
+
 ## Scope and source
 
 - Baseline: `6e664e03ba3d0b7746ce34740ca444f5112b04bc`, published as `nightly-20260905-1918-6e664e03`.

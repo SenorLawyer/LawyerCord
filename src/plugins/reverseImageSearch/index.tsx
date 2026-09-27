@@ -120,8 +120,8 @@ export default definePlugin({
         {
             find: "#{intl::MESSAGE_ACTIONS_MENU_LABEL}),shouldHideMediaOptions:",
             replacement: {
-                match: /favoriteableType:\i,(?<=(\i)\.getAttribute\("data-type"\).+?)/,
-                replace: (m, target) => `${m}reverseImageSearchType:${target}.getAttribute("data-role"),`
+                match: /(?<=favoriteableType:\i,)/,
+                replace: 'reverseImageSearchType:arguments[0].target.getAttribute("data-role"),'
             }
         }
     ],

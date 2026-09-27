@@ -49,6 +49,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep PlatformIndicators' mobile-mask search inside the status switch and remove ReverseImageSearch's backward target lookup.
+
 - Make the collapsible Direct Messages heading reachable by keyboard, support Enter and Space, and expose its expanded state.
 
 - Bound PinDMs' section, renderer, row-height and scroll captures to their nearby code while preserving its generated patch output.

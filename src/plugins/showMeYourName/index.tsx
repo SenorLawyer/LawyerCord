@@ -1157,8 +1157,8 @@ export default definePlugin({
             // because the name is the same as the username.
             find: "location:\"DiscordTag\"});",
             replacement: {
-                match: /(?<=,forceUsername:(\i),.*?displayNameStyles:)\i!==\i\?(\i.displayNameStyles):null/,
-                replace: "!$1?$2:null"
+                match: /(?<=displayNameStyles:)\i!==\i\?(\i\.displayNameStyles):null/,
+                replace: "!arguments[0].forceUsername?$1:null"
             },
         },
         {

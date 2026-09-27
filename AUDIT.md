@@ -2,11 +2,19 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Latest full local verification: all 685 broader tests and timezone checks, TypeScript, focused plugin ESLint, CSS lint, sequential desktop/web builds and artifact scanning pass at the profile-banner fix. The subsequent icon cleanup passes focused lint, sequential builds and artifact scanning. Patch lint now reports two warnings and no errors. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding b2f0362c4; the banner fix requires its own CI.
+Latest full local verification: all 685 broader tests and timezone checks, TypeScript, focused plugin ESLint, CSS lint, sequential desktop/web builds and artifact scanning pass at the profile-banner fix. The subsequent icon, name-style and reaction cleanup passes focused lint, sequential builds and artifact scanning. Patch lint now reports zero warnings and no errors. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding b2f0362c4; the banner fix requires its own CI.
 
 Earlier broad verification checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning passed. Patch lint then reported 107 warnings and no errors. Full repository lint logs use `.git/audit/reconciliation-sep27-*`; later focused runs do not replace final combined validation.
 
 A fresh September 27 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,655 files, fourteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-sep27-current.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
+
+## Name-style and reaction props
+
+ShowMeYourName now reads forceUsername from its owning component instead of searching backward through its source. Both complete captured modules compile and differ only at that reference. Across 288 executions of the actual components, forced usernames, nicknames, privacy settings, account identifiers and name styles preserve their output. Evidence is `.git/audit/name-style-local-verify.{cjs,json}`.
+
+WhoReacted now matches only the adjacent reaction counter and reads emoji, message and type from the owning component. The complete captured module compiles and changes only those references. AST inspection confirms two arrow callbacks inside the ordinary props owner. Forty-eight executions of the actual inner callback and props binding preserve native output and the inserted users across hidden/visible counts, reaction types, emoji types, counts and read-only states. These fixtures control surrounding state and dependencies. Evidence is `.git/audit/reaction-users-local-verify.{cjs,json}`. Historical de485f8f9 and f39ab6409 were inspected for surrounding behavior.
+
+Focused ESLint, sequential desktop/web builds and artifact scanning pass. Patch lint reports zero warnings and no errors. Logs use `.git/audit/name-reaction-local-*`. The latest full regression and TypeScript result remains the 685-test banner checkpoint. Zero patch warnings do not close larger bounded searches, lifecycle findings or live client acceptance.
 
 ## Local direct-message icon matches
 

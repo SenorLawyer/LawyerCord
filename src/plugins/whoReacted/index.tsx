@@ -168,8 +168,8 @@ export default definePlugin({
         {
             find: ",reactionRef:",
             replacement: {
-                match: /(\i)\?null:\(0,\i\.jsx\)\(\i\.\i,{className:\i\.reactionCount,.*?}\),(?<=(emoji:\i,message:\i,type:\i).+?)/,
-                replace: "$&$1?null:$self.renderUsers({$2}),"
+                match: /(\i)\?null:\(0,\i\.jsx\)\(\i\.\i,{className:\i\.reactionCount,[^{}]{0,100}}\),/,
+                replace: "$&$1?null:$self.renderUsers({emoji:arguments[0].emoji,message:arguments[0].message,type:arguments[0].type}),"
             }
         },
         {

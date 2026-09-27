@@ -28,6 +28,31 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { makeLazy, proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("RPCEditor rejects malformed saved lists without changing activities or storage", async () => {
+    const valid = { appId: "app", enabled: true, newActivityType: 0, newName: "", newDetails: "", newState: "", newLargeImageUrl: "", newLargeImageText: "", newSmallImageUrl: "", newSmallImageText: "", newStreamUrl: "", disableAssets: false, disableTimestamps: false };
+    const invalid = [{}, [null], ...Object.keys(valid).map(key => [{ ...valid, [key]: null }]), ...[-1, 4, 1.5, NaN].map(newActivityType => [{ ...valid, newActivityType }])];
+    for (const stored of invalid) {
+        let writes = 0;
+        let errors = 0;
+        const { default: plugin } = loadSource("src/equicordplugins/rpcEditor/index.tsx", {
+            "@api/index": { DataStore: { get: async () => stored, set: async () => { writes++; } } },
+            "@api/Settings": { definePluginSettings: () => ({}) }, "@components/Paragraph": {},
+            "@utils/lazy": { makeLazy }, "@utils/Logger": { Logger: class { error() { errors++; } } },
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+            "@utils/constants": { Devs: {} }, "@utils/react": {},
+            "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+            "@vencord/discord-types/enums": { ActivityType: { PLAYING: 0, STREAMING: 1, LISTENING: 2, WATCHING: 3, COMPETING: 5 } },
+            "@webpack/common": {}, "./ReplaceSettings": {}
+        });
+        await plugin.start();
+        const activity = { application_id: "app", name: "Original", type: 0 };
+        assert.doesNotThrow(() => plugin.patchActivity(activity));
+        assert.deepEqual(activity, { application_id: "app", name: "Original", type: 0 });
+        assert.equal(errors, 1);
+        assert.equal(writes, 0);
+    }
+});
+
 test("RPCEditor settings load saved entries before allowing edits", async () => {
     let finishRead: (value: object[]) => void = () => {};
     let reads = 0;
@@ -35,7 +60,8 @@ test("RPCEditor settings load saved entries before allowing edits", async () => 
     let loading: Promise<void> | undefined;
     let pending = true;
     const persisted = new Promise<object[]>(resolve => { finishRead = resolve; });
-    const { default: plugin } = loadSource("src/equicordplugins/rpcEditor/index.tsx", {
+    const { default: plugin, makeEmptyAppId: makeEntry } = loadSource("src/equicordplugins/rpcEditor/index.tsx", {
+        "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
         "@api/index": { DataStore: { get: () => { reads++; return persisted; }, set: async (_key: string, value: unknown) => { saved = value; } } },
         "@api/Settings": { definePluginSettings: (definition: unknown) => ({ definition }) },
         "@components/Paragraph": { Paragraph: "paragraph" }, "@utils/lazy": { makeLazy },
@@ -52,7 +78,7 @@ test("RPCEditor settings load saved entries before allowing edits", async () => 
     const render = plugin.settings.definition.replacedAppIds.component;
     assert.equal(render().type, "paragraph");
     assert.equal(reads, 1);
-    const entries = [{ appId: "saved-app", newName: "Saved name" }];
+    const entries = [{ ...makeEntry(), appId: "saved-app", newName: "Saved name" }];
     finishRead(entries);
     await loading;
     const editor = render();
@@ -67,6 +93,7 @@ test("RPCEditor settings load saved entries before allowing edits", async () => 
 
 test("RPCEditor template variables preserve literal activity text", () => {
     const { default: plugin } = loadSource("src/equicordplugins/rpcEditor/index.tsx", {
+        "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
         "@api/index": {}, "@api/Settings": { definePluginSettings: () => ({}) },
         "@components/Paragraph": {}, "@utils/lazy": { makeLazy }, "@utils/Logger": { Logger: class { error() {} } },
         "@utils/constants": { Devs: {} }, "@utils/react": {},
@@ -10805,8 +10832,9 @@ test("GIF export reports the save result once", async () => {
 });
 
 test("RPC editor asset placeholders read the original values", async () => {
-    const { default: plugin } = loadSource("src/equicordplugins/rpcEditor/index.tsx", {
-        "@api/index": { DataStore: { get: async () => [{ appId: "app", enabled: true, newActivityType: 0, newLargeImageText: "Changed", newSmallImageText: ":large_text:" }] } },
+    const { default: plugin, makeEmptyAppId: makeEntry } = loadSource("src/equicordplugins/rpcEditor/index.tsx", {
+        "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+        "@api/index": { DataStore: { get: async () => [{ ...makeEntry(), appId: "app", enabled: true, newActivityType: 0, newLargeImageText: "Changed", newSmallImageText: ":large_text:" }] } },
         "@api/Settings": { definePluginSettings: () => ({}) },
         "@components/Paragraph": {}, "@utils/lazy": { makeLazy }, "@utils/Logger": { Logger: class { error() {} } },
         "@utils/constants": { Devs: {} }, "@utils/react": {},

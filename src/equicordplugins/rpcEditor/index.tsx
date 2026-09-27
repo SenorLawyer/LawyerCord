@@ -10,6 +10,7 @@ import { Paragraph } from "@components/Paragraph";
 import { Devs } from "@utils/constants";
 import { makeLazy } from "@utils/lazy";
 import { Logger } from "@utils/Logger";
+import { isObject } from "@utils/misc";
 import { useAwaiter, useForceUpdater } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
 import { Activity } from "@vencord/discord-types";
@@ -52,10 +53,20 @@ export const makeEmptyAppId: () => AppIdSetting = () => ({
     disableAssets: false
 });
 
+function isAppIdSetting(value: unknown): value is AppIdSetting {
+    if (!isObject(value)) return false;
+    const entry = value as Record<string, unknown>;
+    return Object.entries(makeEmptyAppId()).every(([key, fallback]) => typeof entry[key] === typeof fallback)
+        && [ActivityType.PLAYING, ActivityType.STREAMING, ActivityType.LISTENING, ActivityType.WATCHING, ActivityType.COMPETING].some(type => entry.newActivityType === type);
+}
+
 let appIds: AppIdSetting[] = [];
 const logger = new Logger("RPCEditor");
 const loadAppIds = makeLazy(async () => {
-    appIds = await DataStore.get<AppIdSetting[]>(APP_IDS_KEY) ?? [makeEmptyAppId()];
+    const stored = await DataStore.get<unknown>(APP_IDS_KEY) ?? [];
+    if (!Array.isArray(stored) || !stored.every(isAppIdSetting))
+        throw new Error("Saved activities are invalid.");
+    appIds = stored.length ? stored : [makeEmptyAppId()];
 });
 
 function AppSettings() {

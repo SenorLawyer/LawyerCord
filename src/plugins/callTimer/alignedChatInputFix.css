@@ -1,6 +1,12 @@
-[class*="panels"] [class*="inner"],
-[class*="rtcConnectionStatus"] {
-    height: fit-content !important;
+.vc-call-timer-connection {
+    margin: 0;
+    font-family: var(--font-code);
+
+    [--inner]:has(&),
+    [--connection]:has(&),
+    [--rtcConnectionStatus]:has(&) {
+        height: fit-content;
+    }
 }
 
 .vc-call-timer {

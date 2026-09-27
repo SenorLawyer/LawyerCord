@@ -5,12 +5,14 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
+import { setStyleClassNames } from "@api/Styles";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs, EquicordDevs } from "@utils/constants";
 import { useFixedTimer } from "@utils/react";
 import { formatDurationMs } from "@utils/text";
 import definePlugin, { OptionType } from "@utils/types";
 import { PassiveUpdateState, VoiceState } from "@vencord/discord-types";
+import { findCssClassesLazy } from "@webpack";
 import { FluxDispatcher, GuildStore, React, UserStore } from "@webpack/common";
 
 import alignedChatInputFix from "./alignedChatInputFix.css?managed";
@@ -74,6 +76,8 @@ export const settings = definePluginSettings({
 type userJoinData = { channelId: string, time: number; guildId: string | null; };
 const userJoinTimes = new Map<string, userJoinData>();
 const CONNECTION_TIMER_SETTINGS: ["format"] = ["format"];
+const PanelClasses = findCssClassesLazy("inner", "connection", "voiceButtonsContainer");
+const ConnectionClasses = findCssClassesLazy("rtcConnectionStatus", "labelWrapper");
 
 /**
  * The function `addUserJoinTime` stores the join time of a user in a specific channel within a guild.
@@ -240,6 +244,11 @@ export default definePlugin({
     },
 
     start() {
+        setStyleClassNames(alignedChatInputFix, {
+            inner: PanelClasses.inner,
+            connection: PanelClasses.connection,
+            rtcConnectionStatus: ConnectionClasses.rtcConnectionStatus
+        });
         if (settings.store.watchLargeGuilds) {
             this.subscribeToAllGuilds();
         }
@@ -274,7 +283,7 @@ export default definePlugin({
         if (joinTime == null) return null;
 
         return (
-            <p style={{ margin: 0, fontFamily: "var(--font-code)" }}>
+            <p className="vc-call-timer-connection">
                 {formatDurationMs(time, format === "human")}
             </p>
         );

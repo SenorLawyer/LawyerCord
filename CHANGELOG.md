@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CallTimer expands only the containers holding its connection timer, preventing overflow without resizing unrelated panels.
+
 - CallTimer resolves the current voice-row color classes instead of using obsolete hardcoded names.
 - CallTimer applies self-tracking, format, seconds and role-color changes immediately without waiting for another voice event.
 - CallTimer reads the current user from component props instead of scanning through the voice-icon renderer.

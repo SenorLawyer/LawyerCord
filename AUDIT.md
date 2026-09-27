@@ -18,6 +18,14 @@ The tracked regression fails before the scope fix with a missing button, and the
 
 All 674 broader tests and timezone checks, TypeScript, focused ESLint, internationalization lint, desktop/web builds and artifact scanning pass. Patch lint remains at 43 warnings and no errors. Logs use `.git/audit/hidden-channel-overflow-*`. A fresh fetch still finds no missing main commits, and the latest published nightly remains nightly-20260905-1918-6e664e03. Finding closure and final release acceptance remain unfinished.
 
+## ShowHiddenChannels permission-list simplification
+
+Role and overwrite permission patches now capture the adjacent channel and permission expression. The everyone-role filter uses its own memoized filter, and the user-list channel comes from the same component's guildId prop. These four replacements preserve the complete captured module byte for byte before the separate role-selection change. Five replacement callbacks are removed across this batch.
+
+The allowed-role reducer used its first callback to select everyone or the original list, then returned that result unchanged for all remaining callbacks. It is replaced with a direct getAllowedRoles call. Historical 336c7bdd5 documents the intended everyone-role behavior. The captured module now differs only at this helper call and compiles. Sixteen helper cases and 128 executions of the captured memoized selection preserve role contents and object identity across empty lists, everyone-role positions, permission combinations and absent guild IDs. Dependencies are mocked; this does not establish live permission display correctness. Evidence is `.git/audit/hidden-channel-permission-local-verify.{cjs,json}`, comparing f26da56df.
+
+TypeScript, focused ESLint, desktop/web builds and artifact scanning pass. Patch lint reports 38 warnings and no errors. Logs use `.git/audit/hidden-channel-permission-local-*`. All four CI checks passed on f26da56df, which remains the latest full 674-test and timezone run. The permission-header duplication and remaining voice/stage patches still require disposition.
+
 ## NewGuildSettings invite target
 
 The invite patch crossed 2,446 characters into the unrelated openApp method and passed its parsed invite object instead of a guild ID. Commit 515340a07 changed the capture to this shape while refreshing its anchor. The replacement now ends at the INVITE_ACCEPT_SUCCESS dispatch and reads the accepted payload's guild_id or nested guild.id. Its capture-copy callback is removed.

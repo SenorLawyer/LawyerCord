@@ -301,23 +301,23 @@ export default definePlugin({
             replacement: [
                 {
                     // Change the role permission check to CONNECT if the channel is locked
-                    match: /(forceRoles:.+?)(\i\.\i\(\i\.\i\.ADMINISTRATOR,\i\.\i\.VIEW_CHANNEL\))(?<=context:(\i)}.+?)/,
-                    replace: (_, rest, mergedPermissions, channel) => `${rest}$self.swapViewChannelWithConnectPermission(${mergedPermissions},${channel})`
+                    match: /(?<=context:(\i)}\);return \i\.\i\(\i,)(\i\.\i\(\i\.\i\.ADMINISTRATOR,\i\.\i\.VIEW_CHANNEL\))/,
+                    replace: "$self.swapViewChannelWithConnectPermission($2,$1)"
                 },
                 {
                     // Change the permissionOverwrite check to CONNECT if the channel is locked
-                    match: /permissionOverwrites\[.+?\i=(?<=context:(\i)}.+?)(?=(.+?)VIEW_CHANNEL)/,
-                    replace: (m, channel, permCheck) => `${m}!Vencord.Webpack.Common.PermissionStore.can(${CONNECT}n,${channel})?${permCheck}CONNECT):`
+                    match: /(?<=(\i)\.permissionOverwrites\[\i\.id\]\?\?\i\.\i,\i=)(?=(\i\.\i\(\i\.allow,\i\.\i\.)VIEW_CHANNEL)/,
+                    replace: `!Vencord.Webpack.Common.PermissionStore.can(${CONNECT}n,$1)?$2CONNECT):`
                 },
                 {
                     // Include the @everyone role in the allowed roles list for Hidden Channels
-                    match: /getSortedRoles.+?\.filter\(\i=>(?=!)/,
-                    replace: m => `${m}$self.isHiddenChannel(arguments[0]?.channel)?true:`
+                    match: /(?<=\.useMemo\(\(\)=>null!=\i\?\i\.filter\(\i=>)(?=!\(0,\i\.\i\)\(\i\)\):\[\],\[\i\]\))/,
+                    replace: "$self.isHiddenChannel(arguments[0]?.channel)?true:"
                 },
                 {
                     // If the @everyone role has the required permissions, make the array only contain it
-                    match: /forceRoles:.+?.value\(\)(?<=channel:(\i).+?)/,
-                    replace: (m, channel) => `${m}.reduce(...$self.makeAllowedRolesReduce(${channel}.guild_id))`
+                    match: /(?<=\.useMemo\(\(\)=>)(\i\(\)\(\i\)\.filter\(\i=>\{(?=.{0,100}forceRoles:).{0,300}?\}\)\.value\(\))/,
+                    replace: "$self.getAllowedRoles($1,arguments[0].channel.guild_id)"
                 },
                 {
                     // Patch the header to only return allowed users and roles if it's a hidden channel or locked channel (Like when it's used on the HiddenChannelLockScreen)
@@ -326,8 +326,8 @@ export default definePlugin({
                 },
                 {
                     // Export the channel for the users allowed component patch
-                    match: /maxUsers:\d+?,users:\i(?<=channel:(\i).+?)/,
-                    replace: (m, channel) => `${m},shcChannel:${channel}`
+                    match: /(?<=guildId:(\i)\.guild_id,[^{}]{0,100}maxUsers:\d{1,3},users:\i)(?=})/,
+                    replace: ",shcChannel:$1"
                 },
                 {
                     // Always render the component for multiple allowed users
@@ -563,18 +563,9 @@ export default definePlugin({
         return res;
     },
 
-    makeAllowedRolesReduce(guildId: string) {
-        return [
-            (prev: Array<Role>, _: Role, index: number, originalArray: Array<Role>) => {
-                if (index !== 0) return prev;
-
-                const everyoneRole = originalArray.find(role => role.id === guildId);
-
-                if (everyoneRole) return [everyoneRole];
-                return originalArray;
-            },
-            [] as Array<Role>
-        ];
+    getAllowedRoles(roles: Role[], guildId: string) {
+        const everyoneRole = roles.find(role => role.id === guildId);
+        return everyoneRole ? [everyoneRole] : roles;
     },
 
     HiddenChannelLockScreen: (channel: any) => <HiddenChannelLockScreen channel={channel} />,

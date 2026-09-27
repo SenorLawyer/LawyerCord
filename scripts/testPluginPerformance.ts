@@ -26,11 +26,49 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
-import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
+import { makeLazy, proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
+
+test("RPCEditor settings load saved entries before allowing edits", async () => {
+    let finishRead: (value: object[]) => void = () => {};
+    let reads = 0;
+    let saved: unknown;
+    let loading: Promise<void> | undefined;
+    let pending = true;
+    const persisted = new Promise<object[]>(resolve => { finishRead = resolve; });
+    const { default: plugin } = loadSource("src/equicordplugins/rpcEditor/index.tsx", {
+        "@api/index": { DataStore: { get: () => { reads++; return persisted; }, set: async (_key: string, value: unknown) => { saved = value; } } },
+        "@api/Settings": { definePluginSettings: (definition: unknown) => ({ definition }) },
+        "@components/Paragraph": { Paragraph: "paragraph" }, "@utils/lazy": { makeLazy },
+        "@utils/Logger": { Logger: class { error() {} } }, "@utils/constants": { Devs: {} },
+        "@utils/react": { useForceUpdater: () => () => {}, useAwaiter: (factory: () => Promise<void>) => {
+            loading = factory().then(() => { pending = false; });
+            return [null, null, pending];
+        } },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@vencord/discord-types/enums": { ActivityType: { PLAYING: 0 } },
+        "@webpack/common": { React: { createElement: (type: unknown, props: object) => ({ type, props }) } },
+        "./ReplaceSettings": { ReplaceSettings: "editor" }
+    });
+    const render = plugin.settings.definition.replacedAppIds.component;
+    assert.equal(render().type, "paragraph");
+    assert.equal(reads, 1);
+    const entries = [{ appId: "saved-app", newName: "Saved name" }];
+    finishRead(entries);
+    await loading;
+    const editor = render();
+    assert.equal(editor.type, "editor");
+    assert.equal(editor.props.appIds, entries);
+    await editor.props.save();
+    assert.equal(saved, entries);
+    plugin.start();
+    await loading;
+    assert.equal(reads, 1);
+});
 
 test("RPCEditor template variables preserve literal activity text", () => {
     const { default: plugin } = loadSource("src/equicordplugins/rpcEditor/index.tsx", {
         "@api/index": {}, "@api/Settings": { definePluginSettings: () => ({}) },
+        "@components/Paragraph": {}, "@utils/lazy": { makeLazy }, "@utils/Logger": { Logger: class { error() {} } },
         "@utils/constants": { Devs: {} }, "@utils/react": {},
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
         "@vencord/discord-types/enums": { ActivityType: { PLAYING: 0 } },
@@ -10770,6 +10808,7 @@ test("RPC editor asset placeholders read the original values", async () => {
     const { default: plugin } = loadSource("src/equicordplugins/rpcEditor/index.tsx", {
         "@api/index": { DataStore: { get: async () => [{ appId: "app", enabled: true, newActivityType: 0, newLargeImageText: "Changed", newSmallImageText: ":large_text:" }] } },
         "@api/Settings": { definePluginSettings: () => ({}) },
+        "@components/Paragraph": {}, "@utils/lazy": { makeLazy }, "@utils/Logger": { Logger: class { error() {} } },
         "@utils/constants": { Devs: {} }, "@utils/react": {},
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
         "@vencord/discord-types/enums": { ActivityType: { PLAYING: 0, STREAMING: 1 } },

@@ -6,8 +6,11 @@
 
 import { DataStore } from "@api/index";
 import { definePluginSettings } from "@api/Settings";
+import { Paragraph } from "@components/Paragraph";
 import { Devs } from "@utils/constants";
-import { useForceUpdater } from "@utils/react";
+import { makeLazy } from "@utils/lazy";
+import { Logger } from "@utils/Logger";
+import { useAwaiter, useForceUpdater } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
 import { Activity } from "@vencord/discord-types";
 import { ActivityType } from "@vencord/discord-types/enums";
@@ -49,24 +52,26 @@ export const makeEmptyAppId: () => AppIdSetting = () => ({
     disableAssets: false
 });
 
-let appIds = [makeEmptyAppId()];
+let appIds: AppIdSetting[] = [];
+const logger = new Logger("RPCEditor");
+const loadAppIds = makeLazy(async () => {
+    appIds = await DataStore.get<AppIdSetting[]>(APP_IDS_KEY) ?? [makeEmptyAppId()];
+});
+
+function AppSettings() {
+    const [, error, pending] = useAwaiter(loadAppIds);
+    const update = useForceUpdater();
+    if (pending) return <Paragraph>Loading saved activities...</Paragraph>;
+    if (error) return <Paragraph>Could not load saved activities. Reload Discord to try again.</Paragraph>;
+
+    return <ReplaceSettings appIds={appIds} update={update} save={async () => DataStore.set(APP_IDS_KEY, appIds)} />;
+}
 
 const settings = definePluginSettings({
     replacedAppIds: {
         type: OptionType.COMPONENT,
         description: "",
-        component: () => {
-            const update = useForceUpdater();
-            return (
-                <>
-                    <ReplaceSettings
-                        appIds={appIds}
-                        update={update}
-                        save={async () => DataStore.set(APP_IDS_KEY, appIds)}
-                    />
-                </>
-            );
-        }
+        component: AppSettings
     },
 });
 
@@ -87,8 +92,8 @@ export default definePlugin({
     settings,
     settingsAboutComponent: () => <ReplaceTutorial />,
 
-    async start() {
-        appIds = await DataStore.get(APP_IDS_KEY) ?? [makeEmptyAppId()];
+    start() {
+        return loadAppIds().catch(() => logger.error("Failed to load saved activities."));
     },
     parseField(text: string, originalActivity: Activity): string {
         if (text === "null") return "";

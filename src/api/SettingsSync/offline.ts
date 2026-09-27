@@ -13,9 +13,12 @@ import { moment, Toasts } from "@webpack/common";
 import { DataStore } from "..";
 
 type BackupType = "all" | "plugins" | "css" | "datastore";
-const LOCAL_DATASTORE_KEYS = new Set<unknown>(["Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions", "VencordQuickCss"]);
+const LOCAL_DATASTORE_KEYS = new Set<unknown>([
+    "Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions", "VencordQuickCss",
+    "ScheduledMessages_queue", "VCLastVoiceChannel", "VCLastVoiceChannelSession", "KeepCurrentChannel_previousData"
+]);
 export const isLocalDataStoreKey = (key: unknown) => LOCAL_DATASTORE_KEYS.has(key)
-    || (typeof key === "string" && key.startsWith("Vencord_cloudManifest:"));
+    || (typeof key === "string" && (key.startsWith("Vencord_cloudManifest:") || key.startsWith("VoiceMessageTranscriber_")));
 
 export const omitCloudSettings = (settings: object) => Object.fromEntries(Object.entries(settings).filter(([key]) => key !== "cloud"));
 
@@ -182,7 +185,8 @@ export async function exportSettings({ syncDataStore = true, type = "all", minif
     let settings: object | undefined = type === "all" || type === "plugins" ? VencordNative.settings.get() : undefined;
     if (cloud && settings) settings = omitCloudSettings(settings);
     const quickCss = type === "all" || type === "css" ? await VencordNative.quickCss.get() : undefined;
-    const dataStore = syncDataStore && (type === "all" || type === "datastore") ? await DataStore.entries() : undefined;
+    let dataStore = syncDataStore && (type === "all" || type === "datastore") ? await DataStore.entries() : undefined;
+    if (cloud) dataStore = dataStore?.filter(([key]) => !isLocalDataStoreKey(key));
     if (dataStore) serializeDataStore(dataStore);
 
     switch (type) {

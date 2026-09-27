@@ -682,7 +682,10 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
     const nativeSettings = { plugins: {}, cloud: { url: "https://local.invalid", authenticated: true, settingsSyncVersion: 1 } };
     const records: [string, unknown][] = [["CustomSounds", { saved: true }], ["VoiceStats", { seconds: 42 }]];
     const syncedRecords = records.slice();
-    const localKeys = ["Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions", "Vencord_cloudManifest:https://first.invalid:first", "Vencord_cloudManifest:https://second.invalid:second"];
+    const localKeys = [
+        "Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions", "Vencord_cloudManifest:https://first.invalid:first", "Vencord_cloudManifest:https://second.invalid:second",
+        "ScheduledMessages_queue", "VCLastVoiceChannel", "VCLastVoiceChannelSession", "KeepCurrentChannel_previousData", "VoiceMessageTranscriber_https://fixture.invalid/model.bin"
+    ];
     for (const key of localKeys) records.push([key, { local: true }]);
     const writes: unknown[] = [];
     const css: string[] = [];
@@ -696,10 +699,10 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
         "@utils/native": {},
         "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
         "@utils/web": {},
-        "@webpack/common": { lodash,},
+        "@webpack/common": { lodash },
         fflate: {},
         "./cloudSetup": {},
-        "..": { DataStore: { setMany: async (entries: unknown) => writes.push(entries) } }
+        "..": { DataStore: { entries: async () => records, setMany: async (entries: unknown) => writes.push(entries) } }
     };
     const globals = {
         require: (name: string) => modules[name], TextEncoder, TextDecoder, Uint8Array, atob,
@@ -749,6 +752,13 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
     assert.deepEqual(JSON.parse(JSON.stringify(writes.at(-1))), syncedRecords, "Legacy cloud bundles also preserve local credentials");
     await offline.importSettings(JSON.stringify({ dataStore: records }), "datastore");
     assert.deepEqual(JSON.parse(JSON.stringify(writes.at(-1))), records, "Explicit offline restores retain their existing complete-record behavior");
+    assert.deepEqual(JSON.parse(await offline.exportSettings({ type: "datastore", cloud: true })).dataStore, syncedRecords);
+    records.push(["VoiceMessageTranscriber_https://fixture.invalid/second-model.bin", new Uint8Array([1, 2]).buffer]);
+    assert.deepEqual(JSON.parse(new TextDecoder().decode((await buildLocalData()).get("dataStore"))), syncedRecords);
+    assert.deepEqual(JSON.parse(await offline.exportSettings({ type: "datastore", cloud: true })).dataStore, syncedRecords);
+    const snapshot = await offline.captureCloudImportState();
+    assert.deepEqual([...snapshot.dataStore.keys()], syncedRecords.map(([key]) => JSON.stringify(key)));
+    await assert.rejects(offline.exportSettings({ type: "datastore" }), /JSON backup format cannot preserve/);
     records.push(["binary", new Uint8Array([1, 2]).buffer]);
     await assert.rejects(buildLocalData(), /JSON backup format cannot preserve/);
 });
@@ -1068,7 +1078,7 @@ test("legacy cloud sync waits for local settings persistence before reporting su
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
             "@utils/Logger": { Logger: class { info() {} error() {} } },
             "@utils/native": {},
-            "@webpack/common": { lodash,},
+            "@webpack/common": { lodash },
             fflate: { deflateSync: (value: Uint8Array) => value },
             "./cloudSetup": { getCloudUrl: () => new URL("https://sync.invalid"), getCloudAuth: async () => "test" },
             "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), exportSettings: async (options: { cloud?: boolean }) => { assert.equal(options.cloud, true); return "{}"; }, importSettings: async () => {} }
@@ -2372,5 +2382,57 @@ test("QuickCSS edits mark data dirty and use the existing automatic upload prefe
         assert.ok(flush);
         await flush();
         assert.equal(uploads, enabled && authenticated && (direction === "push" || direction === "both") ? 1 : 0);
+    }
+});
+
+
+test("cloud transfers do not create another device's scheduled sends or replace its navigation state", async () => {
+    const schedulerSource = transpileModule(readFileSync("src/equicordplugins/scheduledMessages/utils.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const legacy of [false, true]) {
+        const posts: string[] = [];
+        const job = { id: "job", userId: "account", channelId: "synthetic", content: "Synthetic fixture", scheduledTime: 0, createdAt: 0 };
+        const entries: [string, unknown][] = [
+            ["ScheduledMessages_queue", [job]], ["VCLastVoiceChannel", { channelId: "source voice" }],
+            ["KeepCurrentChannel_previousData", { channelId: "source text", guildId: null }], ["CustomSounds", { saved: true }]
+        ];
+        const device = (name: string, initial: [string, unknown][]) => {
+            const records = new Map(initial);
+            const store = {
+                get: async (key: string) => structuredClone(records.get(key)), entries: async () => structuredClone([...records]),
+                setMany: async (entries: [string, unknown][]) => { for (const [key, value] of entries) records.set(key, structuredClone(value)); },
+                update: async (key: string, updater: (value: unknown) => unknown) => { records.set(key, structuredClone(updater(structuredClone(records.get(key))))); }
+            };
+            const modules: Record<string, unknown> = {
+                "@api/DataStore": store, "..": { DataStore: store },
+                "@api/Settings": { PlainSettings: {}, DefaultSettings: defaultSettings },
+                "@utils/Logger": { Logger: class { warn() {} } },
+                "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+                "@webpack/common": {
+                    lodash, UserStore: { getCurrentUser: () => ({ id: "account" }) }, ChannelStore: { getChannel: () => ({}) }, FluxDispatcher: { dispatch() {} },
+                    Constants: { Endpoints: { MESSAGES: () => "/synthetic" } }, SnowflakeUtils: { fromTimestamp: () => "synthetic" },
+                    RestAPI: { post: async () => { posts.push(name); return { body: { id: "synthetic" } }; } }
+                },
+                ".": { settings: { store: { showNotifications: false, showPhantomMessages: false } } }
+            };
+            const globals = { exports: {}, require: (name: string) => modules[name] ?? {}, structuredClone };
+            const offline = runInNewContext(`${outputText}\nexports;`, globals);
+            const scheduler = runInNewContext(`${schedulerSource}\n({ ...exports, checkAndSendMessages });`, { ...globals, exports: {} });
+            return { records, offline, scheduler };
+        };
+        const source = device("source", entries);
+        const localVoice = { channelId: "recipient voice" };
+        const localText = { channelId: "recipient text", guildId: null };
+        const recipient = device("recipient", [["VCLastVoiceChannel", localVoice], ["KeepCurrentChannel_previousData", localText]]);
+        const payload = legacy ? JSON.stringify({ dataStore: entries }) : await source.offline.exportSettings({ type: "datastore", cloud: true });
+        await recipient.offline.importSettings(payload, "all", true);
+        await Promise.all([source.scheduler.loadScheduledMessages(), recipient.scheduler.loadScheduledMessages()]);
+        await Promise.all([source.scheduler.checkAndSendMessages(), recipient.scheduler.checkAndSendMessages()]);
+        assert.deepEqual(posts, ["source"]);
+        assert.deepEqual(recipient.records.get("VCLastVoiceChannel"), localVoice);
+        assert.deepEqual(recipient.records.get("KeepCurrentChannel_previousData"), localText);
+        assert.deepEqual(recipient.records.get("CustomSounds"), { saved: true });
+        assert.equal(recipient.records.has("ScheduledMessages_queue"), false);
     }
 });

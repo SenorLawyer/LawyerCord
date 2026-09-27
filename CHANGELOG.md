@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep scheduled-message queues, reconnect and last-channel state, and downloaded transcription models out of cloud transfers. This prevents copied jobs from sending on another device and model caches from blocking cloud serialization.
+
 - Include QuickCSS edits in automatic cloud uploads using the existing sync preferences and debounce.
 
 - Keep CSS and stored-data changes made during cloud sync dirty instead of reporting an older upload as current.

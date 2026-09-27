@@ -27,6 +27,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- BlurNSFW accepts blur-amount changes while disabled and applies the latest value when enabled.
 - BetterSettings identifies its context-menu entries directly without searching through surrounding declarations.
 - CustomSounds invalidates deleted audio in other active windows, and previews read current storage even while the plugin is disabled.
 - BetterSettings keeps the collectibles shop lazy instead of loading it with settings.

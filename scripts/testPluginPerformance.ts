@@ -28,6 +28,41 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { makeLazy, proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("BlurNSFW can change blur settings before startup and after stopping", () => {
+    const styles: { textContent: string; removed: boolean; remove: () => void }[] = [];
+    const store = { blurAmount: 10 };
+    let change: () => void = () => assert.fail("Missing setting callback");
+    const { default: plugin } = loadSource("src/plugins/blurNsfw/index.ts", {
+        "@api/Settings": { definePluginSettings: (definition: { blurAmount: { onChange: () => void } }) => {
+            change = definition.blurAmount.onChange;
+            return { store };
+        } },
+        "@api/Styles": {}, "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@utils/css": { createAndAppendStyle: () => {
+            const style = { textContent: "", removed: false, remove() { this.removed = true; } };
+            styles.push(style);
+            return style;
+        } }
+    });
+    store.blurAmount = 15;
+    assert.doesNotThrow(change);
+    assert.equal(styles.length, 0);
+    plugin.start();
+    assert.match(styles[0].textContent, /blur\(15px\)/);
+    store.blurAmount = 20;
+    change();
+    assert.match(styles[0].textContent, /blur\(20px\)/);
+    plugin.stop();
+    assert.equal(styles[0].removed, true);
+    store.blurAmount = 5;
+    assert.doesNotThrow(change);
+    assert.match(styles[0].textContent, /blur\(20px\)/);
+    plugin.start();
+    assert.match(styles[1].textContent, /blur\(5px\)/);
+    plugin.stop();
+});
+
 test("BetterSettings keeps the collectibles shop lazy while preloading settings", () => {
     const { default: plugin } = loadSource("src/plugins/betterSettings/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({}) }, "@api/Styles": {},

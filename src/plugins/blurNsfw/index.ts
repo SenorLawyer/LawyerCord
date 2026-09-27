@@ -10,7 +10,7 @@ import { Devs } from "@utils/constants";
 import { createAndAppendStyle } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
 
-let style: HTMLStyleElement;
+let style: HTMLStyleElement | undefined;
 
 const settings = definePluginSettings({
     blurAmount: {
@@ -27,6 +27,7 @@ const settings = definePluginSettings({
 });
 
 function setCss() {
+    if (!style) return;
     style.textContent = `
         .vc-nsfw-img [class*=imageContainer],
         .vc-nsfw-img [class*=wrapperPaused] {
@@ -68,5 +69,6 @@ export default definePlugin({
 
     stop() {
         style?.remove();
+        style = undefined;
     }
 });

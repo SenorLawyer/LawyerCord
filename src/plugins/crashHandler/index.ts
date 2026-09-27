@@ -23,22 +23,13 @@ import { Devs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 import { maybePromptToUpdate } from "@utils/updater";
-import { filters, findBulk, proxyLazyWebpack } from "@webpack";
+import { findByPropsLazy } from "@webpack";
 import { closeAllModals, DraftType, ExpressionPickerStore, FluxDispatcher, NavigationRouter, SelectedChannelStore } from "@webpack/common";
 
 const CrashHandlerLogger = new Logger("CrashHandler");
 
-const { ModalStack, DraftManager } = proxyLazyWebpack(() => {
-    const [ModalStack, DraftManager] = findBulk(
-        filters.byProps("pushLazy", "popAll"),
-        filters.byProps("clearDraft", "saveDraft"),
-    );
-
-    return {
-        ModalStack,
-        DraftManager
-    };
-});
+const ModalStack = findByPropsLazy("pushLazy", "popAll");
+const DraftManager = findByPropsLazy("clearDraft", "saveDraft");
 
 const settings = definePluginSettings({
     attemptToPreventCrashes: {

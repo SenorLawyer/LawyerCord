@@ -29,12 +29,15 @@ import { readResponseText } from "../src/shared/readResponseText";
 import { makeLazy, proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
 test("CrashHandler releases recovery guards after skipped or failed attempts", () => {
-    for (const scenario of ["disabled", "failed", "rapid"]) {
+    for (const scenario of ["disabled", "failed", "rapid", "late-drafts"]) {
         const settings = { attemptToPreventCrashes: scenario !== "disabled", attemptToNavigateToHome: false };
         const timers: { callback: () => void; delay: number }[] = [];
         const immediates: (() => void)[] = [];
         let recovered = 0;
         const cleared: number[] = [];
+        let draftsAvailable = scenario !== "late-drafts";
+        const modalStack = { popAll() {} };
+        const draftManager = { clearDraft(_channelId: string, draftType: number) { cleared.push(draftType); } };
         const { default: plugin } = loadSource("src/plugins/crashHandler/index.ts", {
             "@api/Notifications": { showNotification() {} },
             "@api/Settings": { definePluginSettings: () => ({ store: settings }) },
@@ -43,7 +46,12 @@ test("CrashHandler releases recovery guards after skipped or failed attempts", (
             "@utils/Logger": { Logger: class { error() {} debug() {} } },
             "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
             "@utils/updater": { maybePromptToUpdate() {} },
-            "@webpack": { proxyLazyWebpack: () => ({ ModalStack: { popAll() {} }, DraftManager: { clearDraft(_channelId: string, draftType: number) { cleared.push(draftType); } } }) },
+            "@webpack": {
+                proxyLazyWebpack: proxyLazy,
+                filters: { byProps: (...props: string[]) => props },
+                findBulk: () => [modalStack, draftsAvailable ? draftManager : undefined],
+                findByPropsLazy: (...props: string[]) => proxyLazy(() => props.includes("popAll") ? modalStack : draftsAvailable ? draftManager : undefined)
+            },
             "@webpack/common": {
                 closeAllModals() {}, DraftType: { ChannelMessage: 0, ThreadSettings: 1, FirstThreadMessage: 2, Poll: 4, SlashCommand: 5, InteractionModal: 7, ScheduledMessage: 8 }, ExpressionPickerStore: { closeExpressionPicker() {} },
                 FluxDispatcher: { dispatch() {} }, SelectedChannelStore: { getChannelId: () => "channel" }
@@ -74,11 +82,12 @@ test("CrashHandler releases recovery guards after skipped or failed attempts", (
         const before = recovered;
         run(1000);
         settings.attemptToPreventCrashes = true;
+        draftsAvailable = true;
         plugin.handlePreventCrash = recover;
         plugin.handleCrash(component, { error: new Error("Later crash") });
         run(1);
         assert.equal(recovered, before + 1, `Recovery remains available after ${scenario} attempt`);
-        assert.deepEqual(cleared, Array.from({ length: recovered }, () => [0, 2]).flat(), "Recovery clears only message composer drafts");
+        assert.deepEqual(cleared, Array.from({ length: recovered - (scenario === "late-drafts" ? 1 : 0) }, () => [0, 2]).flat(), "Recovery clears only message composer drafts");
     }
 });
 

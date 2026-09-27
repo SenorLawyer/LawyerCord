@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Look up CrashHandler's modal and draft modules independently so a temporarily missing module remains retryable.
+
 - Limit crash-recovery draft clearing to channel and first-thread messages. Preserve polls, commands, thread settings, interaction-modal and scheduled-message drafts.
 
 - Release CrashHandler's recovery guard after disabled, failed or rate-limited attempts so later crashes can recover.

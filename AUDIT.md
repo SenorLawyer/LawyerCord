@@ -19,6 +19,12 @@ Changes are accumulated in [PR #47](https://github.com/SenorLawyer/LawyerCord/pu
 
 ## Latest local verification
 
+September 27 PictureInPicture keyboard access: Tab skipped the clickable div entirely in Chromium. The control now uses the existing @webpack/common Button with a native button type and explicit Open Picture in Picture label. The tooltip uses the same wording, and the hand-written role and static inline presentation are removed in favor of shared button styling.
+
+`.git/audit/pip-keyboard.cjs` loads actual React/ReactDOM, the actual shared ButtonCompat/Button source and styles, and the actual plugin component with a controlled Tooltip. The original left focus on body; the new control receives Tab focus and both Enter and Space open real browser PiP, then exit cleanly. Baseline/fixed focus results are recorded in JSON. This does not establish screen-reader output or signed-in layout. The focused tracked regression, stale-request browser check and denial check pass after updating component mocks.
+
+TypeScript, focused ESLint, sequential desktop/web builds and artifact scanning pass; logs are `.git/audit/pip-keyboard-{desktop,web}.log`. Full 644-test verification and all four GitHub checks passed at preceding `5d040630d`. The broad patch and signed-in acceptance remain open.
+
 September 27 PictureInPicture stale completion: delaying the first native request promise until a second video entered PiP reproduced playback starting on the detached first clone. Leaving PiP now pauses the clone before removing it. The request continuation returns if the clone has been detached; playback completion also pauses/returns instead of pausing the original when its clone is no longer attached.
 
 `.git/audit/pip-stale-request.cjs` wraps the first native Chromium request promise and releases it after the newer clip is playing. Its baseline JSON records oldConnected:false and oldPaused:false; corrected output has oldPaused:true with the newer video still selected and playing. `pip-stale-play.cjs` delays the playback promise and verifies the same outcome. Both use real browser media/PiP with controlled promise timing. Tracked regression cases verify that neither stale continuation pauses the original or produces a failure toast. Normal exit, delayed metadata replacement and rejected playback fixtures still pass.

@@ -11,7 +11,7 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
-import { showToast, Toasts, Tooltip } from "@webpack/common";
+import { Button, showToast, Toasts, Tooltip } from "@webpack/common";
 
 const logger = new Logger("PictureInPicture");
 let pendingVideo: HTMLVideoElement | undefined;
@@ -51,18 +51,15 @@ export default definePlugin({
 
     PictureInPictureButton: ErrorBoundary.wrap(() => {
         return (
-            <Tooltip text="Toggle Picture in Picture">
+            <Tooltip text="Open Picture in Picture">
                 {tooltipProps => (
-                    <div
+                    <Button
                         {...tooltipProps}
                         className="vc-pip-button"
-                        role="button"
-                        style={{
-                            cursor: "pointer",
-                            paddingTop: "4px",
-                            paddingLeft: "4px",
-                            paddingRight: "4px",
-                        }}
+                        type="button"
+                        aria-label="Open Picture in Picture"
+                        color={Button.Colors.CUSTOM}
+                        size={Button.Sizes.NONE}
                         onClick={e => {
                             const video = e.currentTarget.parentNode!.parentNode!.querySelector("video")!;
                             if (pendingVideo) {
@@ -131,7 +128,7 @@ export default definePlugin({
                                 d="M21 3a1 1 0 0 1 1 1v7h-2V5H4v14h6v2H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h18zm0 10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h8zm-1 2h-6v4h6v-4z"
                             />
                         </svg>
-                    </div>
+                    </Button>
                 )}
             </Tooltip>
         );

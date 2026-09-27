@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Make the Picture in Picture control keyboard-accessible with the shared button and an explicit accessible name.
+
 - Stop detached PiP videos and ignore stale request or playback completion after another video replaces them.
 
 - Discard an older pending Picture in Picture metadata load when another video is requested, preventing it from replacing the newer video.

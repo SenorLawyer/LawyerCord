@@ -52,7 +52,7 @@ test("PictureInPicture keeps original playback after rejected requests", async (
             "@utils/constants": { Devs: {} },
             "@utils/Logger": { Logger: class { warn() {} } },
             "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
-            "@webpack/common": { Tooltip: "tooltip", showToast: () => events.push("toast"), Toasts: { Type: { FAILURE: "failure" } } }
+            "@webpack/common": { Button: { Colors: { CUSTOM: "CUSTOM" }, Sizes: { NONE: "min" } }, Tooltip: "tooltip", showToast: () => events.push("toast"), Toasts: { Type: { FAILURE: "failure" } } }
         }, {
             React: { createElement: (type: unknown, props: Record<string, unknown>, ...children: unknown[]) => ({ type, props: { ...props, children } }) },
             document: { body: { appendChild: (node: unknown) => node } }

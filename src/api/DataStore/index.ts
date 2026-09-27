@@ -99,10 +99,12 @@ export function set(
     value: any,
     customStore = defaultGetStore(),
 ): Promise<void> {
+    let changedKey = key;
     return customStore("readwrite", store => {
         store.put(value, key);
+        changedKey = structuredClone(key);
         return promisifyRequest(store.transaction);
-    }).then(() => notifyChange(customStore, [key]));
+    }).then(() => notifyChange(customStore, [changedKey]));
 }
 
 /**
@@ -116,15 +118,19 @@ export function setMany(
     entries: [IDBValidKey, any][],
     customStore = defaultGetStore(),
 ): Promise<void> {
+    const changedKeys: IDBValidKey[] = [];
     return customStore("readwrite", store => {
         try {
-            entries.forEach(entry => store.put(entry[1], entry[0]));
+            entries.forEach(([key, value]) => {
+                store.put(value, key);
+                changedKeys.push(structuredClone(key));
+            });
         } catch (err) {
             store.transaction.abort();
             throw err;
         }
         return promisifyRequest(store.transaction);
-    }).then(() => notifyChange(customStore, entries.map(([key]) => key)));
+    }).then(() => notifyChange(customStore, changedKeys));
 }
 
 /**
@@ -154,6 +160,7 @@ export function update<T = any>(
     updater: (oldValue: T | undefined) => T,
     customStore = defaultGetStore(),
 ): Promise<void> {
+    let changedKey = key;
     return customStore(
         "readwrite",
         store =>
@@ -165,18 +172,20 @@ export function update<T = any>(
                 store.get(key).onsuccess = function () {
                     try {
                         store.put(updater(this.result), key);
+                        changedKey = structuredClone(key);
                     } catch (err) {
                         reject(err);
                     }
                 };
             }),
-    ).then(() => notifyChange(customStore, [key]));
+    ).then(() => notifyChange(customStore, [changedKey]));
 }
 
 export function updateMany<T extends unknown[]>(
     entries: { [K in keyof T]: [IDBValidKey, (oldValue: T[K] | undefined) => T[K]] },
     customStore = defaultGetStore(),
 ): Promise<void> {
+    const changedKeys: IDBValidKey[] = [];
     return customStore("readwrite", store => new Promise<void>((resolve, reject) => {
         promisifyRequest(store.transaction).then(resolve, reject);
         const fail = (error: unknown) => {
@@ -189,6 +198,7 @@ export function updateMany<T extends unknown[]>(
                 request.onsuccess = () => {
                     try {
                         store.put(updater(request.result), key);
+                        changedKeys.push(structuredClone(key));
                     } catch (error) {
                         fail(error);
                     }
@@ -197,7 +207,7 @@ export function updateMany<T extends unknown[]>(
         } catch (error) {
             fail(error);
         }
-    })).then(() => notifyChange(customStore, entries.map(([key]) => key)));
+    })).then(() => notifyChange(customStore, changedKeys));
 }
 
 /**
@@ -210,10 +220,12 @@ export function del(
     key: IDBValidKey,
     customStore = defaultGetStore(),
 ): Promise<void> {
+    let changedKey = key;
     return customStore("readwrite", store => {
         store.delete(key);
+        changedKey = structuredClone(key);
         return promisifyRequest(store.transaction);
-    }).then(() => notifyChange(customStore, [key]));
+    }).then(() => notifyChange(customStore, [changedKey]));
 }
 
 /**
@@ -226,15 +238,19 @@ export function delMany(
     keys: IDBValidKey[],
     customStore = defaultGetStore(),
 ): Promise<void> {
+    const changedKeys: IDBValidKey[] = [];
     return customStore("readwrite", store => {
         try {
-            keys.forEach(key => store.delete(key));
+            keys.forEach(key => {
+                store.delete(key);
+                changedKeys.push(structuredClone(key));
+            });
         } catch (err) {
             store.transaction.abort();
             throw err;
         }
         return promisifyRequest(store.transaction);
-    }).then(() => notifyChange(customStore, keys));
+    }).then(() => notifyChange(customStore, changedKeys));
 }
 
 /**

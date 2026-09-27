@@ -14,7 +14,7 @@ import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
 const { outputText } = transpileModule(readFileSync("src/api/DataStore/index.ts", "utf8"), {
     compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
 });
-const { delMany, entries, setMany, update, updateMany } = runInNewContext(`${outputText}\nexports;`, { exports: {} });
+const { delMany, entries, setMany, update, updateMany } = runInNewContext(`${outputText}\nexports;`, { exports: {}, structuredClone });
 
 test("DataStore multi-key updates share one transaction and abort partial writes", async () => {
     for (const outcome of ["get-error", "read-error", "updater-error", "put-error", "abort", "commit"] as const) {

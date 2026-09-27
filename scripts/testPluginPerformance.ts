@@ -14953,7 +14953,7 @@ test("relationship guild and group removals propagate storage failures to Flux",
 test("relationship persistence keeps each account snapshot while storage opens", async () => {
     let userId = "first";
     const saved = new Map<string, unknown>();
-    const dataStore = loadSource("src/api/DataStore/index.ts", {});
+    const dataStore = loadSource("src/api/DataStore/index.ts", {}, { structuredClone });
     const utils = loadSource("src/plugins/relationshipNotifier/utils.ts", {
         "@api/DataStore": { set: (key: string, value: unknown) => dataStore.set(key, value, (_mode: string, callback: (store: object) => unknown) => Promise.resolve().then(() => {
             const transaction: { oncomplete?: () => void; } = {};
@@ -17957,7 +17957,7 @@ test("BetterSessions saves retain their captured account data while storage open
         let userId: string | undefined = "first";
         const opened = Promise.withResolvers<void>();
         const saved = new Map<string, unknown>();
-        const dataStore = loadSource("src/api/DataStore/index.ts", {});
+        const dataStore = loadSource("src/api/DataStore/index.ts", {}, { structuredClone });
         const utils = loadSource("src/plugins/betterSessions/utils.ts", {
             "@api/DataStore": {
                 set: (key: string, value: unknown) => dataStore.set(key, value, (_mode: string, callback: (store: object) => Promise<void>) => opened.promise.then(() => {
@@ -18092,7 +18092,7 @@ test("DataStore retains committed changes until its first listener can attach", 
             queueMicrotask(() => transaction.oncomplete?.());
             return pending;
         };
-        const api = loadSource("src/api/DataStore/index.ts", {}, { fixtureStore, EventTarget, CustomEvent, queueMicrotask }, "(defaultGetStoreFunc = fixtureStore, exports)");
+        const api = loadSource("src/api/DataStore/index.ts", {}, { fixtureStore, EventTarget, CustomEvent, queueMicrotask, structuredClone }, "(defaultGetStoreFunc = fixtureStore, exports)");
         if (mode === "failed") await assert.rejects(api.set("saved", true), /Write failed/);
         else if (mode === "custom") await api.set("saved", true, (kind: string, callback: (store: object) => Promise<void>) => fixtureStore(kind, callback));
         else {
@@ -18110,5 +18110,45 @@ test("DataStore retains committed changes until its first listener can attach", 
         assert.equal(api.getChangeEvents(), target);
         await Promise.resolve();
         assert.equal(events.length, mode === "writes" || mode === "clear" ? 1 : 0, "Reading the event target again must not replay old changes");
+    }
+});
+
+
+test("DataStore change events retain the keys issued to the database", async () => {
+    for (const mode of ["set", "setMany", "update", "updateMany", "del", "delMany"]) {
+        const key = ["original"];
+        const keys: IDBValidKey[] = [key];
+        const entries: [IDBValidKey, unknown][] = [[key, mode === "updateMany" ? () => 1 : 1]];
+        const issued: IDBValidKey[] = [];
+        const fixtureStore = async (_mode: string, callback: (store: object) => Promise<void>) => {
+            const transaction: { oncomplete?: () => void } = {};
+            const pending = callback({ transaction,
+                put(_value: unknown, id: IDBValidKey) { issued.push(structuredClone(id)); },
+                delete(id: IDBValidKey) { issued.push(structuredClone(id)); },
+                get() {
+                    const request: { result: number; onsuccess?: () => void } = { result: 0 };
+                    queueMicrotask(() => request.onsuccess?.call(request));
+                    return request;
+                }
+            });
+            queueMicrotask(() => {
+                key[0] = "changed";
+                keys[0] = "replacement";
+                entries[0][0] = "replacement";
+                transaction.oncomplete?.();
+            });
+            return pending;
+        };
+        const api = loadSource("src/api/DataStore/index.ts", {}, { fixtureStore, EventTarget, CustomEvent, queueMicrotask, structuredClone }, "(defaultGetStoreFunc = fixtureStore, exports)");
+        const events: unknown[] = [];
+        api.getChangeEvents().addEventListener("change", (event: CustomEvent) => events.push(event.detail));
+        if (mode === "set") await api.set(key, 1);
+        else if (mode === "setMany") await api.setMany(entries);
+        else if (mode === "update") await api.update(key, () => 1);
+        else if (mode === "updateMany") await api.updateMany(entries);
+        else if (mode === "del") await api.del(key);
+        else await api.delMany(keys);
+        assert.deepEqual(issued, [["original"]]);
+        assert.deepEqual(structuredClone(events), [issued], `${mode} must describe committed database keys, not later caller edits`);
     }
 });

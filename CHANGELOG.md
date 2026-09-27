@@ -32,6 +32,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Preserve the actual written or deleted keys in DataStore change notifications when callers mutate their key arrays before a transaction finishes.
+
 - Retain committed plugin-data changes made before cloud sync starts, so initialization does not miss an automatic upload.
 
 - Schedule automatic cloud sync after committed plugin-data changes in the current window. Failed writes, custom databases and local-only records do not trigger uploads.

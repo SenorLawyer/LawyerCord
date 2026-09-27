@@ -2744,7 +2744,7 @@ test("versioned DataStore backups preserve top-level Maps across offline and clo
     const cloudSource = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;
     const cloud = runInNewContext(`${cloudSource}\n({ buildLocalData: () => buildLocalData(() => {}), apply: (downloads, expected) => applyDownloads(downloads, { assertCurrent() {}, expected }) });`, { ...globals, exports: {} });
     const utilsSource = transpileModule(readFileSync("src/plugins/betterSessions/utils.ts", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;
-    const utils = runInNewContext(`${utilsSource}\nexports;`, { ...globals, exports: {} });
+    const utils = runInNewContext(`${utilsSource}\nexports;`, { ...globals, exports: {}, Map });
     const offlineBackup = await offline.exportSettings({ type: "datastore" });
     const cloudBackup = await offline.exportSettings({ type: "datastore", cloud: true });
     assert.equal(JSON.parse(offlineBackup).dataStore.version, 1);

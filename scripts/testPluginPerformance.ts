@@ -17981,14 +17981,16 @@ test("BetterSessions saves retain their captured account data while storage open
         }, { structuredClone });
         const original = { name: "First account name", isNew: true };
         utils.savedSessionsCache.set("first-session", original);
-        const first = utils.saveSessionsToDataStore();
+        const snapshot = structuredClone(utils.savedSessionsCache);
+        const first = utils.saveSessionsToDataStore((sessions: Map<string, unknown>) => { for (const [id, value] of snapshot) sessions.set(id, value); });
         original.isNew = false;
         let second: Promise<void> | undefined;
         if (change !== "edit") {
             utils.savedSessionsCache.clear();
             userId = change === "switch" ? "second" : undefined;
             if (userId) utils.savedSessionsCache.set("second-session", { name: "Second account name", isNew: false });
-            second = utils.saveSessionsToDataStore();
+            const snapshot = structuredClone(utils.savedSessionsCache);
+            second = utils.saveSessionsToDataStore((sessions: Map<string, unknown>) => { for (const [id, value] of snapshot) sessions.set(id, value); });
         }
         opened.resolve();
         await Promise.all([first, second]);
@@ -18067,7 +18069,9 @@ test("BetterSessions retained rename callbacks respect account changes and newer
         };
         const { RenameModal } = loadSource("src/plugins/betterSessions/components/RenameModal.tsx", {
             "@components/Button": { TextButton: "button" }, "@components/Heading": { Heading: "heading" },
-            "@plugins/betterSessions/utils": { savedSessionsCache: cache, getDefaultName: () => "Default name", saveSessionsToDataStore: (snapshot: Map<string, { name: string }>) => {
+            "@plugins/betterSessions/utils": { savedSessionsCache: cache, getDefaultName: () => "Default name", saveSessionsToDataStore: (update: (sessions: Map<string, { name: string }>) => void) => {
+                const snapshot = new Map(cache);
+                update(snapshot);
                 saves++;
                 assert.equal(snapshot.get("session")?.name, "Renamed");
                 assert.equal(cache.get("session"), original);
@@ -18268,8 +18272,44 @@ test("BetterSessions preserves malformed records when loading and saving", async
         await assert.rejects(utils.fetchNamesFromDataStore(), /Saved session names are invalid/);
         assert.equal(utils.savedSessionsCache.size, 0);
         utils.savedSessionsCache.set("new-session", { name: "New", isNew: false });
-        await assert.rejects(utils.saveSessionsToDataStore(), /Saved session names are invalid/);
+        await assert.rejects(utils.saveSessionsToDataStore(() => assert.fail("Invalid records must not reach the updater")), /Saved session names are invalid/);
         assert.equal(stored, record);
         assert.equal(writes, 0);
     }
+});
+
+
+test("BetterSessions discovery and settings close preserve names saved by another window", async () => {
+    const stored = new Map([["a", { name: "Latest A", isNew: true }], ["b", { name: "Latest B", isNew: false }]]);
+    const common = { UserStore: { getCurrentUser: () => ({ id: "first" }) } };
+    const utils = loadSource("src/plugins/betterSessions/utils.ts", {
+        "@api/DataStore": { update: async (_key: string, update: (value: unknown) => unknown) => {
+            const next = update(structuredClone(stored)) as typeof stored;
+            stored.clear();
+            for (const [id, data] of next) stored.set(id, data);
+        } },
+        "@utils/css": { classNameFactory: () => () => "" }, "@webpack/common": common, "./components/icons": {}
+    });
+    utils.savedSessionsCache.set("a", { name: "Stale A", isNew: false });
+    utils.savedSessionsCache.set("b", { name: "Stale B", isNew: false });
+    const session = (id: string) => ({ id_hash: id, client_info: { os: "OS", platform: "Client", location: "Here" } });
+    const { default: plugin } = loadSource("src/plugins/betterSessions/index.tsx", {
+        "@api/Notifications": { showNotification() {} }, "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@components/Paragraph": {}, "@utils/constants": { Devs: {} },
+        "@utils/Logger": { Logger: class { error(error: unknown) { assert.fail(String(error)); } } },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+        "@webpack": { findStoreLazy: () => ({ getSessions: () => [session("a"), session("b"), session("c")] }), findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => () => null },
+        "@webpack/common": { ...common, Constants: { Endpoints: { AUTH_SESSIONS: "sessions" } }, RestAPI: { get: async () => ({ body: { user_sessions: [session("a"), session("b"), session("c")] } }) } },
+        "./components/RenameButton": {}, "./utils": utils
+    });
+    await plugin.checkNewSessions();
+    assert.equal(stored.get("a")?.name, "Latest A");
+    assert.equal(stored.get("b")?.name, "Latest B");
+    assert.equal(stored.get("c")?.isNew, true);
+    await plugin.flux.USER_SETTINGS_ACCOUNT_RESET_AND_CLOSE_FORM();
+    assert.equal(stored.get("a")?.name, "Latest A");
+    assert.equal(stored.get("b")?.name, "Latest B");
+    assert.equal(stored.get("a")?.isNew, false);
+    assert.equal(stored.get("c")?.isNew, false);
 });

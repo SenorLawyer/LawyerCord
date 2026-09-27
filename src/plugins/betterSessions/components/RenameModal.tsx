@@ -40,10 +40,9 @@ export function RenameModal({ props, session, state }: { props: RenderModalProps
         saving.current = true;
         const previous = savedSessionsCache.get(session.id_hash);
         const updated = { name: value, isNew: false };
-        const sessions = new Map(savedSessionsCache);
-        sessions.set(session.id_hash, updated);
+        const idHash = session.id_hash;
         try {
-            await saveSessionsToDataStore(sessions);
+            await saveSessionsToDataStore(sessions => { sessions.set(idHash, updated); });
         } catch (error) {
             logger.warn("Failed to save session name", error);
             showToast("Could not save the session name. Try again.", Toasts.Type.FAILURE);

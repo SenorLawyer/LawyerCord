@@ -169,12 +169,12 @@ export default definePlugin({
 
             if (generation !== lifecycleGeneration || userId !== UserStore.getCurrentUser()?.id) return;
 
-            let hasNewSession = false;
+            const newSessionIds: string[] = [];
             for (const session of data.body.user_sessions) {
                 if (savedSessionsCache.has(session.id_hash)) continue;
 
                 savedSessionsCache.set(session.id_hash, { name: "", isNew: true });
-                hasNewSession = true;
+                newSessionIds.push(session.id_hash);
                 showNotification({
                     title: "BetterSessions",
                     body: `New session:\n${session.client_info.os} · ${session.client_info.platform} · ${session.client_info.location}`,
@@ -183,7 +183,11 @@ export default definePlugin({
                 });
             }
 
-            if (hasNewSession) await saveSessionsToDataStore();
+            if (newSessionIds.length) await saveSessionsToDataStore(sessions => {
+                for (const idHash of newSessionIds) {
+                    if (!sessions.has(idHash)) sessions.set(idHash, { name: "", isNew: true });
+                }
+            });
         })();
 
         checkNewSessionsPromise = promise;
@@ -205,36 +209,34 @@ export default definePlugin({
                 AuthSessionsStore.getSessions().map((session: SessionInfo["session"]) => session.id_hash)
             );
 
-            // Add new sessions to cache
-            let changed = false;
+            const updateSessions = (sessions: typeof savedSessionsCache) => {
+                // Add new sessions to cache
+                lastFetchedHashes.forEach(idHash => {
+                    if (sessions.has(idHash)) return;
 
-            lastFetchedHashes.forEach(idHash => {
-                if (savedSessionsCache.has(idHash)) return;
-
-                savedSessionsCache.set(idHash, { name: "", isNew: false });
-                changed = true;
-            });
-
-            // Delete removed sessions from cache
-            if (lastFetchedHashes.size > 0) {
-                savedSessionsCache.forEach((_, idHash) => {
-                    if (lastFetchedHashes.has(idHash)) return;
-
-                    savedSessionsCache.delete(idHash);
-                    changed = true;
+                    sessions.set(idHash, { name: "", isNew: false });
                 });
-            }
 
-            // Dismiss the "NEW" badge of all sessions.
-            // Since the only way for a session to be marked as "NEW" is going to the Devices tab,
-            // closing the settings means they've been viewed and are no longer considered new.
-            savedSessionsCache.forEach(data => {
-                if (!data.isNew) return;
+                // Delete removed sessions from cache
+                if (lastFetchedHashes.size > 0) {
+                    sessions.forEach((_, idHash) => {
+                        if (lastFetchedHashes.has(idHash)) return;
 
-                data.isNew = false;
-                changed = true;
-            });
-            if (changed) return saveSessionsToDataStore();
+                        sessions.delete(idHash);
+                    });
+                }
+
+                // Dismiss the "NEW" badge of all sessions.
+                // Since the only way for a session to be marked as "NEW" is going to the Devices tab,
+                // closing the settings means they've been viewed and are no longer considered new.
+                sessions.forEach(data => {
+                    if (!data.isNew) return;
+
+                    data.isNew = false;
+                });
+            };
+            updateSessions(savedSessionsCache);
+            return saveSessionsToDataStore(updateSessions);
         }
     },
 

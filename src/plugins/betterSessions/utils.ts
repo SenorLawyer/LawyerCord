@@ -35,14 +35,14 @@ export function getDefaultName(clientInfo: SessionInfo["session"]["client_info"]
     return `${clientInfo.os} · ${clientInfo.platform}`;
 }
 
-export function saveSessionsToDataStore(sessions: typeof savedSessionsCache = savedSessionsCache) {
+export function saveSessionsToDataStore(update: (sessions: typeof savedSessionsCache) => void) {
     const dataKey = getDataKey();
     if (!dataKey) return Promise.resolve();
 
-    const snapshot = structuredClone(sessions);
     return DataStore.update<unknown>(dataKey, current => {
-        readSavedSessions(current);
-        return snapshot;
+        const sessions = readSavedSessions(current);
+        update(sessions);
+        return sessions;
     });
 }
 

@@ -36,6 +36,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Preserve session names saved in another window when renaming, discovering sessions, or dismissing new-session badges. Apply each operation to the latest stored Map instead of replacing it with the local cache.
+
 - Preserve malformed BetterSessions records instead of treating them as empty or overwriting them during later saves. Validate stored session names again inside the write transaction.
 
 - Keep premium-offer and reply-timestamp patches local to their target expressions, without relying on offer field order or crossing unrelated objects.

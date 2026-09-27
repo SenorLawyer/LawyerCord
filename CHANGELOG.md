@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Replace IgnoreActivities' capture-copy callbacks and broad activity searches with local bounded patterns.
+
 - Remove GreetStickerPicker's backward props search and use its owning component's arguments for the context-menu callback.
 
 - Remove FakeProfileThemes' broken copy button from the newer profile editor. It received no colors and failed when clicked. The plugin settings and older theme editor retain their copy controls.

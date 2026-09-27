@@ -309,23 +309,23 @@ export default definePlugin({
             find: '"LocalActivityStore"',
             replacement: [
                 {
-                    match: /\.LISTENING.+?(?=!?\i\(\)\(\i,\i\))(?<=(\i)\.push.+?)/,
-                    replace: (m, activities) => `${m}${activities}=${activities}.filter($self.isActivityNotIgnored);`
+                    match: /(\i)\.push\(\{type:\i\.\i\.LISTENING,[^{}]{0,100}\}\),(?=!?\i\(\)\(\i,\1\))/,
+                    replace: "$&$1=$1.filter($self.isActivityNotIgnored);"
                 }
             ]
         },
         {
             find: '"ActivityTrackingStore"',
             replacement: {
-                match: /getVisibleRunningGames\(\).+?;(?=for)(?<=(\i)=\i\.\i\.getVisibleRunningGames.+?)/,
-                replace: (m, runningGames) => `${m}${runningGames}=${runningGames}.filter(({id,name})=>$self.isActivityNotIgnored({type:0,application_id:id,name}));`
+                match: /(\i)=\i\.\i\.getVisibleRunningGames\(\)[^;]{0,100};(?=for)/,
+                replace: "$&$1=$1.filter(({id,name})=>$self.isActivityNotIgnored({type:0,application_id:id,name}));"
             }
         },
         // Activities from the apps launcher in the bottom right of the chat bar
         {
             find: "#{intl::EMBEDDED_ACTIVITIES_DEVELOPER_ACTIVITY}",
             replacement: {
-                match: /lineClamp:1.{0,50}?(?=!\i&&\i\?.+?application:(\i))/,
+                match: /lineClamp:1.{0,50}?(?=!\i&&\i\?.{0,150}?application:(\i))/,
                 replace: "$&$self.renderToggleActivityButton($1),"
             }
         }

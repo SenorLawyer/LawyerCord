@@ -19,6 +19,10 @@ Changes are accumulated in [PR #47](https://github.com/SenorLawyer/LawyerCord/pu
 
 ## Latest local verification
 
+IgnoreActivities now captures the activity list at its listening-activity push and the running-games list at its assignment. Two capture-copy callbacks are replaced with strings. Its app-launcher application capture is bounded to 150 characters. All three complete captured modules retain byte-identical patched output and compile; distant running-game and launcher captures are rejected. Evidence is in `.git/audit/ignore-activity-capture-verify.cjs` and its result JSON.
+
+Focused lint, desktop/web builds, and artifact scanning pass. Patch lint reports zero errors and 82 warnings. Logs use `.git/audit/ignore-activity-*`. The last full 666-test, timezone and TypeScript run remains at `b14e04914`; these edits change only verified patch construction. At the preceding `af1961b8a`, three CI checks had passed and Windows smoke was still running when checked.
+
 GreetStickerPicker's context-menu callback now reads its owning component's arguments instead of capturing a distant props variable. The captured component is an ordinary function and the injected handler is an arrow, so the handler retains the component's arguments. The complete module compiles and differs only in that props reference. Four captured render/callback cases preserve output, event identity and the entire props object, including reordered channel/message fields. Evidence is in `.git/audit/greet-picker-capture-verify.cjs` and its result JSON.
 
 Focused lint, desktop/web builds, and artifact scanning pass. Patch lint reports zero errors and 85 warnings. The latest full 666-test, timezone and TypeScript run is at preceding `b14e04914`; this change only alters the verified patch. Logs use `.git/audit/greet-picker-*`. No real greeting messages were sent.

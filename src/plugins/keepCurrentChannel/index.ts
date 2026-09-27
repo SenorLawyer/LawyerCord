@@ -19,6 +19,7 @@
 import * as DataStore from "@api/DataStore";
 import { Devs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
+import { isObject } from "@utils/misc";
 import definePlugin from "@utils/types";
 import { ChannelRouter, ChannelStore, NavigationRouter, SelectedChannelStore, SelectedGuildStore } from "@webpack/common";
 
@@ -36,6 +37,12 @@ interface ChannelSelectEvent {
 interface PreviousChannel {
     guildId: string | null;
     channelId: string | null;
+}
+
+function isPreviousChannel(value: unknown): value is PreviousChannel {
+    return isObject(value) && "guildId" in value && "channelId" in value
+        && (value.guildId === null || typeof value.guildId === "string")
+        && (value.channelId === null || typeof value.channelId === "string");
 }
 
 const logger = new Logger("KeepCurrentChannel");
@@ -133,8 +140,12 @@ export default definePlugin({
         previousCache = undefined;
         const version = ++restoreVersion;
         try {
-            const previous = await DataStore.get<PreviousChannel>("KeepCurrentChannel_previousData");
+            const previous = await DataStore.get<unknown>("KeepCurrentChannel_previousData");
             if (version !== restoreVersion) return;
+            if (previous !== undefined && !isPreviousChannel(previous)) {
+                logger.warn("Stored previous channel has an invalid format.");
+                return;
+            }
             previousCache = previous;
             if (!previousCache) {
                 previousCache = {

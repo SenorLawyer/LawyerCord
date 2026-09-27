@@ -56,6 +56,7 @@ test("KeepCurrentChannel cancels stale restoration and handles storage failures"
                 warn(_message: string, error: unknown) { errors.push(error); }
                 error(_message: string, error: unknown) { errors.push(error); }
             } },
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
             "@utils/types": { __esModule: true, default: (value: unknown) => value },
             "@webpack/common": {
                 ChannelRouter: { transitionToChannel: (id: string) => routes.push(id) },
@@ -128,6 +129,51 @@ test("KeepCurrentChannel cancels stale restoration and handles storage failures"
         else await state.clearPreviousChannel();
         assert.equal(state.errors.length, 1);
         assert.equal(state.saved()?.channelId, "old");
+    }
+});
+
+test("KeepCurrentChannel leaves malformed saved records untouched", async () => {
+    const invalid = [{ guildId: "guild", channelId: 42 }, null, false, "channel", [], {},
+        { channelId: "channel" }, { guildId: null }, { guildId: {}, channelId: "channel" }];
+    const valid = [{ guildId: null, channelId: "channel" }, { guildId: "guild", channelId: null },
+        { guildId: "guild", channelId: "channel", futureField: true }];
+    for (const previous of [...invalid, ...valid, undefined]) {
+        let saved: unknown = previous;
+        let writes = 0;
+        const routes: unknown[] = [];
+        const warnings: string[] = [];
+        const { default: plugin } = loadSource("src/plugins/keepCurrentChannel/index.ts", {
+            "@api/DataStore": { get: async () => saved, set: async (_key: string, value: unknown) => { writes++; saved = value; } },
+            "@utils/constants": { Devs: {} },
+            "@utils/Logger": { Logger: class { warn(message: string) { warnings.push(message); } error(error: unknown) { assert.fail(String(error)); } } },
+            "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+            "@utils/types": { __esModule: true, default: (value: unknown) => value },
+            "@webpack/common": {
+                ChannelRouter: { transitionToChannel: (id: unknown) => routes.push(id) },
+                SelectedChannelStore: { getChannelId: () => "current" }, SelectedGuildStore: { getGuildId: () => "guild" }
+            }
+        });
+        await plugin.start();
+        plugin.stop();
+        await setImmediate();
+        if (invalid.some(value => value === previous)) {
+            assert.deepEqual(routes, []);
+            assert.equal(writes, 0);
+            assert.equal(saved, previous);
+            assert.equal(warnings.length, 1);
+        } else {
+            assert.equal(warnings.length, 0);
+            if (previous === undefined) {
+                assert.ok(saved !== null && typeof saved === "object" && "guildId" in saved && "channelId" in saved);
+                assert.equal(saved.guildId, "guild");
+                assert.equal(saved.channelId, "current");
+            }
+            else {
+                assert.equal(saved, previous);
+                const channelId = previous !== null && typeof previous === "object" && "channelId" in previous ? previous.channelId : null;
+                assert.deepEqual(routes, channelId ? [channelId] : []);
+            }
+        }
     }
 });
 

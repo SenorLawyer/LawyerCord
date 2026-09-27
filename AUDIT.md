@@ -19,6 +19,10 @@ Changes are accumulated in [PR #47](https://github.com/SenorLawyer/LawyerCord/pu
 
 ## Latest local verification
 
+September 27 KeepCurrentChannel saved-record validation: a numeric channel ID reached navigation in the regression fixture. Startup now validates the historical string-or-null guild/channel fields before restoring them. Nine malformed cases remain untouched during startup and shutdown; three valid shapes retain compatibility and extra fields, and an absent record still initializes normally. Historical versions `a3b2ee48f` and `30ac25607` use the same two-field format.
+
+All 642 broader tests plus timezone checks, TypeScript, focused ESLint, sequential desktop/web builds and artifact scanning pass. Logs are `.git/audit/keep-channel-validation-{tests,desktop,web}.log`. The actual two-plugin crash cleanup fixture also passes. This validates record shape, not account ownership, competing windows or signed-in navigation; those remain open.
+
 September 27 KeepCurrentChannel restart state: the tracked lifecycle regression reproduced two additional failures. After a prior successful run, a failed startup read left the old cache available for stop() to write over a newer stored channel. Restarting after an interrupted account switch also retained the switching flag and ignored later selections. Startup now clears these two in-memory values before reading storage. Each assertion failed before its respective one-line reset and passed afterward; the previous two-plugin crash-cleanup fixture still passes.
 
 All 641 broader tests plus timezone checks, TypeScript, focused ESLint, both builds and artifact scanning pass. Logs are `.git/audit/keep-channel-restart-{tests,desktop,web}.log`. No patch expressions changed. CI for preceding revision `787e666d0` was still pending for Build/CodeQL at the last check, with Windows smoke and dependency review passing; it is not counted as fully verified. Stored-data validation, cross-window writes and signed-in navigation remain separate review items.

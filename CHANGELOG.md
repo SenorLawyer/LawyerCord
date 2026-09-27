@@ -27,6 +27,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- ShowMessageEmbeds targets the attachment parser instead of unrelated attachment renderers. Its context-menu match and the Timezones message-header match now use bounded searches.
+
 - RPCEditor validates the actual stream-link destination and allows clearing an optional stream URL.
 
 - RPCEditor preserves newer settings saved by another window and processes local saves in order. Conflicting edits report that a reload is needed.

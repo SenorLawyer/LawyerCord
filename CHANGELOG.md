@@ -17,6 +17,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Remove CallTimer’s single-use text wrapper and move its static styles into the existing stylesheet.
 - Remove CustomSounds' Debug action, which dumped stored audio and file details to the console.
 
 - Remove duplicate ProfileSets storage state, startup loading, comparison code, profile-effect copying, unused arguments, separators, and styles. Use the shared file utilities for import and export and shared TextInput for pagination. Remove redundant input theme and focus overrides. Use separate shared buttons for loading presets and opening their options.

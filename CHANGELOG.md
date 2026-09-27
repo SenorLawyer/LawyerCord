@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Release CrashHandler's recovery guard after disabled, failed or rate-limited attempts so later crashes can recover.
+
 - Save changed channels immediately and remove KeepCurrentChannel's delayed saves and shutdown flushes, preventing an older window timer from undoing crash cleanup. Repeated selections remain skipped.
 
 - Ignore malformed saved KeepCurrentChannel records during restoration without rewriting them.

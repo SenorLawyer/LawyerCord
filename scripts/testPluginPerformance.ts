@@ -28,6 +28,58 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { makeLazy, proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
+test("CrashHandler releases recovery guards after skipped or failed attempts", () => {
+    for (const scenario of ["disabled", "failed", "rapid"]) {
+        const settings = { attemptToPreventCrashes: scenario !== "disabled", attemptToNavigateToHome: false };
+        const timers: { callback: () => void; delay: number }[] = [];
+        const immediates: (() => void)[] = [];
+        let recovered = 0;
+        const { default: plugin } = loadSource("src/plugins/crashHandler/index.ts", {
+            "@api/Notifications": { showNotification() {} },
+            "@api/Settings": { definePluginSettings: () => ({ store: settings }) },
+            "@plugins/keepCurrentChannel": { clearPreviousChannel: async () => {} },
+            "@utils/constants": { Devs: {} },
+            "@utils/Logger": { Logger: class { error() {} debug() {} } },
+            "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+            "@utils/updater": { maybePromptToUpdate() {} },
+            "@webpack": { proxyLazyWebpack: () => ({ ModalStack: { popAll() {} }, DraftManager: { clearDraft() {} } }) },
+            "@webpack/common": {
+                closeAllModals() {}, DraftType: {}, ExpressionPickerStore: { closeExpressionPicker() {} },
+                FluxDispatcher: { dispatch() {} }, SelectedChannelStore: { getChannelId: () => "channel" }
+            }
+        }, {
+            IS_DEV: false,
+            setTimeout: (callback: () => void, delay: number) => timers.push({ callback, delay }),
+            setImmediate: (callback: () => void) => immediates.push(callback)
+        });
+        const component = { setState(state: { error: unknown }) { if (state.error === null) recovered++; } };
+        function run(delay: number) {
+            for (const timer of timers.filter(timer => timer.delay === delay)) {
+                timers.splice(timers.indexOf(timer), 1);
+                timer.callback();
+            }
+            for (const callback of immediates.splice(0)) callback();
+        }
+        const recover = plugin.handlePreventCrash;
+        if (scenario === "failed") plugin.handlePreventCrash = () => { throw new Error("Recovery failed"); };
+        plugin.handleCrash(component, { error: new Error("First crash") });
+        run(1);
+        if (scenario === "rapid") {
+            assert.equal(recovered, 1);
+            plugin.handleCrash(component, { error: new Error("Rapid crash") });
+            run(1);
+            assert.equal(recovered, 1, "Rapid crashes must not trigger another recovery");
+        }
+        const before = recovered;
+        run(1000);
+        settings.attemptToPreventCrashes = true;
+        plugin.handlePreventCrash = recover;
+        plugin.handleCrash(component, { error: new Error("Later crash") });
+        run(1);
+        assert.equal(recovered, before + 1, `Recovery remains available after ${scenario} attempt`);
+    }
+});
+
 test("KeepCurrentChannel cancels stale restoration and handles storage failures", async () => {
     type PreviousChannel = { guildId: string | null; channelId: string | null; };
     function setup(deferred = false, storage: { value: PreviousChannel | undefined } = { value: { guildId: "guild", channelId: "old" } }) {

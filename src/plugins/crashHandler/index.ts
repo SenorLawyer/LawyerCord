@@ -93,6 +93,9 @@ export default definePlugin({
 
         // 1 ms timeout to avoid react breaking when re-rendering
         setTimeout(() => {
+            // Set isRecovering to false before setting the state to allow us to handle the next crash error correcty, in case it happens
+            setImmediate(() => isRecovering = false);
+
             try {
                 // Prevent a crash loop with an error that could not be handled
                 if (!shouldAttemptRecover) {
@@ -198,9 +201,6 @@ export default definePlugin({
                 CrashHandlerLogger.debug("Failed to navigate to home", err);
             }
         }
-
-        // Set isRecovering to false before setting the state to allow us to handle the next crash error correcty, in case it happens
-        setImmediate(() => isRecovering = false);
 
         try {
             _this.setState({ error: null, info: null });

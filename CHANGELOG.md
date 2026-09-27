@@ -27,6 +27,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- BetterFolders matches its guild-bar dependency entry directly and bounds its surrounding patch searches.
+
 - AlwaysAnimate preserves CSS class-name strings instead of replacing them with animation flags. Its generic replacements now use bounded searches.
 
 - AccountPanelServerProfile matches its popout callbacks directly, and AlwaysAnimate bounds its status-emoji patch search.

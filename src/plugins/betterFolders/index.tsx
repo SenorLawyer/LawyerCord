@@ -162,7 +162,7 @@ export default definePlugin({
                 // Create the isBetterFolders and betterFoldersExpandedIds variables in the GuildsBar component
                 // Needed because we access this from a non-arrow closure so we can't use arguments[0]
                 {
-                    match: /let{disableAppDownload:\i=\i\.isPlatformEmbedded,isOverlay:.+?(?=}=\i)/,
+                    match: /let{disableAppDownload:\i=\i\.isPlatformEmbedded,isOverlay:[^{}]{1,150}?(?=}=\i)/,
                     replace: "$&,isBetterFolders,betterFoldersExpandedIds"
                 },
                 // Export the isBetterFolders and betterFoldersExpandedIds variable to the Guild List component
@@ -172,27 +172,27 @@ export default definePlugin({
                 },
                 // Wrap the guild node (guild or folder) component in a div with display: none if it's not an expanded folder or a guild in an expanded folder
                 {
-                    match: /switch\((\i)\.type\){.+?default:return null}/,
+                    match: /switch\((\i)\.type\){.{1,500}?default:return null}/,
                     replace: `return $self.wrapGuildNodeComponent($1,()=>{$&},${IS_BETTER_FOLDERS_VAR},${BETTER_FOLDERS_EXPANDED_IDS_VAR});`
                 },
                 // Export the isBetterFolders variable to the folder component
                 {
-                    match: /switch\(\i\.type\){case \i\.\i\.FOLDER:.+?folderNode:\i,/,
+                    match: /switch\(\i\.type\){case \i\.\i\.FOLDER:.{1,150}?folderNode:\i,/,
                     replace: `$&isBetterFolders:${IS_BETTER_FOLDERS_VAR},`
                 },
                 // Make the callback for returning the guild node component depend on isBetterFolders and betterFoldersExpandedIds
                 {
-                    match: /switch\(\i\.type\).+?,\i,\i\.setNodeRef/,
+                    match: /\i\.setNodeRef(?=\]\))/,
                     replace: "$&,arguments[0]?.isBetterFolders,arguments[0]?.betterFoldersExpandedIds"
                 },
                 // If we are rendering the Better Folders sidebar, we filter out everything but the guilds and folders from the Guild List children
                 {
-                    match: /lastTargetNode:\i\[\i\.length-1\].+?}\)(?::null)?\](?=}\))/,
+                    match: /lastTargetNode:\i\[\i\.length-1\].{1,150}?}\)(?::null)?\](?=}\))/,
                     replace: "$&.filter($self.makeGuildsBarGuildListFilter(!!arguments[0]?.isBetterFolders))"
                 },
                 // If we are rendering the Better Folders sidebar, we filter out everything but the Guild List from the Sidebar children
                 {
-                    match: /reverse:!0,.{0,150}?barClassName:.+?\}\)\]/,
+                    match: /reverse:!0,.{0,150}?barClassName:.{1,150}?\}\)\]/,
                     replace: "$&.filter($self.makeGuildsBarSidebarFilter(!!arguments[0]?.isBetterFolders))"
                 }
             ]

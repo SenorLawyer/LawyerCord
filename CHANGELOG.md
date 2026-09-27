@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep ThemeLibrary, Decor, SongSpotlight, and Streaks authorization tokens out of cloud uploads and imports.
+
 - Keep scheduled-message queues, reconnect and last-channel state, and downloaded transcription models out of cloud transfers. This prevents copied jobs from sending on another device and model caches from blocking cloud serialization.
 
 - Include QuickCSS edits in automatic cloud uploads using the existing sync preferences and debounce.

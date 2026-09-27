@@ -684,6 +684,7 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
     const syncedRecords = records.slice();
     const localKeys = [
         "Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions", "Vencord_cloudManifest:https://first.invalid:first", "Vencord_cloudManifest:https://second.invalid:second",
+        "ThemeLibrary_uniqueToken", "decor-auth", "songspotlight-auth", "vc-streaks-auth",
         "ScheduledMessages_queue", "VCLastVoiceChannel", "VCLastVoiceChannelSession", "KeepCurrentChannel_previousData", "VoiceMessageTranscriber_https://fixture.invalid/model.bin"
     ];
     for (const key of localKeys) records.push([key, { local: true }]);

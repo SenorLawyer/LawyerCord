@@ -15,6 +15,7 @@ import { DataStore } from "..";
 type BackupType = "all" | "plugins" | "css" | "datastore";
 const LOCAL_DATASTORE_KEYS = new Set<unknown>([
     "Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions", "VencordQuickCss",
+    "ThemeLibrary_uniqueToken", "decor-auth", "songspotlight-auth", "vc-streaks-auth",
     "ScheduledMessages_queue", "VCLastVoiceChannel", "VCLastVoiceChannelSession", "KeepCurrentChannel_previousData"
 ]);
 export const isLocalDataStoreKey = (key: unknown) => LOCAL_DATASTORE_KEYS.has(key)

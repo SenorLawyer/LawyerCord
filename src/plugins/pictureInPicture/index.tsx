@@ -13,6 +13,13 @@ import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 import { Button, showToast, Toasts, Tooltip } from "@webpack/common";
 
+interface MediaActionProps {
+    mimeType?: string[];
+    downloadURL?: string;
+    showDownload: boolean;
+    isVisualMediaType: boolean;
+}
+
 const logger = new Logger("PictureInPicture");
 let pendingVideo: HTMLVideoElement | undefined;
 
@@ -35,14 +42,14 @@ export default definePlugin({
         {
             find: '["VIDEO","CLIP","AUDIO"]',
             replacement: {
-                match: /(\[\i>0&&\i\.length>0.{0,150}?children:)(\i.slice\(\i\))(?<=mimeType:(\i),downloadURL:(\i).+?showDownload:(\i).+?isVisualMediaType:(\i).+?)/,
-                replace: (_, rest, origChildren, mimeType, downloadURL, showDownload, isVisualMediaType) =>
-                    `${rest}[${showDownload}&&${isVisualMediaType}&&$self.shouldShowButton(${mimeType},${downloadURL})&&$self.PictureInPictureButton(),...${origChildren}]`
+                match: /(\[\i>0&&\i\.length>0.{0,150}?children:)(\i\.slice\(\i\))/,
+                replace: "$1[$self.shouldShowButton(arguments[0])&&$self.PictureInPictureButton(),...$2]"
             }
         }
     ],
 
-    shouldShowButton(mimeType: string[] = [], downloadURL?: string) {
+    shouldShowButton({ mimeType = [], downloadURL, showDownload, isVisualMediaType }: MediaActionProps) {
+        if (!showDownload || !isVisualMediaType) return false;
         const normalizedMimeType = mimeType.join("/");
         if (normalizedMimeType.startsWith("video/")) return true;
         if (!downloadURL) return false;

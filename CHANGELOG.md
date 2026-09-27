@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep Picture in Picture button matching independent of the order of Discord media properties.
+
 - Make the Picture in Picture control keyboard-accessible with the shared button and an explicit accessible name.
 
 - Stop detached PiP videos and ignore stale request or playback completion after another video replaces them.

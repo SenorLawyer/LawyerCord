@@ -45,10 +45,10 @@ export default definePlugin({
                 replace: "$1arguments[0]?.stickersType?$self.stickerButton:$2$3"
             }, {
                 match: /(?<=\.useCallback\(\(\)=>\{\(0,\i\.\i\)\()\i\.\i\.STICKER(?=,)/,
-                replace: "arguments[0]?.stickersType||$&"
+                replace: "arguments[0].stickersType||$&"
             }, {
-                match: /(\i)=((\i)===\i\.\i\.STICKER)/,
-                replace: "$1=arguments[0].stickersType?($3===arguments[0].stickersType):($2)"
+                match: /(?<=\i===)\i\.\i\.STICKER/,
+                replace: "(arguments[0].stickersType||$&)"
             }]
         },
         {
@@ -72,7 +72,7 @@ export default definePlugin({
                     replace: "$&,vcStickers"
                 },
                 {
-                    match: /:null,((.{1,200})===.{1,30}\.STICKER&&\w+\?(\([^()]{1,10}\)).{1,15}?(\{.*?,onSelectSticker:.*?\})\):null)/,
+                    match: /:null,((\i)===\i\.\i\.STICKER&&\i\?(\(0,\i\.jsx\))\(\i,(\{(?=.{0,150}?\bonSelectSticker:).{0,150}?\})\):null)/,
                     replace: ':null,$2==="stickers+"?$3($self.moreStickersComponent,$4):null,$1'
                 }
             ]

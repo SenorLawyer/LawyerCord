@@ -28,7 +28,7 @@ import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
-test("extra sticker buttons change only their picker callback argument", () => {
+test("extra sticker buttons preserve picker callbacks and selection scope", () => {
     const { default: plugin } = loadSource("src/equicordplugins/moreStickers/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({}) },
         "@utils/constants": { Devs: {}, EquicordDevs: {} },
@@ -57,6 +57,17 @@ test("extra sticker buttons change only their picker callback argument", () => {
         ["emoji", "chat", "channel"], ["gif", "chat", "channel"],
         ["sticker", "chat", "channel"], ["stickers+", "chat", "channel"]
     ]);
+    const selection = plugin.patches[0].replacement[2];
+    const renderSource = "function render(props){let selected=active===view.Type.STICKER&&activeType===type&&activeChannel===channel;return selected}render";
+    const patched = renderSource.replace(canonicalizeMatch(selection.match), selection.replace);
+    assert.notEqual(patched, renderSource);
+    for (const custom of [false, true]) for (const active of ["sticker", "stickers+", "emoji"]) for (const sameType of [false, true]) for (const sameChannel of [false, true]) {
+        const render = runInNewContext(patched, {
+            active, view: { Type: { STICKER: "sticker" } }, type: "chat", channel: "channel",
+            activeType: sameType ? "chat" : "other", activeChannel: sameChannel ? "channel" : "other"
+        });
+        assert.equal(render(custom ? { stickersType: "stickers+" } : {}), active === (custom ? "stickers+" : "sticker") && sameType && sameChannel);
+    }
 });
 
 test("fast channel deletion renders thread actions independently of counters", async () => {

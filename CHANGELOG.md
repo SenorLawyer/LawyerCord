@@ -19,6 +19,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Remove ContextMenuAPI's special exception that hid patch syntax failures from logs and companion reports. Failed replacements still roll back.
+
 - Remove redundant ReplyTimestamp date casts, its single-use state enum, and the repeated same-day calculation.
 
 - Remove redundant outer exception handling from CrashHandler while preserving recovery when Discord notifications or APIs fail.
@@ -35,6 +37,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Remove TriviaAI, which required a user-supplied API key and arbitrary AI endpoint. Its Answer With AI actions are no longer available.
 
 ### Fixed
+
+- Restrict the inbox menu patch to its arrow-renderer module so another reminder menu cannot consume it first.
 
 - Pass Emoji Studio props to context-menu plugins while preserving its popout close and reset callbacks.
 

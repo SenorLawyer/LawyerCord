@@ -1854,6 +1854,28 @@ test("webpack replacement failures preserve successful factories and diagnostics
     }
 });
 
+test("context menu syntax failures retain diagnostics and the preceding factory", () => {
+    const errors: unknown[][] = [];
+    const failedPatches = { erroredPatch: [] as unknown[], hadNoEffect: [] as unknown[] };
+    const { patchFactory, patches } = loadSource("src/webpack/patchWebpack.ts", {
+        "@api/Settings": {}, "@debug/reporterData": { reporterData: { failedPatches } },
+        "@debug/Tracer": { traceFunctionWithResults: (_name: string, fn: (match: RegExp, replace: string) => string) => (match: RegExp, replace: string) => [fn(match, replace), 0] },
+        "@utils/lazy": { makeLazy: () => () => 1 },
+        "@utils/Logger": { Logger: class { warn() {} error(...args: unknown[]) { errors.push(args); } debug() {} } },
+        "@utils/misc": {}, "./webpack": {}, "diff": {}
+    }, { IS_DEV: false, IS_REPORTER: false, IS_COMPANION_TEST: true }, "({ ...exports, patchFactory })");
+    patches.push({ plugin: "First", find: "return", replacement: [{ match: /base/, replace: "first" }] });
+    patches.push({ plugin: "ContextMenuAPI", find: "return", replacement: [{ match: /"first"/, replace: "(class { field = arguments; })" }] });
+    const original = function () { return "base"; };
+    const result = patchFactory("fixture", original);
+    assert.equal(result(), "first");
+    assert.notEqual(result, original);
+    assert.equal(failedPatches.hadNoEffect.length, 0);
+    assert.equal(errors.length, 1);
+    assert.match(String(errors[0][1]), /arguments/);
+    assert.equal(failedPatches.erroredPatch.length, 1);
+});
+
 test("support messages cannot offer executable snippets", () => {
     let trusted = false;
     const React = { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props, children }) };
@@ -10014,8 +10036,13 @@ test("arrow context menus expose their render props instead of webpack arguments
         studio:props=>{const image="userImage"in props?props.userImage:null;return {renderPopout:popout=>{return jsx(Menu,{navId:"emoji-studio-context-menu",onClose:popout.closePopout,children:[]})}}},
         nested:function(props){return ()=>jsx(Menu,{navId:"nested-menu",children:[]})}
     }})`;
+    const inboxPatch = plugin.patches.find((patch: { find: string | RegExp; }) => String(patch.find).includes("message-reminder-create"));
+    const inboxFind = canonicalizeMatch(inboxPatch.find);
+    const ordinaryMenu = 'function menu(props){return jsx(Menu,{navId:"message-reminder-create",children:[]})}';
+    assert.equal(typeof inboxFind === "string" ? ordinaryMenu.includes(inboxFind) : inboxFind.test(ordinaryMenu), false);
     for (const patch of plugin.patches) {
-        if (!source.includes(patch.find)) continue;
+        const find = canonicalizeMatch(patch.find);
+        if (!(typeof find === "string" ? source.includes(find) : find.test(source))) continue;
         for (const replacement of [patch.replacement].flat())
             source = source.replace(canonicalizeMatch(replacement.match), replacement.replace);
     }

@@ -619,22 +619,18 @@ function patchFactory(moduleId: PropertyKey, originalFactory: AnyModuleFactory):
                     markedAsPatched = true;
                 }
             } catch (err) {
-                // FIXME: Maybe fix this properly
-                const shouldSuppressError = patch.plugin === "ContextMenuAPI" && err instanceof SyntaxError && err.message.includes("arguments");
-                if (!shouldSuppressError) {
-                    logger.error(`Patch by ${patch.plugin} errored (Module id is ${String(moduleId)}): ${replacement.match}\n`, err);
+                logger.error(`Patch by ${patch.plugin} errored (Module id is ${String(moduleId)}): ${replacement.match}\n`, err);
 
-                    if (IS_COMPANION_TEST)
-                        reporterData.failedPatches.erroredPatch.push({
-                            ...patch,
-                            oldModule: lastCode,
-                            newModule: code,
-                            id: moduleId
-                        });
+                if (IS_COMPANION_TEST)
+                    reporterData.failedPatches.erroredPatch.push({
+                        ...patch,
+                        oldModule: lastCode,
+                        newModule: code,
+                        id: moduleId
+                    });
 
-                    if (IS_DEV) {
-                        diffErroredPatch(code, lastCode, lastCode.match(replacement.match)!);
-                    }
+                if (IS_DEV) {
+                    diffErroredPatch(code, lastCode, lastCode.match(replacement.match)!);
                 }
 
                 if (patch.group && markedAsPatched) {

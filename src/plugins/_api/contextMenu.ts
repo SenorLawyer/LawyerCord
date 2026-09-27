@@ -106,7 +106,7 @@ export default definePlugin({
             ],
         },
         {
-            find: '"message-reminder-create"',
+            find: /Menu:\i=>\{.{0,300}?navId:"message-reminder-create"/,
             replacement: {
                 match: /Menu:(\i)=>\{/g,
                 replace: "Menu:function($1){"

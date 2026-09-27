@@ -60,6 +60,14 @@ The store's population filter was already disabled with an injected false conjun
 
 All 677 broader tests and timezone checks, TypeScript, focused lint, sequential desktop/web builds and artifact scanning pass. Logs use `.git/audit/hidden-discovery-local-*`. Patch lint reports 25 warnings and no errors, with no remaining unbounded-match warnings in ShowHiddenChannels. The current warning list is `.git/audit/remaining-patches-current.log`. All four preceding 5fe7f159f CI checks passed. Captured-code checks do not close live client acceptance or the broader outstanding audit findings.
 
+## ShowHiddenThings highest-role display
+
+The highest-role replacement ran inside a condition based on enhanced-member data. When that data was unavailable before loading Members, the condition prevented the replacement from running at all. The component already subscribes to the guild role list and has the member's highestRoleId. The patch now derives the role from those values before the condition, removing the enhanced-member subscription and lookup. The plugin helper, catch block, per-call logger and unused imports are deleted. The existing role list remains the reactive source of truth.
+
+The tracked regression fails before the change because the highest role is absent. Complete module 754744 compiles and changes only in that lookup and removal of the late helper call. Its actual component passes 72 controlled cases across enhanced-data availability, guild presence, management permission, highest-role IDs and member-role lists. Five cases recover the missing highest role; cases with loaded enhanced data retain their output. No enhanced-member reads remain. Evidence is `.git/audit/hidden-highest-role-verify.{cjs,json}` and `hidden-highest-role-before.log`, comparing 4ab6060c2. A first candidate used a backward-reference ordering that matched nothing; the regression caught it before the final pattern was verified. Historical a2253cb4a was inspected and preserves the same intended role selection. Signed-in visual acceptance remains separate.
+
+All 678 broader tests and timezone checks, TypeScript, focused lint, sequential desktop/web builds and artifact scanning pass. The focused regression also passes after removing an unused test mock. Logs use `.git/audit/hidden-highest-role-*`. Patch lint reports 24 warnings and no errors. All four preceding 4ab6060c2 CI checks passed. The capture scan for the next friend-list findings is `.git/audit/hidden-things-friends-spotify-patches.{cjs,json}`.
+
 ## NewGuildSettings invite target
 
 The invite patch crossed 2,446 characters into the unrelated openApp method and passed its parsed invite object instead of a guild ID. Commit 515340a07 changed the capture to this shape while refreshing its anchor. The replacement now ends at the INVITE_ACCEPT_SUCCESS dispatch and reads the accepted payload's guild_id or nested guild.id. Its capture-copy callback is removed.

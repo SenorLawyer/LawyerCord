@@ -2225,6 +2225,30 @@ test("reply mention exceptions match whole user and role IDs", () => {
     assert.equal(plugin.shouldMention(message, false), true);
 });
 
+test("mod view highest role does not depend on loading enhanced members", () => {
+    const source = readFileSync("src/plugins/showHiddenThings/index.ts", "utf8");
+    const ast = typescript.createSourceFile("index.ts", source, ScriptTarget.Latest, true);
+    let patchSource = "";
+    const visit = (node: typescript.Node) => {
+        if (typescript.isPropertyAssignment(node) && node.name.getText(ast) === "patches") patchSource = node.initializer.getText(ast);
+        typescript.forEachChild(node, visit);
+    };
+    visit(ast);
+    const replacement = runInNewContext(`(${patchSource})`)[3].replacement;
+    const original = 'function Roles(e){let{member:t}=e,l=roles,r=i.useMemo(()=>l.filter(e=>e.id!==t.highestRoleId&&t.roles.includes(e.id)),[t.roles,t.highestRoleId,l]),s=(0,ei.bG)([eT.A],()=>eT.A.getEnhancedMember(t.guildId,t.userId),[t.guildId,t.userId]),u=(0,eS.YH)(s);return [null!=u&&(0,a.jsx)(Tooltip,{text:j.intl.string(j.t["93S+lG"]),children:(0,a.jsx)(Role,{role:u,guildId:t.guildId})}),r]}';
+    const roles = [{ id: "highest" }, { id: "lower" }];
+    const render = runInNewContext(original.replace(canonicalizeMatch(replacement.match), replacement.replace) + ";Roles", {
+        roles, i: { useMemo: (fn: () => unknown) => fn() }, ei: { bG: (_stores: unknown[], fn: () => unknown) => fn() },
+        eT: { A: { getEnhancedMember: () => undefined } }, eS: { YH: () => undefined },
+        a: { jsx: (type: string, props: object) => ({ type, props }) }, Tooltip: "tooltip", Role: "role",
+        j: { intl: { string: (value: string) => value }, t: { "93S+lG": "highest role" } }
+    });
+    const result = render({ member: { guildId: "guild", userId: "user", highestRoleId: "highest", roles: ["highest", "lower"] } });
+    assert.ok(result[0], "The highest role must render before enhanced member data is loaded");
+    assert.equal(result[0]?.props.children.props.role, roles[0]);
+    assert.deepEqual([...result[1]], [roles[1]]);
+});
+
 test("hidden voice mentions navigate without joining", () => {
     const source = readFileSync("src/plugins/showHiddenChannels/index.tsx", "utf8");
     const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);

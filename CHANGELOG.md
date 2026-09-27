@@ -61,6 +61,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Remove a disabled channel-store filter while retaining channel counts, and simplify discovery and active-status patches without changing their output.
 - Show the highest role in member mod view before enhanced-member data loads, using the existing role subscription and removing the redundant lookup and helper.
 - Use the correct friend when showing friendship dates, and apply dates to both regular and anniversary rows.
+- Restore voice indicators on regular and anniversary friend rows, using each row's own user and hover state.
 
 - Replace hidden-channel toolbar method-prefix searches with local button matches and keep the nested row guard tied to its mouse handler's channel.
 

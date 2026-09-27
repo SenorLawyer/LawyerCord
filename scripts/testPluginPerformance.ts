@@ -2225,6 +2225,34 @@ test("reply mention exceptions match whole user and role IDs", () => {
     assert.equal(plugin.shouldMention(message, false), true);
 });
 
+test("friend voice indicators use each row's user and hover state", () => {
+    const source = readFileSync("src/plugins/userVoiceShow/index.tsx", "utf8");
+    const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);
+    let patchSource = "";
+    const visit = (node: typescript.Node) => {
+        if (typescript.isPropertyAssignment(node) && node.name.getText(ast) === "patches") patchSource = node.initializer.getText(ast);
+        typescript.forEachChild(node, visit);
+    };
+    visit(ast);
+    const replacement = runInNewContext(`(${patchSource})`)[0].replacement;
+    const row = '(0,R.jsxs)("div",{isFocused:focused,children:[(0,R.jsx)(Info,{user:user,hovered:hovered,showAccountIdentifier:!game&&!user.isProvisional}),(0,R.jsxs)("div",{className:classes.actions,children:["native"]})]})';
+    const original = `"use strict";function anniversary(user,hovered){return ${row}}function regular(user,hovered){return ${row}}`;
+    const calls: { userId: string; isActionButton: boolean; shouldHighlight: boolean; }[] = [];
+    const jsx = (_type: unknown, props: unknown) => props;
+    const render = runInNewContext(original.replace(canonicalizeMatch(replacement.match), replacement.replace) + ";[anniversary,regular]", {
+        R: { jsx, jsxs: jsx }, Info: "info", classes: { actions: "actions" }, focused: false, game: false,
+        $self: { VoiceChannelIndicator: (props: typeof calls[number]) => { calls.push(props); return "voice"; } }
+    });
+    for (const [index, hovered] of [true, false].entries()) {
+        const result = render[index]({ id: String(index), isProvisional: false }, hovered);
+        assert.deepEqual(Array.from(result.children[1].children), ["voice", "native"]);
+    }
+    assert.deepEqual(JSON.parse(JSON.stringify(calls)), [
+        { userId: "0", isActionButton: true, shouldHighlight: true },
+        { userId: "1", isActionButton: true, shouldHighlight: false }
+    ]);
+});
+
 test("friend date patches use each row's user and preserve its status", () => {
     const source = readFileSync("src/plugins/sortFriendRequests/index.tsx", "utf8");
     const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);

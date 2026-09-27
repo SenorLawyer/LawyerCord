@@ -6,6 +6,14 @@ Current source checkpoint `080e17609`: all 654 broader tests and timezone checks
 
 A fresh September 27 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,655 files, fourteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-sep27-current.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
 
+## Voice indicators on friend rows
+
+The voice-indicator patch only changed the first anniversary row and read `this.props.user` from its function component. That receiver is absent, so the injected indicator had no user ID. The regular class-based row was not patched at all. The patch now captures the adjacent user and hovered props and deliberately applies to both layouts. This also removes the backward focus search and the optional receiver chain.
+
+The tracked regression fails before the fix because the second row has no indicator. Captured module 399145 independently proves the missing anniversary user and untouched regular row. The complete patched module compiles and differs only by the two indicator insertions. Sixteen executions of both actual row callbacks verify user IDs, hover state independent of focus, provisional users, and preservation of all native content. Dependencies are mocked; this does not establish signed-in voice/focus acceptance. Evidence is `.git/audit/friend-voice-verify.{cjs,json}` and `friend-voice-before.log`. Prior cleanup 373568238 was inspected and did not change the friend patch.
+
+All 680 broader tests and timezone checks, TypeScript, plugin ESLint, sequential desktop/web builds and artifact scanning pass. Patch lint reports 19 warnings and no errors. Logs use `.git/audit/friend-voice-*`. All four CI checks passed on preceding 4a77ac634. Remaining findings and release acceptance are unfinished.
+
 ## Friend and profile patch simplification
 
 Friend sorting now wraps only the adjacent comparator expression. Request dates capture the user in the same bounded JSX call instead of searching backward. Spotify's profile update inserts at the adjacent premium comparison, and the member mod-view module anchor uses its complete current-user/permission expression. Two replacement callbacks and all four broad searches are removed.

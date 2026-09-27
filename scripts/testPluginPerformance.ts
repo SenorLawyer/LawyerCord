@@ -2225,6 +2225,49 @@ test("reply mention exceptions match whole user and role IDs", () => {
     assert.equal(plugin.shouldMention(message, false), true);
 });
 
+test("reaction profile settings drive native popouts and isolate activation", () => {
+    const store = { avatarClick: false };
+    const selectedKeys: (readonly string[])[] = [];
+    let definition: { avatarClick: { restartNeeded?: boolean; }; } | undefined;
+    let summary: Record<string, unknown> = {};
+    const user = { id: "user" };
+    const React = { createElement: (type: unknown, props: Record<string, unknown>, ...children: unknown[]) => {
+        if (type === "summary") summary = props;
+        return { type, props: { ...props, children } };
+    } };
+    const { plugin, ReactionUsers } = loadSource("src/plugins/whoReacted/index.tsx", {
+        "@api/Settings": { definePluginSettings: (value: typeof definition) => {
+            definition = value;
+            return { store, use: (keys: readonly string[]) => { selectedKeys.push(keys); return store; } };
+        } },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/constants": { Devs: {} }, "@utils/misc": {}, "@utils/Queue": { Queue: class {} },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack": { findStoreLazy: () => ({}) },
+        "@webpack/common": {
+            React, UserSummaryItem: "summary", lodash: { isEqual: isDeepStrictEqual }, useEffect() {}, useLayoutEffect() {},
+            UserStore: { getCurrentUser: () => ({ id: "account" }), getUser: () => user, getUserStoreVersion: () => 0 },
+            ChannelStore: { getChannel: () => ({ guild_id: "guild" }) },
+            useStateFromStores: (_stores: unknown[], read: () => unknown) => read()
+        }
+    }, {}, "({ plugin: exports.default, ReactionUsers })");
+    plugin.reactions = { "message:wave::0": { fetched: true, users: new Map([["user", user]]) } };
+    const props = { message: { id: "message", channel_id: "channel" }, emoji: { name: "wave" }, type: 0 };
+    for (const enabled of [false, true, false]) {
+        store.avatarClick = enabled;
+        const tree = ReactionUsers(props);
+        assert.equal(summary.showUserPopout, enabled);
+        let stopped = 0;
+        const event = { stopPropagation: () => stopped++ };
+        tree.props.onClick?.(event);
+        tree.props.onKeyPress?.(event);
+        assert.equal(stopped, enabled ? 2 : 0);
+    }
+    assert.equal(selectedKeys[0], selectedKeys[1]);
+    assert.deepEqual(Array.from(selectedKeys[0]), ["avatarClick"]);
+    assert.notEqual(definition?.avatarClick.restartNeeded, true);
+});
+
 test("reaction avatar selectors stay pure and observe cache, user and guild updates", () => {
     interface Snapshot { userIds: string[]; guildId: string; generation: number; userVersion: number; }
     const selectors: (() => Snapshot)[] = [];
@@ -2238,7 +2281,7 @@ test("reaction avatar selectors stay pure and observe cache, user and guild upda
     const ChannelStore = { getChannel: () => ({ guild_id: guildId }) };
     const React = { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props: { ...props, children } }) };
     const { plugin, ReactionUsers } = loadSource("src/plugins/whoReacted/index.tsx", {
-        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@api/Settings": { definePluginSettings: () => ({ store: {}, use: () => ({ avatarClick: false }) }) },
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@utils/constants": { Devs: {} }, "@utils/misc": {},
         "@utils/Queue": { Queue: class { unshift(task: unknown) { tasks.push(task); } } },
@@ -2272,7 +2315,7 @@ test("reaction avatar selectors stay pure and observe cache, user and guild upda
     assert.equal(select().userVersion, version);
     assert.equal(select().guildId, guildId);
     const tree = ReactionUsers(props);
-    const summary = tree.props.children[0].props.children[0];
+    const summary = tree.props.children[0];
     assert.equal(summary.props.users[0], user);
     assert.equal(summary.props.guildId, guildId);
     plugin.reactions = {};

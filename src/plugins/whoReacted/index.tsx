@@ -38,6 +38,7 @@ interface ReactionProps {
 }
 
 const MAX_PENDING_REACTION_FETCHES = 50;
+const AVATAR_SETTINGS: "avatarClick"[] = ["avatarClick"];
 const MessageReactionsStore = findStoreLazy("MessageReactionsStore");
 
 let Scroll: any = null;
@@ -96,6 +97,7 @@ function handleClickAvatar(event: React.UIEvent<HTMLElement, Event>) {
 }
 
 function ReactionUsers({ message, emoji, type }: ReactionProps) {
+    const { avatarClick } = settings.use(AVATAR_SETTINGS);
     const key = `${message.id}:${emoji.name}:${emoji.id ?? ""}:${type}`;
     const { userIds, guildId, generation, userId } = useStateFromStores([MessageReactionsStore, UserStore, ChannelStore], () => ({
         userIds: Array.from(reactions[key]?.users.keys() ?? []),
@@ -125,31 +127,26 @@ function ReactionUsers({ message, emoji, type }: ReactionProps) {
     return (
         <div
             style={{ marginLeft: "0.5em", transform: "scale(0.9)" }}
+            onClick={avatarClick ? handleClickAvatar : undefined}
+            onKeyPress={avatarClick ? handleClickAvatar : undefined}
         >
-            <div
-                onClick={handleClickAvatar}
-                onKeyDown={handleClickAvatar}
-                style={settings.store.avatarClick ? {} : { pointerEvents: "none" }}
-            >
-                <UserSummaryItem
-                    users={users}
-                    guildId={guildId}
-                    renderIcon={false}
-                    max={5}
-                    showDefaultAvatarsForNullUsers
-                    showUserPopout
-                />
-            </div>
+            <UserSummaryItem
+                users={users}
+                guildId={guildId}
+                renderIcon={false}
+                max={5}
+                showDefaultAvatarsForNullUsers
+                showUserPopout={avatarClick}
+            />
         </div>
     );
 }
 
 const settings = definePluginSettings({
     avatarClick: {
-        description: "Toggle clicking avatars in reactions",
+        description: "Open profiles by clicking reaction avatars.",
         type: OptionType.BOOLEAN,
-        default: false,
-        restartNeeded: true
+        default: false
     }
 });
 

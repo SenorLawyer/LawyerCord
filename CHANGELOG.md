@@ -59,6 +59,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Apply reaction-avatar profile settings immediately through Discord's native control. Prevent Enter or Space on a focused avatar from also toggling its reaction.
+
 - Keep reaction avatars current after reaction, user and guild changes. Subscribe to the native stores and schedule fetches after render.
 
 - Keep discarded reaction fetches retryable and ignore replies after stopping, reconnecting or changing accounts. Failed requests no longer leave the cache marked as fetched.

@@ -2,11 +2,21 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Latest full local verification: all 689 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the reaction-subscription fix. Patch lint reports zero warnings and no errors. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding 77f64e42f; the subscription fix requires its own CI.
+Latest full local verification: all 690 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the reaction-avatar interaction fix. Patch lint reports zero warnings and no errors. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding 445a893bf; the interaction fix requires its own CI.
 
 Earlier broad verification checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning passed. Patch lint then reported 107 warnings and no errors. Full repository lint logs use `.git/audit/reconciliation-sep27-*`; later focused runs do not replace final combined validation.
 
 A fresh September 27 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,656 files, fifteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-patches-complete.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
+
+## Native reaction-avatar interaction
+
+WhoReacted kept profile controls enabled inside a pointer-disabled wrapper. It now passes the setting to Discord's native showUserPopout prop, removing the inner wrapper and pointer-events override. The setting subscribes to its own stable key list and no longer requires a reload. Enabled avatar clicks still stop before reaching the reaction button; disabled avatar clicks reach that button normally.
+
+The Chromium fixture also exposed an existing keyboard bug. The wrapper stopped keydown while the native Clickable activates on keypress, so Enter on a focused avatar opened the popup and toggled the outer reaction. The event boundary now stops keypress. Enter and Space activate only the avatar. The native negative tab index is preserved; this does not add sequential keyboard navigation to the avatar list.
+
+Both failures were reproduced before the changes. The browser fixture runs actual ReactDOM, the captured UserSummaryItem and Clickable implementations, and controlled stores and popup hosting. It verifies disabled controls are absent, click propagation in both modes, keyboard activation, live setting changes, and hiding an open popup when disabled. The tracked regression covers native popup props, activation handlers and the stable settings key. Evidence is `.git/audit/reaction-avatar-interaction.{cjs,json}`, `reaction-avatar-before.log` and `reaction-avatar-keyboard-before.log`. Store-subscription checks still pass.
+
+All 690 broader tests and timezone checks, TypeScript, focused ESLint, sequential desktop/web builds and artifact scanning pass. The settings API requires a mutable array type; correcting that declaration produced identical emitted code, and TypeScript and lint were rerun successfully. Patch lint reports zero warnings and errors. Logs use `.git/audit/reaction-avatar-*`. All four preceding 445a893bf CI checks passed. Signed-in profile content, sequential avatar focus and scrolling ownership remain separate review items.
 
 ## Reaction-avatar store subscriptions
 

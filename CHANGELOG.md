@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Sync VoiceStats and ProfileSets records only for the signed-in account, preserving other accounts and ownerless recovery data. Exclude ReviewDB authorization records from cloud transfers.
+
 - Keep ThemeLibrary, Decor, SongSpotlight, and Streaks authorization tokens out of cloud uploads and imports.
 
 - Keep scheduled-message queues, reconnect and last-channel state, and downloaded transcription models out of cloud transfers. This prevents copied jobs from sending on another device and model caches from blocking cloud serialization.

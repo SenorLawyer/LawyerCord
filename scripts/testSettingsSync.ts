@@ -680,11 +680,14 @@ test("backups reject DataStore values that JSON would silently discard or change
 
 test("cloud data round trips the aggregate DataStore record and empty CSS", async () => {
     const nativeSettings = { plugins: {}, cloud: { url: "https://local.invalid", authenticated: true, settingsSyncVersion: 1 } };
-    const records: [string, unknown][] = [["CustomSounds", { saved: true }], ["VoiceStats", { seconds: 42 }]];
+    let currentUserId: string | undefined = "first";
+    const accountKeys = (id: string) => [`VoiceStats_totals:${id}`, `VoiceStats_totals:recovered:${id}`, `ProfileDataset:${id}:main`, `ProfilePresets_v2_Main:${id}`, `ProfilePresets_v2_Server:${id}`];
+    const records: [string, unknown][] = [["CustomSounds", { saved: true }], ["VoiceStats", { seconds: 42 }], ...accountKeys("first").map(key => [key, { owned: true }] as [string, unknown])];
     const syncedRecords = records.slice();
     const localKeys = [
         "Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions", "Vencord_cloudManifest:https://first.invalid:first", "Vencord_cloudManifest:https://second.invalid:second",
-        "ThemeLibrary_uniqueToken", "decor-auth", "songspotlight-auth", "vc-streaks-auth",
+        "ThemeLibrary_uniqueToken", "decor-auth", "songspotlight-auth", "vc-streaks-auth", "rdb-auth",
+        "VoiceStats_totals", "ProfileDataset", "ProfilePresets_v2_Main", "ProfilePresets_v2_Server", ...accountKeys("second"),
         "ScheduledMessages_queue", "VCLastVoiceChannel", "VCLastVoiceChannelSession", "KeepCurrentChannel_previousData", "VoiceMessageTranscriber_https://fixture.invalid/model.bin"
     ];
     for (const key of localKeys) records.push([key, { local: true }]);
@@ -700,7 +703,7 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
         "@utils/native": {},
         "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
         "@utils/web": {},
-        "@webpack/common": { lodash },
+        "@webpack/common": { lodash, UserStore: { getCurrentUser: () => currentUserId ? { id: currentUserId } : undefined } },
         fflate: {},
         "./cloudSetup": {},
         "..": { DataStore: { entries: async () => records, setMany: async (entries: unknown) => writes.push(entries) } }
@@ -760,6 +763,21 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
     const snapshot = await offline.captureCloudImportState();
     assert.deepEqual([...snapshot.dataStore.keys()], syncedRecords.map(([key]) => JSON.stringify(key)));
     await assert.rejects(offline.exportSettings({ type: "datastore" }), /JSON backup format cannot preserve/);
+    for (const id of ["second", undefined, "first"]) {
+        currentUserId = id;
+        const expectedRecords = records.filter(([key]) => key === "CustomSounds" || key === "VoiceStats" || (id !== undefined && accountKeys(id).includes(key)));
+        assert.deepEqual(JSON.parse(new TextDecoder().decode((await buildLocalData()).get("dataStore"))), expectedRecords);
+        assert.deepEqual(JSON.parse(await offline.exportSettings({ type: "datastore", cloud: true })).dataStore, expectedRecords);
+        assert.deepEqual([...(await offline.captureCloudImportState()).dataStore.keys()], expectedRecords.map(([key]) => JSON.stringify(key)));
+        await offline.importSettings(JSON.stringify({ dataStore: records }), "datastore", true);
+        assert.deepEqual(JSON.parse(JSON.stringify(writes.at(-1))), expectedRecords);
+        await applyDownloads([download("dataStore", JSON.stringify(records))]);
+        assert.deepEqual(JSON.parse(JSON.stringify(writes.at(-1))), expectedRecords);
+        const before = writes.length;
+        const rejectedKeys = records.filter(([key]) => !expectedRecords.some(([expectedKey]) => expectedKey === key));
+        await applyDownloads(rejectedKeys.map(([key]) => download(`dataStore/${key}`, '{"remote":true}')));
+        assert.equal(writes.length, before, "Individual downloads cannot replace another account's records or ownerless recovery data");
+    }
     records.push(["binary", new Uint8Array([1, 2]).buffer]);
     await assert.rejects(buildLocalData(), /JSON backup format cannot preserve/);
 });

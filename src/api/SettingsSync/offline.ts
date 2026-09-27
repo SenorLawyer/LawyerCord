@@ -8,18 +8,27 @@ import { DefaultSettings, PlainSettings } from "@api/Settings";
 import { Logger } from "@utils/Logger";
 import { isObject } from "@utils/misc";
 import { chooseFile, saveFile } from "@utils/web";
-import { moment, Toasts } from "@webpack/common";
+import { moment, Toasts, UserStore } from "@webpack/common";
 
 import { DataStore } from "..";
 
 type BackupType = "all" | "plugins" | "css" | "datastore";
 const LOCAL_DATASTORE_KEYS = new Set<unknown>([
     "Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions", "VencordQuickCss",
-    "ThemeLibrary_uniqueToken", "decor-auth", "songspotlight-auth", "vc-streaks-auth",
+    "ThemeLibrary_uniqueToken", "decor-auth", "songspotlight-auth", "vc-streaks-auth", "rdb-auth",
     "ScheduledMessages_queue", "VCLastVoiceChannel", "VCLastVoiceChannelSession", "KeepCurrentChannel_previousData"
 ]);
-export const isLocalDataStoreKey = (key: unknown) => LOCAL_DATASTORE_KEYS.has(key)
-    || (typeof key === "string" && (key.startsWith("Vencord_cloudManifest:") || key.startsWith("VoiceMessageTranscriber_")));
+export function isLocalDataStoreKey(key: unknown) {
+    if (LOCAL_DATASTORE_KEYS.has(key)) return true;
+    if (typeof key !== "string") return false;
+    if (key.startsWith("Vencord_cloudManifest:") || key.startsWith("VoiceMessageTranscriber_")) return true;
+    if (!/^(?:VoiceStats_totals|ProfileDataset|ProfilePresets_v2_Main|ProfilePresets_v2_Server)(?::|$)/.test(key)) return false;
+    const userId = UserStore.getCurrentUser()?.id;
+    return !userId || ![
+        `VoiceStats_totals:${userId}`, `VoiceStats_totals:recovered:${userId}`, `ProfileDataset:${userId}:main`,
+        `ProfilePresets_v2_Main:${userId}`, `ProfilePresets_v2_Server:${userId}`
+    ].includes(key);
+}
 
 export const omitCloudSettings = (settings: object) => Object.fromEntries(Object.entries(settings).filter(([key]) => key !== "cloud"));
 

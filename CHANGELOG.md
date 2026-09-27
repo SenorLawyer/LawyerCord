@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Preserve nested crash-state expressions in CrashHandler and narrow ConsoleJanitor’s deprecated-log match.
+
 - Report failed BetterSettings preloads without unhandled promise rejections, while preserving retries when settings are opened.
 
 - Preserve native dialog roles, localized labels and layer identifiers when BetterSettings disables fades.

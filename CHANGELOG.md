@@ -59,6 +59,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Restore Unicode reaction avatars by sharing Discord's native reaction cache key format.
+
 - Restore profile banner viewing through the native clickable control with keyboard support. Empty and color-only banners remain noninteractive.
 
 - Restrict hidden app-channel toolbars to notifications, matching hidden text and forum channels instead of showing unavailable channel controls.

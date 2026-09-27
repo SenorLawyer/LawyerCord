@@ -80,7 +80,7 @@ function getEmojiKey(emoji: Pick<ReactionEmoji, "id" | "name">) {
 }
 
 function getReactionsWithQueue(msg: Message, e: ReactionEmoji, type: number) {
-    const key = `${msg.id}:${getEmojiKey(e)}:${type}`;
+    const key = `${msg.id}:${e.name}:${e.id ?? ""}:${type}`;
     const cache = reactions[key] ??= { fetched: false, users: new Map() };
     if (!cache.fetched) {
         const generation = fetchGeneration;

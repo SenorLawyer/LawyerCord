@@ -2225,6 +2225,28 @@ test("reply mention exceptions match whole user and role IDs", () => {
     assert.equal(plugin.shouldMention(message, false), true);
 });
 
+test("reaction avatars share native cache entries for Unicode and custom emoji", () => {
+    const tasks: (() => void)[] = [];
+    const { plugin, getReactionsWithQueue } = loadSource("src/plugins/whoReacted/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/constants": { Devs: {} }, "@utils/misc": { sleep: async () => {} },
+        "@utils/Queue": { Queue: class { unshift(task: () => void) { tasks.push(task); } } },
+        "@utils/react": {}, "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": {}
+    }, {}, "({ plugin: exports.default, getReactionsWithQueue })");
+    for (const id of [undefined, null, "custom"]) for (const type of [0, 1]) {
+        const emoji = { name: "wave", id };
+        const users = new Map([["user", { id: "user" }]]);
+        const key = `message:wave:${id ?? ""}:${type}`;
+        const cache = { [key]: { fetched: true, users } };
+        plugin.reactions = cache;
+        assert.equal(getReactionsWithQueue({ id: "message", channel_id: "channel" }, emoji, type), users);
+        assert.equal(tasks.length, 0);
+        assert.deepEqual(Object.keys(cache), [key]);
+    }
+});
+
 test("profile banners are clickable only when an image is present", () => {
     const opened: { url: string; }[] = [];
     const React = { createElement: (type: unknown, props: unknown) => ({ type, props }) };

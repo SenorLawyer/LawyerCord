@@ -84,7 +84,7 @@ export default definePlugin({
             find: '"NotificationStore"',
             replacement: [
                 {
-                    match: /\i\.\i\.getDesktopType\(\)===\i\.\i\.NEVER\)(?=.*?(\i\.\i\.playNotificationSound\(.{0,5}\)))/,
+                    match: /\i\.\i\.getDesktopType\(\)===\i\.\i\.NEVER\)(?=[^;{}]{0,100}?(\i\.\i\.playNotificationSound\(\i,\i\)))/,
                     replace: "$&if(!$self.isPrivateChannelRead(arguments[0]?.message))return;else if($self.playSound())return $1;else "
                 },
                 {

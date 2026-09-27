@@ -124,7 +124,7 @@ export default definePlugin({
         ...[".__invalid_connectedAccountOpenIconContainer", ".BLUESKY||"].map(find => ({
             find,
             replacement: {
-                match: /(?<=onClick:(\i)=>\{)(?=.{0,100}\.CONNECTED_ACCOUNT_VIEWED)(?<==(\i)\.metadata.+?)/,
+                match: /(?<=onClick:(\i)=>\{)(?=.{0,100}\.CONNECTED_ACCOUNT_VIEWED)(?=[^}]{0,150}?(\i)\.type)/,
                 replace: "if($self.handleAccountView($1,$2.type,$2.id)) return;"
             }
         }))

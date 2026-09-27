@@ -12,6 +12,10 @@ The invite patch crossed 2,446 characters into the unrelated openApp method and 
 
 A tracked regression fails before the change because accepted invites never receive defaults. The captured complete Discord module compiles and differs only in its success callback; openApp is unchanged. Five controlled callback cases preserve dispatch, callback payloads and return identity while forwarding the expected guild ID. Evidence is `.git/audit/new-guild-target-verify.cjs` and `new-guild-target-verify.json`. These checks do not establish signed-in server-join acceptance. All 670 broader tests and timezone checks, TypeScript, focused lint, desktop/web builds and artifact scanning pass. Patch lint reports 72 warnings and no errors. Logs use `.git/audit/new-guild-target-*`. All four CI checks passed on preceding commit fb907b514; this change requires its own CI.
 
+## Notification and account-link captures
+
+OnePingPerDM now finds its sound call within the current statement and matches its two identifier arguments explicitly. OpenInApp reads the account used in its own click callback instead of searching backward for an arbitrary metadata assignment. The two captured NotificationStore modules and both profile-link modules produce byte-identical patched output and compile. Controlled decoys demonstrate rejection of unrelated function/account references, and longer sound argument names are accepted. Evidence is `.git/audit/ping-links-local-verify.cjs` and `ping-links-local-verify.json`, comparing baseline fba874a10. The earlier 515340a07 notification anchor change was inspected; the current replacement behavior is preserved. Focused lint, desktop/web builds and artifact scanning pass. Patch lint reports 70 warnings and no errors. Logs use `.git/audit/ping-links-local-*`. The latest broader run remains 670 passing tests plus timezone checks at fba874a10. Captured-code equivalence is not signed-in client acceptance.
+
 ## Scope and source
 
 - Baseline: `6e664e03ba3d0b7746ce34740ca444f5112b04bc`, published as `nightly-20260905-1918-6e664e03`.

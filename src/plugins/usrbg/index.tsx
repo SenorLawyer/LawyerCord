@@ -26,6 +26,8 @@ import { classNameFactory } from "@utils/css";
 import { Logger } from "@utils/Logger";
 import { isObject } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
+import { proxyLazyWebpack } from "@webpack";
+import { zustandCreate } from "@webpack/common";
 
 const cl = classNameFactory("vc-usrbg-");
 const logger = new Logger("USRBG");
@@ -37,6 +39,12 @@ interface UsrbgApiReturn {
     prefix: string;
     users: Record<string, string>;
 }
+
+export const useUsrbgData: {
+    (): { data: UsrbgApiReturn | null; };
+    getState(): { data: UsrbgApiReturn | null; };
+    setState(state: { data: UsrbgApiReturn | null; }): void;
+} = proxyLazyWebpack(() => zustandCreate(() => ({ data: null })));
 
 const settings = definePluginSettings({
     nitroFirst: {
@@ -92,7 +100,8 @@ export default definePlugin({
         }
     ],
 
-    data: null as UsrbgApiReturn | null,
+    get data() { return useUsrbgData.getState().data; },
+    set data(data: UsrbgApiReturn | null) { useUsrbgData.setState({ data }); },
     request: undefined as AbortController | undefined,
 
     settingsAboutComponent: () => (

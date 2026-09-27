@@ -7,7 +7,7 @@
 import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
-import usrbg from "@plugins/usrbg";
+import usrbg, { useUsrbgData } from "@plugins/usrbg";
 import { Devs } from "@utils/constants";
 import { useAwaiter } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
@@ -60,7 +60,8 @@ interface MemberListBannerProps {
 const BANNER_SETTINGS: "animate"[] = ["animate"];
 const MemberListBanner = ErrorBoundary.wrap(({ userId, nameplate, preferNameplate, getBanner, convert }: MemberListBannerProps) => {
     const { animate } = settings.use(BANNER_SETTINGS);
-    const url = useStateFromStores([UserProfileStore], () => getBanner(userId), [userId, animate]);
+    const { data } = useUsrbgData();
+    const url = useStateFromStores([UserProfileStore], () => getBanner(userId), [userId, animate, data]);
     if (!url || (preferNameplate && nameplate)) return null;
     if (!animate) return <StaticBanner key={url} url={url} convert={convert} />;
     return <img alt="" src={url} className="vc-banners-everywhere-memberlist" />;

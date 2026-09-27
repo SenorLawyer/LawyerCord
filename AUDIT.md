@@ -2,11 +2,19 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Latest full local verification: all 694 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the banner conversion binding fix. Patch lint reports zero warnings and no errors. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding 5b7aba556; the banner fix requires its own CI.
+Latest full local verification: all 694 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the delayed banner feed fix. Patch lint reports zero warnings and no errors. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding 5d88fac24; the feed fix requires its own CI.
 
 Earlier broad verification checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning passed. Patch lint then reported 107 warnings and no errors. Full repository lint logs use `.git/audit/reconciliation-sep27-*`; later focused runs do not replace final combined validation.
 
 A fresh September 28 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,656 files, fifteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-patches-complete.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
+
+## Reactive USRBG feed for member banners
+
+USRBG now keeps its existing feed in one lazily created Zustand store, using the shared webpack export. Its data getter/setter retain the existing helper interface and route publication and stop through that store. BannersEverywhere subscribes to the feed and includes it in its banner selector dependencies. The feed is not copied or polled. Download ownership, schema validation and the decoded response limit are unchanged.
+
+The delayed-load reproduction now uses actual React and captured native Zustand modules 882035, 976245, 97729 and 417963. Both mounted rows update immediately after production feed publication without a parent render. Stop clears both views, and unmount removes both subscriptions. The captured selector's useSyncExternalStore dependency uses React's native export; surrounding Discord store subscriptions and HTTP remain controlled. Evidence is `.git/audit/banner-feed-late-after.{cjs,json}` alongside the failing-before case. The tracked feed and banner tests now check the shared data identity, clearing, and selector dependency. One existing test initially expected the old dependency list and was updated to include the feed.
+
+All 14 focused feed/banner tests, 694 broader regressions and timezone checks, TypeScript, focused ESLint, sequential desktop/web builds and artifact scanning pass. Logs use `.git/audit/banner-feed-reactivity-*`. All four preceding 5d88fac24 CI checks passed. This resolves delayed feed publication for member banners; native profile/voice rendering, enable-state changes and nameplate preference propagation remain separate checks.
 
 ## Delayed USRBG feed publication
 

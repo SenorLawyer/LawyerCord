@@ -7858,6 +7858,7 @@ test("BannersEverywhere subscribes its banner to profile and setting changes", (
     let url: string | undefined = "banner";
     let expectedUser = "first";
     let subscriptions = 0;
+    let feed: object | null = null;
     let keys: unknown;
     const { default: plugin } = loadSource("src/equicordplugins/bannersEverywhere/index.tsx", {
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
@@ -7868,11 +7869,11 @@ test("BannersEverywhere subscribes its banner to profile and setting changes", (
             assert.deepEqual(Array.from(currentKeys as string[]), ["animate"]);
             return values;
         } }) },
-        "@plugins/usrbg": {}, "@utils/constants": { Devs: {} },
+        "@plugins/usrbg": { useUsrbgData: () => ({ data: feed }) }, "@utils/constants": { Devs: {} },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
         "@webpack/common": { UserProfileStore: store, useStateFromStores: (stores: unknown[], select: () => unknown, deps: unknown[]) => {
             assert.deepEqual(Array.from(stores), [store]);
-            assert.deepEqual(Array.from(deps), [expectedUser, values.animate]);
+            assert.deepEqual(Array.from(deps), [expectedUser, values.animate, feed]);
             subscriptions++;
             return select();
         } }, "./style.css?managed": {}
@@ -7887,6 +7888,7 @@ test("BannersEverywhere subscribes its banner to profile and setting changes", (
     assert.equal(render().type, "img");
     expectedUser = "second";
     url = "replacement";
+    feed = { users: { second: "etag" } };
     assert.equal(render().props.src, "replacement");
     const retained = plugin.memberListBannerHook({ id: expectedUser }, { src: "nameplate" });
     values.preferNameplate = true;
@@ -8189,7 +8191,7 @@ test("USRBG rejects malformed feed data before publishing it", async () => {
             "https://usrbg.is-hardly.online.other.invalid", "https://usrbg.is-hardly.online@other.invalid",
             "data:image/png;base64,AA", "https://usrbg.is-hardly.online?redirect=other"].map(endpoint => ({ ...valid, endpoint })), valid]) {
         let warnings = 0;
-        const { default: plugin } = loadSource("src/plugins/usrbg/index.tsx", {
+        const { default: plugin, useUsrbgData } = loadSource("src/plugins/usrbg/index.tsx", {
             "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
             "@components/Button": {}, "@utils/constants": { Devs: {} },
             "@utils/css": { classNameFactory: () => () => "" },
@@ -8203,6 +8205,9 @@ test("USRBG rejects malformed feed data before publishing it", async () => {
         assert.equal(plugin.getImageUrl("user"), data === valid ? "https://usrbg.is-hardly.online/banners/v2/user?etag" : null);
         assert.equal(plugin.getImageUrl("missing"), null);
         assert.equal(warnings, data === valid ? 0 : 1);
+        assert.equal(useUsrbgData.getState().data, plugin.data);
+        plugin.stop();
+        assert.equal(useUsrbgData.getState().data, null);
     }
 });
 
@@ -11084,6 +11089,16 @@ function loadSource(path: string, mocks: Record<string, object>, globals: Record
     if (path === "src/plugins/translate/native.ts") globals = { AbortController, ...globals };
     if (path === "src/plugins/translate/index.tsx") globals = { AbortController, AbortSignal, ...globals };
     if (path === "src/plugins/betterSessions/utils.ts") globals = { Map, ...globals };
+    if (path === "src/plugins/usrbg/index.tsx") mocks = {
+        "@webpack": { proxyLazyWebpack: proxyLazy },
+        "@webpack/common": { zustandCreate: (init: () => object) => {
+            let state = init();
+            return Object.assign(() => state, { getState: () => state, setState: (value: object) => { state = { ...state, ...value }; } });
+        } }, ...mocks
+    };
+    if (path === "src/equicordplugins/bannersEverywhere/index.tsx") mocks = { ...mocks,
+        "@plugins/usrbg": { useUsrbgData: () => ({ data: null }), ...mocks["@plugins/usrbg"] }
+    };
     if (path === "src/equicordplugins/translatePlus/utils/accessory.tsx") globals = { AbortController, ...globals };
     if (path.endsWith("profileSets/utils/profile.ts"))
         mocks = { "@utils/misc": { parseUrl: (value: string) => { try { return new URL(value); } catch { return null; } } }, ...mocks };

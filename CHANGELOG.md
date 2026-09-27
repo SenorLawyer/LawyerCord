@@ -59,6 +59,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Update mounted member banners when the USRBG feed loads or clears.
+
 - Keep the banner conversion callback bound to its plugin cache so static banner rendering can complete.
 
 - Preserve default avatars and server avatar/banner inheritance in new profile presets. Existing saved image presets keep their behavior.

@@ -49,6 +49,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Remove PauseInvitesForever's extra setter patch and use the adjacent checkbox's setter directly.
+
 - Keep OnePingPerDM's sound capture and OpenInApp's account capture inside their target callbacks instead of searching unrelated code.
 
 - Apply new-server defaults in the accepted invite handler using its guild ID. Stop the patch from modifying the unrelated app-opening method.

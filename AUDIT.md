@@ -16,6 +16,10 @@ A tracked regression fails before the change because accepted invites never rece
 
 OnePingPerDM now finds its sound call within the current statement and matches its two identifier arguments explicitly. OpenInApp reads the account used in its own click callback instead of searching backward for an arbitrary metadata assignment. The two captured NotificationStore modules and both profile-link modules produce byte-identical patched output and compile. Controlled decoys demonstrate rejection of unrelated function/account references, and longer sound argument names are accepted. Evidence is `.git/audit/ping-links-local-verify.cjs` and `ping-links-local-verify.json`, comparing baseline fba874a10. The earlier 515340a07 notification anchor change was inspected; the current replacement behavior is preserved. Focused lint, desktop/web builds and artifact scanning pass. Patch lint reports 70 warnings and no errors. Logs use `.git/audit/ping-links-local-*`. The latest broader run remains 670 passing tests plus timezone checks at fba874a10. Captured-code equivalence is not signed-in client acceptance.
 
+## PauseInvitesForever setter capture
+
+The label patch now captures the adjacent checkbox setter within 250 characters. The separate state-hook search, injected setter alias and two-patch grouping are deleted. The complete captured module differs only by removal of that alias and direct use of the same lexical setter. Its ordinary component owner is verified, the module compiles, and a distant-setter decoy is rejected. Evidence is `.git/audit/pause-invites-capture-verify.cjs` and `pause-invites-capture-verify.json`, comparing baseline dab04c58a. Historical a3b2ee48f only changed plugin metadata. Focused lint, desktop/web builds and artifact scanning pass; logs use `.git/audit/pause-invites-capture-*`. Patch lint reports 69 warnings and no errors. The latest broader run remains 670 passing tests plus timezone checks at fba874a10. This does not close the separate keyboard interaction and rejected-request behavior review.
+
 ## Scope and source
 
 - Baseline: `6e664e03ba3d0b7746ce34740ca444f5112b04bc`, published as `nightly-20260905-1918-6e664e03`.

@@ -10104,6 +10104,11 @@ test("source fixtures reject recoverable syntax errors before execution", () => 
 
 function loadSource(path: string, mocks: Record<string, object>, globals: Record<string, unknown> = {}, result = "exports") {
     mocks = { "@shared/readResponseText": { readResponseText }, ...mocks };
+    if (path === "src/plugins/translate/utils.ts") {
+        mocks = { "@utils/Logger": { Logger: class { debug() {} } }, ...mocks };
+        globals = { crypto, ...globals };
+    }
+    if (path === "src/plugins/translate/native.ts") globals = { AbortController, ...globals };
     if (path === "src/plugins/translate/index.tsx") globals = { AbortController, AbortSignal, ...globals };
     if (path === "src/plugins/betterSessions/utils.ts") globals = { Map, ...globals };
     if (path === "src/equicordplugins/translatePlus/utils/accessory.tsx") globals = { AbortController, ...globals };
@@ -18489,4 +18494,64 @@ test("transcript translation replacement and Cancel abort only their owned reque
     assert.deepEqual(errors, []);
     assert.equal(context.activeTranslations.size, 0);
     assert.equal(context.translationRef.current, null);
+});
+
+
+test("native translation cancellation is isolated by frame and request", async () => {
+    for (const provider of ["makeDeeplTranslateRequest", "makeKagiTranslateRequest"]) {
+        const pending: { signal: AbortSignal; resolve: (response: Response) => void }[] = [];
+        const native = loadSource("src/plugins/translate/native.ts", {}, { Buffer, fetch: (_url: string, options: { signal: AbortSignal }) => new Promise((resolve, reject) => {
+            pending.push({ signal: options.signal, resolve });
+            options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+        }) });
+        const firstFrame = { senderFrame: {} }, secondFrame = { senderFrame: {} };
+        const args = provider === "makeDeeplTranslateRequest" ? [false, "key", "{}"] : ["token", "text", "auto", "en"];
+        const first = native[provider](firstFrame, ...args, "same-id");
+        const second = native[provider](secondFrame, ...args, "same-id");
+        assert.equal((await native[provider](firstFrame, ...args, "same-id")).status, -1);
+        for (const id of [null, {}, 42, "", "x".repeat(65)]) assert.equal((await native[provider](firstFrame, ...args, id)).status, -1);
+        assert.equal((await native[provider]({ senderFrame: null }, ...args, "id")).status, -1);
+        assert.equal(pending.length, 2);
+        native.cancelTranslateRequest({ senderFrame: {} }, "same-id");
+        assert.ok(pending.every(request => !request.signal.aborted));
+        native.cancelTranslateRequest(firstFrame, "same-id");
+        assert.equal((await first).status, -1);
+        assert.equal(pending[0].signal.aborted, true);
+        assert.equal(pending[1].signal.aborted, false);
+        native.cancelTranslateRequest(secondFrame, "same-id");
+        assert.equal((await second).status, -1);
+        const retry = native[provider](firstFrame, ...args, "same-id");
+        pending[2].resolve(new Response("{}"));
+        assert.equal((await retry).status, 200);
+        native.cancelTranslateRequest(firstFrame, "same-id");
+        assert.equal(pending[2].signal.aborted, false);
+    }
+});
+
+test("translation helpers forward cancellation to their native request", async () => {
+    for (const service of ["deepl", "kagi"]) {
+        let signal: AbortSignal | undefined;
+        let cancellations = 0;
+        const native = loadSource("src/plugins/translate/native.ts", {}, { Buffer, fetch: (_url: string, options: { signal: AbortSignal }) => new Promise((_resolve, reject) => {
+            signal = options.signal;
+            signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+        }) });
+        const event = { senderFrame: {} };
+        const utils = loadSource("src/plugins/translate/utils.ts", {
+            "@utils/css": { classNameFactory: () => () => "" }, "@utils/misc": {},
+            "@webpack/common": { showToast: () => assert.fail("Cancellation showed a toast"), Toasts: { Type: { FAILURE: 2 } } },
+            "./settings": { settings: { store: { service, deeplApiKey: "key", kagiSession: "token" } } }, "./languages": {}
+        }, { IS_WEB: false, VencordNative: { pluginHelpers: { Translate: {
+            makeDeeplTranslateRequest: (...args: unknown[]) => native.makeDeeplTranslateRequest(event, ...args),
+            makeKagiTranslateRequest: (...args: unknown[]) => native.makeKagiTranslateRequest(event, ...args),
+            cancelTranslateRequest: async (id: string) => { cancellations++; native.cancelTranslateRequest(event, id); }
+        } } } });
+        const controller = new AbortController();
+        const pending = utils.translateText("Hello", "auto", "fr", () => true, controller.signal);
+        const rejected = assert.rejects(pending);
+        controller.abort();
+        await rejected;
+        assert.equal(signal?.aborted, true);
+        assert.equal(cancellations, 1);
+    }
 });

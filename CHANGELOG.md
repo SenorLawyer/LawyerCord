@@ -36,6 +36,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Forward translation cancellation to DeepL and Kagi native requests. Scope cancellation by invoking frame and request ID so another window cannot cancel unrelated work.
+
 - Cancel transcript translation on replacement, Cancel, unmount, logout, and plugin stop. Pass its own signal to Google translation without reusing the terminated speech worker.
 
 - Cancel replaced Translate Google requests and abort received/outgoing Google requests on logout or plugin stop. Cancelled sends retain their original text without failure feedback.

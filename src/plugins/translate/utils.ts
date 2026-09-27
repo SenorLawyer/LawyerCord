@@ -18,6 +18,7 @@
 
 import { readResponseText } from "@shared/readResponseText";
 import { classNameFactory } from "@utils/css";
+import { Logger } from "@utils/Logger";
 import { isObject, tryOrElse } from "@utils/misc";
 import { PluginNative } from "@utils/types";
 import { showToast, Toasts } from "@webpack/common";
@@ -27,6 +28,7 @@ import { settings } from "./settings";
 
 export const cl = classNameFactory("vc-trans-");
 
+const logger = new Logger("Translate");
 const Native = VencordNative.pluginHelpers.Translate as PluginNative<typeof import("./native")>;
 
 export interface TranslationValue {
@@ -111,20 +113,36 @@ async function googleTranslate(text: string, sourceLang: string, targetLang: str
     };
 }
 
-async function deeplTranslate(text: string, sourceLang: string, targetLang: string): Promise<TranslationValue> {
+async function translateNative<T>(signal: AbortSignal | undefined, request: (id?: string) => Promise<T>): Promise<T> {
+    if (!signal) return request();
+    signal.throwIfAborted();
+    const id = crypto.randomUUID();
+    const pending = request(id);
+    const cancel = () => { void Native.cancelTranslateRequest(id).catch(() => logger.debug("Could not cancel the native translation request.")); };
+    signal.addEventListener("abort", cancel, { once: true });
+    if (signal.aborted) cancel();
+    try {
+        return await pending;
+    } finally {
+        signal.removeEventListener("abort", cancel);
+    }
+}
+
+async function deeplTranslate(text: string, sourceLang: string, targetLang: string, signal?: AbortSignal): Promise<TranslationValue> {
     if (!settings.store.deeplApiKey)
         throw "DeepL API key is not set.";
 
     // CORS jumpscare
-    const { status, data } = await Native.makeDeeplTranslateRequest(
+    const { status, data } = await translateNative(signal, id => Native.makeDeeplTranslateRequest(
         settings.store.service === "deepl-pro",
         settings.store.deeplApiKey,
         JSON.stringify({
             text: [text],
             target_lang: targetLang,
             source_lang: sourceLang.split("-")[0] || undefined
-        })
-    );
+        }),
+        id
+    ));
 
     switch (status) {
         case 200:
@@ -154,13 +172,13 @@ async function deeplTranslate(text: string, sourceLang: string, targetLang: stri
     };
 }
 
-async function kagiTranslate(text: string, sourceLang: string, targetLang: string): Promise<TranslationValue> {
+async function kagiTranslate(text: string, sourceLang: string, targetLang: string, signal?: AbortSignal): Promise<TranslationValue> {
     if (!settings.store.kagiSession)
         throw "Kagi session token is not set.";
 
-    const { status, data } = await Native.makeKagiTranslateRequest(
-        settings.store.kagiSession, text, sourceLang, targetLang
-    );
+    const { status, data } = await translateNative(signal, id => Native.makeKagiTranslateRequest(
+        settings.store.kagiSession, text, sourceLang, targetLang, id
+    ));
 
     switch (status) {
         case 200:

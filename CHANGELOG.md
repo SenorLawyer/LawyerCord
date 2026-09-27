@@ -17,6 +17,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Removed
 
+- Remove the ineffective RichPresence settings rename call. Existing per-service settings migration is unchanged.
+
 - Remove CallTimer’s single-use text wrapper and move its static styles into the existing stylesheet.
 - Remove CustomSounds' Debug action, which dumped stored audio and file details to the console.
 

@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Preserve local data during upload-only cloud sync and keep skipped remote changes available for an explicit download.
+
 - Keep Picture in Picture button matching independent of the order of Discord media properties.
 
 - Make the Picture in Picture control keyboard-accessible with the shared button and an explicit accessible name.

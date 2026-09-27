@@ -2118,3 +2118,73 @@ test("cloud imports preserve CSS and DataStore edits made after their snapshot",
         }
     }
 });
+
+
+test("upload-only cloud sync preserves local data and leaves skipped downloads available", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    const checksum = async (value: string) => Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))).subarray(0, 8).toString("hex");
+    for (const direction of ["push", "both", "manual", undefined]) for (const manual of [false, true]) {
+        const plain = { cloud: { settingsSyncVersion: 1 }, plugins: { Sound: { value: "local edit" } } };
+        let persisted = structuredClone(plain);
+        const originalCss = "body { color: green; }";
+        const remoteCss = "body { color: purple; }";
+        let css = originalCss;
+        let manifest = [
+            { key: "settings", version: 1, checksum: await checksum(JSON.stringify({ plugins: { Sound: { value: "previous" } } })) },
+            { key: "quickCss", version: 1, checksum: await checksum(css) },
+            { key: "dataStore", version: 1, checksum: await checksum("[]") }
+        ];
+        const remote = { key: "quickCss", version: 2, checksum: await checksum(remoteCss) };
+        const storage = { Vencord_settingsDirty: "true", Vencord_cloudSyncDirection: direction };
+        const requests: { uploads: { key: string; checksum: string; }[]; client_manifest: typeof manifest; }[] = [];
+        const store = {
+            get: async (key: string) => key.startsWith("Vencord_cloudManifest:") ? manifest : undefined,
+            entries: async () => [], set: async (_key: string, value: typeof manifest) => { manifest = value; }
+        };
+        const modules: Record<string, unknown> = {
+            "@shared/readResponseText": jsonResponseReader,
+            "@api/DataStore": store, "..": { DataStore: store },
+            "@api/Settings": { PlainSettings: plain, Settings: plain, DefaultSettings: defaultSettings },
+            "@api/Notifications": { showNotification() {} },
+            "@utils/localStorage": { localStorage: storage },
+            "@utils/Logger": { Logger: class { info() {} error(...args: unknown[]) { assert.fail(args.map(String).join(" ")); } } },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" }
+        };
+        const globals = {
+            require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextEncoder, TextDecoder, Response, atob, btoa, crypto, structuredClone, IS_WEB: true,
+            VencordNative: {
+                settings: {
+                    get: () => structuredClone(persisted),
+                    set: async (next: typeof persisted, _path: string | undefined, expected: string) => {
+                        assert.equal(JSON.stringify(persisted), expected);
+                        persisted = structuredClone(next);
+                    }
+                },
+                quickCss: { get: async () => css, set: async (next: string, expected: string) => { assert.equal(css, expected); css = next; } }
+            },
+            fetch: async (_url: URL, init: RequestInit) => {
+                const request: typeof requests[number] = JSON.parse(String(init.body));
+                requests.push(request);
+                const uploaded = request.uploads.map(({ key, checksum }) => ({ key, version: 2, checksum }));
+                const download = request.client_manifest.find(entry => entry.key === "quickCss")?.version !== remote.version;
+                return Response.json({ errors: [], uploaded, server_manifest: [uploaded[0] ?? manifest.find(entry => entry.key === "settings"), remote, manifest.find(entry => entry.key === "dataStore")],
+                    downloads: download ? [{ ...remote, value: btoa(remoteCss) }] : [] });
+            }
+        };
+        modules["./offline"] = runInNewContext(`${outputText}\nexports;`, { ...globals, exports: {} });
+        const api = runInNewContext(`${compiled}\nexports;`, { ...globals, exports: {} });
+        await api.putCloudSettings(manual);
+        assert.deepEqual(requests[0].uploads.map(entry => entry.key), ["settings"]);
+        assert.equal(css, direction === "push" ? originalCss : remoteCss);
+        assert.equal(manifest.find(entry => entry.key === "settings")?.version, 2);
+        assert.equal(manifest.find(entry => entry.key === "quickCss")?.version, direction === "push" ? 1 : 2);
+        assert.equal(storage.Vencord_settingsDirty, undefined);
+        await api.getCloudSettings(false);
+        assert.equal(css, remoteCss, "An explicit download can still receive the previously skipped remote record");
+        assert.equal(manifest.find(entry => entry.key === "quickCss")?.version, 2);
+    }
+});

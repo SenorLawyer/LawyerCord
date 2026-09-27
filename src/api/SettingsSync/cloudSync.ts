@@ -32,7 +32,7 @@ type ApiVersion = "v2" | "v1";
 const SYNC_DIRECTION_KEY = "Vencord_cloudSyncDirection";
 const SETTINGS_DIRTY_KEY = "Vencord_settingsDirty";
 let localSettingsRevision = 0;
-export const getCloudSyncDirection = () => localStorage.getItem(SYNC_DIRECTION_KEY) || "both";
+export const getCloudSyncDirection = () => localStorage[SYNC_DIRECTION_KEY] || "both";
 export const setCloudSyncDirection = (direction: "push" | "pull" | "both" | "manual") => localStorage.setItem(SYNC_DIRECTION_KEY, direction);
 export const areLocalSettingsDirty = () => localStorage.getItem(SETTINGS_DIRTY_KEY) === "true";
 export const markLocalSettingsDirty = () => {
@@ -258,12 +258,16 @@ async function putV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>, m
     context.assertCurrent();
     if (!response) return;
 
-    const hadDownloads = await applyDownloads(response.downloads, context);
+    const receiveDownloads = getCloudSyncDirection() !== "push";
+    const hadDownloads = receiveDownloads && await applyDownloads(response.downloads, context);
     context.assertCurrent();
 
     await saveSyncVersion(context, Date.now());
     context.assertCurrent();
-    await saveLocalManifest(context, response.server_manifest);
+    await saveLocalManifest(context, receiveDownloads ? response.server_manifest : [
+        ...localManifest.filter(entry => !response.uploaded.some(upload => upload.key === entry.key)),
+        ...response.uploaded
+    ]);
     context.assertCurrent();
 
     logger.info(`Sync complete: ${response.uploaded.length} uploaded, ${response.downloads.length} downloaded`);

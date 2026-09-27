@@ -720,7 +720,7 @@ test("cloud data round trips the aggregate DataStore record and empty CSS", asyn
     const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
     }).outputText;
-    const { buildLocalData, applyDownloads } = runInNewContext(`${compiled}\n({ buildLocalData, applyDownloads: downloads => applyDownloads(downloads, { assertCurrent() {} }) });`, { ...globals, exports: {} });
+    const { buildLocalData, applyDownloads } = runInNewContext(`${compiled}\n({ buildLocalData: () => buildLocalData(() => {}), applyDownloads: downloads => applyDownloads(downloads, { assertCurrent() {} }) });`, { ...globals, exports: {} });
     const local = await buildLocalData();
     const settingsJson = new TextDecoder().decode(local.get("settings"));
     assert.deepEqual(JSON.parse(settingsJson), { plugins: {} });
@@ -2522,7 +2522,7 @@ test("cloud ChannelTabs transfers preserve other accounts and device sessions", 
     const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
     }).outputText;
-    const { buildLocalData, applyDownloads } = runInNewContext(`${compiled}\n({ buildLocalData, applyDownloads: (downloads, expected) => applyDownloads(downloads, { assertCurrent() {}, expected }) });`, { ...globals, exports: {} });
+    const { buildLocalData, applyDownloads } = runInNewContext(`${compiled}\n({ buildLocalData: () => buildLocalData(() => {}), applyDownloads: (downloads, expected) => applyDownloads(downloads, { assertCurrent() {}, expected }) });`, { ...globals, exports: {} });
     const download = (key: string, value: unknown) => ({ key, value: Buffer.from(JSON.stringify(value)).toString("base64") });
     const sourceRecords = structuredClone([...records]);
     for (const id of ["first", "second", undefined]) {
@@ -2616,7 +2616,7 @@ test("cloud settings keep service credentials and connection bindings local", as
     const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
     }).outputText;
-    const { buildLocalData, applyDownloads } = runInNewContext(`${compiled}\n({ buildLocalData, applyDownloads: (downloads, expected) => applyDownloads(downloads, { assertCurrent() {}, expected }) });`, { ...globals, exports: {} });
+    const { buildLocalData, applyDownloads } = runInNewContext(`${compiled}\n({ buildLocalData: () => buildLocalData(() => {}), applyDownloads: (downloads, expected) => applyDownloads(downloads, { assertCurrent() {}, expected }) });`, { ...globals, exports: {} });
     const expectedExport = { plugins: {
         ...Object.fromEntries(Object.keys(privateFields).map(name => [name, { enabled: true, ordinaryPreference: "source" }])),
         Unrelated: source.plugins.Unrelated
@@ -2685,7 +2685,7 @@ test("cloud sync preserves device-local RelationshipNotifier observations", asyn
     const compiledCloud = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
     }).outputText;
-    const { buildLocalData, applyDownloads } = runInNewContext(`${compiledCloud}\n({ buildLocalData, applyDownloads: downloads => applyDownloads(downloads, { assertCurrent() {} }) });`, { ...globals, exports: {} });
+    const { buildLocalData, applyDownloads } = runInNewContext(`${compiledCloud}\n({ buildLocalData: () => buildLocalData(() => {}), applyDownloads: downloads => applyDownloads(downloads, { assertCurrent() {} }) });`, { ...globals, exports: {} });
     const expected = [["ordinaryPreference", true]];
     assert.deepEqual(JSON.parse(await offline.exportSettings({ type: "datastore", cloud: true })).dataStore, expected);
     assert.deepEqual(JSON.parse(new TextDecoder().decode((await buildLocalData()).get("dataStore"))), expected);
@@ -2742,7 +2742,7 @@ test("versioned DataStore backups preserve top-level Maps across offline and clo
     const offline = runInNewContext(`${outputText}\nexports;`, globals);
     modules["./offline"] = offline;
     const cloudSource = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;
-    const cloud = runInNewContext(`${cloudSource}\n({ buildLocalData, apply: (downloads, expected) => applyDownloads(downloads, { assertCurrent() {}, expected }) });`, { ...globals, exports: {} });
+    const cloud = runInNewContext(`${cloudSource}\n({ buildLocalData: () => buildLocalData(() => {}), apply: (downloads, expected) => applyDownloads(downloads, { assertCurrent() {}, expected }) });`, { ...globals, exports: {} });
     const utilsSource = transpileModule(readFileSync("src/plugins/betterSessions/utils.ts", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;
     const utils = runInNewContext(`${utilsSource}\nexports;`, { ...globals, exports: {} });
     const offlineBackup = await offline.exportSettings({ type: "datastore" });
@@ -2807,4 +2807,70 @@ test("cloud operations without browser locks stop before accessing account data"
         assert.equal(await api[operation](), false);
     assert.equal(notifications.length, 4);
     assert.ok(notifications.every(note => note.body.includes("Update your browser")));
+});
+
+
+test("cloud uploads check their owner before filtering asynchronously loaded account data", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const stage of ["css", "datastore"]) {
+        let owner = "first";
+        let reads = 0;
+        let switched = false;
+        let returned = false;
+        let requests = 0;
+        const records = ["first", "second"].map(id => [
+            `BetterSessions_savedSessions_${id}`, new Map([[id, { name: `${id} private name`, isNew: false }]])
+        ]);
+        const store = {
+            get: async () => undefined,
+            set: async () => {},
+            entries: async () => {
+                if (++reads === 2 && stage === "datastore") { owner = "second"; switched = true; }
+                return structuredClone(records);
+            }
+        };
+        const settings = { cloud: {}, plugins: {} };
+        const modules: Record<string, unknown> = {
+            "@api/DataStore": store, "..": { DataStore: store },
+            "@api/Settings": { Settings: settings, PlainSettings: settings, DefaultSettings: {} },
+            "@api/Notifications": { showNotification() {} },
+            "@utils/Logger": { Logger: class { info() {} error() {} } },
+            "@utils/localStorage": { localStorage: { setItem() {} } },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+            "@webpack/common": {
+                lodash,
+                UserStore: { getCurrentUser: () => {
+                    const id = owner;
+                    if (switched && !returned) {
+                        returned = true;
+                        queueMicrotask(() => { owner = "first"; });
+                    }
+                    return { id };
+                } }
+            },
+            "./cloudSetup": { getCloudUrl: () => new URL("https://fixture.invalid"), getCloudAuth: async () => "synthetic" },
+            "@shared/readResponseText": jsonResponseReader
+        };
+        const globals = {
+            require: (name: string) => modules[name] ?? {}, navigator, URL, AbortSignal, TextEncoder, TextDecoder, crypto, btoa, atob, structuredClone,
+            VencordNative: {
+                settings: { get: () => settings, set: async () => {} },
+                quickCss: { get: async () => {
+                    if (reads === 1 && stage === "css") { owner = "second"; switched = true; }
+                    return "";
+                } }
+            },
+            fetch: async () => { requests++; return Response.json({ uploaded: [], server_manifest: [], downloads: [], errors: [] }); }
+        };
+        modules["./offline"] = runInNewContext(`${outputText}\nexports;`, { ...globals, exports: {} });
+        const api = runInNewContext(`${compiled}\nexports;`, { ...globals, exports: {} });
+        await api.putCloudSettings();
+        assert.equal(switched, true);
+        assert.equal(returned, true);
+        assert.equal(owner, "first");
+        assert.equal(requests, 0, stage);
+        assert.equal(reads, stage === "css" ? 1 : 2);
+    }
 });

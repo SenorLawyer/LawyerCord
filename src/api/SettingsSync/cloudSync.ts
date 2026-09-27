@@ -126,16 +126,18 @@ async function saveSyncVersion(context: Awaited<ReturnType<typeof getCloudSyncCo
     PlainSettings.cloud.settingsSyncVersion = version;
 }
 
-async function buildLocalData(): Promise<Map<string, Uint8Array>> {
+async function buildLocalData(checkCurrent: () => void): Promise<Map<string, Uint8Array>> {
     const encoder = new TextEncoder();
     const data = new Map<string, Uint8Array>();
 
     data.set("settings", encoder.encode(JSON.stringify(omitCloudSettings(VencordNative.settings.get()))));
 
     const quickCss = await VencordNative.quickCss.get();
+    checkCurrent();
     data.set("quickCss", encoder.encode(quickCss));
 
     const dataStoreEntries = await DataStore.entries();
+    checkCurrent();
     data.set("dataStore", encoder.encode(serializeDataStore(getCloudDataStoreEntries(dataStoreEntries))));
 
     return data;
@@ -254,7 +256,7 @@ async function putV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>, m
     context.assertCurrent();
     const manifestMap = new Map(localManifest.map(e => [e.key, e]));
 
-    const localData = await buildLocalData();
+    const localData = await buildLocalData(context.assertCurrent);
     context.assertCurrent();
     const uploads: SyncRequest["uploads"] = [];
 

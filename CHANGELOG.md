@@ -32,6 +32,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Stop pending cloud uploads before selecting account data when the Discord account or cloud service changes during storage reads.
+
 - Prevent cloud uploads, downloads, and deletion from overlapping across windows that share browser storage. Busy automatic syncs retry through the existing scheduler.
 
 - Preserve the actual written or deleted keys in DataStore change notifications when callers mutate their key arrays before a transaction finishes.

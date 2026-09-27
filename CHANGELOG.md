@@ -32,6 +32,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Let BetterSessions start when an older backup has already replaced its saved names with an empty object. Names lost by the old backup cannot be recovered.
+
 - Stop pending cloud uploads before selecting account data when the Discord account or cloud service changes during storage reads.
 
 - Prevent cloud uploads, downloads, and deletion from overlapping across windows that share browser storage. Busy automatic syncs retry through the existing scheduler.

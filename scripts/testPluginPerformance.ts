@@ -18152,3 +18152,25 @@ test("DataStore change events retain the keys issued to the database", async () 
         assert.deepEqual(structuredClone(events), [issued], `${mode} must describe committed database keys, not later caller edits`);
     }
 });
+
+
+test("BetterSessions loads empty legacy backup records without discarding valid names", async () => {
+    const named = new Map([["session", { name: "Saved name", isNew: false }]]);
+    for (const record of [undefined, new Map(), JSON.parse(JSON.stringify(named)), named]) {
+        let writes = 0;
+        const utils = loadSource("src/plugins/betterSessions/utils.ts", {
+            "@api/DataStore": {
+                get: async (key: string) => { assert.equal(key, "BetterSessions_savedSessions_first"); return record; },
+                set: async () => { writes++; }
+            },
+            "@utils/css": { classNameFactory: () => () => "" },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "first" }) } },
+            "./components/icons": {}
+        });
+        utils.savedSessionsCache.set("stale-session", { name: "Previous account", isNew: false });
+        await utils.fetchNamesFromDataStore();
+        assert.deepEqual(structuredClone(Array.from(utils.savedSessionsCache)), record === named ? Array.from(named) : []);
+        assert.equal(writes, 0);
+        assert.deepEqual(Array.from(named), [["session", { name: "Saved name", isNew: false }]]);
+    }
+});

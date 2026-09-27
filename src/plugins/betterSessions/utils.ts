@@ -50,6 +50,7 @@ export async function fetchNamesFromDataStore(shouldApply = () => true) {
 
     const savedSessions = await DataStore.get<Map<string, { name: string, isNew: boolean; }>>(dataKey) || new Map();
     if (!shouldApply()) return;
+    if (Object.prototype.toString.call(savedSessions) === "[object Object]" && Object.keys(savedSessions).length === 0) return;
 
     savedSessionsCache.clear();
     savedSessions.forEach((data, idHash) => {

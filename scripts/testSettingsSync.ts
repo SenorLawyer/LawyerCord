@@ -874,7 +874,7 @@ test("cloud JSON failures do not copy response contents into logs or notificatio
             "@utils/Logger": { Logger: class { info() {} error(...args: unknown[]) { logs.push(args.map(String).join(" ")); } } },
             "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: "first" }) } },
             "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" },
-            "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), exportSettings: async () => "{}", omitCloudSettings: () => ({}), serializeDataStore: JSON.stringify, isLocalDataStoreKey: () => false, importSettings: async () => writes.push("import") },
+            "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), exportSettings: async () => "{}", omitCloudSettings: () => ({}), serializeDataStore: JSON.stringify, getCloudDataStoreEntries: (entries: unknown) => entries, isLocalDataStoreKey: () => false, importSettings: async () => writes.push("import") },
             fflate: { deflateSync: (value: Uint8Array) => value }
         };
         const api = runInNewContext(`${compiled}\nexports;`, {
@@ -922,7 +922,7 @@ test("cloud JSON responses stop oversized streams before writes and allow retry"
             "@utils/Logger": { Logger: class { info() {} error() {} } },
             "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: "first" }) } },
             "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" },
-            "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), exportSettings: async () => "{}", omitCloudSettings: () => ({}), serializeDataStore: JSON.stringify },
+            "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), exportSettings: async () => "{}", omitCloudSettings: () => ({}), serializeDataStore: JSON.stringify, getCloudDataStoreEntries: (entries: unknown) => entries },
             fflate: { deflateSync: (value: Uint8Array) => value }
         };
         const api = runInNewContext(`${compiled}\nexports;`, {
@@ -1423,7 +1423,7 @@ test("failed cloud downloads and deletions do not advance the manifest or report
         "@utils/Logger": { Logger: class { info() { } error() { } } },
         "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: "first" }) } },
         "./cloudSetup": { getCloudUrl: () => new URL("https://cloud.example"), getCloudAuth: async () => "test" },
-        "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), omitCloudSettings: (settings: object) => settings, serializeDataStore: JSON.stringify, importSettings: async () => { if (importFails) throw new Error("Import failed"); } }
+        "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), omitCloudSettings: (settings: object) => settings, serializeDataStore: JSON.stringify, getCloudDataStoreEntries: (entries: unknown) => entries, importSettings: async () => { if (importFails) throw new Error("Import failed"); } }
     };
     const { getCloudSettings, putCloudSettings, deleteCloudSettings } = runInNewContext(`${outputText}\nexports;`, {
         exports: {}, require: (name: string) => modules[name] ?? {}, URL, AbortSignal, TextEncoder, TextDecoder, atob, btoa, crypto, IS_WEB: true,
@@ -1646,7 +1646,7 @@ test("cloud operations cannot overlap and a completed or failed operation releas
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
             "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: "first" }) } },
             "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic", deauthorizeCloud: async () => {} },
-            "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), omitCloudSettings: (value: object) => value, serializeDataStore: JSON.stringify }
+            "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), omitCloudSettings: (value: object) => value, serializeDataStore: JSON.stringify, getCloudDataStoreEntries: (entries: unknown) => entries }
         };
         const response = { ok: true, json: async () => ({ errors: [], uploaded: [], downloads: [], server_manifest: [], entries: [] }) };
         const api = runInNewContext(`${compiled}\nexports;`, {
@@ -1703,7 +1703,7 @@ test("cloud request timeouts cover response bodies and release the operation for
             "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
             "@webpack/common": { lodash, UserStore: { getCurrentUser: () => ({ id: "first" }) } },
             "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic", deauthorizeCloud: async () => {} },
-            "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), omitCloudSettings: (value: object) => value, serializeDataStore: JSON.stringify, exportSettings: async () => "{}", importSettings: async () => writes++ },
+            "./offline": { captureCloudImportState: async () => ({ quickCss: "", dataStore: new Map() }), omitCloudSettings: (value: object) => value, serializeDataStore: JSON.stringify, getCloudDataStoreEntries: (entries: unknown) => entries, exportSettings: async () => "{}", importSettings: async () => writes++ },
             fflate: { deflateSync: (value: Uint8Array) => value }
         };
         const api = runInNewContext(`${compiled}\nexports;`, {
@@ -2454,4 +2454,94 @@ test("cloud transfers do not create another device's scheduled sends or replace 
         assert.deepEqual(recipient.records.get("CustomSounds"), { saved: true });
         assert.equal(recipient.records.has("ScheduledMessages_queue"), false);
     }
+});
+
+
+test("cloud ChannelTabs transfers preserve other accounts and device sessions", async () => {
+    const keys = ["ChannelTabs_bookmarks", "ChannelTabs_openChannels_v2", "ChannelTabs_unreadFallbacks_v1"];
+    let userId: string | undefined = "first";
+    const source = { first: [{ channelId: "source first" }], second: [{ channelId: "source second" }] };
+    const target = { first: [{ channelId: "target first" }], second: [{ channelId: "target second" }] };
+    let settings = { plugins: { ChannelTabs: { enabled: true, tabSet: structuredClone(source) } } };
+    let records = new Map<string, unknown>(keys.map(key => [key, structuredClone(source)]));
+    const store = {
+        entries: async () => structuredClone([...records]),
+        setMany: async (entries: [string, unknown][]) => { for (const [key, value] of entries) records.set(key, structuredClone(value)); },
+        updateMany: async (entries: [string, (value: unknown) => unknown][]) => {
+            const next = new Map(records);
+            for (const [key, update] of entries) next.set(key, structuredClone(update(structuredClone(records.get(key)))));
+            records = next;
+        }
+    };
+    const modules: Record<string, unknown> = {
+        "@api/DataStore": store, "..": { DataStore: store },
+        "@api/Settings": { PlainSettings: settings, DefaultSettings: defaultSettings },
+        "@utils/Logger": { Logger: class {} },
+        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+        "@webpack/common": { lodash, UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined } }
+    };
+    const globals = {
+        exports: {}, require: (name: string) => modules[name] ?? {}, structuredClone, TextEncoder, TextDecoder, atob,
+        VencordNative: { settings: { get: () => structuredClone(settings), set: async (value: typeof settings) => { settings = structuredClone(value); } }, quickCss: { get: async () => "" } }
+    };
+    const offline = runInNewContext(`${outputText}\nexports;`, globals);
+    modules["./offline"] = offline;
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    const { buildLocalData, applyDownloads } = runInNewContext(`${compiled}\n({ buildLocalData, applyDownloads: (downloads, expected) => applyDownloads(downloads, { assertCurrent() {}, expected }) });`, { ...globals, exports: {} });
+    const download = (key: string, value: unknown) => ({ key, value: Buffer.from(JSON.stringify(value)).toString("base64") });
+    const sourceRecords = structuredClone([...records]);
+    for (const id of ["first", "second", undefined]) {
+        userId = id;
+        const scoped = id ? { [id]: source[id] } : {};
+        const exported = JSON.parse(await offline.exportSettings({ cloud: true }));
+        assert.deepEqual(exported.dataStore, [[keys[0], scoped]]);
+        assert.deepEqual(exported.settings.plugins.ChannelTabs.tabSet, scoped);
+        const built = await buildLocalData();
+        assert.deepEqual(JSON.parse(new TextDecoder().decode(built.get("dataStore"))), [[keys[0], scoped]]);
+        assert.deepEqual(JSON.parse(new TextDecoder().decode(built.get("settings"))).plugins.ChannelTabs.tabSet, scoped);
+    }
+    userId = "first";
+    assert.deepEqual(JSON.parse(await offline.exportSettings({})).dataStore, sourceRecords, "Offline backups retain all accounts and session state");
+    assert.deepEqual(settings.plugins.ChannelTabs.tabSet, source, "Filtering must not mutate live settings");
+    for (const format of ["aggregate", "individual", "legacy"]) for (const snapshot of [true, false]) {
+        records = new Map(keys.map(key => [key, structuredClone(target)]));
+        settings = { plugins: { ChannelTabs: { enabled: true, tabSet: structuredClone(target) } } };
+        (modules["@api/Settings"] as { PlainSettings: typeof settings }).PlainSettings = settings;
+        const expected = snapshot ? await offline.captureCloudImportState() : undefined;
+        records.set(keys[0], { ...target, second: [{ channelId: "newer second" }] });
+        if (format === "legacy") {
+            await offline.importSettings(JSON.stringify({ settings: { plugins: { ChannelTabs: { tabSet: source } } }, dataStore: sourceRecords }), "all", true, undefined, expected);
+        } else {
+            const entries = format === "aggregate" ? [download("dataStore", sourceRecords)] : sourceRecords.map(([key, value]) => download(`dataStore/${key}`, value));
+            await applyDownloads([...entries, download("settings", { plugins: { ChannelTabs: { tabSet: source } } })], expected);
+        }
+        assert.deepEqual(records.get(keys[0]), { first: source.first, second: [{ channelId: "newer second" }] });
+        for (const key of keys.slice(1)) assert.deepEqual(records.get(key), target);
+        assert.deepEqual(settings.plugins.ChannelTabs.tabSet, { first: source.first, second: target.second });
+        if (expected) assert.deepEqual(structuredClone((await offline.captureCloudImportState()).dataStore), structuredClone(expected.dataStore));
+    }
+    for (const owned of [undefined, []]) {
+        records = new Map([[keys[0], structuredClone(target)]]);
+        const remote = owned === undefined ? { second: source.second } : { first: owned, second: source.second };
+        const expected = await offline.captureCloudImportState();
+        await offline.importSettings(JSON.stringify({ dataStore: [[keys[0], remote]] }), "datastore", true, undefined, expected);
+        assert.deepEqual(records.get(keys[0]), { first: owned ?? target.first, second: target.second });
+    }
+    for (const invalid of [null, [], "invalid"]) {
+        records = new Map([[keys[0], structuredClone(target)]]);
+        await assert.rejects(offline.importSettings(JSON.stringify({ dataStore: [["ordinary", "remote"], [keys[0], invalid]] }), "datastore", true), /Account data must be an object/);
+        assert.equal(records.has("ordinary"), false);
+        assert.deepEqual(records.get(keys[0]), target);
+    }
+    records = new Map<string, unknown>([[keys[0], structuredClone(target)], ["ordinary", "original"]]);
+    const expected = await offline.captureCloudImportState();
+    const edited = { ...target, first: [{ channelId: "newer first" }] };
+    records.set(keys[0], edited);
+    await assert.rejects(offline.importSettings(JSON.stringify({ dataStore: [["ordinary", "remote"], [keys[0], source]] }), "datastore", true, undefined, expected));
+    assert.deepEqual(records.get(keys[0]), edited);
+    assert.equal(records.get("ordinary"), "original");
+    await offline.importSettings(JSON.stringify({ dataStore: sourceRecords }), "datastore");
+    assert.deepEqual([...records].filter(([key]) => keys.includes(key)), sourceRecords, "Explicit offline restores still replace complete records");
 });

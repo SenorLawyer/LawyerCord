@@ -16,7 +16,7 @@ import { lodash, SettingsRouter, UserStore } from "@webpack/common";
 import { deflateSync } from "fflate";
 
 import { deauthorizeCloud, getCloudAuth, getCloudUrl } from "./cloudSetup";
-import { captureCloudImportState, exportSettings, importSettings, isLocalDataStoreKey, omitCloudSettings, serializeDataStore } from "./offline";
+import { captureCloudImportState, exportSettings, getCloudDataStoreEntries, importSettings, isLocalDataStoreKey, omitCloudSettings, serializeDataStore } from "./offline";
 import { ManifestEntry, SyncRequest, SyncResponse } from "./types";
 
 const logger = new Logger("SettingsSync:Cloud", "#39b7e0");
@@ -136,7 +136,7 @@ async function buildLocalData(): Promise<Map<string, Uint8Array>> {
     data.set("quickCss", encoder.encode(quickCss));
 
     const dataStoreEntries = await DataStore.entries();
-    data.set("dataStore", encoder.encode(serializeDataStore(dataStoreEntries.filter(([key]) => !isLocalDataStoreKey(key)))));
+    data.set("dataStore", encoder.encode(serializeDataStore(getCloudDataStoreEntries(dataStoreEntries))));
 
     return data;
 }

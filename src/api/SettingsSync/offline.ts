@@ -16,7 +16,8 @@ type BackupType = "all" | "plugins" | "css" | "datastore";
 const LOCAL_DATASTORE_KEYS = new Set<unknown>([
     "Vencord_cloudSecret", "Vencord_cloudManifest", "Vencord_cloudApiVersions", "VencordQuickCss",
     "ThemeLibrary_uniqueToken", "decor-auth", "songspotlight-auth", "vc-streaks-auth", "rdb-auth",
-    "ScheduledMessages_queue", "VCLastVoiceChannel", "VCLastVoiceChannelSession", "KeepCurrentChannel_previousData"
+    "ScheduledMessages_queue", "VCLastVoiceChannel", "VCLastVoiceChannelSession", "KeepCurrentChannel_previousData",
+    "ChannelTabs_openChannels_v2", "ChannelTabs_unreadFallbacks_v1"
 ]);
 export function isLocalDataStoreKey(key: unknown) {
     if (LOCAL_DATASTORE_KEYS.has(key)) return true;
@@ -30,7 +31,26 @@ export function isLocalDataStoreKey(key: unknown) {
     ].includes(key);
 }
 
-export const omitCloudSettings = (settings: object) => Object.fromEntries(Object.entries(settings).filter(([key]) => key !== "cloud"));
+function scopeAccountData(value: unknown) {
+    if (value === undefined) return undefined;
+    if (!isObject(value)) throw new Error("Account data must be an object.");
+    const userId = UserStore.getCurrentUser()?.id;
+    return userId && Object.hasOwn(value, userId) ? { [userId]: value[userId] } : {};
+}
+
+export function getCloudDataStoreEntries(entries: [IDBValidKey, unknown][]): [IDBValidKey, unknown][] {
+    return entries.filter(([key]) => !isLocalDataStoreKey(key))
+        .map(([key, value]) => [key, key === "ChannelTabs_bookmarks" ? scopeAccountData(value) : value]);
+}
+
+export function omitCloudSettings(settings: object) {
+    const filtered = Object.fromEntries(Object.entries(settings).filter(([key]) => key !== "cloud"));
+    const { plugins } = filtered;
+    if (isObject(plugins) && "ChannelTabs" in plugins && isObject(plugins.ChannelTabs) && "tabSet" in plugins.ChannelTabs) {
+        filtered.plugins = { ...plugins, ChannelTabs: { ...plugins.ChannelTabs, tabSet: scopeAccountData(plugins.ChannelTabs.tabSet) } };
+    }
+    return filtered;
+}
 
 const toast = (type: string, message: string) =>
     Toasts.show({
@@ -105,7 +125,7 @@ export async function captureCloudImportState(syncDataStore = true) {
     return {
         settings,
         quickCss,
-        dataStore: new Map(entries.filter(([key]) => isDataStoreKey(key) && !isLocalDataStoreKey(key))
+        dataStore: new Map(getCloudDataStoreEntries(entries.filter(([key]) => isDataStoreKey(key)))
             .map(([key, value]) => [JSON.stringify(key), value] as const))
     };
 }
@@ -150,7 +170,7 @@ export async function importSettings(data: string, type: BackupType = "all", clo
                 Array.isArray(entry) && entry.length === 2 && isDataStoreKey(entry[0]))) {
                 throw new Error("DataStore must contain valid key and value pairs.");
             }
-            dataStore = cloud ? value.filter(([key]) => !isLocalDataStoreKey(key)) : value;
+            dataStore = cloud ? getCloudDataStoreEntries(value) : value;
         }
     }
 
@@ -171,17 +191,22 @@ export async function importSettings(data: string, type: BackupType = "all", clo
         }
         checkCurrent?.();
         if (dataStore) {
-            if (expected) {
+            if (expected || (cloud && dataStore.some(([key]) => key === "ChannelTabs_bookmarks"))) {
                 const entries = new Map(dataStore.map(entry => [JSON.stringify(entry[0]), entry]));
                 await DataStore.updateMany([...entries.values()].map(([key, value]) => [key, (current: unknown) => {
                     checkCurrent?.();
-                    const previous = expected.dataStore.get(JSON.stringify(key));
-                    if (current !== previous && (current === undefined || previous === undefined
-                        || serializeDataStore([[key, current]]) !== serializeDataStore([[key, previous]])))
-                        throw new Error("Stored data changed during sync. Try again to include your latest changes.");
-                    return value;
+                    const scoped = cloud && key === "ChannelTabs_bookmarks" ? scopeAccountData(current) : current;
+                    if (expected) {
+                        const previous = expected.dataStore.get(JSON.stringify(key));
+                        if (scoped !== previous && (scoped === undefined || previous === undefined
+                            || serializeDataStore([[key, scoped]]) !== serializeDataStore([[key, previous]])))
+                            throw new Error("Stored data changed during sync. Try again to include your latest changes.");
+                    }
+                    return cloud && key === "ChannelTabs_bookmarks" && isObject(value)
+                        ? { ...(isObject(current) ? current : {}), ...value }
+                        : value;
                 }]));
-                for (const [key, value] of entries.values()) expected.dataStore.set(JSON.stringify(key), value);
+                for (const [key, value] of entries.values()) expected?.dataStore.set(JSON.stringify(key), value);
             } else {
                 await DataStore.setMany(dataStore);
             }
@@ -196,7 +221,7 @@ export async function exportSettings({ syncDataStore = true, type = "all", minif
     if (cloud && settings) settings = omitCloudSettings(settings);
     const quickCss = type === "all" || type === "css" ? await VencordNative.quickCss.get() : undefined;
     let dataStore = syncDataStore && (type === "all" || type === "datastore") ? await DataStore.entries() : undefined;
-    if (cloud) dataStore = dataStore?.filter(([key]) => !isLocalDataStoreKey(key));
+    if (cloud && dataStore) dataStore = getCloudDataStoreEntries(dataStore);
     if (dataStore) serializeDataStore(dataStore);
 
     switch (type) {

@@ -28,6 +28,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep ChannelTabs session state local and sync only the current account's bookmarks and tab presets. Cloud imports preserve other accounts' saved bookmarks, including concurrent changes.
+
 - Sync VoiceStats and ProfileSets records only for the signed-in account, preserving other accounts and ownerless recovery data. Exclude ReviewDB authorization records from cloud transfers.
 
 - Keep ThemeLibrary, Decor, SongSpotlight, and Streaks authorization tokens out of cloud uploads and imports.

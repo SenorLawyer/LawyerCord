@@ -34,6 +34,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Make the IrcColors message-color patch independent of destructuring property order and prevent it from scanning into another scope.
+
 - Keep LoadingQuotes patches local to each quote selection so a changed normal initializer cannot redirect the patch into event quotes.
 
 - Let BetterSessions start when an older backup has already replaced its saved names with an empty object. Names lost by the old backup cannot be recovered.

@@ -20,23 +20,42 @@ import { TextButton } from "@components/Button";
 import { Heading } from "@components/Heading";
 import { SessionInfo } from "@plugins/betterSessions/types";
 import { getDefaultName, savedSessionsCache, saveSessionsToDataStore } from "@plugins/betterSessions/utils";
+import { Logger } from "@utils/Logger";
 import { RenderModalProps } from "@vencord/discord-types";
-import { Modal, React, TextInput } from "@webpack/common";
-import { KeyboardEvent } from "react";
+import { Modal, React, showToast, TextInput, Toasts, UserStore } from "@webpack/common";
+import type { KeyboardEvent } from "react";
+
+const logger = new Logger("BetterSessions");
 
 export function RenameModal({ props, session, state }: { props: RenderModalProps, session: SessionInfo["session"], state: [string, React.Dispatch<React.SetStateAction<string>>]; }) {
+    const [userId] = React.useState(() => UserStore.getCurrentUser()?.id);
     const [, setTitle] = state;
     const [value, setValue] = React.useState(savedSessionsCache.get(session.id_hash)?.name ?? "");
 
-    function onSaveClick() {
-        savedSessionsCache.set(session.id_hash, { name: value, isNew: false });
-        if (value !== "") {
-            setTitle(`${value}*`);
-        } else {
-            setTitle(getDefaultName(session.client_info));
-        }
+    const saving = React.useRef(false);
 
-        saveSessionsToDataStore();
+    async function onSaveClick() {
+        if (saving.current) return;
+        if (!userId || UserStore.getCurrentUser()?.id !== userId) return props.onClose();
+        saving.current = true;
+        const previous = savedSessionsCache.get(session.id_hash);
+        const updated = { name: value, isNew: false };
+        const sessions = new Map(savedSessionsCache);
+        sessions.set(session.id_hash, updated);
+        try {
+            await saveSessionsToDataStore(sessions);
+        } catch (error) {
+            logger.warn("Failed to save session name", error);
+            showToast("Could not save the session name. Try again.", Toasts.Type.FAILURE);
+            return;
+        } finally {
+            saving.current = false;
+        }
+        if (UserStore.getCurrentUser()?.id !== userId) return props.onClose();
+        if (savedSessionsCache.get(session.id_hash) === previous) {
+            savedSessionsCache.set(session.id_hash, updated);
+            setTitle(value ? `${value}*` : getDefaultName(session.client_info));
+        }
         props.onClose();
     }
 
@@ -66,7 +85,7 @@ export function RenameModal({ props, session, state }: { props: RenderModalProps
                     onChange={setValue}
                     onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
                         if (e.key === "Enter") {
-                            onSaveClick();
+                            void onSaveClick();
                         }
                     }}
                 />

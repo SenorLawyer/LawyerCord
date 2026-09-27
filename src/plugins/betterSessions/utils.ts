@@ -35,11 +35,11 @@ export function getDefaultName(clientInfo: SessionInfo["session"]["client_info"]
     return `${clientInfo.os} · ${clientInfo.platform}`;
 }
 
-export function saveSessionsToDataStore() {
+export function saveSessionsToDataStore(sessions: typeof savedSessionsCache = savedSessionsCache) {
     const dataKey = getDataKey();
     if (!dataKey) return Promise.resolve();
 
-    return DataStore.set(dataKey, structuredClone(savedSessionsCache));
+    return DataStore.set(dataKey, structuredClone(sessions));
 }
 
 export async function fetchNamesFromDataStore(shouldApply = () => true) {

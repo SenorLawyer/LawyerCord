@@ -30,6 +30,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep the BetterSessions rename dialog open when saving fails, allow retry, and update the displayed name only after storage succeeds. Ignore retained callbacks after an account change.
+
 - Snapshot BetterSessions data before saving so account switches, logout, or later edits cannot change an already queued save.
 
 - Keep RelationshipNotifier observation history local so its saved maps cannot block cloud sync or overwrite another device's offline-change baseline.

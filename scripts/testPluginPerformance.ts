@@ -17989,3 +17989,96 @@ test("BetterSessions saves retain their captured account data while storage open
         if (change === "switch") assert.deepEqual(saved.get("BetterSessions_savedSessions_second"), new Map([["second-session", { name: "Second account name", isNew: false }]]));
     }
 });
+
+
+test("BetterSessions rename waits for saving and preserves newer cache entries after failure", async () => {
+    for (const original of [undefined, { name: "Original", isNew: true }]) for (const replaced of [false, true]) {
+        const cache = new Map<string, { name: string; isNew: boolean }>();
+        if (original) cache.set("session", original);
+        let save = Promise.withResolvers<void>();
+        let saves = 0;
+        let closed = 0;
+        const titles: string[] = [];
+        const failures: unknown[] = [];
+        const toasts: string[] = [];
+        const React = {
+            useState: (initial: unknown) => [typeof initial === "function" ? initial() : "Renamed", () => {}],
+            useRef: () => ({ current: false }),
+            createElement: (type: unknown, props: Record<string, unknown>, ...children: unknown[]) => ({ type, props: { ...props, children } })
+        };
+        const { RenameModal } = loadSource("src/plugins/betterSessions/components/RenameModal.tsx", {
+            "@components/Button": { TextButton: "button" }, "@components/Heading": { Heading: "heading" },
+            "@plugins/betterSessions/utils": { savedSessionsCache: cache, getDefaultName: () => "Default name", saveSessionsToDataStore: () => { saves++; return save.promise; } },
+            "@utils/Logger": { Logger: class { warn(_message: string, error: unknown) { failures.push(error); } } },
+            "@webpack/common": { React, UserStore: { getCurrentUser: () => ({ id: "owner" }) }, Modal: "modal", TextInput: "input", showToast: (message: string) => toasts.push(message), Toasts: { Type: { FAILURE: "failure" } } }
+        }, { React });
+        const modal = RenameModal({ props: { onClose: () => closed++ }, session: { id_hash: "session", client_info: {} }, state: ["Original", (value: string) => titles.push(value)] });
+        const onSave = modal.props.actions[1].onClick;
+        const pending = onSave();
+        assert.equal(closed, 0, "The dialog must stay open until persistence succeeds");
+        assert.deepEqual(titles, [], "The row must not claim the name was saved before it is durable");
+        assert.equal(cache.get("session"), original, "Other saves must not capture an unconfirmed rename");
+        await onSave();
+        assert.equal(saves, 1, "Repeated activation must not create overlapping saves");
+        const newer = { name: "Newer", isNew: false };
+        if (replaced) cache.set("session", newer);
+        const error = new Error("Storage unavailable");
+        save.reject(error);
+        await pending;
+        assert.equal(cache.get("session"), replaced ? newer : original);
+        assert.equal(closed, 0);
+        assert.deepEqual(titles, []);
+        assert.equal(toasts.length, 1);
+        assert.deepEqual(failures, [error]);
+        save = Promise.withResolvers<void>();
+        const retry = onSave();
+        save.resolve();
+        await retry;
+        assert.equal(saves, 2);
+        assert.equal(closed, 1);
+        assert.deepEqual(titles, ["Renamed*"]);
+        assert.equal(cache.get("session")?.name, "Renamed");
+    }
+});
+
+
+test("BetterSessions retained rename callbacks respect account changes and newer entries", async () => {
+    for (const change of ["before", "pending", "logout", "replacement"]) {
+        let userId: string | undefined = "owner";
+        const original = { name: "Original", isNew: true };
+        const newer = { name: "Newer", isNew: false };
+        const cache = new Map([["session", original]]);
+        const saved = Promise.withResolvers<void>();
+        let saves = 0;
+        let closed = 0;
+        const titles: string[] = [];
+        const React = {
+            useState: (initial: unknown) => [typeof initial === "function" ? initial() : "Renamed", () => {}],
+            useRef: () => ({ current: false }),
+            createElement: (type: unknown, props: Record<string, unknown>, ...children: unknown[]) => ({ type, props: { ...props, children } })
+        };
+        const { RenameModal } = loadSource("src/plugins/betterSessions/components/RenameModal.tsx", {
+            "@components/Button": { TextButton: "button" }, "@components/Heading": { Heading: "heading" },
+            "@plugins/betterSessions/utils": { savedSessionsCache: cache, getDefaultName: () => "Default name", saveSessionsToDataStore: (snapshot: Map<string, { name: string }>) => {
+                saves++;
+                assert.equal(snapshot.get("session")?.name, "Renamed");
+                assert.equal(cache.get("session"), original);
+                return saved.promise;
+            } },
+            "@utils/Logger": { Logger: class { warn() {} } },
+            "@webpack/common": { React, UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined }, Modal: "modal", TextInput: "input", showToast: () => {}, Toasts: { Type: {} } }
+        }, { React });
+        const modal = RenameModal({ props: { onClose: () => closed++ }, session: { id_hash: "session", client_info: {} }, state: ["Original", (value: string) => titles.push(value)] });
+        if (change === "before") userId = "other";
+        const pending = modal.props.actions[1].onClick();
+        if (change === "pending") userId = "other";
+        if (change === "logout") userId = undefined;
+        cache.set("session", newer);
+        saved.resolve();
+        await pending;
+        assert.equal(saves, change === "before" ? 0 : 1);
+        assert.equal(closed, 1);
+        assert.equal(cache.get("session"), newer);
+        assert.deepEqual(titles, []);
+    }
+});

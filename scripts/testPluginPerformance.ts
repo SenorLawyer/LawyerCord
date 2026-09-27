@@ -29,14 +29,15 @@ import { readResponseText } from "../src/shared/readResponseText";
 import { makeLazy, proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
 test("PictureInPicture keeps original playback after rejected requests", async () => {
-    for (const failure of ["request", "play", undefined]) {
+    for (const failure of ["request", "play", "metadata", undefined]) {
         const events: string[] = [];
         const clone = {
-            readyState: 4, currentTime: 0, style: {},
+            readyState: failure === "metadata" ? 0 : 4, currentTime: 0, style: {}, isConnected: true,
+            onerror: null as (() => Promise<void>) | null,
             async requestPictureInPicture() { events.push("request"); if (failure === "request") throw new Error("Denied"); },
             async play() { events.push("play"); if (failure === "play") throw new Error("Playback failed"); },
             pause() { events.push("pause clone"); },
-            remove() { events.push("remove clone"); }
+            remove() { this.isConnected = false; events.push("remove clone"); }
         };
         const original = { currentTime: 12, cloneNode: () => clone, pause() { events.push("pause original"); } };
         const { default: plugin } = loadSource("src/plugins/pictureInPicture/index.tsx", {
@@ -53,9 +54,10 @@ test("PictureInPicture keeps original playback after rejected requests", async (
         });
         const button = plugin.PictureInPictureButton().props.children[0]({});
         button.props.onClick({ currentTarget: { parentNode: { parentNode: { querySelector: () => original } } } });
+        if (failure === "metadata") await clone.onerror?.();
         await setImmediate();
-        assert.equal(clone.currentTime, 12);
-        assert.deepEqual(events, failure === "request" ? ["request", "pause clone", "remove clone", "toast"]
+        assert.equal(clone.currentTime, failure === "metadata" ? 0 : 12);
+        assert.deepEqual(events, failure === "metadata" ? ["pause clone", "remove clone", "toast"] : failure === "request" ? ["request", "pause clone", "remove clone", "toast"]
             : failure === "play" ? ["request", "play", "pause clone", "remove clone", "toast"]
                 : ["request", "play", "pause original"]);
     }

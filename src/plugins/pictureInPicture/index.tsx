@@ -70,22 +70,32 @@ export default definePlugin({
                             videoClone.style.display = "none";
                             videoClone.onleavepictureinpicture = () => videoClone.remove();
 
+                            async function failPiP() {
+                                if (!videoClone.isConnected) return;
+                                videoClone.onloadedmetadata = null;
+                                videoClone.onerror = null;
+                                videoClone.pause();
+                                videoClone.remove();
+                                if (document.pictureInPictureElement === videoClone) {
+                                    await document.exitPictureInPicture().catch((error: unknown) => logger.warn("Could not close Picture in Picture.", error));
+                                }
+                                showToast("Could not open Picture in Picture.", Toasts.Type.FAILURE);
+                            }
+
                             async function launchPiP() {
+                                videoClone.onloadedmetadata = null;
+                                videoClone.onerror = null;
                                 try {
                                     videoClone.currentTime = video.currentTime;
                                     await videoClone.requestPictureInPicture();
                                     await videoClone.play();
                                     video.pause();
                                 } catch {
-                                    videoClone.pause();
-                                    videoClone.remove();
-                                    if (document.pictureInPictureElement === videoClone) {
-                                        await document.exitPictureInPicture().catch((error: unknown) => logger.warn("Could not close Picture in Picture.", error));
-                                    }
-                                    showToast("Could not open Picture in Picture.", Toasts.Type.FAILURE);
+                                    await failPiP();
                                 }
                             }
 
+                            videoClone.onerror = failPiP;
                             if (videoClone.readyState === 4 /* HAVE_ENOUGH_DATA */)
                                 launchPiP();
                             else

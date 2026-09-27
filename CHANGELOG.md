@@ -59,6 +59,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep reaction-avatar scroll adjustments in their own conversation view instead of changing the most recently opened view.
+
 - Apply reaction-avatar profile settings immediately through Discord's native control. Prevent Enter or Space on a focused avatar from also toggling its reaction.
 
 - Keep reaction avatars current after reaction, user and guild changes. Subscribe to the native stores and schedule fetches after render.

@@ -2231,7 +2231,7 @@ test("reaction profile settings drive native popouts and isolate activation", ()
     let definition: { avatarClick: { restartNeeded?: boolean; }; } | undefined;
     let summary: Record<string, unknown> = {};
     const user = { id: "user" };
-    const React = { createElement: (type: unknown, props: Record<string, unknown>, ...children: unknown[]) => {
+    const React = { useContext: () => null, createContext: (value: unknown) => ({ value }), createElement: (type: unknown, props: Record<string, unknown>, ...children: unknown[]) => {
         if (type === "summary") summary = props;
         return { type, props: { ...props, children } };
     } };
@@ -2241,7 +2241,7 @@ test("reaction profile settings drive native popouts and isolate activation", ()
             return { store, use: (keys: readonly string[]) => { selectedKeys.push(keys); return store; } };
         } },
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
-        "@utils/constants": { Devs: {} }, "@utils/misc": {}, "@utils/Queue": { Queue: class {} },
+        "@utils/constants": { Devs: {} }, "@utils/lazy": { makeLazy }, "@utils/misc": {}, "@utils/Queue": { Queue: class {} },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
         "@webpack": { findStoreLazy: () => ({}) },
         "@webpack/common": {
@@ -2268,28 +2268,29 @@ test("reaction profile settings drive native popouts and isolate activation", ()
     assert.notEqual(definition?.avatarClick.restartNeeded, true);
 });
 
-test("reaction avatar selectors stay pure and observe cache, user and guild updates", () => {
+test("reaction avatar selectors stay pure and use their owning scroller", () => {
     interface Snapshot { userIds: string[]; guildId: string; generation: number; userVersion: number; }
     const selectors: (() => Snapshot)[] = [];
     const effects: (() => void)[] = [];
     const tasks: unknown[] = [];
+    let currentScroller: { scrollCounter: number; setAutomaticAnchor(anchor: null): void; } | null = null;
     const reactionStore = {};
     let guildId = "guild";
     let version = 0;
     const user = { id: "user", username: "Reactor" };
     const UserStore = { getCurrentUser: () => ({ id: "account" }), getUser: () => user, getUserStoreVersion: () => version };
     const ChannelStore = { getChannel: () => ({ guild_id: guildId }) };
-    const React = { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props: { ...props, children } }) };
+    const React = { useContext: (context: unknown) => { assert.equal(context, plugin.ScrollerContext); return currentScroller; }, createContext: (value: unknown) => ({ value }), createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props: { ...props, children } }) };
     const { plugin, ReactionUsers } = loadSource("src/plugins/whoReacted/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({ store: {}, use: () => ({ avatarClick: false }) }) },
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
-        "@utils/constants": { Devs: {} }, "@utils/misc": {},
+        "@utils/constants": { Devs: {} }, "@utils/lazy": { makeLazy }, "@utils/misc": {},
         "@utils/Queue": { Queue: class { unshift(task: unknown) { tasks.push(task); } } },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
         "@webpack": { findStoreLazy: () => reactionStore },
         "@webpack/common": {
             React, UserStore, ChannelStore, UserSummaryItem: "summary", lodash: { isEqual: isDeepStrictEqual },
-            useEffect: (effect: () => void) => effects.push(effect), useLayoutEffect() {},
+            useEffect: (effect: () => void) => effects.push(effect), useLayoutEffect: (effect: () => void) => effect(),
             useStateFromStores: (stores: unknown[], select: () => Snapshot, _deps: unknown[], equal: (a: Snapshot, b: Snapshot) => boolean) => {
                 assert.deepEqual(Array.from(stores), [reactionStore, UserStore, ChannelStore]);
                 assert.equal(equal(select(), select()), true);
@@ -2322,6 +2323,16 @@ test("reaction avatar selectors stay pure and observe cache, user and guild upda
     assert.deepEqual(Array.from(select().userIds), []);
     assert.notEqual(select().generation, initial.generation);
     assert.equal(tasks.length, 1);
+    let firstClears = 0;
+    let secondClears = 0;
+    currentScroller = { scrollCounter: 1, setAutomaticAnchor: anchor => { assert.equal(anchor, null); firstClears++; } };
+    ReactionUsers(props);
+    currentScroller = { scrollCounter: 1, setAutomaticAnchor: anchor => { assert.equal(anchor, null); secondClears++; } };
+    ReactionUsers(props);
+    currentScroller = null;
+    ReactionUsers(props);
+    assert.equal(firstClears, 1);
+    assert.equal(secondClears, 1);
 });
 
 test("reaction requests discard obsolete replies and leave failures retryable", async () => {
@@ -2336,7 +2347,7 @@ test("reaction requests discard obsolete replies and leave failures retryable", 
         const { plugin, getReactionsWithQueue } = loadSource("src/plugins/whoReacted/index.tsx", {
             "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
             "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
-            "@utils/constants": { Devs: {} }, "@utils/misc": { sleep: async () => {} },
+            "@utils/constants": { Devs: {} }, "@utils/lazy": { makeLazy }, "@utils/misc": { sleep: async () => {} },
             "@utils/Queue": { Queue: class { unshift(task: () => Promise<void> | undefined) { tasks.push(task); } } },
             "@webpack": { findStoreLazy: () => ({}) }, "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
             "@webpack/common": {
@@ -2388,7 +2399,7 @@ test("discarded reaction fetches stay available to the native store", async () =
     const { plugin, getReactionsWithQueue } = loadSource("src/plugins/whoReacted/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
-        "@utils/constants": { Devs: {} }, "@utils/misc": { sleep: async () => {} },
+        "@utils/constants": { Devs: {} }, "@utils/lazy": { makeLazy }, "@utils/misc": { sleep: async () => {} },
         "@utils/Queue": { Queue }, "@webpack": { findStoreLazy: () => ({}) },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
         "@webpack/common": {
@@ -2425,7 +2436,7 @@ test("reaction avatars share native cache entries for Unicode and custom emoji",
     const { plugin, getReactionsWithQueue } = loadSource("src/plugins/whoReacted/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
-        "@utils/constants": { Devs: {} }, "@utils/misc": { sleep: async () => {} },
+        "@utils/constants": { Devs: {} }, "@utils/lazy": { makeLazy }, "@utils/misc": { sleep: async () => {} },
         "@utils/Queue": { Queue: class { unshift(task: () => void) { tasks.push(task); } } },
         "@webpack": { findStoreLazy: () => ({}) }, "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
         "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) } }

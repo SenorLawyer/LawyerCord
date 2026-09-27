@@ -19,10 +19,11 @@
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
+import { makeLazy } from "@utils/lazy";
 import { sleep } from "@utils/misc";
 import { Queue } from "@utils/Queue";
 import definePlugin, { OptionType } from "@utils/types";
-import { CustomEmoji, Message, ReactionEmoji, User } from "@vencord/discord-types";
+import { Message, ReactionEmoji, User } from "@vencord/discord-types";
 import { findStoreLazy } from "@webpack";
 import { ChannelStore, Constants, FluxDispatcher, lodash, React, RestAPI, useEffect, useLayoutEffect, UserStore, UserSummaryItem, useStateFromStores } from "@webpack/common";
 
@@ -31,9 +32,14 @@ interface ReactionCacheEntry {
     users: Map<string, User>;
 }
 
+interface ReactionScroller {
+    scrollCounter: number;
+    setAutomaticAnchor(anchor: null): void;
+}
+
 interface ReactionProps {
     message: Message;
-    emoji: CustomEmoji;
+    emoji: ReactionEmoji;
     type: number;
 }
 
@@ -41,7 +47,7 @@ const MAX_PENDING_REACTION_FETCHES = 50;
 const AVATAR_SETTINGS: "avatarClick"[] = ["avatarClick"];
 const MessageReactionsStore = findStoreLazy("MessageReactionsStore");
 
-let Scroll: any = null;
+const getScrollerContext = makeLazy(() => React.createContext<ReactionScroller | null>(null));
 const queue = new Queue(MAX_PENDING_REACTION_FETCHES);
 let fetchGeneration = 0;
 let reactions: Record<string, ReactionCacheEntry> = {};
@@ -98,6 +104,7 @@ function handleClickAvatar(event: React.UIEvent<HTMLElement, Event>) {
 
 function ReactionUsers({ message, emoji, type }: ReactionProps) {
     const { avatarClick } = settings.use(AVATAR_SETTINGS);
+    const scroller = React.useContext(getScrollerContext());
     const key = `${message.id}:${emoji.name}:${emoji.id ?? ""}:${type}`;
     const { userIds, guildId, generation, userId } = useStateFromStores([MessageReactionsStore, UserStore, ChannelStore], () => ({
         userIds: Array.from(reactions[key]?.users.keys() ?? []),
@@ -108,8 +115,8 @@ function ReactionUsers({ message, emoji, type }: ReactionProps) {
     }), [key, message.channel_id], lodash.isEqual);
 
     useLayoutEffect(() => { // bc need to prevent autoscrolling
-        if (Scroll?.scrollCounter > 0) {
-            Scroll.setAutomaticAnchor(null);
+        if (scroller && scroller.scrollCounter > 0) {
+            scroller.setAutomaticAnchor(null);
         }
     });
 
@@ -173,11 +180,10 @@ export default definePlugin({
             }
         },
         {
-
-            find: "cleanAutomaticAnchor(){",
+            find: "useConversationScroll must be used inside <ConversationScrollProvider>",
             replacement: {
-                match: /constructor\(\i\)\{(?=.{0,100}(?:automaticAnchor|\.messages\.loadingMore))/,
-                replace: "$&$self.setScrollObj(this);"
+                match: /(?<=return\(0,(\i)\.jsx\)\(\i\.Provider,\{(?:value:\i,)?children:)\i(?=(?:,value:\i)?\}\)\}function \i\(\)\{let \i=\i\.useContext\(\i\);if\(null==\i\)throw Error\("useConversationScroll)/,
+                replace: "(0,$1.jsx)($self.ScrollerContext.Provider,{value:arguments[0].scrollManager,children:$&})"
             }
         }
     ],
@@ -188,8 +194,8 @@ export default definePlugin({
             : <ReactionUsers {...props} />;
     }, { noop: true }),
 
-    setScrollObj(scroll: any) {
-        Scroll = scroll;
+    get ScrollerContext() {
+        return getScrollerContext();
     },
 
     set reactions(value: Record<string, ReactionCacheEntry>) {
@@ -199,6 +205,5 @@ export default definePlugin({
 
     stop() {
         fetchGeneration++;
-        Scroll = null;
     }
 });

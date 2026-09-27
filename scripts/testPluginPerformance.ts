@@ -2225,6 +2225,29 @@ test("reply mention exceptions match whole user and role IDs", () => {
     assert.equal(plugin.shouldMention(message, false), true);
 });
 
+test("hidden voice mentions navigate without joining", () => {
+    const source = readFileSync("src/plugins/showHiddenChannels/index.tsx", "utf8");
+    const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);
+    let patchSource = "";
+    const visit = (node: typescript.Node) => {
+        if (typescript.isPropertyAssignment(node) && node.name.getText(ast) === "patches") patchSource = node.initializer.getText(ast);
+        typescript.forEachChild(node, visit);
+    };
+    visit(ast);
+    const replacement = runInNewContext(`(${patchSource})`, { CONNECT: 1048576n })[24].replacement;
+    const original = 'function click(t){let m=a.getChannel(t);if(null!=m&&m.isGuildVocal()){let{navigateOnly:e}=d.getConfig({location:"channel_mention"});if(!e)return void l.default.selectVoiceChannel(m.id)}navigate(t)}';
+    for (const hidden of [false, true]) for (const navigateOnly of [false, true]) for (const vocal of [false, true]) {
+        const actions: string[] = [];
+        const click = runInNewContext(original.replace(canonicalizeMatch(replacement.match), replacement.replace) + ";click", {
+            a: { getChannel: () => ({ id: "channel", hidden, isGuildVocal: () => vocal }) },
+            d: { getConfig: () => ({ navigateOnly }) }, l: { default: { selectVoiceChannel: () => actions.push("join") } },
+            navigate: () => actions.push("navigate"), $self: { isHiddenChannel: (channel: { hidden: boolean; }) => channel.hidden }
+        });
+        click("channel");
+        assert.deepEqual(actions, [vocal && !hidden && !navigateOnly ? "join" : "navigate"]);
+    }
+});
+
 test("hidden stage controls and chat toasts use their enclosing channel", () => {
     const source = readFileSync("src/plugins/showHiddenChannels/index.tsx", "utf8");
     const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);

@@ -49,35 +49,20 @@ const logger = new Logger("KeepCurrentChannel");
 let restoreVersion = 0;
 let isSwitchingAccount = false;
 let previousCache: PreviousChannel | undefined;
-let previousSaveTimeout: ReturnType<typeof setTimeout> | undefined;
 
 function hasSamePreviousChannel(previous: PreviousChannel | undefined, next: PreviousChannel) {
     return previous?.guildId === next.guildId && previous.channelId === next.channelId;
 }
 
-function clearPreviousSaveTimeout() {
-    if (previousSaveTimeout === undefined) return;
-
-    clearTimeout(previousSaveTimeout);
-    previousSaveTimeout = undefined;
-}
-
 async function savePreviousChannelNow() {
-    clearPreviousSaveTimeout();
     if (!previousCache) return;
 
     await DataStore.set("KeepCurrentChannel_previousData", previousCache).catch((error: unknown) =>
         logger.warn("Could not save the previous channel.", error));
 }
 
-function schedulePreviousChannelSave() {
-    clearPreviousSaveTimeout();
-    previousSaveTimeout = setTimeout(() => void savePreviousChannelNow(), 500);
-}
-
 export function clearPreviousChannel() {
     restoreVersion++;
-    clearPreviousSaveTimeout();
     previousCache = undefined;
     return DataStore.del("KeepCurrentChannel_previousData").catch((error: unknown) =>
         logger.warn("Could not clear the previous channel.", error));
@@ -103,7 +88,6 @@ export default definePlugin({
         LOGOUT(e: LogoutEvent) {
             restoreVersion++;
             ({ isSwitchingAccount } = e);
-            if (previousSaveTimeout !== undefined) void savePreviousChannelNow();
         },
 
         CONNECTION_OPEN() {
@@ -131,7 +115,7 @@ export default definePlugin({
             if (hasSamePreviousChannel(previousCache, nextPrevious)) return;
 
             previousCache = nextPrevious;
-            schedulePreviousChannelSave();
+            void savePreviousChannelNow();
         }
     },
 
@@ -163,6 +147,5 @@ export default definePlugin({
 
     stop() {
         restoreVersion++;
-        if (previousSaveTimeout !== undefined) void savePreviousChannelNow();
     }
 });

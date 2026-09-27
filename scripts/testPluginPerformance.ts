@@ -30,8 +30,7 @@ import { makeLazy, proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
 
 test("KeepCurrentChannel cancels stale restoration and handles storage failures", async () => {
     type PreviousChannel = { guildId: string | null; channelId: string | null; };
-    function setup(deferred = false) {
-        let saved: PreviousChannel | undefined = { guildId: "guild", channelId: "old" };
+    function setup(deferred = false, storage: { value: PreviousChannel | undefined } = { value: { guildId: "guild", channelId: "old" } }) {
         let finishRead: (value: PreviousChannel | undefined) => void = () => assert.fail("No pending read");
         let failure: "read" | "write" | "delete" | undefined;
         let timerId = 0;
@@ -41,14 +40,14 @@ test("KeepCurrentChannel cancels stale restoration and handles storage failures"
         const { default: plugin, clearPreviousChannel } = loadSource("src/plugins/keepCurrentChannel/index.ts", {
             "@api/DataStore": {
                 get: () => failure === "read" ? Promise.reject(new Error("Read failed"))
-                    : deferred ? new Promise<PreviousChannel | undefined>(resolve => { finishRead = resolve; }) : Promise.resolve(saved),
+                    : deferred ? new Promise<PreviousChannel | undefined>(resolve => { finishRead = resolve; }) : Promise.resolve(storage.value),
                 set: async (_key: string, value: PreviousChannel) => {
                     if (failure === "write") throw new Error("Write failed");
-                    saved = value;
+                    storage.value = value;
                 },
                 del: async () => {
                     if (failure === "delete") throw new Error("Delete failed");
-                    saved = undefined;
+                    storage.value = undefined;
                 }
             },
             "@utils/constants": { Devs: {} },
@@ -69,14 +68,23 @@ test("KeepCurrentChannel cancels stale restoration and handles storage failures"
         });
         return {
             plugin, clearPreviousChannel, routes, errors, timers,
-            saved: () => saved,
-            replaceSaved: (value: PreviousChannel) => { saved = value; },
+            saved: () => storage.value,
+            replaceSaved: (value: PreviousChannel) => { storage.value = value; },
             finish: () => finishRead({ guildId: "guild", channelId: "old" }),
             fail: (operation: typeof failure) => { failure = operation; },
             select: () => plugin.flux.CHANNEL_SELECT({ guildId: "guild", channelId: "new" }),
             flush: async () => { const callbacks = [...timers.values()]; timers.clear(); callbacks.forEach(callback => callback()); await setImmediate(); }
         };
     }
+    const shared: { value: PreviousChannel | undefined } = { value: { guildId: "guild", channelId: "old" } };
+    const firstWindow = setup(false, shared);
+    const secondWindow = setup(false, shared);
+    await firstWindow.plugin.start();
+    await secondWindow.plugin.start();
+    firstWindow.select();
+    await secondWindow.clearPreviousChannel();
+    await firstWindow.flush();
+    assert.equal(shared.value, undefined, "A prior selection in another window must not undo crash cleanup");
     const active = setup();
     await active.plugin.start();
     active.select();

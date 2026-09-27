@@ -36,6 +36,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Bound ContextMenuAPI's argument-injection search while preserving its captured matches and removing redundant callback-source checks.
+
 - Match MemberCount's member-list class exactly instead of accepting unrelated class names containing "members".
 
 - Keep MemberCount and MentionAvatars patch searches near their target expressions, preserving ShowMeYourName integration.

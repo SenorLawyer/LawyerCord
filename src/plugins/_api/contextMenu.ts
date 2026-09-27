@@ -48,11 +48,11 @@ export default definePlugin({
             noWarn: true,
             replacement: [
                 {
-                    match: /navId:(?=.+?([,}].*?\)))/g,
+                    match: /navId:(?=.{1,150}?([,}].{0,300}?\)))/g,
                     replace: (m, rest, ...args) => {
                         if (rest.match(/}=.+/)) return m;
-                        const src = args[1]?.slice(Math.max(0, +args[0] - 2000), +args[0]);
-                        if (src && Math.max(src.lastIndexOf("PureComponent{"), src.lastIndexOf("Component{")) > src.lastIndexOf("function")) return m;
+                        const src = args[1].slice(Math.max(0, +args[0] - 2000), +args[0]);
+                        if (Math.max(src.lastIndexOf("PureComponent{"), src.lastIndexOf("Component{")) > src.lastIndexOf("function")) return m;
                         return `contextMenuAPIArguments:typeof arguments!=='undefined'?arguments:[],${m}`;
                     }
                 }

@@ -73,6 +73,7 @@ export const settings = definePluginSettings({
 // Save the join time of all users in a Map
 type userJoinData = { channelId: string, time: number; guildId: string | null; };
 const userJoinTimes = new Map<string, userJoinData>();
+const CONNECTION_TIMER_SETTINGS: ["format"] = ["format"];
 
 /**
  * The function `addUserJoinTime` stores the join time of a user in a specific channel within a guild.
@@ -253,14 +254,9 @@ export default definePlugin({
             // join time is unknown
             return;
         }
-        if (userId === UserStore.getCurrentUser()?.id && !settings.store.trackSelf) {
-            // don't show for self
-            return;
-        }
-
         return (
             <ErrorBoundary>
-                <Timer time={joinTime.time} />
+                <Timer time={joinTime.time} userId={userId} />
             </ErrorBoundary>
         );
     },
@@ -270,6 +266,7 @@ export default definePlugin({
     },
 
     ConnectionTimer: ErrorBoundary.wrap(() => {
+        const { format } = settings.use(CONNECTION_TIMER_SETTINGS);
         const user = UserStore.getCurrentUser();
         const joinTime = user && userJoinTimes.get(user.id)?.time;
         const time = useFixedTimer({ initialTime: joinTime });
@@ -278,7 +275,7 @@ export default definePlugin({
 
         return (
             <p style={{ margin: 0, fontFamily: "var(--font-code)" }}>
-                {formatDurationMs(time, settings.store.format === "human")}
+                {formatDurationMs(time, format === "human")}
             </p>
         );
     }, { noop: true }),

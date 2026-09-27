@@ -28,6 +28,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- CallTimer applies self-tracking, format, seconds and role-color changes immediately without waiting for another voice event.
 - CallTimer reads the current user from component props instead of scanning through the voice-icon renderer.
 - Narrow chatbox mention matching and make ColorSighted status matching independent of prop order.
 - Narrow NoMosaic attachment matching and remove PlainFolderIcon’s unnecessary replacement callback.

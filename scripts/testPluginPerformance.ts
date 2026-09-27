@@ -2225,6 +2225,39 @@ test("reply mention exceptions match whole user and role IDs", () => {
     assert.equal(plugin.shouldMention(message, false), true);
 });
 
+test("profile banners are clickable only when an image is present", () => {
+    const opened: { url: string; }[] = [];
+    const React = { createElement: (type: unknown, props: unknown) => ({ type, props }) };
+    const { default: plugin } = loadSource("src/plugins/viewIcons/index.tsx", {
+        "@api/Settings": { definePluginSettings: () => ({ store: { format: "webp", imgSize: "1024" } }) },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@components/Icons": { ImageIcon: "icon" }, "@utils/constants": { Devs: {} },
+        "@utils/discord": { openImageModal: (props: { url: string; }) => opened.push(props) },
+        "@utils/misc": { classes: (...values: string[]) => values.filter(Boolean).join(" ") },
+        "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": { React, Clickable: "clickable", Menu: {} }
+    }, { React, URL, window: { location: { href: "https://discord.com/channels/@me" } } });
+    const original = 'function Banner(e){return(0,a.jsx)("div",{className:"native-banner",style:{height:e.height},children:e.children})}';
+    const replacement = plugin.patches[1].replacement;
+    const Banner = runInNewContext(original.replace(canonicalizeMatch(replacement.match), replacement.replace) + ";Banner", {
+        a: { jsx: React.createElement }, $self: plugin
+    });
+    for (const bannerSrc of [undefined, null, "", "https://cdn.discordapp.com/banners/user/banner.png"]) {
+        const children = { content: "native image and overlay" };
+        const outer = Banner({ bannerSrc, height: 120, children });
+        assert.equal(typeof outer.type, "function");
+        const result = outer.type(outer.props);
+        assert.equal(result.type, bannerSrc ? "clickable" : "div");
+        assert.equal(result.props.children, children);
+        assert.equal(result.props.style.height, 120);
+        assert.equal("bannerSrc" in result.props, false);
+        if (bannerSrc) result.props.onClick();
+        else assert.equal(result.props.onClick, undefined);
+    }
+    assert.equal(opened.length, 1);
+    assert.equal(opened[0].url, "https://cdn.discordapp.com/banners/user/banner.webp?size=1024");
+});
+
 test("profile avatar viewing uses the native clickable and preserves supplied actions", () => {
     const source = readFileSync("src/plugins/viewIcons/index.tsx", "utf8");
     const ast = typescript.createSourceFile("index.tsx", source, ScriptTarget.Latest, true);

@@ -16,14 +16,22 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import "./style.css";
+
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { definePluginSettings } from "@api/Settings";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { ImageIcon } from "@components/Icons";
 import { Devs } from "@utils/constants";
 import { openImageModal } from "@utils/discord";
+import { classes } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import type { Channel, Guild, User } from "@vencord/discord-types";
-import { GuildMemberStore, IconUtils, Menu } from "@webpack/common";
+import { Clickable, GuildMemberStore, IconUtils, Menu, React } from "@webpack/common";
+
+interface BannerProps extends React.HTMLAttributes<HTMLDivElement> {
+    bannerSrc?: string | null;
+}
 
 interface UserContextProps {
     channel: Channel;
@@ -189,6 +197,15 @@ export default definePlugin({
     openAvatar,
     openBanner,
 
+    renderBanner: ErrorBoundary.wrap(({ bannerSrc, ...props }: BannerProps) => bannerSrc
+        ? <Clickable
+            {...props}
+            className={classes(props.className, "vc-viewicons-banner")}
+            aria-label="View Banner"
+            onClick={() => openBanner(bannerSrc)}
+        />
+        : <div {...props} />, { noop: true }),
+
     contextMenus: {
         "user-context": UserContext,
         "guild-context": GuildContext,
@@ -206,10 +223,10 @@ export default definePlugin({
         },
         // Banners
         {
-            find: 'backgroundColor:"COMPLETE"',
+            find: '"--custom-cutout-radius":',
             replacement: {
-                match: /(overflow:"visible",.{0,125}?!1\),)style:{(?=.+?backgroundImage:null!=(\i)\?`url\(\$\{\2\}\))/,
-                replace: (_, rest, bannerSrc) => `${rest}onClick:()=>${bannerSrc}!=null&&$self.openBanner(${bannerSrc}),style:{cursor:${bannerSrc}!=null?"pointer":void 0,`
+                match: /(?<=return\(0,\i\.jsx\)\()"div",\{/,
+                replace: "$self.renderBanner,{bannerSrc:arguments[0].bannerSrc,"
             }
         },
         // Group DMs top small & large icon

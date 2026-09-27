@@ -2,11 +2,19 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Latest full local verification: all 683 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the volume-sync fix. The subsequent volume/typing/image cleanup passes its focused checks and builds. Patch lint now reports six warnings and no errors. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding 5e0f68e7f; the new cleanup requires its own CI.
+Latest full local verification: all 685 broader tests and timezone checks, TypeScript, focused plugin ESLint, CSS lint, sequential desktop/web builds and artifact scanning pass at the profile-banner fix. Patch lint reports five warnings and no errors. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding b2f0362c4; the banner fix requires its own CI.
 
 Earlier broad verification checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning passed. Patch lint then reported 107 warnings and no errors. Full repository lint logs use `.git/audit/reconciliation-sep27-*`; later focused runs do not replace final combined validation.
 
 A fresh September 27 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,655 files, fourteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-sep27-current.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
+
+## Native profile-banner actions
+
+The previous banner replacement matches neither captured parent module. Discord now renders the banner through a separate child component, which does not forward arbitrary parent props. The replacement targets that child and uses the native Clickable only when an image exists. Empty and color-only banners retain their div. It removes the obsolete broad search and callback while preserving the native image, cutout, overlay and hover behavior. Historical ed9b28feb was inspected.
+
+The tracked regression fails before the fix because the root remains a div. Both complete captured child modules compile. Across 128 executions, native dimensions, child output, cutout styles and hover callbacks remain intact. Chromium checks using the actual banner and Clickable implementations verify Tab, Enter, Space, one image open per activation, and the scoped pointer cursor. Empty banners stay outside the tab order. The fixtures attach events and control unrelated dependencies; signed-in layout and animation acceptance remain open. Evidence is `.git/audit/profile-banner-verify.{cjs,json}`, `profile-banner-keyboard.{cjs,json}` and the failing-before log.
+
+All 685 broader tests and timezone checks, TypeScript, plugin ESLint, full CSS lint, sequential desktop/web builds and artifact scanning pass. Patch lint reports five warnings and no errors. Logs use `.git/audit/profile-banner-*`. All four preceding b2f0362c4 CI checks passed. Remaining findings and release acceptance are unfinished.
 
 ## Native profile-avatar actions
 

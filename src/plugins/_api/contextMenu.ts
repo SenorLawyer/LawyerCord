@@ -105,6 +105,13 @@ export default definePlugin({
                 }
             ],
         },
+        {
+            find: '"message-reminder-create"',
+            replacement: {
+                match: /Menu:(\i)=>\{/g,
+                replace: "Menu:function($1){"
+            }
+        }
     ],
 
     registerMenuItem(name: string, component: any) {

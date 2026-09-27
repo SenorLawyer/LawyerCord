@@ -27,6 +27,7 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { makeLazy, proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
+import { canonicalizeMatch } from "../src/utils/patches";
 
 test("PictureInPicture keeps original playback after rejected requests", async () => {
     for (const failure of ["request", "play", "metadata", "replaced", "request-replaced", "play-replaced", undefined]) {
@@ -9998,6 +9999,35 @@ test("console previews can retry after root creation fails", () => {
     assert.equal(state.renders.length, 1);
     plugin.stop();
     assert.equal(state.unmounts, 1);
+});
+
+test("inbox context menus expose their render props instead of webpack arguments", () => {
+    const { default: plugin } = loadSource("src/plugins/_api/contextMenu.ts", {
+        "@utils/constants": { Devs: {} },
+        "@utils/patches": { canonicalizeMatch },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+        "@webpack/common": {}
+    });
+    let source = `(function(module,exports,require){return {
+        reminder:{Menu:props=>{return jsx(Menu,{navId:"message-reminder-create",children:[]})}},
+        channel:{Menu:props=>{return jsx(Menu,{navId:props.channel.isThread()?"thread-context":"channel-context",children:[]})}},
+        nested:function(props){return ()=>jsx(Menu,{navId:"nested-menu",children:[]})}
+    }})`;
+    for (const patch of plugin.patches) {
+        if (!source.includes(patch.find)) continue;
+        for (const replacement of [patch.replacement].flat())
+            source = source.replace(canonicalizeMatch(replacement.match), replacement.replace);
+    }
+    const menus = runInNewContext(source, { Menu: "Menu", jsx: (_component: string, props: object) => props })({ exports: {} }, {}, () => {});
+    for (const isThread of [false, true]) {
+        const props = { message: { id: "message" }, channel: { isThread: () => isThread } };
+        for (const menu of [menus.reminder.Menu, menus.channel.Menu]) {
+            const result = menu(props, "second argument");
+            assert.equal(result.contextMenuAPIArguments[0], props);
+            assert.equal(result.contextMenuAPIArguments[1], "second argument");
+        }
+        assert.equal(menus.nested(props)().contextMenuAPIArguments[0], props);
+    }
 });
 
 test("member count injection accepts only the resolved member list class", () => {

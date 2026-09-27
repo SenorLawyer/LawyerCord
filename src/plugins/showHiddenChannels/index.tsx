@@ -276,8 +276,8 @@ export default definePlugin({
         {
             find: '"MessageManager"',
             replacement: {
-                match: /forceFetch:\i,isPreload:.+?}=\i;(?=.+?getChannel\((\i)\))/,
-                replace: (m, channelId) => `${m}if($self.isHiddenChannel({channelId:${channelId}}))return;`
+                match: /(?<=forceFetch:\i,isPreload:[^{}]{0,200}}=\i;)(?=if\(null==(\i)\|\|)/,
+                replace: "if($self.isHiddenChannel({channelId:$1}))return;"
             }
         },
         // Patch keybind handlers so you can't accidentally jump to hidden channels
@@ -285,15 +285,15 @@ export default definePlugin({
             find: '"alt+shift+down"',
             replacement: {
                 match: /(?<=getChannel\(\i\);return null!=(\i))(?=.{0,200}?>0\)&&\(0,\i\.\i\)\(\i\))/,
-                replace: (_, channel) => `&&!$self.isHiddenChannel(${channel})`
+                replace: "&&!$self.isHiddenChannel($1)"
             }
         },
         // Patch keybind handlers so you can't accidentally jump to hidden channels
         {
             find: ".APPLICATION_STORE&&null!=",
             replacement: {
-                match: /getState\(\)\.channelId.+?(?=\.map\(\i=>\i\.id)/,
-                replace: "$&.filter(e=>!$self.isHiddenChannel(e))"
+                match: /(?<=withCurrentVoiceChannel:!0}\))(?=\.map\(\i=>\i\.id)/,
+                replace: ".filter(e=>!$self.isHiddenChannel(e))"
             }
         },
         {

@@ -6,6 +6,10 @@ Current source checkpoint `080e17609`: all 654 broader tests and timezone checks
 
 A fresh September 27 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,655 files, fourteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-sep27-current.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
 
+## ShowHiddenChannels fetch and keyboard navigation
+
+Message fetching now captures the channel ID from the adjacent null check, and ordinary Alt navigation inserts its filter at the current-voice-channel list. Both unbounded prefix searches are removed. The Alt+Shift replacement uses a direct capture string instead of a callback. All five captured module copies produce byte-identical complete output and compile against 5ae97942d. Evidence is `.git/audit/hidden-channel-fetch-navigation-verify.{cjs,json}`. Focused lint, desktop/web builds, artifact scanning and diff checks pass; logs use `.git/audit/hidden-channel-navigation-*`. Patch lint reports 43 warnings and no errors. All four CI checks passed on 5ae97942d. The latest full regression run remains 673 tests plus timezone checks at that revision. Signed-in acceptance and the separately identified allowed-user overflow scope defect remain open.
+
 ## NewGuildSettings invite target
 
 The invite patch crossed 2,446 characters into the unrelated openApp method and passed its parsed invite object instead of a guild ID. Commit 515340a07 changed the capture to this shape while refreshing its anchor. The replacement now ends at the INVITE_ACCEPT_SUCCESS dispatch and reads the accepted payload's guild_id or nested guild.id. Its capture-copy callback is removed.

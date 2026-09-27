@@ -50,6 +50,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ### Fixed
 
 - Restrict hidden app-channel toolbars to notifications, matching hidden text and forum channels instead of showing unavailable channel controls.
+- Keep hidden-channel fetch and keyboard-navigation patches local to their channel checks and list construction, removing broad searches and replacement callbacks.
 
 - Replace hidden-channel toolbar method-prefix searches with local button matches and keep the nested row guard tied to its mouse handler's channel.
 

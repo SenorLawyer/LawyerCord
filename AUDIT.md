@@ -72,6 +72,12 @@ Muted/unread assignments now use bounded lookaheads from the outer row return to
 
 All twelve combined patch configurations compile and differ only in the two channel references. Executing the captured row component across hidden, muted, unread, selected, connected, locked and voice flags produces identical output in 1,536 controlled cases. Dependencies are mocked, so this does not establish live store updates or signed-in rendering. Evidence is `.git/audit/hidden-channel-state-verify.{cjs,json}`, comparing cd8f2d291. Focused lint, desktop/web builds and artifact scanning pass; logs use `.git/audit/hidden-channel-state-*`. Patch lint reports 50 warnings and no errors. The latest full local regression run remains 672 tests plus timezone checks at 621c1286e.
 
+## ShowHiddenChannels nested guard and toolbar
+
+The nested row guard captures its channel from the row mouse-up handler 472 characters later, bounded at 500. This retains the same lexical channel without changing the nested function or its arguments. All twelve patch configurations and 1,536 controlled renders retain identical output. Evidence is `.git/audit/hidden-channel-guard-verify.{cjs,json}`, comparing cdc3e5e00.
+
+The toolbar patches now match local notification/member-button expressions and the adjacent search property instead of copying 1,778-, 2,619- and 607-character method prefixes. The two notification guards become one intentional global replacement matching exactly two sites. Four toolbar callbacks and the nested-guard callback are removed. Complete module 741919 remains byte-identical after patching and compiles. Its actual desktop/mobile methods pass 128 controlled cases across eight guild channel types, hidden/lurking/overlay states and game-invite state. Existing hidden GUILD_APP toolbar behavior is preserved and still needs a separate suitability review; equivalence alone does not establish it is correct. Evidence is `.git/audit/hidden-channel-toolbar-patches.{cjs,json}` and `hidden-channel-toolbar-verify.{cjs,json}`. Dependencies are mocked; signed-in acceptance remains separate. Focused lint, desktop/web builds and artifact scanning pass; logs use `.git/audit/hidden-channel-toolbar-*`. Patch lint reports 45 warnings and no errors. All four CI checks passed on cdc3e5e00. The latest full local regression run remains 672 tests plus timezone checks at 621c1286e.
+
 ## Scope and source
 
 - Baseline: `6e664e03ba3d0b7746ce34740ca444f5112b04bc`, published as `nightly-20260905-1918-6e664e03`.

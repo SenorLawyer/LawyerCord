@@ -49,6 +49,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Replace hidden-channel toolbar method-prefix searches with local button matches and keep the nested row guard tied to its mouse handler's channel.
+
 - Use local row-return matches for hidden-channel muted and unread assignments, removing their backward searches and three replacement callbacks.
 
 - Keep hidden-channel eye and lock icon captures near their channel label and remove their replacement callbacks.

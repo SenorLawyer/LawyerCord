@@ -212,8 +212,8 @@ export default definePlugin({
             predicate: () => settings.store.channelStyle !== ChannelStyle.Unread && settings.store.channelStyle !== ChannelStyle.MutedUnread,
             replacement: [
                 {
-                    match: /(?<=\.LOCKED;if\()(?<={channel:(\i).+?)/,
-                    replace: (_, channel) => `!$self.isHiddenChannel(${channel})&&`
+                    match: /(?<=\.LOCKED;if\()(?=.{0,500}?onMouseUp:\i=>\i\?\.\(\i,(\i)\))/,
+                    replace: "!$self.isHiddenChannel($1)&&"
                 },
                 {
                     // Hide unreads
@@ -251,20 +251,16 @@ export default definePlugin({
             find: "Missing channel in Channel.renderHeaderToolbar",
             replacement: [
                 {
-                    match: /renderHeaderToolbar(?:",|=)\(\)=>{.+?case \i\.\i\.GUILD_TEXT:(?=.+?(\i\.push.{0,50}channel:(\i)},"notifications"\)\)))(?<=isLurking:(\i).+?)/,
-                    replace: (m, pushNotificationButtonExpression, channel, isLurking) => `${m}if(!${isLurking}&&$self.isHiddenChannel(${channel})){${pushNotificationButtonExpression};break;}`
+                    match: /case \i\.\i\.GUILD_(?:TEXT|MEDIA):(?=.{0,150}?(\i)\|\|.{0,150}?(\i\.push.{0,50}?channel:(\i)},"notifications"\)\)))/g,
+                    replace: "$&if(!$1&&$self.isHiddenChannel($3)){$2;break;}"
                 },
                 {
-                    match: /renderHeaderToolbar(?:",|=)\(\)=>{.+?case \i\.\i\.GUILD_MEDIA:(?=.+?(\i\.push.{0,40}channel:(\i)},"notifications"\)\)))(?<=isLurking:(\i).+?)/,
-                    replace: (m, pushNotificationButtonExpression, channel, isLurking) => `${m}if(!${isLurking}&&$self.isHiddenChannel(${channel})){${pushNotificationButtonExpression};break;}`
+                    match: /(?<=\.GUILD_MEDIA:case \i\.\i\.GUILD_DIRECTORY:)(?=\i\.push\(.{0,50}?channelId:(\i)\.id)/,
+                    replace: "if($self.isHiddenChannel($1))break;"
                 },
                 {
-                    match: /renderMobileToolbar(?:",|=)\(\)=>{.+?case \i\.\i\.GUILD_DIRECTORY:(?<=let{channel:(\i).+?)/,
-                    replace: (m, channel) => `${m}if($self.isHiddenChannel(${channel}))break;`
-                },
-                {
-                    match: /(?<=renderHeaderBar(?:",|=)\(\)=>{.+?hideSearch:(\i)\.isDirectory\(\))/,
-                    replace: (_, channel) => `||$self.isHiddenChannel(${channel})`
+                    match: /(?<=hideSearch:(\i)\.isDirectory\(\))(?=,toolbar:this\.renderHeaderToolbar\(\))/,
+                    replace: "||$self.isHiddenChannel($1)"
                 },
                 {
                     match: /(?<=renderSidebar\(\){)/,

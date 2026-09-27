@@ -19,6 +19,10 @@ Changes are accumulated in [PR #47](https://github.com/SenorLawyer/LawyerCord/pu
 
 ## Latest local verification
 
+September 27 RPCEditor patch review: the match now names the LOCAL_ACTIVITY_UPDATE handler, bounds the destructuring span and captures activity independently of field order. This removes an unbounded scan and avoids matching an unrelated callback with a similar shape. `.git/audit/rpc-editor-patch-bounds.cjs` verifies byte-identical complete output and compilation for captured module 480595, plus five field orders with multi-character identifiers and an unrelated handler left untouched. The previous pattern fails the controlled field-order case.
+
+TypeScript, focused ESLint, the template regression, desktop/web builds and artifact scanning pass. Patch lint reports 145 warnings and no errors. Build logs are `.git/audit/rpc-editor-patch-{desktop,web}.log`. The full 632-test suite last passed at preceding revision `85e3daa3c`; this patch-only batch used captured execution and focused checks. Saved configuration, settings persistence and runtime startup behavior remain open review items.
+
 September 27 RPCEditor template correction: string replacements interpreted dollar-sign sequences in original activity fields as replacement instructions. The regression reproduced a name containing `$&`, `$$`, dollar-backtick and dollar-apostrophe turning into duplicated template fragments. Replacement callbacks now return those values literally. Tests cover all seven fields, missing optional fields, repeated placeholders and the existing null sentinel. No template ordering or recursive-substitution behavior was changed.
 
 All 632 broader tests plus timezone checks, TypeScript, focused ESLint, both builds and artifact scanning pass. Logs are `.git/audit/rpc-editor-literal-{tests,desktop,web}.log`. The captured LocalActivityStore module 480595 has one matching RPCEditor patch spanning 85 characters and compiles after injection; its broader matching and persisted configuration/lifecycle behavior remain under review. The corpus inventory is `.git/audit/rpc-editor-patches.json`.

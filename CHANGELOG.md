@@ -27,7 +27,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
-- RPCEditor preserves dollar-sign sequences literally when inserting activity text into templates.
+- RPCEditor preserves dollar-sign sequences literally when inserting activity text into templates, and targets its activity-update patch without depending on event field order.
 
 - UnreadCountBadge shows thread badges even when there are no mentions or voice users, and updates when mute preferences or its display settings change.
 

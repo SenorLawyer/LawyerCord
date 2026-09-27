@@ -49,6 +49,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Read voice-user and reactor role colors from their component props, removing backward searches through unrelated code.
+
 - Match role headings and poll labels directly, preserving role icons and accessibility text, and bound role-color mention captures to their own function.
 
 - Keep PlatformIndicators' mobile-mask search inside the status switch and remove ReverseImageSearch's backward target lookup.

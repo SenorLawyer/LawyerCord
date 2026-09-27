@@ -129,8 +129,8 @@ export default definePlugin({
             find: "#{intl::GUEST_NAME_SUFFIX})]",
             replacement: [
                 {
-                    match: /#{intl::GUEST_NAME_SUFFIX}.{0,50}?"".{0,100}\](?=\}\))(?<=guildId:(\i),.+?user:(\i).+?)/,
-                    replace: "$&,style:$self.getColorStyle($2.id,$1),"
+                    match: /#{intl::GUEST_NAME_SUFFIX}.{0,50}?"".{0,100}\](?=\}\))/,
+                    replace: "$&,style:$self.getColorStyle(arguments[0].user.id,arguments[0].guildId),"
                 }
             ],
             predicate: () => settings.store.voiceUsers
@@ -139,8 +139,8 @@ export default definePlugin({
         {
             find: "MessageReactions.render:",
             replacement: {
-                match: /tag:"strong",variant:"text-md\/medium"(?<=onContextMenu:.{0,15}\((\i),(\i),\i\).+?)/,
-                replace: "$&,style:$self.getColorStyle($2?.id,$1?.channel?.id)"
+                match: /tag:"strong",variant:"text-md\/medium"/,
+                replace: "$&,style:$self.getColorStyle(arguments[0].user?.id,arguments[0]?.channel?.id)"
             },
             predicate: () => settings.store.reactorsList,
         },

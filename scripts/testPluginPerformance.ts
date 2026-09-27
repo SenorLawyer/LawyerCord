@@ -15788,6 +15788,35 @@ test("pinned DM navigation retains the visible selected channel in collapsed cat
 });
 
 
+test("pinned DM heading preserves native props and exposes collapse state", () => {
+    const store = { canCollapseDmSection: false, dmSectionCollapsed: false };
+    const { default: plugin } = loadComponent("src/plugins/pinDms/index.tsx", { Clickable: "discord-clickable" }, {
+        "@api/Settings": { definePluginSettings: () => ({ store }) },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+        "@utils/constants": { Devs: {} },
+        "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {}, StartAt: {} },
+        "@webpack": { findCssClassesLazy: () => ({}), findStoreLazy: () => ({}) },
+        "./components/contextMenu": {}, "./components/CreateCategoryModal": {}, "./constants": {}, "./data": {}
+    });
+    const props = { className: "native-heading", title: "Direct Messages" };
+    let view = plugin.renderDmHeader(props);
+    assert.equal(view.type, "span");
+    assert.equal(view.props.className, props.className);
+    assert.equal(view.props.onClick, undefined);
+    store.canCollapseDmSection = true;
+    for (const collapsed of [false, true]) {
+        store.dmSectionCollapsed = collapsed;
+        view = plugin.renderDmHeader(props);
+        assert.equal(view.type, "discord-clickable");
+        assert.equal(view.props.tag, "span");
+        assert.equal(view.props.title, props.title);
+        assert.equal(view.props.className, "native-heading vc-pindms-dm-header");
+        assert.equal(view.props["aria-expanded"], !collapsed);
+        view.props.onClick();
+        assert.equal(store.dmSectionCollapsed, !collapsed);
+    }
+});
+
 test("pinned DM categories render and edit legacy null colors", () => {
     for (const color of [null, undefined, 0, 0xabcdef]) {
         const category = { id: "category", name: "Category", channels: [], color };

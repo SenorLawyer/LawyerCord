@@ -27,6 +27,10 @@
     gap: 1.5em;
 }
 
+.vc-pindms-dm-header {
+    cursor: pointer;
+}
+
 .vc-pindms-collapse-icon {
     width: 16px;
     height: 16px;

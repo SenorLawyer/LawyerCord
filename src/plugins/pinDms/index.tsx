@@ -26,6 +26,8 @@ interface ChannelComponentProps {
     selected: boolean;
 }
 
+interface DmHeaderProps extends React.HTMLAttributes<HTMLSpanElement> { }
+
 const headerClasses = findCssClassesLazy("privateChannelsHeaderContainer", "headerText");
 
 export const PrivateChannelSortStore = findStoreLazy("PrivateChannelSortStore") as { getPrivateChannelIds: () => string[]; };
@@ -97,8 +99,8 @@ export default definePlugin({
                     replace: "$&if($self.isCategoryIndex($1.section))return $self.renderCategory($1);"
                 },
                 {
-                    match: /renderSection(?:",|=).{0,300}?"span",{/,
-                    replace: "$&...$self.makeSpanProps(),"
+                    match: /(renderSection(?:",|=).{0,300}?)"span"(?=,{)/,
+                    replace: "$1$self.renderDmHeader"
                 },
 
                 // Fix Row Height
@@ -187,13 +189,17 @@ export default definePlugin({
         };
     },
 
-    makeSpanProps() {
-        return settings.store.canCollapseDmSection ? {
-            onClick: () => this.collapseDMList(),
-            role: "button",
-            style: { cursor: "pointer" }
-        } : undefined;
-    },
+    renderDmHeader: ErrorBoundary.wrap((props: DmHeaderProps) => {
+        if (!settings.store.canCollapseDmSection) return <span {...props} />;
+
+        return <Clickable
+            {...props}
+            tag="span"
+            className={classes(props.className, "vc-pindms-dm-header")}
+            aria-expanded={!settings.store.dmSectionCollapsed}
+            onClick={() => { settings.store.dmSectionCollapsed = !settings.store.dmSectionCollapsed; }}
+        />;
+    }, { noop: true }),
 
     getChunkSize() {
         // the chunk size is the amount of rows (measured in pixels) that are rendered at once (probably)
@@ -218,10 +224,6 @@ export default definePlugin({
 
         const category = getCategoryByIndex(sectionIndex - 1);
         return this.isCategoryIndex(sectionIndex) && (category?.channels?.length === 0 || category?.channels[channelIndex]);
-    },
-
-    collapseDMList() {
-        settings.store.dmSectionCollapsed = !settings.store.dmSectionCollapsed;
     },
 
     isChannelHidden(categoryIndex: number, channelIndex: number) {

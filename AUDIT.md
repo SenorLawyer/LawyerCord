@@ -30,6 +30,12 @@ The tracked regression covers success and rejection, pending cleanup, unchanged 
 
 Four PinDMs searches now stay within bounded sections, renderer declarations, row-height logic and the scroll expression. The row-height insertion no longer copies surrounding code. All nine replacements match once in captured module 593065, and the complete patched output is byte-identical to fac4c7edf and compiles. Four distant-target decoys match the previous patterns but are rejected by the new ones. The renderDM-to-renderRow span is 416 characters, covered by two bounded 250-character gaps. Evidence is `.git/audit/pin-dms-patches.{cjs,json}` and `pin-dms-capture-verify.{cjs,json}`. This does not establish signed-in DM-list scrolling acceptance. Prior instance-mirror cleanup 3bbdcf6c4 was inspected and remains intact. Focused lint, desktop/web builds and artifact scanning pass; logs use `.git/audit/pin-dms-capture-*`. Patch lint reports 65 warnings and no errors. All four CI checks passed on fac4c7edf, whose 671 broader tests and timezone checks remain the latest full local run.
 
+## PinDMs heading keyboard behavior
+
+Chromium confirmed that Tab skipped the previous collapsible heading: its span had a button role and mouse handler but no keyboard handler or tab stop. The heading now reuses Discord's Clickable with a span tag and exposes aria-expanded. When collapse is disabled it remains an ordinary span. The former manual-props and toggle methods are removed; static cursor styling moves to the plugin stylesheet.
+
+The complete captured DM-list module differs only at the heading replacement. The tracked regression verifies native props, disabled behavior, both collapse states and toggling. Chromium runs the actual captured Clickable implementation from module 939249 with the actual new header output, confirming Tab, Enter, Space and retained text. The fixture manually rerenders header props after the setting changes; it does not establish signed-in subscription, visual or screen-reader acceptance. Evidence is `.git/audit/pin-dms-heading-{before,after}.cjs` and their JSON results. All 672 broader tests and timezone checks, TypeScript, focused lint, repository CSS lint, desktop/web builds and artifact scanning pass; logs use `.git/audit/pin-dms-heading-*`. All four CI checks passed on preceding 5ac693309. A fresh fetch confirms main is fully integrated and the latest published nightly remains the September 5 baseline.
+
 ## Scope and source
 
 - Baseline: `6e664e03ba3d0b7746ce34740ca444f5112b04bc`, published as `nightly-20260905-1918-6e664e03`.

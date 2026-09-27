@@ -19,6 +19,12 @@ Changes are accumulated in [PR #47](https://github.com/SenorLawyer/LawyerCord/pu
 
 ## Latest local verification
 
+September 27 PictureInPicture ownership investigation: PluginCard and the disable-all path both defer patched plugins until restart. PictureInPicture therefore does not receive a live stop() through either normal UI path; adding a stop hook alone would not address those cases. The captured native video renderer in module 994064 has no media pause in componentWillUnmount and clears its media reference through handleVideoRef. Its unmount method is recorded in `.git/audit/pip-native-unmount.json`.
+
+`.git/audit/pip-original-detachment.cjs` opens PiP on the original local video, removes its parent, and checks playback immediately and 400ms later. Chromium keeps the disconnected original playing in PiP, with media time advancing. Results are `pip-original-detachment.json`. This weakens the assumption that cloning is needed solely to survive DOM removal, but does not establish all Discord renderer behavior or initial metadata-loading semantics. No production change was made in this investigation. Next compare original-element playback, volume/mute, startup loading and exit behavior before deciding whether the clone and its cleanup machinery can be deleted.
+
+CI for `61fbb7983` was still running for Build, Windows smoke and CodeQL at this check; dependency review passed. The last source validation remains the preceding 644-test checkpoint. Repeated-click and stalled-load ownership remain open.
+
 September 27 PictureInPicture metadata failure: a Chromium fixture with a valid playing original and a broken clone URL produced a media error while leaving the hidden clone attached and showing no feedback. Metadata errors now use the same failure cleanup as rejected PiP/playback. The cleanup disconnects pending handlers and ignores an already-removed clone; launch clears metadata handlers before awaiting the request. The previous cleanup is shared rather than duplicated.
 
 `.git/audit/pip-metadata-failure.cjs` verifies one remaining video, uninterrupted original playback, one failure toast and no unhandled rejection. Baseline and corrected observations are `pip-metadata-baseline-result.json` and `pip-metadata-fixed-result.json`. The denied-request, playback-failure and success/exit Chromium fixtures still pass. The tracked regression includes metadata failure alongside the existing request/play/success cases.

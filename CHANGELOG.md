@@ -38,6 +38,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep Experiments' toolbar-handler and experiment-name patches within their nearby code instead of searching into later functions.
+
 - Preserve explicit empty avatar-decoration previews in Decor. Custom decorations apply only when no override was supplied.
 
 - Restrict the inbox menu patch to its arrow-renderer module so another reminder menu cannot consume it first.

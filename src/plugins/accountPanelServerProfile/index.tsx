@@ -83,12 +83,12 @@ export default definePlugin({
             group: true,
             replacement: [
                 {
-                    match: /(\.AVATAR,children:.+?renderPopout:\((\i),\i\)=>)\{(.+?)\}(?=,position)(?<=currentUser:(\i).+?)/,
-                    replace: (_, rest, popoutProps, originalPopout, currentUser) => `${rest}$self.UserProfile({popoutProps:${popoutProps},currentUser:${currentUser},originalRenderPopout:()=>{${originalPopout}}})`
+                    match: /(?<=renderPopout:\((\i),\i\)=>)\{(?=.{0,150}\bcurrentUser:(\i)[,}])(.{1,250}?)\}(?=,position)/,
+                    replace: "$self.UserProfile({popoutProps:$1,currentUser:$2,originalRenderPopout:()=>{$3}})"
                 },
                 {
-                    match: /\.AVATAR,children:.+?onRequestClose:\(\)=>\{/,
-                    replace: "$&$self.onPopoutClose();"
+                    match: /(?<=onRequestClose:\(\)=>\{)(?=\i\(\),\i\(void 0\)\})/,
+                    replace: "$self.onPopoutClose();"
                 },
                 {
                     match: /ref:(\i),style:\i(?=.{0,250}#{intl::USER_PROFILE_ACCOUNT_POPOUT_BUTTON_A11Y_LABEL})/,

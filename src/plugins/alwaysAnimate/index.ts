@@ -80,7 +80,7 @@ export default definePlugin({
             find: "#{intl::GUILD_OWNER}),children:",
             predicate: () => settings.store.statusEmojis,
             replacement: {
-                match: /(\.CUSTOM_STATUS.+?animateEmoji:)\i/,
+                match: /(\.CUSTOM_STATUS.{1,150}?animateEmoji:)\i/,
                 replace: "$1!0"
             }
         },

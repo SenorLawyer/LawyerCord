@@ -27,6 +27,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- AccountPanelServerProfile matches its popout callbacks directly, and AlwaysAnimate bounds its status-emoji patch search.
+
 - ShowMessageEmbeds targets the attachment parser instead of unrelated attachment renderers. Its context-menu match and the Timezones message-header match now use bounded searches.
 
 - RPCEditor validates the actual stream-link destination and allows clearing an optional stream URL.

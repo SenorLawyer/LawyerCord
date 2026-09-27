@@ -94,7 +94,7 @@ export default definePlugin({
             replacement: [
                 // Remove the special logic for channels we don't have access to
                 {
-                    match: /if\(!\i\.\i\.can\(\i\.\i\.VIEW_CHANNEL.+?{if\(this\.id===\i\).+?threadIds:\[\]}}/,
+                    match: /if\(!\i\.\i\.can\(\i\.\i\.VIEW_CHANNEL[^{}]{0,100}{if\(this\.id===\i\).{0,200}?threadIds:\[\]}}/,
                     replace: ""
                 },
                 // Do not check for unreads when selecting the render level if the channel is hidden
@@ -104,13 +104,13 @@ export default definePlugin({
                 },
                 // Make channels we dont have access to be the same level as normal ones
                 {
-                    match: /(this\.record\)\?{renderLevel:(.+?),threadIds.+?renderLevel:).+?(?=,threadIds)/g,
-                    replace: (_, rest, defaultRenderLevel) => `${rest}${defaultRenderLevel}`
+                    match: /(this\.record\)\?{renderLevel:([^,]{1,30}),threadIds:[^;]{0,150}?renderLevel:)[^,]{1,30}(?=,threadIds)/g,
+                    replace: "$1$2"
                 },
                 // Remove permission checking for getRenderLevel function
                 {
-                    match: /(getRenderLevel\(\i\){.+?return)!\i\.\i\.can\(\i\.\i\.VIEW_CHANNEL,this\.record\)\|\|/,
-                    replace: (_, rest) => `${rest} `
+                    match: /(?<=getRenderLevel\(\i\){[^{}]{0,100}?return)!\i\.\i\.can\(\i\.\i\.VIEW_CHANNEL,this\.record\)\|\|/,
+                    replace: " "
                 }
             ]
         },
@@ -120,17 +120,17 @@ export default definePlugin({
                 {
                     // Do not show confirmation to join a voice channel when already connected to another if clicking on a hidden voice channel
                     match: /(?<=getIgnoredUsersForVoiceChannel\((\i)\.id\)[^;]{0,300}?;return\()/,
-                    replace: (_, channel) => `!$self.isHiddenChannel(${channel})&&`
+                    replace: "!$self.isHiddenChannel($1)&&"
                 },
                 {
                     // Prevent Discord from trying to connect to hidden voice channels
                     match: /(?=\|\|\i\.\i\.selectVoiceChannel\((\i)\.id\))/,
-                    replace: (_, channel) => `||$self.isHiddenChannel(${channel})`
+                    replace: "||$self.isHiddenChannel($1)"
                 },
                 {
                     // Make Discord show inside the channel if clicking on a hidden or locked channel
-                    match: /!__OVERLAY__&&\((?<=selectVoiceChannel\((\i)\.id\).+?)/,
-                    replace: (m, channel) => `${m}$self.isHiddenChannel(${channel},true)||`
+                    match: /(?<=selectVoiceChannel\((\i)\.id\),)!__OVERLAY__&&\(/,
+                    replace: "$&$self.isHiddenChannel($1,true)||"
                 }
             ]
         },

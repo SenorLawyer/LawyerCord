@@ -49,6 +49,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Bound ShowHiddenChannels' render-level matches and keep voice navigation tied to the adjacent selection call, removing five replacement callbacks.
+
 - Read voice-user and reactor role colors from their component props, removing backward searches through unrelated code.
 
 - Match role headings and poll labels directly, preserving role icons and accessibility text, and bound role-color mention captures to their own function.

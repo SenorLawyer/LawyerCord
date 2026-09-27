@@ -54,6 +54,14 @@ Focused lint, desktop/web builds and artifact scanning pass; logs use `.git/audi
 
 The voice-user and reactor patches no longer search backward for guild/user/context-menu bindings. Both captured owners are ordinary functions whose argument props supply those same values. Their destructured bindings have no assignment writes, and sixteen controlled cases execute the actual destructuring prefixes to compare old and new color arguments. The two complete modules differ only in these references and compile. Evidence is `.git/audit/role-props-owners.json` and `role-props-verify.{cjs,json}`, comparing 83279a700. These are binding and generated-code checks, not complete signed-in rendering tests. Focused lint, desktop/web builds and artifact scanning pass; logs use `.git/audit/role-props-*`. Patch lint reports 58 warnings and no errors. The latest full local regression run remains 672 tests plus timezone checks at 621c1286e.
 
+## ShowHiddenChannels render levels and navigation
+
+The initial render-level patch now bounds its permission block and render-level expressions. Removing the getRenderLevel permission prefix uses a local lookbehind rather than copying the method prefix. Voice navigation takes its channel from the adjacent selectVoiceChannel call, eliminating the backward search. Five capture-copy callbacks become direct replacements.
+
+Both captured channel-state modules and the navigation module retain byte-identical complete patched output, all replacements match once, and the modules compile. Valid-code decoys with an intervening nested function or navigation expression are rejected by the relevant new matches. The initial nested-function decoy used invalid syntax and was corrected before final verification. Evidence is `.git/audit/hidden-channel-core-patches.{cjs,json}` and `hidden-channel-core-verify.{cjs,json}`, comparing 0dccae261. Previous f61e8b6b5 icon-style fixes were inspected and remain unchanged.
+
+Focused lint, desktop/web builds and artifact scanning pass; logs use `.git/audit/hidden-channel-core-*`. Patch lint reports 54 warnings and no errors. The latest full local regression run remains 672 tests plus timezone checks at 621c1286e. Byte-identical captured output preserves the existing behavior; it does not establish complete live permission, visibility or navigation acceptance.
+
 ## Scope and source
 
 - Baseline: `6e664e03ba3d0b7746ce34740ca444f5112b04bc`, published as `nightly-20260905-1918-6e664e03`.

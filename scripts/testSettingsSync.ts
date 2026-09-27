@@ -2609,3 +2609,57 @@ test("cloud settings keep service credentials and connection bindings local", as
     await offline.importSettings(JSON.stringify({ settings: source }), "plugins");
     assert.deepEqual(persisted, source, "Explicit offline restoration retains credentials and connection settings");
 });
+
+
+test("cloud sync preserves device-local RelationshipNotifier observations", async () => {
+    let userId = "first";
+    const records = new Map<string, unknown>([["ordinaryPreference", true], ["relationship-notifier-guilds", new Map([["legacy", { name: "Legacy guild" }]])]]);
+    const store = {
+        entries: async () => structuredClone([...records]),
+        set: async (key: string, value: unknown) => { records.set(key, structuredClone(value)); },
+        setMany: async (entries: [string, unknown][]) => { for (const [key, value] of entries) records.set(key, structuredClone(value)); }
+    };
+    const modules: Record<string, unknown> = {
+        "@api/DataStore": store, "..": { DataStore: store },
+        "@api/Settings": { PlainSettings: {}, DefaultSettings: defaultSettings },
+        "@utils/Logger": { Logger: class {} },
+        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+        "@vencord/discord-types/enums": { ChannelType: { GROUP_DM: 3 }, RelationshipType: { FRIEND: 1, INCOMING_REQUEST: 3 } },
+        "@webpack": { findStoreLazy: () => ({}) },
+        "@webpack/common": {
+            UserStore: { getCurrentUser: () => ({ id: userId }) },
+            GuildStore: { getGuilds: () => ({ [userId]: { name: userId } }) },
+            GuildMemberStore: { isMember: () => true },
+            ChannelStore: { getSortedPrivateChannels: () => [{ id: userId, name: userId, type: 3, rawRecipients: [] }] },
+            RelationshipStore: { getMutableRelationships: () => new Map([[`${userId}-friend`, 1], [`${userId}-request`, 3]]) }
+        }
+    };
+    const globals = {
+        exports: {}, require: (name: string) => modules[name] ?? {}, structuredClone, TextEncoder, TextDecoder, atob,
+        VencordNative: { settings: { get: () => ({ plugins: {} }) }, quickCss: { get: async () => "" } }
+    };
+    const compiledNotifier = transpileModule(readFileSync("src/plugins/relationshipNotifier/utils.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    const notifier = runInNewContext(`${compiledNotifier}\nexports;`, { ...globals, exports: {} });
+    for (userId of ["first", "second"]) await Promise.all([notifier.syncGuilds(), notifier.syncGroups(), notifier.syncFriends()]);
+    assert.ok(records.get("relationship-notifier-guilds-first") instanceof Map);
+    assert.ok(records.get("relationship-notifier-groups-second") instanceof Map);
+    const observed = structuredClone([...records]);
+    const offline = runInNewContext(`${outputText}\nexports;`, { ...globals, exports: {} });
+    modules["./offline"] = offline;
+    const compiledCloud = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    const { buildLocalData, applyDownloads } = runInNewContext(`${compiledCloud}\n({ buildLocalData, applyDownloads: downloads => applyDownloads(downloads, { assertCurrent() {} }) });`, { ...globals, exports: {} });
+    const expected = [["ordinaryPreference", true]];
+    assert.deepEqual(JSON.parse(await offline.exportSettings({ type: "datastore", cloud: true })).dataStore, expected);
+    assert.deepEqual(JSON.parse(new TextDecoder().decode((await buildLocalData()).get("dataStore"))), expected);
+    assert.deepEqual([...(await offline.captureCloudImportState()).dataStore.keys()], ['"ordinaryPreference"']);
+    const remoteEntries = observed.filter(([key]) => key.startsWith("relationship-notifier-")).map(([key]) => [key, {}]);
+    await offline.importSettings(JSON.stringify({ dataStore: remoteEntries }), "datastore", true);
+    await applyDownloads([{ key: "dataStore", value: Buffer.from(JSON.stringify(remoteEntries)).toString("base64") }]);
+    await applyDownloads(remoteEntries.map(([key]) => ({ key: `dataStore/${key}`, value: Buffer.from("{}").toString("base64") })));
+    assert.deepEqual([...records], observed, "Cloud imports must not replace this device's offline-change baseline");
+    await assert.rejects(offline.exportSettings({ type: "datastore" }), /JSON backup format cannot preserve/, "Offline JSON backups must not silently drop Map contents");
+});

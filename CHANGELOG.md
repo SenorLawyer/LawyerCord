@@ -30,6 +30,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep RelationshipNotifier observation history local so its saved maps cannot block cloud sync or overwrite another device's offline-change baseline.
+
 - Keep plugin credentials, saved decryption passwords, ShareX configurations, and their service connection settings local during cloud sync. Older cloud backups cannot replace them or redirect retained credentials to another server.
 
 - Keep ChannelTabs session state local and sync only the current account's bookmarks and tab presets. Cloud imports preserve other accounts' saved bookmarks, including concurrent changes.

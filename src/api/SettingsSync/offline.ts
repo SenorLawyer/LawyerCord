@@ -39,7 +39,7 @@ const LOCAL_PLUGIN_SETTINGS = new Map<string, readonly string[]>([
 export function isLocalDataStoreKey(key: unknown) {
     if (LOCAL_DATASTORE_KEYS.has(key)) return true;
     if (typeof key !== "string") return false;
-    if (key.startsWith("Vencord_cloudManifest:") || key.startsWith("VoiceMessageTranscriber_")) return true;
+    if (key.startsWith("Vencord_cloudManifest:") || key.startsWith("VoiceMessageTranscriber_") || key.startsWith("relationship-notifier-")) return true;
     if (!/^(?:VoiceStats_totals|ProfileDataset|ProfilePresets_v2_Main|ProfilePresets_v2_Server)(?::|$)/.test(key)) return false;
     const userId = UserStore.getCurrentUser()?.id;
     return !userId || ![

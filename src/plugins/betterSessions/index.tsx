@@ -169,12 +169,20 @@ export default definePlugin({
 
             if (generation !== lifecycleGeneration || userId !== UserStore.getCurrentUser()?.id) return;
 
-            const newSessionIds: string[] = [];
-            for (const session of data.body.user_sessions) {
+            const newSessions: Session[] = data.body.user_sessions.filter((session: Session) => !savedSessionsCache.has(session.id_hash));
+            if (!newSessions.length) return;
+
+            await saveSessionsToDataStore(sessions => {
+                for (const session of newSessions) {
+                    if (!sessions.has(session.id_hash)) sessions.set(session.id_hash, { name: "", isNew: true });
+                }
+            });
+            if (generation !== lifecycleGeneration || userId !== UserStore.getCurrentUser()?.id) return;
+
+            for (const session of newSessions) {
                 if (savedSessionsCache.has(session.id_hash)) continue;
 
                 savedSessionsCache.set(session.id_hash, { name: "", isNew: true });
-                newSessionIds.push(session.id_hash);
                 showNotification({
                     title: "BetterSessions",
                     body: `New session:\n${session.client_info.os} · ${session.client_info.platform} · ${session.client_info.location}`,
@@ -182,12 +190,6 @@ export default definePlugin({
                     onClick: () => SettingsRouter.openUserSettings("sessions_panel")
                 });
             }
-
-            if (newSessionIds.length) await saveSessionsToDataStore(sessions => {
-                for (const idHash of newSessionIds) {
-                    if (!sessions.has(idHash)) sessions.set(idHash, { name: "", isNew: true });
-                }
-            });
         })();
 
         checkNewSessionsPromise = promise;

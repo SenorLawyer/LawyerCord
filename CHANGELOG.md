@@ -59,6 +59,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Retry failed session-discovery saves on later checks without caching unsaved sessions or notifying after stop or account changes.
+
 - Keep reaction-avatar scroll adjustments in their own conversation view instead of changing the most recently opened view.
 
 - Apply reaction-avatar profile settings immediately through Discord's native control. Prevent Enter or Space on a focused avatar from also toggling its reaction.

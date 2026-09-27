@@ -2,11 +2,19 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Latest full local verification: all 690 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the reaction scroller ownership fix. Patch lint reports zero warnings and no errors. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding 8caeecb9d; the scroller fix requires its own CI.
+Latest full local verification: all 691 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the session discovery persistence fix. Patch lint reports zero warnings and no errors. Full CSS lint passed at the preceding banner checkpoint. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on preceding 9e60b5275; the session discovery fix requires its own CI.
 
 Earlier broad verification checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning passed. Patch lint then reported 107 warnings and no errors. Full repository lint logs use `.git/audit/reconciliation-sep27-*`; later focused runs do not replace final combined validation.
 
 A fresh September 28 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,656 files, fifteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-patches-complete.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
+
+## Session discovery persistence
+
+BetterSessions populated its cache and notified about new sessions before saving them. A failed save left those IDs cached, so subsequent checks skipped them and never retried persistence. Discovery now saves first, then updates the cache and notifies. A completed save after stop or an account change does not repopulate the cache or notify. A rename made while saving remains intact. No new retry queue or lifecycle state is needed.
+
+The tracked regression reproduces the premature cache entry before the fix. Four controlled cases verify failed-save retry, stop, account changes and a concurrent rename. All eight BetterSessions regressions pass, including the existing transaction merge and malformed-record protections. Historical 080e17609 preserved independent stored names but retained the premature cache update. Evidence is `.git/audit/session-discovery-before.log` and `session-discovery-focused.log`. An initial fixture used a missing deferred helper and then the promise-based setImmediate as a callback API; both fixture errors were corrected before capturing the failure.
+
+All 691 broader tests and timezone checks, TypeScript, focused ESLint, sequential desktop/web builds and artifact scanning pass. Logs use `.git/audit/session-discovery-*`. All four preceding 9e60b5275 GitHub checks passed. Cross-window cache freshness and signed-in notification behavior remain separate review items.
 
 ## Reaction scroller ownership
 

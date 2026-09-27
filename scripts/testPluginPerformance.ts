@@ -19203,6 +19203,54 @@ test("BetterSessions preserves malformed records when loading and saving", async
 });
 
 
+test("BetterSessions discovery retries failed saves and ignores obsolete completions", async () => {
+    for (const mode of ["retry", "stop", "account", "rename"]) {
+        const cache = new Map<string, { name: string; isNew: boolean; }>();
+        const saved = Promise.withResolvers<void>();
+        let userId = "first";
+        let writes = 0;
+        let errors = 0;
+        let notifications = 0;
+        const session = { id_hash: "new", client_info: { os: "OS", platform: "Client", location: "Here" } };
+        const { default: plugin } = loadSource("src/plugins/betterSessions/index.tsx", {
+            "@api/Notifications": { showNotification: () => notifications++ },
+            "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+            "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+            "@components/Paragraph": {}, "@utils/constants": { Devs: {} },
+            "@utils/Logger": { Logger: class { error() { errors++; } } },
+            "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
+            "@webpack": { findStoreLazy: () => ({}), findCssClassesLazy: () => ({}), findComponentByCodeLazy: () => () => null },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) }, Constants: { Endpoints: { AUTH_SESSIONS: "sessions" } }, RestAPI: { get: async () => ({ body: { user_sessions: [session] } }) } },
+            "./components/RenameButton": {}, "./utils": { savedSessionsCache: cache, saveSessionsToDataStore: () => { writes++; return writes === 1 ? saved.promise : Promise.resolve(); } }
+        }, { clearInterval() {} });
+        const first = plugin.checkNewSessions();
+        await setImmediate();
+        assert.equal(writes, 1);
+        assert.equal(cache.size, 0, "Pending saves must not suppress a later retry");
+        assert.equal(notifications, 0);
+        if (mode === "retry") saved.reject(new Error("Storage failed"));
+        else {
+            if (mode === "stop") plugin.stop();
+            if (mode === "account") userId = "second";
+            if (mode === "rename") cache.set("new", { name: "Renamed meanwhile", isNew: false });
+            saved.resolve();
+        }
+        await first;
+        if (mode === "retry") {
+            assert.equal(errors, 1);
+            assert.equal(cache.size, 0);
+            await plugin.checkNewSessions();
+            assert.equal(writes, 2);
+            assert.equal(cache.get("new")?.isNew, true);
+            assert.equal(notifications, 1);
+        } else {
+            assert.equal(notifications, 0);
+            assert.equal(cache.get("new")?.name, mode === "rename" ? "Renamed meanwhile" : undefined);
+        }
+    }
+});
+
+
 test("BetterSessions discovery and settings close preserve names saved by another window", async () => {
     const stored = new Map([["a", { name: "Latest A", isNew: true }], ["b", { name: "Latest B", isNew: false }]]);
     const common = { UserStore: { getCurrentUser: () => ({ id: "first" }) } };

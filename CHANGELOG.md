@@ -34,6 +34,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep LoadingQuotes patches local to each quote selection so a changed normal initializer cannot redirect the patch into event quotes.
+
 - Let BetterSessions start when an older backup has already replaced its saved names with an empty object. Names lost by the old backup cannot be recovered.
 
 - Stop pending cloud uploads before selecting account data when the Discord account or cloud service changes during storage reads.

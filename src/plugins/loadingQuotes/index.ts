@@ -75,12 +75,12 @@ export default definePlugin({
             find: "#{intl::LOADING_DID_YOU_KNOW}",
             replacement: [
                 {
-                    match: /_loadingText.+?(?=(\i)\[.{0,10}\.random)/,
-                    replace: "$&$self.mutateQuotes($1),"
+                    match: /(?<=\.locale\.startsWith\("en-"\).{0,100}?,)(\i)(?=\[\i\(\)\.random\(\1\.length-1\)\])/,
+                    replace: "$self.mutateQuotes($1),$1"
                 },
                 {
-                    match: /_eventLoadingText.+?(?=(\i)\[.{0,10}\.random)/,
-                    replace: "$&$self.mutateQuotes($1),",
+                    match: /(?<=_eventLoadingText=.{0,100}?return )(\i)(?=\[\i\(\)\.random\(\1\.length-1\)\])/,
+                    replace: "$self.mutateQuotes($1),$1",
                     predicate: () => settings.store.replaceEvents
                 }
             ]

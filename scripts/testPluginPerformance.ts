@@ -57,6 +57,8 @@ test("RPCEditor settings load saved entries before allowing edits", async () => 
     let finishRead: (value: object[]) => void = () => {};
     let reads = 0;
     let saved: unknown;
+    let current: unknown;
+    const commits: unknown[] = [];
     let failSave = false;
     const notices: string[] = [];
     let loading: Promise<void> | undefined;
@@ -64,7 +66,7 @@ test("RPCEditor settings load saved entries before allowing edits", async () => 
     const persisted = new Promise<object[]>(resolve => { finishRead = resolve; });
     const { default: plugin, makeEmptyAppId: makeEntry } = loadSource("src/equicordplugins/rpcEditor/index.tsx", {
         "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
-        "@api/index": { DataStore: { get: () => { reads++; return persisted; }, set: async (_key: string, value: unknown) => { if (failSave) throw new Error("Private storage detail"); saved = structuredClone(value); } } },
+        "@api/index": { DataStore: { get: () => { reads++; return persisted.then(value => { current = structuredClone(value); return value; }); }, update: async (_key: string, updater: (value: unknown) => unknown) => { if (failSave) throw new Error("Private storage detail"); current = updater(current); saved = structuredClone(current); commits.push(saved); } } },
         "@api/Settings": { definePluginSettings: (definition: unknown) => ({ definition }) },
         "@components/Paragraph": { Paragraph: "paragraph" }, "@utils/lazy": { makeLazy },
         "@utils/Logger": { Logger: class { error() {} } }, "@utils/constants": { Devs: {} },
@@ -76,7 +78,7 @@ test("RPCEditor settings load saved entries before allowing edits", async () => 
         "@vencord/discord-types/enums": { ActivityType: { PLAYING: 0 } },
         "@webpack/common": { showToast: (text: string) => notices.push(text), Toasts: { Type: { FAILURE: "failure" } }, React: { createElement: (type: unknown, props: object) => ({ type, props }) } },
         "./ReplaceSettings": { ReplaceSettings: "editor" }
-    });
+    }, { structuredClone });
     const render = plugin.settings.definition.replacedAppIds.component;
     assert.equal(render().type, "paragraph");
     assert.equal(reads, 1);
@@ -97,6 +99,19 @@ test("RPCEditor settings load saved entries before allowing edits", async () => 
     await editor.props.save();
     assert.equal((saved as { newName: string }[])[0].newName, "Unsaved edit");
     assert.equal(notices.length, 1);
+    entries[0].newName = "First queued edit";
+    const firstSave = editor.props.save();
+    entries[0].newName = "Second queued edit";
+    const secondSave = editor.props.save();
+    await Promise.all([firstSave, secondSave]);
+    assert.deepEqual(commits.slice(-2).map(value => (value as { newName: string }[])[0].newName), ["First queued edit", "Second queued edit"]);
+    assert.equal(notices.length, 1);
+    current = [{ ...makeEntry(), appId: "saved-app", newName: "Other window" }];
+    saved = structuredClone(current);
+    entries[0].newName = "Stale local edit";
+    await editor.props.save();
+    assert.equal((saved as { newName: string }[])[0].newName, "Other window");
+    assert.equal(notices[1], "Activity settings changed elsewhere. Reload Discord before saving.");
     plugin.start();
     await loading;
     assert.equal(reads, 1);

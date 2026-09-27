@@ -61,12 +61,16 @@ function isAppIdSetting(value: unknown): value is AppIdSetting {
 }
 
 let appIds: AppIdSetting[] = [];
+let savedAppIds: string | undefined;
+let saveQueue = Promise.resolve();
 const logger = new Logger("RPCEditor");
 const loadAppIds = makeLazy(async () => {
-    const stored = await DataStore.get<unknown>(APP_IDS_KEY) ?? [];
-    if (!Array.isArray(stored) || !stored.every(isAppIdSetting))
+    const stored = await DataStore.get<unknown>(APP_IDS_KEY);
+    const entries = stored ?? [];
+    if (!Array.isArray(entries) || !entries.every(isAppIdSetting))
         throw new Error("Saved activities are invalid.");
-    appIds = stored.length ? stored : [makeEmptyAppId()];
+    savedAppIds = JSON.stringify(stored);
+    appIds = entries.length ? entries : [makeEmptyAppId()];
 });
 
 function AppSettings() {
@@ -75,12 +79,23 @@ function AppSettings() {
     if (pending) return <Paragraph>Loading saved activities...</Paragraph>;
     if (error) return <Paragraph>Could not load saved activities. Reload Discord to try again.</Paragraph>;
 
-    return <ReplaceSettings appIds={appIds} update={update} save={async () => {
-        try {
-            await DataStore.set(APP_IDS_KEY, appIds);
-        } catch {
-            showToast("Failed to save activity settings.", Toasts.Type.FAILURE);
-        }
+    return <ReplaceSettings appIds={appIds} update={update} save={() => {
+        const next = structuredClone(appIds);
+        return saveQueue = saveQueue.then(async () => {
+            let conflict = false;
+            try {
+                await DataStore.update<unknown>(APP_IDS_KEY, current => {
+                    if (JSON.stringify(current) !== savedAppIds) {
+                        conflict = true;
+                        throw new Error("Saved activities changed.");
+                    }
+                    return next;
+                });
+                savedAppIds = JSON.stringify(next);
+            } catch {
+                showToast(conflict ? "Activity settings changed elsewhere. Reload Discord before saving." : "Failed to save activity settings.", Toasts.Type.FAILURE);
+            }
+        });
     }} />;
 }
 

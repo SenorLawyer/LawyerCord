@@ -27,6 +27,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- RPCEditor preserves newer settings saved by another window and processes local saves in order. Conflicting edits report that a reload is needed.
+
 - RPCEditor reports failed saves while retaining edits for another save attempt.
 
 - RPCEditor rejects malformed saved lists without overwriting them or breaking activity updates, and allows adding an entry to an empty saved list.

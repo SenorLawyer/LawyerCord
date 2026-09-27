@@ -62,6 +62,10 @@ Both captured channel-state modules and the navigation module retain byte-identi
 
 Focused lint, desktop/web builds and artifact scanning pass; logs use `.git/audit/hidden-channel-core-*`. Patch lint reports 54 warnings and no errors. The latest full local regression run remains 672 tests plus timezone checks at 621c1286e. Byte-identical captured output preserves the existing behavior; it does not establish complete live permission, visibility or navigation acceptance.
 
+## ShowHiddenChannels row icons
+
+The eye/lock icon patches now bound both their children expression and backward channel reference to the nearby label. Their two replacement callbacks are removed. All twelve combinations of icon selection, muted styling and unread suppression preserve byte-identical complete module output and compile. A valid-code distant-channel decoy is rejected. Evidence is `.git/audit/hidden-channel-row-patches.{cjs,json}` and `hidden-channel-icons-verify.{cjs,json}`, comparing c9cfaef26. The separate muted/unread bindings remain under review; their class condition is inside a nested function, so replacing it with arguments[0] would use the wrong owner. Focused lint, desktop/web builds and artifact scanning pass; logs use `.git/audit/hidden-channel-icons-*`. Patch lint reports 52 warnings and no errors. The latest full local regression run remains 672 tests plus timezone checks at 621c1286e. Captured output equivalence does not establish signed-in row rendering.
+
 ## Scope and source
 
 - Baseline: `6e664e03ba3d0b7746ce34740ca444f5112b04bc`, published as `nightly-20260905-1918-6e664e03`.

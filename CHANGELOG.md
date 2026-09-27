@@ -49,6 +49,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep hidden-channel eye and lock icon captures near their channel label and remove their replacement callbacks.
+
 - Bound ShowHiddenChannels' render-level matches and keep voice navigation tied to the adjacent selection call, removing five replacement callbacks.
 
 - Read voice-user and reactor role colors from their component props, removing backward searches through unrelated code.

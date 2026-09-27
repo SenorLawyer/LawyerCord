@@ -7,11 +7,13 @@
 import { classes } from "@utils/misc";
 import { useFixedTimer } from "@utils/react";
 import { formatDurationMs } from "@utils/text";
+import { findCssClassesLazy } from "@webpack";
 import { Tooltip, UserStore } from "@webpack/common";
 
 import { settings } from "./index";
 import { TimerIcon } from "./TimerIcon";
 
+const Classes = findCssClassesLazy("username", "usernameFont");
 const TIMER_SETTINGS: ("format" | "showSeconds" | "showRoleColor" | "trackSelf")[] = ["format", "showSeconds", "showRoleColor", "trackSelf"];
 
 interface TimerProps {
@@ -28,10 +30,9 @@ export function Timer({ time, userId }: Readonly<TimerProps>) {
     }
 
     const formatted = formatDurationMs(durationMs, format === "human", showSeconds);
-    const defaultColorClassName = showRoleColor ? "" : "usernameFont__71dd5 username__73ce9";
 
     if (settings.store.showWithoutHover) {
-        return <div className={classes("vc-call-timer", defaultColorClassName)}>{formatted}</div>;
+        return <div className={classes("vc-call-timer", !showRoleColor && Classes.usernameFont, !showRoleColor && Classes.username)}>{formatted}</div>;
     } else {
         // show as a tooltip
         return (

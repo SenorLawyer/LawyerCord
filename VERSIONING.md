@@ -2,6 +2,8 @@
 
 `package.json` is the source of truth for the LawyerCord version.
 
+The current Stable release version is `3.0.1.0`, including the `3.0.0.0` audit and update-channel fixes.
+
 The current four-part format is retained for upstream compatibility:
 
 ```text
@@ -33,6 +35,10 @@ Pull-request labels select the channel:
 - No release label or `release:skip`: no release.
 
 Only one channel label may be applied. `release:skip` takes precedence.
+
+Stable clients accept only Stable releases. Beta clients accept Stable and Beta releases. Nightly clients accept all three channels. Packaged clients compare the selected release's immutable tag commit, never its moving `target_commitish` branch.
+
+Source clients follow dedicated `stable`, `beta`, and `nightly` branches. After publishing, Stable advances all three branches, Beta advances `beta` and `nightly`, and Nightly advances only `nightly`. Missing branches fail the update check; they never fall back to unreleased `main` commits.
 
 For a stable release:
 

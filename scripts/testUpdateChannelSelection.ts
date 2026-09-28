@@ -28,6 +28,9 @@ assert.equal(selectUpdateRelease([oldBeta, stable], "beta"), stable, "beta falls
 assert.equal(selectUpdateRelease([newBeta, stable], "beta"), newBeta, "beta selects a newer beta release");
 assert.equal(selectUpdateRelease([oldNightly, stable], "nightly"), stable, "nightly falls back to the newer stable release");
 assert.equal(selectUpdateRelease([newNightly, newBeta, stable], "nightly"), newNightly, "nightly selects the newest nightly release");
+assert.equal(selectUpdateRelease([newNightly, newBeta, stable], "stable"), stable, "stable excludes newer beta and nightly releases");
+assert.equal(selectUpdateRelease([newNightly, newBeta, stable], "beta"), newBeta, "beta excludes newer nightly releases");
+assert.throws(() => selectUpdateRelease([newBeta, newNightly], "stable"), /No stable release/);
 
 const sameVersionBeta = release("v2.0.0.0-beta.9", "2026-08-31T10:00:00Z", true);
 assert.equal(selectUpdateRelease([sameVersionBeta, stable], "beta"), stable, "stable supersedes beta at the same version");

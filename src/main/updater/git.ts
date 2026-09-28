@@ -48,15 +48,8 @@ async function getRepo() {
         .replace(/\.git$/, "");
 }
 
-function updateBranch(channel: unknown): string {
-    const selected = normalizeUpdateChannel(channel);
-    return selected === "stable" ? "main" : selected;
-}
-
 async function fetchBranch(channel: unknown): Promise<string> {
-    let branch = updateBranch(channel);
-    if (branch !== "main" && !(await git("ls-remote", "--heads", "origin", `refs/heads/${branch}`)).stdout.trim())
-        branch = "main";
+    const branch = normalizeUpdateChannel(channel);
     await git("fetch", "origin", `refs/heads/${branch}:refs/remotes/origin/${branch}`);
     return branch;
 }

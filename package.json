@@ -1,7 +1,7 @@
 {
     "name": "lawyercord",
     "private": true,
-    "version": "3.0.0.0",
+    "version": "3.0.1.0",
     "description": "LawyerCord, a Discord client mod",
     "license": "GPL-3.0-or-later",
     "author": "LawyerCord contributors",
@@ -42,7 +42,7 @@
         "testFilePicker": "tsx --test scripts/testFilePicker.ts",
         "testExtensionInstall": "tsx --test scripts/testExtensionInstall.ts",
         "testSettingsSync": "tsx --test scripts/testSettingsSync.ts",
-        "testUpdateChannelSelection": "tsx scripts/testUpdateChannelSelection.ts",
+        "testUpdateChannelSelection": "tsx scripts/testUpdateChannelSelection.ts && tsx scripts/testUpdaterChannels.ts",
         "testInstallerStaleMarkerRepair": "node scripts/testInstallerStaleMarkerRepair.mjs",
         "testVoiceMessageTranscriber": "tsx scripts/testVoiceMessageTranscriber.ts",
         "testDiscordMcp": "tsx scripts/testDiscordMcp.ts",

@@ -21,7 +21,7 @@ import { classNameFactory } from "@utils/css";
 import { UserStore } from "@webpack/common";
 
 import { ChromeIcon, DiscordIcon, EdgeIcon, FirefoxIcon, IEIcon, MobileIcon, OperaIcon, SafariIcon, UnknownIcon } from "./components/icons";
-import { SessionInfo } from "./types";
+import { SavedSession, SessionInfo } from "./types";
 
 const getDataKey = () => {
     const currentUserId = UserStore.getCurrentUser()?.id;
@@ -29,7 +29,7 @@ const getDataKey = () => {
 };
 
 export const cl = classNameFactory("vc-betterSessions-");
-export const savedSessionsCache: Map<string, { name: string, isNew: boolean; }> = new Map();
+export const savedSessionsCache = new Map<string, SavedSession>();
 
 export function getDefaultName(clientInfo: SessionInfo["session"]["client_info"]) {
     return `${clientInfo.os} · ${clientInfo.platform}`;
@@ -60,6 +60,14 @@ export async function fetchNamesFromDataStore(shouldApply = () => true) {
     savedSessions.forEach((data, idHash) => {
         savedSessionsCache.set(idHash, data);
     });
+}
+
+export async function fetchSessionFromDataStore(idHash: string) {
+    const dataKey = getDataKey();
+    if (!dataKey) return;
+    const sessions = readSavedSessions(await DataStore.get<unknown>(dataKey));
+    if (dataKey !== getDataKey()) return;
+    return sessions.get(idHash);
 }
 
 function readSavedSessions(value: unknown): typeof savedSessionsCache {

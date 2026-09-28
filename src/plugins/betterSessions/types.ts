@@ -30,3 +30,8 @@ export interface SessionInfo {
 }
 
 export type Session = SessionInfo["session"];
+
+export interface SavedSession {
+    name: string;
+    isNew: boolean;
+}

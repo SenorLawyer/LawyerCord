@@ -24,13 +24,14 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { Paragraph } from "@components/Paragraph";
 import { Devs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
+import { useAwaiter } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
 import { findComponentByCodeLazy, findCssClassesLazy, findStoreLazy } from "@webpack";
 import { Constants, React, RestAPI, SettingsRouter, Tooltip, UserStore } from "@webpack/common";
 
 import { NewButton, RenameButton } from "./components/RenameButton";
 import { Session, SessionInfo } from "./types";
-import { cl, fetchNamesFromDataStore, getDefaultName, GetOsColor, GetPlatformIcon, savedSessionsCache, saveSessionsToDataStore } from "./utils";
+import { cl, fetchNamesFromDataStore, fetchSessionFromDataStore, getDefaultName, GetOsColor, GetPlatformIcon, savedSessionsCache, saveSessionsToDataStore } from "./utils";
 
 const AuthSessionsStore = findStoreLazy("AuthSessionsStore");
 const TimestampClasses = findCssClassesLazy("timestamp", "blockquoteContainer");
@@ -88,19 +89,23 @@ export default definePlugin({
     ],
 
     renderName: ErrorBoundary.wrap(({ session }: SessionInfo) => {
-        const savedSession = savedSessionsCache.get(session.id_hash);
-
-        const state = React.useState(savedSession?.name ? `${savedSession.name}*` : getDefaultName(session.client_info));
-        const [title] = state;
+        const state = React.useState({ name: "", isNew: false });
+        const [{ name, isNew }] = state;
+        const [, error, pending] = useAwaiter(() => fetchSessionFromDataStore(session.id_hash), {
+            fallbackValue: undefined,
+            deps: [session.id_hash],
+            onSuccess: saved => state[1](saved ?? { name: "", isNew: true }),
+            onError: error => logger.warn("Failed to load session name", error)
+        });
         // Show a "NEW" badge if the session is seen for the first time
         return (
             <>
-                <Paragraph size="md" weight="semibold" color="text-strong">{title}</Paragraph>
+                <Paragraph size="md" weight="semibold" color="text-strong">{name ? `${name}*` : getDefaultName(session.client_info)}</Paragraph>
                 <div className={cl("footer-buttons")}>
-                    {(savedSession == null || savedSession.isNew) && (
+                    {!pending && !error && isNew && (
                         <NewButton />
                     )}
-                    <RenameButton session={session} state={state} />
+                    <RenameButton session={session} state={state} disabled={pending || !!error} />
                 </div>
             </>
         );

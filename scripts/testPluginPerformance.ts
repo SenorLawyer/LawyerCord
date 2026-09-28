@@ -3006,6 +3006,7 @@ test("BetterSessions returns its settings-close save to the flux error handler",
     const savedSessionsCache = new Map();
     const save = Promise.withResolvers<void>();
     const { default: plugin } = loadSource("src/plugins/betterSessions/index.tsx", {
+        "@utils/react": {},
         "@api/Notifications": {}, "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@components/Paragraph": {}, "@utils/constants": { Devs: {} },
@@ -19186,6 +19187,29 @@ test("BetterSessions saves retain their captured account data while storage open
 });
 
 
+test("BetterSessions row reads use current storage without changing discovery state", async () => {
+    for (const outcome of ["loaded", "missing", "malformed", "switch", "logout"]) {
+        let userId: string | undefined = "owner";
+        const read = Promise.withResolvers<unknown>();
+        const api = loadSource("src/plugins/betterSessions/utils.ts", {
+            "@api/DataStore": { get: (key: string) => { assert.equal(key, "BetterSessions_savedSessions_owner"); return read.promise; } },
+            "@utils/css": { classNameFactory: () => () => "" },
+            "@webpack/common": { UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined } },
+            "./components/icons": {}
+        });
+        const cached = { name: "Cached", isNew: true };
+        api.savedSessionsCache.set("session", cached);
+        const pending = api.fetchSessionFromDataStore("session");
+        if (outcome === "switch") userId = "other";
+        if (outcome === "logout") userId = undefined;
+        const stored = { name: "Stored", isNew: false };
+        read.resolve(outcome === "missing" ? undefined : outcome === "malformed" ? [] : new Map([["session", stored]]));
+        if (outcome === "malformed") await assert.rejects(pending, /invalid/);
+        else assert.equal(await pending, outcome === "loaded" ? stored : undefined);
+        assert.equal(api.savedSessionsCache.get("session"), cached);
+    }
+});
+
 test("BetterSessions rename waits for saving and preserves newer cache entries after failure", async () => {
     for (const original of [undefined, { name: "Original", isNew: true }]) for (const replaced of [false, true]) {
         const cache = new Map<string, { name: string; isNew: boolean }>();
@@ -19193,7 +19217,7 @@ test("BetterSessions rename waits for saving and preserves newer cache entries a
         let save = Promise.withResolvers<void>();
         let saves = 0;
         let closed = 0;
-        const titles: string[] = [];
+        const titles: unknown[] = [];
         const failures: unknown[] = [];
         const toasts: string[] = [];
         const React = {
@@ -19207,7 +19231,7 @@ test("BetterSessions rename waits for saving and preserves newer cache entries a
             "@utils/Logger": { Logger: class { warn(_message: string, error: unknown) { failures.push(error); } } },
             "@webpack/common": { React, UserStore: { getCurrentUser: () => ({ id: "owner" }) }, Modal: "modal", TextInput: "input", showToast: (message: string) => toasts.push(message), Toasts: { Type: { FAILURE: "failure" } } }
         }, { React });
-        const modal = RenameModal({ props: { onClose: () => closed++ }, session: { id_hash: "session", client_info: {} }, state: ["Original", (value: string) => titles.push(value)] });
+        const modal = RenameModal({ props: { onClose: () => closed++ }, session: { id_hash: "session", client_info: {} }, state: [{ name: "Original", isNew: true }, (value: unknown) => titles.push(value)] });
         const onSave = modal.props.actions[1].onClick;
         const pending = onSave();
         assert.equal(closed, 0, "The dialog must stay open until persistence succeeds");
@@ -19231,7 +19255,7 @@ test("BetterSessions rename waits for saving and preserves newer cache entries a
         await retry;
         assert.equal(saves, 2);
         assert.equal(closed, 1);
-        assert.deepEqual(titles, ["Renamed*"]);
+        assert.deepEqual(structuredClone(titles), [{ name: "Renamed", isNew: false }]);
         assert.equal(cache.get("session")?.name, "Renamed");
     }
 });
@@ -19265,7 +19289,7 @@ test("BetterSessions retained rename callbacks respect account changes and newer
             "@utils/Logger": { Logger: class { warn() {} } },
             "@webpack/common": { React, UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined }, Modal: "modal", TextInput: "input", showToast: () => {}, Toasts: { Type: {} } }
         }, { React });
-        const modal = RenameModal({ props: { onClose: () => closed++ }, session: { id_hash: "session", client_info: {} }, state: ["Original", (value: string) => titles.push(value)] });
+        const modal = RenameModal({ props: { onClose: () => closed++ }, session: { id_hash: "session", client_info: {} }, state: [{ name: "Original", isNew: true }, (value: string) => titles.push(value)] });
         if (change === "before") userId = "other";
         const pending = modal.props.actions[1].onClick();
         if (change === "pending") userId = "other";
@@ -19474,6 +19498,7 @@ test("BetterSessions discovery retries failed saves and ignores obsolete complet
         let notifications = 0;
         const session = { id_hash: "new", client_info: { os: "OS", platform: "Client", location: "Here" } };
         const { default: plugin } = loadSource("src/plugins/betterSessions/index.tsx", {
+        "@utils/react": {},
             "@api/Notifications": { showNotification: () => notifications++ },
             "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
             "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
@@ -19527,6 +19552,7 @@ test("BetterSessions discovery and settings close preserve names saved by anothe
     utils.savedSessionsCache.set("b", { name: "Stale B", isNew: false });
     const session = (id: string) => ({ id_hash: id, client_info: { os: "OS", platform: "Client", location: "Here" } });
     const { default: plugin } = loadSource("src/plugins/betterSessions/index.tsx", {
+        "@utils/react": {},
         "@api/Notifications": { showNotification() {} }, "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@components/Paragraph": {}, "@utils/constants": { Devs: {} },

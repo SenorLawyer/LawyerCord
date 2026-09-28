@@ -18,7 +18,7 @@
 
 import { TextButton } from "@components/Button";
 import { Heading } from "@components/Heading";
-import { SessionInfo } from "@plugins/betterSessions/types";
+import { SavedSession, SessionInfo } from "@plugins/betterSessions/types";
 import { getDefaultName, savedSessionsCache, saveSessionsToDataStore } from "@plugins/betterSessions/utils";
 import { Logger } from "@utils/Logger";
 import { RenderModalProps } from "@vencord/discord-types";
@@ -27,10 +27,16 @@ import type { KeyboardEvent } from "react";
 
 const logger = new Logger("BetterSessions");
 
-export function RenameModal({ props, session, state }: { props: RenderModalProps, session: SessionInfo["session"], state: [string, React.Dispatch<React.SetStateAction<string>>]; }) {
+interface RenameModalProps {
+    props: RenderModalProps;
+    session: SessionInfo["session"];
+    state: [SavedSession, React.Dispatch<React.SetStateAction<SavedSession>>];
+}
+
+export function RenameModal({ props, session, state }: RenameModalProps) {
     const [userId] = React.useState(() => UserStore.getCurrentUser()?.id);
-    const [, setTitle] = state;
-    const [value, setValue] = React.useState(savedSessionsCache.get(session.id_hash)?.name ?? "");
+    const [savedSession, setSavedSession] = state;
+    const [value, setValue] = React.useState(savedSession.name);
 
     const saving = React.useRef(false);
 
@@ -53,7 +59,7 @@ export function RenameModal({ props, session, state }: { props: RenderModalProps
         if (UserStore.getCurrentUser()?.id !== userId) return props.onClose();
         if (savedSessionsCache.get(session.id_hash) === previous) {
             savedSessionsCache.set(session.id_hash, updated);
-            setTitle(value ? `${value}*` : getDefaultName(session.client_info));
+            setSavedSession(updated);
         }
         props.onClose();
     }

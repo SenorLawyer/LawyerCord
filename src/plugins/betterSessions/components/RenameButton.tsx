@@ -5,18 +5,25 @@
  */
 
 import { Button } from "@components/Button";
-import { SessionInfo } from "@plugins/betterSessions/types";
+import { SavedSession, SessionInfo } from "@plugins/betterSessions/types";
 import { cl } from "@plugins/betterSessions/utils";
 import { openModal } from "@webpack/common";
 
 import { RenameModal } from "./RenameModal";
 
-export function RenameButton({ session, state }: { session: SessionInfo["session"], state: [string, React.Dispatch<React.SetStateAction<string>>]; }) {
+interface RenameButtonProps {
+    session: SessionInfo["session"];
+    state: [SavedSession, React.Dispatch<React.SetStateAction<SavedSession>>];
+    disabled: boolean;
+}
+
+export function RenameButton({ session, state, disabled }: RenameButtonProps) {
     return (
         <Button
             variant="secondary"
             size="xs"
             className={cl("rename-btn")}
+            disabled={disabled}
             onClick={() =>
                 openModal(props => (
                     <RenameModal

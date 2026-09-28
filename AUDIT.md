@@ -2,11 +2,17 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Latest full local verification: all 700 broader tests and timezone checks, TypeScript, focused plugin ESLint, sequential desktop/web builds and artifact scanning pass at the ContentWarning storage fix. Repository-wide ESLint, CSS lint, internationalization lint, zero-warning patch lint and 49 SettingsSync tests passed at preceding 522816af0. The sections below identify the evidence and remaining limits for each change. All four GitHub checks passed on 24def3956; the storage fix requires its own CI.
+Latest local verification: all 700 broader tests and timezone checks, 20 extension installer tests, TypeScript, focused ESLint, sequential desktop/web builds and artifact scanning pass at the extension staging fix. Repository-wide ESLint, CSS lint, internationalization lint, zero-warning patch lint and 49 SettingsSync tests passed at preceding 7f6743fc7, as did all four GitHub checks. The new staging fix requires its own CI. The sections below identify evidence and remaining limits.
 
 Earlier broad verification checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning passed. Patch lint then reported 107 warnings and no errors. Full repository lint logs use `.git/audit/reconciliation-sep27-*`; later focused runs do not replace final combined validation.
 
 A fresh September 28 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,656 files, fifteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-patches-complete.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
+
+## Extension installation staging ownership
+
+A deterministic Windows filesystem regression reproduced a failed concurrent installer deleting the first installer's manifest from their shared staging directory. Each installation now creates a unique temporary directory and owns its cleanup. Extraction and promotion share one failure handler, removing duplicate cleanup while covering archive preflight, extraction and rename failures. No locks, retries or persistent coordination were added.
+
+All 20 installer tests pass, including the concurrent failure, traversal preflight cleanup and preservation of an installed extension. The broader 700 tests and timezone checks, TypeScript, focused ESLint, sequential desktop/web builds and artifact scanning pass. Evidence is `.git/audit/extension-race-before.log`, `extension-race-focused.log` and `extension-race-*` gate logs. An isolated Electron 41.10.7 process also runs the production installer with a local ZIP fixture, loads the extension through Electron, removes it, and reloads the cache without another download or staging remnants (`extension-electron-load.cjs` and `extension-electron-load.json`). This verifies the actual Electron API with the fixture, not Google download compatibility or power-loss durability. A concurrent installer that loses final promotion still reports its error; a crashed process can leave its unique staging directory.
 
 ## ContentWarning concurrent word-list edits
 

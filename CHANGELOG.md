@@ -60,6 +60,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Give concurrent extension installations separate staging directories so a failed installation cannot delete another installation's files.
+
 - Preserve newer ContentWarning word lists when another window edits from an older copy. Keep local saves ordered and report conflicts instead of overwriting them.
 - Refresh saved device names when reopening Devices and use the fresh name in rename dialogs. Successful renames update the name and dismiss the new-session badge together.
 - Resolve BlurNSFW's attachment, post-preview and paused-video classes explicitly, including late-loaded media, and clean up pending class lookups when stopped.

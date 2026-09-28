@@ -19,7 +19,7 @@
 import { session } from "electron";
 import { unzip, unzipSync } from "fflate";
 import { constants as fsConstants } from "fs";
-import { access, mkdir, rename, rm, writeFile } from "fs/promises";
+import { access, mkdir, mkdtemp, rename, rm, writeFile } from "fs/promises";
 import { dirname, join, resolve, sep } from "path";
 import { promisify } from "util";
 
@@ -52,22 +52,17 @@ async function extract(data: Buffer, outDir: string) {
     } });
 
     await mkdir(outDir, { recursive: true });
-    try {
-        const files = await promisify(unzip)(data);
-        for (const [name, content] of Object.entries(files)) {
-            // Signature stuff
-            // 'Cannot load extension with file or directory name
-            // _metadata. Filenames starting with "_" are reserved for use by the system.';
-            if (name.startsWith("_metadata/")) continue;
-            if (content.length !== expectedSizes.get(name)) throw new Error("Extension entry does not match its declared size.");
+    const files = await promisify(unzip)(data);
+    for (const [name, content] of Object.entries(files)) {
+        // Signature stuff
+        // 'Cannot load extension with file or directory name
+        // _metadata. Filenames starting with "_" are reserved for use by the system.';
+        if (name.startsWith("_metadata/")) continue;
+        if (content.length !== expectedSizes.get(name)) throw new Error("Extension entry does not match its declared size.");
 
-            const destination = resolve(outDir, name);
-            await mkdir(name.endsWith("/") ? destination : dirname(destination), { recursive: true });
-            if (!name.endsWith("/")) await writeFile(destination, content);
-        }
-    } catch (error) {
-        await rm(outDir, { recursive: true, force: true });
-        throw error;
+        const destination = resolve(outDir, name);
+        await mkdir(name.endsWith("/") ? destination : dirname(destination), { recursive: true });
+        if (!name.endsWith("/")) await writeFile(destination, content);
     }
 }
 
@@ -77,7 +72,6 @@ export async function installExt(id: string) {
     try {
         await access(extDir, fsConstants.F_OK);
     } catch (err) {
-        const stagedDir = `${extDir}.tmp`;
         const url = `https://clients2.google.com/service/update2/crx?response=redirect&acceptformat=crx2,crx3&x=id%3D${id}%26uc&prodversion=${process.versions.chrome}`;
 
         const controller = new AbortController();
@@ -111,9 +105,10 @@ export async function installExt(id: string) {
             controller.abort();
         }
 
-        await rm(stagedDir, { recursive: true, force: true });
-        await extract(crxToZip(buf.subarray(0, length)), stagedDir);
+        await mkdir(extensionCacheDir, { recursive: true });
+        const stagedDir = await mkdtemp(`${extDir}.tmp-`);
         try {
+            await extract(crxToZip(buf.subarray(0, length)), stagedDir);
             await rename(stagedDir, extDir);
         } catch (error) {
             await rm(stagedDir, { recursive: true, force: true });

@@ -67,6 +67,7 @@ interface FixtureOptions {
     response?: Response;
     forbidInflation?: boolean;
     realFilesystem?: boolean;
+    fsOverrides?: Partial<typeof fs>;
     cached?: boolean;
     legacy?: boolean;
     writeError?: boolean;
@@ -101,9 +102,10 @@ function fixture(options: FixtureOptions = {}) {
             return unzip(data, callback);
         } },
         fs: { constants: { F_OK: 0 } },
-        "fs/promises": options.realFilesystem ? fs : {
+        "fs/promises": options.realFilesystem ? { ...fs, ...options.fsOverrides } : {
             access: async () => { if (!options.cached) throw Object.assign(new Error("Not installed."), { code: "ENOENT" }); },
             mkdir: async () => { },
+            mkdtemp: async (prefix: string) => `${prefix}fixture`,
             rm: async (file: string) => { removals.push(file); },
             rename: async (from: string, to: string) => {
                 renames.push({ from, to });
@@ -275,16 +277,16 @@ for (const declaredSize of [128 * 1024]) {
         await assert.rejects(installer.installExt("extension"));
         assert.equal(installer.loads, 0);
         assert.deepEqual(installer.writes, []);
-        assert.equal(installer.removals.length, 2);
-        assert.ok(installer.removals.every(path => path.endsWith("extension.tmp")));
+        assert.equal(installer.removals.length, 1);
+        assert.ok(installer.removals.every(path => path.endsWith("extension.tmp-fixture")));
     });
 }
 
 test("write failures clean extraction output and never load the extension", async () => {
     const installer = fixture({ writeError: true });
     await assert.rejects(installer.installExt("extension"), /Disk full/);
-    assert.equal(installer.removals.length, 2);
-    assert.ok(installer.removals.every(path => path.endsWith("extension.tmp")));
+    assert.equal(installer.removals.length, 1);
+    assert.ok(installer.removals.every(path => path.endsWith("extension.tmp-fixture")));
     assert.equal(installer.loads, 0);
 });
 
@@ -293,14 +295,45 @@ test("extensions are staged before becoming cached and failed promotion is clean
     assert.equal(await installer.installExt("extension"), "loaded");
     assert.ok(installer.writes.every(write => write.path.includes("extension.tmp")));
     assert.deepEqual(installer.renames, [{
-        from: posix.resolve("extension-fixture", "ExtensionCache/extension.tmp"),
+        from: posix.resolve("extension-fixture", "ExtensionCache/extension.tmp-fixture"),
         to: posix.resolve("extension-fixture", "ExtensionCache/extension")
     }]);
 
     const failed = fixture({ renameError: true });
     await assert.rejects(failed.installExt("extension"), /Rename failed/);
     assert.equal(failed.loads, 0);
-    assert.ok(failed.removals.some(path => path.endsWith("extension.tmp")));
+    assert.ok(failed.removals.some(path => path.endsWith("extension.tmp-fixture")));
+});
+
+test("a failed concurrent installer cannot delete another installation's staged files", async () => {
+    const root = await fs.mkdtemp(nativePath.join(tmpdir(), "lawyercord-extension-race-"));
+    assert.equal(nativePath.dirname(root), nativePath.resolve(tmpdir()));
+    const written = Promise.withResolvers<void>();
+    const resume = Promise.withResolvers<void>();
+    const first = fixture({ root, path: nativePath, realFilesystem: true,
+        data: archive({ "manifest.json": Buffer.from("first manifest"), "first.js": Buffer.from("first payload") }),
+        fsOverrides: { writeFile: async (...args) => {
+            await fs.writeFile(...args);
+            if (String(args[0]).endsWith("manifest.json")) { written.resolve(); await resume.promise; }
+        } }
+    });
+    const second = fixture({ root, path: nativePath, realFilesystem: true,
+        fsOverrides: { writeFile: async () => { throw new Error("Second installer failed"); } }
+    });
+    const installing = first.installExt("extension");
+    try {
+        await Promise.race([written.promise, installing.then(() => assert.fail("The installer did not pause after writing its manifest"))]);
+        await assert.rejects(second.installExt("extension"), /Second installer failed/);
+        resume.resolve();
+        assert.equal(await installing, "loaded");
+        assert.equal(await fs.readFile(nativePath.join(root, "ExtensionCache/extension/manifest.json"), "utf8"), "first manifest");
+        assert.equal(await fs.readFile(nativePath.join(root, "ExtensionCache/extension/first.js"), "utf8"), "first payload");
+        assert.deepEqual(await fs.readdir(nativePath.join(root, "ExtensionCache")), ["extension"]);
+    } finally {
+        resume.resolve();
+        await installing.catch(() => undefined);
+        await fs.rm(root, { recursive: true, force: true });
+    }
 });
 
 test("real filesystem extraction and malformed output cleanup stay within a temporary directory", async () => {
@@ -316,6 +349,9 @@ test("real filesystem extraction and malformed output cleanup stay within a temp
         await assert.rejects(fs.access(nativePath.join(root, "ExtensionCache/broken")));
         assert.equal(failed.loads, 0);
         assert.equal(await fs.readFile(nativePath.join(root, "ExtensionCache/extension/nested/file.js"), "utf8"), "valid");
+        const unsafe = fixture({ root, path: nativePath, realFilesystem: true, data: archive({ "../escaped.js": Buffer.from("unsafe") }) });
+        await assert.rejects(unsafe.installExt("unsafe"), /unsafe path/);
+        assert.deepEqual(await fs.readdir(nativePath.join(root, "ExtensionCache")), ["extension"]);
     } finally {
         await fs.rm(root, { recursive: true, force: true });
     }

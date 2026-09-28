@@ -335,6 +335,60 @@ test("KeepCurrentChannel leaves malformed saved records untouched", async () => 
     }
 });
 
+test("ContentWarning serializes snapshots and preserves concurrent saved words", async () => {
+    for (const outcome of ["success", "conflict", "failure", "stop", "late failure"]) {
+        let stored: unknown = ["original"];
+        const applied: unknown[] = [];
+        const delayed = Promise.withResolvers<void>();
+        let updates = 0;
+        let feedback = 0;
+        const api = loadSource("src/equicordplugins/contentWarning/index.tsx", {
+            "@api/index": { DataStore: {
+                get: async () => structuredClone(stored),
+                update: async (_key: string, transform: (current: unknown) => unknown) => {
+                    updates++;
+                    if (outcome === "failure" && updates === 1) throw new Error("Storage failed");
+                    if (outcome === "late failure" && updates === 1) await delayed.promise;
+                    stored = structuredClone(transform(structuredClone(stored)));
+                    applied.push(structuredClone(stored));
+                }
+            } },
+            "@api/Settings": { definePluginSettings: () => ({}) },
+            "@components/BaseText": {}, "@components/Flex": {}, "@components/Heading": {}, "@components/Icons": {},
+            "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
+            "@utils/constants": { EquicordDevs: {} }, "@utils/css": { classNameFactory: () => () => "" },
+            "@utils/Logger": { Logger: class { error() {} } }, "@utils/react": {}, "@utils/text": { escapeRegExp: (s: string) => s },
+            "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+            "@webpack/common": { lodash: { isEqual: (a: unknown, b: unknown) => isDeepStrictEqual(structuredClone(a), structuredClone(b)) },
+                showToast: () => feedback++, Toasts: { Type: { FAILURE: "failure" } } }
+        }, {}, "({ plugin: exports.default, edit: words => { triggerWords = words; saveTriggerWords(); }, flush: () => writes })");
+        await api.plugin.start();
+        const first = ["first", ""];
+        api.edit(first);
+        first[0] = "mutated after save";
+        api.edit(["latest", ""]);
+        if (outcome === "conflict") stored = ["other window"];
+        if (outcome === "stop") api.plugin.stop();
+        if (outcome === "late failure") {
+            await Promise.resolve();
+            api.plugin.stop();
+            delayed.reject(new Error("Stopped storage failed"));
+        }
+        await api.flush();
+        assert.deepEqual(stored, outcome === "conflict" ? ["other window"] : outcome === "stop" || outcome === "late failure" ? ["original"] : ["latest", ""]);
+        assert.equal(updates, outcome === "stop" ? 0 : outcome === "late failure" ? 1 : 2);
+        assert.equal(feedback, outcome === "conflict" ? 2 : outcome === "failure" ? 1 : 0);
+        if (outcome === "success") assert.deepEqual(applied, [["first", ""], ["latest", ""]]);
+        if (outcome === "conflict") {
+            api.plugin.stop();
+            await api.plugin.start();
+            api.edit(["after reload", ""]);
+            await api.flush();
+            assert.deepEqual(stored, ["after reload", ""]);
+        }
+    }
+});
+
 test("BlurNSFW can change blur settings before startup and after stopping", () => {
     const styles: { textContent: string; removed: boolean; remove: () => void }[] = [];
     const waiting = new Map<string, () => void>();

@@ -19,7 +19,7 @@ import { Logger } from "@utils/Logger";
 import { useAwaiter, useForceUpdater } from "@utils/react";
 import { escapeRegExp } from "@utils/text";
 import definePlugin, { OptionType } from "@utils/types";
-import { Button, showToast, TextInput, Toasts, useState } from "@webpack/common";
+import { Button, lodash, showToast, TextInput, Toasts, useState } from "@webpack/common";
 
 const cl = classNameFactory("vc-content-warning-");
 const logger = new Logger("ContentWarning");
@@ -30,15 +30,18 @@ const REVEAL_SETTINGS: "onClick"[] = ["onClick"];
 let triggerWords = [""];
 let triggerWordRegex: RegExp | null = null;
 let wordsPromise: Promise<void> | undefined;
+let savedWords: string[] = [];
+let writes = Promise.resolve();
 
 function loadTriggerWords() {
     if (wordsPromise) return wordsPromise;
-    const pending = DataStore.get<unknown>(WORDS_KEY).then(raw => {
+    const pending = writes.then(() => DataStore.get<unknown>(WORDS_KEY)).then(raw => {
         if (wordsPromise !== pending) return;
         const words = raw ?? [];
         if (!Array.isArray(words) || !words.every((word: unknown) => typeof word === "string")) {
             throw new Error("Invalid saved trigger words.");
         }
+        savedWords = [...words];
         triggerWords = words;
         if (triggerWords.at(-1) !== "") triggerWords.push("");
         compileTriggerWords();
@@ -62,10 +65,18 @@ function compileTriggerWords() {
 function saveTriggerWords() {
     compileTriggerWords();
     const pending = wordsPromise;
-    void DataStore.set(WORDS_KEY, triggerWords).catch(() => {
+    const words = [...triggerWords];
+    writes = writes.then(async () => {
+        if (wordsPromise !== pending) return;
+        await DataStore.update<unknown>(WORDS_KEY, current => {
+            if (!lodash.isEqual(current ?? [], savedWords)) throw new Error("The saved word list changed.");
+            return words;
+        });
+        if (wordsPromise === pending) savedWords = words;
+    }).catch(() => {
         if (wordsPromise !== pending) return;
         logger.error("Could not save trigger words.");
-        showToast("Could not save words. Changes may be lost when Discord restarts.", Toasts.Type.FAILURE);
+        showToast("Could not save words. Restart Discord to reload the saved list.", Toasts.Type.FAILURE);
     });
 }
 

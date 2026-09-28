@@ -2,7 +2,17 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
-## 3.0.0.0 - Unreleased
+## 3.0.1.0 - 2026-09-28
+
+### Fixed
+
+- Stable source installs follow the published `stable` branch instead of unreleased commits on `main`. Missing release branches report an error instead of falling back to `main`.
+- Stable accepts only Stable releases, Beta accepts Stable and Beta, and Nightly accepts all three. The updater now explains these choices explicitly.
+- Packaged installs resolve the selected release tag to its exact commit. This includes the audit fix for Stable 2.0.1.0 showing nightly commits through a moving `main` release reference.
+
+This Stable release includes all changes from the 3.0.0.0 nightly below.
+
+## 3.0.0.0 - 2026-09-28 (Nightly)
 
 ### Compatibility
 

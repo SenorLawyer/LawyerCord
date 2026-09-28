@@ -299,7 +299,7 @@ jobs:
                   GH_TOKEN: ${{ github.token }}
               run: |
                   $branches = switch ($env:RELEASE_CHANNEL) {
-                      "stable" { @("beta", "nightly") }
+                      "stable" { @("stable", "beta", "nightly") }
                       "beta" { @("beta", "nightly") }
                       "nightly" { @("nightly") }
                       default { throw "Unsupported release channel: $env:RELEASE_CHANNEL" }

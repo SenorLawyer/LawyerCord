@@ -109,7 +109,7 @@ function Updater() {
 
             <Heading className={Margins.top20}>Release Channel</Heading>
             <Paragraph className={Margins.bottom8}>
-                Stable receives tested releases. Beta and Nightly may include unfinished changes.
+                Stable receives only Stable releases. Beta receives Stable and Beta releases. Nightly receives releases from all three channels.
             </Paragraph>
             <Select
                 options={[

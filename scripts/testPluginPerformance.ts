@@ -5,6 +5,7 @@
  */
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { EventEmitter, getEventListeners } from "node:events";
 
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -15795,6 +15796,49 @@ test("status URL copying rejects malformed metadata without changing the clipboa
 });
 
 
+test("HTTP updater verifies release digests before staging and permits a corrected retry", async () => {
+    const valid = Buffer.from("verified archive");
+    const digest = `sha256:${createHash("sha256").update(valid).digest("hex")}`;
+    for (const advertised of [digest, null, undefined, "sha256:bad", `sha512:${"a".repeat(64)}`]) {
+        const handlers: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
+        let downloaded = Buffer.from("corrupted archive");
+        let writes = 0;
+        let stages = 0;
+        loadSource("src/main/updater/http.ts", {
+            "@main/utils/http": {
+                fetchJson: async (url: string) => url.includes("/releases?")
+                    ? [{ tag_name: "tag", assets: [{ name: "fixture.asar", browser_download_url: "https://fixture.invalid/archive", digest: advertised }] }]
+                    : { sha: "next" },
+                fetchBuffer: async () => downloaded
+            },
+            "@shared/IpcEvents": { IpcEvents: { GET_REPO: "repo", GET_UPDATES: "check", UPDATE: "update", BUILD: "build" } },
+            "@shared/updateChannel": { normalizeUpdateChannel: () => "nightly" },
+            "@shared/vencordUserAgent": { VENCORD_USER_AGENT: "fixture" },
+            electron: { ipcMain: { handle: (name: string, handler: (...args: unknown[]) => Promise<unknown>) => { handlers[name] = handler; } } },
+            "original-fs": { mkdtempSync: () => { stages++; return "fixture-temp"; }, renameSync() {}, rmSync() {}, writeFileSync: () => writes++ },
+            crypto: { createHash },
+            path,
+            "~git-hash": { __esModule: true, default: "current" },
+            "~git-remote": { __esModule: true, default: "fixture/repo" },
+            "./common": { ASAR_FILE: "fixture.asar", serializeErrors: (handler: unknown) => handler },
+            "./releaseSelection": { selectUpdateRelease: (releases: unknown[]) => releases[0] }
+        }, { __dirname: "fixture.asar" });
+        if (advertised !== digest) {
+            await assert.rejects(handlers.update(null, "nightly"), /checksum/);
+            assert.equal(await handlers.build(), true);
+        } else {
+            assert.equal(await handlers.update(null, "nightly"), true);
+            await assert.rejects(handlers.build(), /checksum/);
+            assert.equal(stages, 0);
+            assert.equal(writes, 0);
+            downloaded = valid;
+            assert.equal(await handlers.build(), true);
+            assert.equal(stages, 1);
+        }
+        assert.equal(writes, advertised === digest ? 1 : 0);
+    }
+});
+
 test("HTTP updater discards a pending download when a later check finds nothing or fails", async () => {
     for (const outcome of ["current", "release-error", "commit-error"]) {
         const handlers: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
@@ -15806,7 +15850,7 @@ test("HTTP updater discards a pending download when a later check finds nothing 
                 fetchJson: async (url: string) => {
                     if (url.includes("/releases?")) {
                         if (secondCheck && outcome === "release-error") throw new Error("Release lookup failed");
-                        return [{ tag_name: "tag", assets: [{ name: "fixture.asar", browser_download_url: "https://fixture.invalid/old" }] }];
+                        return [{ tag_name: "tag", assets: [{ name: "fixture.asar", browser_download_url: "https://fixture.invalid/old", digest: `sha256:${createHash("sha256").update("fixture").digest("hex")}` }] }];
                     }
                     if (secondCheck && outcome === "commit-error") throw new Error("Commit lookup failed");
                     return { sha: secondCheck ? "current" : "next" };
@@ -15818,6 +15862,7 @@ test("HTTP updater discards a pending download when a later check finds nothing 
             "@shared/vencordUserAgent": { VENCORD_USER_AGENT: "fixture" },
             electron: { ipcMain: { handle: (name: string, handler: (...args: unknown[]) => Promise<unknown>) => { handlers[name] = handler; } } },
             "original-fs": { mkdtempSync: () => "fixture-temp", renameSync() {}, rmSync() {}, writeFileSync: () => writes++ },
+            crypto: { createHash },
             path,
             "~git-hash": { __esModule: true, default: "current" },
             "~git-remote": { __esModule: true, default: "fixture/repo" },
@@ -15852,7 +15897,7 @@ test("HTTP updater ignores superseded checks and downloads even when their URLs 
         loadSource("src/main/updater/http.ts", {
             "@main/utils/http": {
                 fetchJson: async (url: string) => {
-                    if (url.includes("/releases?")) return [{ tag_name: "tag", assets: [{ name: "fixture.asar", browser_download_url: "https://fixture.invalid/same" }] }];
+                    if (url.includes("/releases?")) return [{ tag_name: "tag", assets: [{ name: "fixture.asar", browser_download_url: "https://fixture.invalid/same", digest: `sha256:${createHash("sha256").update("fixture").digest("hex")}` }] }];
                     if (!deferChecks) return { sha: "next" };
                     const pending = Promise.withResolvers<{ sha: string }>();
                     commits.push(pending);
@@ -15865,6 +15910,7 @@ test("HTTP updater ignores superseded checks and downloads even when their URLs 
             "@shared/vencordUserAgent": { VENCORD_USER_AGENT: "fixture" },
             electron: { ipcMain: { handle: (name: string, handler: (...args: unknown[]) => Promise<unknown>) => { handlers[name] = handler; } } },
             "original-fs": { mkdtempSync: () => "fixture-temp", renameSync() {}, rmSync() {}, writeFileSync: () => writes++ },
+            crypto: { createHash },
             path,
             "~git-hash": { __esModule: true, default: "current" },
             "~git-remote": { __esModule: true, default: "fixture/repo" },
@@ -15898,7 +15944,7 @@ test("HTTP updater ignores superseded checks and downloads even when their URLs 
         download = Promise.withResolvers<Buffer>();
         const firstBuild = handlers.build();
         const duplicateBuild = handlers.build();
-        download.resolve(Buffer.from("current"));
+        download.resolve(Buffer.from("fixture"));
         assert.deepEqual(await Promise.all([firstBuild, duplicateBuild]), [true, false]);
         assert.equal(writes, before + 2);
     }

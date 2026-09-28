@@ -7,7 +7,7 @@
 import type { UpdateChannel } from "@shared/updateChannel";
 
 export interface GithubRelease {
-    assets: Array<{ name: string; browser_download_url: string; }>;
+    assets: Array<{ name: string; browser_download_url: string; digest?: string | null; }>;
     prerelease: boolean;
     published_at: string;
     tag_name: string;

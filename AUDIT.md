@@ -2,11 +2,23 @@
 
 This audit is still in progress. File coverage records review work; it does not establish that every finding is resolved or that the client is ready to release.
 
-Latest local verification: all 700 broader tests and timezone checks, 20 extension installer tests, TypeScript, focused ESLint, sequential desktop/web builds and artifact scanning pass at the extension staging fix. Repository-wide ESLint, CSS lint, internationalization lint, zero-warning patch lint and 49 SettingsSync tests passed at preceding 7f6743fc7, as did all four GitHub checks. All four GitHub checks also passed on the staging fix e4141fb2a. The sections below identify evidence and remaining limits.
+Latest local verification: all 701 broader tests and timezone checks, TypeScript, focused ESLint, sequential desktop/web builds and artifact scanning pass at the updater checksum fix. The 20 extension installer tests passed at the preceding installer checkpoint. Repository-wide ESLint, CSS lint, internationalization lint, zero-warning patch lint and 49 SettingsSync tests passed at 7f6743fc7. All four GitHub checks passed on preceding 584739516; the checksum fix requires its own CI. The sections below identify evidence and remaining limits.
 
 Earlier broad verification checkpoint `080e17609`: all 654 broader tests and timezone checks, 49 SettingsSync tests, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, desktop/web builds, and artifact scanning passed. Patch lint then reported 107 warnings and no errors. Full repository lint logs use `.git/audit/reconciliation-sep27-*`; later focused runs do not replace final combined validation.
 
 A fresh September 28 fetch confirms that main `8fc182ba7` is fully integrated and the latest published nightly remains the September 5 baseline. The current tracked inventory contains 1,656 files, fifteen additions and twenty removals against that baseline. The review ledger still accounts for all 1,661 baseline files. Reading coverage does not establish finding closure or live acceptance. The current inventory and source fingerprints are saved in `.git/audit/reconciliation-patches-complete.json`. All baseline paths remain accounted for in the review ledger; current fingerprints are a checkpoint, not evidence that open findings are closed.
+
+## Update archive checksums
+
+The HTTP updater previously promoted downloaded bytes without comparing them with the release digest. A regression supplied corrupted bytes and reproduced successful replacement. Update selection now requires GitHub's SHA-256 asset digest, and the downloaded bytes must match before a staging directory is created. A mismatch preserves the pending selection for retry. All published LawyerCord archive assets in the current release list include that digest; releases without a valid digest are rejected rather than installed unchecked.
+
+The tracked test covers corrupt bytes, a corrected retry, missing/null/malformed digests and an unsupported digest algorithm. Existing superseded-check/download cases still pass. A real Windows filesystem fixture creates readable ASAR files and verifies that checksum, partial-write and rename failures preserve the installed archive; retry succeeds with no staging remnants. All 701 broader regressions and timezone checks, TypeScript, focused ESLint, desktop/web builds and artifact scanning pass. Evidence is `.git/audit/update-release-digests.json`, `updater-digest-before.log`, `updater-digest-focused.log`, `updater-digest-filesystem.cjs` and `updater-digest-*` gate logs. This compares bytes with metadata from the existing trusted GitHub source; it is not an independent publisher signature or power-loss guarantee.
+
+## Import failure and restart-contract reconciliation
+
+Current offline imports validate selected sections before mutation and report partial application if a later persistence operation fails. Three focused SettingsSync regressions pass, including injected failures in settings, CSS and DataStore while a newer local edit is retained (`final-import-failure-check.log`). Cross-storage rollback remains deliberately absent because it could overwrite that newer edit. Settings, CSS and DataStore do not share one transaction.
+
+BannersEverywhere and USRBG both require restart for enable/disable changes. Execution of the actual PluginCard toggle and PluginManager restart predicate with current plugin metadata confirms that all four enable/disable cases request restart without calling startPlugin or stopPlugin (`banner-toggle-restart-contract.json`). No live-toggle synchronization was added. Signed-in appearance remains separate from that verified settings contract.
 
 ## September 28 public client integration check
 

@@ -60,6 +60,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Verify downloaded update archives against GitHub release checksums before replacing the installed archive. Reject releases without a valid checksum and allow retry after a checksum mismatch.
+
 - Give concurrent extension installations separate staging directories so a failed installation cannot delete another installation's files.
 
 - Preserve newer ContentWarning word lists when another window edits from an older copy. Keep local saves ordered and report conflicts instead of overwriting them.

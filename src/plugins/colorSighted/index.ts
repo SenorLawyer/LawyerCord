@@ -35,9 +35,9 @@ export default definePlugin({
         {
             find: ".AVATAR_STATUS_MOBILE_16;",
             replacement: {
-                match: /(fromIsMobile:\i=!0,.+?)status:(\i)/,
+                match: /(?<=\{(?=[^{}]{0,500}\bfromIsMobile:\i=!0[,}])[^{}]{0,500})\bstatus:(\i)/,
                 // Rename field to force it to always use "online"
-                replace: '$1status_$:$2="online"'
+                replace: 'status_$:$1="online"'
             }
         }
     ]

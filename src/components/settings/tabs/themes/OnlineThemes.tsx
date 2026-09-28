@@ -12,42 +12,16 @@ import { Notice } from "@components/Notice";
 import { Paragraph } from "@components/Paragraph";
 import { classNameFactory } from "@utils/css";
 import { Margins } from "@utils/margins";
-import { useAwaiter } from "@utils/react";
-import { React, TextInput } from "@webpack/common";
+import { parseUrl } from "@utils/misc";
+import { React, TextInput, useEffect, useState } from "@webpack/common";
 
 const cl = classNameFactory("vc-settings-theme-");
-
-export function Validator({ link, onValidate }: { link: string; onValidate: (valid: boolean) => void; }) {
-    const [res, err, pending] = useAwaiter(() => fetch(link).then(res => {
-        if (res.status > 300) throw `${res.status} ${res.statusText}`;
-        const contentType = res.headers.get("Content-Type");
-        if (!contentType?.startsWith("text/css") && !contentType?.startsWith("text/plain")) {
-            onValidate(false);
-            throw "Not a CSS file. Remember to use the raw link!";
-        }
-
-        onValidate(true);
-        return "Okay!";
-    }));
-
-    const text = pending
-        ? "Checking..."
-        : err
-            ? `Error: ${err instanceof Error ? err.message : String(err)}`
-            : "Valid!";
-
-    return <Paragraph style={{
-        color: pending ? "var(--text-muted)" : err ? "var(--text-feedback-critical)" : "var(--status-positive)"
-    }}>{text}</Paragraph>;
-}
 
 export interface OnlineThemesSectionProps {
     enableOnlineThemes: boolean;
     setEnableOnlineThemes: (value: boolean) => void;
     currentThemeLink: string;
     setCurrentThemeLink: (value: string) => void;
-    themeLinkValid: boolean;
-    setThemeLinkValid: (value: boolean) => void;
     addThemeLink: (link: string) => void;
 }
 
@@ -56,10 +30,38 @@ export function OnlineThemesSection({
     setEnableOnlineThemes,
     currentThemeLink,
     setCurrentThemeLink,
-    themeLinkValid,
-    setThemeLinkValid,
     addThemeLink
 }: OnlineThemesSectionProps) {
+    const [validation, setValidation] = useState<{ link: string; error: string | null; } | null>(null);
+
+    useEffect(() => {
+        if (!currentThemeLink || !enableOnlineThemes) return;
+        const controller = new AbortController();
+        setValidation(null);
+
+        (async () => {
+            try {
+                const url = parseUrl(currentThemeLink);
+                if (!url || !["https:", "http:"].includes(url.protocol))
+                    throw new Error("Enter an HTTP or HTTPS URL.");
+                const response = await fetch(currentThemeLink, { signal: controller.signal });
+                await response.body?.cancel();
+                if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+                const contentType = response.headers.get("Content-Type");
+                if (!contentType?.startsWith("text/css") && !contentType?.startsWith("text/plain"))
+                    throw new Error("Not a CSS file. Use the raw link.");
+                if (!controller.signal.aborted) setValidation({ link: currentThemeLink, error: null });
+            } catch (error) {
+                if (!controller.signal.aborted)
+                    setValidation({ link: currentThemeLink, error: error instanceof Error ? error.message : String(error) });
+            }
+        })();
+
+        return () => controller.abort();
+    }, [currentThemeLink, enableOnlineThemes]);
+
+    const result = validation?.link === currentThemeLink ? validation : null;
+    const themeLinkValid = !!result && result.error === null;
     return (
         <>
             <Heading className={Margins.top20}>Online Themes</Heading>
@@ -90,7 +92,7 @@ export function OnlineThemesSection({
             </div>
             {currentThemeLink && (
                 <div className={Margins.top8}>
-                    <Validator link={currentThemeLink} onValidate={setThemeLinkValid} />
+                    <Paragraph>{!enableOnlineThemes ? "Online themes are disabled." : !result ? "Checking..." : result.error ?? "Valid!"}</Paragraph>
                 </div>
             )}
         </>

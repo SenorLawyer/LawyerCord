@@ -64,15 +64,15 @@ export default definePlugin({
         {
             find: "getRelationshipCounts(){",
             replacement: {
-                match: /\}\)\.sortBy\((.+?)\)\.value\(\)/,
-                replace: "}).sortBy(row => $self.wrapSort(($1), row)).value()"
+                match: /(?<=\}\)\.sortBy\()\i=>\i\.comparator(?=\)\.value\(\))/,
+                replace: "row => $self.wrapSort(($&), row)"
             }
         },
         {
             find: "peopleListItemRef",
             replacement: {
                 predicate: () => settings.store.showDates,
-                match: /(?<=children:.*user:(\i),.*subText:).+?(?=,hovered:\i,showAccountIdentifier)/,
+                match: /(?<=user:(\i),status:\i,isMobile:\i,isVR:\i,subText:).{1,500}?(?=,hovered:\i,showAccountIdentifier)/g,
                 replace: "$self.makeSubtext($1, $&)"
             }
         },
@@ -80,8 +80,8 @@ export default definePlugin({
             find: "#{intl::FRIEND_REQUEST_CANCEL}",
             replacement: {
                 predicate: () => settings.store.showDates,
-                match: /(?<=children:\[)\(0,.{0,100}user:\i,hovered:\i.+?(?=,\(0)(?<=user:(\i).+?)/,
-                replace: (children, user) => `$self.WrapperDateComponent({user:${user},children:${children}})`
+                match: /(?<=children:\[)\(0,\i\.jsx\)\(\i(?:\.\i)?,\{user:(\i),hovered:\i,[^{}]{0,150}\}\)/,
+                replace: "$self.WrapperDateComponent({user:$1,children:$&})"
             }
         }
     ],
@@ -95,7 +95,7 @@ export default definePlugin({
     makeSubtext(user: User, origSubtext: any) {
         const since = getSince(user);
         if (isNaN(since.getTime())) {
-            return null;
+            return origSubtext;
         }
 
         return (

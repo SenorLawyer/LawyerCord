@@ -5,9 +5,15 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { Constants, PermissionsBits, PermissionStore, React, RestAPI, useEffect, useState } from "@webpack/common";
+import { Channel } from "@vencord/discord-types";
+import { Button, Constants, PermissionsBits, PermissionStore, React, RestAPI, showToast, Toasts, useEffect, useState } from "@webpack/common";
+
+interface TrashIconProps {
+    channel: Channel;
+}
 
 const validKeycodes = new Set([
     "Backspace", "Tab", "Enter", "ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight", "AltLeft", "AltRight", "Pause", "CapsLock",
@@ -105,10 +111,12 @@ export default definePlugin({
     start() {
         window.addEventListener("keydown", handleKeyDown);
         window.addEventListener("keyup", handleKeyUp);
+        window.addEventListener("blur", resetTrashVisibility);
     },
     stop() {
         window.removeEventListener("keydown", handleKeyDown);
         window.removeEventListener("keyup", handleKeyUp);
+        window.removeEventListener("blur", resetTrashVisibility);
         resetTrashVisibility();
         trashVisibilitySubscribers.clear();
     },
@@ -118,27 +126,31 @@ export default definePlugin({
         {
             find: "UNREAD_IMPORTANT:",
             replacement: {
-                match: /\.Children\.count.+?:null(?<=,channel:(\i).+?)/,
-                replace: "$&,$self.TrashIcon($1)"
+                match: /\.Children\.count.{1,150}?:null(?<=,channel:(\i).{1,150}?)/,
+                replace: "$&,$self.TrashIcon({channel:$1})"
             }
         },
         // Threads
         {
             find: "18V16H9v2H6Zm3",
             replacement: {
-                match: /mentionsCount:\i.+?null(?<=channel:(\i).+?)/,
-                replace: "$&,$self.TrashIcon($1)"
+                match: /(?<=children:\[)(\(0,\i\.jsx\)\(\i,\{(?=[^}]{0,150}\bthread:(\i)[,}])(?=[^}]{0,150}\bcountInVoice:)[^}]{1,150}\}\))/,
+                replace: "$1,$self.TrashIcon({channel:$2})"
             }
         }
     ],
-    TrashIcon: channel => {
+    TrashIcon: ErrorBoundary.wrap(({ channel }: TrashIconProps) => {
         const show = useTrashIconVisibility();
 
         if (!show || !PermissionStore.can(PermissionsBits.MANAGE_CHANNELS, channel)) return null;
 
         return (
-            <span
-                onClick={() => RestAPI.del({ url: Constants.Endpoints.CHANNEL(channel.id) })}
+            <Button
+                look={Button.Looks.LINK}
+                size={Button.Sizes.NONE}
+                aria-label="Delete channel"
+                onClick={() => RestAPI.del({ url: Constants.Endpoints.CHANNEL(channel.id) })
+                    .catch(() => showToast("Failed to delete the channel.", Toasts.Type.FAILURE))}
             >
                 <svg
                     width="16"
@@ -158,7 +170,7 @@ export default definePlugin({
                         d="M5.06 7a1 1 0 0 0-1 1.06l.76 12.13a3 3 0 0 0 3 2.81h8.36a3 3 0 0 0 3-2.81l.75-12.13a1 1 0 0 0-1-1.06H5.07ZM11 12a1 1 0 1 0-2 0v6a1 1 0 1 0 2 0v-6Zm3-1a1 1 0 1 1 1 1v6a1 1 0 1 1-2 0v-6a1 1 0 0 1 1-1Z"
                     />
                 </svg>
-            </span>
+            </Button>
         );
-    }
+    }, { noop: true })
 });

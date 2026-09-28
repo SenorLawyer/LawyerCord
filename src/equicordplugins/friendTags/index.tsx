@@ -4,17 +4,17 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import "styles.css?managed";
-
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { DataStore } from "@api/index";
 import { definePluginSettings } from "@api/Settings";
 import { BaseText } from "@components/BaseText";
 import { Divider } from "@components/Divider";
 import { Devs } from "@utils/constants";
-import { useForceUpdater } from "@utils/react";
+import { Logger } from "@utils/Logger";
+import { useAwaiter, useForceUpdater } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
-import { Button, ChannelStore, Menu, RelationshipStore, TextInput, useEffect, UserStore, useState } from "@webpack/common";
+import type { User } from "@vencord/discord-types";
+import { Button, ChannelStore, Menu, React, RelationshipStore, showToast, TextInput, Toasts, UserStore, useState } from "@webpack/common";
 
 interface UserTagData {
     tagName: string;
@@ -22,8 +22,18 @@ interface UserTagData {
 }
 
 let SavedData: UserTagData[] = [];
-let savedDataSerialized = "[]";
+let savedDataSerialized: string | undefined;
+let dataPromise: Promise<void> | undefined;
+const logger = new Logger("FriendTags");
 const tagStoreName = "vc-friendtags-tags";
+const tagIds = new WeakMap<UserTagData, number>();
+let nextTagId = 0;
+
+function getTagId(tag: UserTagData) {
+    let id = tagIds.get(tag);
+    if (id === undefined) tagIds.set(tag, id = nextTagId++);
+    return `vc-tag-${id}`;
+}
 
 function parseUsertags(text: string): string[] {
     const matches = text.match(/&([^&]+)/g);
@@ -32,7 +42,7 @@ function parseUsertags(text: string): string[] {
     return tags.filter(tag => tag !== "");
 }
 
-function queryFriendTags(query) {
+function queryFriendTags(query: string) {
     const tags = new Set(parseUsertags(query).map(tag => tag.toLowerCase()));
     if (!tags.size) return [];
 
@@ -44,13 +54,13 @@ function queryFriendTags(query) {
     }
     if (!taggedUserIds.size) return [];
 
-    const users: Array<{ type: "USER"; record: any; score: number; comparator: string; sortable: string; }> = [];
+    const users: Array<{ type: "USER"; record: User; score: number; comparator: string; sortable: string; }> = [];
     const seenUserIds = new Set<string>();
     const addTaggedUser = (user: string) => {
         if (seenUserIds.has(user) || !taggedUserIds.has(user)) return;
         seenUserIds.add(user);
 
-        const userObject: any = UserStore.getUser(user);
+        const userObject = UserStore.getUser(user);
         if (!userObject) return;
 
         users.push({
@@ -69,74 +79,76 @@ function queryFriendTags(query) {
 }
 
 async function SetData() {
+    if (savedDataSerialized === undefined) return;
+    const pending = dataPromise;
     const serialized = JSON.stringify(SavedData);
-    if (serialized === savedDataSerialized) return true;
-
-    savedDataSerialized = serialized;
-    await DataStore.set(tagStoreName, serialized);
-    return true;
-}
-
-async function GetData() {
-    const fetchData = await DataStore.get<string>(tagStoreName);
-    if (!fetchData) {
-        SavedData = [];
-        savedDataSerialized = "[]";
-        void DataStore.set(tagStoreName, savedDataSerialized);
-        return;
-    }
+    if (serialized === savedDataSerialized) return;
 
     try {
-        SavedData = JSON.parse(fetchData);
-        savedDataSerialized = fetchData;
+        await DataStore.set(tagStoreName, serialized);
     } catch {
-        SavedData = [];
-        savedDataSerialized = "[]";
-        void DataStore.set(tagStoreName, savedDataSerialized);
+        if (dataPromise === pending) {
+            logger.error("Could not save tags.");
+            showToast("Could not save tags. Changes may be lost when FriendTags restarts.", Toasts.Type.FAILURE);
+        }
+        return;
     }
+    if (dataPromise === pending) savedDataSerialized = serialized;
 }
 
-function TagConfigCard(props) {
+function GetData() {
+    if (dataPromise) return dataPromise;
+    const pending = DataStore.get<unknown>(tagStoreName).then(raw => {
+        if (dataPromise !== pending) return;
+        if (raw !== undefined && typeof raw !== "string") throw new Error("Invalid saved tags.");
+        const data: unknown = raw === undefined ? [] : JSON.parse(raw);
+        if (!Array.isArray(data) || !data.every((tag: unknown) =>
+            typeof tag === "object" && tag !== null
+            && "tagName" in tag && typeof tag.tagName === "string"
+            && "userIds" in tag && Array.isArray(tag.userIds)
+            && tag.userIds.every((id: unknown) => typeof id === "string")
+        )) throw new Error("Invalid saved tags.");
+        SavedData = data;
+        savedDataSerialized = JSON.stringify(data);
+    });
+    dataPromise = pending;
+    return pending;
+}
+
+function TagConfigCard(props: { tag: UserTagData; onRemove(): void; }) {
     const { tag } = props;
     const [tagName, setTagName] = useState(tag.tagName);
     const [userIds, setUserIDs] = useState(tag.userIds.join(", "));
-    const update = useForceUpdater();
 
-    useEffect(() => {
-        const dataTag = SavedData.find(obj => obj.tagName === tag.tagName);
-        if (dataTag) {
-            dataTag.tagName = tagName;
-        }
-        SetData();
-        update();
-    }, [tagName]);
-
-    useEffect(() => {
-        const dataTag = SavedData.find(obj => obj.userIds === tag.userIds);
-        if (dataTag) {
-            dataTag.userIds = userIds.split(", ");
-        }
-        SetData();
-        update();
-    }, [userIds]);
+    function changeUserIds(value: string) {
+        if (!SavedData.includes(tag)) return;
+        setUserIDs(value);
+        tag.userIds = value.split(",").map(id => id.trim()).filter(Boolean);
+        void SetData();
+    }
 
     return (
         <>
             <BaseText size="md" tag="h5">Name</BaseText>
-            <TextInput value={tagName} onChange={setTagName}></TextInput>
-            <BaseText size="md" tag="h5">Users (Seperated by comma)</BaseText>
-            <TextInput value={userIds} onChange={setUserIDs}></TextInput>
+            <TextInput value={tagName} onChange={(value: string) => {
+                if (!SavedData.includes(tag)) return;
+                setTagName(value);
+                tag.tagName = value;
+                void SetData();
+            }}></TextInput>
+            <BaseText size="md" tag="h5">Users (Separated by comma)</BaseText>
+            <TextInput value={userIds} onChange={changeUserIds}></TextInput>
             <div className={"vc-friend-tags-user-header-container"}>
                 <BaseText>User List (Click A User To Remove)</BaseText>
                 <div className={"vc-friend-tags-user-header-btns"}>
                     {
-                        userIds.split(", ").map(user => {
-                            const userData: any = UserStore.getUser(user);
+                        Array.from(new Set(tag.userIds), user => {
+                            const userData = UserStore.getUser(user);
                             if (!userData) return null;
                             return (
                                 <div style={{ display: "flex" }} key={user}>
                                     <img src={userData.getAvatarURL()} style={{ height: "20px", borderRadius: "50%", marginRight: "5px" }}></img>
-                                    <BaseText style={{ cursor: "pointer" }} size="md" onClick={() => setUserIDs(userIds.replace(`, ${user}`, "").replace(user, ""))}>{userData.globalName || userData.username}</BaseText>
+                                    <BaseText style={{ cursor: "pointer" }} size="md" onClick={() => changeUserIds(tag.userIds.filter(id => id !== user).join(", "))}>{userData.globalName || userData.username}</BaseText>
                                 </div>
                             );
                         })
@@ -144,11 +156,7 @@ function TagConfigCard(props) {
                 </div>
             </div>
             <Button
-                onClick={async () => {
-                    SavedData = SavedData.filter(data => (data.tagName !== tagName));
-                    await SetData();
-                    update();
-                }}
+                onClick={props.onRemove}
                 color={Button.Colors.RED}
             >
                 Remove
@@ -159,16 +167,25 @@ function TagConfigCard(props) {
 
 function TagConfigurationComponent() {
     const update = useForceUpdater();
+    const [, error, pending] = useAwaiter(GetData);
+
+    if (pending) return <BaseText>Loading tags...</BaseText>;
+    if (error) return <BaseText>Tags could not be loaded. Restart FriendTags to try again.</BaseText>;
 
     return (
         <>
             <Divider />
             {
-                SavedData?.map(e => (
-                    <>
-                        <TagConfigCard tag={e} />
+                SavedData.map(tag => (
+                    <React.Fragment key={getTagId(tag)}>
+                        <TagConfigCard tag={tag} onRemove={() => {
+                            if (!SavedData.includes(tag)) return;
+                            SavedData = SavedData.filter(data => data !== tag);
+                            update();
+                            void SetData();
+                        }} />
                         <Divider />
-                    </>
+                    </React.Fragment>
                 ))
             }
             <Button onClick={() => {
@@ -187,18 +204,13 @@ function TagConfigurationComponent() {
 const settings = definePluginSettings({
     tagConfiguration: {
         type: OptionType.COMPONENT,
-        description: "The tag configuration component",
-        component: () => {
-            return (
-                <TagConfigurationComponent />
-            );
-        }
+        description: "Configure tags and their users.",
+        component: TagConfigurationComponent
     }
 });
 
-function UserToTagID(user, tag, remove) {
-    const dataTag = SavedData.find(e => e.tagName === tag);
-    if (!dataTag) return;
+function UserToTagID(user: string, dataTag: UserTagData, remove: boolean) {
+    if (!SavedData.includes(dataTag)) return;
 
     if (remove) {
         dataTag.userIds = dataTag.userIds.filter(e => e !== user);
@@ -210,7 +222,7 @@ function UserToTagID(user, tag, remove) {
 }
 
 const userPatch: NavContextMenuPatchCallback = (children, { user }) => {
-    if (!user?.id) return;
+    if (!user?.id || savedDataSerialized === undefined) return;
 
     const buttonElement =
         <Menu.MenuItem
@@ -223,15 +235,15 @@ const userPatch: NavContextMenuPatchCallback = (children, { user }) => {
                 return (
                     <Menu.MenuItem
                         label={`${isTagged ? "Remove from" : "Add to"} ${tag.tagName}`}
-                        key={`vc-tag-${tag.tagName}`}
-                        id={`vc-tag-${tag.tagName}`}
-                        action={() => { UserToTagID(user.id, tag.tagName, isTagged); }}
+                        key={getTagId(tag)}
+                        id={getTagId(tag)}
+                        action={() => { UserToTagID(user.id, tag, isTagged); }}
                     />
                 );
             })}
         </Menu.MenuItem>;
 
-    children.push({ ...buttonElement });
+    children.push(buttonElement);
 };
 
 export default definePlugin({
@@ -252,8 +264,13 @@ export default definePlugin({
             },
         }
     ],
-    async start() {
-        GetData();
+    start() {
+        void GetData().catch(() => logger.error("Could not load saved tags."));
+    },
+    stop() {
+        dataPromise = undefined;
+        savedDataSerialized = undefined;
+        SavedData = [];
     },
     queryFriendTags,
 });

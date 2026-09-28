@@ -62,8 +62,8 @@ export default definePlugin({
         {
             find: "#{intl::FRIENDS_ALL_HEADER}",
             replacement: {
-                match: /toString\(\)\}\);case (\i\.\i)\.PENDING/,
-                replace: 'toString()});case $1.IMPLICIT:return "Implicit — "+arguments[1];case $1.BLOCKED'
+                match: /(?<=toString\(\)\}\);)(?=case (\i\.\i)\.PENDING:)/,
+                replace: 'case $1.IMPLICIT:return "Implicit — "+arguments[1];'
             },
         },
         // No friends page
@@ -78,8 +78,8 @@ export default definePlugin({
         {
             find: "#{intl::FRIENDS_SECTION_ONLINE}),className:",
             replacement: {
-                match: /,{id:(\i\.\i)\.PENDING,show:.+?className:(\i\.\i)(?=\},\{id:)/,
-                replace: (rest, relationShipTypes, className) => `,{id:${relationShipTypes}.IMPLICIT,show:true,className:${className},content:"Implicit"}${rest}`
+                match: /,{id:(\i\.\i)\.PENDING,show:.{0,350}?className:(\i\.\i)(?=\},\{id:)/,
+                replace: ',{id:$1.IMPLICIT,show:true,className:$2,content:"Implicit"}$&'
             }
         },
         // Sections content
@@ -104,8 +104,8 @@ export default definePlugin({
             find: "getRelationshipCounts(){",
             replacement: {
                 predicate: () => settings.store.sortByAffinity,
-                match: /\}\)\.sortBy\((.+?)\)\.value\(\)/,
-                replace: "}).sortBy(row => $self.wrapSort(($1), row)).value()"
+                match: /(?<=\}\)\.sortBy\()\i=>\i\.comparator(?=\)\.value\(\))/,
+                replace: "row => $self.wrapSort(($&), row)"
             }
         },
 

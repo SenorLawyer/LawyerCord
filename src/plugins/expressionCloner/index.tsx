@@ -19,19 +19,23 @@
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { migratePluginSettings } from "@api/Settings";
 import { BaseText } from "@components/BaseText";
-import { CheckedTextInput } from "@components/CheckedTextInput";
+import { Button } from "@components/Button";
 import { Flex } from "@components/Flex";
 import { Heading } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
 import { Devs } from "@utils/constants";
 import { getGuildAcronym } from "@utils/discord";
 import { Logger } from "@utils/Logger";
+import { isObject, tryOrElse } from "@utils/misc";
 import definePlugin from "@utils/types";
 import { Guild, GuildSticker } from "@vencord/discord-types";
 import { StickerFormatType } from "@vencord/discord-types/enums";
 import { findByCodeLazy } from "@webpack";
-import { Constants, EmojiStore, FluxDispatcher, GuildStore, IconUtils, Menu, Modal, openModalLazy, PermissionsBits, PermissionStore, React, RestAPI, StickersStore, Toasts, Tooltip, UserStore } from "@webpack/common";
+import { Constants, EmojiStore, FluxDispatcher, GuildStore, IconUtils, lodash, Menu, Modal, openModalLazy, PermissionsBits, PermissionStore, React, RestAPI, StickersStore, TextInput, Toasts, Tooltip, UserStore, useStateFromStores } from "@webpack/common";
 import { Promisable } from "type-fest";
+
+const logger = new Logger("ExpressionCloner");
+let cloneController: AbortController | undefined;
 
 const uploadEmoji = findByCodeLazy(".GUILD_EMOJIS(", "EMOJI_UPLOAD_START");
 
@@ -97,18 +101,25 @@ async function fetchSticker(id: string) {
     return body as Sticker;
 }
 
-async function cloneSticker(guildId: string, sticker: Sticker) {
+function ensureCloneAccount(userId: string, signal: AbortSignal | undefined) {
+    if (!signal || signal.aborted || UserStore.getCurrentUser()?.id !== userId)
+        throw new Error("The cloning session ended.");
+}
+
+async function cloneSticker(guildId: string, sticker: Sticker, userId: string, signal = cloneController?.signal) {
     const data = new FormData();
     data.append("name", sticker.name);
     data.append("tags", sticker.tags);
     data.append("description", sticker.description);
-    data.append("file", await fetchBlob(sticker));
+    data.append("file", await fetchBlob(sticker, signal));
 
+    ensureCloneAccount(userId, signal);
     const { body } = await RestAPI.post({
         url: Constants.Endpoints.GUILD_STICKER_PACKS(guildId),
         body: data,
     });
 
+    ensureCloneAccount(userId, signal);
     FluxDispatcher.dispatch({
         type: "GUILD_STICKERS_CREATE_SUCCESS",
         guildId,
@@ -119,15 +130,26 @@ async function cloneSticker(guildId: string, sticker: Sticker) {
     });
 }
 
-async function cloneEmoji(guildId: string, emoji: Emoji) {
-    const data = await fetchBlob(emoji);
+async function cloneEmoji(guildId: string, emoji: Emoji, userId: string, signal = cloneController?.signal) {
+    const data = await fetchBlob(emoji, signal);
 
-    const dataUrl = await new Promise<string>(resolve => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(data);
-    });
+    const reader = new FileReader();
+    const abort = () => reader.abort();
+    let dataUrl: string;
+    try {
+        ensureCloneAccount(userId, signal);
+        dataUrl = await new Promise<string>((resolve, reject) => {
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => reject(reader.error);
+            reader.onabort = () => reject(new Error("The cloning session ended."));
+            signal?.addEventListener("abort", abort, { once: true });
+            reader.readAsDataURL(data);
+        });
+    } finally {
+        signal?.removeEventListener("abort", abort);
+    }
 
+    ensureCloneAccount(userId, signal);
     return uploadEmoji({
         guildId,
         name: emoji.name.split("~")[0],
@@ -167,14 +189,14 @@ function getGuildCandidates(data: Data) {
     }).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-async function fetchBlob(data: Data) {
+async function fetchBlob(data: Data, signal: AbortSignal | undefined) {
     const MAX_SIZE = data.t === "Sticker"
         ? MAX_STICKER_SIZE_BYTES
         : MAX_EMOJI_SIZE_BYTES;
 
     for (let size = 4096; size >= 16; size /= 2) {
         const url = getUrl(data, size);
-        const res = await fetch(url);
+        const res = await fetch(url, { signal });
         if (!res.ok)
             throw new Error(`Failed to fetch ${url} - ${res.status}`);
 
@@ -186,30 +208,45 @@ async function fetchBlob(data: Data) {
     throw new Error(`Failed to fetch ${data.t} within size limit of ${MAX_SIZE / 1000}kB`);
 }
 
-async function doClone(guildId: string, data: Sticker | Emoji) {
+async function doClone(guildId: string, data: Sticker | Emoji, controller = new AbortController()) {
+    const sessionSignal = cloneController?.signal;
+    const abort = () => controller.abort();
+    if (!sessionSignal || sessionSignal.aborted) abort();
+    else sessionSignal.addEventListener("abort", abort, { once: true });
     try {
+        const userId = UserStore.getCurrentUser()?.id;
+        const { signal } = controller;
+        if (!userId) throw new Error("Sign in before cloning an expression.");
+        ensureCloneAccount(userId, signal);
         if (data.t === "Sticker")
-            await cloneSticker(guildId, data);
+            await cloneSticker(guildId, data, userId, signal);
         else
-            await cloneEmoji(guildId, data);
+            await cloneEmoji(guildId, data, userId, signal);
 
+        ensureCloneAccount(userId, signal);
         Toasts.show({
             message: `Successfully cloned ${data.name} to ${GuildStore.getGuild(guildId)?.name ?? "your server"}!`,
             type: Toasts.Type.SUCCESS,
             id: Toasts.genId()
         });
-    } catch (e: any) {
-        let message = "Something went wrong (check console!)";
-        try {
-            message = JSON.parse(e.text).message;
-        } catch { }
+    } catch (error) {
+        if (controller.signal.aborted) return;
+        let message = "Something went wrong.";
+        if (isObject(error) && "text" in error && typeof error.text === "string") {
+            const { text } = error;
+            const body: unknown = tryOrElse(() => JSON.parse(text), null);
+            if (isObject(body) && "message" in body && typeof body.message === "string" && body.message.trim())
+                message = body.message;
+        }
 
-        new Logger("ExpressionCloner").error("Failed to clone", data.name, "to", guildId, e);
+        logger.error("Failed to clone expression.", error);
         Toasts.show({
             message: "Failed to clone: " + message,
             type: Toasts.Type.FAILURE,
             id: Toasts.genId()
         });
+    } finally {
+        sessionSignal?.removeEventListener("abort", abort);
     }
 }
 
@@ -219,31 +256,26 @@ const getFontSize = (s: string) => {
     return sizes[s.length] ?? 4;
 };
 
-const nameValidator = /^\w+$/i;
+const nameValidator = /^\w{2,32}$/;
 
 function CloneModal({ data }: { data: Sticker | Emoji; }) {
+    const pendingClone = React.useRef<AbortController | null>(null);
+    React.useEffect(() => () => pendingClone.current?.abort(), []);
     const [isCloning, setIsCloning] = React.useState(false);
-    const [name, setName] = React.useState(data.name);
+    const [name, setName] = React.useState(data.t === "Emoji" ? data.name.split("~")[0] : data.name);
+    const nameError = data.t === "Emoji"
+        ? nameValidator.test(name) ? undefined : "Emoji names must be 2 to 32 characters and use only letters, numbers, or underscores."
+        : name.length >= 2 && name.length <= 30 ? undefined : "Sticker names must be 2 to 30 characters.";
 
-    const [x, invalidateMemo] = React.useReducer(x => x + 1, 0);
-
-    const guilds = React.useMemo(() => getGuildCandidates(data), [data.id, x]);
+    const guilds = useStateFromStores(
+        [UserStore, GuildStore, PermissionStore, EmojiStore, StickersStore],
+        () => getGuildCandidates(data), [data], lodash.isEqual
+    );
 
     return (
         <>
             <Heading tag="h5">Custom Name</Heading>
-            <CheckedTextInput
-                initialValue={name}
-                onChange={v => {
-                    data.name = v;
-                    setName(v);
-                }}
-                validate={v =>
-                    (data.t === "Emoji" && v.length > 2 && v.length < 32 && nameValidator.test(v))
-                    || (data.t === "Sticker" && v.length > 2 && v.length < 30)
-                    || "Name must be between 2 and 32 characters and only contain alphanumeric characters"
-                }
-            />
+            <TextInput value={name} onChange={setName} error={nameError} />
             <div style={{
                 display: "flex",
                 flexWrap: "wrap",
@@ -255,12 +287,14 @@ function CloneModal({ data }: { data: Sticker | Emoji; }) {
                 {guilds.map(g => (
                     <Tooltip key={g.id} text={g.name}>
                         {({ onMouseLeave, onMouseEnter }) => (
-                            <div
+                            <Button
+                                type="button"
+                                variant="none"
+                                size="iconOnly"
                                 onMouseLeave={onMouseLeave}
                                 onMouseEnter={onMouseEnter}
-                                role="button"
                                 aria-label={"Clone to " + g.name}
-                                aria-disabled={isCloning}
+                                disabled={isCloning || !!nameError}
                                 style={{
                                     borderRadius: "50%",
                                     backgroundColor: "var(--background-base-lower)",
@@ -269,13 +303,14 @@ function CloneModal({ data }: { data: Sticker | Emoji; }) {
                                     alignItems: "center",
                                     width: "4em",
                                     height: "4em",
-                                    cursor: isCloning ? "not-allowed" : "pointer",
-                                    filter: isCloning ? "brightness(50%)" : "none"
+                                    fontSize: "inherit"
                                 }}
-                                onClick={isCloning ? void 0 : async () => {
+                                onClick={() => {
+                                    if (pendingClone.current) return;
+                                    const controller = pendingClone.current = new AbortController();
                                     setIsCloning(true);
-                                    doClone(g.id, data).finally(() => {
-                                        invalidateMemo();
+                                    return doClone(g.id, { ...data, name }, controller).finally(() => {
+                                        pendingClone.current = null;
                                         setIsCloning(false);
                                     });
                                 }}
@@ -310,7 +345,7 @@ function CloneModal({ data }: { data: Sticker | Emoji; }) {
                                         {getGuildAcronym(g)}
                                     </Paragraph>
                                 )}
-                            </div>
+                            </Button>
                         )}
                     </Tooltip>
                 ))}
@@ -404,7 +439,9 @@ const expressionPickerPatch: NavContextMenuPatchCallback = (children, props: { t
             name,
             isAnimated: firstChild && isGifUrl(firstChild.src)
         })));
-    } else if (type === "sticker" && !props.target.className?.includes("lottieCanvas")) {
+    } else if (type === "sticker") {
+        const sticker = StickersStore.getStickerById(id);
+        if (!sticker || sticker.format_type === StickerFormatType.LOTTIE) return;
         children.push(buildMenuItem("Sticker", () => fetchSticker(id)));
     }
 };
@@ -416,6 +453,20 @@ export default definePlugin({
     tags: ["Emotes", "Servers"],
     searchTerms: ["StickerCloner", "EmoteCloner", "EmojiCloner"],
     authors: [Devs.Ven, Devs.Nuckyz],
+    start() {
+        cloneController?.abort();
+        cloneController = new AbortController();
+    },
+    stop() {
+        cloneController?.abort();
+        cloneController = undefined;
+    },
+    flux: {
+        LOGOUT() {
+            cloneController?.abort();
+            if (cloneController) cloneController = new AbortController();
+        }
+    },
     contextMenus: {
         "message": messageContextMenuPatch,
         "expression-picker": expressionPickerPatch

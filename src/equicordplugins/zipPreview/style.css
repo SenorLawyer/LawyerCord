@@ -104,18 +104,6 @@
     color: var(--text-muted);
 }
 
-.vc-zip-preview-modal-title {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.vc-zip-preview-modal-content {
-    min-height: 240px;
-}
-
 .vc-zip-preview-code-wrap {
     padding: 16px 0;
 }

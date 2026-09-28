@@ -23,17 +23,10 @@
     padding: 1px;
 }
 
-.vc-bactivities-caret-left,
-.vc-bactivities-caret-right {
-    color: #ddd;
-}
-
-.vc-bactivities-caret-left {
-    transform: rotate(90deg);
-}
-
-.vc-bactivities-caret-right {
-    transform: rotate(-90deg);
+.vc-bactivities-activity-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
 }
 
 .vc-bactivities-controls {
@@ -46,24 +39,6 @@
     flex: 1 0;
     margin-top: 10px;
     background-color: var(--user-profile-overlay-background);
-}
-
-.vc-bactivities-controls [class*="vc-activities-caret-"] {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    border-radius: 3px;
-    background-color: #ffffff4d;
-}
-
-.vc-bactivities-controls [class*="vc-activities-caret-"].disabled {
-    cursor: not-allowed;
-    opacity: 0.3;
-}
-
-.vc-bactivities-controls [class*="vc-activities-caret-"]:hover:not(.disabled) {
-    background: var(--input-border-default, var(--input-border));
 }
 
 .vc-bactivities-controls .vc-bactivities-controls-carousel {
@@ -89,8 +64,4 @@
 .vc-bactivities-controls .vc-bactivities-controls-carousel .vc-bactivities-controls-dot.vc-bactivities-controls-selected {
     opacity: 1;
     background: var(--dot-color, var(--brand-500));
-}
-
-.vc-bactivities-controls-tooltip {
-    --background-floating: var(--background-secondary-alt);
 }

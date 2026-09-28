@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-export async function protectWebpack<T>(webpack: any[], body: () => Promise<T>): Promise<T> {
+export async function protectWebpack<T>(body: () => Promise<T>): Promise<T> {
     const prev_m = Object.getOwnPropertyDescriptor(Function.prototype, "m")!;
     Object.defineProperty(Function.prototype, "m", {
         get() { throw "get require.m"; },

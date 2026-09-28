@@ -339,9 +339,7 @@ export const stylePlugin = {
 
             return {
                 loader: "js",
-                contents: styleModule
-                    .replaceAll("STYLE_SOURCE", JSON.stringify(css))
-                    .replaceAll("STYLE_NAME", JSON.stringify(name))
+                contents: styleModule.replace(/STYLE_SOURCE|STYLE_NAME/g, token => JSON.stringify(token === "STYLE_SOURCE" ? css : name))
             };
         });
     }

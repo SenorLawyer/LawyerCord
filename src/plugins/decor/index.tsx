@@ -64,7 +64,7 @@ export default definePlugin({
                 },
                 // Remove NEW label from decor avatar decorations
                 {
-                    match: /(?<=\i\.PURCHASE)(?=,)(?<=avatarDecoration:(\i).+?)/,
+                    match: /(?<=\i\.PURCHASE)(?=,)(?<=avatarDecoration:(\i).{0,500}?)/,
                     replace: "||$1.skuId===$self.SKU_ID"
                 }
             ]
@@ -75,13 +75,13 @@ export default definePlugin({
             replacement: [
                 // Add Decor avatar decoration hook to avatar decoration hook
                 {
-                    match: /(?<=\.avatarDecoration,guildId:\i\}\)\),)(?<=user:(\i).+?)/,
+                    match: /(?<=userValue:(\i)\?\.avatarDecoration[^{}]{0,100}\}\)\),)/,
                     replace: "vcDecorAvatarDecoration=$self.useUserDecorAvatarDecoration($1),"
                 },
                 // Use added hook
                 {
-                    match: /(?<={avatarDecoration:).{1,20}?(?=,)(?<=avatarDecorationOverride:(\i).+?)/,
-                    replace: "$1??vcDecorAvatarDecoration??($&)"
+                    match: /(?<={avatarDecoration:void 0!==\i\?\i:)\i(?=,)/,
+                    replace: "vcDecorAvatarDecoration??$&"
                 },
                 // Make memo depend on added hook
                 {
@@ -96,7 +96,7 @@ export default definePlugin({
             replacement: [
                 // Use Decor avatar decoration hook
                 {
-                    match: /(?<=\i\)\({avatarDecoration:)\i(?=,)(?<=currentUser:(\i).+?)/,
+                    match: /(?<=\i\)\({avatarDecoration:)\i(?=,)(?<=currentUser:(\i).{0,250}?)/,
                     replace: "$self.useUserDecorAvatarDecoration($1)??$&"
                 }
             ]

@@ -16,8 +16,8 @@ export default definePlugin({
         {
             find: '.ensureModule("discord_rpc")',
             replacement: {
-                match: /\.ensureModule\("discord_rpc"\)\.then\(\(.+?\)}\)}/,
-                replace: '.ensureModule("discord_rpc")}',
+                match: /(?<=\.ensureModule\("discord_rpc"\))\.then\(\(\)=>\{[^{}]{1,150}\}\)/,
+                replace: "",
             },
         },
     ],

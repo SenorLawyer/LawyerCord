@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { migratePluginSettings, Settings } from "@api/Settings";
+import { Settings } from "@api/Settings";
 import { Logger } from "@utils/Logger";
 
 import { settings, SettingsStore } from "./settings";
@@ -77,9 +77,11 @@ function setStoreValue(key: SettingsKey, value: boolean | string | number) {
 }
 
 export function migrateOldSettings() {
-    if (Settings.plugins.RichPresence._migrated) return;
+    if (Settings.plugins.RichPresence.nd_albumArtMode === "instance") {
+        settings.store.nd_albumArtMode = "none";
+    }
 
-    migratePluginSettings("RichPresence", "AudioBookShelfRichPresence", "GensokyoRadioRPC", "JellyfinRichPresence", "StatsfmPresence", "TosuRPC");
+    if (Settings.plugins.RichPresence._migrated) return;
 
     for (const migration of migrations) {
         const oldSettings = Settings.plugins[migration.oldPlugin];

@@ -8,10 +8,11 @@ import { Logger } from "@utils/Logger";
 import { parseUrl } from "@utils/misc";
 import { Activity } from "@vencord/discord-types";
 import { ActivityFlags, ActivityStatusDisplayType } from "@vencord/discord-types/enums";
-import { ApplicationAssetUtils, FluxDispatcher } from "@webpack/common";
+import { FluxDispatcher } from "@webpack/common";
 import md5 from "md5";
 
 import { settings } from "../settings";
+import { getCachedApplicationAsset } from "./assetCache";
 
 function md5Hex(str: string): string {
     return md5(str);
@@ -22,14 +23,12 @@ const logger = new Logger("RichPresence:Navidrome");
 
 let updateTimer: NodeJS.Timeout | undefined;
 let abortController: AbortController | undefined;
-let currentTrackId: string | undefined;
+let currentTrackKey: string | undefined;
 let cachedStartTimestamp: number | undefined;
 let cachedPauseTimestamp: number | undefined;
-let cachedTrackState: string | undefined;
 let lastMinutesAgo: number | undefined;
-let cachedActivity: Activity | undefined;
 let cachedSettingsJSON: string | undefined;
-const lastFmCache = new Map<string, string | null>();
+const lastFmCache = new Map<string, string>();
 
 interface NdTrack {
     id: string;
@@ -50,16 +49,14 @@ interface NdTrack {
 
 function customFormat(formatStr: string | undefined, track: NdTrack): string {
     if (!formatStr) return "";
-    return formatStr
-        .replaceAll("{song}", track.title ?? "")
-        .replaceAll("{artist}", track.artist ?? "")
-        .replaceAll("{album}", track.album ?? "")
-        .replaceAll("{year}", track.year ? `${track.year}` : "")
-        .replaceAll("{quality}", track.suffix ? `${track.suffix.toUpperCase()}${track.bitRate ? " " + track.bitRate + "kbps" : ""}` : "");
-}
-
-async function getAsset(applicationId: string, key: string): Promise<string> {
-    return (await ApplicationAssetUtils.fetchAssetIds(applicationId, [key]))[0];
+    const values: Record<string, string> = {
+        song: track.title ?? "",
+        artist: track.artist ?? "",
+        album: track.album ?? "",
+        year: track.year ? `${track.year}` : "",
+        quality: track.suffix ? `${track.suffix.toUpperCase()}${track.bitRate ? " " + track.bitRate + "kbps" : ""}` : ""
+    };
+    return formatStr.replace(/\{(song|artist|album|year|quality)\}/g, (_, key: string) => values[key]);
 }
 
 function setActivity(activity: Activity | null) {
@@ -134,31 +131,24 @@ function getSettingsJSON() {
     });
 }
 
-async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
-    const track = await fetchNowPlaying(signal);
+function throwIfAborted(signal?: AbortSignal) {
     if (signal?.aborted) {
         const e = new Error("Aborted");
         e.name = "AbortError";
         throw e;
     }
+}
+
+async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
+    const track = await fetchNowPlaying(signal);
+    throwIfAborted(signal);
     if (!track) return null;
 
     const currentSettingsJSON = getSettingsJSON();
 
     const isPaused = track.state?.toLowerCase() === "paused";
 
-    if (track.id === currentTrackId && cachedActivity && cachedSettingsJSON === currentSettingsJSON) {
-        let drift = false;
-        if (track.positionMs !== undefined && !isPaused && cachedStartTimestamp) {
-            const expectedPosition = Date.now() - cachedStartTimestamp;
-            if (Math.abs(expectedPosition - track.positionMs) > 2000) drift = true;
-        }
-        if (track.state === cachedTrackState && (track.minutesAgo ?? 0) === (lastMinutesAgo ?? 0) && !drift) {
-            return cachedActivity;
-        }
-    }
-
-    const { nd_clientId, nd_showSmallImage, nd_serverUrl, nd_showAlbum, nd_nameString, nd_detailsString, nd_stateString, nd_largeTextString, nd_activityType, nd_statusDisplayType, nd_lastfmApiKey, nd_hideOnPause } = settings.store;
+    const { nd_clientId, nd_showSmallImage, nd_showAlbum, nd_nameString, nd_detailsString, nd_stateString, nd_largeTextString, nd_activityType, nd_statusDisplayType, nd_lastfmApiKey, nd_hideOnPause } = settings.store;
 
     if (isPaused && nd_hideOnPause) {
         cachedPauseTimestamp = undefined;
@@ -168,16 +158,14 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
     const _clientId = nd_clientId?.trim();
     const appId = _clientId === "" ? "1470554657506984069" : (_clientId ?? "1470554657506984069");
 
-    const _serverUrl = nd_serverUrl?.trim();
-    const parsedExternalUrl = parseUrl(_serverUrl ?? "");
-    const externalBaseUrl = parsedExternalUrl ? parsedExternalUrl.href.replace(/\/$/, "") : null;
-
     const durationMs = (track.duration ?? 0) * 1000;
 
     const trackMinutesAgo = track.minutesAgo ?? 0;
 
-    if (track.id !== currentTrackId || !cachedStartTimestamp) {
-        currentTrackId = track.id;
+    const trackKey = JSON.stringify([settings.store.nd_serverUrl, settings.store.nd_username, track.id]);
+    if (trackKey !== currentTrackKey || !cachedStartTimestamp) {
+        currentTrackKey = trackKey;
+        cachedPauseTimestamp = undefined;
         const elapsedMs = track.positionMs ?? (trackMinutesAgo * 60 * 1000);
         cachedStartTimestamp = Date.now() - elapsedMs;
         lastMinutesAgo = trackMinutesAgo;
@@ -237,57 +225,60 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
     const albumArtMode = settings.store.nd_albumArtMode ?? "none";
     let resolvedCoverArtUrl: string | null = null;
 
-    if (albumArtMode === "instance" && track.coverArt && externalBaseUrl) {
-        const { nd_username, nd_password } = settings.store;
-        const salt = Math.random().toString(36).substring(2, 8);
-        const token = md5Hex((nd_password ?? "") + salt);
-        resolvedCoverArtUrl = `${externalBaseUrl}/rest/getCoverArt?id=${encodeURIComponent(track.coverArt)}&u=${encodeURIComponent(nd_username ?? "")}&t=${token}&s=${salt}&v=1.12.0&c=equicord-rpc`;
-    } else if (albumArtMode === "lastfm" && track.artist) {
+    if (albumArtMode === "lastfm" && track.artist) {
         const trimmedKey = nd_lastfmApiKey?.trim();
         const apiKey = trimmedKey || "feff915bf5987580c9dc354d523dc6b9";
-        const cacheKey = `${track.id}:${apiKey}`;
+        const cacheKey = JSON.stringify([track.artist, track.album, track.title]);
 
         if (lastFmCache.has(cacheKey)) {
             resolvedCoverArtUrl = lastFmCache.get(cacheKey) ?? null;
         } else {
             try {
                 const artist = encodeURIComponent(track.artist);
-                let image: string | undefined;
+                let image: unknown;
 
                 if (track.album) {
                     const album = encodeURIComponent(track.album);
                     const res = await fetch(`https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=${apiKey}&artist=${artist}&album=${album}&format=json`, { signal });
+                    if (!res.ok) throw new Error(`Last.fm request failed: ${res.status}`);
                     const json = await res.json();
+                    throwIfAborted(signal);
                     image = json?.album?.image?.at(-1)?.["#text"];
                 }
 
                 if (!image && track.title) {
                     const title = encodeURIComponent(track.title);
                     const res = await fetch(`https://ws.audioscrobbler.com/2.0/?method=track.getinfo&api_key=${apiKey}&artist=${artist}&track=${title}&format=json`, { signal });
+                    if (!res.ok) throw new Error(`Last.fm request failed: ${res.status}`);
                     const json = await res.json();
+                    throwIfAborted(signal);
                     image = json?.track?.album?.image?.at(-1)?.["#text"];
                 }
 
-                resolvedCoverArtUrl = image ?? null;
-                lastFmCache.set(cacheKey, resolvedCoverArtUrl);
+                const imageUrl = typeof image === "string" ? parseUrl(image) : null;
+                if (imageUrl && (imageUrl.protocol === "https:" || imageUrl.protocol === "http:") && !imageUrl.username && !imageUrl.password) {
+                    resolvedCoverArtUrl = imageUrl.href;
+                    lastFmCache.set(cacheKey, resolvedCoverArtUrl);
+                }
             } catch (e: unknown) {
                 if (e instanceof Error && e.name === "AbortError") throw e;
                 resolvedCoverArtUrl = null;
-                lastFmCache.set(cacheKey, null);
             }
         }
     }
 
+    throwIfAborted(signal);
+
     let largeImagePromise: Promise<string>;
     if (resolvedCoverArtUrl) {
-        largeImagePromise = getAsset(appId, resolvedCoverArtUrl).catch(() => "navidrome");
+        largeImagePromise = getCachedApplicationAsset(appId, resolvedCoverArtUrl).catch(() => "navidrome");
     } else {
-        largeImagePromise = getAsset(appId, "navidrome").catch(() => "navidrome");
+        largeImagePromise = getCachedApplicationAsset(appId, "navidrome").catch(() => "navidrome");
     }
 
     let smallImagePromise: Promise<string> | undefined;
     if (nd_showSmallImage) {
-        smallImagePromise = getAsset(appId, "navidrome").catch(() => "navidrome");
+        smallImagePromise = getCachedApplicationAsset(appId, "navidrome").catch(() => "navidrome");
         assets.small_text = "Navidrome";
     }
 
@@ -301,11 +292,7 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
         assets.small_image = smallImage;
     }
 
-    if (signal?.aborted) {
-        const e = new Error("Aborted");
-        e.name = "AbortError";
-        throw e;
-    }
+    throwIfAborted(signal);
 
     const activity: Activity = {
         application_id: appId,
@@ -329,8 +316,6 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
     };
 
     cachedSettingsJSON = currentSettingsJSON;
-    cachedActivity = activity;
-    cachedTrackState = track.state;
     return activity;
 }
 
@@ -339,25 +324,21 @@ async function updatePresence() {
         const activity = await getActivity(abortController?.signal);
         setActivity(activity);
         if (!activity) {
-            currentTrackId = undefined;
+            currentTrackKey = undefined;
             cachedStartTimestamp = undefined;
             lastMinutesAgo = undefined;
-            cachedActivity = undefined;
             cachedSettingsJSON = undefined;
-            cachedTrackState = undefined;
             cachedPauseTimestamp = undefined;
         }
     } catch (e: unknown) {
         if (e instanceof Error && e.name === "AbortError") return;
         logger.error("Failed to update presence", e);
         setActivity(null);
-        currentTrackId = undefined;
+        currentTrackKey = undefined;
         cachedStartTimestamp = undefined;
         cachedPauseTimestamp = undefined;
         lastMinutesAgo = undefined;
-        cachedActivity = undefined;
         cachedSettingsJSON = undefined;
-        cachedTrackState = undefined;
     }
 
     if (abortController && !abortController.signal.aborted) {
@@ -392,12 +373,10 @@ export function stop() {
     clearTimeout(updateTimer);
     lastFmCache.clear();
     updateTimer = undefined;
-    currentTrackId = undefined;
+    currentTrackKey = undefined;
     cachedStartTimestamp = undefined;
     cachedPauseTimestamp = undefined;
     lastMinutesAgo = undefined;
-    cachedActivity = undefined;
     cachedSettingsJSON = undefined;
-    cachedTrackState = undefined;
     setActivity(null);
 }

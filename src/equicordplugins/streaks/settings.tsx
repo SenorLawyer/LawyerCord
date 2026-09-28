@@ -8,7 +8,7 @@ import { definePluginSettings } from "@api/Settings";
 import { Button } from "@components/Button";
 import { Flex } from "@components/Flex";
 import { OptionType } from "@utils/types";
-import { UserStore } from "@webpack/common";
+import { UserStore, useStateFromStores } from "@webpack/common";
 
 import { useAuthorizationStore } from "./stores/AuthorizationStore";
 import { useStreaksStore } from "./stores/StreaksStore";
@@ -18,13 +18,14 @@ export const settings = definePluginSettings({
         type: OptionType.COMPONENT,
         description: "Log in or out of the Streaks API.",
         component() {
+            const userId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
             const { isAuthorized, authorize, remove } = useAuthorizationStore();
 
             if (isAuthorized()) {
                 return (
                     <Flex>
                         <Button
-                            onClick={() => remove(UserStore.getCurrentUser()?.id)}
+                            onClick={() => { if (userId) remove(userId); }}
                             variant="dangerPrimary"
                         >
                             Log Out of Streaks API
@@ -35,9 +36,7 @@ export const settings = definePluginSettings({
                 return (
                     <Flex>
                         <Button onClick={async () => {
-                            await authorize();
-                            await useStreaksStore.getState().migrate();
-                            await useStreaksStore.getState().fetch();
+                            if (await authorize()) await useStreaksStore.getState().fetch();
                         }}>
                             Log In to Streaks API
                         </Button>

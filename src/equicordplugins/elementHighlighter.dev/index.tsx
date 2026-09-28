@@ -13,7 +13,7 @@ import { classNameFactory } from "@utils/css";
 import { copyWithToast } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
 import { findComponentByCodeLazy } from "@webpack";
-import { useEffect, useState } from "@webpack/common";
+import { lodash, useEffect, useState } from "@webpack/common";
 
 const KeybindShortcut = findComponentByCodeLazy(".combo,", ".key,");
 
@@ -218,56 +218,57 @@ function formatBoxValue(value: string): string | null {
 }
 
 function buildTooltipContent(el: Element, computed: CSSStyleDeclaration, rect: DOMRect): string {
+    const { escape } = lodash;
     const tag = el.tagName.toLowerCase();
     const colorVar = getColorVar(el) ?? computed.color;
     const hex = rgbToHex(computed.color);
 
-    let html = `<span class="${cl("tag")}">&lt;${tag}&gt;</span> `;
+    let html = `<span class="${cl("tag")}">&lt;${escape(tag)}&gt;</span> `;
     html += `<span class="${cl("size")}">${Math.round(rect.width)}x${Math.round(rect.height)}</span>`;
-    html += `<div class="${cl("color")}"><span class="${cl("swatch")}" style="--c:${computed.color}"></span>${colorVar}</div>`;
-    html += `<div class="${cl("hex")}">${hex}</div>`;
+    html += `<div class="${cl("color")}"><span class="${cl("swatch")}" style="--c:${escape(computed.color)}"></span>${escape(colorVar)}</div>`;
+    html += `<div class="${cl("hex")}">${escape(hex)}</div>`;
 
     const { store } = settings;
 
     if (store.showId) {
         const { id } = el;
-        if (id) html += `<div class="${cl("info")}"><span class="${cl("label")}">id:</span> #${id}</div>`;
+        if (id) html += `<div class="${cl("info")}"><span class="${cl("label")}">id:</span> #${escape(id)}</div>`;
     }
 
     if (store.showClasses) {
         const classes = el.className;
         if (classes && typeof classes === "string") {
             const truncated = classes.length > 60 ? classes.slice(0, 60) + "…" : classes;
-            html += `<div class="${cl("info")}"><span class="${cl("label")}">class:</span> ${truncated}</div>`;
+            html += `<div class="${cl("info")}"><span class="${cl("label")}">class:</span> ${escape(truncated)}</div>`;
         }
     }
 
     if (store.showFont) {
         const font = computed.fontFamily.split(",")[0].replace(/["']/g, "");
         const size = computed.fontSize;
-        html += `<div class="${cl("info")}"><span class="${cl("label")}">font:</span> ${font} ${size}</div>`;
+        html += `<div class="${cl("info")}"><span class="${cl("label")}">font:</span> ${escape(font)} ${escape(size)}</div>`;
     }
 
     if (store.showPadding) {
         const padding = formatBoxValue(computed.padding);
-        if (padding) html += `<div class="${cl("info")}"><span class="${cl("label")}">padding:</span> ${padding}</div>`;
+        if (padding) html += `<div class="${cl("info")}"><span class="${cl("label")}">padding:</span> ${escape(padding)}</div>`;
     }
 
     if (store.showMargin) {
         const margin = formatBoxValue(computed.margin);
-        if (margin) html += `<div class="${cl("info")}"><span class="${cl("label")}">margin:</span> ${margin}</div>`;
+        if (margin) html += `<div class="${cl("info")}"><span class="${cl("label")}">margin:</span> ${escape(margin)}</div>`;
     }
 
     if (store.showBorderRadius) {
         const radius = formatBoxValue(computed.borderRadius);
-        if (radius) html += `<div class="${cl("info")}"><span class="${cl("label")}">radius:</span> ${radius}</div>`;
+        if (radius) html += `<div class="${cl("info")}"><span class="${cl("label")}">radius:</span> ${escape(radius)}</div>`;
     }
 
     if (store.showPosition) {
         const pos = computed.position;
         if (pos !== "static") {
             const zIndex = computed.zIndex !== "auto" ? ` z:${computed.zIndex}` : "";
-            html += `<div class="${cl("info")}"><span class="${cl("label")}">position:</span> ${pos}${zIndex}</div>`;
+            html += `<div class="${cl("info")}"><span class="${cl("label")}">position:</span> ${escape(pos)}${escape(zIndex)}</div>`;
         }
     }
 
@@ -279,7 +280,7 @@ function buildTooltipContent(el: Element, computed: CSSStyleDeclaration, rect: D
         } else if (display === "grid" || display === "inline-grid") {
             extra = ` gap:${computed.gap}`;
         }
-        html += `<div class="${cl("info")}"><span class="${cl("label")}">display:</span> ${display}${extra}</div>`;
+        html += `<div class="${cl("info")}"><span class="${cl("label")}">display:</span> ${escape(display)}${escape(extra)}</div>`;
     }
 
     return html;

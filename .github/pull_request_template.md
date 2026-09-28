@@ -12,7 +12,6 @@
 - [ ] Focused tests pass
 - [ ] Lint passes
 - [ ] Relevant builds pass
-- [ ] Privacy inventory regenerated when applicable
 - [ ] Release artifact audit passes
 - [ ] No credentials, private Discord data, or generated build output are included
 
@@ -22,4 +21,4 @@
 
 ## Release channel
 
-<!-- No label defaults to nightly. Apply exactly one of release:nightly, release:beta, release:stable, or release:skip. -->
+<!-- Apply exactly one of release:nightly, release:beta, release:stable, or release:skip. No label prevents a release. -->

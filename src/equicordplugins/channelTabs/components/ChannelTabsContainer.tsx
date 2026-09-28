@@ -58,7 +58,6 @@ export default function ChannelsTabsContainer(props: BasicChannelTabsProps) {
         animationTabShadows,
         animationTabPositioning,
         animationResizeHandle,
-        animationQuestsActive,
         compactAutoExpandSelected,
         compactAutoExpandOnHover,
         newTabButtonBehavior
@@ -91,7 +90,6 @@ export default function ChannelsTabsContainer(props: BasicChannelTabsProps) {
         "animationTabShadows",
         "animationTabPositioning",
         "animationResizeHandle",
-        "animationQuestsActive",
         "compactAutoExpandSelected",
         "compactAutoExpandOnHover",
         "newTabButtonBehavior"
@@ -325,7 +323,6 @@ export default function ChannelsTabsContainer(props: BasicChannelTabsProps) {
                 !animationTabShadows && cl("no-tab-shadows"),
                 !animationTabPositioning && cl("no-tab-positioning"),
                 !animationResizeHandle && cl("no-resize-handle-animation"),
-                !animationQuestsActive && cl("no-quests-active-animation"),
                 !compactAutoExpandSelected && cl("no-compact-auto-expand"),
                 !compactAutoExpandOnHover && cl("no-compact-hover-expand")
             )}

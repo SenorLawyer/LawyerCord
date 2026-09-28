@@ -5,13 +5,16 @@
  */
 
 import { ApplicationIntegrationType } from "@vencord/discord-types/enums";
-import { OAuth2AuthorizeModal, openModal,showToast, Toasts } from "@webpack/common";
+import { OAuth2AuthorizeModal, openModal,showToast, Toasts, UserStore } from "@webpack/common";
 
-import { apiConstants, authFetch, getData } from "./api";
+import { apiConstants, getData } from "./api";
 import { useAuthorizationStore } from "./stores/AuthorizationStore";
 import { logger } from "./utils";
 
 export function presentOAuth2Modal() {
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return;
+    const token = useAuthorizationStore.getState().getToken(userId);
     openModal(props => (
         <OAuth2AuthorizeModal
             {...props}
@@ -27,10 +30,14 @@ export function presentOAuth2Modal() {
 
                 try {
                     const url = new URL(location);
+                    const redirect = new URL(apiConstants.oauth2.redirectURL);
+                    if (url.origin !== redirect.origin || url.pathname !== redirect.pathname)
+                        throw "Invalid authorization URL";
                     url.searchParams.append("whois", "equicord");
 
-                    const res = await authFetch(url);
-                    if (!res) throw "Response wasn't ok";
+                    if (UserStore.getCurrentUser()?.id !== userId) throw "The Discord account changed. Please sign in again.";
+                    const res = await fetch(url, { redirect: "error" });
+                    if (!res.ok) throw "Authorization failed. Please try again.";
 
                     const access = await res.text();
                     if (!access) throw "Access token is missing";
@@ -38,8 +45,10 @@ export function presentOAuth2Modal() {
                     const refresh = res.headers.get("X-Refresh-Token");
                     if (!refresh) throw "Refresh token is missing";
 
-                    useAuthorizationStore.getState().setToken(access, refresh);
-                    getData();
+                    if (UserStore.getCurrentUser()?.id !== userId || useAuthorizationStore.getState().getToken(userId) !== token)
+                        throw "The account changed. Please sign in again.";
+                    useAuthorizationStore.getState().setToken(access, refresh, userId);
+                    await getData();
 
                     showToast("Successfully authorized!", Toasts.Type.SUCCESS);
                 } catch (error) {

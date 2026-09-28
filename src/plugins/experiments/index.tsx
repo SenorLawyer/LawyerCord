@@ -90,8 +90,8 @@ export default definePlugin({
         {
             find: 'navId:"staff-help-popout"',
             replacement: {
-                match: /(isShown.+?)onClick:\i/,
-                replace: (_, rest) => `${rest}onClick:()=>{}`
+                match: /(?<=isShown.{0,100}?)onClick:\i(?=,)/,
+                replace: "onClick:()=>{}"
             }
         },
         // Enable experiment embed on sent experiment links
@@ -104,7 +104,7 @@ export default definePlugin({
                 },
                 // Fix some tricky experiments name causing a client crash
                 {
-                    match: /\.isStaffPersonal\(\).+?if\(null==(\i)\|\|null==\i(?=\)return null;)/,
+                    match: /\.isStaffPersonal\(\).{0,50}?if\(null==(\i)\|\|null==\i(?=\)return null;)/,
                     replace: "$&||({})[$1]!=null"
                 }
             ]

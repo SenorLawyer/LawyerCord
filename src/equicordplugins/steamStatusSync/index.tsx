@@ -8,23 +8,23 @@ import { definePluginSettings } from "@api/Settings";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 
-enum SteamStatus {
-    Online = "online",
-    Away = "away",
-    Invisible = "invisible",
-    Offline = "offline",
-    None = "none"
-}
+const SteamStatus = {
+    Online: "online",
+    Away: "away",
+    Invisible: "invisible",
+    Offline: "offline",
+    None: "none"
+} as const;
 
 interface SettingsProto {
     settings: {
         proto: {
             status?: {
                 status: {
-                    value: String;
+                    value: string;
                 },
                 showCurrentGame: {
-                    value: Boolean;
+                    value: boolean;
                 },
             };
         };
@@ -78,7 +78,8 @@ export const settings = definePluginSettings({
     },
     goInvisibleIfActivityIsHidden: {
         type: OptionType.BOOLEAN,
-        description: "Always go invisible if hiding game activity on Discord"
+        description: "Always go invisible if hiding game activity on Discord",
+        default: false
     }
 });
 
@@ -95,14 +96,14 @@ export default definePlugin({
             const protoStatus = settingsUpdate.settings.proto.status;
 
             if (protoStatus !== undefined) {
-                const steamStatus: SteamStatus = settings.store[`${protoStatus.status.value}Status`];
+                const steamStatus: typeof SteamStatus[keyof typeof SteamStatus] | undefined = settings.store[`${protoStatus.status.value}Status`];
 
                 if (settings.store.goInvisibleIfActivityIsHidden && !protoStatus.showCurrentGame.value) {
                     open(`steam://friends/status/${SteamStatus.Invisible}`);
 
                     return;
                 }
-                if (steamStatus === SteamStatus.None) { return; }
+                if (!Object.values(SteamStatus).some(status => status !== SteamStatus.None && status === steamStatus)) return;
 
                 // Open steam protocol URI for status change
                 open(`steam://friends/status/${steamStatus}`);

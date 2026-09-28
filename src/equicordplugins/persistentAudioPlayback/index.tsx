@@ -421,7 +421,11 @@ function DetachedAudioWidget() {
         if (!widget) return;
 
         const rect = widget.getBoundingClientRect();
-        setPosition(current => current ? clampWidgetPosition(current, rect.width, rect.height) : current);
+        setPosition(current => {
+            if (!current) return current;
+            const next = clampWidgetPosition(current, rect.width, rect.height);
+            return next.left === current.left && next.top === current.top ? current : next;
+        });
     }, []);
 
     React.useEffect(() => {

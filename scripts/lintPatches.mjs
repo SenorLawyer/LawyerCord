@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createSourceFile, forEachChild, isPropertyAssignment, ScriptTarget } from "typescript";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const VERBOSE = process.env.LINT_PATCHES_VERBOSE === "1" || process.argv.includes("--verbose");
@@ -27,12 +28,21 @@ function warn(at, rule, msg) {
 
 for (const rel of tracked) {
     const text = readFileSync(join(ROOT, rel), "utf8");
-    if (!text.includes("match:") && !text.includes("find:")) continue;
 
-    const lines = text.split("\n");
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const at = `${rel.replace(/\\/g, "/")}:${i + 1}`;
+    const source = createSourceFile(rel, text, ScriptTarget.Latest, true);
+    const properties = [];
+    const visit = (node, inPatches = false) => {
+        const property = isPropertyAssignment(node);
+        const inside = inPatches || (property && node.name.text === "patches");
+        if (inPatches && property && ["match", "find", "replace"].includes(node.name.text)) properties.push(node);
+        forEachChild(node, child => visit(child, inside));
+    };
+    visit(source);
+
+    for (const property of properties) {
+        const line = `${property.name.text}: ${property.initializer.getText(source)}`;
+        const lineNumber = source.getLineAndCharacterOfPosition(property.getStart(source)).line + 1;
+        const at = `${rel.replace(/\\/g, "/")}:${lineNumber}`;
 
         const matchM = line.match(/\bmatch\s*:\s*\/((?:\\.|[^/\\\n])+)\/[gimsuy]*/);
         if (matchM) {
@@ -45,7 +55,7 @@ for (const rel of tracked) {
 
         const findM = line.match(/\bfind\s*:\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\/(?:\\.|[^/\\\n])+\/[gimsuy]*)/);
         if (findM) {
-            const window = lines.slice(i, i + 12).join("\n");
+            const window = property.parent.getText(source);
             if (/\b(replacement|match)\s*:/.test(window)) {
                 const v = findM[1];
                 if (v === '""' || v === "''" || v === "``") {

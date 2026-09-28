@@ -24,9 +24,15 @@ import { Devs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
 import { FluxStore } from "@vencord/discord-types";
-import { findStoreLazy } from "@webpack";
+import { findCssClassesLazy, findStoreLazy } from "@webpack";
 
 import { MemberCount } from "./MemberCount";
+
+interface MemberListCountProps {
+    className?: string;
+}
+
+const MemberListClasses = findCssClassesLazy("members", "membersWrap");
 
 export const ChannelMemberStore = findStoreLazy("ChannelMemberStore") as FluxStore & {
     getProps(guildId?: string, channelId?: string): { groups: { count: number; id: string; }[]; };
@@ -71,8 +77,8 @@ export default definePlugin({
             find: "{isSidebarVisible:",
             replacement: [
                 {
-                    match: /children:\[(\i\.useMemo[^}]+"aria-multiselectable")(?<=className:(\i),.+?)/,
-                    replace: "children:[$2?.includes('members')?$self.render():null,$1",
+                    match: /(?<=className:\i\(\)\((\i),.{0,200}?)children:\[(?=\i\.useMemo[^}]{0,150}"aria-multiselectable")/,
+                    replace: "children:[$self.render({className:$1}),",
                 },
             ],
             predicate: () => settings.store.memberList
@@ -86,6 +92,6 @@ export default definePlugin({
             predicate: () => settings.store.toolTip
         }
     ],
-    render: ErrorBoundary.wrap(() => <MemberCount />, { noop: true }),
+    render: ErrorBoundary.wrap(({ className }: MemberListCountProps) => className?.split(" ").includes(MemberListClasses.members) ? <MemberCount /> : null, { noop: true }),
     renderTooltip: ErrorBoundary.wrap(guild => <MemberCount isTooltip tooltipGuildId={guild.id} />, { noop: true })
 });

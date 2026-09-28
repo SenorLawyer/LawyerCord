@@ -21,7 +21,7 @@ import { classNameFactory } from "@utils/css";
 import { UserStore } from "@webpack/common";
 
 import { ChromeIcon, DiscordIcon, EdgeIcon, FirefoxIcon, IEIcon, MobileIcon, OperaIcon, SafariIcon, UnknownIcon } from "./components/icons";
-import { SessionInfo } from "./types";
+import { SavedSession, SessionInfo } from "./types";
 
 const getDataKey = () => {
     const currentUserId = UserStore.getCurrentUser()?.id;
@@ -29,17 +29,21 @@ const getDataKey = () => {
 };
 
 export const cl = classNameFactory("vc-betterSessions-");
-export const savedSessionsCache: Map<string, { name: string, isNew: boolean; }> = new Map();
+export const savedSessionsCache = new Map<string, SavedSession>();
 
 export function getDefaultName(clientInfo: SessionInfo["session"]["client_info"]) {
     return `${clientInfo.os} · ${clientInfo.platform}`;
 }
 
-export function saveSessionsToDataStore() {
+export function saveSessionsToDataStore(update: (sessions: typeof savedSessionsCache) => void) {
     const dataKey = getDataKey();
     if (!dataKey) return Promise.resolve();
 
-    return DataStore.set(dataKey, savedSessionsCache);
+    return DataStore.update<unknown>(dataKey, current => {
+        const sessions = readSavedSessions(current);
+        update(sessions);
+        return sessions;
+    });
 }
 
 export async function fetchNamesFromDataStore(shouldApply = () => true) {
@@ -48,13 +52,36 @@ export async function fetchNamesFromDataStore(shouldApply = () => true) {
     const dataKey = getDataKey();
     if (!dataKey) return;
 
-    const savedSessions = await DataStore.get<Map<string, { name: string, isNew: boolean; }>>(dataKey) || new Map();
+    const record = await DataStore.get<unknown>(dataKey);
     if (!shouldApply()) return;
+    const savedSessions = readSavedSessions(record);
 
     savedSessionsCache.clear();
     savedSessions.forEach((data, idHash) => {
         savedSessionsCache.set(idHash, data);
     });
+}
+
+export async function fetchSessionFromDataStore(idHash: string) {
+    const dataKey = getDataKey();
+    if (!dataKey) return;
+    const sessions = readSavedSessions(await DataStore.get<unknown>(dataKey));
+    if (dataKey !== getDataKey()) return;
+    return sessions.get(idHash);
+}
+
+function readSavedSessions(value: unknown): typeof savedSessionsCache {
+    if (value === undefined || (Object.prototype.toString.call(value) === "[object Object]" && Object.keys(value as object).length === 0)) return new Map();
+    if (!(value instanceof Map)) throw new Error("Saved session names are invalid. The original record has been preserved.");
+    const sessions: Map<unknown, unknown> = value;
+    for (const [id, data] of sessions) {
+        if (typeof id !== "string" || !data || typeof data !== "object"
+            || !("name" in data) || typeof data.name !== "string"
+            || !("isNew" in data) || typeof data.isNew !== "boolean") {
+            throw new Error("Saved session names are invalid. The original record has been preserved.");
+        }
+    }
+    return value;
 }
 
 export function GetOsColor(os: string) {

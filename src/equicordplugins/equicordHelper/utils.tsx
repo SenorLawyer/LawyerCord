@@ -71,7 +71,6 @@ export async function toggleEnabled(name: string) {
             showNotice("Failed to start dependencies: " + failures.join(", "), "Close", () => null);
             return false;
         } else if (restartNeeded) {
-            settings.enabled = true;
             onRestartNeeded();
             return await beforeReturn(settings, wasEnabled);
         }

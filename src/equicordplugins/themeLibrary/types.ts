@@ -13,7 +13,7 @@ type Author = {
 };
 
 export interface Theme {
-    id: string;
+    id: string | number;
     name: string;
     content: string;
     type: string | "theme" | "snippet";

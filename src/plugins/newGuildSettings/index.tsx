@@ -129,15 +129,9 @@ function applyDefaultSettings(guildId: string | null) {
             suppress_everyone: settings.store.everyone,
             suppress_roles: settings.store.role,
             mute_scheduled_events: settings.store.events,
-            notify_highlights: settings.store.highlights ? 1 : 0
+            notify_highlights: settings.store.highlights ? 1 : 0,
+            ...(settings.store.messages !== 3 && { message_notifications: settings.store.messages })
         });
-
-    if (settings.store.messages !== 3) {
-        updateGuildNotificationSettings(guildId,
-            {
-                message_notifications: settings.store.messages,
-            });
-    }
 
     if (settings.store.showAllChannels && isOptInEnabledForGuild(guildId)) {
         toggleShowAllChannels(guildId);
@@ -163,8 +157,8 @@ export default definePlugin({
         {
             find: ",acceptInvite(",
             replacement: {
-                match: /INVITE_ACCEPT_SUCCESS.+?,(\i)=\i\?\.guild_id.+?;/,
-                replace: (m, guildId) => `${m}$self.applyDefaultSettings(${guildId});`
+                match: /(?<=\.dispatch\(\{type:"INVITE_ACCEPT_SUCCESS",invite:)(\i)\.body,code:\i}\);/,
+                replace: "$&$self.applyDefaultSettings($1.body.guild_id??$1.body.guild?.id);"
             }
         },
         {

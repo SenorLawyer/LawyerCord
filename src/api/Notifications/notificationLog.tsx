@@ -75,13 +75,8 @@ export async function persistNotification(notification: NotificationData) {
     signals.forEach(x => x());
 }
 
-export async function deleteNotification(timestamp: number) {
-    const log = await getLog();
-    const index = log.findIndex(x => x.timestamp === timestamp);
-    if (index === -1) return;
-
-    log.splice(index, 1);
-    await DataStore.set(KEY, log);
+export async function deleteNotification(id: string) {
+    await DataStore.update(KEY, (log: PersistentNotificationData[] = []) => log.filter(entry => entry.id !== id));
     signals.forEach(x => x());
 }
 
@@ -114,7 +109,7 @@ function NotificationEntry({ data }: { data: PersistentNotificationData; }) {
                     if (removing) return;
                     setRemoving(true);
 
-                    setTimeout(() => deleteNotification(data.timestamp), 200);
+                    setTimeout(() => deleteNotification(data.id), 200);
                 }}
                 richBody={
                     <div className={cl("body-wrapper")}>

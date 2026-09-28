@@ -4,11 +4,12 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { app } from "electron";
+import { app, IpcMainInvokeEvent } from "electron";
 import { readFile, rm } from "fs/promises";
 import { basename, normalize } from "path";
 
-export async function readRecording(_: any, filePath: string) {
+export async function readRecording(_: IpcMainInvokeEvent, filePath: string) {
+    if (typeof filePath !== "string") return null;
     filePath = normalize(filePath);
     const filename = basename(filePath);
     const discordBaseDirWithTrailingSlash = normalize(app.getPath("userData") + "/");

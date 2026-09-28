@@ -47,11 +47,11 @@ export default definePlugin({
             find: ".STAFF_ONLY_DM:",
             replacement: [
                 {
-                    match: /(?<=type:(\i).*?\.BOT:.{0,25})default:(\i)=/,
-                    replace: "default:$2=$self.getTagText($self.localTags[$1]);",
+                    match: /(?<=\.BOT:default:\i=)\i\.intl\.string\(\i\.t#{intl::APP_TAG}\)/,
+                    replace: "$self.getTagText($self.localTags[arguments[0].type])",
                 },
                 {
-                    match: /(?<=type:\i.*?)\.BOT:(?=default:)/,
+                    match: /\.BOT:(?=default:)/,
                     replace: "$&return null;",
                     predicate: () => settings.store.dontShowBotTag
                 },
@@ -64,7 +64,7 @@ export default definePlugin({
             all: true,
             predicate: () => settings.store.noAppsAllowed,
             replacement: {
-                match: /(#{intl::APP_TAG::hash}":\[").*?("\])/,
+                match: /(#{intl::APP_TAG::hash}":\[").{0,30}("\])/,
                 replace: "$1BOT$2",
                 noWarn: true,
             }

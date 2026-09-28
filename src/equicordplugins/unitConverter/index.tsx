@@ -18,19 +18,20 @@
 
 import "./style.css";
 
-import { addMessageAccessory } from "@api/MessageAccessories";
 import { definePluginSettings } from "@api/Settings";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { ChannelStore } from "@webpack/common";
+import { ChannelStore, UserStore, useStateFromStores } from "@webpack/common";
 
-import { convert } from "./converter";
 import { conversions, ConverterAccessory, ConvertIcon } from "./ConverterAccessory";
+
+const SafeConverterAccessory = ErrorBoundary.wrap(ConverterAccessory, { noop: true });
 
 export const settings = definePluginSettings({
     myUnits: {
         type: OptionType.SELECT,
-        description: "the units you use and want things converted to. defaults to imperial",
+        description: "Units to convert measurements into.",
         options: [
             {
                 default: true,
@@ -47,7 +48,7 @@ export const settings = definePluginSettings({
 
 export default definePlugin({
     name: "UnitConverter",
-    description: "Converts metric units to Imperial units and vice versa",
+    description: "Converts between metric and imperial units.",
     dependencies: ["MessagePopoverAPI"],
     tags: ["Utility"],
     authors: [Devs.sadan],
@@ -60,16 +61,15 @@ export default definePlugin({
                 icon: ConvertIcon,
                 message,
                 channel: ChannelStore.getChannel(message.channel_id),
-                onClick: async () => {
-                    const setConversion = conversions.get(message.id);
-                    if (!setConversion) return;
-                    setConversion(convert(message.content));
+                onClick: () => {
+                    for (const convertMessage of conversions.get(message.id) ?? []) convertMessage();
                 }
             };
         }
     },
-    start() {
-        addMessageAccessory("vc-converter", props => <ConverterAccessory message={props.message} />);
+    renderMessageAccessory: props => {
+        const userId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
+        return userId ? <SafeConverterAccessory key={`${userId}:${props.message.id}`} message={props.message} /> : null;
     },
     settings,
 });

@@ -364,9 +364,9 @@ export default definePlugin({
 });
 
 function shouldIgnoreForChannelType(channel: Channel) {
-    if (channel.type === ChannelTypes.DM && settings.store.dmNotifications) return false;
-    if (channel.type === ChannelTypes.GROUP_DM && settings.store.groupDmNotifications) return false;
-    else return !settings.store.serverNotifications;
+    if (channel.type === ChannelTypes.DM) return !settings.store.dmNotifications;
+    if (channel.type === ChannelTypes.GROUP_DM) return !settings.store.groupDmNotifications;
+    return !settings.store.serverNotifications;
 }
 
 function getCachedAvatarIcon(userId: string, avatar: string) {

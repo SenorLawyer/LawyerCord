@@ -16,11 +16,17 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { TextButton } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
 import { getIntlMessage, hasGuildFeature } from "@utils/discord";
 import definePlugin from "@utils/types";
-import { Constants, GuildStore, PermissionStore, RestAPI } from "@webpack/common";
+import { Constants, GuildStore, PermissionStore, RestAPI, showToast, Toasts, useState } from "@webpack/common";
+
+interface InvitesLabelProps {
+    guildId: string;
+    setChecked(value: boolean): void;
+}
 
 function showDisableInvites(guildId: string) {
     const guild = GuildStore.getGuild(guildId);
@@ -30,17 +36,6 @@ function showDisableInvites(guildId: string) {
         !hasGuildFeature(guild, "INVITES_DISABLED") &&
         PermissionStore.getGuildPermissionProps(guild).canManageRoles
     );
-}
-
-function disableInvites(guildId: string) {
-    const guild = GuildStore.getGuild(guildId);
-    if (!guild || hasGuildFeature(guild, "INVITES_DISABLED")) return;
-
-    const features = [...guild.features, "INVITES_DISABLED"];
-    void RestAPI.patch({
-        url: Constants.Endpoints.GUILD(guildId),
-        body: { features },
-    });
 }
 
 export default definePlugin({
@@ -53,28 +48,40 @@ export default definePlugin({
     patches: [
         {
             find: "#{intl::GUILD_INVITE_DISABLE_ACTION_SHEET_DESCRIPTION}",
-            group: true,
-            replacement: [
-                {
-                    match: /children:\i\.\i\.string\(\i\.\i#{intl::GUILD_INVITE_DISABLE_ACTION_SHEET_DESCRIPTION}\)/,
-                    replace: "children: $self.renderInvitesLabel({guildId:arguments[0].guildId,setChecked})",
-                },
-                {
-                    match: /\.INVITES_DISABLED\)(?=.+?#{intl::INVITES_PERMANENTLY_DISABLED_TIP}.+?checked:(\i)).+?\[\1,(\i)\]=\i.useState\(\i\)/,
-                    replace: "$&,setChecked=$2"
-                }
-            ]
+            replacement: {
+                match: /children:\i\.\i\.string\(\i\.\i#{intl::GUILD_INVITE_DISABLE_ACTION_SHEET_DESCRIPTION}\)(?=.{0,250}?onChange:function\(\)\{(\i)\()/,
+                replace: "children: $self.renderInvitesLabel({guildId:arguments[0].guildId,setChecked:$1})",
+            }
         }
     ],
 
-    renderInvitesLabel: ErrorBoundary.wrap(({ guildId, setChecked }) => {
+    renderInvitesLabel: ErrorBoundary.wrap(({ guildId, setChecked }: InvitesLabelProps) => {
+        const [pending, setPending] = useState(false);
+
+        async function disableInvites() {
+            const guild = GuildStore.getGuild(guildId);
+            if (!guild || pending) return;
+
+            setPending(true);
+            try {
+                if (!hasGuildFeature(guild, "INVITES_DISABLED")) {
+                    await RestAPI.patch({
+                        url: Constants.Endpoints.GUILD(guildId),
+                        body: { features: [...guild.features, "INVITES_DISABLED"] },
+                    });
+                }
+                setChecked(true);
+            } catch {
+                showToast("Could not pause invites. Try again.", Toasts.Type.FAILURE);
+            } finally {
+                setPending(false);
+            }
+        }
+
         return (
             <div>
                 {getIntlMessage("GUILD_INVITE_DISABLE_ACTION_SHEET_DESCRIPTION")}
-                {showDisableInvites(guildId) && <a role="button" onClick={() => {
-                    setChecked(true);
-                    disableInvites(guildId);
-                }}> Pause Indefinitely.</a>}
+                {showDisableInvites(guildId) && <TextButton disabled={pending} onClick={disableInvites}>Pause Indefinitely.</TextButton>}
             </div>
         );
     }, { noop: true })

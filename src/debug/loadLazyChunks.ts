@@ -30,8 +30,11 @@ function getWebpackChunkMap() {
         configurable: true
     });
 
-    wreq.u(sym);
-    delete Object.prototype[sym];
+    try {
+        wreq.u(sym);
+    } finally {
+        delete Object.prototype[sym];
+    }
 
     return chunksMap as Record<PropertyKey, string> | null;
 }
@@ -45,7 +48,6 @@ export async function loadLazyChunks() {
 
         const validChunks = new Set<PropertyKey>();
         const invalidChunks = new Set<PropertyKey>();
-        const deferredRequires = new Set<PropertyKey>();
 
         const { promise: chunksSearchingDone, resolve: chunksSearchingResolve } = Promise.withResolvers<void>();
 
@@ -67,8 +69,6 @@ export async function loadLazyChunks() {
 
             const lazyChunks = factoryCode.matchAll(hasCssDebuggingLoad ? CompleteLazyChunkRegex : PartialLazyChunkRegex);
             const validChunkGroups = new Set<[chunkIds: PropertyKey[], entryPoint: PropertyKey]>();
-
-            const shouldForceDefer = false;
 
             await Promise.all(Array.from(lazyChunks).map(async ([, rawChunkIds, entryPoint]) => {
                 const chunkIds = rawChunkIds
@@ -137,11 +137,6 @@ export async function loadLazyChunks() {
             // Requires the entry points for all valid chunk groups
             for (const [, entryPoint] of validChunkGroups) {
                 try {
-                    if (shouldForceDefer) {
-                        deferredRequires.add(entryPoint);
-                        continue;
-                    }
-
                     if (wreq.m[entryPoint]) wreq(entryPoint);
                 } catch (err) {
                     console.error(err);
@@ -194,11 +189,6 @@ export async function loadLazyChunks() {
             LazyChunkLoaderLogger.warn(error);
         } finally {
             Webpack.factoryListeners.delete(factoryListener);
-        }
-
-        // Require deferred entry points
-        for (const deferredRequire of deferredRequires) {
-            wreq(deferredRequire);
         }
 
         // All chunks Discord has mapped to asset files, even if they are not used anymore

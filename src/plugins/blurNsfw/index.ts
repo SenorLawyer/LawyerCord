@@ -7,16 +7,24 @@
 import { definePluginSettings } from "@api/Settings";
 import { managedStyleRootNode } from "@api/Styles";
 import { Devs } from "@utils/constants";
-import { createAndAppendStyle } from "@utils/css";
+import { classNameToSelector, createAndAppendStyle } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
+import { filters, findCssClassesLazy, waitFor, waitForSubscriptions } from "@webpack";
 
-let style: HTMLStyleElement;
+let style: HTMLStyleElement | undefined;
+const selectors = new Set<string>();
+const mediaClasses = [
+    ["imageContainer", "imageContent"],
+    ["imageContainer", "backgroundImage"],
+    ["wrapperPaused", "wrapperPlaying"]
+].map(names => ({ name: names[0], classes: findCssClassesLazy(...names), filter: filters.byClassNames(...names) }));
 
 const settings = definePluginSettings({
     blurAmount: {
         type: OptionType.NUMBER,
         description: "Blur Amount (in pixels)",
         default: 10,
+        isValid: value => Number.isFinite(Number(value)) && Number(value) >= 0 || "Enter a number of zero or greater.",
         onChange: setCss
     },
     blurAllChannels: {
@@ -27,10 +35,11 @@ const settings = definePluginSettings({
 });
 
 function setCss() {
+    if (!style || !selectors.size) return;
+    const { blurAmount } = settings.store;
     style.textContent = `
-        .vc-nsfw-img [class*=imageContainer],
-        .vc-nsfw-img [class*=wrapperPaused] {
-            filter: blur(${settings.store.blurAmount}px);
+        ${Array.from(selectors, selector => `.vc-nsfw-img ${selector}`).join(",\n")} {
+            filter: blur(${Number.isFinite(blurAmount) && blurAmount >= 0 ? blurAmount : 10}px);
             transition: filter 0.2s;
 
             &:hover {
@@ -53,8 +62,8 @@ export default definePlugin({
             find: "}renderStickersAccessories(",
             replacement: [
                 {
-                    match: /(\.renderReactions\(\i\).+?className:)/,
-                    replace: '$&(this?.props?.channel?.nsfw || $self.settings.store.blurAllChannels ? "vc-nsfw-img ": "")+'
+                    match: /(?<=\.jsxs\)\("div",\{(?=[^{}]{0,150}\bid:\(0,\i\.\i\)\(\i\))[^{}]{0,150}\bclassName:)/,
+                    replace: '(this?.props?.channel?.nsfw || $self.settings.store.blurAllChannels ? "vc-nsfw-img ": "")+'
                 }
             ]
         }
@@ -63,10 +72,18 @@ export default definePlugin({
     start() {
         style = createAndAppendStyle("VcBlurNsfw", managedStyleRootNode);
 
-        setCss();
+        for (const { name, classes, filter } of mediaClasses) {
+            waitFor(filter, () => {
+                selectors.add(classNameToSelector(classes[name]));
+                setCss();
+            });
+        }
     },
 
     stop() {
+        for (const { filter } of mediaClasses) waitForSubscriptions.delete(filter);
+        selectors.clear();
         style?.remove();
+        style = undefined;
     }
 });

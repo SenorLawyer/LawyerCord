@@ -7,13 +7,16 @@
 import "./styles.css";
 
 import { definePluginSettings } from "@api/Settings";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
 import { React } from "@webpack/common";
 
 import { PresetManager } from "./components/presetManager";
-import { loadPresets, PresetSection } from "./utils/storage";
+import { PresetSection } from "./utils/storage";
+
+const SafePresetManager = ErrorBoundary.wrap(PresetManager, { noop: true });
 
 export const cl = classNameFactory("vc-profile-presets-");
 export const settings = definePluginSettings({
@@ -31,6 +34,7 @@ export default definePlugin({
     description: "Allows you to save and load different profile presets, via the Profile Section in Settings.",
     tags: ["Appearance", "Customisation", "Utility"],
     authors: [EquicordDevs.omaw, EquicordDevs.justjxke],
+    dependencies: ["UserSettingsAPI"],
     settings,
     patches: [
         {
@@ -48,10 +52,7 @@ export default definePlugin({
             }
         }
     ],
-    start() {
-        loadPresets("main");
-    },
     renderPresetSection(section: PresetSection, guildId?: string) {
-        return <PresetManager section={section} guildId={guildId} />;
+        return <SafePresetManager section={section} guildId={guildId} />;
     }
 });

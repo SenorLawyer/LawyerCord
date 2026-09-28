@@ -97,7 +97,7 @@ export default definePlugin({
             find: '"text":"locked"',
             replacement: [
                 {
-                    match: /let\{id:(\i),guildId:\i,channelId:(\i)[^}]*\}.*?\.\i,{(?=children)/,
+                    match: /let\{id:(\i),guildId:\i,channelId:(\i)[^}]{0,100}\}[^{}]{0,250}?\.\i,{(?=children)/,
                     replace: "$&color:$self.getColorInt($1,$2),"
                 }
             ],
@@ -108,8 +108,8 @@ export default definePlugin({
             find: 'tutorialId:"whos-online',
             replacement: [
                 {
-                    match: /(#{intl::CHANNEL_MEMBERS_A11Y_LABEL}.+}\):null,).{0,100}?(?:—|\\u2014) ",\i\]\}\)\]/,
-                    replace: "$1$self.RoleGroupColor(arguments[0])]"
+                    match: /(?<=\):null,)\(0,\i\.jsx\)\("span",\{className:\i\.\i,children:\i}\),null==(\i)\?null:\(0,\i\.jsxs\)\("span",\{children:\["(?:\\xa0|[ \u00a0])(?:—|\\u2014) ",\1\]}\)/,
+                    replace: "$self.RoleGroupColor(arguments[0])"
                 },
             ],
             predicate: () => settings.store.memberList
@@ -129,8 +129,8 @@ export default definePlugin({
             find: "#{intl::GUEST_NAME_SUFFIX})]",
             replacement: [
                 {
-                    match: /#{intl::GUEST_NAME_SUFFIX}.{0,50}?"".{0,100}\](?=\}\))(?<=guildId:(\i),.+?user:(\i).+?)/,
-                    replace: "$&,style:$self.getColorStyle($2.id,$1),"
+                    match: /#{intl::GUEST_NAME_SUFFIX}.{0,50}?"".{0,100}\](?=\}\))/,
+                    replace: "$&,style:$self.getColorStyle(arguments[0].user.id,arguments[0].guildId),"
                 }
             ],
             predicate: () => settings.store.voiceUsers
@@ -139,8 +139,8 @@ export default definePlugin({
         {
             find: "MessageReactions.render:",
             replacement: {
-                match: /tag:"strong",variant:"text-md\/medium"(?<=onContextMenu:.{0,15}\((\i),(\i),\i\).+?)/,
-                replace: "$&,style:$self.getColorStyle($2?.id,$1?.channel?.id)"
+                match: /tag:"strong",variant:"text-md\/medium"/,
+                replace: "$&,style:$self.getColorStyle(arguments[0].user?.id,arguments[0]?.channel?.id)"
             },
             predicate: () => settings.store.reactorsList,
         },
@@ -148,8 +148,8 @@ export default definePlugin({
         {
             find: ",reactionVoteCounts",
             replacement: {
-                match: /\.SIZE_32.+?variant:"text-md\/normal",className:\i\.\i,(?="aria-label":)/,
-                replace: "$&style:$self.getColorStyle(arguments[0]?.user?.id,arguments[0]?.channel?.id),"
+                match: /(?<=variant:"text-md\/normal",className:\i\.\i,)(?="aria-label":)/,
+                replace: "style:$self.getColorStyle(arguments[0]?.user?.id,arguments[0]?.channel?.id),"
             },
             predicate: () => settings.store.pollResults
         },

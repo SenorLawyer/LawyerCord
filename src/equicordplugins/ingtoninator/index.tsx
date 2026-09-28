@@ -5,7 +5,6 @@
  */
 
 import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
-import { addMessagePreSendListener, removeMessagePreSendListener } from "@api/MessageEvents";
 import { definePluginSettings } from "@api/Settings";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
@@ -154,10 +153,5 @@ export default definePlugin({
         icon: disabledIcon,
         render: IngtoninatorButton
     },
-    start() {
-        addMessagePreSendListener(handleMessage);
-    },
-    stop() {
-        removeMessagePreSendListener(handleMessage);
-    }
+    onBeforeMessageSend: handleMessage
 });

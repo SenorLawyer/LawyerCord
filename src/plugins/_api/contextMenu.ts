@@ -48,11 +48,11 @@ export default definePlugin({
             noWarn: true,
             replacement: [
                 {
-                    match: /navId:(?=.+?([,}].*?\)))/g,
+                    match: /navId:(?=.{1,150}?([,}].{0,300}?\)))/g,
                     replace: (m, rest, ...args) => {
                         if (rest.match(/}=.+/)) return m;
-                        const src = args[1]?.slice(Math.max(0, +args[0] - 2000), +args[0]);
-                        if (src && Math.max(src.lastIndexOf("PureComponent{"), src.lastIndexOf("Component{")) > src.lastIndexOf("function")) return m;
+                        const src = args[1].slice(Math.max(0, +args[0] - 2000), +args[0]);
+                        if (Math.max(src.lastIndexOf("PureComponent{"), src.lastIndexOf("Component{")) > src.lastIndexOf("function")) return m;
                         return `contextMenuAPIArguments:typeof arguments!=='undefined'?arguments:[],${m}`;
                     }
                 }
@@ -64,28 +64,32 @@ export default definePlugin({
             replacement: [
                 // Patch the central context menu handler
                 {
-                    match: /(?=let{navId:)(?<=function \i\((\i)\).+?)/,
-                    replace: "$1=Vencord.Api.ContextMenu._usePatchContextMenu($1);"
+                    match: /function \i\((\i)\)\{(?=let\{[^}]{0,150}\bnavId:)/,
+                    replace: "$&$1=Vencord.Api.ContextMenu._usePatchContextMenu($1);"
                 },
 
                 // Demangle Discord's Menu Item module
                 {
-                    match: /(?<=(\(\i\.type===(\i\.\i)\).{0,50}?navigable:.+Menu API).+?)}$/s,
-                    replace: (_, m) => {
+                    match: /}$/,
+                    replace: (match, _offset, source) => {
+                        const start = source.search(canonicalizeMatch(/\(\i\.type===\i\.\i\).{0,50}?navigable:/));
+                        const end = source.indexOf("Menu API only allows Items");
+                        if (start === -1 || end < start) return match;
+                        const menuItems = source.slice(start, end);
                         const registerCalls = [] as string[];
 
                         const typeCheckRe = canonicalizeMatch(/\(\i\.type===(\i\.\i)\)/g); // if (t.type === m.MenuItem)
                         const pushTypeRe = /type:"(\w+)"/g; // push({type:"item"})
 
                         let typeMatch: RegExpExecArray | null;
-                        while ((typeMatch = typeCheckRe.exec(m)) !== null) {
+                        while ((typeMatch = typeCheckRe.exec(menuItems)) !== null) {
                             const component = typeMatch[1];
                             // Set the starting index of the second regex to that of the first to start
                             // matching from after the if
                             pushTypeRe.lastIndex = typeCheckRe.lastIndex;
 
                             // extract the first type: "..."
-                            const type = pushTypeRe.exec(m)?.[1];
+                            const type = pushTypeRe.exec(menuItems)?.[1];
                             if (type && type in nameMap) {
                                 const name = nameMap[type];
                                 registerCalls.push(`$self.registerMenuItem("${name}",${component})`);
@@ -101,6 +105,20 @@ export default definePlugin({
                 }
             ],
         },
+        {
+            find: /Menu:\i=>\{.{0,300}?navId:"message-reminder-create"/,
+            replacement: {
+                match: /Menu:(\i)=>\{/g,
+                replace: "Menu:function($1){"
+            }
+        },
+        {
+            find: '"emoji-studio-context-menu"',
+            replacement: {
+                match: /(\i)=>\{(?=.{0,100}?"userImage"in \1)/,
+                replace: "function($1){"
+            }
+        }
     ],
 
     registerMenuItem(name: string, component: any) {

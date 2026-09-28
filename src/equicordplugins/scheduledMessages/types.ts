@@ -22,11 +22,13 @@ export interface ScheduledAttachment {
 }
 
 export interface ScheduledMessage {
+    userId?: string;
     id: string;
     channelId: string;
     content: string;
     scheduledTime: number;
     createdAt: number;
+    attemptedAt?: number;
     reactions?: ScheduledReaction[];
     attachments?: ScheduledAttachment[];
 }

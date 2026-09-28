@@ -22,12 +22,10 @@ const cl = classNameFactory("vc-changelog-");
 
 interface NewPluginsSectionProps {
     newPlugins: string[];
-    onPluginToggle?: (pluginName: string, enabled: boolean) => void;
 }
 
 export function NewPluginsSection({
     newPlugins,
-    onPluginToggle,
 }: NewPluginsSectionProps) {
     const settings = useSettings();
     const changes = React.useMemo(() => new ChangeList<string>(), []);

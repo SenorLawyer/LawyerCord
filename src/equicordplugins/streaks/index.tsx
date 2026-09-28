@@ -12,13 +12,16 @@ import { Devs, EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import definePlugin from "@utils/types";
 import { Message } from "@vencord/discord-types";
-import { ChannelStore, moment, Tooltip, UserStore } from "@webpack/common";
+import { ChannelStore, moment, Tooltip, UserStore, useStateFromStores } from "@webpack/common";
 
 import { settings } from "./settings";
 import { useAuthorizationStore } from "./stores/AuthorizationStore";
 import { useStreaksStore } from "./stores/StreaksStore";
 
 const cl = classNameFactory("vc-streaks-");
+const pendingRefreshes = new Set<ReturnType<typeof setTimeout>>();
+let generation = 0;
+const COLOR_SETTINGS = ["eliteColor", "diamondColor", "platinumColor", "goldColor", "silverColor", "bronzeColor", "defaultColor"] satisfies (keyof typeof settings.def)[];
 
 const STREAK_THRESHOLDS = {
     ELITE: 100,
@@ -40,10 +43,14 @@ const colorFor = (streak: number) => {
 };
 
 const StreakBadge = ({ userId }: { userId: string; }) => {
+    settings.use(COLOR_SETTINGS);
+    const currentUserId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
     const streaks = useStreaksStore(state => state.streaks);
     const streak = streaks[userId];
 
     if (!streak || streak.count < 1) return null;
+    if (!(streak.user_a_id === currentUserId && streak.user_b_id === userId
+        || streak.user_b_id === currentUserId && streak.user_a_id === userId)) return null;
 
     const today = moment().format("YYYY-MM-DD");
     const active = streak.last_streak_date === today;
@@ -71,11 +78,17 @@ export default definePlugin({
     dependencies: ["MessageDecorationsAPI", "MemberListDecoratorsAPI", "ConcatenatedModules"],
     settings,
 
+    stop() {
+        generation++;
+        for (const timer of pendingRefreshes) clearTimeout(timer);
+        pendingRefreshes.clear();
+        useStreaksStore.getState().clear();
+    },
+
     flux: {
         async CONNECTION_OPEN() {
-            useAuthorizationStore.getState().init();
+            useStreaksStore.getState().clear();
             if (useAuthorizationStore.getState().isAuthorized()) {
-                await useStreaksStore.getState().migrate();
                 await useStreaksStore.getState().fetch();
             }
         },
@@ -94,8 +107,10 @@ export default definePlugin({
 
             const today = moment().format("YYYY-MM-DD");
             const cached = useStreaksStore.getState().streaks[recipientId];
-            const myFlag = cached && cached.today_date != null && cached.today_date === today && (cached.user_a_id === me ? cached.user_a_today : cached.user_b_today);
-            const theirFlag = cached && cached.today_date != null && cached.today_date === today && (cached.user_a_id === me ? cached.user_b_today : cached.user_a_today);
+            const current = cached && cached.today_date === today
+                && (cached.user_a_id === me && cached.user_b_id === recipientId || cached.user_b_id === me && cached.user_a_id === recipientId);
+            const myFlag = current && (cached.user_a_id === me ? cached.user_a_today : cached.user_b_today);
+            const theirFlag = current && (cached.user_a_id === me ? cached.user_b_today : cached.user_a_today);
 
             if (message.author.id === me) {
                 if (!myFlag) {
@@ -103,15 +118,20 @@ export default definePlugin({
                 }
             } else if (message.author.id === recipientId) {
                 if (!theirFlag) {
-                    setTimeout(async () => {
+                    const requestGeneration = generation;
+                    const timer = setTimeout(async () => {
+                        pendingRefreshes.delete(timer);
+                        if (requestGeneration !== generation || UserStore.getCurrentUser()?.id !== me) return;
                         const before = useStreaksStore.getState().streaks[recipientId]?.count;
                         await useStreaksStore.getState().refresh(recipientId);
+                        if (requestGeneration !== generation || UserStore.getCurrentUser()?.id !== me) return;
                         const after = useStreaksStore.getState().streaks[recipientId]?.count;
 
                         if (before === after) {
                             useStreaksStore.getState().update(recipientId);
                         }
                     }, 1000);
+                    pendingRefreshes.add(timer);
                 }
             }
         },

@@ -100,4 +100,15 @@ const participants = [streamA, streamB];
     assert.equal(shouldMuteStreamAudio(unrelatedVoiceAudio, tracked, stores, { primaryAudio, streamAudio }), false, "DOM fallback does not mute non-candidate voice");
 }
 
+{
+    const selected = streamParticipant("user-a", "guild:guild:voice-channel:user-a");
+    const other = streamParticipant("user-b", "guild:guild:voice-channel:user-b");
+    const stores = storesFor(selected, [selected, other]);
+    const selectedAudio = audio({ videoStreamId: selected.streamId, _speakingFlags: 2 });
+    const otherAudio = audio({ videoStreamId: other.streamId, _speakingFlags: 2 });
+    const tracked = new Set([selectedAudio, otherAudio]);
+    assert.equal(getEffectiveVolume(selectedAudio, tracked, stores), 1, "selected compound stream key stays audible");
+    assert.equal(getEffectiveVolume(otherAudio, tracked, stores), 0, "shared channel and guild do not match different stream owners");
+}
+
 console.log("primaryStreamAudio synthetic checks passed");

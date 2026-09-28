@@ -16,40 +16,38 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { TextButton } from "@components/Button";
 import { Message } from "@vencord/discord-types";
 import { Parser, useEffect, useState } from "@webpack/common";
 
 import { TranslateIcon } from "./TranslateIcon";
 import { cl, TranslationValue } from "./utils";
 
-const TranslationSetters = new Map<string,(v: TranslationValue) => void>();
+const TranslationSetters = new Map<string, Set<(v: TranslationValue) => void>>();
 
-export function handleTranslate(messageId: string, data: TranslationValue) {
-    TranslationSetters.get(messageId)!(data);
+export function handleTranslate(messageId: string, data: TranslationValue, content: string) {
+    for (const setter of TranslationSetters.get(`${messageId}:${content}`) ?? [])
+        setter(data);
 }
 
-function Dismiss({ onDismiss }: { onDismiss: () => void; }) {
-    return (
-        <button
-            onClick={onDismiss}
-            className={cl("dismiss")}
-        >
-            Dismiss
-        </button>
-    );
-}
-
-export function TranslationAccessory({ message }: { message: Message; }) {
+export function TranslationAccessory({ message, content }: { message: Message & { vencordEmbeddedBy?: string[]; }; content: string; }) {
+    const key = `${message.id}:${content}`;
     const [translation, setTranslation] = useState<TranslationValue>();
 
     useEffect(() => {
         // Ignore MessageLinkEmbeds messages
-        if ((message as any).vencordEmbeddedBy) return;
+        if (message.vencordEmbeddedBy) return;
 
-        TranslationSetters.set(message.id, setTranslation);
+        const setters = TranslationSetters.get(key) ?? new Set<(value: TranslationValue) => void>();
+        setters.add(setTranslation);
+        TranslationSetters.set(key, setters);
 
-        return () => void TranslationSetters.delete(message.id);
-    }, []);
+        return () => {
+            setters.delete(setTranslation);
+            if (!setters.size)
+                TranslationSetters.delete(key);
+        };
+    }, [key]);
 
     if (!translation) return null;
 
@@ -58,7 +56,7 @@ export function TranslationAccessory({ message }: { message: Message; }) {
             <TranslateIcon width={16} height={16} className={cl("accessory-icon")} />
             {Parser.parse(translation.text)}
             <br />
-            (translated from {translation.sourceLanguage} - <Dismiss onDismiss={() => setTranslation(undefined)} />)
+            (translated from {translation.sourceLanguage} - <TextButton type="button" variant="link" onClick={() => setTranslation(undefined)}>Dismiss</TextButton>)
         </span>
     );
 }

@@ -6,86 +6,75 @@
 
 import { settings } from ".";
 
-interface regexes {
-    imperial: {
-        [key: string]: {
-            regex: RegExp,
-            convert: (...groups: string[]) => string;
-        };
-    };
-    metric: {
-        [key: string]: {
-            regex: RegExp,
-            convert: (...groups: string[]) => string;
-        };
-    };
-}
-const regexes: regexes = {
+const regexes: Record<"imperial" | "metric", Record<string, {
+    regex: RegExp;
+    convert: (...groups: string[]) => string;
+}>> = {
     // matches imperial units, converts them to metric
     imperial: {
         fahrenheit: {
-            regex: /(-?\d+(?:\.\d+)?)°?(f)(?!\w)/ig,
+            regex: /(?<![\p{L}\p{N}\p{M}_.])(-?\d+(?:\.\d+)?)\s?°?f(?![\p{L}\p{N}\p{M}_])/igu,
             convert(...groups) {
                 const c = ((parseFloat(groups[1]) - 32) * (5 / 9)).toFixed(2);
                 return `${c}°C`;
             },
         },
         feetInchesMark: {
-            regex: /(\d+)(') ?(\d+(?:\.\d+)?)("|'')?/g,
+            regex: /(?<![\p{L}\p{N}\p{M}_.])(\d+)(') ?(\d+(?:\.\d+)?)("|'')?(?![\p{L}\p{N}\p{M}_])/gu,
             convert(...groups) {
-                let ftin = parseFloat(groups[1]) / 3.281;
-                ftin += parseFloat(groups[3]) / 39.37;
+                let ftin = parseFloat(groups[1]) * 0.3048;
+                ftin += parseFloat(groups[3]) * 0.0254;
+                return `${ftin.toFixed(2)}m`;
+            },
+        },
+        feetInchesWord: {
+            regex: /(?<![\p{L}\p{N}\p{M}_.])(\d+) *(f(?:ee|oo)?t) *(\d+(?:\.\d+)?) *(in(?:ches?)?)(?![\p{L}\p{N}\p{M}_])/igu,
+            convert(...groups) {
+                let ftin = parseFloat(groups[1]) * 0.3048;
+                ftin += parseFloat(groups[3]) * 0.0254;
                 return `${ftin.toFixed(2)}m`;
             },
         },
         feetWord: {
-            regex: /(\d+(?:\.\d+)?) *(f(ee)?t)(?! *\d)/ig,
+            regex: /(?<![\p{L}\p{N}\p{M}_.])(\d+(?:\.\d+)?) *(f(ee)?t)(?![\p{L}\p{N}\p{M}_])/igu,
             convert(...groups) {
-                const ft = (parseFloat(groups[1]) / 3.281).toFixed(2);
+                const ft = (parseFloat(groups[1]) * 0.3048).toFixed(2);
                 return `${ft}m`;
             },
         },
         inchesWord: {
-            regex: /(?<!\d+ *(?:f(?:ee|oo)?t) *)(\d+(?:\.\d+)?) *(in(?:ches?)?)/ig,
+            regex: /(?<![\p{L}\p{N}\p{M}_.])(\d+(?:\.\d+)?) *(in(?:ches?)?)(?![\p{L}\p{N}\p{M}_])/igu,
             convert(...groups) {
                 const inches = (parseFloat(groups[1]) * 2.54).toFixed(2);
                 return `${inches}cm`;
             },
         },
-        feetInchesWord: {
-            regex: /(\d+) *(f(?:ee|oo)?t) *(\d+(?:\.\d+)?) *(in(?:ches?)?)/ig,
-            convert(...groups) {
-                let ftin = parseFloat(groups[1]) / 3.281;
-                ftin += parseFloat(groups[3]) / 39.37;
-                return `${ftin.toFixed(2)}m`;
-            },
-        },
-        poundWord: {
-            regex: /(\d+(?:\.\d+)?) *(lbs?|pounds?)(?! ?\d)/ig,
-            convert(...groups: string[]) {
-                const lbs = (parseFloat(groups[1]) / 2.205).toFixed(2);
-                return `${lbs}kg`;
-            },
-        },
         poundOunceWord: {
-            regex: /(\d+(?:\.\d+)?) *(lbs?|pounds?) *(\d+(?:\.\d+)?) *(ozs?|ounces?)/ig,
+            regex: /(?<![\p{L}\p{N}\p{M}_.])(\d+(?:\.\d+)?) *(lbs?|pounds?) *(\d+(?:\.\d+)?) *(ozs?|ounces?)(?![\p{L}\p{N}\p{M}_])/igu,
             convert(...groups) {
-                let lbs = parseFloat(groups[1]) / 2.205;
-                lbs += parseFloat(groups[3]) / 35.274;
+                let lbs = parseFloat(groups[1]) * 0.45359237;
+                lbs += parseFloat(groups[3]) * 0.028349523125;
                 return `${lbs.toFixed(2)}kg`;
             }
         },
+        poundWord: {
+            regex: /(?<![\p{L}\p{N}\p{M}_.])(\d+(?:\.\d+)?) *(lbs?|pounds?)(?![\p{L}\p{N}\p{M}_])/igu,
+            convert(...groups: string[]) {
+                const lbs = (parseFloat(groups[1]) * 0.45359237).toFixed(2);
+                return `${lbs}kg`;
+            },
+        },
         ounceWord: {
-            regex: /(\d+(?:\.\d+)?) ?(ounces?|oz)(?!\w)/gi,
+            regex: /(?<![\p{L}\p{N}\p{M}_.])(\d+(?:\.\d+)?) ?(ounces?|oz)(?![\p{L}\p{N}\p{M}_])/giu,
             convert(...groups) {
-                const ozs = (parseFloat(groups[1]) * 28.35).toFixed(2);
+                const ozs = (parseFloat(groups[1]) * 28.349523125).toFixed(2);
                 return `${ozs}g`;
             },
         },
         milesPerHour: {
-            regex: /(\d+(?:\.\d+)?) ?(m(?:p|\/)h)/gi,
+            regex: /(?<![\p{L}\p{N}\p{M}_.])(\d+(?:\.\d+)?) ?(m(?:p|\/)h)(?![\p{L}\p{N}\p{M}_])/giu,
             convert(...groups) {
-                const mph = (parseFloat(groups[1]) * 1.609).toFixed(2);
+                const mph = (parseFloat(groups[1]) * 1.609344).toFixed(2);
                 return `${mph}km/h`;
             },
         }
@@ -94,7 +83,7 @@ const regexes: regexes = {
     metric: {
         // i dont think people ever write metric units as 1m3cm or something like that
         celsius: {
-            regex: /(-?\d+(?:\.\d+)?)\s?°?c(?!\w)/ig,
+            regex: /(?<![\p{L}\p{N}\p{M}_.])(-?\d+(?:\.\d+)?)\s?°?c(?![\p{L}\p{N}\p{M}_])/igu,
             convert(...groups) {
                 const f = ((parseFloat(groups[1]) * (9 / 5)) + 32).toFixed(2);
                 return `${f}°F`;
@@ -102,7 +91,7 @@ const regexes: regexes = {
         },
         // convert to inches
         centimeters: {
-            regex: /(\d+(?:\.\d+)?) ?(cm|centimeters?)(?!\w)/gi,
+            regex: /(?<![\p{L}\p{N}\p{M}_.])(\d+(?:\.\d+)?) ?(cm|centimeters?)(?![\p{L}\p{N}\p{M}_])/giu,
             convert(...groups) {
                 const cm = (parseFloat(groups[1]) / 2.54).toFixed(2);
                 return `${cm}in`;
@@ -110,9 +99,9 @@ const regexes: regexes = {
         },
         // convert to feet
         meters: {
-            regex: /(\d+(?:\.\d+)?) ?(m|meters?)(?!\w)/gi,
+            regex: /(?<![\p{L}\p{N}\p{M}_.])(\d+(?:\.\d+)?) ?(m|meters?)(?![\p{L}\p{N}\p{M}_])/giu,
             convert(...groups) {
-                const totalInches = parseFloat(groups[1]) * 39.3701;
+                const totalInches = Math.round(parseFloat(groups[1]) / 0.0254 * 100) / 100;
                 const feet = Math.floor(totalInches / 12);
                 const inches = totalInches % 12;
                 if (feet === 0) return `${inches.toFixed(2)}in`;
@@ -120,48 +109,45 @@ const regexes: regexes = {
                 return `${feet}ft ${inches.toFixed(2)}in`;
             },
         },
+        kilometersPerHour: {
+            regex: /(?<![\p{L}\p{N}\p{M}_.])(\d+(?:\.\d+)?) ?(km\/h|kmph|kph|kilometers?\/?h)(?![\p{L}\p{N}\p{M}_])/giu,
+            convert(...groups) {
+                const kph = (parseFloat(groups[1]) / 1.609344).toFixed(2);
+                return `${kph}mph`;
+            },
+        },
         // convert to miles
         kilometers: {
-            regex: /(\d+(?:\.\d+)?) ?(km|kilometers?|kms?)(?!\w)/gi,
+            regex: /(?<![\p{L}\p{N}\p{M}_.])(\d+(?:\.\d+)?) ?(km|kilometers?|kms?)(?![\p{L}\p{N}\p{M}_])/giu,
             convert(...groups) {
-                const m = (parseFloat(groups[1]) / 1.609).toFixed(2);
+                const m = (parseFloat(groups[1]) / 1.609344).toFixed(2);
                 return `${m}mi`;
             },
         },
         grams: {
-            regex: /(\d+(?:\.\d+)?) ?(grams?|g)(?!\w)/gi,
+            regex: /(?<![\p{L}\p{N}\p{M}_.])(\d+(?:\.\d+)?) ?(grams?|g)(?![\p{L}\p{N}\p{M}_])/giu,
             convert(...groups) {
-                const g = (parseFloat(groups[1]) / 28.35).toFixed(2);
+                const g = (parseFloat(groups[1]) / 28.349523125).toFixed(2);
                 return `${g}oz`;
             },
         },
         kilograms: {
-            regex: /(\d+(?:\.\d+)?) ?(kg|kilo(?:gram)?s?)(?!\w)/gi,
+            regex: /(?<![\p{L}\p{N}\p{M}_.])(\d+(?:\.\d+)?) ?(kg|kilo(?:gram)?s?)(?![\p{L}\p{N}\p{M}_])/giu,
             convert(...groups) {
-                const kg = (parseFloat(groups[1]) * 2.205).toFixed(2);
+                const kg = (parseFloat(groups[1]) / 0.45359237).toFixed(2);
                 return `${kg}lb`;
             },
         },
-        kilometersPerHour: {
-            regex: /(\d+(?:\.\d+)?) ?(km\/h|kmph|kph|kilometers?\/?h)/gi,
-            convert(...groups) {
-                const kph = (parseFloat(groups[1]) / 1.609).toFixed(2);
-                return `${kph}mph`;
-            },
-        }
     }
 
 };
 export function convert(message: string): string {
     let newMessage = message;
-    if (settings.store.myUnits === "imperial") {
-        for (const unit in regexes.metric) {
-            newMessage = newMessage.replaceAll(regexes.metric[unit].regex, regexes.metric[unit].convert);
-        }
-    } else {
-        for (const unit in regexes.imperial) {
-            newMessage = newMessage.replaceAll(regexes.imperial[unit].regex, regexes.imperial[unit].convert);
-        }
-    }
+    const units = settings.store.myUnits === "imperial" ? regexes.metric : regexes.imperial;
+    for (const unit of Object.values(units))
+        newMessage = newMessage.replaceAll(unit.regex, (...groups: string[]) => {
+            const converted = unit.convert(...groups);
+            return Number.isFinite(parseFloat(converted)) ? converted : groups[0];
+        });
     return newMessage;
 }

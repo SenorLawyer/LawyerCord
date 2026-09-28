@@ -204,13 +204,11 @@ export default definePlugin({
             };
 
             const handleContextMenu: MouseEventHandler<HTMLButtonElement> = e => {
+                e.preventDefault();
+                e.stopPropagation();
                 if (settings.store.clickMethod === "Left") {
-                    e.preventDefault();
-                    e.stopPropagation();
                     copyWithToast(msg.content);
                 } else {
-                    e.preventDefault();
-                    e.stopPropagation();
                     openViewRawModalMessage(msg);
                 }
             };

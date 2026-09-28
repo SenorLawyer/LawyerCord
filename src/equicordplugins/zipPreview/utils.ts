@@ -74,7 +74,6 @@ export interface LoadedZipEntry extends ZipEntry {
 
 export interface ZipPreviewResult {
     entries: ZipEntry[];
-    truncated: boolean;
 }
 
 export type ZipPreviewCacheState =
@@ -122,11 +121,13 @@ export function getCachedZip(url: string): ZipPreviewCacheState {
 
     const promise = loadZip(url)
         .then(result => {
+            if (zipCache.get(url) !== pending) throw new Error(CANCELLED_PREVIEW_MESSAGE);
             zipCache.set(url, { status: "resolved", result });
             trimZipCache();
             return result;
         })
         .catch(error => {
+            if (zipCache.get(url) !== pending) throw error;
             const message = error instanceof Error ? error.message : "Failed to preview ZIP.";
             if (message === CANCELLED_PREVIEW_MESSAGE || message === NATIVE_UNAVAILABLE_MESSAGE) zipCache.delete(url);
             else {
@@ -304,10 +305,7 @@ export function parseZipBuffer(buffer: ArrayBuffer): ZipPreviewResult {
         })
         .sort((left, right) => left.path.localeCompare(right.path));
 
-    return {
-        entries,
-        truncated: false
-    };
+    return { entries };
 }
 
 export async function loadZipEntry(entry: ZipEntry): Promise<LoadedZipEntry> {

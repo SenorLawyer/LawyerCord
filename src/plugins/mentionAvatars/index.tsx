@@ -55,7 +55,7 @@ export default definePlugin({
         // HEY THOR UPDATE SHOW ME YOUR NAME IF THIS SHIT CHANGES TY :)
         find: ".USER_MENTION)",
         replacement: {
-            match: /children:`@\$\{(\i\?\?\i)\}`(?<=\.useName\((\i)\).+?)/,
+            match: /children:`@\$\{(\i\?\?\i)\}`(?<=\.useName\((\i)\).{0,350}?)/,
             replace: "children:$self.renderUsername({username:$1,user:$2,showMeYourNameMention:typeof showMeYourNameMention!=='undefined'?showMeYourNameMention:undefined})"
         }
     },
@@ -91,6 +91,7 @@ export default definePlugin({
             >
                 {user && (
                     <img
+                        alt=""
                         src={user.getAvatarURL(SelectedGuildStore.getGuildId(), 16, isHovering)}
                         className="vc-mentionAvatars-icon"
                         style={{ borderRadius: "50%" }}
@@ -106,6 +107,7 @@ export default definePlugin({
         return (
             <>
                 <img
+                    alt=""
                     src={user.getAvatarURL(SelectedGuildStore.getGuildId(), 16)}
                     className="vc-mentionAvatars-icon"
                     style={{ borderRadius: "50%" }}
@@ -125,6 +127,7 @@ export default definePlugin({
 
         return (
             <img
+                alt=""
                 className="vc-mentionAvatars-icon vc-mentionAvatars-role-icon"
                 src={`${location.protocol}//${window.GLOBAL_ENV.CDN_HOST}/role-icons/${roleId}/${role.icon}.webp?size=24&quality=lossless`}
             />

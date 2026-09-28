@@ -64,10 +64,6 @@ function SoggyModal(props: RenderModalProps) {
     );
 }
 
-function buildSoggyModal(): any {
-    openModal(props => <SoggyModal {...props} />);
-}
-
 function SoggyButton() {
     return (
         <HeaderBarButton
@@ -83,7 +79,7 @@ function SoggyButton() {
                     style={{ pointerEvents: "none" }}
                 />
             )}
-            onClick={() => buildSoggyModal()}
+            onClick={() => openModal(props => <SoggyModal {...props} />)}
             selected={false}
         />
     );

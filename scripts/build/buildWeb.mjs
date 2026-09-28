@@ -124,7 +124,7 @@ async function buildExtension(target, files) {
             if (f.startsWith("manifest")) {
                 const json = JSON.parse(content.toString("utf-8"));
                 json.version = VERSION;
-                content = Buffer.from(new TextEncoder().encode(JSON.stringify(json)));
+                content = Buffer.from(JSON.stringify(json));
             }
 
             return [
@@ -165,7 +165,7 @@ async function packExtension(source, target, label) {
 }
 
 const appendCssRuntime = readFile("dist/LawyerCord.user.css", "utf-8").then(content => {
-    const cssRuntime = `unsafeWindow._vcUserScriptRendererCss=\`${content.replaceAll("`", "\\`")}\``;
+    const cssRuntime = `unsafeWindow._vcUserScriptRendererCss=${JSON.stringify(content)};`;
 
     return appendFile("dist/LawyerCord.user.js", cssRuntime);
 });

@@ -99,7 +99,7 @@ function IssuesPanel({ issues, onSelect }: { issues: WorkflowIssue[]; onSelect(i
     </section>;
 }
 
-function Builder({ initial, transitionState, onClose, onSaved }: RenderModalProps & { initial: Automation; onSaved?(automation: Automation): void; }) {
+function Builder({ initial, transitionState, onClose }: RenderModalProps & { initial: Automation; }) {
     const [state, dispatch] = React.useReducer(editorReducer, initial, workflow => {
         const blocks = workflow.schemaVersion === 2 ? structuredClone(workflow.blocks) : migrateToGraph(workflow.blocks);
         // Older automations were laid out for smaller nodes, so their saved spots would overlap now.
@@ -406,20 +406,16 @@ function Builder({ initial, transitionState, onClose, onSaved }: RenderModalProp
     }, [selectedId, selectedIds, clipboard, automation, insertion]);
 
     const hasBadJson = automation.blocks.some(block => block.config.jsonDrafts && Object.keys(block.config.jsonDrafts).length > 0);
-    const save = async (run: boolean) => {
+    const save = async () => {
         if (hasBadJson) return;
         setSaving(true);
         const next = { ...automation, name: automation.name.trim() || "Untitled automation", updatedAt: Date.now() };
         try {
             await upsertAutomation(next);
-            if (run) {
-                const result = await runAutomation(next.id);
-                showToast(result.success ? "Run finished." : result.error || "The run failed.", result.success ? Toasts.Type.SUCCESS : Toasts.Type.FAILURE);
-            } else showToast("Automation saved.", Toasts.Type.SUCCESS);
+            showToast("Automation saved.", Toasts.Type.SUCCESS);
             saved.current = automation;
             await discardAutomationDraft(next.id);
             setDraftStatus("Saved");
-            onSaved?.(next);
         } catch (error) {
             showToast(error instanceof Error ? error.message : "The automation could not be saved.", Toasts.Type.FAILURE);
         } finally {
@@ -449,7 +445,7 @@ function Builder({ initial, transitionState, onClose, onSaved }: RenderModalProp
             <span className={`vc-ab-status${running ? " running" : ""}`}>{running ? "Running…" : draftStatus}</span>
         </div>}
         actions={[
-            { text: "Save", variant: "primary", onClick: () => void save(false), disabled: saving || hasBadJson },
+            { text: "Save", variant: "primary", onClick: () => void save(), disabled: saving || hasBadJson },
             { text: "Test with sample data", variant: "secondary", onClick: () => void startRun(true), disabled: running || issues.some(issue => issue.severity === "error") },
             { text: "Run for real", variant: "secondary", onClick: () => void startRun(false), disabled: running || !isSaved },
             ...(running ? [{ text: "Stop", variant: "critical-primary", onClick: () => cancelAutomation(automation.id) }] : []),
@@ -500,10 +496,10 @@ function Builder({ initial, transitionState, onClose, onSaved }: RenderModalProp
     </Modal>;
 }
 
-export function openAutomationBuilder(automation: Automation, onSaved?: (automation: Automation) => void): void {
+export function openAutomationBuilder(automation: Automation): void {
     void DataStore.get<Automation>(`LawyerCord_automationDraft_${automation.id}`).then(draft => {
         const initial = draft && isAutomation(draft) ? draft : automation;
         const Wrapped = ErrorBoundary.wrap(Builder, { noop: true });
-        openModal(props => <Wrapped {...props} key={initial.id} initial={initial} onSaved={onSaved} />);
+        openModal(props => <Wrapped {...props} key={initial.id} initial={initial} />);
     });
 }

@@ -13,45 +13,34 @@ import { AUTHORIZE_URL, CLIENT_ID } from "../constants";
 import { useStreaksStore } from "./StreaksStore";
 
 interface AuthorizationState {
-    token: string | null;
+    getToken: () => string | null;
     tokens: Record<string, string>;
-    init: () => void;
-    authorize: () => Promise<void>;
+    authorize: () => Promise<boolean>;
     setToken: (token: string) => void;
     remove: (id: string) => void;
     isAuthorized: () => boolean;
 }
-const indexedDBStorage = {
-    async getItem(name: string): Promise<string | null> {
-        return DataStore.get(name).then(v => v ?? null);
-    },
-    async setItem(name: string, value: string): Promise<void> {
-        await DataStore.set(name, value);
-    },
-    async removeItem(name: string): Promise<void> {
-        await DataStore.del(name);
-    },
-};
 export const useAuthorizationStore = proxyLazy(() => zustandCreate(
     zustandPersist(
-        (set: any, get: any) => ({
-            token: null,
+        (set: (state: Partial<AuthorizationState>) => void, get: () => AuthorizationState): AuthorizationState => ({
             tokens: {},
-            init: () => { set({ token: get().tokens[UserStore.getCurrentUser()?.id] ?? null }); },
+            getToken: () => get().tokens[UserStore.getCurrentUser()?.id] ?? null,
             setToken: (token: string) => {
                 const id = UserStore.getCurrentUser()?.id;
                 if (!id) return;
-                set({ token, tokens: { ...get().tokens, [id]: token } });
+                set({ tokens: { ...get().tokens, [id]: token } });
             },
             remove: (id: string) => {
-                const { tokens, init } = get();
+                const { tokens } = get();
                 const newTokens = { ...tokens };
                 delete newTokens[id];
                 set({ tokens: newTokens });
-                init();
+                if (id === UserStore.getCurrentUser()?.id) useStreaksStore.getState().clear();
             },
             async authorize() {
-                return new Promise((resolve, reject) => {
+                const userId = UserStore.getCurrentUser()?.id;
+                if (!userId) return false;
+                return new Promise<boolean>(resolve => {
                     let hasCallbackStarted = false;
                     openModal(props =>
                         <OAuth2AuthorizeModal
@@ -62,49 +51,55 @@ export const useAuthorizationStore = proxyLazy(() => zustandCreate(
                             permissions={0n}
                             clientId={CLIENT_ID}
                             cancelCompletesFlow={false}
-                            callback={async (response: any) => {
+                            callback={async (response: { location: string; }) => {
+                                if (hasCallbackStarted) return;
                                 hasCallbackStarted = true;
                                 try {
+                                    if (UserStore.getCurrentUser()?.id !== userId) throw new Error("Discord account changed during authorization.");
                                     const url = new URL(response.location);
                                     const code = url.searchParams.get("code");
                                     if (!code) throw new Error("No code in redirect");
                                     const req = await fetch(`${AUTHORIZE_URL}?code=${encodeURIComponent(code)}`);
-                                    if (req?.ok) {
-                                        const { access_token: token } = await req.json();
-                                        if (token) get().setToken(token);
+                                    if (req.ok) {
+                                        const data: unknown = await req.json();
+                                        if (UserStore.getCurrentUser()?.id !== userId) throw new Error("Discord account changed during authorization.");
+                                        if (typeof data !== "object" || data === null || !("access_token" in data) || typeof data.access_token !== "string" || !data.access_token.trim())
+                                            throw new Error("Streaks returned an invalid token.");
+                                        get().setToken(data.access_token);
                                     } else {
                                         throw new Error(`Request not OK: ${req.status}`);
                                     }
-                                    resolve(void 0);
+                                    resolve(true);
                                 } catch (e) {
-                                    if (e instanceof Error) {
-                                        showToast(`Failed to authorize: ${e.message}`, Toasts.Type.FAILURE);
-                                        new Logger("Streaks").error("Failed to authorize", e);
-                                        reject(e);
-                                    }
+                                    showToast(e instanceof Error ? `Failed to authorize: ${e.message}` : "Failed to authorize with Streaks.", Toasts.Type.FAILURE);
+                                    new Logger("Streaks").error("Failed to authorize", e);
+                                    resolve(false);
                                 }
                             }}
                         />, {
                         onCloseCallback() {
                             if (!hasCallbackStarted) {
-                                reject(new Error("Authorization cancelled"));
+                                hasCallbackStarted = true;
+                                resolve(false);
                             }
                         },
                     });
                 });
             },
-            isAuthorized: () => !!get().token,
-        } as AuthorizationState),
+            isAuthorized: () => !!get().getToken(),
+        }),
         {
             name: "vc-streaks-auth",
-            storage: indexedDBStorage,
-            partialize: state => ({ tokens: state.tokens }),
-            onRehydrateStorage: () => async state => {
+            storage: {
+                getItem: (name: string) => DataStore.get<unknown>(name).then(value => value ?? null),
+                setItem: (name: string, value: unknown) => DataStore.set(name, value),
+                removeItem: (name: string) => DataStore.del(name),
+            },
+            partialize: (state: AuthorizationState) => ({ tokens: state.tokens }),
+            onRehydrateStorage: () => async (state?: AuthorizationState) => {
                 if (!state) return;
-                state.init();
+                useStreaksStore.getState().clear();
                 if (state.isAuthorized()) {
-                    useStreaksStore.getState().clear();
-                    await useStreaksStore.getState().migrate();
                     await useStreaksStore.getState().fetch();
                 }
             }

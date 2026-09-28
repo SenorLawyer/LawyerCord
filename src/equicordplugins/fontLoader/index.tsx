@@ -122,12 +122,13 @@ const applyFont = async (fontFamily: string) => {
             fontLinkUrl = nextFontLinkUrl;
         }
 
+        const escapedFontFamily = CSS.escape(fontFamily);
         styleElement.textContent = `
             * {
-                --font-primary: '${fontFamily}', sans-serif !important;
-                --font-display: '${fontFamily}', sans-serif !important;
-                --font-headline: '${fontFamily}', sans-serif !important;
-                ${settings.store.applyOnCodeBlocks ? "--font-code: '${fontFamily}', monospace !important;" : ""}
+                --font-primary: ${escapedFontFamily}, sans-serif !important;
+                --font-display: ${escapedFontFamily}, sans-serif !important;
+                --font-headline: ${escapedFontFamily}, sans-serif !important;
+                ${settings.store.applyOnCodeBlocks ? `--font-code: ${escapedFontFamily}, monospace !important;` : ""}
             }
         `;
     } catch (err) {

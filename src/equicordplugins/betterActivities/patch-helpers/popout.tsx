@@ -4,114 +4,55 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
-import { Activity } from "@vencord/discord-types";
-import { PresenceStore, React, useEffect, useMemo, UserStore, useState, useStateFromStores } from "@webpack/common";
-import { JSX } from "react";
+import { React, useState } from "@webpack/common";
+import type { ReactElement } from "react";
 
-import { CarouselControls } from "../components/CarouselControls";
 import { settings } from "../settings";
-import { AllActivitiesProps } from "../types";
-import { ActivityView, getActivityApplication } from "../utils";
+import { cl } from "../utils";
 
-export function showAllActivitiesComponent({ activity, user, ...props }: Readonly<AllActivitiesProps>): JSX.Element | null {
-    const currentUser = UserStore.getCurrentUser();
-    if (!currentUser) return null;
+const STYLE_KEYS: ["allActivitiesStyle"] = ["allActivitiesStyle"];
 
-    const [currentActivity, setCurrentActivity] = useState<Activity | null>(
-        activity?.type !== 4 ? activity! : null
-    );
+interface ActivityCardsProps {
+    cards: ReactElement[];
+}
 
-    const activities = useStateFromStores(
-        [PresenceStore],
-        () => PresenceStore.getActivities(user.id).filter((activity: Activity) => activity != null && activity.type !== 4)
-    );
+const ActivityCards = ErrorBoundary.wrap(({ cards }: ActivityCardsProps) => {
+    const { allActivitiesStyle } = settings.use(STYLE_KEYS);
+    const [selectedKey, setSelectedKey] = useState<ReactElement["key"]>(null);
+    const index = Math.max(0, cards.findIndex(card => card.key === selectedKey));
 
-    useEffect(() => {
-        if (!activities.length) {
-            setCurrentActivity(null);
-            return;
-        }
+    if (!cards.length) return null;
+    if (allActivitiesStyle === "list") return <div className={cl("activity-list")}>{cards}</div>;
 
-        const existing = currentActivity && activities.find(a => a.id === currentActivity.id);
-        if (!existing) {
-            setCurrentActivity(activities[0]);
-        } else if (existing !== currentActivity) {
-            setCurrentActivity(existing);
-        }
-    }, [activities]);
+    return <>
+        {cards[index]}
+        {cards.length > 1 && <div className={cl("controls")}>
+            <Button size="small" onClick={() => setSelectedKey(cards[(index + cards.length - 1) % cards.length].key)}>
+                Previous
+            </Button>
+            <div className={cl("controls-carousel")}>
+                {cards.map((card, position) => <Button
+                    key={card.key}
+                    size="min"
+                    variant="none"
+                    aria-label={`Show activity ${position + 1}`}
+                    aria-pressed={position === index}
+                    className={cl("controls-dot", { "controls-selected": position === index })}
+                    onClick={() => setSelectedKey(card.key)}
+                />)}
+            </div>
+            <Button size="small" onClick={() => setSelectedKey(cards[(index + 1) % cards.length].key)}>
+                Next
+            </Button>
+        </div>}
+    </>;
+}, { noop: true });
 
-    // we use these for other activities, it would be better to somehow get the corresponding activity props
-    const generalProps = useMemo(() => Object.keys(props).reduce((acc, key) => {
-        // exclude activity specific props to prevent copying them to all activities (e.g. buttons)
-        if (key !== "renderActions" && key !== "application") acc[key] = props[key];
-        return acc;
-    }, {}), [props]);
-
-    if (!activities.length) return null;
-
-    if (settings.store.allActivitiesStyle === "carousel") {
-        if (!currentActivity) return null;
-        return (
-            <ErrorBoundary noop>
-                <div style={{ display: "flex", flexDirection: "column" }}>
-                    {activity && currentActivity?.application_id === activity.application_id ? (
-                        <ActivityView
-                            activity={currentActivity}
-                            user={user}
-                            currentUser={currentUser}
-                            {...props}
-                        />
-                    ) : (
-                        <ActivityView
-                            activity={currentActivity}
-                            user={user}
-                            // fetch optional application
-                            application={getActivityApplication(currentActivity!)}
-                            currentUser={currentUser}
-                            {...generalProps}
-                        />
-                    )}
-                    {activities.length > 1 && currentActivity && (
-                        <CarouselControls
-                            activities={activities}
-                            currentActivity={currentActivity}
-                            onActivityChange={setCurrentActivity}
-                        />
-                    )}
-                </div>
-            </ErrorBoundary>
-        );
-    } else {
-        return (
-            <ErrorBoundary noop>
-                <div
-                    style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "5px",
-                    }}
-                >
-                    {activities.map((activity, index) =>
-                        index === 0 ? (
-                            <ActivityView
-                                key={index}
-                                activity={activity}
-                                user={user}
-                                currentUser={currentUser}
-                                {...props}
-                            />) : (
-                            <ActivityView
-                                key={index}
-                                activity={activity}
-                                user={user}
-                                application={getActivityApplication(activity)}
-                                currentUser={currentUser}
-                                {...generalProps}
-                            />
-                        ))}
-                </div>
-            </ErrorBoundary>
-        );
-    }
+export function wrapActivityCards(renderCards: (props: { className: string; }) => ReactElement[]) {
+    return (props: { className: string; }) => {
+        const cards = renderCards(props);
+        return cards.length ? [<ActivityCards key="activities" cards={cards} />] : [];
+    };
 }

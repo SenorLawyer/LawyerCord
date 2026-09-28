@@ -65,7 +65,7 @@ export default definePlugin({
     },
     renderMessageDecoration({ message }) {
         if (!settings.store.showInMessages) return null;
-        return message?.author == null ? null : <VoiceChannelIndicator userId={message.author.id} isMessageIndicator />;
+        return message?.author == null ? null : <VoiceChannelIndicator userId={message.author.id} />;
     },
     stop() {
         clearVoiceChannelIndicatorTimers();
@@ -75,8 +75,8 @@ export default definePlugin({
         {
             find: "null!=this.peopleListItemRef.current",
             replacement: {
-                match: /\.isProvisional.{0,50}?className:\i\.\i,children:\[(?<=isFocused:(\i).+?)/,
-                replace: "$&$self.VoiceChannelIndicator({userId:this?.props?.user?.id,isActionButton:true,shouldHighlight:$1}),"
+                match: /(?<=hovered:(\i),showAccountIdentifier:!\i&&!)(\i)\.isProvisional\}\),\(0,\i\.jsxs\)\("div",\{className:\i\.\i,children:\[/g,
+                replace: "$&$self.VoiceChannelIndicator({userId:$2.id,isActionButton:true,shouldHighlight:$1}),"
             },
             predicate: () => settings.store.showInMemberList
         }

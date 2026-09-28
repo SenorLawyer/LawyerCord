@@ -44,7 +44,7 @@ const UrlReplacementRules: Record<string, URLReplacementRule> = {
         match: /^https:\/\/(steamcommunity\.com|(?:help|store)\.steampowered\.com)\/.+$/,
         replace: match => `steam://openurl/${match}`,
         description: "Open Steam links in the Steam app",
-        shortlinkMatch: /^https:\/\/s.team\/.+$/,
+        shortlinkMatch: /^https:\/\/s\.team\/.+$/,
         accountViewReplace: userId => `steam://openurl/https://steamcommunity.com/profiles/${userId}`,
     },
     epic: {
@@ -64,7 +64,7 @@ const UrlReplacementRules: Record<string, URLReplacementRule> = {
         description: "Open Apple Music links in the iTunes app"
     },
     vrcx: {
-        match: /^https:\/\/vrchat.com\/home\/(user|avatar|world|group)\/(.+)$/,
+        match: /^https:\/\/vrchat\.com\/home\/(user|avatar|world|group)\/(.+)$/,
         replace: (_, type, id) => `vrcx://${type}/${id}`,
         description: "Open VRChat links in the VRCX app"
     },
@@ -124,7 +124,7 @@ export default definePlugin({
         ...[".__invalid_connectedAccountOpenIconContainer", ".BLUESKY||"].map(find => ({
             find,
             replacement: {
-                match: /(?<=onClick:(\i)=>\{)(?=.{0,100}\.CONNECTED_ACCOUNT_VIEWED)(?<==(\i)\.metadata.+?)/,
+                match: /(?<=onClick:(\i)=>\{)(?=.{0,100}\.CONNECTED_ACCOUNT_VIEWED)(?=[^}]{0,150}?(\i)\.type)/,
                 replace: "if($self.handleAccountView($1,$2.type,$2.id)) return;"
             }
         }))

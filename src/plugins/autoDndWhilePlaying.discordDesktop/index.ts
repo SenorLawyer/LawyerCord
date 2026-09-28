@@ -7,11 +7,14 @@
 import { definePluginSettings, migratePluginSettings } from "@api/Settings";
 import { getUserSettingLazy } from "@api/UserSettings";
 import { Devs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
+import { RunningGameStore, UserStore } from "@webpack/common";
 
-let savedStatus: string | null;
+let savedStatus: { userId: string; value: string; applied: string; } | null = null;
 
 const StatusSettings = getUserSettingLazy<string>("status", "status")!;
+const logger = new Logger("AutoDNDWhilePlaying");
 
 const settings = definePluginSettings({
     statusToSet: {
@@ -44,6 +47,29 @@ const settings = definePluginSettings({
     },
 });
 
+async function updateStatus(isPlaying: boolean) {
+    const userId = UserStore.getCurrentUser()?.id;
+    if (savedStatus?.userId !== userId) savedStatus = null;
+    if (!userId) return;
+    const status = StatusSettings.getSetting();
+
+    if (isPlaying) {
+        if (savedStatus || settings.store.excludeInvisible && status === "invisible") return;
+        const previousStatus = savedStatus = { userId, value: status, applied: settings.store.statusToSet };
+        if (status === previousStatus.applied) return;
+        try {
+            await StatusSettings.updateSetting(previousStatus.applied);
+        } catch (error) {
+            if (savedStatus === previousStatus) savedStatus = null;
+            throw error;
+        }
+    } else if (savedStatus) {
+        const previousStatus = savedStatus;
+        savedStatus = null;
+        if (status === previousStatus.applied && previousStatus.value !== previousStatus.applied) return StatusSettings.updateSetting(previousStatus.value);
+    }
+}
+
 migratePluginSettings("AutoDNDWhilePlaying", "StatusWhilePlaying");
 export default definePlugin({
     name: "AutoDNDWhilePlaying",
@@ -51,21 +77,31 @@ export default definePlugin({
     tags: ["Activity", "Utility"],
     authors: [Devs.thororen],
     isModified: true,
+    dependencies: ["UserSettingsAPI"],
     settings,
+    async start() {
+        try {
+            await updateStatus(RunningGameStore.getRunningGames().length > 0);
+        } catch (error) {
+            logger.error("Could not update your status.", error);
+        }
+    },
+    async stop() {
+        const previousStatus = savedStatus;
+        savedStatus = null;
+        try {
+            if (previousStatus && previousStatus.userId === UserStore.getCurrentUser()?.id && StatusSettings.getSetting() === previousStatus.applied && previousStatus.value !== previousStatus.applied)
+                await StatusSettings.updateSetting(previousStatus.value);
+        } catch (error) {
+            logger.error("Could not restore your status.", error);
+        }
+    },
     flux: {
+        LOGOUT() {
+            savedStatus = null;
+        },
         RUNNING_GAMES_CHANGE({ games }) {
-            const status = StatusSettings.getSetting();
-
-            if (settings.store.excludeInvisible && (savedStatus ?? status) === "invisible") return;
-
-            if (games.length > 0) {
-                if (status !== settings.store.statusToSet) {
-                    savedStatus = status;
-                    StatusSettings.updateSetting(settings.store.statusToSet);
-                }
-            } else if (savedStatus && savedStatus !== settings.store.statusToSet) {
-                StatusSettings.updateSetting(savedStatus);
-            }
+            return updateStatus(games.length > 0);
         }
     }
 });

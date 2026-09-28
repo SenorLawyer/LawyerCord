@@ -55,7 +55,7 @@ export default {
 
     settings: {
         get: () => sendSync<Settings>(IpcEvents.GET_SETTINGS),
-        set: (settings: Settings, pathToNotify?: string) => invoke<void>(IpcEvents.SET_SETTINGS, settings, pathToNotify),
+        set: (settings: Settings, pathToNotify?: string, expected?: string) => invoke<void>(IpcEvents.SET_SETTINGS, settings, pathToNotify, expected),
         getSettingsDir: () => invoke<string>(IpcEvents.GET_SETTINGS_DIR),
 
         openFolder: () => invoke<void>(IpcEvents.OPEN_SETTINGS_FOLDER),
@@ -63,7 +63,7 @@ export default {
 
     quickCss: {
         get: () => invoke<string>(IpcEvents.GET_QUICK_CSS),
-        set: (css: string) => invoke<void>(IpcEvents.SET_QUICK_CSS, css),
+        set: (css: string, expected?: string) => invoke<void>(IpcEvents.SET_QUICK_CSS, css, expected),
 
         addChangeListener(cb: (newCss: string) => void) {
             ipcRenderer.on(IpcEvents.QUICK_CSS_UPDATE, (_, css) => cb(css));

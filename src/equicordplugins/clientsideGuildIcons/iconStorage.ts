@@ -13,8 +13,8 @@ export async function normalizeStoredGuildIcon(value: unknown): Promise<Blob | n
     if (value instanceof Blob) return value.type.startsWith("image/") ? value : null;
     if (typeof value !== "string" || !value.startsWith("data:image/")) return null;
 
-    const blob = await fetch(value).then(response => response.blob());
-    return blob.type.startsWith("image/") ? blob : null;
+    const blob = await fetch(value).then(response => response.blob()).catch(() => null);
+    return blob?.type.startsWith("image/") ? blob : null;
 }
 
 export async function normalizeStoredGuildIcons(value: unknown): Promise<NormalizedGuildIcons> {

@@ -46,7 +46,7 @@ const cache = new Map<string, EmbedCacheEntry>();
 const unfurlCache = new Map<string, UnfurlCacheEntry>();
 
 function cacheKey(message: Message): string {
-    return `${message.channel_id}\0${message.id}\0${message.author?.id ?? ""}\0${discordEditedTimestamp(message) ?? ""}\0${message.content}`;
+    return `${UserStore.getCurrentUser()?.id ?? ""}\0${message.channel_id}\0${message.id}\0${message.author?.id ?? ""}\0${discordEditedTimestamp(message) ?? ""}\0${message.content}`;
 }
 
 function cloneWithEmbeds(message: Message, embeds: Embed[]): Message {
@@ -177,6 +177,11 @@ async function loadEntry(message: Message, key: string, entry: EmbedCacheEntry):
         });
     } catch {
         finishEntry(key, entry);
+        return;
+    }
+    if (cache.get(key) !== entry) return;
+    if (UserStore.getCurrentUser()?.id !== localUserId) {
+        cache.delete(key);
         return;
     }
     if (decrypted.status !== "decrypted") {

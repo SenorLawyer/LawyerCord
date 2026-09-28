@@ -8,7 +8,6 @@ import { definePluginSettings } from "@api/Settings";
 import { Notice } from "@components/Notice";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { UserStore } from "@webpack/common";
 
 const settings = definePluginSettings({
     platform: {
@@ -70,36 +69,28 @@ export default definePlugin({
                 },
                 {
                     match: /(?<="GatewaySocket"\)\}\),properties:)(\i)/,
-                    replace: "{...$1,...$self.getPlatform(true)}"
+                    replace: "{...$1,...$self.getPlatform()}"
                 },
             ]
         }
     ],
-    getPlatform(bypass, userId?: any) {
-        const platform = settings.store.platform ?? "desktop";
-        const currentUserId = UserStore.getCurrentUser()?.id;
-
-        if (bypass || (currentUserId != null && userId === currentUserId)) {
-            switch (platform) {
-                case "desktop":
-                    return { browser: "Discord Client" };
-                case "web":
-                    return { browser: "Discord Web" };
-                case "ios":
-                    return { browser: "Discord iOS" };
-                case "android":
-                    return { browser: "Discord Android" };
-                case "xbox":
-                    return { browser: "Discord Embedded" };
-                case "playstation":
-                    return { browser: "Discord Embedded" };
-                case "vr":
-                    return { browser: "Discord VR" };
-                default:
-                    return null;
-            }
+    getPlatform() {
+        switch (settings.store.platform ?? "desktop") {
+            case "desktop":
+                return { browser: "Discord Client" };
+            case "web":
+                return { browser: "Discord Web" };
+            case "ios":
+                return { browser: "Discord iOS" };
+            case "android":
+                return { browser: "Discord Android" };
+            case "xbox":
+            case "playstation":
+                return { browser: "Discord Embedded" };
+            case "vr":
+                return { browser: "Discord VR" };
+            default:
+                return null;
         }
-
-        return null;
     }
 });

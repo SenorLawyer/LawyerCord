@@ -137,10 +137,11 @@ export const isAllowedHost = proxyLazy(() => {
 });
 
 async function fetchAttachment(attachment: MessageAttachment): Promise<File> {
-    if (!IS_WEB)
-        return Native.fetchAttachment(attachment).then(
-            ({ data, filename, type }) => new File([data], filename, { type })
-        );
+    if (!IS_WEB) {
+        const result = await Native.fetchAttachment(attachment);
+        if (!result.success) throw new Error(result.error);
+        return new File([result.data], result.filename, { type: result.type });
+    }
 
     const { content_type, filename } = attachment;
     const url = URL.parse(attachment.url);

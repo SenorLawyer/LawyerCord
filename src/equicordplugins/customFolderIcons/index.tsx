@@ -4,12 +4,22 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import ErrorBoundary from "@components/ErrorBoundary";
 import { EquicordDevs } from "@utils/constants";
+import { parseUrl } from "@utils/misc";
 import definePlugin from "@utils/types";
+import type { ReactNode } from "react";
 
 import { makeContextItem } from "./components";
-import { folderIconsData, settings } from "./settings";
+import { settings } from "./settings";
 import { folderProp, int2rgba } from "./util";
+
+interface FolderIconProps {
+    folderNode: { id: string; color: number; };
+    original: ReactNode;
+}
+
+const SETTINGS: ("folderIcons" | "solidIcon")[] = ["folderIcons", "solidIcon"];
 
 export default definePlugin({
     name: "CustomFolderIcons",
@@ -22,7 +32,7 @@ export default definePlugin({
             find: "#{intl::GUILD_FOLDER_TOOLTIP_A11Y_LABEL}",
             replacement: {
                 match: /(\(0,\i\.jsx\)\(\i,\{folderNode:(\i),hovered:\i,sorting:\i\}\))/,
-                replace: "($self.shouldReplace({folderNode:$2})?$self.replace({folderNode:$2}):$1)"
+                replace: "$self.replace({folderNode:$2,original:$1})"
             }
         },
     ],
@@ -32,28 +42,23 @@ export default definePlugin({
             menuItems.push(makeContextItem(props));
         }
     },
-    shouldReplace(props: any): boolean {
-        return !!((settings.store.folderIcons as folderIconsData)?.[props.folderNode.id]?.url);
-    },
-    replace(props: any) {
-        const folderSettings = (settings.store.folderIcons as folderIconsData);
-        if (folderSettings && folderSettings[props.folderNode.id]) {
-            const data = folderSettings[props.folderNode.id];
-            return (
-                <div
-                    style={{
-                        backgroundColor: int2rgba(props.folderNode.color, +settings.store.solidIcon || .4),
-                        display: "flex",
-                        justifyContent: "center",
-                        alignItems: "center",
-                        width: "100%",
-                        height: "100%"
-                    }}
-                >
-                    <img alt="" src={data!.url} width={`${data!.size ?? 100}%`} height={`${data!.size ?? 100}%`}
-                    />
-                </div>
-            );
-        }
-    }
+    replace: ErrorBoundary.wrap((props: FolderIconProps) => {
+        const { folderIcons, solidIcon } = settings.use(SETTINGS);
+        const data = folderIcons?.[props.folderNode.id];
+        if (!data || !parseUrl(data.url)) return props.original;
+        return (
+            <div
+                style={{
+                    backgroundColor: int2rgba(props.folderNode.color, solidIcon ? 1 : .4),
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    width: "100%",
+                    height: "100%"
+                }}
+            >
+                <img alt="" src={data.url} width={`${data.size ?? 100}%`} height={`${data.size ?? 100}%`} />
+            </div>
+        );
+    }, { noop: true })
 });

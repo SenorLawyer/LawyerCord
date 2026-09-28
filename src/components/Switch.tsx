@@ -32,6 +32,7 @@ export interface SwitchProps {
     // checkmark/x icon in thumb
     hasIcon?: boolean;
     innerRef?: Ref<HTMLInputElement>;
+    "aria-label"?: string;
     "aria-describedby"?: string;
     "aria-labelledby"?: string;
 }

@@ -243,8 +243,9 @@ async function handleUploadFileFromDraft(upload: CloudUpload) {
     }
 
     try {
-        await uploadProvidedFiles([file], true);
-        upload.removeFromMsgDraft();
+        if (await uploadProvidedFiles([file], true)) {
+            upload.removeFromMsgDraft();
+        }
     } catch (e) {
         logger.warn("Draft upload encountered an unexpected error", e);
     }

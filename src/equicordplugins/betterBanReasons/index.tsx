@@ -101,6 +101,7 @@ const settings = definePluginSettings({
     },
     isTextInputDefault: {
         type: OptionType.BOOLEAN,
+        default: false,
         description: 'Shows a text input instead of a select menu by default. (Equivalent to clicking the "Other" option)'
     }
 });
@@ -111,27 +112,26 @@ export default definePlugin({
     tags: ["Appearance", "Customisation"],
     authors: [Devs.Inbestigator, EquicordDevs.yonn2222],
 
-    durationSetter: null as ((v: number) => void) | null,
-
     patches: [
         {
             find: "#{intl::BAN_REASON_OPTION_SPAM_ACCOUNT}",
+            group: true,
             replacement: [
                 {
-                    match: /(\[\{name:\i\.\i\.\i\(\i\.\i\.\i\),.+?"other"\}\])/,
+                    match: /(\[\{name:\i\.\i\.\i\(\i\.\i\.\i\),.{0,300}?"other"\}\])/,
                     replace: "$self.getReasons($1)"
                 },
                 {
-                    match: /useState\(null\)(?=.{0,300}targetUserId:)/,
+                    match: /useState\(""\)(?=,\[\i,\i\]=\i\.useState\(null\))/,
                     replace: "useState($self.getDefaultState())"
                 },
                 {
-                    match: /(\[\i,\i\])=(\i)\.useState\((null!=\i\?\i:\i)\)/,
-                    replace: "$1=$self.captureDeleteState($2.useState,$3)"
+                    match: /(\[\i,(\i)\]=\i\.useState\(null!=\i\?\i:\i\))/,
+                    replace: "$1,vcSetBanDeleteSeconds=$2"
                 },
                 {
                     match: /\i=\i\.useCallback\((\i)=>\{.{0,10},\i\(null\)(?=\},\[\]\))/,
-                    replace: "$&,$self.onReasonSelect($1)"
+                    replace: "$&,$self.onReasonSelect($1,vcSetBanDeleteSeconds)"
                 }
             ]
         }
@@ -145,18 +145,12 @@ export default definePlugin({
         ];
     },
 
-    getDefaultState: () => settings.store.isTextInputDefault ? 1 : 0,
+    getDefaultState: () => settings.store.isTextInputDefault ? "other" : "",
 
-    captureDeleteState(hook: (initial: number) => [number, (v: number) => void], initial: number) {
-        const result = hook(initial);
-        this.durationSetter = result[1];
-        return result;
-    },
-
-    onReasonSelect(value: string) {
+    onReasonSelect(value: string, setDuration: (value: number) => void) {
         const reason = getStoredReasons().find(r => r.text === value);
         if (reason?.deleteSeconds !== undefined) {
-            this.durationSetter?.(reason.deleteSeconds);
+            setDuration(reason.deleteSeconds);
         }
     },
 

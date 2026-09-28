@@ -7,8 +7,7 @@ Default privacy behavior:
 - Discord analytics, metrics, and Sentry are disabled by the required `NoTrack` plugin.
 - Cloud settings sync and source auto-update are disabled.
 - `DiscordMCP`, secure messaging, voice transcription, and other optional plugins are disabled until the user enables them.
-- The local control panel is required and runs only on `127.0.0.1` while LawyerCord is open. Its private URL includes a random capability token.
-- Local plugin settings, MCP queue data, downloaded MCP attachments, control-panel data, evidence exports, and secure-messaging material are stored in LawyerCord's local application-data directory.
+- Local plugin settings, MCP queue data, downloaded MCP attachments, and secure-messaging material are stored in LawyerCord's local application-data directory.
 
 Features that can contact third parties:
 
@@ -17,9 +16,6 @@ Features that can contact third parties:
 - The voice transcriber downloads a pinned JavaScript runtime from jsDelivr and speech models from Hugging Face; audio inference itself runs locally.
 - The updater contacts the configured Git remote only after auto-update is enabled or an update is requested manually.
 - The local Discord MCP server uses stdio plus a secret-authenticated file queue. It opens no listening network port, but the connected MCP host can request data from any Discord channel visible to the authenticated account.
-- The control panel records bounded runtime network destination metadata in memory. It removes query strings from displayed URLs and does not transmit observations.
-
-Only explicitly approved channels enter the control panel's local search index. Persistent index contents are protected with Electron `safeStorage`; if secure OS storage is unavailable, the index remains memory-only. Removing a channel from the index scope deletes its indexed messages. Evidence exports are explicit user actions and are written locally.
 
 Secure messaging encrypts message bodies and supported attachments before Discord receives them. Discord still sees metadata including participants, channel, timing, ciphertext size, attachment count, and traffic patterns. Endpoint compromise, another powerful client plugin, or screen/clipboard capture can still expose plaintext.
 

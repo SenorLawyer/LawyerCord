@@ -18,6 +18,10 @@
 
 import { Promisable } from "type-fest";
 
+import { Logger } from "./Logger";
+
+const logger = new Logger("Queue");
+
 /**
  * A queue that can be used to run tasks consecutively.
  * Highly recommended for things like fetching data from Discord
@@ -31,13 +35,14 @@ export class Queue {
 
     private queue = [] as Array<() => Promisable<unknown>>;
 
-    private promise?: Promise<any>;
+    private promise?: Promise<unknown>;
 
     private next() {
         const func = this.queue.shift();
         if (func)
             this.promise = Promise.resolve()
                 .then(func)
+                .catch(error => logger.error("Queued task failed", error))
                 .finally(() => this.next());
         else
             this.promise = undefined;

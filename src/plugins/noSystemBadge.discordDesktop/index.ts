@@ -29,12 +29,12 @@ export default definePlugin({
             find: ",setSystemTrayApplications",
             replacement: [
                 {
-                    match: /setBadge\(\i\).+?},/,
-                    replace: "setBadge(){},"
+                    match: /(?<=setBadge\(\i\)\{)/,
+                    replace: "return;"
                 },
                 {
-                    match: /setSystemTrayIcon\(\i\).+?},/,
-                    replace: "setSystemTrayIcon(){},"
+                    match: /(?<=setSystemTrayIcon\(\i\)\{)/,
+                    replace: "return;"
                 }
             ]
         }

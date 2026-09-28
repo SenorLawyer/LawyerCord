@@ -10,7 +10,7 @@ import { FormSwitch } from "@components/FormSwitch";
 import { Heading, HeadingSecondary } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
 import { Margins } from "@utils/margins";
-import { identity } from "@utils/misc";
+import { identity, parseUrl } from "@utils/misc";
 import { Activity } from "@vencord/discord-types";
 import { ActivityFlags, ActivityType } from "@vencord/discord-types/enums";
 import { PresenceStore, React, Select, SnowflakeUtils, TextInput, UserStore } from "@webpack/common";
@@ -69,7 +69,7 @@ export function ReplaceTutorial() {
 }
 
 export function ReplaceSettings({ appIds, update, save }: SettingsProps) {
-    async function onChange(val: string | boolean, index: number, key: string) {
+    function onChange<K extends keyof AppIdSetting>(val: AppIdSetting[K], index: number, key: K) {
         if (index === appIds.length - 1)
             appIds.push(makeEmptyAppId());
 
@@ -99,7 +99,7 @@ export function ReplaceSettings({ appIds, update, save }: SettingsProps) {
                         <Heading className={`${Margins.top8} ${Margins.bottom8}`}>Application ID</Heading>
                         <CheckedTextInput
                             initialValue={setting.appId}
-                            onChange={async v => {
+                            onChange={v => {
                                 onChange(v, i, "appId");
                             }}
                             validate={v =>
@@ -130,11 +130,16 @@ export function ReplaceSettings({ appIds, update, save }: SettingsProps) {
                                         <Heading className={`${Margins.top8} ${Margins.bottom8}`}>Stream URL (must be YouTube or Twitch)</Heading>
                                         <CheckedTextInput
                                             initialValue={setting.newStreamUrl}
-                                            onChange={async v => {
+                                            onChange={v => {
                                                 onChange(v, i, "newStreamUrl");
                                             }}
                                             validate={v => {
-                                                return /https?:\/\/(www\.)?(twitch\.tv|youtube\.com)\/\w+/.test(v) || "Invalid stream URL";
+                                                if (!v) return true;
+                                                const url = parseUrl(v);
+                                                return !!url && ["http:", "https:"].includes(url.protocol)
+                                                    && ["twitch.tv", "www.twitch.tv", "youtube.com", "www.youtube.com"].includes(url.hostname)
+                                                    && !url.username && !url.password && url.pathname.length > 1
+                                                    || "Invalid stream URL.";
                                             }}
                                         />
 
@@ -147,7 +152,7 @@ export function ReplaceSettings({ appIds, update, save }: SettingsProps) {
                                         <TextInput
                                             className={Margins.top8}
                                             value={setting.newName}
-                                            onChange={async v => {
+                                            onChange={v => {
                                                 onChange(v, i, "newName");
                                             }}
                                         />
@@ -157,7 +162,7 @@ export function ReplaceSettings({ appIds, update, save }: SettingsProps) {
                                 <TextInput
                                     className={Margins.top8}
                                     value={setting.newDetails}
-                                    onChange={async v => {
+                                    onChange={v => {
                                         onChange(v, i, "newDetails");
                                     }}
                                 />
@@ -165,7 +170,7 @@ export function ReplaceSettings({ appIds, update, save }: SettingsProps) {
                                 <TextInput
                                     className={Margins.top8}
                                     value={setting.newState}
-                                    onChange={async v => {
+                                    onChange={v => {
                                         onChange(v, i, "newState");
                                     }}
                                 />
@@ -177,7 +182,7 @@ export function ReplaceSettings({ appIds, update, save }: SettingsProps) {
                                         <TextInput
                                             className={Margins.top8}
                                             value={setting.newLargeImageText}
-                                            onChange={async v => {
+                                            onChange={v => {
                                                 onChange(v, i, "newLargeImageText");
                                             }}
                                         />
@@ -185,7 +190,7 @@ export function ReplaceSettings({ appIds, update, save }: SettingsProps) {
                                         <TextInput
                                             className={Margins.top8}
                                             value={setting.newLargeImageUrl}
-                                            onChange={async v => {
+                                            onChange={v => {
                                                 onChange(v, i, "newLargeImageUrl");
                                             }}
                                         />
@@ -194,7 +199,7 @@ export function ReplaceSettings({ appIds, update, save }: SettingsProps) {
                                         <TextInput
                                             className={Margins.top8}
                                             value={setting.newSmallImageText}
-                                            onChange={async v => {
+                                            onChange={v => {
                                                 onChange(v, i, "newSmallImageText");
                                             }}
                                         />
@@ -202,7 +207,7 @@ export function ReplaceSettings({ appIds, update, save }: SettingsProps) {
                                         <TextInput
                                             className={Margins.top8}
                                             value={setting.newSmallImageUrl}
-                                            onChange={async v => {
+                                            onChange={v => {
                                                 onChange(v, i, "newSmallImageUrl");
                                             }}
                                         />

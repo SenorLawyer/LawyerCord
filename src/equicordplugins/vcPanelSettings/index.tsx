@@ -13,9 +13,7 @@ import { Link } from "@components/Link";
 import { Devs } from "@utils/constants";
 import { identity } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
-import { findByPropsLazy } from "@webpack";
-import { FluxDispatcher, Select, Slider, useEffect, useState } from "@webpack/common";
-const configModule = findByPropsLazy("getOutputVolume");
+import { FluxDispatcher, lodash, MediaEngineStore, Select, Slider, useState, useStateFromStores } from "@webpack/common";
 
 const settings = definePluginSettings({
     title1: {
@@ -91,13 +89,7 @@ const settings = definePluginSettings({
 });
 
 function OutputVolumeComponent() {
-    const [outputVolume, setOutputVolume] = useState(configModule.getOutputVolume());
-
-    useEffect(() => {
-        const listener = () => setOutputVolume(configModule.getOutputVolume());
-        FluxDispatcher.subscribe("AUDIO_SET_OUTPUT_VOLUME", listener);
-        return () => FluxDispatcher.unsubscribe("AUDIO_SET_OUTPUT_VOLUME", listener);
-    }, []);
+    const outputVolume = useStateFromStores([MediaEngineStore], () => MediaEngineStore.getOutputVolume());
 
     return (
         <>
@@ -113,13 +105,7 @@ function OutputVolumeComponent() {
 }
 
 function InputVolumeComponent() {
-    const [inputVolume, setInputVolume] = useState(configModule.getInputVolume());
-
-    useEffect(() => {
-        const listener = () => setInputVolume(configModule.getInputVolume());
-        FluxDispatcher.subscribe("AUDIO_SET_INPUT_VOLUME", listener);
-        return () => FluxDispatcher.unsubscribe("AUDIO_SET_INPUT_VOLUME", listener);
-    }, []);
+    const inputVolume = useStateFromStores([MediaEngineStore], () => MediaEngineStore.getInputVolume());
 
     return (
         <>
@@ -135,18 +121,13 @@ function InputVolumeComponent() {
 }
 
 function OutputDeviceComponent() {
-    const [outputDevice, setOutputDevice] = useState(configModule.getOutputDeviceId());
-
-    useEffect(() => {
-        const listener = () => setOutputDevice(configModule.getOutputDeviceId());
-        FluxDispatcher.subscribe("AUDIO_SET_OUTPUT_DEVICE", listener);
-        return () => FluxDispatcher.unsubscribe("AUDIO_SET_OUTPUT_DEVICE", listener);
-    }, []);
+    const outputDevice = useStateFromStores([MediaEngineStore], () => MediaEngineStore.getOutputDeviceId());
+    const devices = useStateFromStores([MediaEngineStore], () => Object.values(MediaEngineStore.getOutputDevices()).map(device => ({ id: device.id, name: device.name })), [], lodash.isEqual);
 
     return (
         <>
             {settings.store.showOutputDeviceHeader && <Heading>Output device</Heading>}
-            <Select options={Object.values(configModule.getOutputDevices()).map((device: any /* i am NOT typing this*/) => {
+            <Select options={devices.map(device => {
                 return { value: device.id, label: settings.store.showOutputDeviceHeader ? device.name : `🔊 ${device.name}` };
             })}
                 serialize={identity}
@@ -164,18 +145,13 @@ function OutputDeviceComponent() {
 }
 
 function InputDeviceComponent() {
-    const [inputDevice, setInputDevice] = useState(configModule.getInputDeviceId());
-
-    useEffect(() => {
-        const listener = () => setInputDevice(configModule.getInputDeviceId());
-        FluxDispatcher.subscribe("AUDIO_SET_INPUT_DEVICE", listener);
-        return () => FluxDispatcher.unsubscribe("AUDIO_SET_INPUT_DEVICE", listener);
-    }, []);
+    const inputDevice = useStateFromStores([MediaEngineStore], () => MediaEngineStore.getInputDeviceId());
+    const devices = useStateFromStores([MediaEngineStore], () => Object.values(MediaEngineStore.getInputDevices()).map(device => ({ id: device.id, name: device.name })), [], lodash.isEqual);
 
     return (
         <div style={{ marginTop: "10px" }}>
             {settings.store.showInputDeviceHeader && <Heading>Input device</Heading>}
-            <Select options={Object.values(configModule.getInputDevices()).map((device: any /* i am NOT typing this*/) => {
+            <Select options={devices.map(device => {
                 return { value: device.id, label: settings.store.showInputDeviceHeader ? device.name : `🎤 ${device.name}` };
             })}
                 serialize={identity}
@@ -193,18 +169,13 @@ function InputDeviceComponent() {
 }
 
 function VideoDeviceComponent() {
-    const [videoDevice, setVideoDevice] = useState(configModule.getVideoDeviceId());
-
-    useEffect(() => {
-        const listener = () => setVideoDevice(configModule.getVideoDeviceId());
-        FluxDispatcher.subscribe("MEDIA_ENGINE_SET_VIDEO_DEVICE", listener);
-        return () => FluxDispatcher.unsubscribe("MEDIA_ENGINE_SET_VIDEO_DEVICE", listener);
-    }, []);
+    const videoDevice = useStateFromStores([MediaEngineStore], () => MediaEngineStore.getVideoDeviceId());
+    const devices = useStateFromStores([MediaEngineStore], () => Object.values(MediaEngineStore.getVideoDevices()).map(device => ({ id: device.id, name: device.name })), [], lodash.isEqual);
 
     return (
         <div style={{ marginTop: "10px" }}>
             {settings.store.showVideoDeviceHeader && <Heading>Camera</Heading>}
-            <Select options={Object.values(configModule.getVideoDevices()).map((device: any /* i am NOT typing this*/) => {
+            <Select options={devices.map(device => {
                 return { value: device.id, label: settings.store.showVideoDeviceHeader ? device.name : `📷 ${device.name}` };
             })}
                 serialize={identity}

@@ -6,61 +6,58 @@
 
 import "./style.css";
 
-import { definePluginSettings, useSettings } from "@api/Settings";
+import { definePluginSettings } from "@api/Settings";
 import { Divider } from "@components/Divider";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { Heading, HeadingPrimary } from "@components/Heading";
 import { Link } from "@components/Link";
 import { Paragraph } from "@components/Paragraph";
 import { Devs, EquicordDevs } from "@utils/constants";
 import { Margins } from "@utils/margins";
 import { useForceUpdater } from "@utils/react";
-import definePlugin, { OptionType } from "@utils/types";
+import definePlugin, { OptionType, PluginSettingComponentProps } from "@utils/types";
 import { moment, TextInput, useEffect, useState } from "@webpack/common";
 
-import { DemoMessageContainer, timeFormats } from "./utils";
-
-type TimeFormat = {
-    name: string;
-    description: string;
-    default: string;
-    offset: number;
-};
-type TimeRowProps = {
+import { DemoMessageContainer, type TimeFormat, timeFormats } from "./utils";
+interface TimeRowProps {
     id: string;
     format: TimeFormat;
     onChange: (key: string, value: string) => void;
-    pluginSettings: any;
-};
-
-let hasConfiguredRelativeThresholds = false;
-
-function configureRelativeThresholds() {
-    if (hasConfiguredRelativeThresholds) return;
-
-    moment.relativeTimeThreshold("s", 60);
-    moment.relativeTimeThreshold("ss", -1);
-    moment.relativeTimeThreshold("m", 60);
-    hasConfiguredRelativeThresholds = true;
+    pluginSettings: Partial<Record<string, string>>;
 }
 
-const format = (date: Date, formatTemplate: string): string => {
-    configureRelativeThresholds();
+const FORMAT_LITERALS = /\[[^[]*\]|\\./g;
+const FORMAT_SETTINGS: "formats"[] = ["formats"];
 
+const format = (date: Date, formatTemplate: string): string => {
     const mmt = moment(date);
+    if (!mmt.isValid()) return mmt.format(formatTemplate);
     const { formats } = settings.store;
     const sameDayFormat = formats?.sameDayFormat || timeFormats.sameDayFormat.default;
     const lastDayFormat = formats?.lastDayFormat || timeFormats.lastDayFormat.default;
     const lastWeekFormat = formats?.lastWeekFormat || timeFormats.lastWeekFormat.default;
     const sameElseFormat = formats?.sameElseFormat || timeFormats.sameElseFormat.default;
 
-    return mmt.format(formatTemplate)
-        .replace("calendar", () => mmt.calendar(null, {
+    let result = "";
+    let offset = 0;
+    for (const match of formatTemplate.matchAll(FORMAT_LITERALS)) {
+        const part = match[0];
+        if (part !== "[calendar]" && part !== "[relative]") continue;
+
+        const before = formatTemplate.slice(offset, match.index);
+        result += before ? mmt.format(before) : "";
+        result += part === "[calendar]" ? mmt.calendar(null, {
             sameDay: sameDayFormat,
             lastDay: lastDayFormat,
             lastWeek: lastWeekFormat,
             sameElse: sameElseFormat
-        }))
-        .replace("relative", () => mmt.fromNow());
+        }) : moment.duration({ to: mmt, from: moment() })
+            .locale(mmt.locale())
+            .humanize(true, { s: 60, ss: -1, m: 60 });
+        offset = match.index + part.length;
+    }
+    const after = formatTemplate.slice(offset);
+    return result + (after ? mmt.format(after) : "");
 };
 
 const timestampSubscribers = new Set<() => void>();
@@ -94,73 +91,79 @@ function clearTimestampRefresh() {
     timestampRefreshInterval = undefined;
 }
 
-const TimeRow = (props: TimeRowProps) => {
-    const [state, setState] = useState(props.pluginSettings?.[props.id] || props.format.default);
+const TimeRow = (props: TimeRowProps) => (
+    <>
+        <Heading>{props.format.name}</Heading>
+        <Paragraph>{props.format.description}</Paragraph>
+        <TextInput
+            aria-label={props.format.name}
+            value={props.pluginSettings[props.id] ?? props.format.default}
+            onChange={value => props.onChange(props.id, value)}
+        />
+    </>
+);
 
-    const handleChange = (value: string) => {
-        setState(value);
-        props.onChange(props.id, value);
+function FormatEditor({ setValue }: PluginSettingComponentProps) {
+    const [settingsState, setSettingsState] = useState(() => settings.store.formats ?? {});
+
+    const setNewValue = (key: string, value: string) => {
+        const newSettings = { ...settingsState, [key]: value };
+        setSettingsState(newSettings);
+        setValue(newSettings);
     };
 
     return (
         <>
-            <Heading>{props.format.name}</Heading>
-            <Paragraph>{props.format.description}</Paragraph>
-            <TextInput value={state} onChange={handleChange} />
-        </>
-    );
-};
+            <DemoMessageContainer />
+            {Object.entries(timeFormats).map(([key, value]) => (
+                <section key={key}>
+                    {key === "sameDayFormat" && (
+                        <div className={Margins.bottom20}>
+                            <Divider style={{ marginBottom: "10px" }} />
+                            <Heading tag="h1">Calendar formats</Heading>
+                            <Paragraph>
+                                How to format the [calendar] value if used in the above timestamps.
+                            </Paragraph>
+                        </div>
+                    )}
+                    <TimeRow
+                        id={key}
+                        format={value}
+                        onChange={setNewValue}
+                        pluginSettings={settingsState}
+                    />
+                </section>
+            ))}
+        </>);
+}
 
 const settings = definePluginSettings({
     formats: {
         type: OptionType.COMPONENT,
+        get default(): Partial<Record<string, string>> {
+            return {};
+        },
         description: "Customize the timestamp formats",
-        component: componentProps => {
-            const [settingsState, setSettingsState] = useState(useSettings().plugins?.CustomTimestamps?.formats ?? {});
-
-            const setNewValue = (key: string, value: string) => {
-                const newSettings = { ...settingsState, [key]: value };
-                setSettingsState(newSettings);
-                componentProps.setValue(newSettings);
-            };
-
-            return (
-                <>
-                    <DemoMessageContainer />
-                    {Object.entries(timeFormats).map(([key, value]) => (
-                        <section key={key}>
-                            {key === "sameDayFormat" && (
-                                <div className={Margins.bottom20}>
-                                    <Divider style={{ marginBottom: "10px" }} />
-                                    <Heading tag="h1">Calendar formats</Heading>
-                                    <Paragraph>
-                                        How to format the [calendar] value if used in the above timestamps.
-                                    </Paragraph>
-                                </div>
-                            )}
-                            <TimeRow
-                                id={key}
-                                format={value}
-                                onChange={setNewValue}
-                                pluginSettings={settingsState}
-                            />
-                        </section>
-                    ))}
-                </>);
-        }
+        component: FormatEditor
     }
-}).withPrivateSettings<{
-    formats: {
-        cozyFormat: string;
-        compactFormat: string;
-        tooltipFormat: string;
-        ariaLabelFormat: string;
-        sameDayFormat: string;
-        lastDayFormat: string;
-        lastWeekFormat: string;
-        sameElseFormat: string;
-    };
-}>();
+});
+
+function renderTimestamp(date: Date, type: "cozy" | "compact" | "tooltip" | "ariaLabel") {
+    const forceUpdater = useForceUpdater();
+    const { formats } = settings.use(FORMAT_SETTINGS);
+    const key = `${type}Format` as const;
+    const formatTemplate: string = formats?.[key] || timeFormats[key].default;
+
+    useEffect(() => {
+        const dynamic = Array.from(formatTemplate.matchAll(FORMAT_LITERALS))
+            .some(([part]) => part === "[calendar]" || part === "[relative]");
+        if (dynamic) {
+            return subscribeTimestampRefresh(forceUpdater);
+        }
+    }, [forceUpdater, formatTemplate]);
+
+    return format(date, formatTemplate);
+}
 
 export default definePlugin({
     name: "CustomTimestamps",
@@ -199,16 +202,16 @@ export default definePlugin({
                 {
                     // Tooltips when hovering over message timestamps
                     match: /(__unsupportedReactNodeAsText:).{0,25}"LLLL"\)/,
-                    replace: "$1$self.renderTimestamp(arguments[0].timestamp,'tooltip')",
+                    replace: "$1$self.renderTooltip({date:arguments[0].timestamp})",
                 },
             ]
         },
         {
-            find: /.full,.{0,15}children:/,
+            find: /__unsupportedReactNodeAsText:\i\.full/,
             replacement: {
                 // Tooltips for timestamp markdown (e.g. <t:1234567890>)
                 match: /(__unsupportedReactNodeAsText:)\i.full/,
-                replace: "$1$self.renderTimestamp(new Date(arguments[0].node.timestamp*1000),'tooltip')"
+                replace: "$1$self.renderTooltip({date:new Date(arguments[0].node.timestamp*1000)})"
             }
         }
     ],
@@ -217,30 +220,6 @@ export default definePlugin({
         clearTimestampRefresh();
     },
 
-    renderTimestamp: (date: Date, type: "cozy" | "compact" | "tooltip" | "ariaLabel") => {
-        const forceUpdater = useForceUpdater();
-        let formatTemplate: string;
-
-        switch (type) {
-            case "cozy":
-                formatTemplate = settings.store.formats?.cozyFormat || timeFormats.cozyFormat.default;
-                break;
-            case "compact":
-                formatTemplate = settings.store.formats?.compactFormat || timeFormats.compactFormat.default;
-                break;
-            case "tooltip":
-                formatTemplate = settings.store.formats?.tooltipFormat || timeFormats.tooltipFormat.default;
-                break;
-            case "ariaLabel":
-                formatTemplate = settings.store.formats?.ariaLabelFormat || timeFormats.ariaLabelFormat.default;
-        }
-
-        useEffect(() => {
-            if (formatTemplate.includes("calendar") || formatTemplate.includes("relative")) {
-                return subscribeTimestampRefresh(forceUpdater);
-            }
-        }, [forceUpdater, formatTemplate]);
-
-        return format(date, formatTemplate);
-    }
+    renderTimestamp,
+    renderTooltip: ErrorBoundary.wrap(({ date }: { date: Date; }) => renderTimestamp(date, "tooltip"), { noop: true })
 });

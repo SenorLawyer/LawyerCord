@@ -21,7 +21,6 @@ import { definePluginSettings } from "@api/Settings";
 import { Paragraph } from "@components/Paragraph";
 import { ApngBlendOp, ApngDisposeOp, parseAPNG } from "@utils/apng";
 import { Devs } from "@utils/constants";
-import { getCurrentGuild } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 import type { Emoji, Message, RenderModalProps, Sticker } from "@vencord/discord-types";
@@ -240,8 +239,8 @@ export default definePlugin({
             replacement: [
                 {
                     // Create a variable for the intention of using the emoji
-                    match: /(?<=\.USE_EXTERNAL_EMOJIS.+?;)(?<=intention:(\i).+?)/,
-                    replace: (_, intention) => `const fakeNitroIntention=${intention};`
+                    match: /(?<=\.USE_EXTERNAL_EMOJIS,\i\);)(?=if\((\i)===\i\.EmojiIntention\.COMMUNITY_CONTENT\))/,
+                    replace: "const fakeNitroIntention=$1;"
                 },
                 {
                     // Disallow the emoji for external if the intention doesn't allow it
@@ -255,8 +254,8 @@ export default definePlugin({
                 },
                 {
                     // Disallow the emoji for premium locked if the intention doesn't allow it
-                    match: /!(\i\.\i\.canUseEmojisEverywhere\(\i\))/,
-                    replace: m => `(${m}&&!${IS_BYPASSEABLE_INTENTION})`
+                    match: /(?<=!\(\i\|\|)\i\.\i\.canUseEmojisEverywhere\(\i\)/,
+                    replace: check => `(${check}||${IS_BYPASSEABLE_INTENTION})`
                 },
                 {
                     // Allow animated emojis to be used if the intention allows it
@@ -269,8 +268,8 @@ export default definePlugin({
         {
             find: ".getUserIsAdmin(",
             replacement: {
-                match: /(function \i\(\i,\i)\){(.{0,250}.getUserIsAdmin\(.+?return!1})/,
-                replace: (_, rest1, rest2) => `${rest1},fakeNitroOriginal){if(!fakeNitroOriginal)return false;${rest2}`
+                match: /(function \i\(\i,\i)\)\{(?=[^}]{0,250}\.getUserIsAdmin\()/,
+                replace: "$1,fakeNitroOriginal){if(!fakeNitroOriginal)return false;"
             }
         },
         // Make stickers always available
@@ -310,13 +309,13 @@ export default definePlugin({
         {
             find: ",updateTheme(",
             replacement: {
-                match: /(function \i\(\i\){let{backgroundGradientPresetId:(\i).+?)(\i\.\i\.updateAsync.+?theme=(.+?),.+?},\i\))/,
-                replace: (_, rest, backgroundGradientPresetId, originalCall, theme) => `${rest}$self.handleGradientThemeSelect(${backgroundGradientPresetId},${theme},()=>${originalCall});`
+                match: /\i\.\i\.updateAsync\("appearance",\i=>\{\i\.theme=(\i\(\i\)),\i\.clientThemeSettings=\i\(\{(?=[^{}]{0,150}?backgroundGradientPresetId:(\i)(?:,|}))[^{}]{0,150}\}\)\},\i\)/,
+                replace: "$self.handleGradientThemeSelect($2,$1,()=>$&);"
             }
         },
         // Allow users to use custom client themes
         {
-            find: '("custom_themes_editor_footer")',
+            find: ".CLIENT_THEMES_EDITOR?",
             replacement: {
                 match: /(?<=\i=)\(0,\i\.\i\)\(\i\.\i\.TIER_2\)(?=,|;)/g,
                 replace: "true"
@@ -345,36 +344,41 @@ export default definePlugin({
                 {
                     // Call our function to decide whether the embed should be ignored or not
                     predicate: () => settings.store.transformEmojis || settings.store.transformStickers,
-                    match: /(renderEmbeds\((\i)\){)(.+?embeds\.map\(\((\i),\i\)?=>{)/,
-                    replace: (_, rest1, message, rest2, embed) => `${rest1}const fakeNitroMessage=${message};${rest2}if($self.shouldIgnoreEmbed(${embed},fakeNitroMessage))return null;`
+                    match: /(renderEmbeds\((\i)\){)(.{0,150}?embeds\.map\(\((\i),\i\)?=>{)/,
+                    replace: "$1const fakeNitroMessage=$2;$3if($self.shouldIgnoreEmbed($4,fakeNitroMessage))return null;"
                 },
                 {
                     // Patch the stickers array to add fake nitro stickers
                     predicate: () => settings.store.transformStickers,
-                    match: /renderStickersAccessories\((\i)\){let (\i)=\(0,\i\.\i\)\(\i\).+?;/,
-                    replace: (m, message, stickers) => `${m}${stickers}=$self.patchFakeNitroStickers(${stickers},${message});`
+                    match: /renderStickersAccessories\((\i)\){let (\i)=\(0,\i\.\i\)\(\i\)[^;]{0,100};/,
+                    replace: "$&$2=$self.patchFakeNitroStickers($2,$1);"
                 },
                 {
                     // Filter attachments to remove fake nitro stickers or emojis
                     predicate: () => settings.store.transformStickers,
-                    match: /renderAttachments\(\i\){.+?{attachments:(\i).+?;/,
-                    replace: (m, attachments) => `${m}${attachments}=$self.filterAttachments(${attachments});`
+                    match: /renderAttachments\(\i\){[^;]{0,200}{attachments:(\i)[^;]{0,50};/,
+                    replace: "$&$1=$self.filterAttachments($1);"
                 }
             ]
         },
         {
             find: "#{intl::STICKER_POPOUT_UNJOINED_PRIVATE_GUILD_DESCRIPTION}",
+            group: true,
             predicate: () => settings.store.transformStickers,
             replacement: [
                 {
                     // Export the renderable sticker to be used in the fake nitro sticker notice
                     match: /let{renderableSticker:(\i).{0,270}sticker:\i,channel:\i,/,
-                    replace: (m, renderableSticker) => `${m}fakeNitroRenderableSticker:${renderableSticker},`
+                    replace: "$&fakeNitroRenderableSticker:$1,"
+                },
+                {
+                    match: /(?<=let \i,\{)(?=[^{}]{0,150}sticker:\i(?:,|}))(?=[^{}]{0,150}closePopout:\i(?:,|}))/,
+                    replace: "fakeNitroRenderableSticker,"
                 },
                 {
                     // Add the fake nitro sticker notice
-                    match: /(let \i,{sticker:\i,channel:\i,closePopout:\i.+?}=(\i).+?;)(.+?description:)(\i)(?=,sticker:\i)/,
-                    replace: (_, rest, props, rest2, reactNode) => `${rest}let{fakeNitroRenderableSticker}=${props};${rest2}$self.addFakeNotice(${FakeNoticeType.Sticker},${reactNode},!!fakeNitroRenderableSticker?.fake)`
+                    match: /(?<=description:)\i(?=,sticker:\i)/,
+                    replace: `$self.addFakeNotice(${FakeNoticeType.Sticker},$&,!!fakeNitroRenderableSticker?.fake)`
                 }
             ]
         },
@@ -383,8 +387,8 @@ export default definePlugin({
             predicate: () => settings.store.transformEmojis,
             replacement: {
                 // Export the emoji node to be used in the fake nitro emoji notice
-                match: /isDiscoverable:\i,shouldHideRoleSubscriptionCTA:\i,(?<={node:(\i),.+?)/,
-                replace: (m, node) => `${m}fakeNitroNode:${node},`
+                match: /shouldHideRoleSubscriptionCTA:\i(?=,|})/,
+                replace: "$&,fakeNitroNode:arguments[0].node"
             }
         },
         {
@@ -392,8 +396,8 @@ export default definePlugin({
             predicate: () => settings.store.transformEmojis,
             replacement: {
                 // Add the fake nitro emoji notice
-                match: /(?<=emojiDescription:)(\i)(?<=\1=function\(\i\)\{let\{sourceType:.+?)/,
-                replace: (_, reactNode) => `$self.addFakeNotice(${FakeNoticeType.Emoji},${reactNode},!!arguments[0]?.fakeNitroNode?.fake)`
+                match: /(?<=emojiDescription:)\i(?=,|})/,
+                replace: `$self.addFakeNotice(${FakeNoticeType.Emoji},$&,!!arguments[0]?.fakeNitroNode?.fake)`
             }
         },
         // Separate patch for allowing using custom app icons
@@ -408,15 +412,11 @@ export default definePlugin({
         {
             find: 'type:"GUILD_SOUNDBOARD_SOUND_CREATE"',
             replacement: {
-                match: /(?<=type:"(?:SOUNDBOARD_SOUNDS_RECEIVED|GUILD_SOUNDBOARD_SOUND_CREATE|GUILD_SOUNDBOARD_SOUND_UPDATE|GUILD_SOUNDBOARD_SOUNDS_UPDATE)".+?available:)\i\.available/g,
+                match: /(?<=type:"(?:SOUNDBOARD_SOUNDS_RECEIVED|GUILD_SOUNDBOARD_SOUND_CREATE|GUILD_SOUNDBOARD_SOUND_UPDATE|GUILD_SOUNDBOARD_SOUNDS_UPDATE)".{0,250}?available:)\i\.available/g,
                 replace: "true"
             }
         },
     ],
-
-    get guildId() {
-        return getCurrentGuild()?.id;
-    },
 
     get canUseEmotes() {
         return (OverridePremiumTypeStore.getState().premiumTypeActual ?? 0) > 0;
@@ -812,7 +812,8 @@ export default definePlugin({
         if (e.type === 0) return true;
         if (e.available === false) return false;
 
-        if (isUnusableRoleSubscriptionEmoji(e, this.guildId, true)) return false;
+        const guildId = ChannelStore.getChannel(channelId)?.guild_id;
+        if (isUnusableRoleSubscriptionEmoji(e, guildId, true)) return false;
 
         let isUsableTwitchSubEmote = false;
         if (e.managed && e.guildId) {
@@ -821,9 +822,9 @@ export default definePlugin({
         }
 
         if (this.canUseEmotes || isUsableTwitchSubEmote)
-            return e.guildId === this.guildId || hasExternalEmojiPerms(channelId);
+            return e.guildId === guildId || hasExternalEmojiPerms(channelId);
         else
-            return !e.animated && e.guildId === this.guildId;
+            return !e.animated && e.guildId === guildId;
     },
 
     start() {
@@ -834,7 +835,7 @@ export default definePlugin({
         }
 
         this.preSend = addMessagePreSendListener(async (channelId, messageObj, options) => {
-            const { guildId } = this;
+            const guildId = ChannelStore.getChannel(channelId)?.guild_id;
 
             let hasBypass = false;
 

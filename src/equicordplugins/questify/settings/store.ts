@@ -13,9 +13,9 @@ import { QuestFeaturesSetting } from "../components/questFeaturesSetting";
 import { QuestNotificationsSetting } from "../components/questNotificationsSetting";
 import { QuestTilesSetting } from "../components/questTilesSetting";
 import { ReorderQuestsSetting } from "../components/reorderQuestsSetting";
-import { defaultClaimedSubsort, defaultDisableAccountPanelPromo, defaultDisableAccountPanelQuestProgress, defaultDisableFriendsListPromo, defaultDisableMembersListPromo, defaultDisableOrbsAndQuestsBadges, defaultDisableQuestsEverything, defaultDisableRelocationNotices, defaultDisableSponsoredBanner, defaultExpiredSubsort, defaultIgnoredQuestIDs, defaultIgnoredSubsort, defaultIsOnQuestsPage, defaultLastQuestPageFilters, defaultLastQuestPageSort, defaultLeftClickAction, defaultMiddleClickAction, defaultNewExcludedQuestAlertSound, defaultNewExcludedQuestAlertVolume, defaultNewQuestAlertSound, defaultNewQuestAlertVolume, defaultNotifyOnNewExcludedQuests, defaultNotifyOnNewQuests, defaultNotifyOnQuestComplete, defaultQuestButtonBadgeColor, defaultQuestButtonBadgeCount, defaultQuestButtonDisplay, defaultQuestButtonIncludedTypes, defaultQuestButtonIndicator, defaultQuestCompletedAlertSound, defaultQuestCompletedAlertVolume, defaultQuestFetchInterval, defaultQuestOrder, defaultQuestTileClaimedColorSetting, defaultQuestTileExpiredColorSetting, defaultQuestTileGradient, defaultQuestTileIgnoredColorSetting, defaultQuestTilePreload, defaultQuestTileUnclaimedColorSetting, defaultRememberQuestPageFilters, defaultRememberQuestPageSort, defaultResumeQuestIDs, defaultRightClickAction, defaultUnclaimedSubsort, type QuestButtonAction, type QuestButtonDisplayMode, type QuestButtonIncludedTypes, type QuestButtonIndicatorMode, type QuestOrderStatus } from "./def";
+import { defaultClaimedSubsort, defaultDisableAccountPanelPromo, defaultDisableAccountPanelQuestProgress, defaultDisableFriendsListPromo, defaultDisableMembersListPromo, defaultDisableOrbsAndQuestsBadges, defaultDisableQuestsEverything, defaultDisableRelocationNotices, defaultDisableSponsoredBanner, defaultExpiredSubsort, defaultIgnoredQuestIDs, defaultIgnoredSubsort, defaultIsOnQuestsPage, defaultLastQuestPageFilters, defaultLastQuestPageSort, defaultLeftClickAction, defaultMiddleClickAction, defaultNewExcludedQuestAlertSound, defaultNewExcludedQuestAlertVolume, defaultNewQuestAlertSound, defaultNewQuestAlertVolume, defaultNotifyOnNewExcludedQuests, defaultNotifyOnNewQuests, defaultNotifyOnQuestComplete, defaultQuestButtonBadgeColor, defaultQuestButtonBadgeCount, defaultQuestButtonDisplay, defaultQuestButtonIncludedTypes, defaultQuestButtonIndicator, defaultQuestCompletedAlertSound, defaultQuestCompletedAlertVolume, defaultQuestFetchInterval, defaultQuestOrder, defaultQuestTileClaimedColorSetting, defaultQuestTileExpiredColorSetting, defaultQuestTileGradient, defaultQuestTileIgnoredColorSetting, defaultQuestTilePreload, defaultQuestTileUnclaimedColorSetting, defaultRememberQuestPageFilters, defaultRememberQuestPageSort, defaultRightClickAction, defaultUnclaimedSubsort, type QuestButtonAction, type QuestButtonDisplayMode, type QuestButtonIncludedTypes, type QuestButtonIndicatorMode, type QuestOrderStatus } from "./def";
 
-const MIGRATION_TARGET = 1;
+const MIGRATION_TARGET = 2;
 const CURRENT_SETTINGS = PlainSettings.plugins.Questify;
 
 if (CURRENT_SETTINGS) {
@@ -27,7 +27,12 @@ if (CURRENT_SETTINGS) {
         migrationVersion = 1;
     }
 
-    if (migrationVersion !== CURRENT_SETTINGS.migrationVersion) {
+    if (migrationVersion < 2) {
+        const currentSettings = PlainSettings.plugins.Questify;
+        for (const key of ["resumeQuestIDs", "resumeInterruptedQuests", "autoCompleteQuestTypes", "autoCompleteQuestsSimultaneously", "completeVideoQuestsQuicker", "makeMobileVideoQuestsDesktopCompatible", "allowChangingDangerousSettings"]) {
+            delete currentSettings[key];
+        }
+        currentSettings.migrationVersion = 2;
         SettingsStore.markAsChanged();
     }
 }
@@ -329,12 +334,6 @@ export const settings = definePluginSettings({
         type: OptionType.CUSTOM,
         description: "An array of Quest IDs that are ignored.",
         default: defaultIgnoredQuestIDs,
-        hidden: true,
-    },
-    resumeQuestIDs: {
-        type: OptionType.CUSTOM,
-        description: "An array of Quest IDs that are being or are queued to be auto-completed in the background.",
-        default: defaultResumeQuestIDs,
         hidden: true,
     },
 });

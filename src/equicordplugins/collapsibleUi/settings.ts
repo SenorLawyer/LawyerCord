@@ -9,43 +9,36 @@ import { OptionType } from "@utils/types";
 
 export const panelRegistry = {
     guildBar: {
-        id: "guildBar",
         classId: "guild-bar",
         label: "Guild Bar",
         collapsedKey: "guildBarCollapsed",
     },
     channelList: {
-        id: "channelList",
         classId: "channel-list",
         label: "Channel List",
         collapsedKey: "channelListCollapsed",
     },
     membersList: {
-        id: "membersList",
         classId: "members-list",
         label: "Members List",
         collapsedKey: "membersListCollapsed",
     },
     chatButtons: {
-        id: "chatButtons",
         classId: "chat-buttons",
         label: "Message Buttons",
         collapsedKey: "chatButtonsCollapsed",
     },
     titleBar: {
-        id: "titleBar",
         classId: "title-bar",
         label: "Title Bar",
         collapsedKey: "titleBarCollapsed",
     },
     headerBar: {
-        id: "headerBar",
         classId: "header-bar",
         label: "Header Bar",
         collapsedKey: "headerBarCollapsed",
     },
     userArea: {
-        id: "userArea",
         classId: "user-area",
         label: "User Area",
         collapsedKey: "userAreaCollapsed",

@@ -33,28 +33,17 @@ function DecodeIcon() {
     );
 }
 
-function isValidUtf8String(str) {
-    try {
-        new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(str.split("").map(char => char.charCodeAt(0))));
-        return true;
-    } catch (e) {
-        return false;
-    }
-}
-
 function findBase64Strings(content) {
     const base64Regex = /\b[A-Za-z0-9+/]{4,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?\b/g;
     const matches = content.match(base64Regex);
     return matches || [];
 }
 
-function decodeBase64Strings(base64Strings) {
+function decodeBase64Strings(base64Strings: string[]) {
     return base64Strings.map(base64 => {
         try {
-            const decoded = atob(base64);
-            return isValidUtf8String(decoded) ? decoded : null;
-        } catch (e) {
-            console.error("Failed to decode base64 content:", e);
+            return new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(atob(base64), char => char.charCodeAt(0)));
+        } catch {
             return null;
         }
     }).filter(decoded => decoded !== null);

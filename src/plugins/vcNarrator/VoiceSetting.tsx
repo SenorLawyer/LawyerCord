@@ -6,20 +6,10 @@
 
 import { Heading } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
-import { SearchableSelect, useMemo, useState } from "@webpack/common";
+import { IS_LINUX } from "@utils/constants";
+import { lodash, SearchableSelect, useEffect, useMemo, useState } from "@webpack/common";
 
 import { getCurrentVoice, settings } from "./settings";
-
-// TODO: replace by [Object.groupBy](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/groupBy) once it has more maturity
-
-function groupBy<T extends object, K extends PropertyKey>(arr: T[], fn: (obj: T) => K) {
-    return arr.reduce((acc, obj) => {
-        const value = fn(obj);
-        acc[value] ??= [];
-        acc[value].push(obj);
-        return acc;
-    }, {} as Record<K, T[]>);
-}
 
 interface PickerProps {
     voice: string | undefined;
@@ -48,24 +38,25 @@ function SimplePicker({ voice, voices }: PickerProps) {
 const languageNames = new Intl.DisplayNames(["en"], { type: "language" });
 
 function ComplexPicker({ voice, voices }: PickerProps) {
-    const groupedVoices = useMemo(() => groupBy(voices, voice => voice.lang), [voices]);
+    const groupedVoices = useMemo(() => lodash.groupBy(voices, voice => voice.lang), [voices]);
 
     const languageNameMapping = useMemo(() => {
-        const list = [] as Record<"name" | "friendlyName", string>[];
+        const list: { name: string; friendlyName: string; }[] = [];
 
         for (const name in groupedVoices) {
+            let friendlyName = name;
             try {
-                const friendlyName = languageNames.of(name);
-                if (friendlyName) {
-                    list.push({ name, friendlyName });
-                }
-            } catch { }
+                friendlyName = languageNames.of(name) ?? name;
+            } catch {
+                friendlyName = name;
+            }
+            list.push({ name, friendlyName });
         }
 
         return list;
     }, [groupedVoices]);
 
-    const [selectedLanguage, setSelectedLanguage] = useState(() => getCurrentVoice()?.lang ?? languageNameMapping[0].name);
+    const [selectedLanguage, setSelectedLanguage] = useState(() => getCurrentVoice(voices)?.lang ?? languageNameMapping[0].name);
 
     if (languageNameMapping.length === 1) {
         return (
@@ -76,7 +67,8 @@ function ComplexPicker({ voice, voices }: PickerProps) {
         );
     }
 
-    const voicesForLanguage = groupedVoices[selectedLanguage];
+    const language = languageNameMapping.find(item => item.name === selectedLanguage)?.name ?? languageNameMapping[0].name;
+    const voicesForLanguage = groupedVoices[language];
 
     const languageOptions = languageNameMapping.map(l => ({
         label: l.friendlyName,
@@ -89,7 +81,7 @@ function ComplexPicker({ voice, voices }: PickerProps) {
             <SearchableSelect
                 placeholder="Select a language"
                 options={languageOptions}
-                value={languageOptions.find(l => l.value === selectedLanguage)?.value}
+                value={language}
                 onChange={v => setSelectedLanguage(v)}
                 maxVisibleItems={5}
                 closeOnSelect
@@ -103,12 +95,28 @@ function ComplexPicker({ voice, voices }: PickerProps) {
     );
 }
 
+const VOICE_SETTINGS: "voice"[] = ["voice"];
+
 function VoiceSetting() {
-    const voices = useMemo(() => window.speechSynthesis?.getVoices() ?? [], []);
-    const { voice } = settings.use(["voice"]);
+    const [voices, setVoices] = useState(() => window.speechSynthesis?.getVoices() ?? []);
+    const { voice } = settings.use(VOICE_SETTINGS);
+
+    useEffect(() => {
+        const synthesis = window.speechSynthesis;
+        if (!synthesis) return;
+
+        const updateVoices = () => setVoices(synthesis.getVoices());
+        synthesis.addEventListener("voiceschanged", updateVoices);
+        updateVoices();
+        return () => synthesis.removeEventListener("voiceschanged", updateVoices);
+    }, []);
 
     if (!voices.length)
-        return <Paragraph>No voices found.</Paragraph>;
+        return <Paragraph>
+            No narrator voices are available yet. {IS_LINUX
+                ? "If none load, install speech-dispatcher or espeak and run Discord with the --enable-speech-dispatcher flag."
+                : "If none load, check the speech voices installed in your operating system settings."}
+        </Paragraph>;
 
     // espeak on Linux has a ridiculous amount of voices (26k for me).
     // If there are more than 20 voices, we split it up into two pickers, one for language, then one with only the voices for that language.

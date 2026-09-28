@@ -6,7 +6,7 @@
 
 import { PinOrder, PrivateChannelSortStore, settings } from "@plugins/pinDms";
 import { useForceUpdater } from "@utils/react";
-import { UserStore } from "@webpack/common";
+import { SelectedChannelStore, useEffect, UserStore } from "@webpack/common";
 
 export interface Category {
     id: string;
@@ -16,38 +16,47 @@ export interface Category {
     collapsed?: boolean;
 }
 
+const SETTINGS_KEYS = ["pinOrder", "canCollapseDmSection", "dmSectionCollapsed", "userBasedCategoryList"] satisfies Array<keyof typeof settings.store>;
+
 let forceUpdateDms: (() => void) | undefined = undefined;
 let lastPrivateChannelIds: string[] | null = null;
 const lastSortOrder = new Map<string, number>();
-export let currentUserCategories: Category[] = [];
 
-export async function init() {
+export function getCurrentUserCategories(): Category[] {
     const userId = UserStore.getCurrentUser()?.id;
-    if (userId == null) return;
+    return userId == null ? [] : settings.store.userBasedCategoryList[userId] ??= [];
+}
 
-    currentUserCategories = settings.store.userBasedCategoryList[userId] ??= [];
+export function init() {
     forceUpdateDms?.();
 }
 
 export function usePinnedDms() {
-    forceUpdateDms = useForceUpdater();
-    settings.use(["pinOrder", "canCollapseDmSection", "dmSectionCollapsed", "userBasedCategoryList"]);
+    const forceUpdate = useForceUpdater();
+    useEffect(() => {
+        forceUpdateDms = forceUpdate;
+        return () => {
+            if (forceUpdateDms === forceUpdate) forceUpdateDms = undefined;
+        };
+    }, [forceUpdate]);
+    settings.use(SETTINGS_KEYS);
 }
 
 export function getCategory(id: string) {
-    return currentUserCategories.find(c => c.id === id);
+    return getCurrentUserCategories().find(c => c.id === id);
 }
 
 export function getCategoryByIndex(index: number) {
-    return currentUserCategories[index];
+    return getCurrentUserCategories()[index];
 }
 
 export function createCategory(category: Category) {
-    currentUserCategories.push(category);
+    const categories = getCurrentUserCategories();
+    if (!categories.some(c => c.id === category.id)) categories.push(category);
 }
 
 export function addChannelToCategory(channelId: string, categoryId: string) {
-    const category = currentUserCategories.find(c => c.id === categoryId);
+    const category = getCurrentUserCategories().find(c => c.id === categoryId);
     if (category == null) return;
 
     if (category.channels.includes(channelId)) return;
@@ -56,21 +65,22 @@ export function addChannelToCategory(channelId: string, categoryId: string) {
 }
 
 export function removeChannelFromCategory(channelId: string) {
-    const category = currentUserCategories.find(c => c.channels.includes(channelId));
+    const category = getCurrentUserCategories().find(c => c.channels.includes(channelId));
     if (category == null) return;
 
     category.channels = category.channels.filter(c => c !== channelId);
 }
 
 export function removeCategory(categoryId: string) {
-    const categoryIndex = currentUserCategories.findIndex(c => c.id === categoryId);
+    const categories = getCurrentUserCategories();
+    const categoryIndex = categories.findIndex(c => c.id === categoryId);
     if (categoryIndex === -1) return;
 
-    currentUserCategories.splice(categoryIndex, 1);
+    categories.splice(categoryIndex, 1);
 }
 
 export function collapseCategory(id: string, value = true) {
-    const category = currentUserCategories.find(c => c.id === id);
+    const category = getCurrentUserCategories().find(c => c.id === id);
     if (category == null) return;
 
     category.collapsed = value;
@@ -78,15 +88,15 @@ export function collapseCategory(id: string, value = true) {
 
 // Utils
 export function isPinned(id: string) {
-    return currentUserCategories.some(c => c.channels.includes(id));
+    return getCurrentUserCategories().some(c => c.channels.includes(id));
 }
 
 export function categoryLen() {
-    return currentUserCategories.length;
+    return getCurrentUserCategories().length;
 }
 
 export function getSections() {
-    return currentUserCategories.reduce((acc, category) => {
+    return getCurrentUserCategories().reduce((acc, category) => {
         acc.push(category.channels.length === 0 ? 1 : category.channels.length);
         return acc;
     }, [] as number[]);
@@ -118,9 +128,10 @@ export function getCategoryChannels(category: Category): string[] {
 }
 
 export function getAllUncollapsedChannels() {
-    return currentUserCategories
-        .filter(c => !c.collapsed)
-        .flatMap(getCategoryChannels);
+    const selectedChannelId = SelectedChannelStore.getChannelId();
+    return getCurrentUserCategories().flatMap(category => category.collapsed
+        ? category.channels.filter(id => id === selectedChannelId)
+        : getCategoryChannels(category));
 }
 
 // Move categories
@@ -132,14 +143,15 @@ export const canMoveArrayInDirection = (array: any[], index: number, direction: 
 };
 
 export const canMoveCategoryInDirection = (id: string, direction: -1 | 1) => {
-    const categoryIndex = currentUserCategories.findIndex(m => m.id === id);
-    return canMoveArrayInDirection(currentUserCategories, categoryIndex, direction);
+    const categories = getCurrentUserCategories();
+    const categoryIndex = categories.findIndex(m => m.id === id);
+    return canMoveArrayInDirection(categories, categoryIndex, direction);
 };
 
 export const canMoveCategory = (id: string) => canMoveCategoryInDirection(id, -1) || canMoveCategoryInDirection(id, 1);
 
 export const canMoveChannelInDirection = (channelId: string, direction: -1 | 1) => {
-    const category = currentUserCategories.find(c => c.channels.includes(channelId));
+    const category = getCurrentUserCategories().find(c => c.channels.includes(channelId));
     if (category == null) return false;
 
     const channelIndex = category.channels.indexOf(channelId);
@@ -152,14 +164,15 @@ function swapElementsInArray(array: any[], index1: number, index2: number) {
 }
 
 export function moveCategory(id: string, direction: -1 | 1) {
-    const a = currentUserCategories.findIndex(m => m.id === id);
+    const categories = getCurrentUserCategories();
+    const a = categories.findIndex(m => m.id === id);
     const b = a + direction;
 
-    swapElementsInArray(currentUserCategories, a, b);
+    swapElementsInArray(categories, a, b);
 }
 
 export function moveChannel(channelId: string, direction: -1 | 1) {
-    const category = currentUserCategories.find(c => c.channels.includes(channelId));
+    const category = getCurrentUserCategories().find(c => c.channels.includes(channelId));
     if (category == null) return;
 
     const a = category.channels.indexOf(channelId);

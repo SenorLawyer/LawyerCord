@@ -106,21 +106,22 @@ export default definePlugin({
             drop(item: { id: string; }) {
                 const source = item.id;
                 const target = emoji?.uniqueName ?? emoji?.id;
-                function update(this: { source: string; target: string; }, e: { emojis: string[]; }) {
-                    if (this.source === this.target) {
+                function update(e: { emojis: string[]; }) {
+                    if (source === target) {
                         return false;
                     }
-                    const sourceIndex = e.emojis.findIndex(emoji => emoji === this.source);
-                    const targetIndex = e.emojis.findIndex(emoji => emoji === this.target);
+                    const sourceIndex = e.emojis.indexOf(source);
+                    const targetIndex = e.emojis.indexOf(target);
+                    if (sourceIndex === -1 || targetIndex === -1) return false;
                     // Adjust final index to account for removal of source emoji
                     const finalIndex = targetIndex < sourceIndex ? targetIndex : targetIndex - 1;
                     if (sourceIndex === finalIndex) {
                         return false;
                     }
                     e.emojis.splice(sourceIndex, 1);
-                    e.emojis.splice(finalIndex, 0, this.source);
+                    e.emojis.splice(finalIndex, 0, source);
                 }
-                UserSettingsActionCreators.FrecencyUserSettingsActionCreators.updateAsync("favoriteEmojis", update.bind({ source, target }), UserSettingsDelay.INFREQUENT_USER_ACTION);
+                UserSettingsActionCreators.FrecencyUserSettingsActionCreators.updateAsync("favoriteEmojis", update, UserSettingsDelay.INFREQUENT_USER_ACTION);
             }
         }), [emoji]);
     },

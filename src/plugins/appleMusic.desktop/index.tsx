@@ -185,10 +185,7 @@ const settings = definePluginSettings({
 });
 
 function customFormat(formatStr: string, data: TrackData) {
-    return formatStr
-        .replaceAll("{name}", data.name)
-        .replaceAll("{album}", data.album ?? "")
-        .replaceAll("{artist}", data.artist ?? "");
+    return formatStr.replace(/\{(name|album|artist)\}/g, (_, key: "name" | "album" | "artist") => data[key] ?? "");
 }
 
 function getLink(type: LinkType, data: TrackData) {

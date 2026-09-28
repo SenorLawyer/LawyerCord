@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import type { FFmpeg } from "@ffmpeg/ffmpeg";
-
 export interface CategoryImageProps {
     src: string;
     alt?: string;
@@ -57,6 +55,7 @@ export interface LineEmojiPack {
 }
 
 export interface PickerHeaderProps {
+    query: string;
     onQueryChange: (query: string) => void;
 }
 
@@ -152,9 +151,4 @@ export interface DynamicStickerPackMeta extends StickerPackMeta {
 
 export interface StickerPack extends StickerPackMeta {
     stickers: Sticker[];
-}
-
-export interface FFmpegState {
-    ffmpeg?: FFmpeg;
-    isLoaded: boolean;
 }

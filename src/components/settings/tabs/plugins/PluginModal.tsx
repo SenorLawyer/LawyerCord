@@ -32,10 +32,11 @@ import { classNameFactory } from "@utils/css";
 import { proxyLazy } from "@utils/lazy";
 import { Margins } from "@utils/margins";
 import { classes, isObjectEmpty } from "@utils/misc";
+import { useForceUpdater } from "@utils/react";
 import { OptionType, Plugin, PluginTag } from "@utils/types";
 import { RenderModalProps, User } from "@vencord/discord-types";
 import { findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
-import { Clickable, FluxDispatcher, Modal, openModal, React, Text, Toasts, Tooltip, useEffect, useMemo, UserStore, UserSummaryItem, UserUtils, useState } from "@webpack/common";
+import { Clickable, FluxDispatcher, lodash, Modal, openModal, React, Text, Toasts, Tooltip, useEffect, useMemo, useRef, UserStore, UserSummaryItem, UserUtils, useState } from "@webpack/common";
 import { Constructor } from "type-fest";
 
 import { PluginMeta } from "~plugins";
@@ -47,7 +48,6 @@ import { GithubButton, WebsiteButton } from "./LinkIconButton";
 const cl = classNameFactory("vc-plugin-modal-");
 
 const AvatarStyles = findCssClassesLazy("moreUsers", "avatar", "clickableAvatar");
-const CloseButton = findComponentByCodeLazy("CLOSE_BUTTON_LABEL");
 const ConfirmModal = findComponentByCodeLazy('parentComponent:"ConfirmModal"');
 const WarningIcon = findComponentByCodeLazy("3.15H3.29c-1.74");
 const UserRecord: Constructor<Partial<User>> = proxyLazy(() => UserStore.getCurrentUser().constructor) as any;
@@ -87,6 +87,17 @@ function PluginTags({ tags }: { tags: PluginTag[]; }) {
 export default function PluginModal({ plugin, onRestartNeeded, onClose, transitionState }: PluginModalProps) {
     const pluginSettings = useSettings([`plugins.${plugin.name}.*`]).plugins[plugin.name];
     const hasSettings = hasAnyVisibleSettings(plugin);
+    const resetVersion = useRef(0);
+    const forceUpdate = useForceUpdater();
+    const changeHandlers = useMemo(() => Object.fromEntries(
+        Object.entries(plugin.settings?.def ?? {}).map(([key, option]) => [key, debounce((newValue: unknown, previousValue: unknown, version: number) => {
+            const currentSettings = plugin.settings?.store;
+            if (!currentSettings || version !== resetVersion.current || !lodash.isEqual(currentSettings[key], previousValue)) return;
+
+            currentSettings[key] = newValue;
+            if (option.restartNeeded) onRestartNeeded(key);
+        })])
+    ), [plugin, onRestartNeeded]);
 
     // avoid layout shift by showing dummy users while loading users
     const fallbackAuthors = useMemo(() => [makeDummyUser({ username: "Loading...", id: "-1465912127305809920" })], []);
@@ -110,10 +121,14 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
     }, [plugin.authors]);
 
     function handleResetClick() {
-        openWarningModal(plugin, onRestartNeeded);
+        openWarningModal(plugin, onRestartNeeded, true, undefined, () => {
+            resetVersion.current++;
+            forceUpdate();
+        });
     }
 
     function renderSettings() {
+        const version = resetVersion.current;
         const { settings } = plugin;
         if (!hasSettings || !settings)
             return <Paragraph>There are no settings for this plugin.</Paragraph>;
@@ -123,22 +138,13 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
 
             if (isSettingHidden(settings, setting)) return null;
 
-            function onChange(newValue: any) {
-                const option = plugin.settings!.def[key];
-                if (!option || option.type === OptionType.CUSTOM) return;
-
-                pluginSettings[key] = newValue;
-
-                if (option.restartNeeded) onRestartNeeded(key);
-            }
-
             const Component = OptionComponentMap[setting.type];
             return (
-                <ErrorBoundary noop key={key}>
+                <ErrorBoundary noop key={`${version}:${key}`}>
                     <Component
                         id={key}
                         setting={setting}
-                        onChange={debounce(onChange)}
+                        onChange={newValue => changeHandlers[key](newValue, lodash.cloneDeep(pluginSettings[key]), version)}
                         pluginSettings={pluginSettings}
                         definedSettings={settings}
                         closePluginSettings={onClose}
@@ -173,7 +179,7 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
     }
 
     const pluginMeta = PluginMeta[plugin.name];
-    const isEquicordPlugin = pluginMeta.folderName.startsWith("src/equicordplugins/") ?? false;
+    const isEquicordPlugin = pluginMeta.folderName.startsWith("src/equicordplugins/");
 
     return (
         <Modal
@@ -217,7 +223,7 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
                                 renderUser={(user: User) => (
                                     <Clickable
                                         className={AvatarStyles.clickableAvatar}
-                                        onClick={() => isEquicordPlugin ? openContributorModal(user) : openContributorModal(user)}
+                                        onClick={() => openContributorModal(user)}
                                     >
                                         <img
                                             className={AvatarStyles.avatar}
@@ -298,9 +304,9 @@ function resetSettings(plugin: Plugin, onRestartNeeded?: (pluginName: string) =>
         if (key === "enabled") continue;
 
         const setting = defaultSettings[key];
-        setting.type = setting.type ?? OptionType.STRING;
-
-        if (setting.type === OptionType.STRING) {
+        if (setting.type === OptionType.SELECT) {
+            newSettings[key] = setting.options.find(option => option.default)?.value;
+        } else if (setting.type === OptionType.STRING) {
             newSettings[key] = setting.default !== undefined && setting.default !== "" ? setting.default : "";
         } else if ("default" in setting && setting.default !== undefined) {
             newSettings[key] = setting.default;
@@ -341,9 +347,8 @@ export function openWarningModal(plugin?: Plugin | null, onRestartNeeded?: (plug
             onConfirm={() => {
                 if (isPlugin && plugin) {
                     resetSettings(plugin, onRestartNeeded);
-                } else {
-                    reset?.();
                 }
+                reset?.();
             }}
             onCancel={props.onClose}
         >

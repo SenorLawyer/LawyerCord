@@ -16,14 +16,22 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import "./style.css";
+
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { definePluginSettings } from "@api/Settings";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { ImageIcon } from "@components/Icons";
 import { Devs } from "@utils/constants";
 import { openImageModal } from "@utils/discord";
+import { classes } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import type { Channel, Guild, User } from "@vencord/discord-types";
-import { GuildMemberStore, IconUtils, Menu } from "@webpack/common";
+import { Clickable, GuildMemberStore, IconUtils, Menu, React } from "@webpack/common";
+
+interface BannerProps extends React.HTMLAttributes<HTMLDivElement> {
+    bannerSrc?: string | null;
+}
 
 interface UserContextProps {
     channel: Channel;
@@ -189,6 +197,15 @@ export default definePlugin({
     openAvatar,
     openBanner,
 
+    renderBanner: ErrorBoundary.wrap(({ bannerSrc, ...props }: BannerProps) => bannerSrc
+        ? <Clickable
+            {...props}
+            className={classes(props.className, "vc-viewicons-banner")}
+            aria-label="View Banner"
+            onClick={() => openBanner(bannerSrc)}
+        />
+        : <div {...props} />, { noop: true }),
+
     contextMenus: {
         "user-context": UserContext,
         "guild-context": GuildContext,
@@ -200,41 +217,41 @@ export default definePlugin({
         {
             find: "return{avatarProps:{",
             replacement: {
-                match: /(?<=avatarProps:(\i),eventHandlers:(\i).{0,100}?)return null==/,
-                replace: 'Object.assign($2,{style:{cursor:"pointer"},onClick:()=>$self.openAvatar($1.src)});$&',
+                match: /return null==(\i)&&null==(\i)(?=\?\(0,\i\.jsx\)\("div",\{\.\.\.\i,className:\i,children:\(0,\i\.jsx\)\(\i,\{\.\.\.(\i),)/,
+                replace: "if(null==$1&&null==$2)$2=()=>$self.openAvatar($3.src);$&",
             }
         },
         // Banners
         {
-            find: 'backgroundColor:"COMPLETE"',
+            find: '"--custom-cutout-radius":',
             replacement: {
-                match: /(overflow:"visible",.{0,125}?!1\),)style:{(?=.+?backgroundImage:null!=(\i)\?`url\(\$\{\2\}\))/,
-                replace: (_, rest, bannerSrc) => `${rest}onClick:()=>${bannerSrc}!=null&&$self.openBanner(${bannerSrc}),style:{cursor:${bannerSrc}!=null?"pointer":void 0,`
+                match: /(?<=return\(0,\i\.jsx\)\()"div",\{/,
+                replace: "$self.renderBanner,{bannerSrc:arguments[0].bannerSrc,"
             }
         },
         // Group DMs top small & large icon
         {
             find: '["aria-hidden"],"aria-label":',
             replacement: {
-                match: /null==\i\.icon\?.+?src:(\(0,\i\.\i\).+?\))(?=[,}])/,
+                match: /(?<=,src:)(\(0,\i\.\i\)\(\i,\d+,\i\))(?=[,}])/,
                 // We have to check that icon is not an unread GDM in the server bar
-                replace: (m, iconUrl) => `${m},onClick:()=>arguments[0]?.size!=="SIZE_48"&&$self.openAvatar(${iconUrl})`
+                replace: '$&,onClick:()=>arguments[0]?.size!=="SIZE_48"&&$self.openAvatar($1)'
             }
         },
         // User DMs top small icon
         {
             find: ".channel.getRecipientId(),",
             replacement: {
-                match: /(?=,src:(\i.getAvatarURL\(.+?[)]))/,
-                replace: (_, avatarUrl) => `,onClick:()=>$self.openAvatar(${avatarUrl})`
+                match: /(?=,src:(\i\.getAvatarURL\([^()]{0,100}\)))/,
+                replace: ",onClick:()=>$self.openAvatar($1)"
             }
         },
         // User Dms top large icon
         {
             find: ".EMPTY_GROUP_DM)",
             replacement: {
-                match: /(?<=SIZE_80,)(?=src:(.+?\))[,}])/,
-                replace: (_, avatarUrl) => `onClick:()=>$self.openAvatar(${avatarUrl}),`
+                match: /(?<=SIZE_80,)(?=src:(\(0,\i\.\i\)\(\i,\d+,\i\))[,}])/,
+                replace: "onClick:()=>$self.openAvatar($1),"
             }
         }
     ]

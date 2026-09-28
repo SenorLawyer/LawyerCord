@@ -114,13 +114,6 @@ function isFriendAllowlisted(friendId: string) {
     return allowedFriendIds.size === 0 || allowedFriendIds.has(friendId);
 }
 
-// Blatantly stolen from VcNarrator plugin
-
-// For every user, channelId and oldChannelId will differ when moving channel.
-// Only for the local user, channelId and oldChannelId will be the same when moving channel,
-// for some ungodly reason
-let clientOldChannelId: string | undefined;
-
 export default definePlugin({
     name: "VoiceJoinMessages",
     description: "Receive client-side ephemeral messages when your friends join voice channels",
@@ -133,19 +126,14 @@ export default definePlugin({
             if (!clientUserId) return;
 
             for (const state of voiceStates) {
-                // mmmm hacky workaround
-                const { userId, channelId } = state;
-                let { oldChannelId } = state;
-                if (userId === clientUserId && channelId !== clientOldChannelId) {
-                    oldChannelId = clientOldChannelId;
-                    clientOldChannelId = channelId;
-                }
+                const { userId, channelId, oldChannelId } = state;
+                if (userId === clientUserId) continue;
                 if (settings.store.ignoreBlockedUsers && RelationshipStore.isBlocked(userId)) continue;
                 // Ignore events from same channel
                 if (oldChannelId === channelId) continue;
 
                 // Friend joined a voice channel
-                if (settings.store.friendDirectMessages && (!oldChannelId && channelId) && userId !== clientUserId && isFriendAllowlisted(userId)) {
+                if (settings.store.friendDirectMessages && (!oldChannelId && channelId) && isFriendAllowlisted(userId)) {
                     const channel = ChannelStore.getChannel(channelId);
                     if (!channel || !PermissionStore.can(PermissionsBits.VIEW_CHANNEL, channel)) continue;
 
@@ -184,12 +172,10 @@ export default definePlugin({
     start() {
         allowedFriendIds = parseUserIdSet(settings.store.allowedFriends);
         ignoredFriendIds = parseUserIdSet(settings.store.ignoredFriends);
-        clientOldChannelId = SelectedChannelStore.getVoiceChannelId?.();
     },
 
     stop() {
         allowedFriendIds = new Set();
         ignoredFriendIds = new Set();
-        clientOldChannelId = undefined;
     },
 });

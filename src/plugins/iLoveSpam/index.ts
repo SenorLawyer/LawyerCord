@@ -20,7 +20,7 @@ import { migratePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
 
-migratePluginSettings("IloveSpam", "iLoveSpam");
+migratePluginSettings("ILoveSpam", "IloveSpam", "iLoveSpam");
 export default definePlugin({
     name: "ILoveSpam",
     description: "Do not hide messages from 'likely spammers'",

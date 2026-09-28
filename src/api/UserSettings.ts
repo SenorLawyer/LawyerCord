@@ -71,7 +71,7 @@ export function getUserSetting<T = any>(group: string, name: string): UserSettin
 }
 
 /**
- * {@link getUserSettingDefinition}, lazy.
+ * {@link getUserSetting}, lazy.
  *
  * Get the setting with the given setting group and name.
  *

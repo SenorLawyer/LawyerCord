@@ -16,29 +16,20 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { DataStore } from "@api/index";
 import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
+import { clearPreviousChannel } from "@plugins/keepCurrentChannel";
 import { Devs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 import { maybePromptToUpdate } from "@utils/updater";
-import { filters, findBulk, proxyLazyWebpack } from "@webpack";
+import { findByPropsLazy } from "@webpack";
 import { closeAllModals, DraftType, ExpressionPickerStore, FluxDispatcher, NavigationRouter, SelectedChannelStore } from "@webpack/common";
 
 const CrashHandlerLogger = new Logger("CrashHandler");
 
-const { ModalStack, DraftManager } = proxyLazyWebpack(() => {
-    const [ModalStack, DraftManager] = findBulk(
-        filters.byProps("pushLazy", "popAll"),
-        filters.byProps("clearDraft", "saveDraft"),
-    );
-
-    return {
-        ModalStack,
-        DraftManager
-    };
-});
+const ModalStack = findByPropsLazy("pushLazy", "popAll");
+const DraftManager = findByPropsLazy("clearDraft", "saveDraft");
 
 const settings = definePluginSettings({
     attemptToPreventCrashes: {
@@ -52,6 +43,15 @@ const settings = definePluginSettings({
         default: false
     }
 });
+
+interface CrashState {
+    error: unknown;
+    info?: unknown;
+}
+
+interface CrashBoundary {
+    setState(state: CrashState): void;
+}
 
 let hasCrashedOnce = false;
 let isRecovering = false;
@@ -69,22 +69,18 @@ export default definePlugin({
         {
             find: "#{intl::ERRORS_UNEXPECTED_CRASH}",
             replacement: {
-                match: /this\.setState\((.+?)\)/,
-                replace: "$self.handleCrash(this,$1);"
+                match: /this\.setState\(/,
+                replace: "$self.handleCrash(this,"
             }
         }
     ],
 
-    handleCrash(_this: any, errorState: any) {
-        DataStore.del("KeepCurrentChannel_previousData");
+    handleCrash(_this: CrashBoundary, errorState: CrashState) {
+        void clearPreviousChannel();
 
-        if (IS_DEV) {
-            try {
-                if (errorState?.info && "componentStack" in errorState.info) {
-                    console.error("Component Stack:", errorState.info.componentStack);
-                }
-            } catch { }
-        }
+        const { info } = errorState;
+        if (IS_DEV && info !== null && typeof info === "object" && "componentStack" in info)
+            CrashHandlerLogger.error("Component Stack:", info.componentStack);
         _this.setState(errorState);
 
         // Already recovering, prevent error which happens more than once too fast to trigger another recover
@@ -93,32 +89,33 @@ export default definePlugin({
 
         // 1 ms timeout to avoid react breaking when re-rendering
         setTimeout(() => {
-            try {
-                // Prevent a crash loop with an error that could not be handled
-                if (!shouldAttemptRecover) {
-                    try {
-                        showNotification({
-                            color: "#eed202",
-                            title: "Discord has crashed!",
-                            body: "Awn :( Discord has crashed two times rapidly, not attempting to recover.",
-                            noPersist: true,
-                        });
-                    } catch { }
+            // Set isRecovering to false before setting the state to allow us to handle the next crash error correcty, in case it happens
+            setImmediate(() => isRecovering = false);
 
-                    return;
+            // Prevent a crash loop with an error that could not be handled
+            if (!shouldAttemptRecover) {
+                try {
+                    showNotification({
+                        color: "#eed202",
+                        title: "Discord has crashed!",
+                        body: "Awn :( Discord has crashed two times rapidly, not attempting to recover.",
+                        noPersist: true,
+                    });
+                } catch (err) {
+                    CrashHandlerLogger.debug("Failed to show crash notification.", err);
                 }
 
-                shouldAttemptRecover = false;
-                // This is enough to avoid a crash loop
-                setTimeout(() => shouldAttemptRecover = true, 1000);
-            } catch { }
+                return;
+            }
 
-            try {
-                if (!hasCrashedOnce) {
-                    hasCrashedOnce = true;
-                    maybePromptToUpdate("Uh oh, Discord has just crashed... but good news, there is a LawyerCord update available that might fix this issue! Would you like to update now?", true);
-                }
-            } catch { }
+            shouldAttemptRecover = false;
+            // This is enough to avoid a crash loop
+            setTimeout(() => shouldAttemptRecover = true, 1000);
+
+            if (!hasCrashedOnce) {
+                hasCrashedOnce = true;
+                void maybePromptToUpdate("Uh oh, Discord has just crashed... but good news, there is a LawyerCord update available that might fix this issue! Would you like to update now?", true);
+            }
 
             try {
                 if (settings.store.attemptToPreventCrashes) {
@@ -130,7 +127,7 @@ export default definePlugin({
         }, 1);
     },
 
-    handlePreventCrash(_this: any) {
+    handlePreventCrash(_this: CrashBoundary) {
         try {
             showNotification({
                 color: "#eed202",
@@ -138,16 +135,15 @@ export default definePlugin({
                 body: "Attempting to recover...",
                 noPersist: true,
             });
-        } catch { }
+        } catch (err) {
+            CrashHandlerLogger.debug("Failed to show recovery notification.", err);
+        }
 
         try {
             const channelId = SelectedChannelStore.getChannelId();
 
-            for (const key in DraftType) {
-                if (!Number.isNaN(Number(key))) continue;
-
-                DraftManager.clearDraft(channelId, DraftType[key]);
-            }
+            DraftManager.clearDraft(channelId, DraftType.ChannelMessage);
+            DraftManager.clearDraft(channelId, DraftType.FirstThreadMessage);
         } catch (err) {
             CrashHandlerLogger.debug("Failed to clear drafts.", err);
         }
@@ -198,9 +194,6 @@ export default definePlugin({
                 CrashHandlerLogger.debug("Failed to navigate to home", err);
             }
         }
-
-        // Set isRecovering to false before setting the state to allow us to handle the next crash error correcty, in case it happens
-        setImmediate(() => isRecovering = false);
 
         try {
             _this.setState({ error: null, info: null });

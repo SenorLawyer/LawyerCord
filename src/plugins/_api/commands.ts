@@ -34,7 +34,7 @@ export default definePlugin({
                     // patch simpler
 
                     // textCommands = builtInCommands.filter(...)
-                    match: /(?<=\w=)(\w)(\.filter\(.{0,60}"gif")/,
+                    match: /(?<=\i=)(\i)(\.filter\(.{0,60}"gif")/,
                     replace: "Vencord.Api.Commands._init($1)$2",
                 }
             ],
@@ -53,8 +53,8 @@ export default definePlugin({
             find: "#{intl::COMMANDS_OPTIONAL_COUNT}",
             replacement: [
                 {
-                    match: /children:(?=\i\?\?\i\?\.name)(?<=command:(\i),.+?)/,
-                    replace: "children:$1.plugin??"
+                    match: /(\i)\.displayDescription\}\)\]\}\),.{0,100}?children:(?=\i\?\?\i\?\.name)/,
+                    replace: "$&$1.plugin??"
                 }
             ]
         }

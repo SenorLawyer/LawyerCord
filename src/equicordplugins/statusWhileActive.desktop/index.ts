@@ -7,13 +7,15 @@
 import { definePluginSettings } from "@api/Settings";
 import { getUserSettingLazy } from "@api/UserSettings";
 import { EquicordDevs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 import { VoiceState } from "@vencord/discord-types";
 import { UserStore, VoiceStateStore } from "@webpack/common";
 
-let savedStatus: string | null = null;
+let savedStatus: { userId: string; value: string; applied: string; } | null = null;
 
 const StatusSettings = getUserSettingLazy<string>("status", "status")!;
+const logger = new Logger("StatusWhileActive");
 
 const settings = definePluginSettings({
     statusToSet: {
@@ -41,20 +43,27 @@ const settings = definePluginSettings({
     }
 });
 
-function setStatus(inVoiceChannel: boolean, status: string) {
+async function setStatus(userId: string, inVoiceChannel: boolean, status: string) {
+    if (savedStatus?.userId !== userId) savedStatus = null;
+
     if (inVoiceChannel) {
-        if (status !== settings.store.statusToSet) {
-            savedStatus = status;
-            StatusSettings?.updateSetting(settings.store.statusToSet);
+        if (savedStatus) return;
+        const previousStatus = savedStatus = { userId, value: status, applied: settings.store.statusToSet };
+        if (status === previousStatus.applied) return;
+        try {
+            await StatusSettings.updateSetting(previousStatus.applied);
+        } catch (error) {
+            if (savedStatus === previousStatus) savedStatus = null;
+            throw error;
         }
         return;
     }
 
     if (savedStatus) {
-        if (savedStatus !== settings.store.statusToSet) {
-            StatusSettings?.updateSetting(savedStatus);
-        }
+        const previousStatus = savedStatus;
         savedStatus = null;
+        if (status === previousStatus.applied && previousStatus.value !== previousStatus.applied)
+            return StatusSettings?.updateSetting(previousStatus.value);
     }
 }
 
@@ -65,7 +74,7 @@ function updateStatusForCurrentVoiceState() {
     const status = StatusSettings.getSetting();
     const inVoiceChannel = !!VoiceStateStore.getVoiceStateForUser(userId)?.channelId;
 
-    setStatus(inVoiceChannel, status);
+    return setStatus(userId, inVoiceChannel, status);
 }
 
 export default definePlugin({
@@ -73,8 +82,19 @@ export default definePlugin({
     description: "Automatically updates your online status when in a voice channel.",
     tags: ["Activity", "Customisation", "Voice"],
     authors: [EquicordDevs.smuki],
+    dependencies: ["UserSettingsAPI"],
     settings,
+    async start() {
+        try {
+            await updateStatusForCurrentVoiceState();
+        } catch (error) {
+            logger.error("Could not update your status.", error);
+        }
+    },
     flux: {
+        LOGOUT() {
+            savedStatus = null;
+        },
         VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceState[]; }) {
             const userId = UserStore.getCurrentUser()?.id;
             if (!userId) return;
@@ -82,17 +102,18 @@ export default definePlugin({
             const myState = voiceStates.find(state => state.userId === userId);
             if (!myState) return;
 
-            updateStatusForCurrentVoiceState();
-        },
-        VOICE_CHANNEL_STATUS_UPDATE() {
-            updateStatusForCurrentVoiceState();
+            return updateStatusForCurrentVoiceState();
         }
     },
 
-    stop() {
-        if (!savedStatus) return;
-
-        StatusSettings?.updateSetting(savedStatus);
+    async stop() {
+        const previousStatus = savedStatus;
         savedStatus = null;
+        try {
+            if (previousStatus && previousStatus.userId === UserStore.getCurrentUser()?.id && StatusSettings.getSetting() === previousStatus.applied && previousStatus.value !== previousStatus.applied)
+                await StatusSettings.updateSetting(previousStatus.value);
+        } catch (error) {
+            logger.error("Could not restore your status.", error);
+        }
     }
 });

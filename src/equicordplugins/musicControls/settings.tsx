@@ -65,11 +65,7 @@ function LyricsProviderSettings() {
                     <TextInput
                         type="text"
                         value={store.spotifyLyricsApiUrl}
-                        onChange={v => {
-                            store.spotifyLyricsApiUrl = v;
-                            void clearLyricsCache();
-                            showToast("Lyrics cache purged", Toasts.Type.SUCCESS);
-                        }}
+                        onChange={v => { store.spotifyLyricsApiUrl = v; }}
                         placeholder="https://spotify-lyrics-api-pi.vercel.app"
                         maxLength={null}
                     />

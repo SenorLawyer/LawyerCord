@@ -17,7 +17,7 @@
 */
 
 import { useSettings } from "@api/Settings";
-import { authorizeCloud, deauthorizeCloud } from "@api/SettingsSync/cloudSetup";
+import { authorizeCloud, cancelCloudAuthorization } from "@api/SettingsSync/cloudSetup";
 import { deleteCloudSettings, eraseAllCloudData, getCloudSettings, putCloudSettings } from "@api/SettingsSync/cloudSync";
 import { Button } from "@components/Button";
 import { CheckedTextInput } from "@components/CheckedTextInput";
@@ -81,9 +81,7 @@ function CloudTab() {
 
     async function changeUrl(url: string) {
         cloud.url = url;
-        cloud.authenticated = false;
-
-        await deauthorizeCloud();
+        cancelCloudAuthorization();
         await authorizeCloud();
 
         setInputKey(prev => prev + 1);
@@ -110,7 +108,7 @@ function CloudTab() {
                     if (v)
                         authorizeCloud();
                     else
-                        cloud.authenticated = v;
+                        cancelCloudAuthorization();
                 }}
                 hideBorder
             />
@@ -137,21 +135,16 @@ function CloudTab() {
                     <CheckedTextInput
                         key={`backendUrl-${inputKey}`}
                         initialValue={cloud.url}
-                        onChange={async v => {
+                        onChange={v => {
                             cloud.url = v;
-                            cloud.authenticated = false;
-                            await deauthorizeCloud();
+                            cancelCloudAuthorization();
                         }}
                         validate={validateUrl}
                     />
                 </div>
                 <Button
                     disabled={!isAuthenticated}
-                    onClick={async () => {
-                        cloud.authenticated = false;
-                        await deauthorizeCloud();
-                        await authorizeCloud();
-                    }}
+                    onClick={() => authorizeCloud(true)}
                 >
                     <Flex gap="8px" alignItems="center">
                         <RefreshIcon color="currentColor" />

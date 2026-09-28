@@ -25,6 +25,7 @@ import { sortPermissionOverwrites } from "@plugins/permissionsViewer/utils";
 import { classes } from "@utils/misc";
 import { formatDuration } from "@utils/text";
 import type { Channel, RoleOrUserPermission } from "@vencord/discord-types";
+import { ChannelFlags, ChannelType as ChannelTypes, ForumLayout as ForumLayoutTypes, VideoQualityMode as VideoQualityModes } from "@vencord/discord-types/enums";
 import { findByPropsLazy, findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
 import { EmojiStore, FluxDispatcher, GuildMemberStore, GuildStore, Parser, PermissionsBits, PermissionStore, SnowflakeUtils, Timestamp, Tooltip, useEffect, useState } from "@webpack/common";
 import { ComponentType } from "react";
@@ -36,33 +37,9 @@ const enum SortOrderTypes {
     CREATION_DATE = 1
 }
 
-const enum ForumLayoutTypes {
-    DEFAULT = 0,
-    LIST = 1,
-    GRID = 2
-}
-
 interface DefaultReaction {
     emojiId: string | null;
     emojiName: string | null;
-}
-
-const enum ChannelTypes {
-    GUILD_TEXT = 0,
-    GUILD_VOICE = 2,
-    GUILD_ANNOUNCEMENT = 5,
-    GUILD_STAGE_VOICE = 13,
-    GUILD_FORUM = 15
-}
-
-const enum VideoQualityModes {
-    AUTO = 1,
-    FULL = 2
-}
-
-const enum ChannelFlags {
-    PINNED = 1 << 1,
-    REQUIRE_TAG = 1 << 4
 }
 
 const ChatScrollClasses = findCssClassesLazy("auto", "managedReactiveScroller", "customTheme");
@@ -126,22 +103,22 @@ function HiddenChannelLockScreen({ channel }: { channel: Channel; }) {
     } = channel;
 
     useEffect(() => {
-        const membersToFetch: Array<string> = [];
+        const membersToFetch = new Set<string>();
 
         const guildOwnerId = GuildStore.getGuild(guild_id)?.ownerId;
-        if (!GuildMemberStore.getMember(guild_id, guildOwnerId)) membersToFetch.push(guildOwnerId);
+        if (guildOwnerId && !GuildMemberStore.getMember(guild_id, guildOwnerId)) membersToFetch.add(guildOwnerId);
 
         Object.values(permissionOverwrites).forEach(({ type, id: userId }) => {
             if (type === 1 && !GuildMemberStore.getMember(guild_id, userId)) {
-                membersToFetch.push(userId);
+                membersToFetch.add(userId);
             }
         });
 
-        if (membersToFetch.length > 0) {
+        if (membersToFetch.size > 0) {
             FluxDispatcher.dispatch({
                 type: "GUILD_MEMBERS_REQUEST",
                 guildIds: [guild_id],
-                userIds: membersToFetch
+                userIds: Array.from(membersToFetch)
             });
         }
 

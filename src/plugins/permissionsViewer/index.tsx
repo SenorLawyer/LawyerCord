@@ -24,29 +24,28 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { SafetyIcon } from "@components/Icons";
 import { TooltipContainer } from "@components/TooltipContainer";
 import { Devs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import { classes } from "@utils/misc";
+import { useAwaiter } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
 import type { Guild, RoleOrUserPermission } from "@vencord/discord-types";
 import { PermissionOverwriteType } from "@vencord/discord-types/enums";
 import { findCssClassesLazy } from "@webpack";
-import { Button, ChannelStore, Dialog, GuildMemberStore, GuildRoleStore, GuildStore, match, Menu, PermissionsBits, Popout, useEffect, useRef, UserStore } from "@webpack/common";
+import { Button, ChannelStore, Dialog, GuildMemberStore, GuildRoleStore, GuildStore, Menu, PermissionsBits, Popout, useRef, UserStore, useStateFromStores } from "@webpack/common";
 
 import openRolesAndUsersPermissionsModal from "./components/RolesAndUsersPermissions";
 import UserPermissions from "./components/UserPermissions";
 import { getSortedRolesForMember, loadGetGuildPermissionSpecMap, sortPermissionOverwrites } from "./utils";
 
 const PopoutClasses = findCssClassesLazy("container", "popoutRoleDot");
+const logger = new Logger("PermissionsViewer");
 
 export const enum PermissionsSortOrder {
     HighestRole,
     LowestRole
 }
 
-const enum MenuItemParentType {
-    User,
-    Channel,
-    Guild
-}
+type MenuItemParentType = "user" | "channel" | "guild";
 
 export const settings = definePluginSettings({
     permissionsSortOrder: {
@@ -57,10 +56,10 @@ export const settings = definePluginSettings({
             { label: "Lowest Role", value: PermissionsSortOrder.LowestRole }
         ]
     },
-});
+}).withPrivateSettings<{ unsafeViewAsRole?: boolean; }>();
 
-function MenuItem(guildId: string, id?: string, type?: MenuItemParentType) {
-    if (type === MenuItemParentType.User && !GuildMemberStore.isMember(guildId, id!)) return null;
+function MenuItem(guildId: string, id: string, type: MenuItemParentType) {
+    if (type === "user" && !GuildMemberStore.isMember(guildId, id)) return null;
 
     return (
         <Menu.MenuItem
@@ -68,13 +67,16 @@ function MenuItem(guildId: string, id?: string, type?: MenuItemParentType) {
             label="Permissions"
             action={() => {
                 const guild = GuildStore.getGuild(guildId);
+                if (!guild) return;
 
-                const { permissions, header } = match(type)
-                    .returnType<{ permissions: RoleOrUserPermission[], header: string; }>()
-                    .with(MenuItemParentType.User, () => {
-                        const member = GuildMemberStore.getMember(guildId, id!)!;
+                let permissions: RoleOrUserPermission[];
+                let header: string;
+                switch (type) {
+                    case "user": {
+                        const member = GuildMemberStore.getMember(guildId, id);
+                        if (!member) return;
 
-                        const permissions: RoleOrUserPermission[] = getSortedRolesForMember(guild, member)
+                        permissions = getSortedRolesForMember(guild, member)
                             .map(role => ({
                                 type: PermissionOverwriteType.ROLE,
                                 ...role
@@ -87,37 +89,30 @@ function MenuItem(guildId: string, id?: string, type?: MenuItemParentType) {
                             });
                         }
 
-                        return {
-                            permissions,
-                            header: member.nick ?? UserStore.getUser(member.userId).username
-                        };
-                    })
-                    .with(MenuItemParentType.Channel, () => {
-                        const channel = ChannelStore.getChannel(id!);
+                        header = member.nick ?? UserStore.getUser(member.userId)?.username ?? "Unknown User";
+                        break;
+                    }
+                    case "channel": {
+                        const channel = ChannelStore.getChannel(id);
+                        if (!channel) return;
 
-                        const permissions = sortPermissionOverwrites(Object.values(channel.permissionOverwrites).map(({ id, allow, deny, type }) => ({
+                        permissions = sortPermissionOverwrites(Object.values(channel.permissionOverwrites).map(({ id, allow, deny, type }) => ({
                             type,
                             id,
                             overwriteAllow: allow,
                             overwriteDeny: deny
                         })), guildId);
-
-                        return {
-                            permissions,
-                            header: channel.name
-                        };
-                    })
-                    .otherwise(() => {
-                        const permissions = GuildRoleStore.getSortedRoles(guild.id).map(role => ({
+                        header = channel.name;
+                        break;
+                    }
+                    case "guild":
+                        permissions = GuildRoleStore.getSortedRoles(guild.id).map(role => ({
                             type: PermissionOverwriteType.ROLE,
                             ...role
                         }));
-
-                        return {
-                            permissions,
-                            header: guild.name
-                        };
-                    });
+                        header = guild.name;
+                        break;
+                }
 
                 openRolesAndUsersPermissionsModal(permissions, guild, header);
             }}
@@ -125,33 +120,23 @@ function MenuItem(guildId: string, id?: string, type?: MenuItemParentType) {
     );
 }
 
-function makeContextMenuPatch(childId: string | string[], type?: MenuItemParentType): NavContextMenuPatchCallback {
+function makeContextMenuPatch(childId: string | string[], type: MenuItemParentType): NavContextMenuPatchCallback {
     return (children, props) => {
-        if (
-            !props ||
-            (type === MenuItemParentType.User && !props.user) ||
-            (type === MenuItemParentType.Guild && !props.guild) ||
-            (type === MenuItemParentType.Channel && (!props.channel || !props.guild))
-        ) {
-            return;
-        }
+        if (!props) return;
+        const guildId = type === "user" ? props.guildId : props.guild?.id;
+        const id = type === "user" ? props.user?.id : type === "channel" ? props.channel?.id : guildId;
+        if (!guildId || !id) return;
 
-        const group = findGroupChildrenByChildId(childId, children);
-
-        const item = match(type)
-            .with(MenuItemParentType.User, () => MenuItem(props.guildId, props.user.id, type))
-            .with(MenuItemParentType.Channel, () => MenuItem(props.guild.id, props.channel.id, type))
-            .with(MenuItemParentType.Guild, () => MenuItem(props.guild.id))
-            .otherwise(() => null);
-
+        const item = MenuItem(guildId, id, type);
         if (item == null) return;
 
+        const group = findGroupChildrenByChildId(childId, children);
         if (group) {
             return group.push(item);
         }
 
         // "roles" may not be present due to the member not having any roles. In that case, add it above "Copy ID"
-        if (childId === "roles" && props.guildId) {
+        if (childId === "roles") {
             children.splice(-1, 0, <Menu.MenuGroup>{item}</Menu.MenuGroup>);
         }
     };
@@ -176,10 +161,13 @@ export default definePlugin({
 
     ViewPermissionsButton: ErrorBoundary.wrap(({ className, guild, userId }: { className: string; guild: Guild; userId: string; }) => {
         const buttonRef = useRef(null);
-        useEffect(() => void loadGetGuildPermissionSpecMap(), []);
+        const [permissionsReady] = useAwaiter(loadGetGuildPermissionSpecMap, {
+            fallbackValue: false,
+            onError: () => logger.error("Could not load permission details.")
+        });
 
-        const guildMember = GuildMemberStore.getMember(guild.id, userId);
-        if (!guildMember) return null;
+        const guildMember = useStateFromStores([GuildMemberStore], () => GuildMemberStore.getMember(guild.id, userId), [guild.id, userId]);
+        if (!guildMember || !permissionsReady) return null;
 
         return (
             <Popout
@@ -196,6 +184,7 @@ export default definePlugin({
                     <TooltipContainer text="View Permissions">
                         <Button
                             {...popoutProps}
+                            aria-label="View Permissions"
                             ref={buttonRef}
                             color={Button.Colors.CUSTOM}
                             look={Button.Looks.FILLED}
@@ -211,9 +200,9 @@ export default definePlugin({
     }, { noop: true }),
 
     contextMenus: {
-        "user-context": makeContextMenuPatch("roles", MenuItemParentType.User),
-        "channel-context": makeContextMenuPatch(["mute-channel", "unmute-channel"], MenuItemParentType.Channel),
-        "guild-context": makeContextMenuPatch("privacy", MenuItemParentType.Guild),
-        "guild-header-popout": makeContextMenuPatch("privacy", MenuItemParentType.Guild)
+        "user-context": makeContextMenuPatch("roles", "user"),
+        "channel-context": makeContextMenuPatch(["mute-channel", "unmute-channel"], "channel"),
+        "guild-context": makeContextMenuPatch("privacy", "guild"),
+        "guild-header-popout": makeContextMenuPatch("privacy", "guild")
     }
 });

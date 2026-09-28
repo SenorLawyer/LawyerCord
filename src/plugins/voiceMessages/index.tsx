@@ -161,43 +161,38 @@ function sendAudio(blob: Blob, meta: AudioMetadata) {
     upload.upload();
 }
 
-function useObjectUrl() {
-    const [url, setUrl] = useState<string>();
-    const setWithFree = (blob: Blob) => {
-        if (url) URL.revokeObjectURL(url);
-        setUrl(URL.createObjectURL(blob));
-    };
-
-    return [url, setWithFree] as const;
-}
-
 function VoiceMessageModal({ modalProps }: { modalProps: RenderModalProps; }) {
     const [isRecording, setRecording] = useState(false);
     const [blob, setBlob] = useState<Blob>();
-    const [blobUrl, setBlobUrl] = useObjectUrl();
+    const [blobUrl, setBlobUrl] = useState<string>();
 
-    const VoiceRecorder = IS_DISCORD_DESKTOP ? VoiceRecorderDesktop : VoiceRecorderWeb;
+    useEffect(() => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        setBlobUrl(url);
+        return () => URL.revokeObjectURL(url);
+    }, [blob]);
 
-    useEffect(() => () => {
-        if (blobUrl)
-            URL.revokeObjectURL(blobUrl);
-    }, [blobUrl]);
-
-    const [meta, metaError] = useAwaiter(async () => {
-        if (!blob) return EMPTY_META;
+    const [meta, metaError, metaPending] = useAwaiter(async () => {
+        if (!blob) return { ...EMPTY_META, blob };
 
         const audioContext = new AudioContext();
-        const audioBuffer = await audioContext.decodeAudioData(await blob.arrayBuffer());
-
-        return {
-            waveform: generateWaveform(audioBuffer.getChannelData(0), audioBuffer.sampleRate),
-            duration: audioBuffer.duration,
-        };
+        try {
+            const audioBuffer = await audioContext.decodeAudioData(await blob.arrayBuffer());
+            return {
+                blob,
+                waveform: generateWaveform(audioBuffer.getChannelData(0), audioBuffer.sampleRate),
+                duration: audioBuffer.duration,
+            };
+        } finally {
+            await audioContext.close();
+        }
     }, {
         deps: [blob],
-        fallbackValue: EMPTY_META,
+        fallbackValue: { ...EMPTY_META, blob: undefined },
     });
 
+    const canSend = blob && !isRecording && !metaPending && !metaError && meta?.blob === blob;
     const isUnsupportedFormat = blob && (!blob.type.startsWith("audio/ogg") || blob.type.includes("codecs") && !blob.type.includes("opus"));
 
     return (
@@ -208,29 +203,24 @@ function VoiceMessageModal({ modalProps }: { modalProps: RenderModalProps; }) {
                 text: "Send",
                 variant: "primary",
                 onClick: () => {
-                    sendAudio(blob!, meta ?? EMPTY_META);
+                    if (!blob || !canSend) return;
+                    sendAudio(blob, meta);
                     modalProps.onClose();
                     showToast("Now sending voice message... Please be patient", Toasts.Type.MESSAGE);
                 },
-                disabled: !blob
+                disabled: !canSend
             }]}
         >
             <div className={cl("buttons")}>
                 <VoiceRecorder
-                    setAudioBlob={blob => {
-                        setBlob(blob);
-                        setBlobUrl(blob);
-                    }}
+                    setAudioBlob={setBlob}
                     onRecordingChange={setRecording}
                 />
 
                 <Button
                     onClick={async () => {
                         const file = await chooseFile("audio/*");
-                        if (file) {
-                            setBlob(file);
-                            setBlobUrl(file);
-                        }
+                        if (file) setBlob(file);
                     }}
                 >
                     Upload File

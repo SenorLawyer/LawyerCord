@@ -94,7 +94,7 @@ export default definePlugin({
             replacement: [
                 // Remove the special logic for channels we don't have access to
                 {
-                    match: /if\(!\i\.\i\.can\(\i\.\i\.VIEW_CHANNEL.+?{if\(this\.id===\i\).+?threadIds:\[\]}}/,
+                    match: /if\(!\i\.\i\.can\(\i\.\i\.VIEW_CHANNEL[^{}]{0,100}{if\(this\.id===\i\).{0,200}?threadIds:\[\]}}/,
                     replace: ""
                 },
                 // Do not check for unreads when selecting the render level if the channel is hidden
@@ -104,13 +104,13 @@ export default definePlugin({
                 },
                 // Make channels we dont have access to be the same level as normal ones
                 {
-                    match: /(this\.record\)\?{renderLevel:(.+?),threadIds.+?renderLevel:).+?(?=,threadIds)/g,
-                    replace: (_, rest, defaultRenderLevel) => `${rest}${defaultRenderLevel}`
+                    match: /(this\.record\)\?{renderLevel:([^,]{1,30}),threadIds:[^;]{0,150}?renderLevel:)[^,]{1,30}(?=,threadIds)/g,
+                    replace: "$1$2"
                 },
                 // Remove permission checking for getRenderLevel function
                 {
-                    match: /(getRenderLevel\(\i\){.+?return)!\i\.\i\.can\(\i\.\i\.VIEW_CHANNEL,this\.record\)\|\|/,
-                    replace: (_, rest) => `${rest} `
+                    match: /(?<=getRenderLevel\(\i\){[^{}]{0,100}?return)!\i\.\i\.can\(\i\.\i\.VIEW_CHANNEL,this\.record\)\|\|/,
+                    replace: " "
                 }
             ]
         },
@@ -120,17 +120,17 @@ export default definePlugin({
                 {
                     // Do not show confirmation to join a voice channel when already connected to another if clicking on a hidden voice channel
                     match: /(?<=getIgnoredUsersForVoiceChannel\((\i)\.id\)[^;]{0,300}?;return\()/,
-                    replace: (_, channel) => `!$self.isHiddenChannel(${channel})&&`
+                    replace: "!$self.isHiddenChannel($1)&&"
                 },
                 {
                     // Prevent Discord from trying to connect to hidden voice channels
                     match: /(?=\|\|\i\.\i\.selectVoiceChannel\((\i)\.id\))/,
-                    replace: (_, channel) => `||$self.isHiddenChannel(${channel})`
+                    replace: "||$self.isHiddenChannel($1)"
                 },
                 {
                     // Make Discord show inside the channel if clicking on a hidden or locked channel
-                    match: /!__OVERLAY__&&\((?<=selectVoiceChannel\((\i)\.id\).+?)/,
-                    replace: (m, channel) => `${m}$self.isHiddenChannel(${channel},true)||`
+                    match: /(?<=selectVoiceChannel\((\i)\.id\),)!__OVERLAY__&&\(/,
+                    replace: "$&$self.isHiddenChannel($1,true)||"
                 }
             ]
         },
@@ -180,14 +180,14 @@ export default definePlugin({
                 // Add the hidden eye icon if the channel is hidden
                 {
                     predicate: () => settings.store.showMode === ShowMode.EyeIconRight,
-                    match: /\.Children\.count.+?:null(?<=,channel:(\i).+?)/,
-                    replace: (m, channel) => `${m},$self.isHiddenChannel(${channel})?$self.EyeRightIcon():null`
+                    match: /\.Children\.count[^;]{0,150}?:null(?<=,channel:(\i),[^;]{0,200})/,
+                    replace: "$&,$self.isHiddenChannel($1)?$self.EyeRightIcon():null"
                 },
                 // Add the hidden lock icon if the channel is hidden
                 {
                     predicate: () => settings.store.showMode === ShowMode.LockIconRight,
-                    match: /\.Children\.count.+?:null(?<=,channel:(\i).+?)/,
-                    replace: (m, channel) => `${m},$self.isHiddenChannel(${channel})?$self.LockRightIcon():null`
+                    match: /\.Children\.count[^;]{0,150}?:null(?<=,channel:(\i),[^;]{0,200})/,
+                    replace: "$&,$self.isHiddenChannel($1)?$self.LockRightIcon():null"
                 },
             ]
         },
@@ -197,13 +197,13 @@ export default definePlugin({
             replacement: [
                 // Make the channel appear as muted if it's hidden
                 {
-                    match: /Children\.count.+?;(?=return\(0,\i\.jsxs?\)\(\i\.\i,{focusTarget:)(?<={channel:(\i),name:\i,muted:(\i).+?;)/,
-                    replace: (m, channel, muted) => `${m}${muted}=$self.isHiddenChannel(${channel})?true:${muted};`
+                    match: /(?=return\(0,\i\.jsxs?\)\(\i\.\i,{focusTarget:.{0,350}?if\((\i)\)return \i\.MUTED)/,
+                    replace: "$1=$self.isHiddenChannel(arguments[0].channel)?true:$1;"
                 },
                 // Make voice channels also appear as muted if they are muted
                 {
                     match: /(?<=\?\i\.\i:\i\.\i,)(.{0,150}?)if\((\i)(?:\)return |\?)(\i\.MUTED)/,
-                    replace: (_, otherClasses, isMuted, mutedClassExpression) => `${isMuted}?${mutedClassExpression}:"",${otherClasses}if(${isMuted})return ""`
+                    replace: '$2?$3:"",$1if($2)return ""'
                 }
             ]
         },
@@ -212,13 +212,13 @@ export default definePlugin({
             predicate: () => settings.store.channelStyle !== ChannelStyle.Unread && settings.store.channelStyle !== ChannelStyle.MutedUnread,
             replacement: [
                 {
-                    match: /(?<=\.LOCKED;if\()(?<={channel:(\i).+?)/,
-                    replace: (_, channel) => `!$self.isHiddenChannel(${channel})&&`
+                    match: /(?<=\.LOCKED;if\()(?=.{0,500}?onMouseUp:\i=>\i\?\.\(\i,(\i)\))/,
+                    replace: "!$self.isHiddenChannel($1)&&"
                 },
                 {
                     // Hide unreads
-                    match: /Children\.count.+?;(?=return\(0,\i\.jsxs?\)\(\i\.\i,{focusTarget:)(?<={channel:(\i),name:\i,.+?unread:(\i).+?)/,
-                    replace: (m, channel, unread) => `${m}${unread}=$self.isHiddenChannel(${channel})?false:${unread};`
+                    match: /(?=return\(0,\i\.jsxs?\)\(\i\.\i,{focusTarget:.{0,450}?if\((\i)\)if\(\i\)return \i\.UNREAD_IMPORTANT)/,
+                    replace: "$1=$self.isHiddenChannel(arguments[0].channel)?false:$1;"
                 }
             ]
         },
@@ -251,20 +251,16 @@ export default definePlugin({
             find: "Missing channel in Channel.renderHeaderToolbar",
             replacement: [
                 {
-                    match: /renderHeaderToolbar(?:",|=)\(\)=>{.+?case \i\.\i\.GUILD_TEXT:(?=.+?(\i\.push.{0,50}channel:(\i)},"notifications"\)\)))(?<=isLurking:(\i).+?)/,
-                    replace: (m, pushNotificationButtonExpression, channel, isLurking) => `${m}if(!${isLurking}&&$self.isHiddenChannel(${channel})){${pushNotificationButtonExpression};break;}`
+                    match: /case \i\.\i\.GUILD_(?:TEXT|MEDIA|APP):(?=.{0,150}?(\i)\|\|.{0,150}?(\i\.push.{0,50}?channel:(\i)},"notifications"\)\)))/g,
+                    replace: "$&if(!$1&&$self.isHiddenChannel($3)){$2;break;}"
                 },
                 {
-                    match: /renderHeaderToolbar(?:",|=)\(\)=>{.+?case \i\.\i\.GUILD_MEDIA:(?=.+?(\i\.push.{0,40}channel:(\i)},"notifications"\)\)))(?<=isLurking:(\i).+?)/,
-                    replace: (m, pushNotificationButtonExpression, channel, isLurking) => `${m}if(!${isLurking}&&$self.isHiddenChannel(${channel})){${pushNotificationButtonExpression};break;}`
+                    match: /(?<=\.GUILD_MEDIA:case \i\.\i\.GUILD_DIRECTORY:)(?=\i\.push\(.{0,50}?channelId:(\i)\.id)/,
+                    replace: "if($self.isHiddenChannel($1))break;"
                 },
                 {
-                    match: /renderMobileToolbar(?:",|=)\(\)=>{.+?case \i\.\i\.GUILD_DIRECTORY:(?<=let{channel:(\i).+?)/,
-                    replace: (m, channel) => `${m}if($self.isHiddenChannel(${channel}))break;`
-                },
-                {
-                    match: /(?<=renderHeaderBar(?:",|=)\(\)=>{.+?hideSearch:(\i)\.isDirectory\(\))/,
-                    replace: (_, channel) => `||$self.isHiddenChannel(${channel})`
+                    match: /(?<=hideSearch:(\i)\.isDirectory\(\))(?=,toolbar:this\.renderHeaderToolbar\(\))/,
+                    replace: "||$self.isHiddenChannel($1)"
                 },
                 {
                     match: /(?<=renderSidebar\(\){)/,
@@ -280,8 +276,8 @@ export default definePlugin({
         {
             find: '"MessageManager"',
             replacement: {
-                match: /forceFetch:\i,isPreload:.+?}=\i;(?=.+?getChannel\((\i)\))/,
-                replace: (m, channelId) => `${m}if($self.isHiddenChannel({channelId:${channelId}}))return;`
+                match: /(?<=forceFetch:\i,isPreload:[^{}]{0,200}}=\i;)(?=if\(null==(\i)\|\|)/,
+                replace: "if($self.isHiddenChannel({channelId:$1}))return;"
             }
         },
         // Patch keybind handlers so you can't accidentally jump to hidden channels
@@ -289,15 +285,15 @@ export default definePlugin({
             find: '"alt+shift+down"',
             replacement: {
                 match: /(?<=getChannel\(\i\);return null!=(\i))(?=.{0,200}?>0\)&&\(0,\i\.\i\)\(\i\))/,
-                replace: (_, channel) => `&&!$self.isHiddenChannel(${channel})`
+                replace: "&&!$self.isHiddenChannel($1)"
             }
         },
         // Patch keybind handlers so you can't accidentally jump to hidden channels
         {
             find: ".APPLICATION_STORE&&null!=",
             replacement: {
-                match: /getState\(\)\.channelId.+?(?=\.map\(\i=>\i\.id)/,
-                replace: "$&.filter(e=>!$self.isHiddenChannel(e))"
+                match: /(?<=withCurrentVoiceChannel:!0}\))(?=\.map\(\i=>\i\.id)/,
+                replace: ".filter(e=>!$self.isHiddenChannel(e))"
             }
         },
         {
@@ -305,33 +301,33 @@ export default definePlugin({
             replacement: [
                 {
                     // Change the role permission check to CONNECT if the channel is locked
-                    match: /(forceRoles:.+?)(\i\.\i\(\i\.\i\.ADMINISTRATOR,\i\.\i\.VIEW_CHANNEL\))(?<=context:(\i)}.+?)/,
-                    replace: (_, rest, mergedPermissions, channel) => `${rest}$self.swapViewChannelWithConnectPermission(${mergedPermissions},${channel})`
+                    match: /(?<=context:(\i)}\);return \i\.\i\(\i,)(\i\.\i\(\i\.\i\.ADMINISTRATOR,\i\.\i\.VIEW_CHANNEL\))/,
+                    replace: "$self.swapViewChannelWithConnectPermission($2,$1)"
                 },
                 {
                     // Change the permissionOverwrite check to CONNECT if the channel is locked
-                    match: /permissionOverwrites\[.+?\i=(?<=context:(\i)}.+?)(?=(.+?)VIEW_CHANNEL)/,
-                    replace: (m, channel, permCheck) => `${m}!Vencord.Webpack.Common.PermissionStore.can(${CONNECT}n,${channel})?${permCheck}CONNECT):`
+                    match: /(?<=(\i)\.permissionOverwrites\[\i\.id\]\?\?\i\.\i,\i=)(?=(\i\.\i\(\i\.allow,\i\.\i\.)VIEW_CHANNEL)/,
+                    replace: `!Vencord.Webpack.Common.PermissionStore.can(${CONNECT}n,$1)?$2CONNECT):`
                 },
                 {
                     // Include the @everyone role in the allowed roles list for Hidden Channels
-                    match: /getSortedRoles.+?\.filter\(\i=>(?=!)/,
-                    replace: m => `${m}$self.isHiddenChannel(arguments[0]?.channel)?true:`
+                    match: /(?<=\.useMemo\(\(\)=>null!=\i\?\i\.filter\(\i=>)(?=!\(0,\i\.\i\)\(\i\)\):\[\],\[\i\]\))/,
+                    replace: "$self.isHiddenChannel(arguments[0]?.channel)?true:"
                 },
                 {
                     // If the @everyone role has the required permissions, make the array only contain it
-                    match: /forceRoles:.+?.value\(\)(?<=channel:(\i).+?)/,
-                    replace: (m, channel) => `${m}.reduce(...$self.makeAllowedRolesReduce(${channel}.guild_id))`
+                    match: /(?<=\.useMemo\(\(\)=>)(\i\(\)\(\i\)\.filter\(\i=>\{(?=.{0,100}forceRoles:).{0,300}?\}\)\.value\(\))/,
+                    replace: "$self.getAllowedRoles($1,arguments[0].channel.guild_id)"
                 },
                 {
                     // Patch the header to only return allowed users and roles if it's a hidden channel or locked channel (Like when it's used on the HiddenChannelLockScreen)
-                    match: /return\(0,\i\.jsxs?\)\(\i\.\i,{channelId:(\i)\.id,children:\[(?=.{0,1000}?(\(0,\i\.jsxs?\)\("div",{className:\i\.\i,children:\[.{0,100}\i\.length>0.+?\]}\)),)/,
-                    replace: (m, channel, allowedUsersAndRolesComponent) => `if($self.isHiddenChannel(${channel},true)){return${allowedUsersAndRolesComponent};}${m}`
+                    match: /return\(0,\i\.jsxs?\)\(\i\.\i,{channelId:(\i)\.id,children:\[(?=.{0,650}?(\(0,\i\.jsxs?\)\("div",{className:\i\.\i,children:\[.{0,100}\i\.length>0.{0,900}?\]}\)),)/,
+                    replace: "if($self.isHiddenChannel($1,true)){return$2;}$&"
                 },
                 {
                     // Export the channel for the users allowed component patch
-                    match: /maxUsers:\d+?,users:\i(?<=channel:(\i).+?)/,
-                    replace: (m, channel) => `${m},shcChannel:${channel}`
+                    match: /(?<=guildId:(\i)\.guild_id,[^{}]{0,100}maxUsers:\d{1,3},users:\i)(?=})/,
+                    replace: ",shcChannel:$1"
                 },
                 {
                     // Always render the component for multiple allowed users
@@ -342,23 +338,26 @@ export default definePlugin({
         },
         {
             find: '="interactive-text-default",overflowCountClassName:',
+            group: true,
             replacement: [
                 {
-                    // Create a variable for the channel prop
-                    match: /let{users:\i,maxUsers:\i,/,
-                    replace: "let{shcChannel}=arguments[0];$&"
+                    match: /(?<=\(\i,{count:\i,textVariant:\i,)/,
+                    replace: "shcChannel:arguments[0].shcChannel,"
                 },
                 {
                     // Make Discord always render the plus button if the component is used inside the HiddenChannelLockScreen
                     match: /\i>0(?=&&!\i&&!\i)/,
-                    replace: m => `($self.isHiddenChannel(typeof shcChannel!=="undefined"?shcChannel:void 0,true)?true:${m})`
+                    replace: "($self.isHiddenChannel(arguments[0].shcChannel,true)?true:$&)"
+                },
+                {
+                    match: /(?<=#{intl::VIDEO_CALL_VIEW_ALL_COUNT},{count:)\i/,
+                    replace: "$self.isHiddenChannel(arguments[0].shcChannel,true)?arguments[0].users.length:$&"
                 },
                 {
                     // Show only the plus text without overflowed children amount
                     // if the overflow amount is <= 0 and the component is used inside the HiddenChannelLockScreen
                     match: /(?<=`\+\$\{)\i(?=\})/,
-                    replace: overflowTextAmount => "" +
-                        `$self.isHiddenChannel(typeof shcChannel!=="undefined"?shcChannel:void 0,true)&&(${overflowTextAmount}-1)<=0?"":${overflowTextAmount}`
+                    replace: '$self.isHiddenChannel(arguments[0].shcChannel,true)&&($&-1)<=0?"":$&'
                 }
             ]
         },
@@ -377,12 +376,12 @@ export default definePlugin({
             replacement: [
                 {
                     // Render our HiddenChannelLockScreen component instead of the main voice channel component
-                    match: /renderContent\(\i\){.+?this\.renderVoiceChannelEffects.+?children:/,
+                    match: /(?<=hideControls:\i,idle:\i,children:)/,
                     replace: "$&!this?.props?.inCall&&$self.isHiddenChannel(this?.props?.channel,true)?$self.HiddenChannelLockScreen(this?.props?.channel):"
                 },
                 {
                     // Disable gradients for the HiddenChannelLockScreen of voice channels
-                    match: /renderContent\(\i\){.+?disableGradients:/,
+                    match: /(?<=screenMessage:this\.screenMessage,disableGradients:)/,
                     replace: "$&!this?.props?.inCall&&$self.isHiddenChannel(this?.props?.channel,true)||"
                 },
                 {
@@ -402,23 +401,23 @@ export default definePlugin({
             replacement: [
                 {
                     // Render our HiddenChannelLockScreen component instead of the main stage channel component
-                    match: /screenMessage:(\i)\?.+?children:(?=!\1)(?<=let \i,{channel:(\i).+?)/,
-                    replace: (m, _isPopoutOpen, channel) => `${m}$self.isHiddenChannel(${channel})?$self.HiddenChannelLockScreen(${channel}):`
+                    match: /(?<=screenMessage:(\i)\?{[^{}]{0,100}}:null,\.\.\.\i,children:)(?=!\1&&)/,
+                    replace: "$self.isHiddenChannel(arguments[0].channel)?$self.HiddenChannelLockScreen(arguments[0].channel):"
                 },
                 {
                     // Disable useless components for the HiddenChannelLockScreen of stage channels
-                    match: /render(?:BottomLeft|BottomCenter|BottomRight|ChatToasts):\(\)=>(?<=let \i,{channel:(\i).+?)/g,
-                    replace: (m, channel) => `${m}$self.isHiddenChannel(${channel})?null:`
+                    match: /(?<=render(?:BottomLeft|BottomCenter|BottomRight|ChatToasts):(?:\(\)=>|function\(\){return))(?=.{0,150}?channel(?:Id)?:(\i)(?=[,}.]))/g,
+                    replace: " $self.isHiddenChannel($1)?null:"
                 },
                 {
                     // Disable gradients for the HiddenChannelLockScreen of stage channels
-                    match: /"124px".+?disableGradients:(?<=let \i,{channel:(\i).+?)/,
-                    replace: (m, channel) => `${m}$self.isHiddenChannel(${channel})||`
+                    match: /(?<=paddingTop:\i},disableGradients:)/,
+                    replace: "$self.isHiddenChannel(arguments[0].channel)||"
                 },
                 {
                     // Disable strange styles applied to the header for the HiddenChannelLockScreen of stage channels
-                    match: /"124px".+?style:(?<=let \i,{channel:(\i).+?)/,
-                    replace: (m, channel) => `${m}$self.isHiddenChannel(${channel})?void 0:`
+                    match: /(?<=style:)(?={height:`calc\(100% - \$\{\i}\)`,paddingTop:\i},disableGradients:)/,
+                    replace: "$self.isHiddenChannel(arguments[0].channel)?void 0:"
                 }
             ]
         },
@@ -427,8 +426,8 @@ export default definePlugin({
             replacement: [
                 {
                     // Remove the divider and amount of users in stage channel components for the HiddenChannelLockScreen
-                    match: /\(0,\i\.jsx\)\(\i\.\i\.Divider.+?}\)]}\)(?=.+?:(\i)\.guild_id)/,
-                    replace: (m, channel) => `$self.isHiddenChannel(${channel})?null:(${m})`
+                    match: /\(0,\i\.jsx\)\(\i\.\i\.Divider,{[^{}]{0,100}}\),\(0,\i\.jsxs?\)\(\i\.\i\.Title,{children:\[.{0,500}?\]}\)/,
+                    replace: "...($self.isHiddenChannel(arguments[0].channel)?[]:[$&])"
                 },
                 {
                     // Remove the open chat button for the HiddenChannelLockScreen
@@ -443,12 +442,12 @@ export default definePlugin({
             replacement: [
                 {
                     // Make the getChannels call to GuildChannelStore return hidden channels
-                    match: /(?<=queryChannels\(\i\){.+?getChannels\(\i)(?=\))/,
+                    match: /(?<=getChannels\(\i)(?=\)\[\i\]\)\.map\(\i=>\i\.channel\))/,
                     replace: ",true"
                 },
                 {
                     // Avoid filtering out hidden channels from the channel list
-                    match: /(?<=queryChannels\(\i\){.+?\)\((\i)\.type\))(?=&&!\i\.\i\.can\()/,
+                    match: /(?<=\)\((\i)\.type\))(?=&&!\i\.\i\.can\(\i\?\1\.accessPermissions:\i\.\i\.VIEW_CHANNEL,\1\))/,
                     replace: "&&!$self.isHiddenChannel($1)"
                 }
             ]
@@ -465,8 +464,8 @@ export default definePlugin({
             find: 'getConfig({location:"channel_mention"})',
             replacement: {
                 // Show inside voice channel instead of trying to join them when clicking on a channel mention
-                match: /(?<=getChannel\(\i\);if\(null!=(\i)).{0,200}?return void (?=\i\.default\.selectVoiceChannel)/,
-                replace: (m, channel) => `${m}!$self.isHiddenChannel(${channel})&&`
+                match: /(?<=if\(!\i)(?=\)return void \i\.default\.selectVoiceChannel\((\i)\.id\))/,
+                replace: "&&!$self.isHiddenChannel($1)"
             }
         },
         {
@@ -474,13 +473,13 @@ export default definePlugin({
             replacement: [
                 {
                     // Make GuildChannelStore contain hidden channels
-                    match: /isChannelGated\(.+?\)(?=&&)/,
-                    replace: m => `${m}&&false`
+                    match: /if\((\i\.count\+=1),\i\.\i\.has\((\i)\.type\)&&!\i\.\i\.can\(\i\.\i\.VIEW_CHANNEL,\2\)&&!\i\.\i\.isChannelGated\(\2\.guild_id,\2\.id\)&&\2\.id!==\i\)return;/,
+                    replace: "$1;"
                 },
                 {
                     // Filter hidden channels from GuildChannelStore.getChannels unless told otherwise
-                    match: /(?<=getChannels\(\i)(\){.*?)return (.+?)}/,
-                    replace: (_, rest, channels) => `,shouldIncludeHidden${rest}return $self.resolveGuildChannels(${channels},shouldIncludeHidden??arguments[0]==="@favorites");}`
+                    match: /(?<=getChannels\(\i)(\){[^{}]{0,100}return )([^{};]{0,150})(?=})/,
+                    replace: ',shouldIncludeHidden$1$self.resolveGuildChannels($2,shouldIncludeHidden??arguments[0]==="@favorites");'
                 },
             ]
         },
@@ -496,8 +495,8 @@ export default definePlugin({
             find: '"NowPlayingViewStore"',
             replacement: {
                 // Make active now voice states on hidden channels
-                match: /(getVoiceStateForUser.{0,150}?)&&\i\.\i\.canWithPartialContext.{0,20}VIEW_CHANNEL.+?}\)(?=\?)/,
-                replace: "$1"
+                match: /(?<=getVoiceStateForUser\(\i\);return \i\?\.channelId!=null)&&\i\.\i\.canWithPartialContext\(\i\.\i\.VIEW_CHANNEL,{channelId:\i\.channelId}\)(?=\?)/,
+                replace: ""
             }
         },
         {
@@ -564,18 +563,9 @@ export default definePlugin({
         return res;
     },
 
-    makeAllowedRolesReduce(guildId: string) {
-        return [
-            (prev: Array<Role>, _: Role, index: number, originalArray: Array<Role>) => {
-                if (index !== 0) return prev;
-
-                const everyoneRole = originalArray.find(role => role.id === guildId);
-
-                if (everyoneRole) return [everyoneRole];
-                return originalArray;
-            },
-            [] as Array<Role>
-        ];
+    getAllowedRoles(roles: Role[], guildId: string) {
+        const everyoneRole = roles.find(role => role.id === guildId);
+        return everyoneRole ? [everyoneRole] : roles;
     },
 
     HiddenChannelLockScreen: (channel: any) => <HiddenChannelLockScreen channel={channel} />,
@@ -618,14 +608,14 @@ export default definePlugin({
                 <svg
                     onMouseLeave={onMouseLeave}
                     onMouseEnter={onMouseEnter}
-                    className={cl("channel-list-icon") + " " + "shc-hidden-channel-icon"}
+                    className={classes(cl("channel-list-icon"), cl("hidden-channel-icon"))}
                     width="24"
                     height="24"
                     viewBox="0 0 24 24"
                     aria-hidden={true}
                     role="img"
                 >
-                    <path className="shc-evenodd-fill-current-color" d="M17 11V7C17 4.243 14.756 2 12 2C9.242 2 7 4.243 7 7V11C5.897 11 5 11.896 5 13V20C5 21.103 5.897 22 7 22H17C18.103 22 19 21.103 19 20V13C19 11.896 18.103 11 17 11ZM12 18C11.172 18 10.5 17.328 10.5 16.5C10.5 15.672 11.172 15 12 15C12.828 15 13.5 15.672 13.5 16.5C13.5 17.328 12.828 18 12 18ZM15 11H9V7C9 5.346 10.346 4 12 4C13.654 4 15 5.346 15 7V11Z" />
+                    <path fillRule="evenodd" d="M17 11V7C17 4.243 14.756 2 12 2C9.242 2 7 4.243 7 7V11C5.897 11 5 11.896 5 13V20C5 21.103 5.897 22 7 22H17C18.103 22 19 21.103 19 20V13C19 11.896 18.103 11 17 11ZM12 18C11.172 18 10.5 17.328 10.5 16.5C10.5 15.672 11.172 15 12 15C12.828 15 13.5 15.672 13.5 16.5C13.5 17.328 12.828 18 12 18ZM15 11H9V7C9 5.346 10.346 4 12 4C13.654 4 15 5.346 15 7V11Z" />
                 </svg>
             )}
         </Tooltip>

@@ -6,7 +6,7 @@
 
 import "./style.css";
 
-import { addContextMenuPatch, NavContextMenuPatchCallback, removeContextMenuPatch } from "@api/ContextMenu";
+import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { DataStore } from "@api/index";
 import { definePluginSettings } from "@api/Settings";
 import { EquicordDevs } from "@utils/constants";
@@ -20,6 +20,7 @@ import { ContextMenuEmoji, SavedEmoji, Target } from "./types";
 
 const DATA_COLLECTION_NAME = "whitelisted-emojis";
 
+let startGeneration = 0;
 let cache_allowedList: ContextMenuEmoji[] = [];
 const allowedEmojiNames = new Set<string>();
 const cacheListeners = new Set<() => void>();
@@ -70,7 +71,6 @@ function buildSaveData(item: ContextMenuEmoji): SavedEmoji {
     if (!item.surrogates) {
         const emojiData = EmojiStore.getCustomEmojiById(item.id);
         if (emojiData?.guildId) {
-            saveData.url = IconUtils.getEmojiURL({ id: emojiData.id, animated: !!emojiData.animated, size: 64 });
             saveData.guildId = emojiData.guildId;
             saveData.animated = emojiData.animated;
         }
@@ -431,16 +431,20 @@ export default definePlugin({
             }
         }
     ],
-    settings: settings,
+    settings,
+    contextMenus: {
+        "expression-picker": expressionPickerPatch,
+        "guild-context": guildContextPatch,
+    },
     async start() {
-        setCachedAllowedList(await getAllowedList());
+        const generation = ++startGeneration;
+        const list = await getAllowedList();
+        if (generation !== startGeneration) return;
+        setCachedAllowedList(list);
         notifyCacheChange();
-        addContextMenuPatch("expression-picker", expressionPickerPatch);
-        addContextMenuPatch("guild-context", guildContextPatch);
     },
     stop() {
-        removeContextMenuPatch("expression-picker", expressionPickerPatch);
-        removeContextMenuPatch("guild-context", guildContextPatch);
+        startGeneration++;
         setCachedAllowedList([]);
     },
     filterEmojis(emojis: (CustomEmoji | UnicodeEmoji)[]): (CustomEmoji | UnicodeEmoji)[] {

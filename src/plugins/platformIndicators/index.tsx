@@ -263,7 +263,7 @@ export default definePlugin({
             replacement: [
                 {
                     // Return the STATUS_ONLINE_MOBILE mask if the user is on mobile, no matter the status
-                    match: /\.STATUS_TYPING;switch(?=.+?(if\(\i\)return \i\.\i\.Masks\.STATUS_ONLINE_MOBILE))/,
+                    match: /\.STATUS_TYPING;switch(?=[^}]{0,400}?(if\(\i\)return \i\.\i\.Masks\.STATUS_ONLINE_MOBILE))/,
                     replace: ".STATUS_TYPING;$1;switch"
                 },
                 {

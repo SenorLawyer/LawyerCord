@@ -10,7 +10,7 @@ import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { User } from "@vencord/discord-types";
-import { Menu, SelectedGuildStore, Toasts, UserProfileStore } from "@webpack/common";
+import { Menu, Toasts, UserProfileStore } from "@webpack/common";
 
 const logger = new Logger("CopyProfileColors");
 
@@ -34,7 +34,7 @@ function getProfileColors(userId: string, guildId?: string) {
     }
 }
 
-function copyProfileColors(userId: string, guildId?: string) {
+async function copyProfileColors(userId: string, guildId?: string) {
     const colors = getProfileColors(userId, guildId);
 
     if (!colors) {
@@ -52,7 +52,7 @@ function copyProfileColors(userId: string, guildId?: string) {
     const formattedColors = `Primary-color #${primaryColor}, Secondary-Color #${secondaryColor}`;
 
     try {
-        copyToClipboard(formattedColors);
+        await copyToClipboard(formattedColors);
         Toasts.show({
             type: Toasts.Type.SUCCESS,
             message: "Profile colors copied to clipboard!",
@@ -84,9 +84,8 @@ export function ColorIcon() {
 const userContextMenuPatch: NavContextMenuPatchCallback = (children, { user, guildId }: { user?: User; guildId?: string; }) => {
     if (!user) return;
 
-    const effectiveGuildId = guildId ?? SelectedGuildStore.getGuildId();
-    const guildProfile = effectiveGuildId
-        ? UserProfileStore.getGuildMemberProfile(user.id, effectiveGuildId)
+    const guildProfile = guildId
+        ? UserProfileStore.getGuildMemberProfile(user.id, guildId)
         : null;
     const hasGuildColors = guildProfile?.themeColors && guildProfile.themeColors.length >= 2;
 
@@ -99,13 +98,13 @@ const userContextMenuPatch: NavContextMenuPatchCallback = (children, { user, gui
         />
     );
 
-    if (hasGuildColors && effectiveGuildId) {
+    if (hasGuildColors && guildId) {
         children.push(
             <Menu.MenuItem
                 id="CopyServerProfileColors"
                 icon={ColorIcon}
                 label="Copy Server Profile Colors"
-                action={() => copyProfileColors(user.id, effectiveGuildId)}
+                action={() => copyProfileColors(user.id, guildId)}
             />
         );
     }

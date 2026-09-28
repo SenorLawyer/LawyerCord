@@ -24,7 +24,7 @@ import { canBlockReviewAuthor, canDeleteReview, canReportReview, cl, showToast }
 import { openUserProfile } from "@utils/discord";
 import { classes } from "@utils/misc";
 import { findCssClassesLazy } from "@webpack";
-import { ConfirmModal, IconUtils, openModal as openVencordModal, Parser, Timestamp, useEffect, useState } from "@webpack/common";
+import { ConfirmModal, IconUtils, openModal as openVencordModal, Parser, Timestamp, useEffect, UserStore, useState } from "@webpack/common";
 
 import { openBlockModal } from "./BlockedUserModal";
 import { BlockButton, DeleteButton, ReportButton } from "./MessageButton";
@@ -39,6 +39,7 @@ const BotTagClasses = findCssClassesLazy("botTagVerified", "botTagRegular", "bot
 const dateFormat = new Intl.DateTimeFormat();
 
 export default function ReviewComponent({ review, refetch, profileId }: { review: Review; refetch(): void; profileId: string; }) {
+    const accountId = UserStore.getCurrentUser()?.id;
     const [showAll, setShowAll] = useState(false);
     const [localVote, setLocalVote] = useState<boolean | null>(review.userVote ?? null);
     const [score, setScore] = useState(review.score ?? 0);
@@ -62,7 +63,10 @@ export default function ReviewComponent({ review, refetch, profileId }: { review
                 confirmText="Delete"
                 cancelText="Nevermind"
                 onConfirm={async () => {
-                    if (!(await getToken())) {
+                    if (UserStore.getCurrentUser()?.id !== accountId) return;
+                    const token = await getToken();
+                    if (UserStore.getCurrentUser()?.id !== accountId) return;
+                    if (!token) {
                         return showToast("You must be logged in to delete reviews.");
                     }
                     const res = await deleteReview(review.id);
@@ -81,7 +85,10 @@ export default function ReviewComponent({ review, refetch, profileId }: { review
                 confirmText="Report"
                 cancelText="Nevermind"
                 onConfirm={async () => {
-                    if (!(await getToken())) {
+                    if (UserStore.getCurrentUser()?.id !== accountId) return;
+                    const token = await getToken();
+                    if (UserStore.getCurrentUser()?.id !== accountId) return;
+                    if (!token) {
                         return showToast("You must be logged in to report reviews.");
                     }
                     await reportReview(review.id);
@@ -93,6 +100,7 @@ export default function ReviewComponent({ review, refetch, profileId }: { review
     const isAuthorBlocked = Auth?.user?.blockedUsers?.includes(review.sender.discordID) ?? false;
 
     function blockReviewSender() {
+        if (UserStore.getCurrentUser()?.id !== accountId) return;
         if (isAuthorBlocked)
             return unblockUser(review.sender.discordID);
 
@@ -104,7 +112,10 @@ export default function ReviewComponent({ review, refetch, profileId }: { review
                 confirmText="Block"
                 cancelText="Nevermind"
                 onConfirm={async () => {
-                    if (!(await getToken())) {
+                    if (UserStore.getCurrentUser()?.id !== accountId) return;
+                    const token = await getToken();
+                    if (UserStore.getCurrentUser()?.id !== accountId) return;
+                    if (!token) {
                         return showToast("You must be logged in to block users.");
                     }
                     await blockUser(review.sender.discordID);
@@ -114,7 +125,7 @@ export default function ReviewComponent({ review, refetch, profileId }: { review
     }
 
     async function submitVote(isUpvote: boolean) {
-        if (isVoting) return;
+        if (isVoting || UserStore.getCurrentUser()?.id !== accountId) return;
 
         if (review.sender.discordID === Auth.user?.discordID) {
             return showToast("You cannot vote on your own review.");
@@ -124,14 +135,14 @@ export default function ReviewComponent({ review, refetch, profileId }: { review
 
         try {
             if (localVote === isUpvote) {
-                if (await deleteReviewVote(review.id)) {
+                if (await deleteReviewVote(review.id) && UserStore.getCurrentUser()?.id === accountId) {
                     setLocalVote(null);
                     setScore(currentScore => currentScore + (isUpvote ? -1 : 1));
                 }
                 return;
             }
 
-            if (await voteReview(review.id, isUpvote)) {
+            if (await voteReview(review.id, isUpvote) && UserStore.getCurrentUser()?.id === accountId) {
                 const delta = localVote == null
                     ? isUpvote ? 1 : -1
                     : isUpvote ? 2 : -2;

@@ -17,16 +17,13 @@
 */
 
 import { migrateSettingsFromPlugin } from "@api/Settings";
-import { ErrorCard } from "@components/ErrorCard";
 import { HeadingSecondary } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
-import { Devs, IS_LINUX } from "@utils/constants";
-import { Logger } from "@utils/Logger";
+import { Devs } from "@utils/constants";
 import { Margins } from "@utils/margins";
 import { wordsToTitle } from "@utils/text";
 import definePlugin, { ReporterTestable } from "@utils/types";
 import { AuthenticationStore, Button, ChannelStore, GuildMemberStore, SelectedChannelStore, SelectedGuildStore, useMemo, UserStore, VoiceStateStore } from "@webpack/common";
-import { ReactElement } from "react";
 
 import { getCurrentVoice, settings } from "./settings";
 
@@ -41,28 +38,29 @@ interface VoiceStateChangeEvent {
     sessionId: string;
 }
 
-// Mute/Deaf for other people than you is commented out, because otherwise someone can spam it and it will be annoying
+// Other users' mute and deafen events are not narrated because they can be spammed.
 // Filtering out events is not as simple as just dropping duplicates, as otherwise mute, unmute, mute would
 // not say the second mute, which would lead you to believe they're unmuted
 
 function speak(text: string) {
     // Don't narrate in the overlay window, otherwise everything is said twice
-    if (!text || window.__OVERLAY__) return;
+    const synthesis = window.speechSynthesis;
+    if (!text || window.__OVERLAY__ || !synthesis) return;
 
     const { volume, rate } = settings.store;
 
     const speech = new SpeechSynthesisUtterance(text);
     const voice = getCurrentVoice();
-    speech.voice = voice!;
+    if (voice) speech.voice = voice;
     speech.volume = volume;
     speech.rate = rate;
-    speechSynthesis.speak(speech);
+    synthesis.speak(speech);
 }
 
 function clean(str: string) {
     const replacer = settings.store.latinOnly
         ? /[^\p{Script=Latin}\p{Number}\p{Punctuation}\s]/gu
-        : /[^\p{Letter}\p{Number}\p{Punctuation}\s]/gu;
+        : /[^\p{Letter}\p{Mark}\p{Number}\p{Punctuation}\s]/gu;
 
     return str.normalize("NFKC")
         .replace(replacer, "")
@@ -71,11 +69,13 @@ function clean(str: string) {
 }
 
 function formatText(str: string, user: string, channel: string, displayName: string, nickname: string) {
-    return str
-        .replaceAll("{{USER}}", clean(user) || (user ? "Someone" : ""))
-        .replaceAll("{{CHANNEL}}", clean(channel) || "channel")
-        .replaceAll("{{DISPLAY_NAME}}", clean(displayName) || (displayName ? "Someone" : ""))
-        .replaceAll("{{NICKNAME}}", clean(nickname) || (nickname ? "Someone" : ""));
+    const values: Record<string, string> = {
+        USER: clean(user) || (user ? "Someone" : ""),
+        CHANNEL: clean(channel) || "channel",
+        DISPLAY_NAME: clean(displayName) || (displayName ? "Someone" : ""),
+        NICKNAME: clean(nickname) || (nickname ? "Someone" : "")
+    };
+    return str.replace(/{{(USER|CHANNEL|DISPLAY_NAME|NICKNAME)}}/g, (_, key: string) => values[key]);
 }
 
 // For every user, channelId and oldChannelId will differ when moving channel.
@@ -96,37 +96,6 @@ function getTypeAndChannelId({ channelId, oldChannelId }: VoiceStateChangeEvent,
 
     return ["", ""];
 }
-
-/*
-function updateStatuses(type: string, { deaf, mute, selfDeaf, selfMute, userId, channelId }: VoiceState, isMe: boolean) {
-    if (isMe && (type === "join" || type === "move")) {
-        StatusMap = {};
-        const states = VoiceStateStore.getVoiceStatesForChannel(channelId!) as Record<string, VoiceState>;
-        for (const userId in states) {
-            const s = states[userId];
-            StatusMap[userId] = {
-                mute: s.mute || s.selfMute,
-                deaf: s.deaf || s.selfDeaf
-            };
-        }
-        return;
-    }
-
-    if (type === "leave" || (type === "move" && channelId !== SelectedChannelStore.getVoiceChannelId())) {
-        if (isMe)
-            StatusMap = {};
-        else
-            delete StatusMap[userId];
-
-        return;
-    }
-
-    StatusMap[userId] = {
-        deaf: deaf || selfDeaf,
-        mute: mute || selfMute
-    };
-}
-*/
 
 function playSample(type: string) {
     const currentUser = UserStore.getCurrentUser();
@@ -155,13 +124,19 @@ export default definePlugin({
     settings,
 
     flux: {
+        LOGOUT() {
+            myLastChannelId = undefined;
+        },
+
         VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceStateChangeEvent[]; }) {
-            const myGuildId = SelectedGuildStore.getGuildId();
             const myChanId = SelectedChannelStore.getVoiceChannelId();
             const myId = UserStore.getCurrentUser()?.id;
             if (!myId) return;
 
-            if (myChanId && ChannelStore.getChannel(myChanId)?.type === 13 /* Stage Channel */) return;
+            if (myChanId && ChannelStore.getChannel(myChanId)?.type === 13 /* Stage Channel */) {
+                myLastChannelId = myChanId;
+                return;
+            }
 
             const sessionId = AuthenticationStore.getSessionId();
             const { sayOwnName } = settings.store;
@@ -182,13 +157,11 @@ export default definePlugin({
                 const shouldSayUser = !isMe || sayOwnName;
                 const userObj = shouldSayUser ? UserStore.getUser(userId) : null;
                 const user = shouldSayUser ? userObj?.username ?? "Someone" : "";
-                const displayName = user && ((userObj as any)?.globalName ?? user);
-                const nickname = user && ((myGuildId ? GuildMemberStore.getNick(myGuildId, userId) : null) ?? displayName);
-                const channel = ChannelStore.getChannel(id)?.name ?? "channel";
+                const displayName = user && (userObj?.globalName ?? user);
+                const channel = ChannelStore.getChannel(id);
+                const nickname = user && ((channel?.guild_id ? GuildMemberStore.getNick(channel.guild_id, userId) : null) ?? displayName);
 
-                speak(formatText(template, user, channel, displayName, nickname));
-
-                // updateStatuses(type, state, isMe);
+                speak(formatText(template, user, channel?.name ?? "channel", displayName, nickname));
             }
         },
 
@@ -218,13 +191,7 @@ export default definePlugin({
     },
 
     start() {
-        if (typeof speechSynthesis === "undefined" || speechSynthesis.getVoices().length === 0) {
-            new Logger("VcNarrator").warn(
-                "SpeechSynthesis not supported or no Narrator voices found. Thus, this plugin will not work. Check my Settings for more info"
-            );
-            return;
-        }
-
+        myLastChannelId = SelectedChannelStore.getVoiceChannelId() ?? undefined;
     },
 
     stop() {
@@ -232,11 +199,6 @@ export default definePlugin({
     },
 
     settingsAboutComponent() {
-        const [hasVoices, hasEnglishVoices] = useMemo(() => {
-            const voices = speechSynthesis.getVoices();
-            return [voices.length !== 0, voices.some(v => v.lang.startsWith("en"))];
-        }, []);
-
         const types = useMemo(() => {
             const messageTypes: string[] = [];
 
@@ -247,17 +209,6 @@ export default definePlugin({
             return messageTypes;
         }, []);
 
-        let errorComponent: ReactElement<any> | null = null;
-        if (!hasVoices) {
-            let error = "No narrator voices found. ";
-            error += IS_LINUX
-                ? "Install speech-dispatcher or espeak and run Discord with the --enable-speech-dispatcher flag"
-                : "Try installing some in the Narrator settings of your Operating System";
-            errorComponent = <ErrorCard>{error}</ErrorCard>;
-        } else if (!hasEnglishVoices) {
-            errorComponent = <ErrorCard>You don't have any English voices installed, so the narrator might sound weird</ErrorCard>;
-        }
-
         return (
             <section>
                 <Paragraph>
@@ -267,26 +218,21 @@ export default definePlugin({
                     The special placeholders <code>{"{{USER}}"}</code>, <code>{"{{DISPLAY_NAME}}"}</code>, <code>{"{{NICKNAME}}"}</code> and <code>{"{{CHANNEL}}"}</code>{" "}
                     will be replaced with the user's name (nothing if it's yourself), the user's display name, the user's nickname on current server and the channel's name respectively
                 </Paragraph>
-                {hasEnglishVoices && (
-                    <>
-                        <HeadingSecondary className={Margins.top20}>Play Example Sounds</HeadingSecondary>
-                        <div
-                            style={{
-                                display: "grid",
-                                gridTemplateColumns: "repeat(4, 1fr)",
-                                gap: "1rem",
-                            }}
-                            className={"vc-narrator-buttons"}
-                        >
-                            {types.map(t => (
-                                <Button key={t} onClick={() => playSample(t)}>
-                                    {wordsToTitle([t])}
-                                </Button>
-                            ))}
-                        </div>
-                    </>
-                )}
-                {errorComponent}
+                <HeadingSecondary className={Margins.top20}>Play Example Sounds</HeadingSecondary>
+                <div
+                    style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(4, 1fr)",
+                        gap: "1rem",
+                    }}
+                    className={"vc-narrator-buttons"}
+                >
+                    {types.map(t => (
+                        <Button key={t} onClick={() => playSample(t)}>
+                            {wordsToTitle([t])}
+                        </Button>
+                    ))}
+                </div>
             </section>
         );
     }

@@ -59,7 +59,7 @@ const settings = definePluginSettings({
 export const buildSeveralUsers = ErrorBoundary.wrap(function buildSeveralUsers({ users, count, guildId }: { users: User[], count: number; guildId: string; }) {
     return (
         <>
-            {users.slice(0, count).map(user => (
+            {users.slice(0, 2).map(user => (
                 <React.Fragment key={user.id}>
                     <TypingUser user={user} guildId={guildId} />
                     {", "}

@@ -24,7 +24,7 @@ import { addMessage } from "./LoggedMessageManager";
 import { settings } from "./settings";
 import { FetchMessagesResponse, LoadMessagePayload, LoggedMessage, LoggedMessageJSON, MessageCreatePayload, MessageDeleteBulkPayload, MessageDeletePayload, MessageUpdatePayload } from "./types";
 import { cleanUpCachedMessage, cleanupUserObject, getNative, isGhostPinged, mapTimestamp, messageJsonToMessageClass, reAddDeletedMessages } from "./utils";
-import { removeContextMenuBindings, setupContextMenuPatches } from "./utils/contextMenu";
+import { contextMenuPath } from "./utils/contextMenu";
 import { hasWhitelistedId, shouldIgnore } from "./utils/index";
 import { LimitedMap } from "./utils/LimitedMap";
 import { doesMatch } from "./utils/parseQuery";
@@ -265,7 +265,7 @@ export default definePlugin({
             find: "_tryFetchMessagesCached",
             replacement: [
                 {
-                    match: /(?<=\.get\({url.+?then\()(\i)=>\(/,
+                    match: /(?<=\.then\()(\i)=>\((?=\i\.\i\.fetchMessages\.recordEnd\(\))/,
                     replace: "async $1=>(await $self.processMessageFetch($1),"
                 },
                 {
@@ -294,7 +294,7 @@ export default definePlugin({
         {
             find: ".handleImageLoad)",
             replacement: {
-                match: /(componentDidMount\(\){)(.{1,150}===(.+?)\.LOADING)/,
+                match: /(componentDidMount\(\){)(.{1,150}===(\i\.\i)\.LOADING)/,
                 replace:
                     "$1if(this.props?.src?.startsWith('blob:') && this.props?.item?.type === 'VIDEO')" +
                     "return this.setState({readyState: $3.READY});$2"
@@ -312,7 +312,7 @@ export default definePlugin({
 
         // only check for expired attachments if the message is not deleted
         {
-            find: "\"/ephemeral-attachments/\"",
+            find: ".ATTACHMENTS_REFRESH_URLS,",
             replacement: {
                 match: /\i\.attachments\.some\(\i\)\|\|\i\.embeds\.some/,
                 replace: "!arguments[0].deleted && $&"
@@ -320,6 +320,14 @@ export default definePlugin({
         }
     ],
     settings,
+
+    contextMenus: {
+        "message": contextMenuPath,
+        "channel-context": contextMenuPath,
+        "user-context": contextMenuPath,
+        "guild-context": contextMenuPath,
+        "gdm-context": contextMenuPath
+    },
 
     toolboxActions: {
         "Message Logger"() {
@@ -356,8 +364,6 @@ export default definePlugin({
             return messages;
         }
     },
-
-    isDeletedMessage: (id: string) => cacheSentMessages.get(id)?.deleted ?? false,
 
     getDeleted(m1, m2) {
         const deleted = m2?.deleted;
@@ -416,12 +422,9 @@ export default definePlugin({
         settings.store.imageCacheDir = imageCacheDir;
         settings.store.logsDir = logsDir;
         settings.store.attachmentFileExtensions = attachmentFileExtensions ?? "none";
-
-        setupContextMenuPatches();
     },
 
     stop() {
-        removeContextMenuBindings();
         MessageStore.getMessage = this.oldGetMessage;
         imageUtils.clearAttachmentBlobUrlCache();
     }

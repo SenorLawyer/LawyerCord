@@ -20,7 +20,8 @@ export function showInstallFinishedAlert(pluginToEnable: string, native: boolean
         confirmText: `Enable & ${native ? "restart" : "refresh"}`,
         cancelText: native ? "Restart" : "Refresh",
         onConfirm() {
-            !Vencord.Plugins.plugins[pluginToEnable] ? Vencord.Settings.plugins[pluginToEnable] = { enabled: true } : Vencord.Settings.plugins[pluginToEnable].enabled = true;
+            Vencord.Settings.plugins[pluginToEnable] ??= { enabled: true };
+            Vencord.Settings.plugins[pluginToEnable].enabled = true;
             native ? relaunch() : window.location.reload();
         },
         onCancel: () => native ? relaunch() : window.location.reload()

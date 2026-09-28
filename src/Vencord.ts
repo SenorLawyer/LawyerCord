@@ -29,20 +29,22 @@ export * as Webpack from "./webpack";
 export * as WebpackPatcher from "./webpack/patchWebpack";
 export { PlainSettings, Settings };
 
+import * as DataStore from "@api/DataStore";
+import { isLocalDataStoreKey } from "@api/SettingsSync/offline";
 import { coreStyleRootNode, initStyles } from "@api/Styles";
 import { openSettingsTabModal, UpdaterTab } from "@components/settings";
 import { debounce } from "@shared/debounce";
 import { IS_WINDOWS } from "@utils/constants";
 import { createAndAppendStyle } from "@utils/css";
 import { StartAt } from "@utils/types";
-import { SettingsRouter } from "@webpack/common";
+import { SettingsRouter, UserStore } from "@webpack/common";
 
-import { get as dsGet } from "./api/DataStore";
 import { popNotice, showNotice } from "./api/Notices";
-import { NotificationData, showNotification } from "./api/Notifications";
+import { showNotification } from "./api/Notifications";
 import { initPluginManager, PMLogger, startAllPlugins } from "./api/PluginManager";
 import { PlainSettings, Settings, SettingsStore } from "./api/Settings";
-import { areLocalSettingsDirty, getCloudSettings, getCloudSyncDirection, markLocalSettingsDirty, putCloudSettings, shouldCloudSync } from "./api/SettingsSync/cloudSync";
+import { getAuthorization } from "./api/SettingsSync/cloudSetup";
+import { areLocalSettingsDirty, getCloudSettings, getCloudSyncDirection, markLocalDataDirty, markLocalSettingsDirty, putCloudSettings, shouldCloudSync } from "./api/SettingsSync/cloudSync";
 import { relaunch } from "./utils/native";
 import { checkForUpdates, isOutdated as getIsOutdated, update, UpdateLogger } from "./utils/updater";
 import { onceReady } from "./webpack";
@@ -53,8 +55,36 @@ if (IS_REPORTER) {
 }
 
 async function syncSettings() {
-    const hasCloudAuth = await dsGet("Vencord_cloudSecret");
-    if (!hasCloudAuth) {
+    const saveSettingsOnFrequentAction = debounce(async () => {
+        if (Settings.cloud.settingsSync && Settings.cloud.authenticated && shouldCloudSync("push")) {
+            if (await putCloudSettings() === false) saveSettingsOnFrequentAction();
+        }
+    }, 60_000);
+
+    SettingsStore.addGlobalChangeListener((_, path) => {
+        if (path === "cloud" || path.startsWith("cloud.")) return;
+        markLocalSettingsDirty();
+        saveSettingsOnFrequentAction();
+    });
+
+    VencordNative.quickCss.addChangeListener(() => {
+        markLocalDataDirty();
+        saveSettingsOnFrequentAction();
+    });
+
+    DataStore.getChangeEvents().addEventListener("change", event => {
+        const keys = (event as CustomEvent<IDBValidKey[] | null>).detail;
+        if (keys !== null && keys.every(isLocalDataStoreKey)) return;
+        markLocalDataDirty();
+        saveSettingsOnFrequentAction();
+    });
+
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return;
+    const service = Settings.cloud.url;
+    const authorization = await getAuthorization();
+    if (UserStore.getCurrentUser()?.id !== userId || Settings.cloud.url !== service) return;
+    if (typeof authorization !== "string" || !authorization) {
         if (Settings.cloud.authenticated) {
             // User switched to an account that isn't connected to cloud
             showNotification({
@@ -69,29 +99,13 @@ async function syncSettings() {
         return;
     }
 
-    // pre-check for local shared settings
-    if (
-        Settings.cloud.authenticated &&
-        !hasCloudAuth // this has been enabled due to local settings share or some other bug
-    ) {
-        // show a notification letting them know and tell them how to fix it
-        showNotification({
-            title: "Cloud Integrations",
-            body: "We've noticed you have cloud integrations enabled in another client! Due to limitations, you will " +
-                "need to re-authenticate to continue using them. Click here to go to the settings page to do so!",
-            color: "var(--yellow-360)",
-            onClick: () => SettingsRouter.openUserSettings("equicord_cloud_panel")
-        });
-        return;
-    }
-
     if (
         Settings.cloud.settingsSync && // if it's enabled
         Settings.cloud.authenticated && // if cloud integrations are enabled
         getCloudSyncDirection() !== "manual" // if we're not in manual mode
     ) {
         if (areLocalSettingsDirty() && shouldCloudSync("push")) {
-            await putCloudSettings();
+            if (await putCloudSettings() === false) saveSettingsOnFrequentAction();
         } else if (shouldCloudSync("pull") && await getCloudSettings(false)) { // if we synchronized something (false means no sync)
             // we show a notification here instead of allowing getCloudSettings() to show one to declutter the amount of
             // potential notifications that might occur. getCloudSettings() will always send a notification regardless if
@@ -105,34 +119,12 @@ async function syncSettings() {
             });
         }
     }
-
-    const saveSettingsOnFrequentAction = debounce(async () => {
-        if (Settings.cloud.settingsSync && Settings.cloud.authenticated && shouldCloudSync("push")) {
-            await putCloudSettings();
-        }
-    }, 60_000);
-
-    SettingsStore.addGlobalChangeListener(() => {
-        markLocalSettingsDirty();
-        saveSettingsOnFrequentAction();
-    });
 }
 
 let notifiedForUpdatesThisSession = false;
 
 async function runUpdateCheck() {
     if (IS_UPDATER_DISABLED) return;
-
-    const notify = (data: NotificationData) => {
-        if (notifiedForUpdatesThisSession) return;
-        notifiedForUpdatesThisSession = true;
-
-        setTimeout(() => showNotification({
-            permanent: true,
-            noPersist: true,
-            ...data
-        }), 10_000);
-    };
 
     try {
         const isOutdated = await checkForUpdates();
@@ -205,7 +197,7 @@ async function init() {
     await onceReady;
     startAllPlugins(StartAt.WebpackReady);
 
-    syncSettings();
+    syncSettings().catch((error: unknown) => PMLogger.error("Failed to initialize cloud settings sync", error));
     initTrayIpc();
 
     if (!IS_DEV && !IS_WEB && !IS_UPDATER_DISABLED) {

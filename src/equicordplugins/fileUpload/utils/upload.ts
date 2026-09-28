@@ -6,7 +6,7 @@
 
 import { normalizeCorsProxyUrl, toProxiedUrl } from "@equicordplugins/fileUpload/constants";
 import { settings } from "@equicordplugins/fileUpload/settings";
-import { fallbackServiceOrder, serviceLabels, ServiceType, ShareXUploaderConfig, UploadResponse } from "@equicordplugins/fileUpload/types";
+import { parseFallbackServiceOrder, serviceLabels, ServiceType, ShareXUploaderConfig, UploadResponse } from "@equicordplugins/fileUpload/types";
 import { copyToClipboard } from "@utils/clipboard";
 import { insertTextIntoChatInputBox } from "@utils/discord";
 import { Logger } from "@utils/Logger";
@@ -80,18 +80,6 @@ function isUploadCancelledError(error: unknown): boolean {
 
     const message = error.message.toLowerCase();
     return message.includes("cancelled") || message.includes("canceled") || message.includes("aborted") || message.includes("aborterror");
-}
-
-function getFallbackServices(): ServiceType[] {
-    const configuredOrder = (settings.store as { fallbackOrder?: string; }).fallbackOrder || fallbackServiceOrder.join(",");
-    const services = configuredOrder
-        .split(/[\n,]/)
-        .map(service => service.trim())
-        .filter((service): service is ServiceType => Object.values(ServiceType).includes(service as ServiceType));
-
-    return services.length === fallbackServiceOrder.length && new Set(services).size === fallbackServiceOrder.length
-        ? services
-        : fallbackServiceOrder;
 }
 
 function emitUploadState() {
@@ -1226,38 +1214,16 @@ function canServiceHandleFile(service: ServiceType, fileName: string): boolean {
     return true;
 }
 
-function normalizePrimaryService(primary: ServiceType, fileName: string): ServiceType {
-    if (canServiceHandleFile(primary, fileName)) {
-        return primary;
-    }
-
-    if (isExeFileName(fileName)) {
-        return ServiceType.GOFILE;
-    }
-
-    if (!Native && primary === ServiceType.ZEROX0) {
-        return ServiceType.CATBOX;
-    }
-
-    return primary;
-}
-
 function buildUploadOrder(primary: ServiceType, fileName: string): ServiceType[] {
-    const disableFallbacks = Boolean((settings.store as { disableFallbacks?: boolean; }).disableFallbacks);
-    const effectivePrimary = normalizePrimaryService(primary, fileName);
-
-    const order: ServiceType[] = [effectivePrimary];
-    if (disableFallbacks) {
-        return order;
-    }
-
-    for (const fallback of getFallbackServices()) {
-        if (fallback !== effectivePrimary && canServiceHandleFile(fallback, fileName)) {
-            order.push(fallback);
+    if (settings.store.disableFallbacks) {
+        if (!canServiceHandleFile(primary, fileName)) {
+            throw new Error(`${serviceLabels[primary]} cannot upload this file. Choose another service.`);
         }
+        return [primary];
     }
 
-    return order;
+    return [primary, ...parseFallbackServiceOrder(settings.store.fallbackOrder).filter(service => service !== primary)]
+        .filter(service => canServiceHandleFile(service, fileName));
 }
 
 function finalizeUploadedUrl(url: string): string {
@@ -1365,6 +1331,7 @@ async function uploadWithFallbacks(fileBlob: Blob, filename: string, primary: Se
 
         try {
             const uploadedUrl = await uploadToService(service, fileBlob, filename);
+            if (cancelRequested) throw new Error("Upload cancelled by user");
             if (attempted.length) {
                 showToast(`Upload succeeded with ${serviceLabels[service]} after fallback`, Toasts.Type.SUCCESS);
             }
@@ -1554,21 +1521,21 @@ export async function uploadPickedFile(): Promise<void> {
     await uploadProvidedFiles([file]);
 }
 
-export async function uploadProvidedFiles(files: readonly File[], forceSend?: boolean): Promise<void> {
+export async function uploadProvidedFiles(files: readonly File[], forceSend?: boolean): Promise<boolean> {
     if (isUploading) {
         showToast("Upload already in progress", Toasts.Type.MESSAGE);
-        return;
+        return false;
     }
 
     if (!isConfigured()) {
         showToast("Please configure FileUpload settings first", Toasts.Type.FAILURE);
-        return;
+        return false;
     }
 
-    if (!files.length) return;
+    if (!files.length) return false;
 
     const uploadFiles = files.filter(file => Boolean(file) && isFileTypeAllowed(file));
-    if (!uploadFiles.length) return;
+    if (!uploadFiles.length) return false;
 
     isUploading = true;
     cancelRequested = false;
@@ -1593,6 +1560,7 @@ export async function uploadProvidedFiles(files: readonly File[], forceSend?: bo
 
             await uploadPreparedBlob(file, undefined, forceSend);
         }
+        return true;
     } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error";
         if (isUploadCancelledError(error)) {
@@ -1603,6 +1571,7 @@ export async function uploadProvidedFiles(files: readonly File[], forceSend?: bo
             logger.error("Manual upload error", error);
             setUploadState({ phase: "failed", status: `Upload failed: ${message}`, canCancel: false, percent: 0 });
         }
+        return false;
     } finally {
         isUploading = false;
         activeAbortController = null;

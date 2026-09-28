@@ -4,16 +4,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { folderIcon, folderIconsData, settings } from "./settings";
-
-export async function setFolderData(props: folderProp, newData: folderIcon) {
-    if (!settings.store.folderIcons) {
-        settings.store.folderIcons = {};
-    }
-    const folderSettings = (settings.store.folderIcons as folderIconsData);
-    folderSettings[props.folderId] = newData;
-}
-
 export interface folderProp {
     folderId: string;
     folderColor: number;

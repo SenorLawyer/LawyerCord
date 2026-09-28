@@ -20,8 +20,10 @@ import { fetchBuffer, fetchJson } from "@main/utils/http";
 import { IpcEvents } from "@shared/IpcEvents";
 import { normalizeUpdateChannel, type UpdateChannel } from "@shared/updateChannel";
 import { VENCORD_USER_AGENT } from "@shared/vencordUserAgent";
+import { createHash } from "crypto";
 import { ipcMain } from "electron";
-import { writeFileSync } from "original-fs";
+import { mkdtempSync, renameSync, rmSync, writeFileSync } from "original-fs";
+import { join } from "path";
 
 import gitHash from "~git-hash";
 import gitRemote from "~git-remote";
@@ -30,7 +32,8 @@ import { ASAR_FILE, serializeErrors } from "./common";
 import { type GithubRelease, selectUpdateRelease } from "./releaseSelection";
 
 const API_BASE = `https://api.github.com/repos/${gitRemote}`;
-let PendingUpdate: string | null = null;
+let PendingUpdate: { url: string; digest: string; } | null = null;
+let updateCheck = Symbol();
 
 async function githubGet<T = any>(endpoint: string) {
     return fetchJson<T>(API_BASE + endpoint, {
@@ -54,13 +57,17 @@ async function getReleaseCommit(release: GithubRelease): Promise<string> {
 }
 
 async function fetchUpdates(channel: UpdateChannel) {
+    const check = updateCheck = Symbol();
+    PendingUpdate = null;
     const release = await getRelease(channel);
     const releaseCommit = await getReleaseCommit(release);
-    if (releaseCommit === gitHash) return null;
+    if (check !== updateCheck || releaseCommit === gitHash) return null;
 
     const asset = release.assets.find(asset => asset.name === ASAR_FILE);
     if (!asset) throw new Error(`The ${channel} release does not include ${ASAR_FILE}`);
-    PendingUpdate = asset.browser_download_url;
+    if (typeof asset.digest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(asset.digest))
+        throw new Error("The release archive has no valid SHA-256 checksum.");
+    PendingUpdate = { url: asset.browser_download_url, digest: asset.digest };
     return { release, releaseCommit };
 }
 
@@ -80,8 +87,20 @@ async function calculateGitChanges(_: unknown, updateChannel: unknown) {
 async function applyUpdates() {
     if (!PendingUpdate) return true;
 
-    const data = await fetchBuffer(PendingUpdate);
-    writeFileSync(__dirname, data, { flush: true });
+    const check = updateCheck;
+    const pending = PendingUpdate;
+    const data = await fetchBuffer(pending.url);
+    if (check !== updateCheck || !PendingUpdate) return false;
+    if (`sha256:${createHash("sha256").update(data).digest("hex")}` !== pending.digest)
+        throw new Error("The downloaded update does not match its checksum. Try downloading it again.");
+    const tempDir = mkdtempSync(`${__dirname}.update-`);
+    try {
+        const tempFile = join(tempDir, ASAR_FILE);
+        writeFileSync(tempFile, data, { flush: true });
+        renameSync(tempFile, __dirname);
+    } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+    }
 
     PendingUpdate = null;
 

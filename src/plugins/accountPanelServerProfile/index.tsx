@@ -83,12 +83,12 @@ export default definePlugin({
             group: true,
             replacement: [
                 {
-                    match: /(\.AVATAR,children:.+?renderPopout:\((\i),\i\)=>)\{(.+?)\}(?=,position)(?<=currentUser:(\i).+?)/,
-                    replace: (_, rest, popoutProps, originalPopout, currentUser) => `${rest}$self.UserProfile({popoutProps:${popoutProps},currentUser:${currentUser},originalRenderPopout:()=>{${originalPopout}}})`
+                    match: /(?<=renderPopout:\((\i),\i\)=>)\{(?=.{0,150}\bcurrentUser:(\i)[,}])(.{1,250}?)\}(?=,position)/,
+                    replace: "$self.UserProfile({popoutProps:$1,currentUser:$2,originalRenderPopout:()=>{$3}})"
                 },
                 {
-                    match: /\.AVATAR,children:.+?onRequestClose:\(\)=>\{/,
-                    replace: "$&$self.onPopoutClose();"
+                    match: /(?<=onRequestClose:\(\)=>\{)(?=\i\(\),\i\(void 0\)\})/,
+                    replace: "$self.onPopoutClose();"
                 },
                 {
                     match: /ref:(\i),style:\i(?=.{0,250}#{intl::USER_PROFILE_ACCOUNT_POPOUT_BUTTON_A11Y_LABEL})/,
@@ -116,20 +116,18 @@ export default definePlugin({
     },
 
     UserProfile: ErrorBoundary.wrap(({ popoutProps, currentUser, originalRenderPopout }: UserProfileProps) => {
-        if (
-            (settings.store.prioritizeServerProfile && openAlternatePopout) ||
-            (!settings.store.prioritizeServerProfile && !openAlternatePopout)
-        ) {
+        if (settings.store.prioritizeServerProfile === openAlternatePopout) {
             return originalRenderPopout();
         }
 
         const currentChannel = getCurrentChannel();
-        if (currentChannel?.getGuildId() == null || !UserProfile.$$vencordGetWrappedComponent()) {
+        const guildId = currentChannel?.getGuildId();
+        if (!currentChannel || guildId == null || !UserProfile.$$vencordGetWrappedComponent()) {
             return originalRenderPopout();
         }
 
         if (isPluginEnabled(alwaysExpandProfiles.name)) {
-            return <ServerProfileLauncher popoutProps={popoutProps} userId={currentUser.id} guildId={currentChannel.getGuildId()!} />;
+            return <ServerProfileLauncher popoutProps={popoutProps} userId={currentUser.id} guildId={guildId} />;
         }
 
         return (
@@ -137,7 +135,7 @@ export default definePlugin({
                 {...popoutProps}
                 user={currentUser}
                 currentUser={currentUser}
-                guildId={currentChannel.getGuildId()}
+                guildId={guildId}
                 channelId={currentChannel.id}
             />
         );

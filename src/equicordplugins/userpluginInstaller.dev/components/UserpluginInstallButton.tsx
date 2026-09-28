@@ -5,12 +5,17 @@
  */
 
 import { Button } from "@components/Button";
+import { Message } from "@vencord/discord-types";
 import { Alerts, ChannelStore, useEffect, useState } from "@webpack/common";
 
 import userpluginInstaller, { Native, OpenSettingsModule, settings } from "..";
 import { CLONE_LINK_REGEX, showInstallFinishedAlert, WHITELISTED_SHARE_CHANNELS } from "../misc/constants";
 
-export default function UserpluginInstallButton({ props }: any) {
+interface Props {
+    message: Message;
+}
+
+export default function UserpluginInstallButton({ message }: Props) {
     const [plugins, setPlugins] = useState<{
         directory?: string;
     }[]>([]);
@@ -18,16 +23,17 @@ export default function UserpluginInstallButton({ props }: any) {
         const { plugins } = userpluginInstaller;
 
         setPlugins(plugins.value());
-        const cid = plugins.registerCallback(value => setPlugins(plugins.value()));
+        const cid = plugins.registerCallback(setPlugins);
         return () => plugins.deregisterCallback(cid);
-    });
-    const { message } = props;
-    if (![...WHITELISTED_SHARE_CHANNELS, ...(settings.store.allowlistedChannels || "").split(",")].includes(ChannelStore.getChannel(message.channel_id).parent_id) && !WHITELISTED_SHARE_CHANNELS.includes(message.channel_id))
-        return;
-    const gitLink = (props.message.content as string).match(CLONE_LINK_REGEX);
-    if (!gitLink) return;
+    }, []);
+    const allowedChannels = [...WHITELISTED_SHARE_CHANNELS, ...(settings.store.allowlistedChannels || "").split(",").map(id => id.trim()).filter(Boolean)];
+    const parentId = ChannelStore.getChannel(message.channel_id)?.parent_id;
+    if (!allowedChannels.includes(message.channel_id) && !(parentId && allowedChannels.includes(parentId)))
+        return null;
+    const gitLink = message.content.match(CLONE_LINK_REGEX);
+    if (!gitLink) return null;
     const idpl = gitLink.includes("plugins.nin0.dev") ? 1 : 0;
-    const installed = plugins.map(p => p.directory).includes(gitLink[[3, 6][idpl]]);
+    const installed = plugins.some(p => p.directory === gitLink[[3, 6][idpl]]);
     return <>
         <div style={{ display: "flex" }}>
             <Button style={{
@@ -37,14 +43,15 @@ export default function UserpluginInstallButton({ props }: any) {
                 onClick={async () => {
                     if (installed) return void OpenSettingsModule.openUserSettings("vencord_userplugins_panel");
                     try {
-                        const { name, native } = JSON.parse(await Native.initPluginInstall(gitLink[0], gitLink[[1, 4][idpl]], gitLink[[2, 5][idpl]], gitLink[[3, 6][idpl]]));
+                        const { name, native } = await Native.initPluginInstall(gitLink[0], gitLink[[1, 4][idpl]], gitLink[[2, 5][idpl]], gitLink[[3, 6][idpl]]);
                         showInstallFinishedAlert(name, native);
                     }
-                    catch (e: any) {
-                        if (e.toString().includes("silentStop")) return;
+                    catch (e) {
+                        const error = String(e);
+                        if (error.includes("silentStop")) return;
                         Alerts.show({
                             title: "Install error",
-                            body: e.toString()
+                            body: error
                         });
                     }
                 }}>

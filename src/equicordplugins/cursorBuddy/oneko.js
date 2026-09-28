@@ -16,12 +16,12 @@ export default function oneko(options = {}) {
         speed = 10,
         fps = 24,
         image = "./oneko.gif",
-        persistPosition = true,
         furColor = "#FFFFFF",
         outlineColor = "#000000",
     } = options;
 
     const nekoEl = document.createElement("div");
+    let frameRequest = 0;
     let nekoPosX = 32;
     let nekoPosY = 32;
 
@@ -159,21 +159,6 @@ export default function oneko(options = {}) {
     function init() {
         const nekoFile = image; // Use passed-in image URL
 
-        if (persistPosition) {
-            let storedNeko = JSON.parse(window.localStorage.getItem("oneko"));
-            if (storedNeko !== null) {
-                nekoPosX = storedNeko.nekoPosX;
-                nekoPosY = storedNeko.nekoPosY;
-                mousePosX = storedNeko.mousePosX;
-                mousePosY = storedNeko.mousePosY;
-                frameCount = storedNeko.frameCount;
-                idleTime = storedNeko.idleTime;
-                idleAnimation = storedNeko.idleAnimation;
-                idleAnimationFrame = storedNeko.idleAnimationFrame;
-                nekoEl.style.backgroundPosition = storedNeko.bgPos;
-            }
-        }
-
         nekoEl.id = "oneko";
         nekoEl.ariaHidden = true;
         nekoEl.style.width = "32px";
@@ -196,31 +181,14 @@ export default function oneko(options = {}) {
 
         document.body.appendChild(nekoEl);
 
-        document.addEventListener("mousemove", function (event) {
-            mousePosX = event.clientX;
-            mousePosY = event.clientY;
-        });
+        document.addEventListener("mousemove", onMouseMove);
 
-        if (persistPosition) {
-            window.addEventListener("beforeunload", function (event) {
-                window.localStorage.setItem(
-                    "oneko",
-                    JSON.stringify({
-                        nekoPosX: nekoPosX,
-                        nekoPosY: nekoPosY,
-                        mousePosX: mousePosX,
-                        mousePosY: mousePosY,
-                        frameCount: frameCount,
-                        idleTime: idleTime,
-                        idleAnimation: idleAnimation,
-                        idleAnimationFrame: idleAnimationFrame,
-                        bgPos: nekoEl.style.backgroundPosition,
-                    })
-                );
-            });
-        }
+        frameRequest = window.requestAnimationFrame(onAnimationFrame);
+    }
 
-        window.requestAnimationFrame(onAnimationFrame);
+    function onMouseMove(event) {
+        mousePosX = event.clientX;
+        mousePosY = event.clientY;
     }
 
     let lastFrameTimestamp;
@@ -232,7 +200,7 @@ export default function oneko(options = {}) {
             lastFrameTimestamp = timestamp;
             frame();
         }
-        window.requestAnimationFrame(onAnimationFrame);
+        frameRequest = window.requestAnimationFrame(onAnimationFrame);
     }
 
     function setSprite(name, frame) {
@@ -335,4 +303,9 @@ export default function oneko(options = {}) {
     }
 
     init();
+    return () => {
+        window.cancelAnimationFrame(frameRequest);
+        document.removeEventListener("mousemove", onMouseMove);
+        nekoEl.remove();
+    };
 }

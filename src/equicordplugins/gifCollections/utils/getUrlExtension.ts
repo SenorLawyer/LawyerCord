@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { parseUrl } from "@utils/misc";
+
 export function getUrlExtension(url: string) {
-    if (!url.startsWith("https:")) url = "https:" + url;
-    return new URL(url).pathname.split(".").pop();
+    const parsed = parseUrl(url.startsWith("//") ? `https:${url}` : url);
+    return parsed?.pathname.match(/\.([^./]+)$/)?.[1].toLowerCase();
 }

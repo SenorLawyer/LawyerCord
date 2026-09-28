@@ -6,15 +6,16 @@
 
 import "./styles.css";
 
-import { get, set } from "@api/DataStore";
+import { get, set, updateMany } from "@api/DataStore";
 import { BaseText } from "@components/BaseText";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { EquicordDevs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import { useTimer } from "@utils/react";
 import definePlugin from "@utils/types";
 import { VoiceState } from "@vencord/discord-types";
 import { findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
-import { SelectedChannelStore, UserStore, VoiceStateStore } from "@webpack/common";
+import { Alerts, Button, SelectedChannelStore, showToast, Toasts, UserStore, VoiceStateStore } from "@webpack/common";
 
 const wrapperClasses = findCssClassesLazy("memberSinceWrapper");
 const containerClasses = findCssClassesLazy("memberSince");
@@ -22,36 +23,49 @@ const Section = findComponentByCodeLazy("headingVariant:", '"section"', "heading
 
 const storageKey = "VoiceStats_totals";
 const saveIntervalMs = 30_000;
+const logger = new Logger("VoiceStats");
 
 const sessionStarts = new Map<string, number>();
 const totalsByUser = new Map<string, number>();
+let recoveredTotals: Record<string, number> = {};
+let activeUserId: string | undefined;
+const pendingTotalsByAccount = new Map<string, Record<string, number>>();
 let trackedChannelId: string | null = null;
 let saveIntervalId: ReturnType<typeof setInterval> | null = null;
 let totalsDirty = false;
 let pluginStarted = false;
+let pluginEnabled = false;
 let startGeneration = 0;
-
-async function loadStoredTotals() {
-    const saved = await get<Record<string, number>>(storageKey);
-    if (!saved) return;
-    for (const [userId, value] of Object.entries(saved)) totalsByUser.set(userId, value);
-}
+let pendingSave = Promise.resolve();
+let recovering = false;
 
 async function persistTotals() {
-    if (!totalsDirty) return;
+    const userId = activeUserId;
+    if (!totalsDirty || !userId) return;
 
+    const snapshot = Object.fromEntries(totalsByUser);
+    pendingTotalsByAccount.set(userId, snapshot);
     totalsDirty = false;
-    await set(storageKey, Object.fromEntries(totalsByUser));
+    pendingSave = pendingSave.then(async () => {
+        try {
+            await set(`${storageKey}:${userId}`, snapshot);
+            if (pendingTotalsByAccount.get(userId) === snapshot) pendingTotalsByAccount.delete(userId);
+        } catch (error) {
+            if (activeUserId === userId) totalsDirty = true;
+            logger.error("Could not save voice statistics.", error);
+        }
+    });
+    await pendingSave;
 }
 
 function flushActiveSessions() {
-    const now = Date.now();
+    const now = performance.now();
     for (const [userId, startedAt] of sessionStarts) {
         const accrued = Math.floor((now - startedAt) / 1000);
         if (accrued <= 0) continue;
 
         totalsByUser.set(userId, (totalsByUser.get(userId) ?? 0) + accrued);
-        sessionStarts.set(userId, now);
+        sessionStarts.set(userId, startedAt + accrued * 1000);
         totalsDirty = true;
     }
 }
@@ -73,13 +87,14 @@ function stopSaveInterval() {
 }
 
 function startTrackingChannel(channelId: string, myId: string) {
+    if (trackedChannelId === channelId) return;
     if (trackedChannelId) stopTrackingChannel();
 
     trackedChannelId = channelId;
     sessionStarts.clear();
 
     const states = VoiceStateStore.getVoiceStatesForChannel(channelId) ?? {};
-    const now = Date.now();
+    const now = performance.now();
     for (const state of Object.values(states) as VoiceState[]) {
         if (state.userId !== myId) sessionStarts.set(state.userId, now);
     }
@@ -96,9 +111,10 @@ function stopTrackingChannel() {
 }
 
 function getLiveSeconds(userId: string): number {
-    const stored = totalsByUser.get(userId) ?? 0;
+    if (!activeUserId || UserStore.getCurrentUser()?.id !== activeUserId) return 0;
+    const stored = (totalsByUser.get(userId) ?? 0) + (recoveredTotals[userId] ?? 0);
     const startedAt = sessionStarts.get(userId);
-    return startedAt ? stored + Math.floor((Date.now() - startedAt) / 1000) : stored;
+    return startedAt !== undefined ? stored + Math.floor((performance.now() - startedAt) / 1000) : stored;
 }
 
 function formatDuration(seconds: number): string {
@@ -156,22 +172,120 @@ const VoiceStatsSection = ErrorBoundary.wrap(({ userId, isSideBar }: { userId: s
     );
 }, { noop: true });
 
+function isTotals(value: unknown): value is Record<string, number> {
+    return value !== null && typeof value === "object" && !Array.isArray(value)
+        && Object.values(value).every(seconds => typeof seconds === "number" && Number.isSafeInteger(seconds) && seconds >= 0);
+}
+
+async function recoverLegacyTotals(userId: string) {
+    if (recovering || UserStore.getCurrentUser()?.id !== userId) return;
+    recovering = true;
+    const resume = pluginEnabled;
+    pluginStarted = false;
+    stopTrackingChannel();
+    const generation = ++startGeneration;
+    try {
+        await persistTotals();
+        await pendingSave;
+        if (pendingTotalsByAccount.has(userId)) throw new Error("Save pending totals before recovering old statistics.");
+        let recovered = false;
+        let legacyTotals: Record<string, number> = {};
+        await updateMany<[unknown, Record<string, number>]>([
+            [storageKey, legacy => {
+                if (!isTotals(legacy)) throw new Error("No valid old statistics were found.");
+                legacyTotals = legacy;
+                return legacy;
+            }],
+            [`${storageKey}:recovered:${userId}`, current => {
+                if (generation !== startGeneration || UserStore.getCurrentUser()?.id !== userId) throw new Error("The account changed during recovery.");
+                if (current !== undefined && !isTotals(current)) throw new Error("Recovered statistics are invalid.");
+                recovered = current !== undefined;
+                return current ?? legacyTotals;
+            }]
+        ]);
+        showToast(recovered ? "Old statistics were already recovered for this account." : "Old statistics recovered.", Toasts.Type.SUCCESS);
+    } catch (error) {
+        logger.error("Could not recover old voice statistics.", error);
+        showToast("Could not recover old voice statistics. Your saved records were kept.", Toasts.Type.FAILURE);
+    } finally {
+        recovering = false;
+        if (resume && generation === startGeneration && UserStore.getCurrentUser()?.id === userId) await loadAccountTotals();
+    }
+}
+
+function RecoverySettings() {
+    return <Button onClick={() => {
+        const userId = UserStore.getCurrentUser()?.id;
+        if (!userId) return;
+        Alerts.show({
+            title: "Recover Old Voice Statistics",
+            body: "Old totals have no recorded account owner. Add them to this account once? The original record will be kept.",
+            confirmText: "Recover",
+            onConfirm: () => { void recoverLegacyTotals(userId); }
+        });
+    }}>Recover Old Voice Statistics</Button>;
+}
+
+async function loadAccountTotals() {
+    pluginStarted = false;
+    stopTrackingChannel();
+    const generation = ++startGeneration;
+    const userId = UserStore.getCurrentUser()?.id;
+    activeUserId = userId;
+    totalsByUser.clear();
+    recoveredTotals = {};
+    totalsDirty = false;
+    if (!userId) return;
+
+    let saved: unknown;
+    let recovered: unknown;
+    try {
+        [saved, recovered] = await Promise.all([get<unknown>(`${storageKey}:${userId}`), get<unknown>(`${storageKey}:recovered:${userId}`)]);
+    } catch (error) {
+        logger.error("Could not load voice statistics.", error);
+        return;
+    }
+    if (generation !== startGeneration || UserStore.getCurrentUser()?.id !== userId) return;
+    if ((saved !== undefined && !isTotals(saved)) || (recovered !== undefined && !isTotals(recovered))) {
+        logger.error("Saved voice statistics are invalid. Tracking has been paused to preserve them.");
+        return;
+    }
+    recoveredTotals = recovered ?? {};
+    const pending = pendingTotalsByAccount.get(userId);
+    totalsDirty = pending !== undefined;
+    for (const [id, value] of Object.entries(pending ?? (saved ?? {}))) totalsByUser.set(id, value);
+    pluginStarted = true;
+
+    const channelId = SelectedChannelStore.getVoiceChannelId();
+    if (channelId) startTrackingChannel(channelId, userId);
+}
+
 export default definePlugin({
     name: "VoiceStats",
     description: "Shows how long you've spent in voice with each user in their profile",
     tags: ["Voice", "Friends"],
     authors: [EquicordDevs.Moowi],
     dependencies: ["ProfileSectionsAPI"],
+    settingsAboutComponent: RecoverySettings,
     renderProfileSection: {
         render: VoiceStatsSection,
         priority: 0,
     },
     flux: {
+        LOGOUT() {
+            startGeneration++;
+            stopTrackingChannel();
+            activeUserId = undefined;
+            totalsByUser.clear();
+            recoveredTotals = {};
+            totalsDirty = false;
+        },
+        CONNECTION_OPEN: loadAccountTotals,
         VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceState[]; }) {
             if (!pluginStarted) return;
 
             const myId = UserStore.getCurrentUser()?.id;
-            if (!myId) return;
+            if (!myId || myId !== activeUserId) return;
 
             for (const state of voiceStates) {
                 const { userId, channelId, oldChannelId } = state;
@@ -180,7 +294,6 @@ export default definePlugin({
                     if (!oldChannelId && channelId) startTrackingChannel(channelId, myId);
                     else if (oldChannelId && !channelId) stopTrackingChannel();
                     else if (channelId && channelId !== oldChannelId) {
-                        stopTrackingChannel();
                         startTrackingChannel(channelId, myId);
                     }
                     continue;
@@ -191,12 +304,12 @@ export default definePlugin({
 
                 if (joinedMyChannel) {
                     if (!sessionStarts.has(userId)) {
-                        sessionStarts.set(userId, Date.now());
+                        sessionStarts.set(userId, performance.now());
                         startSaveInterval();
                     }
                 } else if (leftMyChannel && sessionStarts.has(userId)) {
                     const startedAt = sessionStarts.get(userId)!;
-                    const accrued = Math.floor((Date.now() - startedAt) / 1000);
+                    const accrued = Math.floor((performance.now() - startedAt) / 1000);
                     if (accrued > 0) {
                         totalsByUser.set(userId, (totalsByUser.get(userId) ?? 0) + accrued);
                         totalsDirty = true;
@@ -209,21 +322,13 @@ export default definePlugin({
         }
     },
 
-    async start() {
-        pluginStarted = true;
-        const generation = ++startGeneration;
-
-        await loadStoredTotals();
-        if (!pluginStarted || generation !== startGeneration) return;
-
-        const myId = UserStore.getCurrentUser()?.id;
-        if (!myId) return;
-
-        const channelId = SelectedChannelStore.getVoiceChannelId?.();
-        if (channelId) startTrackingChannel(channelId, myId);
+    start() {
+        pluginEnabled = true;
+        return loadAccountTotals();
     },
 
     stop() {
+        pluginEnabled = false;
         pluginStarted = false;
         startGeneration++;
         stopTrackingChannel();

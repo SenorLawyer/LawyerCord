@@ -31,10 +31,6 @@ copy(Object.fromEntries(
 ))
 */
 
-export type GoogleLanguage = keyof typeof GoogleLanguages;
-export type DeeplLanguage = keyof typeof DeeplLanguages;
-export type KagiLanguage = keyof typeof KagiLanguages;
-
 export const GoogleLanguages = {
     "auto": "Detect language",
     "af": "Afrikaans",
@@ -302,23 +298,6 @@ export const DeeplLanguages = {
     "yo": "Yoruba",
     "zu": "Zulu"
 } as const;
-
-export function deeplLanguageToGoogleLanguage(language: string) {
-    switch (language) {
-        case "": return "auto";
-        case "nb": return "no";
-        case "zh-hans": return "zh-CN";
-        case "zh-hant": return "zh-TW";
-        case "en-us":
-        case "en-gb":
-            return "en";
-        case "pt-br":
-        case "pt-pt":
-            return "pt";
-        default:
-            return language;
-    }
-}
 
 // Generated using:
 // curl https://translate.kagi.com/api/list-languages | jq 'map({(.language | ascii_downcase): .name}) | add | to_entries | sort_by(.value) | from_entries'

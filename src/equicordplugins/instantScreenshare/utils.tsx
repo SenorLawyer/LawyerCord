@@ -12,7 +12,7 @@ import { IS_WINDOWS } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import { OptionType } from "@utils/types";
 import { findByCodeLazy, findByPropsLazy } from "@webpack";
-import { MediaEngineStore, SearchableSelect, useEffect, useState } from "@webpack/common";
+import { MediaEngineStore, SearchableSelect, showToast, Toasts, useEffect, useState } from "@webpack/common";
 
 interface PickerProps {
     streamMediaSelection: any[];
@@ -88,16 +88,8 @@ export async function getCurrentMedia() {
     const streamMedia = sources.find(screen => screen.id === settings.store.streamMedia);
     if (streamMedia) return streamMedia;
 
-    const fallback = sources[0];
-    if (!fallback) {
-        log.error("No media sources found.");
-        return null;
-    }
-
-    log.error(`Stream Media "${settings.store.streamMedia}" not found. Resetting to default.`);
-
-    settings.store.streamMedia = fallback.id;
-    return fallback;
+    showToast("Select an available media source in InstantScreenshare settings.", Toasts.Type.FAILURE);
+    return null;
 }
 
 function StreamSimplePicker({ streamMediaSelection, streamMedia }: PickerProps) {
@@ -164,7 +156,7 @@ function SettingSection() {
     return (
         <section>
             <Heading>Media source to stream</Heading>
-            <Paragraph className={Margins.bottom20}>Resets to main screen if not found</Paragraph>
+            <Paragraph className={Margins.bottom20}>Sharing will not start if the selected source is unavailable.</Paragraph>
             <ScreenSetting />
         </section>
     );

@@ -41,7 +41,7 @@ export default definePlugin({
         {
             find: "UNREAD_IMPORTANT:",
             replacement: {
-                match: /\.Children\.count.+?:null(?<=,channel:(\i).+?)/,
+                match: /\.Children\.count.{0,150}?:null(?<=,channel:(\i).{0,250}?)/,
                 replace: "$&,$self.renderChannelBadges($1)"
             }
         },
@@ -49,7 +49,7 @@ export default definePlugin({
         {
             find: "18V16H9v2H6Zm3",
             replacement: {
-                match: /mentionsCount:\i.+?null(?<=channel:(\i).+?)/,
+                match: /\(0,\i\.jsx\)\(\i,\{thread:(\i),countInVoice:\i,.{0,100}?\}\)/,
                 replace: "$&,$self.renderChannelBadges($1)"
             }
         }

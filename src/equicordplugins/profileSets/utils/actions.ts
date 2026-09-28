@@ -4,140 +4,117 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { isNonNullish } from "@utils/guards";
+import { chooseFile, saveFile } from "@utils/web";
 import { ProfilePreset } from "@vencord/discord-types";
-import { findStoreLazy } from "@webpack";
-import { showToast, Toasts } from "@webpack/common";
+import { showToast, Toasts, UserStore } from "@webpack/common";
 
 import { getCurrentProfile } from "./profile";
-import { addPreset, movePresetInArray, presets, PresetSection, type ProfilePresetEx, removePreset, replaceAllPresets, savePresetsData, updatePreset } from "./storage";
-
-const UserProfileSettingsStore = findStoreLazy("UserProfileSettingsStore");
-
-function isImageInput(value: unknown): value is string | { imageUri: string; } {
-    if (typeof value === "string") return value.length > 0;
-    return typeof value === "object" && isNonNullish(value) && "imageUri" in value && typeof (value as { imageUri: unknown }).imageUri === "string";
-}
-
-function getFreshPendingAvatar(section: PresetSection, guildId?: string): string | null {
-    const pending = (section === "server" && guildId
-        ? UserProfileSettingsStore.getPendingChanges?.(guildId)
-        : UserProfileSettingsStore.getPendingChanges?.()) ?? {};
-    const pendingObj = pending as Record<string, unknown>;
-    const selected = [pendingObj.pendingAvatar].find(isImageInput);
-    if (!selected) return null;
-    return typeof selected === "string" ? selected : selected.imageUri;
-}
-
-export async function savePreset(name: string, section: PresetSection, guildId?: string) {
-    const profile = await getCurrentProfile(guildId, { isGuildProfile: section === "server" });
-    const freshPendingAvatar = getFreshPendingAvatar(section, guildId);
-    const effectiveAvatar = freshPendingAvatar ?? profile.avatarDataUrl ?? null;
-
-    const newPreset: ProfilePresetEx = {
-        name,
-        timestamp: Date.now(),
-        ...profile,
-        avatarDataUrl: effectiveAvatar,
-    };
-    addPreset(newPreset);
-    await savePresetsData(section);
-}
-
-export async function updatePresetField<K extends keyof Omit<ProfilePreset, "name" | "timestamp">>(
-    index: number,
-    field: K,
-    value: Omit<ProfilePreset, "name" | "timestamp">[K],
-    section: PresetSection,
-    guildId?: string
-) {
-    if (index < 0 || index >= presets.length) return;
-    void guildId;
-
-    const updatedPreset = {
-        ...presets[index],
-        [field]: value,
-        timestamp: Date.now()
-    };
-    updatePreset(index, updatedPreset);
-    await savePresetsData(section);
-}
-
-export async function deletePreset(index: number, section: PresetSection, guildId?: string) {
-    if (index < 0 || index >= presets.length) return;
-
-    removePreset(index);
-    await savePresetsData(section);
-}
-
-export async function movePreset(fromIndex: number, toIndex: number, section: PresetSection, guildId?: string) {
-    if (fromIndex < 0 || fromIndex >= presets.length || toIndex < 0 || toIndex >= presets.length) return;
-
-    movePresetInArray(fromIndex, toIndex);
-    await savePresetsData(section);
-}
-
-export async function renamePreset(index: number, newName: string, section: PresetSection, guildId?: string) {
-    if (index < 0 || index >= presets.length || !newName.trim()) return;
-
-    const updatedPreset = { ...presets[index], name: newName.trim() };
-    updatePreset(index, updatedPreset);
-    await savePresetsData(section);
-}
-
-export function exportPresets(section: PresetSection) {
-    const dataStr = JSON.stringify(presets, null, 2);
-    const dataBlob = new Blob([dataStr], { type: "application/json" });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `profile-presets-${section}-${Date.now()}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-}
+import { PresetSection, type PresetStorage } from "./storage";
+import { isPresetList } from "./validation";
 
 export type ImportDecision = "override" | "merge" | "cancel";
+export type PresetActions = ReturnType<typeof createPresetActions>;
 
-export async function importPresets(
-    forceUpdate: () => void,
-    onImportPrompt: (existingCount: number) => Promise<ImportDecision>,
-    section: PresetSection,
-    guildId?: string
-) {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "application/json";
-    input.onchange = async (event: Event) => {
+export function createPresetActions(storage: PresetStorage, signal?: AbortSignal) {
+    async function savePreset(name: string, section: PresetSection, guildId?: string) {
+        const userId = UserStore.getCurrentUser()?.id;
+        const originalPresets = storage.presets;
+        if (!userId) throw new Error("Sign in before saving a profile preset.");
+        const profile = await getCurrentProfile(guildId, { isGuildProfile: section === "server", signal });
+        if (UserStore.getCurrentUser()?.id !== userId || storage.presets !== originalPresets)
+            throw new Error("The account or preset list changed while preparing the profile.");
+
+        const newPreset: ProfilePreset = {
+            name,
+            timestamp: Date.now(),
+            ...profile,
+        };
+        await storage.savePresetsData(section, [...storage.presets, newPreset]);
+    }
+
+    async function refreshPreset(preset: ProfilePreset, section: PresetSection, guildId?: string) {
+        const userId = UserStore.getCurrentUser()?.id;
+        const originalPresets = storage.presets;
+        if (!userId || !storage.presets.includes(preset)) throw new Error("The profile preset is no longer available.");
+        const profile = await getCurrentProfile(guildId, { isGuildProfile: section === "server", signal });
+        const index = storage.presets.indexOf(preset);
+        if (UserStore.getCurrentUser()?.id !== userId || storage.presets !== originalPresets || index < 0)
+            throw new Error("The account or preset list changed while preparing the profile.");
+        const updatedPreset = {
+            ...preset,
+            ...Object.fromEntries(Object.entries(profile).filter(([, value]) => value !== undefined)),
+            timestamp: Date.now()
+        };
+        await storage.savePresetsData(section, storage.presets.map((entry, i) => i === index ? updatedPreset : entry));
+    }
+
+    async function deletePreset(index: number, section: PresetSection) {
+        if (index < 0 || index >= storage.presets.length) return;
+
+        await storage.savePresetsData(section, storage.presets.filter((_, i) => i !== index));
+    }
+
+    async function movePreset(fromIndex: number, toIndex: number, section: PresetSection) {
+        if (fromIndex < 0 || fromIndex >= storage.presets.length || toIndex < 0 || toIndex >= storage.presets.length) return;
+
+        const reordered = [...storage.presets];
+        const [preset] = reordered.splice(fromIndex, 1);
+        reordered.splice(toIndex, 0, preset);
+        await storage.savePresetsData(section, reordered);
+    }
+
+    async function renamePreset(index: number, newName: string, section: PresetSection) {
+        if (index < 0 || index >= storage.presets.length || !newName.trim()) return;
+
+        const updatedPreset = { ...storage.presets[index], name: newName.trim() };
+        await storage.savePresetsData(section, storage.presets.map((entry, i) => i === index ? updatedPreset : entry));
+    }
+
+    function exportPresets(section: PresetSection) {
+        if (!storage.isCurrentScope(section)) {
+            showToast("Reopen this panel before exporting profile presets.", Toasts.Type.FAILURE);
+            return;
+        }
+        const dataStr = JSON.stringify(storage.presets, null, 2);
+        saveFile(new File([dataStr], `profile-presets-${section}-${Date.now()}.json`, { type: "application/json" }));
+    }
+
+    async function importPresets(
+        forceUpdate: () => void,
+        onImportPrompt: (existingCount: number, recoverLegacy?: boolean) => Promise<ImportDecision>,
+        section: PresetSection,
+        recoverLegacy = false
+    ) {
+        const userId = UserStore.getCurrentUser()?.id;
+        if (!userId) return;
+        const originalPresets = storage.presets;
+        const checkScope = () => {
+            if (UserStore.getCurrentUser()?.id !== userId || storage.presets !== originalPresets)
+                throw new Error("The account or preset list changed during import.");
+        };
         try {
-            const target = event.currentTarget as HTMLInputElement | null;
-            const file = target?.files?.[0];
-            if (!file) return;
-
-            const text = await file.text();
-            const importedPresets = JSON.parse(text);
-
-            if (!Array.isArray(importedPresets)) {
-                return;
-            }
-
-            if (presets.length > 0) {
-                const decision = await onImportPrompt(presets.length);
-                if (decision === "cancel") return;
-                if (decision === "override") {
-                    replaceAllPresets(importedPresets);
-                } else {
-                    const combined = [...presets, ...importedPresets];
-                    replaceAllPresets(combined);
-                }
+            let importedPresets: unknown;
+            if (recoverLegacy) {
+                if (section !== "main") return;
+                importedPresets = await storage.readLegacyPresets();
             } else {
-                replaceAllPresets(importedPresets);
+                const file = await chooseFile("application/json");
+                if (!file) return;
+                importedPresets = JSON.parse(await file.text());
             }
+            checkScope();
 
-            await savePresetsData(section);
+            if (!isPresetList(importedPresets)) throw new Error("Invalid profile preset list.");
+
+            const decision = recoverLegacy || storage.presets.length > 0 ? await onImportPrompt(storage.presets.length, recoverLegacy) : "override";
+            if (decision === "cancel") return;
+            checkScope();
+            await storage.savePresetsData(section, decision === "merge" ? [...storage.presets, ...importedPresets] : importedPresets);
             forceUpdate();
         } catch {
-            showToast("Failed to import presets. The file might be invalid.", Toasts.Type.FAILURE);
+            showToast("Could not import the profile presets. Reopen this panel before trying again.", Toasts.Type.FAILURE);
         }
-    };
-    input.click();
+    }
+
+    return { savePreset, refreshPreset, deletePreset, movePreset, renamePreset, exportPresets, importPresets };
 }

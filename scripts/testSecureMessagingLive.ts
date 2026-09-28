@@ -1054,6 +1054,7 @@ async function main(): Promise<void> {
     const cleanupErrors: Error[] = [];
     let cleanupProof: CleanupProof | undefined;
     let page: Page | undefined;
+    let messageRegistryInitialized = false;
     let primaryError: unknown;
     let syntheticConversationCreated = false;
     let syntheticTrustCreated = false;
@@ -1074,6 +1075,7 @@ async function main(): Promise<void> {
         );
         await assertMessageEventsSendPatch(page);
         await initializeMessageRegistry(page);
+        messageRegistryInitialized = true;
 
         const preflight = await preflightPristineState(page, recipientAnnouncement, pluginPrestarted);
         assert.equal(preflight.vaultReady, true);
@@ -1344,13 +1346,15 @@ async function main(): Promise<void> {
 
     let allKnownMessageIds = [...sentMessageIds];
     if (page) {
-        await captureCleanup("collecting the live-message cleanup registry", async () => {
-            allKnownMessageIds = [...new Set([...allKnownMessageIds, ...await collectRegisteredMessageIds(page!)])];
-        });
-        await captureCleanup("deleting and verifying all live-proof messages", async () => {
-            const deleted = await deleteOwnTestMessages(page!, allKnownMessageIds);
-            assert.equal(deleted, true, "all live-proof messages must be absent after deletion");
-        });
+        if (messageRegistryInitialized) {
+            await captureCleanup("collecting the live-message cleanup registry", async () => {
+                allKnownMessageIds = [...new Set([...allKnownMessageIds, ...await collectRegisteredMessageIds(page!)])];
+            });
+            await captureCleanup("deleting and verifying all live-proof messages", async () => {
+                const deleted = await deleteOwnTestMessages(page!, allKnownMessageIds);
+                assert.equal(deleted, true, "all live-proof messages must be absent after deletion");
+            });
+        }
 
         if (syntheticConversationCreated) {
             await captureCleanup("disabling the synthetic conversation configuration", async () => {

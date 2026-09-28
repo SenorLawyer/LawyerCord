@@ -9,22 +9,22 @@ import { copyToClipboard } from "@utils/clipboard";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
 import type { User } from "@vencord/discord-types";
-import { Menu, SelectedGuildStore, Toasts, UserProfileStore } from "@webpack/common";
+import { IconUtils, Menu, Toasts, UserProfileStore } from "@webpack/common";
 
 interface UserContextProps {
     guildId?: string;
     user?: User;
 }
 
-const SIZE_QUERY_REGEX = /\?size=\d+$/;
+const SIZE_QUERY_REGEX = /(?<=[?&]size=)\d+(?=&|#|$)/;
 const CDN_SIZE = 4096;
 
 function withCdnSize(url: string | null | undefined) {
     if (!url) return null;
-    return url.replace(SIZE_QUERY_REGEX, `?size=${CDN_SIZE}`);
+    return url.replace(SIZE_QUERY_REGEX, String(CDN_SIZE));
 }
 
-function copyUrl(label: string, url: string | null) {
+async function copyUrl(label: string, url: string | null) {
     if (!url) {
         Toasts.show({
             id: Toasts.genId(),
@@ -34,7 +34,16 @@ function copyUrl(label: string, url: string | null) {
         return;
     }
 
-    copyToClipboard(url);
+    try {
+        await copyToClipboard(url);
+    } catch {
+        Toasts.show({
+            id: Toasts.genId(),
+            message: `Could not copy ${label.toLowerCase()}.`,
+            type: Toasts.Type.FAILURE
+        });
+        return;
+    }
     Toasts.show({
         id: Toasts.genId(),
         message: `${label} copied.`,
@@ -53,22 +62,19 @@ function getBannerUrl(userId: string, guildId?: string) {
     const banner = profile?.banner;
     if (!banner) return null;
 
-    const extension = banner.startsWith("a_") ? "gif" : "png";
-    const path = guildId
-        ? `guilds/${guildId}/users/${userId}/banners`
-        : `banners/${userId}`;
-
-    return `https://cdn.discordapp.com/${path}/${banner}.${extension}?size=${CDN_SIZE}`;
+    const data = { id: userId, banner, canAnimate: true, size: CDN_SIZE };
+    return withCdnSize(guildId
+        ? IconUtils.getGuildMemberBannerURL({ ...data, guildId })
+        : IconUtils.getUserBannerURL(data));
 }
 
 const userContextPatch: NavContextMenuPatchCallback = (children, { guildId, user }: UserContextProps) => {
     if (!user) return;
 
-    const effectiveGuildId = guildId ?? SelectedGuildStore.getGuildId();
     const avatarUrl = getAvatarUrl(user);
-    const serverAvatarUrl = effectiveGuildId ? getAvatarUrl(user, effectiveGuildId) : null;
+    const serverAvatarUrl = guildId ? getAvatarUrl(user, guildId) : null;
     const bannerUrl = getBannerUrl(user.id);
-    const serverBannerUrl = effectiveGuildId ? getBannerUrl(user.id, effectiveGuildId) : null;
+    const serverBannerUrl = guildId ? getBannerUrl(user.id, guildId) : null;
 
     children.push(
         <Menu.MenuItem id="vc-copy-user-media-urls" label="Copy User Media URL">

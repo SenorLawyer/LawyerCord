@@ -444,10 +444,10 @@ export type PartialExcept<T, R extends keyof T> = Partial<T> & Required<Pick<T, 
 
 export type IpcRes<V = any> = { ok: true; value: V; } | { ok: false, error: any; };
 
-export type PluginNative<PluginExports extends Record<string, (event: Electron.IpcMainInvokeEvent, ...args: any[]) => any>> = {
+export type PluginNative<PluginExports extends Record<string, (...args: never[]) => unknown>> = {
     [key in keyof PluginExports]:
-    PluginExports[key] extends (event: Electron.IpcMainInvokeEvent, ...args: infer Args) => infer Return
-    ? (...args: Args) => Return extends Promise<any> ? Return : Promise<Return>
+    PluginExports[key] extends (event: never, ...args: infer Args) => infer Return
+    ? (...args: Args) => Promise<Awaited<Return>>
     : never;
 };
 

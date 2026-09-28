@@ -191,7 +191,7 @@ export default definePlugin({
             // Normal channel.
             find: "UNREAD_IMPORTANT:",
             replacement: {
-                match: /\.Children\.count.+?:null(?<=,channel:(\i).+?)/,
+                match: /(?<=channel:(\i),name:[^{}]{0,100}\}\)\}\),\i)\.Children\.count\(\i\)>0\?\(0,\i\.jsx\)\("div",\{[^{}]{0,150}\}\):null/,
                 replace: "$&,$self.TypingIndicator($1.id,$1.getGuildId())"
             }
         },
@@ -199,7 +199,7 @@ export default definePlugin({
             // Thread "spine" that shows in the left.
             find: "M0 15H2c0 1.6569",
             replacement: {
-                match: /mentionsCount:\i.+?null(?<=channel:(\i).+?)/,
+                match: /\(0,\i\.jsx\)\(\i,\{thread:(\i),countInVoice:\i,hasVideo:\i,mentionCount:\i,isMentionLowImportance:\i\}\)/,
                 replace: "$&,$self.TypingIndicator($1.id,$1.getGuildId())"
             }
         }

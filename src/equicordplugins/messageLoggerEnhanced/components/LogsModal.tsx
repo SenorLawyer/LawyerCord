@@ -172,7 +172,7 @@ export function LogsModal({ modalProps, initalQuery }: Props) {
                         )}
 
                         {!pending && messages != null && (
-                            <LogsContentMemo
+                            <LogsContent
                                 visibleMessages={messages}
                                 canLoadMore={messages.length < statusTotal && messages.length >= settings.store.messagesToDisplayAtOnceInLogs}
                                 tab={currentTab}
@@ -224,8 +224,6 @@ function LogsContent({ visibleMessages, canLoadMore, sortNewest, tab, reset, han
         </div>
     );
 }
-
-const LogsContentMemo = LazyComponent(() => LogsContent);
 
 function NoResults({ tab }: { tab: LogTabs; }) {
     const generateSuggestedTabs = (tab: LogTabs) => {

@@ -4,18 +4,16 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { PickerContent, PickerContentHeader, PickerContentRow, PickerContentRowGrid, PickerHeaderProps, SidebarProps, Sticker, StickerCategoryType, StickerPack } from "@equicordplugins/moreStickers/types";
+import { PickerContent, PickerContentHeader, PickerContentRow, PickerContentRowGrid, PickerHeaderProps, SidebarProps, Sticker, StickerCategoryType } from "@equicordplugins/moreStickers/types";
 import { sendSticker } from "@equicordplugins/moreStickers/upload";
-import { clPicker, FFmpegStateContext } from "@equicordplugins/moreStickers/utils";
-import { debounce } from "@shared/debounce";
-import { Modal,openModal, React, TextInput } from "@webpack/common";
+import { clPicker } from "@equicordplugins/moreStickers/utils";
+import { useAwaiter } from "@utils/react";
+import { Modal,openModal, React, showToast, TextInput, Toasts } from "@webpack/common";
 import { JSX } from "react";
 
 import { CategoryImage, CategoryScroller, CategoryWrapper, StickerCategory } from "./categories";
 import { CancelIcon, CogIcon, IconContainer, RecentlyUsedIcon, SearchIcon } from "./icons";
 import { addRecentSticker, getRecentStickers, Header, Packs, RECENT_STICKERS_ID, RECENT_STICKERS_TITLE } from "./misc";
-
-const debounceQueryChange = debounce((cb: Function, ...args: any) => cb(...args), 150);
 
 export const RecentPack = {
     id: RECENT_STICKERS_ID,
@@ -24,7 +22,6 @@ export const RecentPack = {
 
 export const PickerSidebar = ({ packMetas, onPackSelect }: SidebarProps) => {
     const [activePack, setActivePack] = React.useState<StickerCategoryType>(RecentPack);
-    const [hovering, setHovering] = React.useState(false);
 
     return (
         <CategoryWrapper>
@@ -64,9 +61,8 @@ export const PickerSidebar = ({ packMetas, onPackSelect }: SidebarProps) => {
             </CategoryScroller>
             <div className={clPicker("settings-cog-container")}>
                 <button
-                    className={clPicker("settings-cog") + (
-                        hovering ? ` ${clPicker("settings-cog-active")}` : ""
-                    )}
+                    className={clPicker("settings-cog")}
+                    aria-label="Sticker pack settings"
                     onClick={() => {
                         openModal(modalProps => {
                             return (
@@ -76,8 +72,6 @@ export const PickerSidebar = ({ packMetas, onPackSelect }: SidebarProps) => {
                             );
                         });
                     }}
-                    onMouseEnter={() => setHovering(true)}
-                    onMouseLeave={() => setHovering(false)}
                 >
                     <CogIcon width={20} height={20} />
                 </button>
@@ -95,12 +89,6 @@ function PickerContentRowGrid({
     onSend = () => { },
     isHovered = false
 }: PickerContentRowGrid) {
-    if (FFmpegStateContext === undefined) {
-        return <div>FFmpegStateContext is undefined</div>;
-    }
-
-    const ffmpegState = React.useContext(FFmpegStateContext);
-
     return (
         <div
             role="gridcell"
@@ -111,7 +99,7 @@ function PickerContentRowGrid({
             onClick={e => {
                 if (!channelId) return;
 
-                sendSticker({ channelId, sticker, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, ffmpegState });
+                sendSticker({ channelId, sticker, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey });
                 addRecentSticker(sticker);
                 onSend(sticker, e.ctrlKey);
             }}
@@ -254,8 +242,12 @@ export function PickerContent({ stickerPacks, selectedStickerPackId, setSelected
         )
     );
 
-    const [currentStickerPack, setCurrentStickerPack] = React.useState<StickerPack | null>(stickerPacks.length ? stickerPacks[0] : null);
-    const [recentStickers, setRecentStickers] = React.useState<Sticker[]>([]);
+    const currentStickerPack = stickerPacks.find(pack => pack.id === currentSticker?.stickerPackId);
+    const [loadedRecents] = useAwaiter(getRecentStickers, {
+        fallbackValue: [],
+        onError: () => showToast("Could not load recent stickers.", Toasts.Type.FAILURE)
+    });
+    const recentStickers = loadedRecents ?? [];
 
     const stickerPacksElemRef = React.useRef<HTMLDivElement>(null);
     const scrollerRef = React.useRef<HTMLDivElement>(null);
@@ -264,21 +256,6 @@ export function PickerContent({ stickerPacks, selectedStickerPackId, setSelected
         if (!query) return stickers;
         return stickers.filter(sticker => sticker.title.toLowerCase().includes(query.toLowerCase()));
     }
-
-    async function fetchRecentStickers() {
-        const recentStickers = await getRecentStickers();
-        setRecentStickers(recentStickers);
-    }
-
-    React.useEffect(() => {
-        fetchRecentStickers();
-    }, []);
-
-    React.useEffect(() => {
-        if (currentStickerPack?.id !== currentSticker?.stickerPackId) {
-            setCurrentStickerPack(stickerPacks.find(p => p.id === currentSticker?.stickerPackId) ?? currentStickerPack);
-        }
-    }, [currentSticker]);
 
     const stickersToRows = (stickers: Sticker[]): JSX.Element[] => stickers
         .reduce((acc, sticker, i) => {
@@ -426,14 +403,7 @@ export function PickerContent({ stickerPacks, selectedStickerPackId, setSelected
     );
 }
 
-export const PickerHeader = ({ onQueryChange }: PickerHeaderProps) => {
-    const [query, setQuery] = React.useState<string | undefined>();
-
-    const setQueryDebounced = (value: string, immediate = false) => {
-        setQuery(value);
-        if (immediate) onQueryChange(value);
-        else debounceQueryChange(onQueryChange, value);
-    };
+export const PickerHeader = ({ query, onQueryChange }: PickerHeaderProps) => {
 
     return (
         <Header>
@@ -447,14 +417,14 @@ export const PickerHeader = ({ onQueryChange }: PickerHeaderProps) => {
                             autoFocus={true}
                             value={query}
 
-                            onChange={(value: string) => setQueryDebounced(value)}
+                            onChange={onQueryChange}
                         />
                     </div>
                     <div className={clPicker("search-icon")}>
                         <IconContainer>
                             {
                                 (query && query.length > 0) ?
-                                    <CancelIcon className={clPicker("clear-icon")} width={20} height={20} onClick={() => setQueryDebounced("", true)} /> :
+                                    <CancelIcon className={clPicker("clear-icon")} width={20} height={20} onClick={() => onQueryChange("")} /> :
                                     <SearchIcon width={20} height={20} color="var(--text-muted)" />
                             }
                         </IconContainer>

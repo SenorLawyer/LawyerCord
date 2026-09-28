@@ -28,7 +28,7 @@ import { getThemeInfo } from "@main/themes";
 import { debounce } from "@shared/debounce";
 import { localStorage } from "@utils/localStorage";
 import { getStylusWebStoreUrl } from "@utils/web";
-import { EXTENSION_BASE_URL, metaReady, RENDERER_CSS_URL } from "@utils/web-metadata";
+import { metaReady, RENDERER_CSS_URL } from "@utils/web-metadata";
 
 // listeners for ipc.on
 const cssListeners = new Set<(css: string) => void>();
@@ -79,8 +79,12 @@ window.VencordNative = {
 
     quickCss: {
         get: () => DataStore.get("VencordQuickCss").then(s => s ?? ""),
-        set: async (css: string) => {
-            await DataStore.set("VencordQuickCss", css);
+        set: async (css: string, expected?: string) => {
+            await DataStore.update<string>("VencordQuickCss", current => {
+                if (expected !== undefined && (current ?? "") !== expected)
+                    throw new Error("QuickCSS changed during sync. Try again to include your latest changes.");
+                return css;
+            });
             cssListeners.forEach(l => l(css));
         },
         addChangeListener(cb) {
@@ -104,7 +108,6 @@ window.VencordNative = {
                 return;
             }
 
-            win.baseUrl = EXTENSION_BASE_URL;
             win.setCss = setCssDebounced;
             win.getCurrentCss = () => VencordNative.quickCss.get();
             win.getTheme = this.getEditorTheme;
@@ -129,7 +132,22 @@ window.VencordNative = {
                 return {};
             }
         },
-        set: async (s: Settings) => localStorage.setItem("LawyerCordSettings", JSON.stringify(s)),
+        set: async (s: Settings, _pathToNotify?: string, expected?: string) => {
+            const serialized = JSON.stringify(s);
+            const save = () => {
+                if (expected !== undefined) {
+                    const current = JSON.parse(localStorage.getItem("LawyerCordSettings") || "{}");
+                    if (JSON.stringify(current) !== expected)
+                        throw new Error("Settings changed during sync. Try again to include your latest changes.");
+                }
+                localStorage.setItem("LawyerCordSettings", serialized);
+            };
+            if (!navigator.locks) {
+                if (expected !== undefined) throw new Error("This browser cannot safely apply cloud settings. Update your browser and try again.");
+                return save();
+            }
+            await navigator.locks.request("LawyerCordSettings", save);
+        },
         getSettingsDir: async () => "LocalStorage",
         openFolder: async () => Promise.reject("settings:openFolder is not supported on web"),
     },

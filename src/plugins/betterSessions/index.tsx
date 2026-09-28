@@ -24,13 +24,14 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { Paragraph } from "@components/Paragraph";
 import { Devs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
+import { useAwaiter } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
 import { findComponentByCodeLazy, findCssClassesLazy, findStoreLazy } from "@webpack";
 import { Constants, React, RestAPI, SettingsRouter, Tooltip, UserStore } from "@webpack/common";
 
 import { NewButton, RenameButton } from "./components/RenameButton";
 import { Session, SessionInfo } from "./types";
-import { cl, fetchNamesFromDataStore, getDefaultName, GetOsColor, GetPlatformIcon, savedSessionsCache, saveSessionsToDataStore } from "./utils";
+import { cl, fetchNamesFromDataStore, fetchSessionFromDataStore, getDefaultName, GetOsColor, GetPlatformIcon, savedSessionsCache, saveSessionsToDataStore } from "./utils";
 
 const AuthSessionsStore = findStoreLazy("AuthSessionsStore");
 const TimestampClasses = findCssClassesLazy("timestamp", "blockquoteContainer");
@@ -88,19 +89,23 @@ export default definePlugin({
     ],
 
     renderName: ErrorBoundary.wrap(({ session }: SessionInfo) => {
-        const savedSession = savedSessionsCache.get(session.id_hash);
-
-        const state = React.useState(savedSession?.name ? `${savedSession.name}*` : getDefaultName(session.client_info));
-        const [title, setTitle] = state;
+        const state = React.useState({ name: "", isNew: false });
+        const [{ name, isNew }] = state;
+        const [, error, pending] = useAwaiter(() => fetchSessionFromDataStore(session.id_hash), {
+            fallbackValue: undefined,
+            deps: [session.id_hash],
+            onSuccess: saved => state[1](saved ?? { name: "", isNew: true }),
+            onError: error => logger.warn("Failed to load session name", error)
+        });
         // Show a "NEW" badge if the session is seen for the first time
         return (
             <>
-                <Paragraph size="md" weight="semibold" color="text-strong">{title}</Paragraph>
+                <Paragraph size="md" weight="semibold" color="text-strong">{name ? `${name}*` : getDefaultName(session.client_info)}</Paragraph>
                 <div className={cl("footer-buttons")}>
-                    {(savedSession == null || savedSession.isNew) && (
+                    {!pending && !error && isNew && (
                         <NewButton />
                     )}
-                    <RenameButton session={session} state={state} />
+                    <RenameButton session={session} state={state} disabled={pending || !!error} />
                 </div>
             </>
         );
@@ -169,12 +174,20 @@ export default definePlugin({
 
             if (generation !== lifecycleGeneration || userId !== UserStore.getCurrentUser()?.id) return;
 
-            let hasNewSession = false;
-            for (const session of data.body.user_sessions) {
+            const newSessions: Session[] = data.body.user_sessions.filter((session: Session) => !savedSessionsCache.has(session.id_hash));
+            if (!newSessions.length) return;
+
+            await saveSessionsToDataStore(sessions => {
+                for (const session of newSessions) {
+                    if (!sessions.has(session.id_hash)) sessions.set(session.id_hash, { name: "", isNew: true });
+                }
+            });
+            if (generation !== lifecycleGeneration || userId !== UserStore.getCurrentUser()?.id) return;
+
+            for (const session of newSessions) {
                 if (savedSessionsCache.has(session.id_hash)) continue;
 
                 savedSessionsCache.set(session.id_hash, { name: "", isNew: true });
-                hasNewSession = true;
                 showNotification({
                     title: "BetterSessions",
                     body: `New session:\n${session.client_info.os} · ${session.client_info.platform} · ${session.client_info.location}`,
@@ -182,8 +195,6 @@ export default definePlugin({
                     onClick: () => SettingsRouter.openUserSettings("sessions_panel")
                 });
             }
-
-            if (hasNewSession) await saveSessionsToDataStore();
         })();
 
         checkNewSessionsPromise = promise;
@@ -205,36 +216,34 @@ export default definePlugin({
                 AuthSessionsStore.getSessions().map((session: SessionInfo["session"]) => session.id_hash)
             );
 
-            // Add new sessions to cache
-            let changed = false;
+            const updateSessions = (sessions: typeof savedSessionsCache) => {
+                // Add new sessions to cache
+                lastFetchedHashes.forEach(idHash => {
+                    if (sessions.has(idHash)) return;
 
-            lastFetchedHashes.forEach(idHash => {
-                if (savedSessionsCache.has(idHash)) return;
-
-                savedSessionsCache.set(idHash, { name: "", isNew: false });
-                changed = true;
-            });
-
-            // Delete removed sessions from cache
-            if (lastFetchedHashes.size > 0) {
-                savedSessionsCache.forEach((_, idHash) => {
-                    if (lastFetchedHashes.has(idHash)) return;
-
-                    savedSessionsCache.delete(idHash);
-                    changed = true;
+                    sessions.set(idHash, { name: "", isNew: false });
                 });
-            }
 
-            // Dismiss the "NEW" badge of all sessions.
-            // Since the only way for a session to be marked as "NEW" is going to the Devices tab,
-            // closing the settings means they've been viewed and are no longer considered new.
-            savedSessionsCache.forEach(data => {
-                if (!data.isNew) return;
+                // Delete removed sessions from cache
+                if (lastFetchedHashes.size > 0) {
+                    sessions.forEach((_, idHash) => {
+                        if (lastFetchedHashes.has(idHash)) return;
 
-                data.isNew = false;
-                changed = true;
-            });
-            if (changed) void saveSessionsToDataStore();
+                        sessions.delete(idHash);
+                    });
+                }
+
+                // Dismiss the "NEW" badge of all sessions.
+                // Since the only way for a session to be marked as "NEW" is going to the Devices tab,
+                // closing the settings means they've been viewed and are no longer considered new.
+                sessions.forEach(data => {
+                    if (!data.isNew) return;
+
+                    data.isNew = false;
+                });
+            };
+            updateSessions(savedSessionsCache);
+            return saveSessionsToDataStore(updateSessions);
         }
     },
 

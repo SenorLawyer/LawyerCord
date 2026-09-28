@@ -16,8 +16,8 @@ import { findCssClassesLazy, findStoreLazy } from "@webpack";
 import { Clickable, ContextMenuApi, FluxDispatcher, Menu, React } from "@webpack/common";
 
 import { contextMenus } from "./components/contextMenu";
-import { openCategoryModal, requireSettingsModal } from "./components/CreateCategoryModal";
-import { DEFAULT_CHUNK_SIZE } from "./constants";
+import { openCategoryModal } from "./components/CreateCategoryModal";
+import { DEFAULT_CHUNK_SIZE, DEFAULT_COLOR } from "./constants";
 import { canMoveCategory, canMoveCategoryInDirection, Category, categoryLen, collapseCategory, getAllUncollapsedChannels, getCategoryByIndex, getCategoryChannels, getSections, init, isPinned, moveCategory, removeCategory, usePinnedDms } from "./data";
 
 interface ChannelComponentProps {
@@ -26,11 +26,11 @@ interface ChannelComponentProps {
     selected: boolean;
 }
 
+interface DmHeaderProps extends React.HTMLAttributes<HTMLSpanElement> { }
+
 const headerClasses = findCssClassesLazy("privateChannelsHeaderContainer", "headerText");
 
 export const PrivateChannelSortStore = findStoreLazy("PrivateChannelSortStore") as { getPrivateChannelIds: () => string[]; };
-
-export let instance: any;
 
 export const enum PinOrder {
     LastMessage,
@@ -85,13 +85,13 @@ export default definePlugin({
                 },
                 {
                     // Insert the pinned channels to sections
-                    match: /(?<=renderRow:this\.renderRow,)sections:\[.+?1\)]/,
+                    match: /(?<=renderRow:this\.renderRow,)sections:\[[^\]]{1,150}?1\)]/,
                     replace: "...$self.makeProps(this,{$&})"
                 },
 
                 // Rendering
                 {
-                    match: /renderRow(?:",|=)(\i)=>{(?<=renderDM(?:",|=).+?(\i\.\i),\{channel:.+?)/,
+                    match: /renderRow(?:",|=)(\i)=>{(?<=renderDM(?:",|=).{0,250}?(\i\.\i),\{channel:.{0,250}?)/,
                     replace: "$&if($self.isChannelIndex($1.section, $1.row))return $self.renderChannel($1.section,$1.row,$2)();"
                 },
                 {
@@ -99,14 +99,14 @@ export default definePlugin({
                     replace: "$&if($self.isCategoryIndex($1.section))return $self.renderCategory($1);"
                 },
                 {
-                    match: /renderSection(?:",|=).{0,300}?"span",{/,
-                    replace: "$&...$self.makeSpanProps(),"
+                    match: /(renderSection(?:",|=).{0,300}?)"span"(?=,{)/,
+                    replace: "$1$self.renderDmHeader"
                 },
 
                 // Fix Row Height
                 {
-                    match: /(\.startsWith\("section-divider"\).+?return 1===)(\i)/,
-                    replace: "$1($2-$self.categoryLen())"
+                    match: /(?<=\.startsWith\("section-divider"\).{0,150}?return 1===)\i/,
+                    replace: "($&-$self.categoryLen())"
                 },
                 {
                     match: /getRowHeight(?:",|=)\((\i),(\i)\)=>{/,
@@ -116,7 +116,7 @@ export default definePlugin({
                 // Fix ScrollTo
                 {
                     // Override scrollToChannel to properly account for pinned channels
-                    match: /(?<=scrollTo\(\{to:\i\}\):\(\i\+=)(\d+)\*\(.+?(?=,)/,
+                    match: /(?<=scrollTo\(\{to:\i\}\):\(\i\+=)(\d+)\*\([^,;{}]{1,100}(?=,)/,
                     replace: "$self.getScrollOffset(arguments[0],$1,this?.props?.padding,this?.state?.preRenderedChildren,$&)"
                 },
                 {
@@ -160,11 +160,6 @@ export default definePlugin({
 
     sections: null as number[] | null,
 
-    set _instance(i: any) {
-        this.instance = i;
-        instance = i;
-    },
-
     startAt: StartAt.WebpackReady,
     start: init,
     flux: {
@@ -176,10 +171,9 @@ export default definePlugin({
     categoryLen,
     getSections,
     getAllUncollapsedChannels,
-    requireSettingsMenu: requireSettingsModal,
 
     makeProps(instance, { sections }: { sections: number[]; }) {
-        this._instance = instance;
+        this.instance = instance;
         this.sections = sections;
 
         this.sections.splice(1, 0, ...this.getSections());
@@ -195,13 +189,17 @@ export default definePlugin({
         };
     },
 
-    makeSpanProps() {
-        return settings.store.canCollapseDmSection ? {
-            onClick: () => this.collapseDMList(),
-            role: "button",
-            style: { cursor: "pointer" }
-        } : undefined;
-    },
+    renderDmHeader: ErrorBoundary.wrap((props: DmHeaderProps) => {
+        if (!settings.store.canCollapseDmSection) return <span {...props} />;
+
+        return <Clickable
+            {...props}
+            tag="span"
+            className={classes(props.className, "vc-pindms-dm-header")}
+            aria-expanded={!settings.store.dmSectionCollapsed}
+            onClick={() => { settings.store.dmSectionCollapsed = !settings.store.dmSectionCollapsed; }}
+        />;
+    }, { noop: true }),
 
     getChunkSize() {
         // the chunk size is the amount of rows (measured in pixels) that are rendered at once (probably)
@@ -226,10 +224,6 @@ export default definePlugin({
 
         const category = getCategoryByIndex(sectionIndex - 1);
         return this.isCategoryIndex(sectionIndex) && (category?.channels?.length === 0 || category?.channels[channelIndex]);
-    },
-
-    collapseDMList() {
-        settings.store.dmSectionCollapsed = !settings.store.dmSectionCollapsed;
     },
 
     isChannelHidden(categoryIndex: number, channelIndex: number) {
@@ -316,7 +310,7 @@ export default definePlugin({
             >
                 <h2
                     className={classes(headerClasses.privateChannelsHeaderContainer, "vc-pindms-section-container", category.collapsed ? "vc-pindms-collapsed" : "")}
-                    style={{ color: `#${category.color.toString(16).padStart(6, "0")}` }}
+                    style={{ color: `#${(category.color ?? DEFAULT_COLOR).toString(16).padStart(6, "0")}` }}
                 >
                     <span className={headerClasses.headerText}>
                         {category?.name ?? "uh oh"}
@@ -354,9 +348,5 @@ export default definePlugin({
         const channelId = getCategoryChannels(category)[index];
 
         return { channel: channels[channelId], category };
-    },
-
-    getCategoryChannels(category: Category) {
-        return getCategoryChannels(category);
     }
 });

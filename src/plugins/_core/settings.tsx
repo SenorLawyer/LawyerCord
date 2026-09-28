@@ -26,28 +26,6 @@ import { waitFor } from "@webpack";
 import { React } from "@webpack/common";
 import type { ComponentType, PropsWithChildren, ReactNode } from "react";
 
-const enum LayoutType {
-    ROOT = 0,
-    SECTION = 1,
-    SIDEBAR_ITEM = 2,
-    PANEL = 3,
-    SPLIT = 4,
-    CATEGORY = 5,
-    ACCORDION = 6,
-    LIST = 7,
-    RELATED = 8,
-    FIELD_SET = 9,
-    TAB_ITEM = 10,
-    STATIC = 11,
-    BUTTON = 12,
-    TOGGLE = 13,
-    SLIDER = 14,
-    SELECT = 15,
-    RADIO = 16,
-    NAVIGATOR = 17,
-    CUSTOM = 18
-}
-
 let LayoutTypes = {
     SECTION: 1,
     SIDEBAR_ITEM: 2,
@@ -56,12 +34,6 @@ let LayoutTypes = {
     CUSTOM: 19,
 };
 waitFor(["SECTION", "SIDEBAR_ITEM", "PANEL", "CUSTOM"], v => LayoutTypes = v);
-
-const enum SectionType {
-    HEADER = "HEADER",
-    DIVIDER = "DIVIDER",
-    CUSTOM = "CUSTOM"
-}
 
 type SettingsLocation =
     | "top"
@@ -72,7 +44,7 @@ type SettingsLocation =
     | "bottom";
 
 interface SettingsLayoutNode {
-    type: LayoutType;
+    type: number;
     key?: string;
     legacySearchKey?: string;
     getLegacySearchKey?(): string;
@@ -286,7 +258,6 @@ export default definePlugin({
         return layout;
     },
 
-    customSections: [] as ((SectionTypes: Record<string, string>) => { section: string; element: ComponentType; label: string; id?: string; })[],
     customEntries: [] as EntryOptions[],
 
     async start() {

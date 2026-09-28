@@ -226,9 +226,9 @@ async function watchForLocalThemeChanges(generation = startGeneration) {
 
     const currentCount = countLocalThemeFiles(currentThemes);
 
-    if (lastThemeCount && currentCount !== lastThemeCount) {
+    if (currentCount !== lastThemeCount) {
         const diff = currentCount - lastThemeCount;
-        await refreshThemeList(false, generation);
+        await refreshThemeList(true, generation);
         if (!pluginStarted || generation !== startGeneration) return;
 
         if (settings.store.showNotifications) {

@@ -92,9 +92,26 @@ ipcMain.handle(IpcEvents.OPEN_EXTERNAL, (_, url) => {
 });
 
 ipcMain.handle(IpcEvents.GET_QUICK_CSS, () => readCss());
-ipcMain.handle(IpcEvents.SET_QUICK_CSS, (_, css) =>
-    writeFileSync(QUICK_CSS_PATH, css)
-);
+ipcMain.handle(IpcEvents.SET_QUICK_CSS, (_, css: unknown, expected: unknown) => {
+    if (typeof css !== "string" || (expected !== undefined && typeof expected !== "string"))
+        throw new Error("Invalid QuickCSS data.");
+    if (expected !== undefined) {
+        let current = "";
+        try {
+            current = readFileSync(QUICK_CSS_PATH, "utf-8");
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+                throw new Error("Could not read QuickCSS before saving.");
+        }
+        if (current !== expected)
+            throw new Error("QuickCSS changed during sync. Try again to include your latest changes.");
+    }
+    try {
+        writeFileSync(QUICK_CSS_PATH, css);
+    } catch {
+        throw new Error("Could not save QuickCSS.");
+    }
+});
 
 ipcMain.handle(IpcEvents.GET_THEMES_LIST, () => listThemes());
 ipcMain.handle(IpcEvents.GET_THEME_DATA, (_, fileName) => getThemeData(fileName));

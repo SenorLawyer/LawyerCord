@@ -1,6 +1,7 @@
 .vc-notification-root {
     /* clear default button styles */
     all: unset;
+    position: relative;
     display: flex;
     flex-direction: column;
     color: var(--text-default);
@@ -134,4 +135,18 @@
 .vc-notification-log-danger-btn {
     color: var(--control-critical-primary-text-default);
     background-color: var(--control-critical-primary-background-default);
+}
+
+.vc-notification-root > .vc-notification-action {
+    all: unset;
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+}
+
+.vc-notification-root > .vc-notification-action:focus-visible,
+.vc-notification-close-btn:focus-visible {
+    outline: 2px solid var(--border-focus, #00b0f4);
+    outline-offset: -2px;
 }

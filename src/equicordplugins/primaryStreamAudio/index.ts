@@ -14,8 +14,8 @@ let updateInterval: number | undefined;
 const trackedAudio = new Set<StreamAudioData>();
 
 const stores: PrimaryStreamAudioStores = {
-    channelRTCStore: ChannelRTCStore,
-    selectedChannelStore: SelectedChannelStore,
+    get channelRTCStore() { return ChannelRTCStore; },
+    get selectedChannelStore() { return SelectedChannelStore; },
 };
 
 function mediaStreamsMatch(a?: MediaStream | null, b?: MediaStream | null) {

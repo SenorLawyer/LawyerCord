@@ -20,6 +20,7 @@ import type { HTMLAttributes, ReactNode } from "react";
 
 import fullHeightStyle from "./fullHeightContext.css?managed";
 
+const logger = new Logger("BetterSettings");
 const cl = classNameFactory("");
 const Classes = findCssClassesLazy("animating", "baseLayer", "bg", "layer", "layers");
 
@@ -57,12 +58,19 @@ const settings = definePluginSettings({
 });
 
 interface LayerProps extends HTMLAttributes<HTMLDivElement> {
+    name?: string;
     mode: "SHOWN" | "HIDDEN";
     baseLayer?: boolean;
 }
 
-function Layer({ mode, baseLayer = false, ...props }: LayerProps) {
+function Layer({ name, mode, baseLayer = false, ...props }: LayerProps) {
     const hidden = mode === "HIDDEN";
+    const modal = !hidden && !baseLayer;
+    let label = "";
+    if (name === "CHANNEL_SETTINGS" || name === "COLLECTIBLES_SHOP")
+        label = getIntlMessage(name);
+    else if (name === "COMPONENT_PLAYGROUND")
+        label = "Component Playground";
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => () => {
@@ -73,7 +81,11 @@ function Layer({ mode, baseLayer = false, ...props }: LayerProps) {
     const node = (
         <div
             ref={containerRef}
+            data-layer={name ?? "base"}
             aria-hidden={hidden}
+            aria-modal={modal}
+            aria-label={modal ? label : undefined}
+            role={modal ? "dialog" : undefined}
             className={cl({
                 [Classes.layer]: true,
                 [Classes.baseLayer]: baseLayer,
@@ -110,13 +122,13 @@ export default definePlugin({
             find: "this.renderArtisanalHack()",
             replacement: [
                 {
-                    match: /class (\i)( extends \i\.PureComponent.+?jsx\)\(\1,\{mode:)/,
-                    replace: "var $1=$self.Layer;class VencordPatchedOldFadeLayer$2",
+                    match: /class (\i)(?= extends \i\.PureComponent\{containerRef=\i\.createRef\(\);static getDerivedStateFromProps)/,
+                    replace: "var $1=$self.Layer;class VencordPatchedOldFadeLayer",
                     predicate: () => settings.store.disableFade
                 },
                 { // Lazy-load contents
-                    match: /createPromise:\(\)=>([^:}]*?),webpackId:"?\d+"?,name:(?!="CollectiblesShop")"[^"]+"/g,
-                    replace: "$&,_:$1",
+                    match: /createPromise:\(\)=>([^:}]*?),webpackId:"?\d+"?,name:(?!"CollectiblesShop")"[^"]+"/g,
+                    replace: "$&,_:$self.preload($1)",
                     predicate: () => settings.store.eagerLoad
                 }
             ]
@@ -137,14 +149,15 @@ export default definePlugin({
         },
         { // Disable fade animations for settings menu
             find: '"data-mana-component":"layer-modal"',
+            group: true,
             replacement: [
                 {
-                    match: /(\i)\.animated\.div(?=,\{"data-mana-component":"layer-modal")/,
+                    match: /\i\.animated\.div(?=,\{[^{}]{0,150}"data-mana-component":"layer-modal")/,
                     replace: '"div"'
                 },
                 {
-                    match: /(?<="data-mana-component":"layer-modal"[^}]*?)style:\i,/,
-                    replace: "style:{},"
+                    match: /(?<=\{(?=[^{}]{0,150}"data-mana-component":"layer-modal")[^{}]{0,150})style:\i(?=[,}]),?/,
+                    replace: ""
                 }
             ],
             predicate: () => settings.store.disableFade
@@ -161,7 +174,7 @@ export default definePlugin({
             find: "handleOpenSettingsContextMenu=",
             replacement: {
                 match: /(?=handleOpenSettingsContextMenu=.{0,100}?null!=\i&&.{0,100}?(await [^};]*?\)\)))/,
-                replace: "_vencordBetterSettingsEagerLoad=(async ()=>$1)();"
+                replace: "_vencordBetterSettingsEagerLoad=$self.preload((async ()=>$1)());"
             },
             predicate: () => settings.store.eagerLoad
         },
@@ -170,7 +183,7 @@ export default definePlugin({
             predicate: () => settings.store.organizeMenu,
             replacement: [
                 {
-                    match: /children:\[(\i),null!=(\i).{0,30}\}\),(\i)\](?<=\1=(?:function|.{0,30}\.openUserSettings).+?)/, // TODO .{0,30}\.openUserSettings is stable compat
+                    match: /children:\[(\i),null!=(\i)&&\(0,\i\.\i\)\(\i\.\i,\{children:\2\}\),(\i)\]/,
                     replace: "children:$self.transformSettingsEntries([$1,$2,$3])",
                 }
             ]
@@ -185,11 +198,15 @@ export default definePlugin({
         try {
             [FocusLock.$$vencordGetWrappedComponent(), ComponentDispatch, Classes.layer].forEach(e => e.test);
         } catch {
-            new Logger("BetterSettings").error("Failed to find some components");
+            logger.error("Failed to find some components");
             return props.children;
         }
 
         return <Layer {...props} />;
+    },
+
+    preload(promise: Promise<unknown>) {
+        return promise.catch((error: unknown) => logger.warn("Could not preload settings.", error));
     },
 
     transformSettingsEntries(list) {

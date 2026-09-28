@@ -7,6 +7,7 @@
 import { definePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
+import { EmojiIntention } from "@vencord/discord-types/enums";
 import { OverridePremiumTypeStore } from "@webpack/common";
 
 export const settings = definePluginSettings({
@@ -45,28 +46,22 @@ export default definePlugin({
             replacement: [
                 {
                     // if (inlinedCalculatePlayingCount(a,b) >= limit) return;
-                    match: /(BURST_REACTION_EFFECT_PLAY:(?:\i=>|function\(\i\)){.+?if\()(\(?(?:function)?\(\i,\i\)(?:=>)?{.+?\(\i,\i\))>=5+?(?=\))/,
-                    replace: (_, rest, playingCount) => `${rest}!$self.shouldPlayBurstReaction(${playingCount})`
+                    match: /(?<=\}\)?\(\i,\i\)>=)5(?=\)return;)/,
+                    replace: "($self.settings.store.unlimitedSuperReactionPlaying?Infinity:$self.settings.store.superReactionPlayingLimit)"
                 }
             ]
         },
         {
             find: ".EMOJI_PICKER_CONSTANTS_EMOJI_CONTAINER_PADDING_HORIZONTAL)",
             replacement: {
-                match: /(openPopoutType:void 0(?=.+?isBurstReaction:(\i).+?;(\i===\i\.\i\.REACTION)&&\i\.push\().+?\[\2,\i\]=\i\.useState\()!1\)/,
-                replace: (_, rest, _isBurstReactionVariable, isReactionIntention) => `${rest}$self.shouldSuperReactByDefault&&${isReactionIntention})`
+                match: /(?<=getGuildId\(\)\?\?\i\?\?null,\[\i,\i\]=\i\.useState\()!1/,
+                replace: "$self.shouldSuperReactByDefault(arguments[0].pickerIntention)"
             }
         }
     ],
     settings,
 
-    shouldPlayBurstReaction(playingCount: number) {
-        if (settings.store.unlimitedSuperReactionPlaying) return true;
-        if (settings.store.superReactionPlayingLimit > playingCount) return true;
-        return false;
-    },
-
-    get shouldSuperReactByDefault() {
-        return settings.store.superReactByDefault && (OverridePremiumTypeStore.getState().premiumTypeActual != null);
+    shouldSuperReactByDefault(pickerIntention: EmojiIntention) {
+        return pickerIntention === EmojiIntention.REACTION && settings.store.superReactByDefault && OverridePremiumTypeStore.getState().premiumTypeActual != null;
     }
 });

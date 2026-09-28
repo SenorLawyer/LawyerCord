@@ -25,7 +25,6 @@ import { Heading } from "@components/Heading";
 import { Link } from "@components/Link";
 import { Paragraph } from "@components/Paragraph";
 import { Devs } from "@utils/constants";
-import { isTruthy } from "@utils/guards";
 import { proxyLazy } from "@utils/lazy";
 import { Logger } from "@utils/Logger";
 import { Margins } from "@utils/margins";
@@ -46,9 +45,9 @@ const logger = new Logger("CustomRPC");
 const ShowCurrentGame = getUserSettingLazy<boolean>("status", "showCurrentGame")!;
 
 const maxAssetCacheSize = 100;
-const assetCache = new Map<string, Promise<string>>();
+const assetCache = new Map<string, Promise<string | undefined>>();
 
-async function getApplicationAsset(key: string): Promise<string> {
+async function getApplicationAsset(key: string): Promise<string | undefined> {
     const appId = settings.store.appID || "0";
     const cacheKey = JSON.stringify([appId, key]);
     const cached = assetCache.get(cacheKey);
@@ -60,7 +59,11 @@ async function getApplicationAsset(key: string): Promise<string> {
     }
 
     const promise = ApplicationAssetUtils.fetchAssetIds(appId, [key])
-        .then(ids => ids[0]!)
+        .then(ids => {
+            const asset = ids[0];
+            if (!asset && assetCache.get(cacheKey) === promise) assetCache.delete(cacheKey);
+            return asset;
+        })
         .catch(error => {
             if (assetCache.get(cacheKey) === promise) assetCache.delete(cacheKey);
             throw error;
@@ -118,8 +121,8 @@ async function createActivity(): Promise<Activity | undefined> {
         stateURL,
         type,
         streamLink,
-        startTime,
-        endTime,
+        startTime: storedStartTime,
+        endTime: storedEndTime,
         imageBig,
         imageBigURL,
         imageBigTooltip,
@@ -136,6 +139,9 @@ async function createActivity(): Promise<Activity | undefined> {
     } = settings.store;
 
     if (!appName) return;
+
+    const startTime = validTimestamp(storedStartTime);
+    const endTime = validTimestamp(storedEndTime);
 
     const activity: Activity = {
         application_id: appID || "0",
@@ -162,8 +168,8 @@ async function createActivity(): Promise<Activity | undefined> {
         case TimestampMode.CUSTOM:
             if (startTime || endTime) {
                 activity.timestamps = {};
-                if (startTime && endTime && endTime > startTime) {
-                    const anchor = loopAnchor ?? Date.now();
+                const anchor = loopAnchor ?? Date.now();
+                if (startTime && endTime && endTime > startTime && endTime - startTime <= MAX_TIMESTAMP - anchor) {
                     activity.timestamps.start = anchor;
                     activity.timestamps.end = anchor + (endTime - startTime);
                 } else {
@@ -185,18 +191,11 @@ async function createActivity(): Promise<Activity | undefined> {
         activity.state_url = stateURL;
     }
 
-    if (buttonOneText) {
-        activity.buttons = [
-            buttonOneText,
-            buttonTwoText
-        ].filter(isTruthy);
-
-        activity.metadata = {
-            button_urls: [
-                buttonOneURL,
-                buttonTwoURL
-            ].filter(isTruthy)
-        };
+    const buttons = [[buttonOneText, buttonOneURL], [buttonTwoText, buttonTwoURL]]
+        .flatMap(([label, url]) => label && url ? [{ label, url }] : []);
+    if (buttons.length) {
+        activity.buttons = buttons.map(button => button.label);
+        activity.metadata = { button_urls: buttons.map(button => button.url) };
     }
 
     const [largeImageAsset, smallImageAsset] = await Promise.all([
@@ -221,7 +220,7 @@ async function createActivity(): Promise<Activity | undefined> {
         };
     }
 
-    if (partyMaxSize && partySize) {
+    if (partySize && partyMaxSize && Number.isSafeInteger(partySize) && Number.isSafeInteger(partyMaxSize) && partySize > 0 && partySize <= partyMaxSize) {
         activity.party = {
             size: [partySize, partyMaxSize]
         };
@@ -267,7 +266,7 @@ let rpcGeneration = 0;
 let pluginActive = false;
 
 function validTimestamp(value: unknown) {
-    return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= MAX_TIMESTAMP ? value : undefined;
+    return typeof value === "number" && Number.isSafeInteger(value) && value > 0 && value <= MAX_TIMESTAMP ? value : undefined;
 }
 
 function handleSettingsChange(_data?: unknown, path = "") {
@@ -393,9 +392,6 @@ export default definePlugin({
                     </Paragraph>
                     <Paragraph>
                         If you want to use an image link, download your image and reupload the image to <Link href="https://imgur.com">Imgur</Link> and get the image link by right-clicking the image and selecting "Copy image address".
-                    </Paragraph>
-                    <Paragraph>
-                        You can't see your own buttons on your profile, but everyone else can see it fine.
                     </Paragraph>
                     <Paragraph>
                         Some weird unicode text ("fonts" 𝖑𝖎𝖐𝖊 𝖙𝖍𝖎𝖘) may cause the rich presence to not show up, try using normal letters instead.

@@ -1,4 +1,18 @@
-[class*="panels"] [class*="inner"],
-[class*="rtcConnectionStatus"] {
-    height: fit-content !important;
+.vc-call-timer-connection {
+    margin: 0;
+    font-family: var(--font-code);
+
+    [--inner]:has(&),
+    [--connection]:has(&),
+    [--rtcConnectionStatus]:has(&) {
+        height: fit-content;
+    }
+}
+
+.vc-call-timer {
+    margin-top: -6px; /* this margin value doesn't change the default size of the user container */
+    font-weight: bold;
+    font-family: monospace;
+    font-size: 11px; /* good size that doesn't touch username */
+    position: relative;
 }

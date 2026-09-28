@@ -257,21 +257,8 @@ function SilentTypingChatIcon() {
 }
 
 function getEffectiveList(): string[] {
-    if (settings.store.defaultHidden) {
-        if (!settings.store.disabledLocations) {
-            settings.store.disabledLocations = "";
-            return [];
-        } else {
-            return settings.store.disabledLocations.split(",").map(x => x.trim()).filter(Boolean);
-        }
-    } else {
-        if (!settings.store.enabledLocations) {
-            settings.store.enabledLocations = "";
-            return [];
-        } else {
-            return settings.store.enabledLocations.split(",").map(x => x.trim()).filter(Boolean);
-        }
-    }
+    const { defaultHidden, disabledLocations, enabledLocations } = settings.store;
+    return (defaultHidden ? disabledLocations : enabledLocations).split(",").map(x => x.trim()).filter(Boolean);
 }
 
 function isImplicitlyAllowed(channel: string | Channel): number {
@@ -434,8 +421,8 @@ export default definePlugin({
         {
             find: '.dispatch({type:"TYPING_START_LOCAL"',
             replacement: {
-                match: /startTyping\(\i\){.+?},stop/,
-                replace: "startTyping:$self.startTyping,stop"
+                match: /startTyping\(\i\)\{\i\.\i\.dispatch\(\{type:"TYPING_START_LOCAL",channelId:\i\}\)\}/,
+                replace: "startTyping:$self.startTyping"
             }
         },
         {
@@ -524,6 +511,20 @@ export default definePlugin({
                         const locationId = location === "guild" ? ctx.channel.guild_id : ctx.channel.id;
                         toggleLocation(locationId, getEffectiveList(), settings.store.defaultHidden);
                     }
+                }
+
+                const updateChatBarIndicators = findOption(args, "chat-bar-indicators");
+
+                if (typeof updateChatBarIndicators === "boolean") {
+                    updated = true;
+                    settings.store.hideChatBoxTypingIndicators = updateChatBarIndicators;
+                }
+
+                const updateMembersListIndicators = findOption(args, "members-list-indicators");
+
+                if (typeof updateMembersListIndicators === "boolean") {
+                    updated = true;
+                    settings.store.hideMembersListTypingIndicators = updateMembersListIndicators;
                 }
 
                 const updateChatIcon = findOption(args, "chat-icon");

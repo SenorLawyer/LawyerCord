@@ -30,7 +30,7 @@ export default definePlugin({
             replacement: [
                 // Main setting definition
                 {
-                    match: /\.updateAsync\(.+?(?=,useSetting:)/,
+                    match: /\.updateAsync\(.{1,150}?(?=,useSetting:)/,
                     replace: "$&,userSettingsAPIGroup:arguments[0],userSettingsAPIName:arguments[1]"
                 },
                 // Selective wrapper

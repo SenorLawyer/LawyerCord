@@ -47,8 +47,8 @@ export default definePlugin({
 
             find: 'dispatch({type:"SPOTIFY_PROFILE_UPDATE"',
             replacement: {
-                match: /SPOTIFY_PROFILE_UPDATE.+?isPremium:(?="premium"===(\i)\.body\.product)/,
-                replace: (m, req) => `${m}(${req}.body.product="premium")&&`
+                match: /(?<=isPremium:)(?="premium"===(\i)\.body\.product)/,
+                replace: "($1.body.product=\"premium\")&&"
             },
         },
         {

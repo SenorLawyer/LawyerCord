@@ -11,16 +11,6 @@ import definePlugin, { OptionType } from "@utils/types";
 const MIDDLE_CLICK = 1;
 let lastMiddleClickUp = 0;
 
-function updateListeners(refresh: boolean = true) {
-    document.removeEventListener("mouseup", handleMouseUp, true);
-    document.removeEventListener("auxclick", handleAuxClick, true);
-
-    if (refresh) {
-        document.addEventListener("mouseup", handleMouseUp, true);
-        document.addEventListener("auxclick", handleAuxClick, true);
-    }
-}
-
 function handleAuxClick(event: MouseEvent) {
     if (event.button !== MIDDLE_CLICK) return false;
 
@@ -56,8 +46,7 @@ const settings = definePluginSettings({
             { label: "Media", value: "media" },
             { label: "Links & Media", value: "both" },
             { label: "None", value: "none", default: true },
-        ],
-        onChange(newValue) { updateListeners(newValue !== "none"); }
+        ]
     },
     pasteScope: {
         type: OptionType.SELECT,
@@ -95,8 +84,14 @@ export default definePlugin({
         return false;
     },
 
-    start() { updateListeners(); },
-    stop() { updateListeners(false); },
+    start() {
+        document.addEventListener("mouseup", handleMouseUp, true);
+        document.addEventListener("auxclick", handleAuxClick, true);
+    },
+    stop() {
+        document.removeEventListener("mouseup", handleMouseUp, true);
+        document.removeEventListener("auxclick", handleAuxClick, true);
+    },
 
     patches: [
         {

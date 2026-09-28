@@ -9,17 +9,17 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { Heading } from "@components/Heading";
 import { classNameFactory } from "@utils/css";
 import { RenderModalProps } from "@vencord/discord-types";
-import { findByPropsLazy } from "@webpack";
-import { ChannelStore, closeModal, DraftType, Modal, openModal, showToast, TextInput, Toasts, UploadManager, useState } from "@webpack/common";
+import { ChannelStore, closeModal, DraftActions, DraftStore, DraftType, Modal, openModal, showToast, TextInput, Toasts, UploadAttachmentStore, UploadManager, useEffect, useRef, UserStore, useState } from "@webpack/common";
 
 import { ScheduledAttachment } from "../types";
 import { addScheduledMessage, getChannelDisplayInfo } from "../utils";
 import { ErrorIcon } from "./Icons";
 
 const cl = classNameFactory("vc-scheduled-msg-");
-const ComponentDispatch = findByPropsLazy("dispatchToLastSubscribed");
 
-function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, close }: {
+function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, close, userId, uploadIds }: {
+    uploadIds?: string[];
+    userId: string;
     channelId: string;
     content: string;
     attachments?: ScheduledAttachment[];
@@ -30,6 +30,13 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
     const [delayMinutes, setDelayMinutes] = useState("5");
     const [scheduledDateTime, setScheduledDateTime] = useState("");
     const [error, setError] = useState("");
+    const submitting = useRef(false);
+    const active = useRef(true);
+
+    useEffect(() => {
+        active.current = true;
+        return () => { active.current = false; };
+    }, []);
 
     const { name, avatar } = getChannelDisplayInfo(channelId);
     const channel = ChannelStore.getChannel(channelId);
@@ -38,11 +45,16 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
     const isDM = channel.isPrivate();
 
     const handleSchedule = async () => {
+        if (!active.current || submitting.current) return;
+        if (UserStore.getCurrentUser()?.id !== userId) {
+            setError("Account changed. Reopen the scheduling dialog.");
+            return;
+        }
         let scheduledTime: number;
 
         if (scheduleType === "delay") {
-            const minutes = parseInt(delayMinutes, 10);
-            if (isNaN(minutes) || minutes < 1) {
+            const minutes = Number(delayMinutes);
+            if (!Number.isFinite(minutes) || minutes < 1) {
                 setError("Please enter a valid delay (minimum 1 minute)");
                 return;
             }
@@ -56,11 +68,22 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
             scheduledTime = dateTime;
         }
 
-        const result = await addScheduledMessage(channelId, content, scheduledTime, attachments);
+        submitting.current = true;
+        const result = await addScheduledMessage(channelId, content, scheduledTime, attachments)
+            .catch(() => ({ success: false, error: "Could not save the scheduled message. Try again." }));
+        submitting.current = false;
 
+        if (!active.current || UserStore.getCurrentUser()?.id !== userId) return;
         if (result.success) {
-            ComponentDispatch.dispatchToLastSubscribed("CLEAR_TEXT");
-            UploadManager.clearAll(channelId, DraftType.ChannelMessage);
+            if (uploadIds !== undefined) {
+                if (DraftStore.getDraft(channelId, DraftType.ChannelMessage) === content) {
+                    DraftActions.clearDraft(channelId, DraftType.ChannelMessage);
+                }
+                const uploads = UploadAttachmentStore.getUploads(channelId, DraftType.ChannelMessage);
+                if (uploads.length === uploadIds.length && uploads.every(upload => uploadIds.includes(upload.id))) {
+                    UploadManager.clearAll(channelId, DraftType.ChannelMessage);
+                }
+            }
             showToast("Message scheduled!", Toasts.Type.SUCCESS);
             close();
         } else {
@@ -72,7 +95,7 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
         <Modal
             {...rootProps}
             size="sm"
-            title="Schedule Message"
+            title={uploadIds === undefined ? "Recreate Scheduled Message" : "Schedule Message"}
             actions={[
                 {
                     text: "Schedule",
@@ -93,6 +116,13 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
                 </span>
             </div>
 
+            {uploadIds === undefined && (
+                <div>
+                    <p>This creates a new scheduled message for the account currently signed in. The original stays paused.</p>
+                    <div>{content}</div>
+                    {attachments?.map((attachment, index) => <div key={index}>{attachment.filename}</div>)}
+                </div>
+            )}
             <Heading tag="h5" className={cl("field-label")}>Schedule Type</Heading>
             <div className={cl("schedule-type-buttons")}>
                 <Button
@@ -129,7 +159,6 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
                         className={cl("datetime-input")}
                         value={scheduledDateTime}
                         onChange={e => setScheduledDateTime(e.target.value)}
-                        min={new Date().toISOString().slice(0, 16)}
                     />
                 </>
             )}
@@ -146,9 +175,17 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
 
 export const ScheduleTimeModal = ErrorBoundary.wrap(ScheduleTimeModalInner, { noop: true });
 
-export function openScheduleTimeModal(channelId: string, content: string, attachments?: ScheduledAttachment[]): void {
+export function openScheduleTimeModal(channelId: string, content: string, attachments?: ScheduledAttachment[], uploadIds?: string[]): void {
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!userId) return;
+    if (!ChannelStore.getChannel(channelId)) {
+        showToast("This channel is unavailable. Switch to an account that can access it before scheduling.", Toasts.Type.FAILURE);
+        return;
+    }
     const key = openModal(props => (
         <ScheduleTimeModal
+            uploadIds={uploadIds}
+            userId={userId}
             channelId={channelId}
             content={content}
             attachments={attachments}

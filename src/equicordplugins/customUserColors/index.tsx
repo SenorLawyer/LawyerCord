@@ -127,7 +127,6 @@ export default definePlugin({
         "gdm-context": channelContextMenuPatch,
     },
     settings,
-    requireSettingsMenu,
     getCustomColorString,
 
     async start() {
@@ -150,7 +149,7 @@ export default definePlugin({
             find: '="SYSTEM_TAG"',
             replacement: {
                 // Override colorString with our custom color and disable gradients if applying the custom color.
-                match: /(?<=colorString:\i,colorStrings:\i,colorRoleName:\i.*?}=)(\i),/,
+                match: /(?<=\bcolorRoleName:\i[^{}]{0,150}\}=)(\i),/,
                 replace: "$self.wrapMessageColorProps($1, arguments[0]),"
             },
             predicate: () => !Settings.plugins.IrcColors.enabled,

@@ -35,12 +35,13 @@ export function parseTagArguments(message: string) {
     const args = [] as { name: string, defaultValue: string | null; }[];
 
     for (const [, value] of message.matchAll(ArgumentRegex)) {
-        const [name, defaultValue] = value.split("=").map(s => s.trim());
+        const [rawName, defaultValue] = value.split("=").map(s => s.trim());
+        const name = rawName.toLowerCase();
 
         if (!name) continue;
         if (args.some(arg => arg.name === name)) continue;
 
-        args.push({ name: name.toLowerCase(), defaultValue: defaultValue ?? null });
+        args.push({ name, defaultValue: defaultValue ?? null });
     }
 
     return args;
@@ -74,7 +75,7 @@ export function registerTagCommand(tag: Tag) {
             const response = tag.message
                 .replace(ArgumentRegex, (fullMatch, value: string) => {
                     const [argName, defaultValue] = value.split("=").map(s => s.trim());
-                    return findOption(args, argName, null) ?? defaultValue ?? fullMatch;
+                    return findOption(args, argName.toLowerCase(), null) ?? defaultValue ?? fullMatch;
                 })
                 .replaceAll("\\n", "\n");
 

@@ -67,12 +67,12 @@ export default definePlugin({
     settings,
 
     shouldMention(message: Message, isHoldingShift: boolean) {
-        let isListed = settings.store.userList.includes(message.author.id);
+        let isListed = settings.store.userList.split(/[,\s]+/).includes(message.author.id);
 
         const channel = ChannelStore.getChannel(message.channel_id);
         if (channel?.guild_id && !isListed) {
             const roles = GuildMemberStore.getMember(channel.guild_id, message.author.id)?.roles;
-            isListed = !!roles && roles.some(role => settings.store.roleList.includes(role));
+            isListed = !!roles && roles.some(role => settings.store.roleList.split(/[,\s]+/).includes(role));
         }
 
         const isExempt = settings.store.shouldPingListed ? isListed : !isListed;

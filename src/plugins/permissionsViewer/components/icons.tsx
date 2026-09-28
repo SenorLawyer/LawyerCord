@@ -41,18 +41,3 @@ export function PermissionAllowedIcon() {
         </svg>
     );
 }
-
-export function PermissionDefaultIcon() {
-    return (
-        <svg
-            height="24"
-            width="24"
-            viewBox="0 0 16 16"
-        >
-            <g>
-                <title>Not overwritten</title>
-                <polygon fill="var(--text-default)" points="12 2.32 10.513 2 4 13.68 5.487 14" />
-            </g>
-        </svg>
-    );
-}

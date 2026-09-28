@@ -35,10 +35,6 @@ export class Data {
     declare _onMessagePreSend_preSend;
     private storageDirty = false;
 
-    withStart() {
-        return this;
-    }
-
     onMessagePreSend(channelId: string, message: MessageObject, extra: SendMessageOptions) {
         const target: { user: User; source?: Guild, extra: IUserExtra; }[] = [];
         const now = Date.now();

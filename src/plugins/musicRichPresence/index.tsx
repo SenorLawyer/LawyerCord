@@ -23,6 +23,7 @@ import { Heading } from "@components/Heading";
 import { Margins } from "@components/margins";
 import { Paragraph } from "@components/Paragraph";
 import { Devs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 import { Activity, ActivityAssets, ActivityButton } from "@vencord/discord-types";
 import { ActivityFlags, ActivityStatusDisplayType, ActivityType } from "@vencord/discord-types/enums";
@@ -64,6 +65,10 @@ const enum NameFormat {
 const LASTFM_API_KEY = "790c37d90400163a5a5fe00d6ca32ef0";
 const DISCORD_APP_ID = "1108588077900898414";
 const LASTFM_PLACEHOLDER_IMAGE_HASH = "2a96cbd8b46e442fc41c2b86b821562f";
+
+const logger = new Logger("MusicRichPresence");
+let active = false;
+let updateGeneration = 0;
 
 async function getApplicationAsset(key: string): Promise<string> {
     return (await ApplicationAssetUtils.fetchAssetIds(DISCORD_APP_ID, [key]))[0];
@@ -237,17 +242,30 @@ export default definePlugin({
     },
 
     start() {
+        active = true;
         this.updatePresence();
         this.updateInterval = setInterval(() => { this.updatePresence(); }, 16000);
     },
 
     stop() {
+        active = false;
+        updateGeneration++;
         clearInterval(this.updateInterval);
         clearListenBrainzCache();
+        setActivity(null);
     },
 
     async updatePresence() {
-        setActivity(await this.getActivity());
+        if (!active) return;
+        const generation = ++updateGeneration;
+        const userId = AuthenticationStore.getId();
+        try {
+            const activity = await this.getActivity();
+            if (active && generation === updateGeneration && userId === AuthenticationStore.getId())
+                setActivity(activity);
+        } catch (error) {
+            logger.error("Failed to update music presence", error);
+        }
     },
 
     getLargeImage(track: TrackData): string | undefined {

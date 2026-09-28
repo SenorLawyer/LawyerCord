@@ -19,76 +19,80 @@
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
+import { makeLazy } from "@utils/lazy";
 import { sleep } from "@utils/misc";
 import { Queue } from "@utils/Queue";
-import { useForceUpdater } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
-import { CustomEmoji, Message, ReactionEmoji, User } from "@vencord/discord-types";
-import { ChannelStore, Constants, FluxDispatcher, React, RestAPI, useEffect, useLayoutEffect, UserStore, UserSummaryItem } from "@webpack/common";
+import { Message, ReactionEmoji, User } from "@vencord/discord-types";
+import { findStoreLazy } from "@webpack";
+import { ChannelStore, Constants, FluxDispatcher, lodash, React, RestAPI, useEffect, useLayoutEffect, UserStore, UserSummaryItem, useStateFromStores } from "@webpack/common";
 
 interface ReactionCacheEntry {
     fetched: boolean;
     users: Map<string, User>;
 }
 
+interface ReactionScroller {
+    scrollCounter: number;
+    setAutomaticAnchor(anchor: null): void;
+}
+
 interface ReactionProps {
     message: Message;
-    emoji: CustomEmoji;
+    emoji: ReactionEmoji;
     type: number;
 }
 
 const MAX_PENDING_REACTION_FETCHES = 50;
+const AVATAR_SETTINGS: "avatarClick"[] = ["avatarClick"];
+const MessageReactionsStore = findStoreLazy("MessageReactionsStore");
 
-let Scroll: any = null;
+const getScrollerContext = makeLazy(() => React.createContext<ReactionScroller | null>(null));
 const queue = new Queue(MAX_PENDING_REACTION_FETCHES);
 let fetchGeneration = 0;
 let reactions: Record<string, ReactionCacheEntry> = {};
-
-function fetchReactions(msg: Message, emoji: ReactionEmoji, type: number) {
-    const key = getEmojiKey(emoji);
-    return RestAPI.get({
-        url: Constants.Endpoints.REACTIONS(msg.channel_id, msg.id, key),
-        query: {
-            limit: 100,
-            type
-        },
-        oldFormErrors: true
-    })
-        .then(res => {
-            for (const user of res.body) {
-                FluxDispatcher.dispatch({
-                    type: "USER_UPDATE",
-                    user
-                });
-            }
-
-            FluxDispatcher.dispatch({
-                type: "MESSAGE_REACTION_ADD_USERS",
-                channelId: msg.channel_id,
-                messageId: msg.id,
-                users: res.body,
-                emoji,
-                reactionType: type
-            });
-        })
-        .catch(console.error)
-        .finally(() => sleep(250));
-}
 
 function getEmojiKey(emoji: Pick<ReactionEmoji, "id" | "name">) {
     return emoji.name + (emoji.id ? `:${emoji.id}` : "");
 }
 
 function getReactionsWithQueue(msg: Message, e: ReactionEmoji, type: number) {
-    const key = `${msg.id}:${getEmojiKey(e)}:${type}`;
+    const key = `${msg.id}:${e.name}:${e.id ?? ""}:${type}`;
     const cache = reactions[key] ??= { fetched: false, users: new Map() };
-    if (!cache.fetched) {
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!cache.fetched && userId) {
         const generation = fetchGeneration;
-        queue.unshift(() => {
-            if (generation !== fetchGeneration) return;
-            return fetchReactions(msg, e, type);
+        queue.unshift(async () => {
+            if (generation !== fetchGeneration || userId !== UserStore.getCurrentUser()?.id || cache.fetched) return;
+            cache.fetched = true;
+            try {
+                const res = await RestAPI.get({
+                    url: Constants.Endpoints.REACTIONS(msg.channel_id, msg.id, getEmojiKey(e)),
+                    query: { limit: 100, type },
+                    oldFormErrors: true
+                });
+                if (generation !== fetchGeneration || userId !== UserStore.getCurrentUser()?.id) {
+                    cache.fetched = false;
+                    return;
+                }
+                for (const user of res.body) {
+                    FluxDispatcher.dispatch({ type: "USER_UPDATE", user });
+                }
+                FluxDispatcher.dispatch({
+                    type: "MESSAGE_REACTION_ADD_USERS",
+                    channelId: msg.channel_id,
+                    messageId: msg.id,
+                    users: res.body,
+                    emoji: e,
+                    reactionType: type
+                });
+            } catch (error) {
+                cache.fetched = false;
+                throw error;
+            } finally {
+                await sleep(250);
+            }
         });
-        cache.fetched = true;
     }
 
     return cache.users;
@@ -99,29 +103,30 @@ function handleClickAvatar(event: React.UIEvent<HTMLElement, Event>) {
 }
 
 function ReactionUsers({ message, emoji, type }: ReactionProps) {
-    const forceUpdate = useForceUpdater();
-    const emojiKey = getEmojiKey(emoji);
+    const { avatarClick } = settings.use(AVATAR_SETTINGS);
+    const scroller = React.useContext(getScrollerContext());
+    const key = `${message.id}:${emoji.name}:${emoji.id ?? ""}:${type}`;
+    const { userIds, guildId, generation, userId } = useStateFromStores([MessageReactionsStore, UserStore, ChannelStore], () => ({
+        userIds: Array.from(reactions[key]?.users.keys() ?? []),
+        guildId: ChannelStore.getChannel(message.channel_id)?.guild_id,
+        generation: fetchGeneration,
+        userId: UserStore.getCurrentUser()?.id,
+        userVersion: UserStore.getUserStoreVersion()
+    }), [key, message.channel_id], lodash.isEqual);
 
     useLayoutEffect(() => { // bc need to prevent autoscrolling
-        if (Scroll?.scrollCounter > 0) {
-            Scroll.setAutomaticAnchor(null);
+        if (scroller && scroller.scrollCounter > 0) {
+            scroller.setAutomaticAnchor(null);
         }
     });
 
     useEffect(() => {
-        const cb = (e: any) => {
-            if (e?.messageId === message.id && e.reactionType === type && e.emoji && getEmojiKey(e.emoji) === emojiKey)
-                forceUpdate();
-        };
-        FluxDispatcher.subscribe("MESSAGE_REACTION_ADD_USERS", cb);
+        getReactionsWithQueue(message, emoji, type);
+    }, [message.id, message.channel_id, emoji.id, emoji.name, type, generation, userId]);
 
-        return () => FluxDispatcher.unsubscribe("MESSAGE_REACTION_ADD_USERS", cb);
-    }, [message.id, type, emojiKey, forceUpdate]);
-
-    const reactions = getReactionsWithQueue(message, emoji, type);
     const users: User[] = [];
 
-    for (const id of reactions.keys()) {
+    for (const id of userIds) {
         const user = UserStore.getUser(id);
         if (user) users.push(user);
     }
@@ -129,31 +134,26 @@ function ReactionUsers({ message, emoji, type }: ReactionProps) {
     return (
         <div
             style={{ marginLeft: "0.5em", transform: "scale(0.9)" }}
+            onClick={avatarClick ? handleClickAvatar : undefined}
+            onKeyPress={avatarClick ? handleClickAvatar : undefined}
         >
-            <div
-                onClick={handleClickAvatar}
-                onKeyDown={handleClickAvatar}
-                style={settings.store.avatarClick ? {} : { pointerEvents: "none" }}
-            >
-                <UserSummaryItem
-                    users={users}
-                    guildId={ChannelStore.getChannel(message.channel_id)?.guild_id}
-                    renderIcon={false}
-                    max={5}
-                    showDefaultAvatarsForNullUsers
-                    showUserPopout
-                />
-            </div>
+            <UserSummaryItem
+                users={users}
+                guildId={guildId}
+                renderIcon={false}
+                max={5}
+                showDefaultAvatarsForNullUsers
+                showUserPopout={avatarClick}
+            />
         </div>
     );
 }
 
 const settings = definePluginSettings({
     avatarClick: {
-        description: "Toggle clicking avatars in reactions",
+        description: "Open profiles by clicking reaction avatars.",
         type: OptionType.BOOLEAN,
-        default: false,
-        restartNeeded: true
+        default: false
     }
 });
 
@@ -168,8 +168,8 @@ export default definePlugin({
         {
             find: ",reactionRef:",
             replacement: {
-                match: /(\i)\?null:\(0,\i\.jsx\)\(\i\.\i,{className:\i\.reactionCount,.*?}\),(?<=(emoji:\i,message:\i,type:\i).+?)/,
-                replace: "$&$1?null:$self.renderUsers({$2}),"
+                match: /(\i)\?null:\(0,\i\.jsx\)\(\i\.\i,{className:\i\.reactionCount,[^{}]{0,100}}\),/,
+                replace: "$&$1?null:$self.renderUsers({emoji:arguments[0].emoji,message:arguments[0].message,type:arguments[0].type}),"
             }
         },
         {
@@ -180,11 +180,10 @@ export default definePlugin({
             }
         },
         {
-
-            find: "cleanAutomaticAnchor(){",
+            find: "useConversationScroll must be used inside <ConversationScrollProvider>",
             replacement: {
-                match: /constructor\(\i\)\{(?=.{0,100}(?:automaticAnchor|\.messages\.loadingMore))/,
-                replace: "$&$self.setScrollObj(this);"
+                match: /(?<=return\(0,(\i)\.jsx\)\(\i\.Provider,\{(?:value:\i,)?children:)\i(?=(?:,value:\i)?\}\)\}function \i\(\)\{let \i=\i\.useContext\(\i\);if\(null==\i\)throw Error\("useConversationScroll)/,
+                replace: "(0,$1.jsx)($self.ScrollerContext.Provider,{value:arguments[0].scrollManager,children:$&})"
             }
         }
     ],
@@ -195,16 +194,16 @@ export default definePlugin({
             : <ReactionUsers {...props} />;
     }, { noop: true }),
 
-    setScrollObj(scroll: any) {
-        Scroll = scroll;
+    get ScrollerContext() {
+        return getScrollerContext();
     },
 
-    set reactions(value: any) {
+    set reactions(value: Record<string, ReactionCacheEntry>) {
+        fetchGeneration++;
         reactions = value;
     },
 
     stop() {
         fetchGeneration++;
-        Scroll = null;
     }
 });

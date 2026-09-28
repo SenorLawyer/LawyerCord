@@ -16,14 +16,24 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { Button, MediaEngineStore, useState } from "@webpack/common";
+import { Logger } from "@utils/Logger";
+import { Button, MediaEngineStore, useEffect, useRef, useState } from "@webpack/common";
 
 import { settings, type VoiceRecorder } from "..";
+
+const logger = new Logger("VoiceMessages");
 
 export const VoiceRecorderWeb: VoiceRecorder = ({ setAudioBlob, onRecordingChange }) => {
     const [recording, setRecording] = useState(false);
     const [paused, setPaused] = useState(false);
     const [recorder, setRecorder] = useState<MediaRecorder>();
+    const active = useRef<{ dispose(): void; } | undefined>(undefined);
+
+    useEffect(() => () => {
+        const session = active.current;
+        active.current = undefined;
+        session?.dispose();
+    }, []);
 
     const changeRecording = (recording: boolean) => {
         setRecording(recording);
@@ -34,6 +44,23 @@ export const VoiceRecorderWeb: VoiceRecorder = ({ setAudioBlob, onRecordingChang
         const nowRecording = !recording;
 
         if (nowRecording) {
+            if (active.current) return;
+            const session = { dispose: () => {} };
+            active.current = session;
+
+            const finish = () => {
+                active.current = undefined;
+                session.dispose();
+                setRecorder(undefined);
+                setPaused(false);
+                changeRecording(false);
+            };
+            const fail = (error: unknown) => {
+                if (active.current !== session) return;
+                finish();
+                logger.error("Could not record audio.", error);
+            };
+
             navigator.mediaDevices.getUserMedia({
                 audio: {
                     echoCancellation: settings.store.echoCancellation,
@@ -41,6 +68,11 @@ export const VoiceRecorderWeb: VoiceRecorder = ({ setAudioBlob, onRecordingChang
                     deviceId: MediaEngineStore.getInputDeviceId()
                 }
             }).then(mediaStream => {
+                session.dispose = () => mediaStream.getTracks().forEach(track => track.stop());
+                if (active.current !== session) {
+                    session.dispose();
+                    return;
+                }
                 const chunks: Blob[] = [];
 
                 const recorder = new MediaRecorder(mediaStream);
@@ -51,23 +83,29 @@ export const VoiceRecorderWeb: VoiceRecorder = ({ setAudioBlob, onRecordingChang
                 };
 
                 const handleStop = () => {
-                    setAudioBlob(new Blob(chunks, { type: "audio/ogg; codecs=opus" }));
-                    changeRecording(false);
+                    if (active.current !== session) return;
+                    const blob = new Blob(chunks, { type: recorder.mimeType });
+                    finish();
+                    setAudioBlob(blob);
+                };
+                const handleError = () => fail(new Error("The audio recorder reported an error."));
 
+                session.dispose = () => {
                     recorder.removeEventListener("dataavailable", handleDataAvailable);
                     recorder.removeEventListener("stop", handleStop);
-
+                    recorder.removeEventListener("error", handleError);
+                    if (recorder.state !== "inactive") recorder.stop();
                     mediaStream.getTracks().forEach(track => track.stop());
                 };
-
                 recorder.addEventListener("dataavailable", handleDataAvailable);
                 recorder.addEventListener("stop", handleStop, { once: true });
+                recorder.addEventListener("error", handleError);
                 recorder.start();
 
                 changeRecording(true);
-            });
-        } else {
-            recorder?.stop();
+            }).catch(fail);
+        } else if (recorder && recorder.state !== "inactive") {
+            recorder.stop();
         }
     }
 
@@ -80,9 +118,11 @@ export const VoiceRecorderWeb: VoiceRecorder = ({ setAudioBlob, onRecordingChang
             <Button
                 disabled={!recording}
                 onClick={() => {
-                    setPaused(!paused);
-                    if (paused) recorder?.resume();
-                    else recorder?.pause();
+                    if (!recorder || recorder.state === "inactive") return;
+                    const nowPaused = recorder.state === "recording";
+                    if (nowPaused) recorder.pause();
+                    else recorder.resume();
+                    setPaused(nowPaused);
                 }}
             >
                 {paused ? "Resume" : "Pause"} recording

@@ -9,7 +9,7 @@ import { FileHandle, open } from "node:fs/promises";
 
 import { dialog, IpcMainInvokeEvent } from "electron";
 
-const activeFiles = new Map<string, FileHandle>();
+const activeFiles = new Map<string, { fileHandle: FileHandle; decoder: TextDecoder; }>();
 
 export async function startNativeLogImport(_event: IpcMainInvokeEvent, defaultPath?: string) {
     const res = await dialog.showOpenDialog({
@@ -24,31 +24,32 @@ export async function startNativeLogImport(_event: IpcMainInvokeEvent, defaultPa
 
     const fileHandle = await open(path, "r");
     const fileId = randomUUID();
-    activeFiles.set(fileId, fileHandle);
+    activeFiles.set(fileId, { fileHandle, decoder: new TextDecoder() });
 
     return fileId;
 }
 
-export async function readNativeLogChunk(_event: IpcMainInvokeEvent, fileId: string, size: number = 64 * 1024): Promise<string | null> {
-    const fileHandle = activeFiles.get(fileId);
-    if (!fileHandle) return null;
+export async function readNativeLogChunk(_event: IpcMainInvokeEvent, fileId: string): Promise<string | null> {
+    const file = activeFiles.get(fileId);
+    if (!file) return null;
+    const { fileHandle, decoder } = file;
 
-    const buffer = Buffer.alloc(size);
-    const { bytesRead } = await fileHandle.read(buffer, 0, size);
+    const buffer = Buffer.alloc(64 * 1024);
+    const { bytesRead } = await fileHandle.read(buffer, 0, buffer.length);
 
     if (bytesRead === 0) {
         await fileHandle.close();
         activeFiles.delete(fileId);
-        return null;
+        return decoder.decode() || null;
     }
 
-    return buffer.toString("utf-8", 0, bytesRead);
+    return decoder.decode(buffer.subarray(0, bytesRead), { stream: true });
 }
 
 export async function closeNativeLogImport(_event: IpcMainInvokeEvent, fileId: string) {
-    const fileHandle = activeFiles.get(fileId);
-    if (fileHandle) {
-        await fileHandle.close();
+    const file = activeFiles.get(fileId);
+    if (file) {
+        await file.fileHandle.close();
         activeFiles.delete(fileId);
     }
 }

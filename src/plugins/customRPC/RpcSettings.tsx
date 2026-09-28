@@ -10,6 +10,7 @@ import { Divider } from "@components/Divider";
 import { Heading } from "@components/Heading";
 import { resolveError } from "@components/settings/tabs/plugins/components/Common";
 import { classNameFactory } from "@utils/css";
+import { parseUrl } from "@utils/misc";
 import { ActivityType } from "@vencord/discord-types/enums";
 import { Select, Text, TextInput, useState } from "@webpack/common";
 
@@ -49,35 +50,34 @@ function isAppIdValid(value: string) {
     return true;
 }
 
-function isStreamLinkDisabled() {
-    return settings.store.type !== ActivityType.STREAMING;
-}
-
 function isStreamLinkValid(value: string) {
-    if (!isStreamLinkDisabled() && !/https?:\/\/(www\.)?(twitch\.tv|youtube\.com)\/\w+/.test(value)) return "Streaming link must be a valid URL.";
+    if (settings.store.type === ActivityType.STREAMING) {
+        const url = parseUrl(value);
+        if (!url || !/^https?:$/.test(url.protocol) || !/^(www\.)?(twitch\.tv|youtube\.com)$/.test(url.host) || !/^\/\w/.test(url.pathname) || url.username || url.password)
+            return "Streaming link must be a valid URL.";
+    }
     if (value && value.length > 512) return "Streaming link must be not longer than 512 characters.";
     return true;
 }
 
-function parseNumber(value: string) {
-    return value ? parseInt(value, 10) : 0;
-}
-
 function isNumberValid(value: number) {
-    if (isNaN(value)) return "Must be a number.";
-    if (value < 0) return "Must be a positive number.";
+    if (!Number.isSafeInteger(value)) return "Must be a whole number within the supported range.";
+    if (value < 0) return "Must be zero or greater.";
     return true;
 }
 
 function isUrlValid(value: string) {
-    if (value && !/^https?:\/\/.+/.test(value)) return "Must be a valid URL.";
+    if (!value) return true;
+    const url = parseUrl(value);
+    if (!url || !/^https?:$/.test(url.protocol)) return "Must be a valid URL.";
     return true;
 }
 
 function isImageKeyValid(value: string) {
-    if (/https?:\/\/(cdn|media)\.discordapp\.(com|net)\//.test(value)) return "Don't use a Discord link. Use an Imgur image link instead.";
-    if (/https?:\/\/(?!i\.)?imgur\.com\//.test(value)) return "Imgur link must be a direct link to the image (e.g. https://i.imgur.com/...). Right click the image and click 'Copy image address'";
-    if (/https?:\/\/(?!media\.)?tenor\.com\//.test(value)) return "Tenor link must be a direct link to the image (e.g. https://media.tenor.com/...). Right click the GIF and click 'Copy image address'";
+    const host = parseUrl(value)?.hostname ?? "";
+    if (/^(cdn|media)\.discordapp\.(com|net)$/.test(host)) return "Don't use a Discord link. Use an Imgur image link instead.";
+    if (host === "imgur.com") return "Imgur link must be a direct link to the image (e.g. https://i.imgur.com/...). Right click the image and click 'Copy image address'";
+    if (host === "tenor.com") return "Tenor link must be a direct link to the image (e.g. https://media.tenor.com/...). Right click the GIF and click 'Copy image address'";
     return true;
 }
 
@@ -97,11 +97,11 @@ function SingleSetting<T>({ settingsKey, label, disabled, isValid, transform }: 
     const [error, setError] = useState<string | null>(null);
 
     function handleChange(newValue: any) {
+        setState(newValue);
         if (transform) newValue = transform(newValue);
 
         const valid = isValid?.(newValue) ?? true;
 
-        setState(newValue);
         setError(resolveError(valid));
 
         if (valid === true) {
@@ -113,6 +113,7 @@ function SingleSetting<T>({ settingsKey, label, disabled, isValid, transform }: 
         <div className={cl("single", { disabled })}>
             <Heading tag="h5">{label}</Heading>
             <TextInput
+                aria-label={label}
                 type="text"
                 placeholder={"Enter a value"}
                 value={state}
@@ -129,12 +130,13 @@ function SelectSetting<T>({ settingsKey, label, options, disabled }: SelectOptio
         <div className={cl("single", { disabled })}>
             <Heading tag="h5">{label}</Heading>
             <Select
+                aria-label={label}
                 placeholder={"Select an option"}
                 options={options}
                 maxVisibleItems={5}
                 closeOnSelect={true}
                 select={v => settings.store[settingsKey] = v}
-                isSelected={v => v === settings.store[settingsKey]}
+                isSelected={v => v === (settings.store[settingsKey] ?? options.find(option => option.default)?.value)}
                 serialize={v => String(v)}
                 isDisabled={disabled}
             />
@@ -201,16 +203,16 @@ export function RPCSettings() {
                 {
                     settingsKey: "partySize",
                     label: "Party Size",
-                    transform: parseNumber,
+                    transform: Number,
                     isValid: isNumberValid,
-                    disabled: s.type !== ActivityType.PLAYING,
+                    disabled: (s.type ?? ActivityType.PLAYING) !== ActivityType.PLAYING,
                 },
                 {
                     settingsKey: "partyMaxSize",
                     label: "Maximum Party Size",
-                    transform: parseNumber,
+                    transform: Number,
                     isValid: isNumberValid,
-                    disabled: s.type !== ActivityType.PLAYING,
+                    disabled: (s.type ?? ActivityType.PLAYING) !== ActivityType.PLAYING,
                 },
             ]} />
 
@@ -269,14 +271,14 @@ export function RPCSettings() {
                 {
                     settingsKey: "startTime",
                     label: "Start Timestamp (in milliseconds)",
-                    transform: parseNumber,
+                    transform: Number,
                     isValid: isNumberValid,
                     disabled: s.timestampMode !== TimestampMode.CUSTOM,
                 },
                 {
                     settingsKey: "endTime",
                     label: "End Timestamp (in milliseconds)",
-                    transform: parseNumber,
+                    transform: Number,
                     isValid: isNumberValid,
                     disabled: s.timestampMode !== TimestampMode.CUSTOM,
                 },

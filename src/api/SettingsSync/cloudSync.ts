@@ -7,44 +7,84 @@
 import * as DataStore from "@api/DataStore";
 import { showNotification } from "@api/Notifications";
 import { PlainSettings, Settings } from "@api/Settings";
+import { readResponseText } from "@shared/readResponseText";
 import { localStorage } from "@utils/localStorage";
 import { Logger } from "@utils/Logger";
+import { isObject } from "@utils/misc";
 import { relaunch } from "@utils/native";
-import { SettingsRouter } from "@webpack/common";
-import { deflateSync, inflateSync } from "fflate";
+import { lodash, SettingsRouter, UserStore } from "@webpack/common";
+import { deflateSync } from "fflate";
 
 import { deauthorizeCloud, getCloudAuth, getCloudUrl } from "./cloudSetup";
-import { exportSettings, importSettings } from "./offline";
+import { captureCloudImportState, deserializeDataStore, exportSettings, getCloudDataStoreEntries, importSettings, isLocalDataStoreKey, omitCloudSettings, serializeDataStore } from "./offline";
 import { ManifestEntry, SyncRequest, SyncResponse } from "./types";
 
 const logger = new Logger("SettingsSync:Cloud", "#39b7e0");
 
 const MANIFEST_STORE_KEY = "Vencord_cloudManifest";
 const API_VERSION_STORE_KEY = "Vencord_cloudApiVersions";
+const REQUEST_TIMEOUT_MS = 120_000;
+const MAX_SYNC_RESPONSE_BYTES = 128 * 1024 * 1024;
+const MAX_TIMESTAMP_RESPONSE_BYTES = 1024 * 1024;
 
 type ApiVersion = "v2" | "v1";
 
 const SYNC_DIRECTION_KEY = "Vencord_cloudSyncDirection";
 const SETTINGS_DIRTY_KEY = "Vencord_settingsDirty";
-export const getCloudSyncDirection = () => localStorage.getItem(SYNC_DIRECTION_KEY) || "both";
+let localSettingsRevision = 0;
+export const getCloudSyncDirection = () => localStorage[SYNC_DIRECTION_KEY] || "both";
 export const setCloudSyncDirection = (direction: "push" | "pull" | "both" | "manual") => localStorage.setItem(SYNC_DIRECTION_KEY, direction);
 export const areLocalSettingsDirty = () => localStorage.getItem(SETTINGS_DIRTY_KEY) === "true";
-export const markLocalSettingsDirty = () => localStorage.setItem(SETTINGS_DIRTY_KEY, "true");
+export const markLocalDataDirty = () => localStorage.setItem(SETTINGS_DIRTY_KEY, "true");
+export const markLocalSettingsDirty = () => {
+    localSettingsRevision++;
+    markLocalDataDirty();
+};
 export const markLocalSettingsClean = () => localStorage.removeItem(SETTINGS_DIRTY_KEY);
 
 async function loadApiVersionMap(): Promise<Record<string, ApiVersion>> {
     return await DataStore.get<Record<string, ApiVersion>>(API_VERSION_STORE_KEY) ?? {};
 }
 
-async function getApiVersion(): Promise<ApiVersion> {
+async function getApiVersion(origin: string): Promise<ApiVersion> {
     const map = await loadApiVersionMap();
-    return map[getCloudUrl().origin] ?? "v2";
+    return map[origin] ?? "v2";
 }
 
-async function setApiVersion(version: ApiVersion) {
+async function getCloudSyncContext(checkLocalEdits = false) {
+    const url = getCloudUrl();
+    const userId = UserStore.getCurrentUser()?.id;
+    const revision = localSettingsRevision;
+    const isCurrent = () => userId !== undefined && UserStore.getCurrentUser()?.id === userId && getCloudUrl().href === url.href;
+    return {
+        expected: checkLocalEdits ? await captureCloudImportState() : undefined,
+        url,
+        manifestKey: `${MANIFEST_STORE_KEY}:${url.origin}:${userId}`,
+        isCurrent,
+        assertCurrent: (checkEdits = true) => {
+            if (!isCurrent()) throw new Error("Cloud sync account or service changed.");
+            if (checkEdits && checkLocalEdits && localSettingsRevision !== revision)
+                throw new Error("Local settings changed during sync. Try again to include your latest changes.");
+        }
+    };
+}
+
+async function checkLocalData(context: Awaited<ReturnType<typeof getCloudSyncContext>>, syncDataStore = true) {
+    context.assertCurrent();
+    const { expected } = context;
+    if (!expected) return;
+    const current = await captureCloudImportState(syncDataStore);
+    context.assertCurrent();
+    if (current.quickCss !== expected.quickCss || (syncDataStore && !lodash.isEqual(current.dataStore, expected.dataStore))) {
+        markLocalDataDirty();
+        throw new Error("Local data changed during sync. Try again to include your latest changes.");
+    }
+}
+
+async function setApiVersion(version: ApiVersion, origin: string) {
     await DataStore.update<Record<string, ApiVersion>>(API_VERSION_STORE_KEY, map => {
         map ??= {};
-        map[getCloudUrl().origin] = version;
+        map[origin] = version;
         return map;
     });
 }
@@ -70,59 +110,66 @@ async function computeChecksum(data: Uint8Array): Promise<string> {
     return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function getLocalManifest(): Promise<ManifestEntry[]> {
-    return await DataStore.get<ManifestEntry[]>(MANIFEST_STORE_KEY) ?? [];
+async function getLocalManifest(context: Awaited<ReturnType<typeof getCloudSyncContext>>): Promise<ManifestEntry[]> {
+    return await DataStore.get<ManifestEntry[]>(context.manifestKey) ?? [];
 }
 
-async function saveLocalManifest(manifest: ManifestEntry[]) {
-    await DataStore.set(MANIFEST_STORE_KEY, manifest);
+async function saveLocalManifest(context: Awaited<ReturnType<typeof getCloudSyncContext>>, manifest: ManifestEntry[]) {
+    await DataStore.set(context.manifestKey, manifest);
 }
 
-async function buildLocalData(): Promise<Map<string, Uint8Array>> {
+async function saveSyncVersion(context: Awaited<ReturnType<typeof getCloudSyncContext>>, version: number) {
+    const next = VencordNative.settings.get();
+    next.cloud = { ...next.cloud, settingsSyncVersion: version };
+    await VencordNative.settings.set(next, undefined, context.expected?.settings);
+    context.assertCurrent();
+    PlainSettings.cloud.settingsSyncVersion = version;
+}
+
+async function buildLocalData(checkCurrent: () => void): Promise<Map<string, Uint8Array>> {
     const encoder = new TextEncoder();
     const data = new Map<string, Uint8Array>();
 
-    data.set("settings", encoder.encode(JSON.stringify(VencordNative.settings.get())));
+    data.set("settings", encoder.encode(JSON.stringify(omitCloudSettings(VencordNative.settings.get()))));
 
     const quickCss = await VencordNative.quickCss.get();
-    if (quickCss) data.set("quickCss", encoder.encode(quickCss));
+    checkCurrent();
+    data.set("quickCss", encoder.encode(quickCss));
 
     const dataStoreEntries = await DataStore.entries();
-    if (dataStoreEntries) data.set("dataStore", encoder.encode(JSON.stringify(dataStoreEntries)));
+    checkCurrent();
+    data.set("dataStore", encoder.encode(serializeDataStore(getCloudDataStoreEntries(dataStoreEntries))));
 
     return data;
 }
 
-async function applyDownloads(downloads: SyncResponse["downloads"]) {
+async function applyDownloads(downloads: SyncResponse["downloads"], context: Awaited<ReturnType<typeof getCloudSyncContext>>) {
     if (downloads.length === 0) return false;
+    if (new Set(downloads.map(({ key }) => key)).size !== downloads.length)
+        throw new Error("The cloud server returned duplicate download records.");
 
-    let settingsChanged = false;
+    const backup: { settings?: unknown; quickCss?: string; dataStore?: [IDBValidKey, unknown][]; } = {};
     const decoder = new TextDecoder();
 
     for (const dl of downloads) {
+        if (dl.key.startsWith("dataStore/") && isLocalDataStoreKey(dl.key.slice("dataStore/".length))) continue;
         const text = decoder.decode(fromBase64(dl.value));
 
         if (dl.key === "settings") {
-            try {
-                await importSettings(JSON.stringify({ settings: JSON.parse(text) }), "all", true);
-                settingsChanged = true;
-            } catch (e) {
-                logger.error("Failed to apply settings download", e);
-            }
+            backup.settings = JSON.parse(text);
         } else if (dl.key === "quickCss") {
-            await VencordNative.quickCss.set(text);
-            settingsChanged = true;
+            backup.quickCss = text;
+        } else if (dl.key === "dataStore") {
+            const entries = deserializeDataStore(JSON.parse(text));
+            backup.dataStore = (backup.dataStore ?? []).concat(entries);
         } else if (dl.key.startsWith("dataStore/")) {
-            const dsKey = dl.key.slice("dataStore/".length);
-            try {
-                await DataStore.set(dsKey, JSON.parse(text));
-            } catch (e) {
-                logger.error(`Failed to apply dataStore download for ${dsKey}`, e);
-            }
+            (backup.dataStore ??= []).push([dl.key.slice("dataStore/".length), JSON.parse(text)]);
         }
     }
 
-    return settingsChanged;
+    if (Object.keys(backup).length === 0) return false;
+    await importSettings(JSON.stringify({ ...backup, ...(backup.dataStore && { dataStore: JSON.parse(serializeDataStore(backup.dataStore)) }) }), "all", true, context.assertCurrent, context.expected);
+    return true;
 }
 
 function handleAuthFailure() {
@@ -135,25 +182,41 @@ function handleAuthFailure() {
     Settings.cloud.authenticated = false;
 }
 
-async function doSyncV2(uploads: SyncRequest["uploads"], clientManifest: ManifestEntry[]): Promise<SyncResponse | null> {
-    let res: Response;
-    try {
-        res = await fetch(new URL("/v2/sync", getCloudUrl()), {
-            method: "POST",
-            headers: {
-                Authorization: await getCloudAuth(),
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ client_manifest: clientManifest, uploads } satisfies SyncRequest),
-        });
-    } catch (e) {
-        logger.error("v2 sync network error, will retry next sync", e);
-        return null;
-    }
+function isManifestEntry(value: unknown): value is ManifestEntry {
+    return isObject(value) && "key" in value && typeof value.key === "string"
+        && "version" in value && typeof value.version === "number" && Number.isFinite(value.version)
+        && "checksum" in value && typeof value.checksum === "string";
+}
 
+function isSyncResponse(value: unknown): value is SyncResponse {
+    return isObject(value)
+        && "server_manifest" in value && Array.isArray(value.server_manifest) && value.server_manifest.every(isManifestEntry)
+        && "uploaded" in value && Array.isArray(value.uploaded) && value.uploaded.every(isManifestEntry)
+        && "errors" in value && Array.isArray(value.errors) && value.errors.every((entry: unknown) =>
+            isObject(entry) && "key" in entry && typeof entry.key === "string" && "error" in entry && typeof entry.error === "string")
+        && "downloads" in value && Array.isArray(value.downloads) && value.downloads.every((entry: unknown) =>
+            isManifestEntry(entry) && "value" in entry && typeof entry.value === "string"
+            && (["settings", "quickCss", "dataStore"].includes(entry.key)
+                || (entry.key.startsWith("dataStore/") && entry.key.length > "dataStore/".length)));
+}
+
+async function doSyncV2(uploads: SyncRequest["uploads"], clientManifest: ManifestEntry[], context: Awaited<ReturnType<typeof getCloudSyncContext>>): Promise<SyncResponse | null> {
+    const auth = await getCloudAuth();
+    context.assertCurrent();
+    const res = await fetch(new URL("/v2/sync", context.url), {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        method: "POST",
+        headers: {
+            Authorization: auth,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ client_manifest: clientManifest, uploads } satisfies SyncRequest),
+    });
+
+    context.assertCurrent(false);
     if (res.status === 404) {
         logger.info("Server does not support v2, falling back to v1");
-        await setApiVersion("v1");
+        await setApiVersion("v1", context.url.origin);
         return null;
     }
 
@@ -172,18 +235,34 @@ async function doSyncV2(uploads: SyncRequest["uploads"], clientManifest: Manifes
         return null;
     }
 
-    return await res.json();
+    const response: unknown = JSON.parse(await readResponseText(res, MAX_SYNC_RESPONSE_BYTES));
+    context.assertCurrent(false);
+    if (!isSyncResponse(response))
+        throw new Error("The cloud server returned invalid or unsupported sync data.");
+    if (uploads.length && response.uploaded.length) {
+        await saveLocalManifest(context, [
+            ...clientManifest.filter(entry => !response.uploaded.some(upload => upload.key === entry.key)),
+            ...response.uploaded
+        ]);
+        context.assertCurrent(false);
+    }
+    if (response.errors.length)
+        throw new Error("The cloud server could not synchronize all data. Please try again.");
+    return response;
 }
 
-async function putV2(manual?: boolean) {
-    const localManifest = await getLocalManifest();
+async function putV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>, manual?: boolean) {
+    const localManifest = await getLocalManifest(context);
+    context.assertCurrent();
     const manifestMap = new Map(localManifest.map(e => [e.key, e]));
 
-    const localData = await buildLocalData();
+    const localData = await buildLocalData(context.assertCurrent);
+    context.assertCurrent();
     const uploads: SyncRequest["uploads"] = [];
 
     for (const [key, value] of localData) {
         const checksum = await computeChecksum(value);
+        context.assertCurrent();
         const existing = manifestMap.get(key);
 
         if (!existing || existing.checksum !== checksum)
@@ -191,23 +270,27 @@ async function putV2(manual?: boolean) {
     }
 
     if (uploads.length === 0 && !manual) {
+        await checkLocalData(context);
         logger.info("No changes to push");
         delete localStorage.Vencord_settingsDirty;
         return;
     }
 
-    const response = await doSyncV2(uploads, localManifest);
+    const response = await doSyncV2(uploads, localManifest, context);
+    context.assertCurrent();
     if (!response) return;
 
-    for (const err of response.errors)
-        logger.error(`Sync error for ${err.key}: ${err.error}`);
+    await checkLocalData(context);
+    const receiveDownloads = getCloudSyncDirection() !== "push";
+    const hadDownloads = receiveDownloads && await applyDownloads(response.downloads, context);
+    context.assertCurrent();
 
-    const hadDownloads = await applyDownloads(response.downloads);
-    await saveLocalManifest(response.server_manifest);
+    await saveSyncVersion(context, Date.now());
+    context.assertCurrent();
+    if (receiveDownloads) await saveLocalManifest(context, response.server_manifest);
+    context.assertCurrent();
 
-    PlainSettings.cloud.settingsSyncVersion = Date.now();
-    await VencordNative.settings.set(PlainSettings);
-
+    await checkLocalData(context);
     logger.info(`Sync complete: ${response.uploaded.length} uploaded, ${response.downloads.length} downloaded`);
 
     if (manual) {
@@ -225,14 +308,13 @@ async function putV2(manual?: boolean) {
     delete localStorage.Vencord_settingsDirty;
 }
 
-async function getV2(shouldNotify: boolean, force: boolean) {
-    const localManifest = force ? [] : await getLocalManifest();
+async function getV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>, shouldNotify: boolean, force: boolean) {
+    const localManifest = force ? [] : await getLocalManifest(context);
+    context.assertCurrent();
 
-    const response = await doSyncV2([], localManifest);
+    const response = await doSyncV2([], localManifest, context);
+    context.assertCurrent();
     if (!response) return false;
-
-    for (const err of response.errors)
-        logger.error(`Sync error for ${err.key}: ${err.error}`);
 
     if (response.downloads.length === 0) {
         logger.info("Settings up to date");
@@ -245,12 +327,16 @@ async function getV2(shouldNotify: boolean, force: boolean) {
         return false;
     }
 
-    const settingsChanged = await applyDownloads(response.downloads);
-    await saveLocalManifest(response.server_manifest);
+    await checkLocalData(context);
+    const settingsChanged = await applyDownloads(response.downloads, context);
+    context.assertCurrent();
 
-    PlainSettings.cloud.settingsSyncVersion = Date.now();
-    await VencordNative.settings.set(PlainSettings);
+    await saveSyncVersion(context, Date.now());
+    context.assertCurrent();
+    await saveLocalManifest(context, response.server_manifest);
+    context.assertCurrent();
 
+    await checkLocalData(context);
     logger.info(`Pulled ${response.downloads.length} keys from cloud`);
 
     if (shouldNotify)
@@ -268,12 +354,15 @@ async function getV2(shouldNotify: boolean, force: boolean) {
     return true;
 }
 
-async function deleteV2() {
+async function deleteV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>) {
     const auth = await getCloudAuth();
+    if (!context.isCurrent()) return;
 
-    const manifestRes = await fetch(new URL("/v2/manifest", getCloudUrl()), {
+    const manifestRes = await fetch(new URL("/v2/manifest", context.url), {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         headers: { Authorization: auth },
     });
+    if (!context.isCurrent()) return;
 
     if (!manifestRes.ok) {
         showNotification({
@@ -284,21 +373,27 @@ async function deleteV2() {
         return;
     }
 
-    const { entries }: { entries: ManifestEntry[]; } = await manifestRes.json();
+    const manifest: unknown = JSON.parse(await readResponseText(manifestRes, MAX_SYNC_RESPONSE_BYTES));
+    if (!context.isCurrent()) return;
+    if (!isObject(manifest) || !("entries" in manifest) || !Array.isArray(manifest.entries) || !manifest.entries.every(isManifestEntry))
+        throw new Error("The cloud server returned an invalid deletion manifest.");
 
-    await Promise.all(entries.map(async entry => {
-        const res = await fetch(new URL(`/v2/data/${encodeURIComponent(entry.key)}`, getCloudUrl()), {
+    for (const entry of manifest.entries) {
+        const res = await fetch(new URL(`/v2/data/${encodeURIComponent(entry.key)}`, context.url), {
+            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
             method: "DELETE",
             headers: { Authorization: auth },
         });
+        if (!context.isCurrent()) return;
         if (!res.ok && res.status !== 404)
-            logger.error(`Failed to delete key ${entry.key}: ${res.status}`);
-    }));
+            throw new Error(`Could not delete cloud data (API returned ${res.status}).`);
+    }
 
-    await saveLocalManifest([]);
+    await saveLocalManifest(context, []);
+    if (!context.isCurrent()) return;
 
-    PlainSettings.cloud.settingsSyncVersion = 0;
-    await VencordNative.settings.set(PlainSettings);
+    await saveSyncVersion(context, 0);
+    if (!context.isCurrent()) return;
 
     logger.info("Settings deleted from cloud successfully");
     showNotification({
@@ -308,18 +403,27 @@ async function deleteV2() {
     });
 }
 
-async function putV1(manual?: boolean) {
-    const settings = await exportSettings({ syncDataStore: false, minify: true });
+function isSyncVersion(value: unknown): value is number {
+    return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
 
-    const res = await fetch(new URL("/v1/settings", getCloudUrl()), {
+async function putV1(context: Awaited<ReturnType<typeof getCloudSyncContext>>, manual?: boolean) {
+    const settings = await exportSettings({ syncDataStore: false, minify: true, cloud: true });
+
+    context.assertCurrent();
+    const auth = await getCloudAuth();
+    context.assertCurrent();
+    const res = await fetch(new URL("/v1/settings", context.url), {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         method: "PUT",
         headers: {
-            Authorization: await getCloudAuth(),
+            Authorization: auth,
             "Content-Type": "application/octet-stream",
         },
         body: deflateSync(new TextEncoder().encode(settings)) as Uint8Array<ArrayBuffer>,
     });
 
+    context.assertCurrent();
     if (!res.ok) {
         logger.error(`Failed to sync up, API returned ${res.status}`);
         showNotification({
@@ -330,10 +434,15 @@ async function putV1(manual?: boolean) {
         return;
     }
 
-    const { written } = await res.json();
-    PlainSettings.cloud.settingsSyncVersion = written;
-    VencordNative.settings.set(PlainSettings);
+    const response: unknown = JSON.parse(await readResponseText(res, MAX_TIMESTAMP_RESPONSE_BYTES));
+    context.assertCurrent();
+    if (!isObject(response) || !("written" in response) || !isSyncVersion(response.written))
+        throw new Error("The cloud server returned an invalid sync timestamp.");
+    await checkLocalData(context, false);
+    await saveSyncVersion(context, response.written);
+    context.assertCurrent();
 
+    await checkLocalData(context, false);
     logger.info("Settings uploaded to cloud successfully");
 
     if (manual) {
@@ -347,16 +456,20 @@ async function putV1(manual?: boolean) {
     delete localStorage.Vencord_settingsDirty;
 }
 
-async function getV1(shouldNotify: boolean, force: boolean) {
-    const res = await fetch(new URL("/v1/settings", getCloudUrl()), {
+async function getV1(context: Awaited<ReturnType<typeof getCloudSyncContext>>, shouldNotify: boolean, force: boolean) {
+    context.assertCurrent();
+    const auth = await getCloudAuth();
+    context.assertCurrent();
+    const res = await fetch(new URL("/v1/settings", context.url), {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         method: "GET",
         headers: {
-            Authorization: await getCloudAuth(),
+            Authorization: auth,
             Accept: "application/octet-stream",
-            "If-None-Match": Settings.cloud.settingsSyncVersion.toString(),
         },
     });
 
+    context.assertCurrent();
     if (res.status === 401) {
         handleAuthFailure();
         return false;
@@ -394,7 +507,10 @@ async function getV1(shouldNotify: boolean, force: boolean) {
         return false;
     }
 
-    const written = Number(res.headers.get("etag")!);
+    const etag = res.headers.get("etag");
+    const written = Number(etag);
+    if (etag === null || !/^\d+$/.test(etag) || !isSyncVersion(written))
+        throw new Error("The cloud server returned an invalid sync timestamp.");
     const localWritten = Settings.cloud.settingsSyncVersion;
 
     if (!force && written < localWritten) {
@@ -407,13 +523,28 @@ async function getV1(shouldNotify: boolean, force: boolean) {
         return false;
     }
 
-    const data = await res.arrayBuffer();
-    const settings = new TextDecoder().decode(inflateSync(new Uint8Array(data)));
-    await importSettings(settings, "all", true);
+    if (!res.body) throw new Error("The cloud settings response is empty.");
+    let compressedBytes = 0;
+    const compressed = res.body.pipeThrough(new TransformStream<Uint8Array<ArrayBuffer>, BufferSource>({
+        transform(chunk, controller) {
+            context.assertCurrent();
+            compressedBytes += chunk.byteLength;
+            if (compressedBytes > MAX_SYNC_RESPONSE_BYTES) throw new Error("Cloud settings exceed the download size limit.");
+            for (let offset = 0; offset < chunk.length; offset += 1024)
+                controller.enqueue(chunk.subarray(offset, offset + 1024));
+        }
+    }));
+    const expanded = compressed.pipeThrough(new DecompressionStream("deflate-raw"));
+    const settings = await readResponseText(new Response(expanded), MAX_SYNC_RESPONSE_BYTES);
+    context.assertCurrent();
+    await checkLocalData(context);
+    await importSettings(settings, "all", true, context.assertCurrent, context.expected);
+    context.assertCurrent();
 
-    PlainSettings.cloud.settingsSyncVersion = written;
-    VencordNative.settings.set(PlainSettings);
+    await saveSyncVersion(context, written);
+    context.assertCurrent();
 
+    await checkLocalData(context);
     logger.info("Settings loaded from cloud successfully");
     if (shouldNotify)
         showNotification({
@@ -428,11 +559,15 @@ async function getV1(shouldNotify: boolean, force: boolean) {
     return true;
 }
 
-async function deleteV1() {
-    const res = await fetch(new URL("/v1/settings", getCloudUrl()), {
+async function deleteV1(context: Awaited<ReturnType<typeof getCloudSyncContext>>) {
+    const auth = await getCloudAuth();
+    if (!context.isCurrent()) return;
+    const res = await fetch(new URL("/v1/settings", context.url), {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         method: "DELETE",
-        headers: { Authorization: await getCloudAuth() },
+        headers: { Authorization: auth },
     });
+    if (!context.isCurrent()) return;
 
     if (!res.ok) {
         logger.error(`Failed to delete, API returned ${res.status}`);
@@ -453,91 +588,151 @@ async function deleteV1() {
 }
 
 export function shouldCloudSync(direction: "push" | "pull") {
-    const localDirection = localStorage.Vencord_cloudSyncDirection;
+    const localDirection = getCloudSyncDirection();
     return localDirection === direction || localDirection === "both";
 }
 
-export async function putCloudSettings(manual?: boolean) {
-    try {
-        const version = await getApiVersion();
-        if (version === "v2") {
-            await putV2(manual);
-            if (await getApiVersion() === "v1")
-                await putV1(manual);
-        } else {
-            await putV1(manual);
-        }
-    } catch (e: any) {
-        logger.error("Failed to sync up", e);
+async function runCloudOperation<T>(shouldNotify: boolean, operation: () => Promise<T>): Promise<T | false> {
+    if (!navigator.locks) {
         showNotification({
             title: "Cloud Settings",
-            body: `Could not synchronize settings to the cloud (${e.toString()}).`,
-            color: "var(--red-360)",
-        });
-    }
-}
-
-export async function getCloudSettings(shouldNotify = true, force = false) {
-    try {
-        const version = await getApiVersion();
-        if (version === "v2") {
-            const result = await getV2(shouldNotify, force);
-            if (await getApiVersion() === "v1")
-                return await getV1(shouldNotify, force);
-            return result;
-        }
-        return await getV1(shouldNotify, force);
-    } catch (e: any) {
-        logger.error("Failed to sync down", e);
-        showNotification({
-            title: "Cloud Settings",
-            body: `Could not synchronize settings from the cloud (${e.toString()}).`,
-            color: "var(--red-360)",
+            body: "This browser cannot safely synchronize cloud settings. Update your browser and try again.",
+            noPersist: true,
         });
         return false;
     }
+    return navigator.locks.request("LawyerCordCloudSync", { ifAvailable: true }, lock => {
+        if (lock) return operation();
+        if (shouldNotify) showNotification({
+            title: "Cloud Settings",
+            body: "Another cloud operation is still running. Try again when it finishes.",
+            noPersist: true,
+        });
+        return false;
+    });
+}
+
+export async function putCloudSettings(manual?: boolean) {
+    return runCloudOperation(Boolean(manual), async () => {
+        let context: Awaited<ReturnType<typeof getCloudSyncContext>> | undefined;
+        try {
+            context = await getCloudSyncContext(true);
+            const version = await getApiVersion(context.url.origin);
+            context.assertCurrent();
+            if (version === "v2") {
+                await putV2(context, manual);
+                context.assertCurrent();
+                const nextVersion = await getApiVersion(context.url.origin);
+                context.assertCurrent();
+                if (nextVersion === "v1")
+                    await putV1(context, manual);
+            } else {
+                await putV1(context, manual);
+            }
+        } catch (e: unknown) {
+            if (context && !context.isCurrent()) return;
+            if (e instanceof SyntaxError) e = new Error("The cloud server returned invalid JSON.");
+            logger.error("Failed to sync up", e);
+            showNotification({
+                title: "Cloud Settings",
+                body: `Could not synchronize settings to the cloud (${String(e)}).`,
+                color: "var(--red-360)",
+            });
+        }
+    });
+}
+
+export async function getCloudSettings(shouldNotify = true, force = false) {
+    return runCloudOperation(shouldNotify, async () => {
+        let context: Awaited<ReturnType<typeof getCloudSyncContext>> | undefined;
+        try {
+            context = await getCloudSyncContext(true);
+            const version = await getApiVersion(context.url.origin);
+            context.assertCurrent();
+            if (version === "v2") {
+                const result = await getV2(context, shouldNotify, force);
+                context.assertCurrent();
+                const nextVersion = await getApiVersion(context.url.origin);
+                context.assertCurrent();
+                if (nextVersion === "v1")
+                    return await getV1(context, shouldNotify, force);
+                return result;
+            }
+            return await getV1(context, shouldNotify, force);
+        } catch (e: unknown) {
+            if (context && !context.isCurrent()) return false;
+            if (e instanceof SyntaxError) e = new Error("The cloud server returned invalid JSON.");
+            logger.error("Failed to sync down", e);
+            showNotification({
+                title: "Cloud Settings",
+                body: `Could not synchronize settings from the cloud (${String(e)}).`,
+                color: "var(--red-360)",
+            });
+            return false;
+        }
+    });
 }
 
 export async function deleteCloudSettings() {
-    try {
-        const version = await getApiVersion();
-        if (version === "v2")
-            await deleteV2();
-        else
-            await deleteV1();
-    } catch (e: any) {
-        logger.error("Failed to delete", e);
-        showNotification({
-            title: "Cloud Settings",
-            body: `Could not delete settings (${e.toString()}).`,
-            color: "var(--red-360)",
-        });
-    }
+    return runCloudOperation(true, async () => {
+        let context: Awaited<ReturnType<typeof getCloudSyncContext>> | undefined;
+        try {
+            context = await getCloudSyncContext();
+            const version = await getApiVersion(context.url.origin);
+            if (!context.isCurrent()) return;
+            if (version === "v2")
+                await deleteV2(context);
+            else
+                await deleteV1(context);
+        } catch (e: unknown) {
+            if (context && !context.isCurrent()) return;
+            if (e instanceof SyntaxError) e = new Error("The cloud server returned invalid JSON.");
+            logger.error("Failed to delete", e);
+            showNotification({
+                title: "Cloud Settings",
+                body: `Could not delete settings (${String(e)}).`,
+                color: "var(--red-360)",
+            });
+        }
+    });
 }
 
 export async function eraseAllCloudData() {
-    const res = await fetch(new URL("/v1/", getCloudUrl()), {
-        method: "DELETE",
-        headers: { Authorization: await getCloudAuth() },
-    });
+    return runCloudOperation(true, async () => {
+        let context: Awaited<ReturnType<typeof getCloudSyncContext>> | undefined;
+        try {
+            context = await getCloudSyncContext();
+            const auth = await getCloudAuth();
+            context.assertCurrent();
+            const res = await fetch(new URL("/v1/", context.url), {
+                signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+                method: "DELETE",
+                headers: { Authorization: auth },
+            });
+            context.assertCurrent();
 
-    if (!res.ok) {
-        logger.error(`Failed to erase data, API returned ${res.status}`);
-        showNotification({
-            title: "Cloud Integrations",
-            body: `Could not erase all data (API returned ${res.status}), please contact support.`,
-            color: "var(--red-360)",
-        });
-        return;
-    }
+            if (!res.ok)
+                throw new Error(`API returned ${res.status}.`);
 
-    Settings.cloud.authenticated = false;
-    await deauthorizeCloud();
-    await saveLocalManifest([]);
+            Settings.cloud.authenticated = false;
+            await deauthorizeCloud();
+            context.assertCurrent();
+            await saveLocalManifest(context, []);
+            context.assertCurrent();
 
-    showNotification({
-        title: "Cloud Integrations",
-        body: "Successfully erased all data.",
-        color: "var(--green-360)",
+            showNotification({
+                title: "Cloud Integrations",
+                body: "Successfully erased all data.",
+                color: "var(--green-360)",
+            });
+        } catch (error: unknown) {
+            if (context && !context.isCurrent()) return;
+            logger.error("Failed to erase cloud data", error);
+            showNotification({
+                title: "Cloud Integrations",
+                body: `Could not finish erasing cloud data (${String(error)}).`,
+                color: "var(--red-360)",
+            });
+        }
     });
 }

@@ -1158,13 +1158,6 @@ export default definePlugin({
             ],
         },
         {
-            find: "renderResults({results:",
-            replacement: {
-                match: /let \i=.{1,100}renderResults\({results:(\i)\.query\.results,/,
-                replace: "$self.sortEmojis($1);$&"
-            },
-        },
-        {
             find: "numEmojiResults:",
             replacement: [
                 {

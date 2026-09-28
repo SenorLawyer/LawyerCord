@@ -26,17 +26,22 @@ export default definePlugin({
     patches: [
         {
             find: "#{intl::EDIT_TEXTAREA_HELP}",
-            replacement: {
-                match: /(?<=,channel:\i,message:\i\}\)\.then\().+?(?=\i\.content!==this\.props\.message\.content&&\i\((.+?)\)\})/,
-                replace: (match, args) => "" +
-                    `async ${match}` +
-                    `if(await Vencord.Api.MessageEvents._handlePreEdit(${args}))` +
-                    "return Promise.resolve({shouldClear:false,shouldRefocus:true});"
-            }
+            group: true,
+            replacement: [{
+                match: /(?<=\.then\()\i(?==>\{let\{valid:\i\}=)/,
+                replace: "async $&"
+            }, {
+                match: /let (\i)=\i\.\i\.parse\(this\.props\.channel,\i\)(?:,[^;]{1,200})?;/g,
+                replace: "$&if(await Vencord.Api.MessageEvents._handlePreEdit(this.props.channel.id,this.props.message.id,$1))return{shouldClear:false,shouldRefocus:true};"
+            }]
         },
         {
             find: ".handleSendMessage,onResize:",
-            replacement: {
+            group: true,
+            replacement: [{
+                match: /(?<=\.then\()\i(?==>\{let\{[^{}]{0,100}\bfailureReason:)/,
+                replace: "async $&"
+            }, {
                 match: /let (\i)=\i\.\i\.parse\((\i),\i\);.{0,100}?let (\i)=\{\.\.\.\i\.\i\.getSendMessageOptions\((\{.{0,300}?\})\),location:\i\.\i\.\i\};/,
                 replace: (match, parsedMessage, channel, options, contentOptions) => match +
                     `const vcContentOptions=${contentOptions},vcProps={` +
@@ -47,7 +52,7 @@ export default definePlugin({
                     `channel:${channel}};` +
                     `if(await Vencord.Api.MessageEvents._handlePreSend(${channel}.id,${parsedMessage},${options},vcProps,vcContentOptions))` +
                     "return{shouldClear:false,shouldRefocus:true};"
-            }
+            }]
         },
         {
             find: '("interactionUsernameProfile',

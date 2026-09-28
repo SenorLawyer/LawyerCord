@@ -11,25 +11,21 @@ export const settings = definePluginSettings({
     target: {
         type: OptionType.STRING,
         description: "Target language",
-        default: "en",
-        restartNeeded: true
+        default: "en"
     },
     toki: {
         type: OptionType.BOOLEAN,
         description: "Enable Toki Pona",
-        default: true,
-        restartNeeded: true
+        default: true
     },
     sitelen: {
         type: OptionType.BOOLEAN,
         description: "Enable Sitelen Pona",
-        default: true,
-        restartNeeded: true
+        default: true
     },
     shavian: {
         type: OptionType.BOOLEAN,
         description: "Enable Shavian",
-        default: true,
-        restartNeeded: true
+        default: true
     }
 });

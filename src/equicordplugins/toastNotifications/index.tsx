@@ -8,27 +8,21 @@ import { definePluginSettings } from "@api/Settings";
 import { Button } from "@components/Button";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { makeRange, OptionType } from "@utils/types";
-import { Channel, Message } from "@vencord/discord-types";
-import { findByPropsLazy, findStoreLazy } from "@webpack";
-import { ChannelStore, IconUtils, MessageStore, NavigationRouter, PresenceStore, RelationshipStore, SelectedChannelStore, StreamerModeStore, UserStore } from "@webpack/common";
+import { Channel, Message, MessageJSON } from "@vencord/discord-types";
+import { UserNotificationSetting } from "@vencord/discord-types/enums";
+import { findByPropsLazy } from "@webpack";
+import { ChannelStore, IconUtils, MessageStore, NavigationRouter, PresenceStore, RelationshipStore, SelectedChannelStore, StreamerModeStore, UserGuildSettingsStore, UserStore } from "@webpack/common";
 
 import { setContainerPosition, showNotification, teardownNotifications } from "./components/Notifications";
 
 const MuteStore = findByPropsLazy("isSuppressEveryoneEnabled");
 const SelectedChannelActionCreators = findByPropsLazy("selectPrivateChannel");
 const ChannelRTCActions = findByPropsLazy("updateChatOpen", "toggleParticipants");
-const UserGuildSettingsStore = findStoreLazy("UserGuildSettingsStore");
 
 const ID_REGEX = /^\d{17,20}$/;
 
 let ignoredUsers = new Set<string>();
 let notifyFor = new Set<string>();
-
-enum NotificationLevel {
-    ALL_MESSAGES = 0,
-    ONLY_MENTIONS = 1,
-    NO_MESSAGES = 2
-}
 
 export const settings = definePluginSettings({
     position: {
@@ -126,7 +120,9 @@ export default definePlugin({
     authors: [EquicordDevs.Skully, EquicordDevs.Ethan, EquicordDevs.Buzzy],
     settings,
     flux: {
-        MESSAGE_CREATE({ message }: { message: Message; }) {
+        LOGOUT: teardownNotifications,
+        CONNECTION_OPEN: teardownNotifications,
+        MESSAGE_CREATE({ message }: { message: MessageJSON; }) {
             const authorId = message.author?.id;
             if (!authorId) return;
             const currentUser = UserStore.getCurrentUser();
@@ -207,7 +203,7 @@ function parseIdSet(str: string): Set<string> {
     return ids;
 }
 
-function getMockedMessage(message: Message): Message | undefined {
+function getMockedMessage(message: MessageJSON): Message | undefined {
     return MessageStore.getMessage(message.channel_id, message.id)
         ?? MessageStore.getMessages(message.channel_id)?.receiveMessage(message)?.get(message.id);
 }
@@ -226,7 +222,7 @@ function navigateToChannel(channel: Channel) {
  * channel allowlist, friend-server-notifications setting, channel/guild mutes,
  * and the user's configured notification level for the channel/guild.
  */
-function shouldNotifyForGuildMessage(message: Message, channel: Channel, currentUserId: string, authorId: string): boolean {
+function shouldNotifyForGuildMessage(message: MessageJSON, channel: Channel, currentUserId: string, authorId: string): boolean {
     if (!channel.guild_id) return false;
 
     // Allowlist always wins.
@@ -238,20 +234,12 @@ function shouldNotifyForGuildMessage(message: Message, channel: Channel, current
     // Respect the user's mute state for the guild/category/channel.
     if (MuteStore.isGuildOrCategoryOrChannelMuted(channel.guild_id, channel.id)) return false;
 
-    // Resolve the user's configured notification level for the channel/guild.
-    const userGuildSettings = UserGuildSettingsStore.getAllSettings().userGuildSettings[channel.guild_id];
-    if (!userGuildSettings) return false;
-
-    const channelOverride = userGuildSettings.channel_overrides?.[channel.id];
-    const level: NotificationLevel = (channelOverride && typeof channelOverride === "object" && "message_notifications" in channelOverride)
-        ? channelOverride.message_notifications
-        : (typeof userGuildSettings.message_notifications === "number" ? userGuildSettings.message_notifications : NotificationLevel.NO_MESSAGES);
-
-    if (level === NotificationLevel.NO_MESSAGES) return false;
-    if (level === NotificationLevel.ALL_MESSAGES) return true;
+    const level = UserGuildSettingsStore.resolvedMessageNotifications(channel);
+    if (level === UserNotificationSetting.NO_MESSAGES) return false;
+    if (level === UserNotificationSetting.ALL_MESSAGES) return true;
 
     // Otherwise we only notify if the user was mentioned.
-    return message.content.includes(`<@${currentUserId}>`) || message.content.includes(`<@!${currentUserId}>`);
+    return message.mentions.some(user => user.id === currentUserId);
 }
 
 function showExampleNotification(): Promise<void> {

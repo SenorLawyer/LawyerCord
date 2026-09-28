@@ -5,10 +5,6 @@
  */
 
 import { classNameFactory } from "@utils/css";
-import { waitFor } from "@webpack";
-import { React } from "@webpack/common";
-
-import { FFmpegState } from "./types";
 
 export const cl = classNameFactory("vc-more-stickers-");
 export const clPicker = (className: string, ...args: any[]) => cl("picker-" + className, ...args);
@@ -22,8 +18,3 @@ function corsUrl(url: string | URL) {
 export function corsFetch(url: string | URL, init?: RequestInit | undefined) {
     return fetch(corsUrl(url), init);
 }
-
-export let FFmpegStateContext: React.Context<FFmpegState | undefined> | undefined;
-waitFor("createContext", () => {
-    FFmpegStateContext = React.createContext<FFmpegState | undefined>(undefined);
-});

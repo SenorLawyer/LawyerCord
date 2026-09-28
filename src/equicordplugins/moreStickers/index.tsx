@@ -7,17 +7,15 @@
 import "./style.css";
 
 import { definePluginSettings } from "@api/Settings";
-import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { Devs, EquicordDevs } from "@utils/constants";
-import { loadFFmpeg } from "@utils/ffmpeg";
+import { useAwaiter } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
 import { Channel } from "@vencord/discord-types";
-import { React } from "@webpack/common";
+import { React, showToast, Toasts } from "@webpack/common";
 
 import { Packs, PickerContent, PickerHeader, PickerSidebar, Wrapper } from "./components";
 import { getStickerPack, getStickerPackMetas } from "./stickers";
-import { StickerPack, StickerPackMeta } from "./types";
-import { cl, FFmpegStateContext } from "./utils";
+import { cl } from "./utils";
 
 export const settings = definePluginSettings({
     promptToUpload: {
@@ -46,11 +44,11 @@ export default definePlugin({
                 match: /(children:\(0,\i\.jsx\)\()(.{0,10})({className:\i\(\)\(\i\.\i,\i\.\i)/,
                 replace: "$1arguments[0]?.stickersType?$self.stickerButton:$2$3"
             }, {
-                match: /(\i=)((\i\.useCallback\(\(\)=>\{\(.*?\)\().*?\.STICKER,(\i.{0,25}\]\)))/,
-                replace: '$1arguments[0]?.stickersType?$3"stickers+",$4:$2'
+                match: /(?<=\.useCallback\(\(\)=>\{\(0,\i\.\i\)\()\i\.\i\.STICKER(?=,)/,
+                replace: "arguments[0].stickersType||$&"
             }, {
-                match: /(\i)=((\i)===\i\.\i\.STICKER)/,
-                replace: "$1=arguments[0].stickersType?($3===arguments[0].stickersType):($2)"
+                match: /(?<=\i===)\i\.\i\.STICKER/,
+                replace: "(arguments[0].stickersType||$&)"
             }]
         },
         {
@@ -74,7 +72,7 @@ export default definePlugin({
                     replace: "$&,vcStickers"
                 },
                 {
-                    match: /:null,((.{1,200})===.{1,30}\.STICKER&&\w+\?(\([^()]{1,10}\)).{1,15}?(\{.*?,onSelectSticker:.*?\})\):null)/,
+                    match: /:null,((\i)===\i\.\i\.STICKER&&\i\?(\(0,\i\.jsx\))\(\i,(\{(?=.{0,150}?\bonSelectSticker:).{0,150}?\})\):null)/,
                     replace: ':null,$2==="stickers+"?$3($self.moreStickersComponent,$4):null,$1'
                 }
             ]
@@ -113,61 +111,18 @@ export default definePlugin({
         channel: Channel,
         closePopout: () => void;
     }) {
-        if (FFmpegStateContext === undefined) {
-            return <div>FFmpegStateContext is undefined</div>;
-        }
-
-        const [query, setQuery] = React.useState<string | undefined>();
-        const [stickerPackMetas, setStickerPackMetas] = React.useState<StickerPackMeta[]>([]);
-        const [stickerPacks, setStickerPacks] = React.useState<StickerPack[]>([]);
+        const [query, setQuery] = React.useState("");
         const [selectedStickerPackId, setSelectedStickerPackId] = React.useState<string | null>(null);
 
-        const ffmpegLoaded = React.useState(false);
-        const ffmpeg = React.useState<FFmpeg>(new FFmpeg());
-
-        const getMetasSignature = (m: StickerPackMeta[]) => {
-            const ids: string[] = [];
-            for (const meta of m) {
-                ids.push(meta.id);
-            }
-
-            ids.sort();
-
-            let signature = "";
-            for (const id of ids) {
-                if (signature) signature += ",";
-                signature += id;
-            }
-
-            return signature;
-        };
-
-        React.useEffect(() => {
-            (async () => {
-                const sps = (await Promise.all(
-                    stickerPackMetas.map(meta => getStickerPack(meta.id))
-                ))
-                    .filter((x): x is Exclude<typeof x, null> => x !== null);
-                setStickerPacks(sps);
-            })();
-        }, [stickerPackMetas]);
-
-        React.useEffect(() => {
-            (async () => {
-                const metas = await getStickerPackMetas();
-                if (getMetasSignature(metas) !== getMetasSignature(stickerPackMetas)) {
-                    setStickerPackMetas(metas);
-                }
-            })();
-        }, []);
-
-        React.useEffect(() => {
-            if (ffmpegLoaded[0]) return;
-
-            loadFFmpeg(ffmpeg[0]).then(() => {
-                ffmpegLoaded[1](true);
-            });
-        }, []);
+        const [loadedPacks] = useAwaiter(async () => {
+            const metas = await getStickerPackMetas();
+            const packs = await Promise.all(metas.map(meta => getStickerPack(meta.id)));
+            return packs.filter(pack => pack !== null);
+        }, {
+            fallbackValue: [],
+            onError: () => showToast("Could not load sticker packs.", Toasts.Type.FAILURE)
+        });
+        const stickerPacks = loadedPacks ?? [];
 
         return (
             <Wrapper>
@@ -175,23 +130,18 @@ export default definePlugin({
                     <path d="M0 0.26087C0 0.137894 0 0.0764069 0.0382035 0.0382035C0.0764069 0 0.137894 0 0.26087 0H0.73913C0.862106 0 0.923593 0 0.961797 0.0382035C1 0.0764069 1 0.137894 1 0.26087V0.73913C1 0.862106 1 0.923593 0.961797 0.961797C0.923593 1 0.862106 1 0.73913 1H0.26087C0.137894 1 0.0764069 1 0.0382035 0.961797C0 0.923593 0 0.862106 0 0.73913V0.26087Z" fill="white" />
                 </svg>
 
-                <PickerHeader onQueryChange={setQuery} />
-                <FFmpegStateContext.Provider value={{
-                    ffmpeg: ffmpeg[0],
-                    isLoaded: ffmpegLoaded[0]
-                }}>
-                    <PickerContent
-                        stickerPacks={stickerPacks}
-                        selectedStickerPackId={selectedStickerPackId}
-                        setSelectedStickerPackId={setSelectedStickerPackId}
-                        channelId={channel.id}
-                        closePopout={closePopout}
-                        query={query}
-                    />
-                </FFmpegStateContext.Provider>
+                <PickerHeader query={query} onQueryChange={setQuery} />
+                <PickerContent
+                    stickerPacks={stickerPacks}
+                    selectedStickerPackId={selectedStickerPackId}
+                    setSelectedStickerPackId={setSelectedStickerPackId}
+                    channelId={channel.id}
+                    closePopout={closePopout}
+                    query={query}
+                />
                 <PickerSidebar
                     packMetas={
-                        stickerPackMetas.map(meta => ({
+                        stickerPacks.map(meta => ({
                             id: meta.id,
                             name: meta.title,
                             iconUrl: meta.logo.image

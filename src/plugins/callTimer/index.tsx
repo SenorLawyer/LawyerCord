@@ -5,12 +5,14 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
+import { setStyleClassNames } from "@api/Styles";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs, EquicordDevs } from "@utils/constants";
 import { useFixedTimer } from "@utils/react";
 import { formatDurationMs } from "@utils/text";
 import definePlugin, { OptionType } from "@utils/types";
 import { PassiveUpdateState, VoiceState } from "@vencord/discord-types";
+import { findCssClassesLazy } from "@webpack";
 import { FluxDispatcher, GuildStore, React, UserStore } from "@webpack/common";
 
 import alignedChatInputFix from "./alignedChatInputFix.css?managed";
@@ -73,6 +75,9 @@ export const settings = definePluginSettings({
 // Save the join time of all users in a Map
 type userJoinData = { channelId: string, time: number; guildId: string | null; };
 const userJoinTimes = new Map<string, userJoinData>();
+const CONNECTION_TIMER_SETTINGS: ["format"] = ["format"];
+const PanelClasses = findCssClassesLazy("inner", "connection", "voiceButtonsContainer");
+const ConnectionClasses = findCssClassesLazy("rtcConnectionStatus", "labelWrapper");
 
 /**
  * The function `addUserJoinTime` stores the join time of a user in a specific channel within a guild.
@@ -128,12 +133,12 @@ export default definePlugin({
             predicate: () => settings.store.allCallTimers,
             replacement: [
                 {
-                    match: /user:(\i).*?\.EMBEDDED.{0,25};(?=return 0!==(\i)\.length)/,
-                    replace: "$&$2.push($self.renderTimer($1.id));",
+                    match: /(?<=\.EMBEDDED.{0,25};)(?=return 0!==(\i)\.length)/,
+                    replace: "$1.push($self.renderTimer(arguments[0].user.id));",
                     predicate: () => !settings.store.showWithoutHover,
                 },
                 {
-                    match: /#{intl::GUEST_NAME_SUFFIX}\)\]\}\):""(?=.*?userId:(\i\.\i))/,
+                    match: /#{intl::GUEST_NAME_SUFFIX}\)\]\}\):""(?=.{0,150}?userId:(\i\.\i))/,
                     replace: "$&,$self.renderTimer($1)",
                     predicate: () => settings.store.showWithoutHover,
                 }
@@ -221,14 +226,7 @@ export default definePlugin({
 
                 // check if the user is in the map
                 const existingJoinTime = userJoinTimes.get(userId);
-                if (existingJoinTime) {
-                    // check if the user is in a channel
-                    if (channelId !== existingJoinTime.channelId) {
-                        // update the user's join time
-                        addUserJoinTime(userId, channelId, guildId);
-                    }
-                } else {
-                    // user wasn't previously tracked, add the user to the map
+                if (existingJoinTime?.channelId !== channelId) {
                     addUserJoinTime(userId, channelId, guildId);
                 }
             }
@@ -246,6 +244,11 @@ export default definePlugin({
     },
 
     start() {
+        setStyleClassNames(alignedChatInputFix, {
+            inner: PanelClasses.inner,
+            connection: PanelClasses.connection,
+            rtcConnectionStatus: ConnectionClasses.rtcConnectionStatus
+        });
         if (settings.store.watchLargeGuilds) {
             this.subscribeToAllGuilds();
         }
@@ -260,14 +263,9 @@ export default definePlugin({
             // join time is unknown
             return;
         }
-        if (userId === UserStore.getCurrentUser()?.id && !settings.store.trackSelf) {
-            // don't show for self
-            return;
-        }
-
         return (
             <ErrorBoundary>
-                <Timer time={joinTime.time} />
+                <Timer time={joinTime.time} userId={userId} />
             </ErrorBoundary>
         );
     },
@@ -277,6 +275,7 @@ export default definePlugin({
     },
 
     ConnectionTimer: ErrorBoundary.wrap(() => {
+        const { format } = settings.use(CONNECTION_TIMER_SETTINGS);
         const user = UserStore.getCurrentUser();
         const joinTime = user && userJoinTimes.get(user.id)?.time;
         const time = useFixedTimer({ initialTime: joinTime });
@@ -284,8 +283,8 @@ export default definePlugin({
         if (joinTime == null) return null;
 
         return (
-            <p style={{ margin: 0, fontFamily: "var(--font-code)" }}>
-                {formatDurationMs(time, settings.store.format === "human")}
+            <p className="vc-call-timer-connection">
+                {formatDurationMs(time, format === "human")}
             </p>
         );
     }, { noop: true }),

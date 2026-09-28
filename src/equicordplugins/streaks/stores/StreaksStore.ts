@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import * as DataStore from "@api/DataStore";
 import { proxyLazy } from "@utils/lazy";
 import { UserStore, zustandCreate } from "@webpack/common";
 
@@ -27,15 +26,21 @@ export interface StreaksState {
     fetch: () => Promise<void>;
     update: (recipientId: string) => Promise<void>;
     refresh: (recipientId: string) => Promise<void>;
-    migrate: () => Promise<void>;
     clear: () => void;
 }
 
-export const useStreaksStore = proxyLazy(() => zustandCreate((set: any, get: any) => ({
+let generation = 0;
+
+export const useStreaksStore = proxyLazy(() => zustandCreate((set: (state: Partial<StreaksState>) => void, get: () => StreaksState): StreaksState => ({
     streaks: {},
-    clear: () => set({ streaks: {} }),
+    clear: () => {
+        generation++;
+        set({ streaks: {} });
+    },
     async fetch() {
-        const { token } = useAuthorizationStore.getState();
+        const requestGeneration = generation;
+        const myId = UserStore.getCurrentUser()?.id;
+        const token = useAuthorizationStore.getState().getToken();
         if (!token) return;
 
         try {
@@ -44,7 +49,7 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: any, get: any
             });
             if (res.ok) {
                 const data: RemoteStreak[] = await res.json();
-                const myId = UserStore.getCurrentUser()?.id;
+                if (requestGeneration !== generation || UserStore.getCurrentUser()?.id !== myId || useAuthorizationStore.getState().getToken() !== token) return;
                 const streaksMap: Record<string, RemoteStreak> = {};
                 for (const s of data) {
                     const otherId = s.user_a_id === myId ? s.user_b_id : s.user_a_id;
@@ -57,7 +62,9 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: any, get: any
         }
     },
     async update(recipientId: string) {
-        const { token } = useAuthorizationStore.getState();
+        const requestGeneration = generation;
+        const myId = UserStore.getCurrentUser()?.id;
+        const token = useAuthorizationStore.getState().getToken();
         if (!token) return;
 
         try {
@@ -67,6 +74,7 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: any, get: any
             });
             if (res.ok) {
                 const streak: RemoteStreak = await res.json();
+                if (requestGeneration !== generation || UserStore.getCurrentUser()?.id !== myId || useAuthorizationStore.getState().getToken() !== token) return;
                 set({ streaks: { ...get().streaks, [recipientId]: streak } });
             }
         } catch (e) {
@@ -74,7 +82,9 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: any, get: any
         }
     },
     async refresh(recipientId: string) {
-        const { token } = useAuthorizationStore.getState();
+        const requestGeneration = generation;
+        const myId = UserStore.getCurrentUser()?.id;
+        const token = useAuthorizationStore.getState().getToken();
         if (!token) return;
 
         try {
@@ -83,35 +93,11 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: any, get: any
             });
             if (res.ok) {
                 const streak: RemoteStreak = await res.json();
+                if (requestGeneration !== generation || UserStore.getCurrentUser()?.id !== myId || useAuthorizationStore.getState().getToken() !== token) return;
                 set({ streaks: { ...get().streaks, [recipientId]: streak } });
             }
         } catch (e) {
             console.error("Failed to refresh streak", e);
         }
-    },
-    async migrate() {
-        const { token } = useAuthorizationStore.getState();
-        if (!token) return;
-
-        const legacyData = await DataStore.get("vc-streaks-data");
-        if (!legacyData || Object.keys(legacyData).length === 0) return;
-
-        try {
-            const res = await fetch(`${API_URL}/streaks/migrate`, {
-                method: "POST",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(legacyData)
-            });
-
-            if (res.ok) {
-                await DataStore.del("vc-streaks-data");
-                console.log("Successfully migrated local streaks to API");
-            }
-        } catch (e) {
-            console.error("Failed to migrate streaks", e);
-        }
     }
-} as StreaksState)));
+})));

@@ -17,13 +17,15 @@
 */
 
 import { Devs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 
-import { onChannelDelete, onGuildDelete, onRelationshipRemove, removeFriend, removeGroup, removeGuild } from "./functions";
+import { onChannelDelete, onGuildDelete, onRelationshipRemove, removeFriend, removeGroup, removeGuild, reset } from "./functions";
 import settings from "./settings";
 import { syncAndRunChecks, syncFriends, syncGroups, syncGuilds } from "./utils";
 
 let startupSyncTimeout: ReturnType<typeof setTimeout> | undefined;
+const logger = new Logger("RelationshipNotifier");
 
 function clearStartupSyncTimeout() {
     if (startupSyncTimeout === undefined) return;
@@ -70,23 +72,32 @@ export default definePlugin({
         CHANNEL_DELETE: onChannelDelete,
         RELATIONSHIP_ADD: syncFriends,
         RELATIONSHIP_UPDATE: syncFriends,
-        RELATIONSHIP_REMOVE(e) {
-            onRelationshipRemove(e);
-            syncFriends();
+        async RELATIONSHIP_REMOVE(e) {
+            await Promise.all([onRelationshipRemove(e), syncFriends()]);
         },
-        CONNECTION_OPEN: syncAndRunChecks
+        CONNECTION_OPEN() {
+            clearStartupSyncTimeout();
+            reset();
+            return syncAndRunChecks();
+        },
+        LOGOUT() {
+            clearStartupSyncTimeout();
+            reset();
+        }
     },
 
     start() {
         clearStartupSyncTimeout();
+        reset();
         startupSyncTimeout = setTimeout(() => {
             startupSyncTimeout = undefined;
-            void syncAndRunChecks();
+            void syncAndRunChecks().catch(error => logger.error("Could not sync relationships.", error));
         }, 5000);
     },
 
     stop() {
         clearStartupSyncTimeout();
+        reset();
     },
 
     removeFriend,

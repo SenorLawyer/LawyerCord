@@ -47,16 +47,8 @@ export function buildPluginMenuEntries(includeEmpty = false) {
         []
     );
 
-    const candidates = useMemo(() =>
-        sortedPlugins
-            .filter(p => {
-                if (!isPluginEnabled(p.name)) return false;
-                if (p.name.endsWith("API")) return false;
-
-                const name = p.name.toLowerCase();
-                return name.includes(lowerSearch);
-            }),
-        [lowerSearch]
+    const candidates = sortedPlugins.filter(p =>
+        isPluginEnabled(p.name) && !p.name.endsWith("API") && p.name.toLowerCase().includes(lowerSearch)
     );
 
     return (

@@ -14,7 +14,7 @@ import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import type { Role, User } from "@vencord/discord-types";
 import { findByPropsLazy } from "@webpack";
-import { Constants, GuildRoleStore, IconUtils, Popout, RestAPI, ScrollerThin, useEffect, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
+import { Clickable, Constants, GuildRoleStore, IconUtils, Popout, RestAPI, ScrollerThin, useEffect, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
 
 const logger = new Logger("ClickableRoles");
 
@@ -23,92 +23,53 @@ const cl = classNameFactory("vc-clickableroles-");
 const GuildActions = findByPropsLazy("requestMembersById", "banUser");
 
 const MAX_VISIBLE_MEMBERS = 20;
-const CACHE_TTL = 60_000;
-const MAX_MEMBER_CACHE_ENTRIES = 100;
-
-const memberCache = new Map<string, { ids: string[]; timestamp: number; }>();
-
-function getCachedMemberIds(guildId: string, roleId: string) {
-    const key = `${guildId}-${roleId}`;
-    const cached = memberCache.get(key);
-    if (!cached) return null;
-
-    if (Date.now() - cached.timestamp >= CACHE_TTL) {
-        memberCache.delete(key);
-        return null;
-    }
-
-    memberCache.delete(key);
-    memberCache.set(key, cached);
-    return cached.ids;
-}
-
-function trimMemberCache() {
-    if (memberCache.size <= MAX_MEMBER_CACHE_ENTRIES) return;
-
-    const now = Date.now();
-    for (const [key, entry] of memberCache) {
-        if (memberCache.size <= MAX_MEMBER_CACHE_ENTRIES) return;
-        if (now - entry.timestamp >= CACHE_TTL) memberCache.delete(key);
-    }
-
-    while (memberCache.size > MAX_MEMBER_CACHE_ENTRIES) {
-        const oldestKey = memberCache.keys().next().value;
-        if (oldestKey === undefined) return;
-        memberCache.delete(oldestKey);
-    }
-}
-
-function clearMemberCache() {
-    memberCache.clear();
-}
-
-function setCachedMemberIds(guildId: string, roleId: string, ids: string[]) {
-    const key = `${guildId}-${roleId}`;
-    if (memberCache.has(key)) memberCache.delete(key);
-    memberCache.set(key, { ids, timestamp: Date.now() });
-    trimMemberCache();
-}
+let requestGeneration = 0;
 
 function RoleMembersList({ roleId, guildId, closePopout, setPopoutRef }: { roleId: string; guildId: string; closePopout(): void; setPopoutRef(ref: HTMLDivElement | null): void; }) {
     const [memberIds, setMemberIds] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
+    const [failed, setFailed] = useState(false);
+    const accountId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
 
-    const role = useStateFromStores([GuildRoleStore], () => GuildRoleStore.getRole(guildId, roleId));
+    const role = useStateFromStores([GuildRoleStore], () => GuildRoleStore.getRole(guildId, roleId), [guildId, roleId]);
 
     const [totalCount, setTotalCount] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
 
-        const cached = getCachedMemberIds(guildId, roleId);
-        if (cached) {
-            setTotalCount(cached.length);
-            const visible = cached.slice(0, MAX_VISIBLE_MEMBERS);
+        const generation = requestGeneration;
+        const isCurrent = () => !cancelled && generation === requestGeneration && accountId === UserStore.getCurrentUser()?.id;
+        setMemberIds([]);
+        setTotalCount(0);
+        setFailed(false);
+        setLoading(!!accountId);
+        if (!accountId) return;
+
+        RestAPI.get({
+            url: Constants.Endpoints.GUILD_ROLE_MEMBER_IDS(guildId, roleId),
+        }).then(res => {
+            if (!isCurrent()) return;
+            const ids: unknown = res.body;
+            if (!Array.isArray(ids) || !ids.every(id => typeof id === "string")) {
+                setFailed(true);
+                setLoading(false);
+                return;
+            }
+            setTotalCount(ids.length);
+            const visible = ids.slice(0, MAX_VISIBLE_MEMBERS);
             setMemberIds(visible);
             if (visible.length) GuildActions.requestMembersById(guildId, visible, false);
             setLoading(false);
-        } else {
-            RestAPI.get({
-                url: Constants.Endpoints.GUILD_ROLE_MEMBER_IDS(guildId, roleId),
-            }).then(res => {
-                if (cancelled) return;
-                const ids = res.body as string[];
-                setCachedMemberIds(guildId, roleId, ids);
-                setTotalCount(ids.length);
-                const visible = ids.slice(0, MAX_VISIBLE_MEMBERS);
-                setMemberIds(visible);
-                if (visible.length) GuildActions.requestMembersById(guildId, visible, false);
-                setLoading(false);
-            }).catch(e => {
-                if (cancelled) return;
-                logger.error("Failed to fetch role members", e);
-                setLoading(false);
-            });
-        }
+        }).catch(e => {
+            if (!isCurrent()) return;
+            logger.error("Failed to fetch role members", e);
+            setFailed(true);
+            setLoading(false);
+        });
 
         return () => { cancelled = true; };
-    }, [guildId, roleId]);
+    }, [guildId, roleId, accountId]);
 
     const users = useStateFromStores(
         [UserStore],
@@ -135,10 +96,12 @@ function RoleMembersList({ roleId, guildId, closePopout, setPopoutRef }: { roleI
             <ScrollerThin className={cl("list")} fade>
                 {loading ? (
                     <div className={cl("empty")}>Loading members...</div>
+                ) : failed ? (
+                    <div className={cl("empty")}>Could not load role members.</div>
                 ) : users.length === 0 ? (
                     <div className={cl("empty")}>No members found.</div>
                 ) : users.map(user => (
-                    <div
+                    <Clickable
                         key={user.id}
                         className={cl("user")}
                         onClick={() => {
@@ -148,7 +111,7 @@ function RoleMembersList({ roleId, guildId, closePopout, setPopoutRef }: { roleI
                     >
                         <img src={IconUtils.getUserAvatarURL(user)} alt="" className={cl("avatar")} />
                         <span>{user.globalName ?? user.username}</span>
-                    </div>
+                    </Clickable>
                 ))}
                 {totalCount > MAX_VISIBLE_MEMBERS && (
                     <div className={cl("overflow")}>and {totalCount - MAX_VISIBLE_MEMBERS} more</div>
@@ -192,17 +155,31 @@ export default definePlugin({
     patches: [
         {
             find: "#{intl::zr0Y5R::raw}",
-            replacement: {
-                match: /(\.colorString\?\?\i;)return(.*?enableTooltip:!1\}\)\}\):null,\i\]\}\))/,
-                replace: "$1return $self.wrapRolePill(arguments[0],()=>$2)",
-            },
+            group: true,
+            replacement: [
+                {
+                    match: /(?<=\.colorString\?\?\i;)return/,
+                    replace: "return $self.wrapRolePill(arguments[0],",
+                },
+                {
+                    match: /(?<=enableTooltip:!1\}\)\}\):null,\i\]\}\))\}/,
+                    replace: ")}",
+                }
+            ],
         },
         {
             find: 'tutorialId:"whos-online"',
-            replacement: {
-                match: /\((function\(\i\)\{let\{id:.*?#{intl::CHANNEL_MEMBERS_A11Y_LABEL}.*?\}\))\}\);/,
-                replace: "($self.wrapRoleGroup($1}));",
-            },
+            group: true,
+            replacement: [
+                {
+                    match: /(?<=\.memo\()function\(\i\)\{(?=let\{[^}]{0,100}\bid:)(?=let\{[^}]{0,100}\bcount:)(?=let\{[^}]{0,100}\bguildId:)/,
+                    replace: "$self.wrapRoleGroup($&",
+                },
+                {
+                    match: /(?<=children:\["\\xa0\\u2014 ",\i\]\}\)\]\}\)\]\}\)\})(?=\);)/,
+                    replace: ")",
+                }
+            ],
         },
     ],
 
@@ -218,15 +195,15 @@ export default definePlugin({
         };
     },
 
-    wrapRolePill(props: { role: Role; guildId: string; }, renderOriginal: () => React.ReactNode) {
+    wrapRolePill(props: { role: Role; guildId: string; }, original: React.ReactNode) {
         return (
             <WrappedClickableRole roleId={props.role.id} guildId={props.guildId}>
-                {renderOriginal()}
+                {original}
             </WrappedClickableRole>
         );
     },
 
     stop() {
-        clearMemberCache();
+        requestGeneration++;
     },
 });

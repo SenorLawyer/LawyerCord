@@ -1,0 +1,45 @@
+.vc-birthday-confetti-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483647;
+    pointer-events: none;
+    display: grid;
+    place-items: center;
+}
+
+.vc-birthday-confetti-particles {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+}
+
+.vc-birthday-confetti-particles span {
+    position: absolute;
+    top: -24px;
+    width: 10px;
+    height: 18px;
+    animation: vc-birthday-confetti-fall linear infinite;
+}
+
+.vc-birthday-confetti-player {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    pointer-events: auto;
+}
+
+.vc-birthday-confetti-player video {
+    display: block;
+    max-width: 85vw;
+    max-height: 75vh;
+    border-radius: 12px;
+    background: var(--background-primary);
+}
+
+@keyframes vc-birthday-confetti-fall {
+    to {
+        transform: translate(40px, calc(100vh + 48px)) rotate(720deg);
+    }
+}

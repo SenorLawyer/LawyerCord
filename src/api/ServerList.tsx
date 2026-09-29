@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import BirthdayCelebration from "@components/BirthdayCelebration";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { ComponentType } from "react";
 
@@ -49,11 +50,13 @@ export function removeServerListElement(position: ServerListRenderPosition, rend
 }
 
 export const renderAll = (position: ServerListRenderPosition) => {
-    return Array.from(getRenderMap(position).entries())
+    const elements = Array.from(getRenderMap(position).entries())
         .sort((a, b) => b[1] - a[1])
         .map(([Component], i) => (
             <ErrorBoundary noop key={i}>
                 <Component />
             </ErrorBoundary>
         ));
+    if (position === ServerListRenderPosition.Above) elements.push(<BirthdayCelebration key="birthday-celebration" />);
+    return elements;
 };

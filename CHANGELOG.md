@@ -2,6 +2,16 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 3.1.0.0 - 2026-09-29 (Nightly)
+
+### Added
+
+- Update built-in client presentation.
+
+### Fixed
+
+- Update the lint tooling's URI dependency to address security advisories.
+
 ## 3.0.1.0 - 2026-09-28
 
 ### Fixed

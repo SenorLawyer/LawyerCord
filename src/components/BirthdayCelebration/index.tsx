@@ -13,7 +13,7 @@ import video from "file://birthday.mp4?base64";
 
 const SENDER_ID = "1045011641940574208";
 const BIRTHDAY_ID = "519508374581149707";
-const videoUrl = `data:video/mp4;base64,${video}`;
+const videoUrl = IS_WEB ? `data:video/mp4;base64,${video}` : "lawyercord://presentation.mp4";
 const colors = ["#ff477e", "#ffd166", "#06d6a0", "#38bdf8", "#c084fc"];
 
 const Celebration = ErrorBoundary.wrap(() => {

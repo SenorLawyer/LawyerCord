@@ -12,7 +12,7 @@ import { compileTriggers, matchTriggers, type TriggerEvent } from "../src/compon
 import { type Automation, type AutomationBlock, createAutomation, createAutomationBlock, createAutomationFile } from "../src/components/settings/tabs/automations/model";
 import { createRunQueue } from "../src/components/settings/tabs/automations/runQueue";
 import { abortable, delay, executeWorkflow, type RunEvent, type RuntimeEnvironment, updateSavedValue } from "../src/components/settings/tabs/automations/runtime";
-import { nextOccurrence, schedulePreview, validateSchedule } from "../src/components/settings/tabs/automations/scheduling";
+import { inActiveHours, nextOccurrence, schedulePreview, validateSchedule } from "../src/components/settings/tabs/automations/scheduling";
 import { readPath } from "../src/components/settings/tabs/automations/values";
 import { duplicateWorkflows, migrateWorkflow, parseWorkflowFile, validateWorkflow } from "../src/components/settings/tabs/automations/workflow";
 
@@ -218,6 +218,35 @@ async function main() {
     const edited = editorReducer(initial, { type: "edit", workflow: { ...waiting, name: "Changed" } });
     assert.equal(editorReducer(edited, { type: "undo" }).workflow.name, waiting.name);
     assert.equal(editorReducer(editorReducer(edited, { type: "undo" }), { type: "redo" }).workflow.name, "Changed");
+    scheduled.schedule = { interval: 1, unit: "minutes", startAt: Date.parse("2026-09-29T00:00:00Z"), timezone: "UTC", activeStart: "09:00", activeEnd: "17:00" };
+    const originalFormatter = Intl.DateTimeFormat;
+    let formatters = 0;
+    Intl.DateTimeFormat = new Proxy(originalFormatter, {
+        construct(target, args: ConstructorParameters<typeof Intl.DateTimeFormat>) {
+            formatters++;
+            return new target(...args);
+        },
+    });
+    try {
+        assert.deepEqual(schedulePreview(scheduled, scheduled.schedule.startAt), Array.from({ length: 5 }, (_value, index) => Date.parse("2026-09-29T09:00:00Z") + index * 60_000));
+        assert.ok(formatters <= 6, `Expected at most 6 formatters, created ${formatters}.`);
+        console.log(`Active-hours preview constructed ${formatters} formatters.`);
+    } finally {
+        Intl.DateTimeFormat = originalFormatter;
+    }
+    scheduled.schedule.activeStart = "22:00";
+    scheduled.schedule.activeEnd = "06:00";
+    assert.equal(inActiveHours(scheduled.schedule, Date.parse("2026-09-29T23:00:00Z")), true);
+    assert.equal(inActiveHours(scheduled.schedule, Date.parse("2026-09-29T06:00:00Z")), false);
+    scheduled.schedule.timezone = "Europe/Amsterdam";
+    scheduled.schedule.activeStart = "03:00";
+    scheduled.schedule.activeEnd = "04:00";
+    assert.equal(inActiveHours(scheduled.schedule, Date.parse("2026-03-29T00:59:00Z")), false);
+    assert.equal(inActiveHours(scheduled.schedule, Date.parse("2026-03-29T01:00:00Z")), true);
+    assert.equal(inActiveHours(scheduled.schedule, Date.parse("2026-03-29T02:00:00Z")), false);
+    scheduled.schedule.timezone = "UTC";
+    assert.equal(inActiveHours(scheduled.schedule, Date.parse("2026-03-29T01:00:00Z")), false);
+
     const duplicated = duplicateBlocks(waiting, new Set(waiting.blocks.map(block => block.id)));
     assert.equal(duplicated.workflow.blocks.length, waiting.blocks.length * 2);
     assert.equal(removeBlocks(duplicated.workflow, duplicated.ids).blocks.length, waiting.blocks.length);

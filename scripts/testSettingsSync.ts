@@ -2309,6 +2309,8 @@ test("cloud completion preserves CSS and stored edits during responses and check
             let persisted = structuredClone(plain);
             let css = "original CSS";
             let records: [string, unknown][] = [["plugin", "original data"]];
+            let dataStoreReads = 0;
+            if (version === "v1" && operation === "putCloudSettings") records.push(["large-cache", "x".repeat(1024 * 1024)]);
             if (operation === "getCloudSettings") records.push(["cache", new Uint8Array([1, 2]).buffer]);
             const storage = { Vencord_settingsDirty: "true", setItem(key: string, value: string) { Reflect.set(this, key, value); } };
             const notifications: { color?: string }[] = [];
@@ -2318,7 +2320,7 @@ test("cloud completion preserves CSS and stored edits during responses and check
             };
             const store = {
                 get: async (key: string) => key === "Vencord_cloudApiVersions" ? { "https://first.invalid": version } : undefined,
-                entries: async () => structuredClone(records), set: async () => {},
+                entries: async () => { dataStoreReads++; return structuredClone(records); }, set: async () => {},
                 updateMany: async (entries: [string, (value: unknown) => unknown][]) => {
                     const next = new Map(records);
                     for (const [key, update] of entries) next.set(key, update(next.get(key)));
@@ -2364,6 +2366,8 @@ test("cloud completion preserves CSS and stored edits during responses and check
             modules["./offline"] = runInNewContext(`${outputText}\nexports;`, { ...globals, exports: {} });
             const api = runInNewContext(`${compiled}\nexports;`, { navigator, ...globals, exports: {} });
             await api[operation](true);
+            if (version === "v1" && operation === "putCloudSettings") assert.equal(dataStoreReads, 0);
+            else assert.ok(dataStoreReads > 0);
             const edited = stage !== "none";
             const syncsSection = !(version === "v1" && operation === "putCloudSettings" && section === "data");
             assert.equal(storage.Vencord_settingsDirty, edited && syncsSection ? "true" : undefined, `${version}/${operation}/${section}/${stage}`);
@@ -2378,6 +2382,133 @@ test("cloud completion preserves CSS and stored edits during responses and check
         }
 });
 
+
+test("sync failures cannot schedule uploads through notification history", async () => {
+    const source = createSourceFile("Vencord.ts", readFileSync("src/Vencord.ts", "utf8"), ScriptTarget.Latest, true);
+    const declaration = source.statements.find(node => isFunctionDeclaration(node) && node.name?.text === "syncSettings");
+    assert.ok(declaration);
+    const startup = transpileModule(declaration.getText(source), { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
+    const logSource = createSourceFile("notificationLog.tsx", readFileSync("src/api/Notifications/notificationLog.tsx", "utf8"), ScriptTarget.Latest, true);
+    const persistDeclaration = logSource.statements.find(node => isFunctionDeclaration(node) && node.name?.text === "persistNotification");
+    assert.ok(persistDeclaration);
+    const persistCode = transpileModule(persistDeclaration.getText(logSource), { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const version of ["v1", "v2"]) for (const operation of ["putCloudSettings", "getCloudSettings"]) for (const failure of ["network", "status"]) {
+        let loggedIn = false;
+        let pending: (() => Promise<void>) | undefined;
+        const takePending = () => {
+            const callback = pending;
+            pending = undefined;
+            return callback;
+        };
+        let requests = 0;
+        let notifications = 0;
+        let historyWrites = 0;
+        const events = new EventTarget();
+        const settings = { cloud: { settingsSync: true, authenticated: true }, notifications: { logLimit: 50 } };
+        const storage = { Vencord_cloudSyncDirection: "both", setItem() {} };
+        const store = {
+            get: async (key: string) => key === "Vencord_cloudApiVersions" ? { "https://first.invalid": version } : undefined,
+            entries: async () => [],
+            getChangeEvents: () => events,
+            update: async (key: string, change: (value: unknown[]) => unknown[]) => {
+                change([]);
+                historyWrites++;
+                events.dispatchEvent(new CustomEvent("change", { detail: [key] }));
+            }
+        };
+        const userStore = { getCurrentUser: () => loggedIn ? { id: "first" } : undefined };
+        const modules: Record<string, unknown> = {
+            "@api/DataStore": store, "..": { DataStore: store },
+            "@api/Settings": { Settings: settings },
+            "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
+            "@utils/Logger": { Logger: class { error() {} info() {} } },
+            "@utils/localStorage": { localStorage: storage },
+            "@webpack/common": { UserStore: userStore },
+            "./cloudSetup": { getCloudUrl: () => new URL("https://first.invalid"), getCloudAuth: async () => "synthetic" },
+            fflate: { deflateSync: (value: Uint8Array) => value }
+        };
+        const globals = {
+            exports: {}, require: (name: string) => modules[name] ?? {}, navigator, URL, TextEncoder, AbortSignal, crypto, btoa,
+            VencordNative: { settings: { get: () => ({}) }, quickCss: { get: async () => "", addChangeListener() {} } }
+        };
+        const offline = runInNewContext(`${outputText}\nexports;`, globals);
+        modules["./offline"] = offline;
+        const persistNotification = runInNewContext(`${persistCode}\nexports.persistNotification;`, {
+            exports: {}, Settings: settings, DataStore: store, KEY: "notification-log", signals: new Set(), nanoid: () => "test"
+        });
+        modules["@api/Notifications"] = { showNotification: (value: unknown) => { notifications++; return persistNotification(value); } };
+        const api = runInNewContext(`${compiled}\nexports;`, {
+            ...globals, exports: {}, fetch: async () => {
+                requests++;
+                if (failure === "network") throw new Error("Offline.");
+                return { ok: false, status: 500 };
+            }
+        });
+        const syncSettings = runInNewContext(`${startup}\nsyncSettings;`, {
+            ...api, Settings: settings, SettingsStore: { addGlobalChangeListener() {} }, UserStore: userStore,
+            VencordNative: globals.VencordNative, DataStore: store, isLocalDataStoreKey: offline.isLocalDataStoreKey,
+            debounce: (callback: () => Promise<void>) => () => { pending = callback; }
+        });
+        await syncSettings();
+        loggedIn = true;
+        await api[operation]();
+        await new Promise<void>(resolve => setImmediate(resolve));
+        assert.equal(requests, 1);
+        assert.equal(notifications, 1);
+        assert.equal(historyWrites, 0);
+        assert.equal(takePending(), undefined);
+        events.dispatchEvent(new CustomEvent("change", { detail: ["ordinaryPreference"] }));
+        const flush = takePending();
+        assert.ok(flush);
+        await flush();
+        await new Promise<void>(resolve => setImmediate(resolve));
+        assert.equal(requests, 2);
+        assert.equal(notifications, 2);
+        assert.equal(historyWrites, 0);
+        assert.equal(takePending(), undefined);
+    }
+});
+
+test("upload snapshots retain ownership across backend lookup and preserve V2 fallback data", async () => {
+    const compiled = transpileModule(readFileSync("src/api/SettingsSync/cloudSync.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    for (const version of ["v1", "v2"]) for (const change of ["none", "account", "service", "settings"]) {
+        let userId = "first";
+        let service = "https://first.invalid";
+        let api: { markLocalSettingsDirty(): void; getCloudSyncContext(check: boolean, upload: boolean): Promise<{ assertCurrent(): void; expected: unknown; }> };
+        const snapshots: boolean[] = [];
+        const modules: Record<string, unknown> = {
+            "@api/DataStore": { get: async () => {
+                if (change === "account") userId = "second";
+                if (change === "service") service = "https://second.invalid";
+                if (change === "settings") api.markLocalSettingsDirty();
+                return { "https://first.invalid": version };
+            } },
+            "@utils/Logger": { Logger: class {} },
+            "@utils/localStorage": { localStorage: { setItem() {} } },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
+            "./cloudSetup": { getCloudUrl: () => new URL(service) },
+            "./offline": { captureCloudImportState: async (dataStore: boolean) => { snapshots.push(dataStore); return {}; } }
+        };
+        api = runInNewContext(`${compiled}\n({ ...exports, getCloudSyncContext });`, {
+            exports: {}, require: (name: string) => modules[name] ?? {}, URL
+        });
+        if (change === "account" || change === "service") {
+            const context = await api.getCloudSyncContext(true, true);
+            assert.throws(() => context.assertCurrent(), /account or service changed/);
+            assert.deepEqual(snapshots, []);
+        } else {
+            const context = await api.getCloudSyncContext(true, true);
+            assert.deepEqual(snapshots, [version === "v2"]);
+            if (change === "settings") assert.throws(() => context.assertCurrent(), /Local settings changed/);
+            else assert.doesNotThrow(() => context.assertCurrent());
+        }
+    }
+});
 
 test("QuickCSS and DataStore edits mark data dirty and use the existing automatic upload preferences", async () => {
     const source = createSourceFile("Vencord.ts", readFileSync("src/Vencord.ts", "utf8"), ScriptTarget.Latest, true);

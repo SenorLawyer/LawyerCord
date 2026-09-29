@@ -47,7 +47,7 @@ export const Forms = {
 /** @deprecated use Paragraph, Span, or BaseText from Vencord */
 export const Text = TextCompat;
 /** @deprecated use Button from Vencord */
-export const Button = ButtonCompat;
+export { ButtonCompat as Button };
 /** @deprecated Use FormSwitch from Vencord */
 export const Switch = FormSwitchCompat as never;
 

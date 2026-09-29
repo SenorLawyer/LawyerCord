@@ -23,12 +23,23 @@ interface TimerProps {
 
 export function Timer({ time, userId }: Readonly<TimerProps>) {
     const { format, showSeconds, showRoleColor, trackSelf } = settings.use(TIMER_SETTINGS);
-    const durationMs = useFixedTimer({ initialTime: time });
     if (userId === UserStore.getCurrentUser()?.id && !trackSelf) {
         // don't show for self
         return null;
     }
 
+    return <RunningTimer time={time} format={format} showSeconds={showSeconds} showRoleColor={showRoleColor} />;
+}
+
+interface RunningTimerProps {
+    time: number;
+    format: typeof settings.store.format;
+    showSeconds: boolean;
+    showRoleColor: boolean;
+}
+
+function RunningTimer({ time, format, showSeconds, showRoleColor }: Readonly<RunningTimerProps>) {
+    const durationMs = useFixedTimer({ initialTime: time });
     const formatted = formatDurationMs(durationMs, format === "human", showSeconds);
 
     if (settings.store.showWithoutHover) {

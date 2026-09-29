@@ -325,6 +325,7 @@ interface CodexSessionHeader {
 
 interface TrackedFile {
     offset: number;
+    skipping?: boolean;
     session?: CodexSessionHeader;
 }
 
@@ -339,6 +340,7 @@ const system = {
     roblox: {
         file: "",
         offset: 0,
+        skipping: false,
         silent: true,
         session: null as { game: RobloxGame; joinedAt: number; } | null,
         pendingJoin: null as { jobId: string; placeId: string; } | null,
@@ -420,17 +422,21 @@ async function scanProcesses(): Promise<void> {
 }
 
 /** New bytes since the last read, minus any half-written last line, which is picked up next time. */
-async function readAppended(path: string, offset: number): Promise<{ lines: string[]; offset: number; }> {
+async function readAppended(path: string, offset: number, skipping = false): Promise<{ lines: string[]; offset: number; skipping: boolean; }> {
     const handle = await open(path, "r");
     try {
         const { size } = await handle.stat();
         const start = size < offset ? 0 : offset;
-        if (size === start) return { lines: [], offset: size };
+        if (size < offset) skipping = false;
+        if (size === start) return { lines: [], offset: size, skipping };
         const length = Math.min(size - start, READ_CAP);
         const buffer = Buffer.alloc(length);
         const { bytesRead } = await handle.read(buffer, 0, length, start);
-        const end = buffer.subarray(0, bytesRead).lastIndexOf(0x0A) + 1;
-        return { lines: buffer.subarray(0, end).toString("utf8").split("\n"), offset: start + end };
+        const bytes = buffer.subarray(0, bytesRead);
+        const end = bytes.lastIndexOf(0x0A) + 1;
+        if (!end && (skipping || bytesRead === READ_CAP)) return { lines: [], offset: start + bytesRead, skipping: true };
+        const begin = skipping ? bytes.indexOf(0x0A) + 1 : 0;
+        return { lines: bytes.subarray(begin, end).toString("utf8").split("\n"), offset: start + end, skipping: false };
     } finally {
         await handle.close();
     }
@@ -512,10 +518,12 @@ async function scanRoblox(): Promise<void> {
         state.silent = state.file === "";
         state.file = file;
         state.offset = 0;
+        state.skipping = false;
         state.pendingJoin = null;
     }
-    const { lines, offset } = await readAppended(file, state.offset);
+    const { lines, offset, skipping } = await readAppended(file, state.offset, state.skipping);
     state.offset = offset;
+    state.skipping = skipping;
     for (const line of lines) {
         const parsed = parseRobloxLine(line);
         if (!parsed) continue;
@@ -547,10 +555,30 @@ async function codexFiles(): Promise<string[]> {
 }
 
 async function readCodexHeader(file: string): Promise<CodexSessionHeader | undefined> {
-    const { lines } = await readAppended(file, 0);
-    for (const line of lines.slice(0, 3)) {
-        const parsed = parseCodexLine(line);
-        if (parsed?.kind === "session") return parsed;
+    const handle = await open(file, "r");
+    try {
+        let length = 0;
+        let lines = 0;
+        let chunks: Buffer[] = [];
+        while (length < READ_CAP) {
+            const buffer = Buffer.alloc(Math.min(16 * 1024, READ_CAP - length));
+            const { bytesRead } = await handle.read(buffer, 0, buffer.length, length);
+            if (!bytesRead) break;
+            length += bytesRead;
+            const bytes = buffer.subarray(0, bytesRead);
+            let start = 0;
+            for (let end = bytes.indexOf(0x0A); end !== -1; end = bytes.indexOf(0x0A, start)) {
+                chunks.push(bytes.subarray(start, end));
+                const parsed = parseCodexLine(Buffer.concat(chunks).toString("utf8"));
+                if (parsed?.kind === "session") return parsed;
+                if (++lines === 3) return undefined;
+                chunks = [];
+                start = end + 1;
+            }
+            if (start < bytesRead) chunks.push(bytes.subarray(start));
+        }
+    } finally {
+        await handle.close();
     }
     return undefined;
 }
@@ -576,9 +604,10 @@ async function scanCodex(): Promise<void> {
                 continue;
             }
         }
-        let read: { lines: string[]; offset: number; };
-        try { read = await readAppended(file, tracked.offset); } catch { continue; }
+        let read: Awaited<ReturnType<typeof readAppended>>;
+        try { read = await readAppended(file, tracked.offset, tracked.skipping); } catch { continue; }
         tracked.offset = read.offset;
+        tracked.skipping = read.skipping;
         for (const line of read.lines) {
             const parsed = parseCodexLine(line);
             if (!parsed) continue;

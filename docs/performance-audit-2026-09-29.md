@@ -32,12 +32,14 @@ The comparison contains 712 changed files. The audit reviewed changed runtime co
 | Session names | Concurrent session rows each loaded and validated the same saved account map. | Share only pending reads for the same account, without caching completed Discord data. |
 | Reaction avatars | The selector included a global user-store version, rerendering reaction rows for unrelated user changes. | Compare the relevant reaction users and their displayed profile fields instead. |
 | Call timers | The hidden self timer still mounted ticking work. | Mount the timer hook only in the visible child while keeping settings reactive. |
+| Role interaction patches | The live patcher rejected an unmatched opening parenthesis before the second grouped replacement could close it. | Apply each wrapper as one balanced replacement, verified against both live module factories. |
 
 ## Verification and limits
 
 - The original updater failure was reproduced through the installed client's native updater API. A disposable Windows file held with the same no-delete lock then verified the production replacement path, exact installed bytes, and backup retention.
 - The repaired client rendered the cold modal, its compatibility button, and the actual updater tab. The packaged video loaded in Discord with its expected dimensions and duration.
 - Regression tests cover the repairs, including checksum rejection, write rollback, account isolation, synchronization conflicts, timezone boundaries, oversized lines, long headers, unrelated user updates, and lifecycle cleanup.
+- Built-in media now follows Discord's selected audio output. The default browser output was an inaudible monitor while Discord used Voicemeeter; replaying through the selected output was confirmed audible. Updated effects exist only during playback, cap confetti at 650 and sparks at 1600, and release animation frames, listeners, timers, and audio on dismissal or completion.
 - This is a source-diff audit plus focused runtime tests and workload measurements. It is not an FPS, idle-CPU, heap, or startup-time comparison between two complete Discord installations. It does not establish performance parity with `v1.16.1.0` or claim that every user's slowdown has the same cause.
 - Existing fixes for default-off automations, bounded queues, subscription cleanup, native watcher demand, and download limits were retained. New features were not removed merely because they increase source size.
 - The fallback Windows copy is not atomic. It preserves a backup and rolls back caught write failures, but a process or machine interruption during copying can still require repair from the backup or installer.

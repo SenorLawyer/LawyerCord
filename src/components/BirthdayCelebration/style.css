@@ -5,24 +5,37 @@
     pointer-events: none;
     display: grid;
     place-items: center;
-}
-
-.vc-birthday-confetti-particles {
-    position: absolute;
-    inset: 0;
     overflow: hidden;
 }
 
-.vc-birthday-confetti-particles span {
+.vc-birthday-effects {
     position: absolute;
-    top: -24px;
-    width: 10px;
-    height: 18px;
-    animation: vc-birthday-confetti-fall linear infinite;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+}
+
+.vc-birthday-flying-video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: clamp(80px, 13vw, 190px);
+    animation: vc-birthday-flight 13s linear infinite;
+}
+
+.vc-birthday-flying-video[data-flight="1"] {
+    animation-delay: -4.3s;
+    animation-direction: reverse;
+}
+
+.vc-birthday-flying-video[data-flight="2"] {
+    animation-delay: -8.6s;
 }
 
 .vc-birthday-confetti-player {
     position: relative;
+    z-index: 4;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -30,16 +43,24 @@
     pointer-events: auto;
 }
 
+@keyframes vc-birthday-flight {
+    0% { transform: translate(-15vw, 12vh) rotate(-24deg) scale(0.8); }
+    25% { transform: translate(70vw, 8vh) rotate(20deg) scale(1.1); }
+    50% { transform: translate(85vw, 60vh) rotate(-15deg) scale(0.8); }
+    75% { transform: translate(5vw, 55vh) rotate(25deg) scale(1); }
+    100% { transform: translate(-15vw, 12vh) rotate(-24deg) scale(0.8); }
+}
+
 .vc-birthday-confetti-player video {
     display: block;
     max-width: 85vw;
-    max-height: 75vh;
-    border-radius: 12px;
+    max-height: 62vh;
     background: var(--background-primary);
 }
 
-@keyframes vc-birthday-confetti-fall {
-    to {
-        transform: translate(40px, calc(100vh + 48px)) rotate(720deg);
+@media (prefers-reduced-motion: reduce) {
+    .vc-birthday-effects,
+    .vc-birthday-flying-video {
+        display: none;
     }
 }

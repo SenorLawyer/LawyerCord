@@ -155,31 +155,17 @@ export default definePlugin({
     patches: [
         {
             find: "#{intl::zr0Y5R::raw}",
-            group: true,
-            replacement: [
-                {
-                    match: /(?<=\.colorString\?\?\i;)return/,
-                    replace: "return $self.wrapRolePill(arguments[0],",
-                },
-                {
-                    match: /(?<=enableTooltip:!1\}\)\}\):null,\i\]\}\))\}/,
-                    replace: ")}",
-                }
-            ],
+            replacement: {
+                match: /(?<=\.colorString\?\?\i;return)(\(0,\i\.jsxs?\))/,
+                replace: "((...args)=>$self.wrapRolePill(arguments[0],$1(...args)))",
+            },
         },
         {
             find: 'tutorialId:"whos-online"',
-            group: true,
-            replacement: [
-                {
-                    match: /(?<=\.memo\()function\(\i\)\{(?=let\{[^}]{0,100}\bid:)(?=let\{[^}]{0,100}\bcount:)(?=let\{[^}]{0,100}\bguildId:)/,
-                    replace: "$self.wrapRoleGroup($&",
-                },
-                {
-                    match: /(?<=children:\["\\xa0\\u2014 ",\i\]\}\)\]\}\)\]\}\)\})(?=\);)/,
-                    replace: ")",
-                }
-            ],
+            replacement: {
+                match: /(\i\.memo)(?=\(function\(\i\)\{let\{(?=[^}]{0,100}\bid:)(?=[^}]{0,100}\bcount:)(?=[^}]{0,100}\bguildId:))/,
+                replace: "((fn)=>$1($self.wrapRoleGroup(fn)))",
+            },
         },
     ],
 

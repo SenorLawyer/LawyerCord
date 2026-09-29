@@ -8,6 +8,10 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Update built-in client presentation.
 
+### Fixed
+
+- Update the lint tooling's URI dependency to address security advisories.
+
 ## 3.0.1.0 - 2026-09-28
 
 ### Fixed

@@ -22,7 +22,7 @@ import { normalizeUpdateChannel, type UpdateChannel } from "@shared/updateChanne
 import { VENCORD_USER_AGENT } from "@shared/vencordUserAgent";
 import { createHash } from "crypto";
 import { ipcMain } from "electron";
-import { mkdtempSync, renameSync, rmSync, writeFileSync } from "original-fs";
+import { copyFileSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "original-fs";
 import { join } from "path";
 
 import gitHash from "~git-hash";
@@ -97,7 +97,19 @@ async function applyUpdates() {
     try {
         const tempFile = join(tempDir, ASAR_FILE);
         writeFileSync(tempFile, data, { flush: true });
-        renameSync(tempFile, __dirname);
+        try {
+            renameSync(tempFile, __dirname);
+        } catch (error) {
+            if (process.platform !== "win32" || typeof error !== "object" || error === null || !("code" in error) || error.code !== "EPERM") throw error;
+            const backup = `${__dirname}.bak`;
+            copyFileSync(__dirname, backup);
+            try {
+                copyFileSync(tempFile, __dirname);
+            } catch (writeError) {
+                copyFileSync(backup, __dirname);
+                throw writeError;
+            }
+        }
     } finally {
         rmSync(tempDir, { recursive: true, force: true });
     }

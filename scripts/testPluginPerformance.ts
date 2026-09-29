@@ -2366,7 +2366,7 @@ test("reaction profile settings drive native popouts and isolate activation", ()
 });
 
 test("reaction avatar selectors stay pure and use their owning scroller", () => {
-    interface Snapshot { userIds: string[]; guildId: string; generation: number; userVersion: number; }
+    interface Snapshot { userIds: string[]; guildId: string; generation: number; users: { username: string; avatar: string; guildAvatar?: string; }[]; }
     const selectors: (() => Snapshot)[] = [];
     const effects: (() => void)[] = [];
     const tasks: unknown[] = [];
@@ -2374,7 +2374,7 @@ test("reaction avatar selectors stay pure and use their owning scroller", () => 
     const reactionStore = {};
     let guildId = "guild";
     let version = 0;
-    const user = { id: "user", username: "Reactor" };
+    const user = { id: "user", username: "Reactor", avatar: "avatar", guildMemberAvatars: { guild: "guild-avatar" } };
     const UserStore = { getCurrentUser: () => ({ id: "account" }), getUser: () => user, getUserStoreVersion: () => version };
     const ChannelStore = { getChannel: () => ({ guild_id: guildId }) };
     const React = { useContext: (context: unknown) => { assert.equal(context, plugin.ScrollerContext); return currentScroller; }, createContext: (value: unknown) => ({ value }), createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props: { ...props, children } }) };
@@ -2408,9 +2408,21 @@ test("reaction avatar selectors stay pure and use their owning scroller", () => 
     const initial = select();
     cache["message:wave::0"].users.set("user", user);
     assert.deepEqual(Array.from(select().userIds), ["user"]);
+    const beforeUnrelated = select();
     version++;
+    assert.deepEqual(select(), beforeUnrelated);
+    user.username = "Renamed";
+    assert.notDeepEqual(select(), beforeUnrelated);
+    assert.equal(beforeUnrelated.users[0].username, "Reactor");
+    const beforeAvatar = select();
+    user.avatar = "replacement-avatar";
+    assert.notDeepEqual(select(), beforeAvatar);
+    assert.equal(beforeAvatar.users[0].avatar, "avatar");
+    const beforeGuildAvatar = select();
+    user.guildMemberAvatars.guild = "replacement-guild-avatar";
+    assert.notDeepEqual(select(), beforeGuildAvatar);
+    assert.equal(beforeGuildAvatar.users[0].guildAvatar, "guild-avatar");
     guildId = "replacement";
-    assert.equal(select().userVersion, version);
     assert.equal(select().guildId, guildId);
     const tree = ReactionUsers(props);
     const summary = tree.props.children[0];
@@ -11812,7 +11824,8 @@ test("sticker picker uses shared async cleanup for pack loading", async () => {
             let notices = 0;
             const React = {
                 createElement: () => null,
-                useState: (initial: unknown) => [initial, (value: { value?: unknown; error?: unknown; }) => updates.push(value)],
+                useState: (initial: unknown) => [initial, (value: { value?: unknown; error?: unknown; }) => { if (!Object.is(initial, value)) updates.push(value); }],
+                useMemo: (factory: () => unknown) => factory(),
                 useEffect: (effect: () => () => void) => effects.push(effect)
             };
             const shared = loadSource("src/utils/react.tsx", {
@@ -11822,7 +11835,10 @@ test("sticker picker uses shared async cleanup for pack loading", async () => {
             const plugin = loadSource("src/equicordplugins/moreStickers/index.tsx", {
                 "@api/Settings": { definePluginSettings: () => ({}) }, "@utils/constants": { Devs: {}, EquicordDevs: {} },
                 "@utils/react": shared, "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
-                "@webpack/common": { React, showToast: () => notices++, Toasts: { Type: {} } },
+                "@webpack/common": {
+                    React, showToast: () => notices++, Toasts: { Type: {} },
+                    lodash: { debounce: (callback: (value: string) => void) => Object.assign(callback, { cancel() {} }) }
+                },
                 "./components": {}, "./utils": { cl: () => "" },
                 "./stickers": {
                     getStickerPackMetas: async () => { if (failure === "metadata") throw new Error("Load failed"); return [{ id: "loaded" }, { id: "missing" }]; },
@@ -11830,9 +11846,9 @@ test("sticker picker uses shared async cleanup for pack loading", async () => {
                 }
             }).default;
             plugin.moreStickersComponent({ channel: { id: "channel" }, closePopout() {} });
-            assert.equal(effects.length, 1);
-            const cleanup = effects[0]();
-            if (unmounted) cleanup();
+            assert.equal(effects.length, 2);
+            const cleanups = effects.map(effect => effect());
+            if (unmounted) cleanups.forEach(cleanup => cleanup());
             await setImmediate();
             assert.equal(updates.length, unmounted ? 0 : 1);
             assert.equal(notices, !unmounted && failure !== "none" ? 1 : 0);

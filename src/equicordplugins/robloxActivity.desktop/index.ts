@@ -137,9 +137,4 @@ export default definePlugin({
         robloxActivity = undefined;
         sessionStartedAt.value = 0;
     },
-    flux: {
-        PRESENCE_UPDATE() {
-            void checkProcess();
-        }
-    },
 });

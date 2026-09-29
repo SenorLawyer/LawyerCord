@@ -51,13 +51,15 @@ async function getApiVersion(origin: string): Promise<ApiVersion> {
     return map[origin] ?? "v2";
 }
 
-async function getCloudSyncContext(checkLocalEdits = false) {
+async function getCloudSyncContext(checkLocalEdits = false, upload = false) {
     const url = getCloudUrl();
     const userId = UserStore.getCurrentUser()?.id;
     const revision = localSettingsRevision;
     const isCurrent = () => userId !== undefined && UserStore.getCurrentUser()?.id === userId && getCloudUrl().href === url.href;
+    const version = upload ? await getApiVersion(url.origin) : undefined;
     return {
-        expected: checkLocalEdits ? await captureCloudImportState() : undefined,
+        expected: checkLocalEdits && isCurrent() ? await captureCloudImportState(version !== "v1") : undefined,
+        version,
         url,
         manifestKey: `${MANIFEST_STORE_KEY}:${url.origin}:${userId}`,
         isCurrent,
@@ -231,6 +233,7 @@ async function doSyncV2(uploads: SyncRequest["uploads"], clientManifest: Manifes
             title: "Cloud Settings",
             body: `Could not synchronize settings (API returned ${res.status}).`,
             color: "var(--red-360)",
+            noPersist: true,
         });
         return null;
     }
@@ -430,6 +433,7 @@ async function putV1(context: Awaited<ReturnType<typeof getCloudSyncContext>>, m
             title: "Cloud Settings",
             body: `Could not synchronize settings to cloud (API returned ${res.status}).`,
             color: "var(--red-360)",
+            noPersist: true,
         });
         return;
     }
@@ -503,6 +507,7 @@ async function getV1(context: Awaited<ReturnType<typeof getCloudSyncContext>>, s
             title: "Cloud Settings",
             body: `Could not synchronize settings from the cloud (API returned ${res.status}).`,
             color: "var(--red-360)",
+            noPersist: true,
         });
         return false;
     }
@@ -616,10 +621,9 @@ export async function putCloudSettings(manual?: boolean) {
     return runCloudOperation(Boolean(manual), async () => {
         let context: Awaited<ReturnType<typeof getCloudSyncContext>> | undefined;
         try {
-            context = await getCloudSyncContext(true);
-            const version = await getApiVersion(context.url.origin);
+            context = await getCloudSyncContext(true, true);
             context.assertCurrent();
-            if (version === "v2") {
+            if (context.version === "v2") {
                 await putV2(context, manual);
                 context.assertCurrent();
                 const nextVersion = await getApiVersion(context.url.origin);
@@ -637,6 +641,7 @@ export async function putCloudSettings(manual?: boolean) {
                 title: "Cloud Settings",
                 body: `Could not synchronize settings to the cloud (${String(e)}).`,
                 color: "var(--red-360)",
+                noPersist: true,
             });
         }
     });
@@ -667,6 +672,7 @@ export async function getCloudSettings(shouldNotify = true, force = false) {
                 title: "Cloud Settings",
                 body: `Could not synchronize settings from the cloud (${String(e)}).`,
                 color: "var(--red-360)",
+                noPersist: true,
             });
             return false;
         }

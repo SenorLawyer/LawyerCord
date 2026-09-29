@@ -42,6 +42,9 @@ const settings = definePluginSettings({
     }
 });
 
+let parsedBlocklist: string | undefined;
+let blockedStickerIds = new Set<string>();
+
 function parseStickerIds(value: string | null | undefined): Set<string> {
     if (!value) return new Set();
 
@@ -143,7 +146,11 @@ export default definePlugin({
     },
     isBlocked(stickerId: string) {
         const { blockedStickers } = settings.use(BLOCK_SETTINGS);
-        return parseStickerIds(blockedStickers).has(stickerId);
+        if (parsedBlocklist !== blockedStickers) {
+            blockedStickerIds = parseStickerIds(blockedStickers);
+            parsedBlocklist = blockedStickers;
+        }
+        return blockedStickerIds.has(stickerId);
     },
     blockedComponent: ErrorBoundary.wrap(blockedComponentRender, { fallback: () => <p style={{ color: "red" }}>Failed to render :(</p> }),
     settings,

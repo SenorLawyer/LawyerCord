@@ -34,9 +34,14 @@ export function validateSchedule(schedule: Schedule): string | undefined {
     return undefined;
 }
 
+let activeHoursFormatter: { timezone?: string; formatter: Intl.DateTimeFormat; } | undefined;
+
 export function inActiveHours(schedule: Schedule, timestamp: number): boolean {
     if (!schedule.activeStart || !schedule.activeEnd || schedule.activeStart === schedule.activeEnd) return true;
-    const time = new Intl.DateTimeFormat("en-GB", { timeZone: schedule.timezone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(timestamp);
+    if (!activeHoursFormatter || activeHoursFormatter.timezone !== schedule.timezone) {
+        activeHoursFormatter = { timezone: schedule.timezone, formatter: new Intl.DateTimeFormat("en-GB", { timeZone: schedule.timezone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) };
+    }
+    const time = activeHoursFormatter.formatter.format(timestamp);
     return schedule.activeStart < schedule.activeEnd
         ? time >= schedule.activeStart && time < schedule.activeEnd
         : time >= schedule.activeStart || time < schedule.activeEnd;

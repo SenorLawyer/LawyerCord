@@ -30,6 +30,7 @@ const getDataKey = () => {
 
 export const cl = classNameFactory("vc-betterSessions-");
 export const savedSessionsCache = new Map<string, SavedSession>();
+const pendingSessionReads = new Map<string, Promise<Map<string, SavedSession>>>();
 
 export function getDefaultName(clientInfo: SessionInfo["session"]["client_info"]) {
     return `${clientInfo.os} · ${clientInfo.platform}`;
@@ -65,7 +66,12 @@ export async function fetchNamesFromDataStore(shouldApply = () => true) {
 export async function fetchSessionFromDataStore(idHash: string) {
     const dataKey = getDataKey();
     if (!dataKey) return;
-    const sessions = readSavedSessions(await DataStore.get<unknown>(dataKey));
+    let pending = pendingSessionReads.get(dataKey);
+    if (!pending) {
+        pending = DataStore.get<unknown>(dataKey).then(readSavedSessions).finally(() => pendingSessionReads.delete(dataKey));
+        pendingSessionReads.set(dataKey, pending);
+    }
+    const sessions = await pending;
     if (dataKey !== getDataKey()) return;
     return sessions.get(idHash);
 }

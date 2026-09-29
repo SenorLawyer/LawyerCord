@@ -5,6 +5,7 @@
  */
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { test } from "node:test";
@@ -99,5 +100,66 @@ for (const mode of ["http", "git"]) test(`${mode} updater isolates release chann
             await assert.rejects(update(undefined, channel), /Missing release branch/);
             assert.ok(gitCalls.every(args => args[0] === "fetch" && !args.join(" ").includes("/main")));
         }
+    }
+});
+
+for (const failure of ["locked", "write", "checksum", "permission"] as const) test(`archive install handles ${failure}`, async () => {
+    const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>();
+    const archive = "/fixture/client.asar";
+    const downloaded = Buffer.from("new archive");
+    const files = new Map<string, Buffer>([[archive, Buffer.from("old archive")]]);
+    let copies = 0;
+    const modules: Record<string, unknown> = {
+        "@shared/IpcEvents": { IpcEvents: events },
+        "@shared/updateChannel": updateChannel,
+        "@shared/vencordUserAgent": { VENCORD_USER_AGENT: "test" },
+        "./releaseSelection": releaseSelection,
+        "~git-hash": "old",
+        "~git-remote": "fixture/repo",
+        "./common": { ASAR_FILE: "desktop.asar", serializeErrors: (fn: unknown) => fn },
+        electron: { ipcMain: { handle: (event: string, fn: (...args: unknown[]) => Promise<unknown>) => handlers.set(event, fn) } },
+        "original-fs": {
+            mkdtempSync: () => "/fixture/staging",
+            writeFileSync: (path: string, data: Buffer) => files.set(path, data),
+            renameSync: () => { throw Object.assign(new Error("Archive locked"), { code: failure === "permission" ? "EACCES" : "EPERM" }); },
+            copyFileSync: (source: string, target: string) => {
+                copies++;
+                if (failure === "write" && copies === 2) {
+                    files.set(target, Buffer.from("partial"));
+                    throw new Error("Write failed");
+                }
+                const data = files.get(source);
+                assert.ok(data);
+                files.set(target, Buffer.from(data));
+            },
+            rmSync: () => {}
+        },
+        "@main/utils/http": {
+            fetchBuffer: async () => downloaded,
+            fetchJson: async (url: string) => url.includes("/releases?") ? [{
+                ...nightly,
+                assets: [{ name: "desktop.asar", browser_download_url: "https://example.com/archive", digest: `sha256:${failure === "checksum" ? "a".repeat(64) : createHash("sha256").update(downloaded).digest("hex")}` }]
+            }] : { sha: "new" }
+        }
+    };
+    const { outputText } = transpileModule(readFileSync("src/main/updater/http.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    });
+    runInNewContext(outputText, {
+        exports: {}, __dirname: archive, process: { platform: "win32" }, URL,
+        require: (name: string) => name in modules ? modules[name] : nativeRequire(name)
+    });
+    const update = handlers.get(events.UPDATE);
+    const build = handlers.get(events.BUILD);
+    assert.ok(update && build);
+    await update(undefined, "nightly");
+    if (failure === "locked") {
+        assert.equal(await build(), true);
+        assert.equal(files.get(archive)?.toString(), "new archive");
+        assert.equal(files.get(`${archive}.bak`)?.toString(), "old archive");
+    } else {
+        await assert.rejects(build(), failure === "write" ? /Write failed/ : failure === "checksum" ? /checksum/ : /Archive locked/);
+        assert.equal(files.get(archive)?.toString(), "old archive");
+        if (failure !== "write") assert.equal(copies, 0);
     }
 });

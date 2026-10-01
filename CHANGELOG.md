@@ -41,6 +41,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Prevent late command palette startup from registering after stop, preserve edits made during hydration, and release preview URLs without waiting for image decoding.
 - Save local guild icons atomically, reject stale pickers and writes after stop, and retain the MIME type of images identified by extension.
 - Cancel the entire clip upload when stopped or closed, keep cancellation scoped to its modal, reject account changes before later sends, and release unused picker tokens.
+- Stop Windows release and build checks on the first failed native command and report failed source-channel updates immediately.
 - Preserve expanded editor component identity when a parent supplies a new render callback.
 - Bound favorite-file metadata to 64 KiB, stop decompression in bounded chunks and validate saved attachment fields and destinations.
 - Validate local clip metadata, cap its JSON at 1 MiB, remove temporary directories after failed writes, and retain failed cleanup tokens for retry.

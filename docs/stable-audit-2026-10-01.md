@@ -73,6 +73,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Font search ownership: remove unused font variant, axis and category parsing, and validate only the metadata rendered by the UI. Each query effect owns its request and cancellable debounce. Replacement/unmount abort the old request and discard its completion; the input stays available during loading. Reuse font removal on stop. Both lifecycle regressions fail before the change and pass afterwards; source lint and TypeScript pass. Universal font-variable selectors remain a separate finding pending compatibility evidence.
 
+- Release validation failure propagation: enable PowerShell native-command errors in Windows release tests and build blocks, and explicitly reject each failed update-channel write. Runtime proofs execute the extracted workflow bodies through PowerShell with controlled native commands. Before the change, an early test/build failure and a failed channel update return success after later commands run. Afterwards, each stops at the failed command, including first/middle/final test failures. Ubuntu CI already uses Bash with exit-on-error. No release was dispatched by these proofs.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

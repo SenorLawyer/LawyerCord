@@ -126,6 +126,7 @@ jobs:
 
             - name: Validate Windows build
               run: |
+                  $PSNativeCommandUseErrorActionPreference = $true
                   pnpm buildStandalone
                   pnpm auditReleaseArtifacts dist
 

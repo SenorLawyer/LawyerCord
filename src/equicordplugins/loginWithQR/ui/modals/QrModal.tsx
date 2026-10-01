@@ -9,7 +9,6 @@ import { QrCodeIcon } from "@components/Icons";
 import { wrapTab } from "@components/settings";
 import loginWithQR from "@equicordplugins/loginWithQR";
 import { images } from "@equicordplugins/loginWithQR/images";
-import { findByPropsLazy } from "@webpack";
 import {
     RestAPI,
     useEffect,
@@ -39,7 +38,7 @@ interface Preview {
 interface QrModalProps {
     exit: (err: string | null) => void;
     setPreview: (
-        media: HTMLImageElement | HTMLVideoElement | null,
+        media: HTMLImageElement | null,
         location?: QRCode["location"]
     ) => Promise<void>;
 }
@@ -54,8 +53,6 @@ const limitSize = (width: number, height: number) => {
         return { h, w: (width / height) * h };
     }
 };
-
-const { getVideoDeviceId } = findByPropsLazy("getVideoDeviceId");
 
 const tokenRegex = /^https:\/\/discord\.com\/ra\/([\w-]+)$/;
 const verifyUrl = async (
@@ -158,28 +155,7 @@ function QrModal() {
                     size.width = (media.width / media.height) * 34;
                 }
 
-                let source: ReactElement;
-                if (media instanceof HTMLImageElement)
-                    source = (
-                        <img src={media.src} style={{ width: "100%", height: "100%" }} />
-                    );
-                else
-                    source = (
-                        <video
-                            controls={false}
-                            style={{ width: "100%", height: "100%" }}
-                            ref={e => {
-                                if (e) {
-                                    e.srcObject = media.srcObject;
-                                    if (!media.paused) {
-                                        e.play().catch(error => {
-                                            console.error("Error playing the video:", error);
-                                        });
-                                    }
-                                }
-                            }}
-                        />
-                    );
+                const source = <img src={media.src} style={{ width: "100%", height: "100%" }} />;
 
                 if (!location) return res(setPreview({ source, size }));
                 else {

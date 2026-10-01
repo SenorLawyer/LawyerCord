@@ -87,6 +87,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 ## Completion requirements
 
+- QR scanner lifetime: delete FileReader base64 copies and the mutable callback wrapper. Each scan owns its image URL, decoding callbacks, preview timer, initiating account and confirmation. Stop, account connection changes and tab close invalidate the scan; image failures reset it and duplicate inputs cannot overlap. Confirmation preserves the 1,250 ms hold for pointer, Space and Enter input. Cancellation errors are handled without logging the handshake. Nine added checks fail against the preceding source; all 15 scanner/confirmation tests pass afterwards, including bounded canvas dimensions and URL cleanup. Source/style lint and TypeScript pass. Already submitted REST requests cannot be cancelled by the wrapper; late handshakes are cancelled only under their original account. No live authentication request was sent.
+
 - Account for every baseline path with an explicit disposition and evidence scope.
 - Finish the semantic review and validate every changed behavior with the smallest sufficient proof.
 - Align package version, changelog and release documentation.

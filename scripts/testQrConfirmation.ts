@@ -21,6 +21,9 @@ function fixture(token: string | null = "handshake") {
     let aborts = 0;
     let controllers = 0;
     let sequence = 0;
+    let account = "first";
+    let closes = 0;
+    const controller = new AbortController();
     const slots: { value?: unknown; deps?: unknown[]; cleanup?: () => void; }[] = [];
     const effects: (() => void)[] = [];
     const timers = new Map<number, { callback: () => void; duration: number; }>();
@@ -52,11 +55,11 @@ function fixture(token: string | null = "handshake") {
             constructor() { controllers++; }
             start() {} get() { return { progress: "0%" }; }
         } }) },
-        "@webpack/common": { ...React, Modal: "modal", openModal: (factory: (props: Node["props"]) => Node) => factory({ onClose: () => {} }),
+        "@webpack/common": { ...React, UserStore: { getCurrentUser: () => ({ id: account }) }, Modal: "modal", openModal: (factory: (props: Node["props"]) => Node) => factory({ onClose: () => { closes++; } }),
             RestAPI: { post: ({ body }: { body: unknown; }) => new Promise<void>((resolve, reject) => requests.push({ body, resolve, reject: () => reject(new Error("Request failure")) })) } },
         "..": { cl: (...values: unknown[]) => values.filter(Boolean).join(" ") }
     };
-    const { outputText } = transpileModule(readFileSync("src/equicordplugins/loginWithQR/ui/modals/VerifyModal.tsx", "utf8"), {
+    const { outputText } = transpileModule(readFileSync(process.env.AUDIT_QR_CONFIRM_SOURCE ?? "src/equicordplugins/loginWithQR/ui/modals/VerifyModal.tsx", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022, jsx: JsxEmit.React }
     });
     const { default: open } = runInNewContext(`${outputText}\nexports;`, {
@@ -66,7 +69,7 @@ function fixture(token: string | null = "handshake") {
         requestAnimationFrame: (callback: () => void) => { frames.set(++sequence, callback); return sequence; }, cancelAnimationFrame: (id: number) => frames.delete(id),
         require: (name: string) => { assert.ok(name in mocks, name); return mocks[name]; }
     });
-    const node = open(token, () => { aborts++; });
+    const node = open(token, (confirmed: boolean) => { if (!confirmed) aborts++; }, controller.signal, "first");
     const Component = node.type;
     if (typeof Component !== "function") throw new Error("Missing verification component.");
     let button: Node | undefined;
@@ -79,10 +82,14 @@ function fixture(token: string | null = "handshake") {
         node.children.forEach(walk);
     };
     const event = { button: 0, isPrimary: true, pointerId: 1, currentTarget: { setPointerCapture() {} } };
-    const invoke = (name: string) => { const callback = button?.props[name]; assert.equal(typeof callback, "function", name); (callback as (event: unknown) => void)(event); };
+    const invoke = (name: string, value: unknown = event) => { const callback = button?.props[name]; assert.equal(typeof callback, "function", name); (callback as (event: unknown) => void)(value); };
     return { timers, frames, requests, aborts: () => aborts, controllers: () => controllers,
         render() { cursor = 0; button = undefined; const result = Component(node.props); walk(result); effects.splice(0).forEach(effect => effect()); return result; },
         press() { invoke("onPointerDown"); }, release() { invoke("onPointerUp"); }, cancel() { invoke("onPointerCancel"); }, blur() { invoke("onBlur"); }, loseCapture() { invoke("onLostPointerCapture"); },
+        keyDown(key: string, repeat = false) { invoke("onKeyDown", { key, repeat, preventDefault() {} }); },
+        keyUp(key: string) { invoke("onKeyUp", { key, preventDefault() {} }); },
+        abort() { controller.abort(); }, closes: () => closes,
+        switchAccount() { account = "second"; },
         tick() { const pending = [...timers.values()]; timers.clear(); pending.forEach(({ callback }) => callback()); },
         unmount() { slots.forEach(slot => slot?.cleanup?.()); }
     };
@@ -177,4 +184,35 @@ test("failed QR confirmation shows failure and missing handshakes never submit",
     missing.tick();
     assert.equal(missing.requests.length, 0);
     assert.equal(missing.frames.size, 0);
+});
+
+test("keyboard confirmation requires a full hold and ignores key repeats", async () => {
+    for (const key of [" ", "Enter"]) {
+        const f = fixture(); f.render();
+        f.keyDown(key); f.keyUp(key); f.tick();
+        assert.equal(f.requests.length, 0);
+        f.keyDown(key); f.keyDown(key, true);
+        assert.equal(f.timers.size, 1);
+        f.tick();
+        assert.equal(f.requests.length, 1);
+        f.requests[0].resolve(); await settle(); f.unmount();
+        assert.equal(f.aborts(), 0);
+    }
+});
+
+test("aborted QR scans close verification and account changes invalidate a pending hold", () => {
+    const f = fixture(); f.render(); f.press(); f.abort(); f.tick();
+    assert.equal(f.closes(), 1);
+    assert.equal(f.requests.length, 0);
+    f.unmount(); assert.equal(f.aborts(), 1);
+    const changed = fixture(); changed.render(); changed.press(); changed.switchAccount(); changed.tick();
+    assert.equal(changed.requests.length, 0);
+    changed.unmount();
+});
+
+test("QR confirmation cannot apply a response from the preceding account", async () => {
+    const f = fixture(); f.render(); f.press(); f.tick(); f.switchAccount();
+    f.requests[0].resolve(); await settle();
+    assert.ok(!JSON.stringify(f.render()).includes("QR_CODE_LOGIN_SUCCESS"));
+    f.unmount(); assert.equal(f.aborts(), 1);
 });

@@ -17,6 +17,8 @@ import { Button } from "@webpack/common";
 
 import openQrModal from "./ui/modals/QrModal";
 
+export const scans = new Set<AbortController>();
+
 const settings = definePluginSettings({
     scanQr: {
         type: OptionType.COMPONENT,
@@ -59,6 +61,13 @@ export default definePlugin({
 
     qrModalOpen: false,
 
+    flux: {
+        CONNECTION_OPEN() {
+            scans.forEach(scan => scan.abort());
+            scans.clear();
+        }
+    },
+
     start() {
         SettingsPlugin.customEntries.push({
             key: "equicord_login_with_qr",
@@ -69,6 +78,9 @@ export default definePlugin({
     },
 
     stop() {
+        this.qrModalOpen = false;
+        scans.forEach(scan => scan.abort());
+        scans.clear();
         removeFromArray(SettingsPlugin.customEntries, e => e.key === "equicord_login_with_qr");
     },
 });

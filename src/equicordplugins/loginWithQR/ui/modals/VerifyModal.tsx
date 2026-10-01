@@ -15,6 +15,7 @@ import {
     RestAPI,
     useEffect,
     useRef,
+    UserStore,
     useState } from "@webpack/common";
 
 import { cl } from "..";
@@ -23,11 +24,15 @@ type VerifyState = "verifying" | "loggedIn" | "notFound";
 
 function VerifyModal({
     token,
-    onAbort,
+    onComplete,
+    signal,
+    accountId,
     ...props
 }: {
     token: string | null;
-    onAbort: () => void;
+    onComplete: (confirmed: boolean) => void;
+    signal: AbortSignal;
+    accountId: string;
 } & RenderModalProps) {
     const [state, setState] = useState<VerifyState>(token ? "verifying" : "notFound");
     const [inProgress, setInProgress] = useState(false);
@@ -36,23 +41,34 @@ function VerifyModal({
     const active = useRef(true);
     const submitted = useRef(false);
     const confirmed = useRef(false);
+    const onClose = useRef(props.onClose);
+    onClose.current = props.onClose;
+
+    const isCurrent = () => active.current && !signal.aborted && UserStore.getCurrentUser()?.id === accountId;
 
     useEffect(() => {
         active.current = true;
+        const abort = () => {
+            active.current = false;
+            clearTimeout(timeout.current);
+            onClose.current();
+        };
+        signal.addEventListener("abort", abort, { once: true });
+        if (signal.aborted) abort();
         return () => {
             active.current = false;
             clearTimeout(timeout.current);
-            if (!confirmed.current) onAbort();
+            signal.removeEventListener("abort", abort);
+            onComplete(confirmed.current);
         };
-    }, [onAbort]);
+    }, [onComplete, signal]);
 
-    const startInput = (event: React.PointerEvent<HTMLButtonElement>) => {
-        if (!active.current || !token || state !== "verifying" || submitted.current || timeout.current !== undefined
-            || event.button !== 0 || !event.isPrimary) return;
-        event.currentTarget.setPointerCapture(event.pointerId);
+    const startHold = () => {
+        if (!isCurrent() || !token || state !== "verifying" || submitted.current || timeout.current !== undefined) return;
         setHolding(true);
         timeout.current = setTimeout(() => {
             timeout.current = undefined;
+            if (!isCurrent()) return;
             submitted.current = true;
             setInProgress(true);
             RestAPI.post({
@@ -62,15 +78,15 @@ function VerifyModal({
                 },
             })
                 .then(() => {
-                    if (!active.current) return;
+                    if (!isCurrent()) return;
                     confirmed.current = true;
                     setState("loggedIn");
                 })
                 .catch(() => {
-                    if (active.current) setState("notFound");
+                    if (isCurrent()) setState("notFound");
                 })
                 .finally(() => {
-                    if (active.current) setInProgress(false);
+                    if (isCurrent()) setInProgress(false);
                 });
         }, 1250);
     };
@@ -160,11 +176,25 @@ function VerifyModal({
                             size="medium"
                             variant="dangerPrimary"
                             className={cl("device-confirm", holding && "device-confirm-holding")}
-                            onPointerDown={startInput}
+                            onPointerDown={event => {
+                                if (event.button !== 0 || !event.isPrimary) return;
+                                event.currentTarget.setPointerCapture(event.pointerId);
+                                startHold();
+                            }}
                             onPointerUp={endInput}
                             onPointerCancel={endInput}
                             onLostPointerCapture={endInput}
                             onBlur={endInput}
+                            onKeyDown={event => {
+                                if (event.key !== " " && event.key !== "Enter") return;
+                                event.preventDefault();
+                                if (!event.repeat) startHold();
+                            }}
+                            onKeyUp={event => {
+                                if (event.key !== " " && event.key !== "Enter") return;
+                                event.preventDefault();
+                                endInput();
+                            }}
                             disabled={inProgress}
                         >
                             Hold to confirm login
@@ -194,13 +224,17 @@ function VerifyModal({
 
 export default function openVerifyModal(
     token: string | null,
-    onAbort: () => void,
+    onComplete: (confirmed: boolean) => void,
+    signal: AbortSignal,
+    accountId: string,
 ) {
     return openModal(props => (
         <VerifyModal
             {...props}
             token={token}
-            onAbort={onAbort}
+            onComplete={onComplete}
+            signal={signal}
+            accountId={accountId}
         />
     ));
 }

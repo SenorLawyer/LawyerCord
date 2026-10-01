@@ -22,6 +22,11 @@
     pointer-events: none;
 }
 
+.qrlogin-preview-image {
+    width: 100%;
+    height: 100%;
+}
+
 .qrlogin-modal-filepaste-drop {
     background-color: var(--mention-background);
 }
@@ -32,6 +37,9 @@
 }
 
 .qrlogin-preview-crosses {
+    width: 100%;
+    height: 100%;
+    position: relative;
     animation: 500ms preview-crosses cubic-bezier(0.25, 1, 0.5, 1) forwards;
 }
 

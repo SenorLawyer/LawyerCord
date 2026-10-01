@@ -93,6 +93,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Contributor modal subscriptions: replace its global settings listener with memoized displayed plugin enable paths, retain card toggle updates, supply the profile selector user dependency and handle failed profile fetches. All three regressions fail against preceding source and pass afterwards. The shared SettingsStore proof avoids 102 updates for unrelated plugin values and a theme change while retaining enable updates and cleanup. Source lint and TypeScript pass.
 
+- Husk reaction work: read settings once per search, stop at the last matching emoji using a reverse scan, reuse the rendered channel and use the shared reaction endpoint. Preserve bigint fallback and handle request rejection with one error toast and a scrubbed warning. Both regressions fail before the fix and pass afterwards, including a 10,000-emoji server whose last emoji matches. Source lint passes.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

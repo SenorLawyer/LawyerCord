@@ -111,41 +111,6 @@
     margin: 0 10px;
 }
 
-/* Shared styles for warning modal and disable all modal */
-
-.vc-warning-info {
-    gap: 15px;
-    display: grid !important;
-    flex-direction: column;
-    user-select: none;
-}
-
-.vc-warning-info img {
-    width: 70%;
-    height: auto;
-    display: block;
-    margin: auto auto 10px;
-}
-
-.vc-warning-info strong {
-    font-weight: bold;
-}
-
-.text-danger {
-    color: var(--text-feedback-critical) !important;
-    font-size: 1.2rem;
-    font-weight: bold;
-}
-
-.text-normal {
-    color: var(--text-default);
-    font-size: 1.2rem;
-}
-
-.text-normal.margin-bottom {
-    margin-bottom: 10px;
-}
-
 .vc-plugins-disable-warning,
 .vc-plugin-modal-disable-warning {
     background-color: color-mix(in srgb, var(--status-danger) 10%, transparent) !important;
@@ -161,65 +126,8 @@
     background-color: color-mix(in srgb, var(--status-danger) 40%, transparent) !important;
 }
 
-.vc-plugins-confirm-reset,
-.vc-plugin-modal-confirm-reset {
-    background-color: var(--status-danger) !important;
-    color: var(--text-default);
-}
-
-.vc-plugins-confirm-reset:hover,
-.vc-plugin-modal-confirm-reset:hover {
-    background-color: var(--text-feedback-critical) !important;
-    color: var(--text-default);
-}
-
-.vc-modal-close-button {
-    margin-left: auto !important;
-}
-
 .vc-modal-align-reset {
     align-self: end;
-}
-
-.vc-modal-footer {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.vc-modal-footer .vc-button-container {
-    gap: 10px;
-    align-items: center;
-    justify-content: space-between !important;
-}
-
-/* Specific to disable all modal */
-
-.warning-text {
-    color: var(--text-feedback-critical) !important;
-    font-size: 1.2rem !important;
-}
-
-.warning-text span {
-    font-weight: bold;
-    text-decoration: underline;
-}
-
-.visual-refresh .button-danger-background {
-    font-size: 16px;
-    background-color: rgb(240 71 71 / 10%) !important;
-    color: rgb(240 71 71) !important;
-    border: 1px solid rgb(240 71 71 / 60%) !important;
-    border-radius: 4px;
-    font-weight: 500;
-    padding: 6px 10px;
-    text-align: center;
-}
-
-.visual-refresh .button-danger-background:hover {
-    background-color: var(--status-danger-background) !important;
-    color: var(--status-danger-text) !important;
 }
 
 .visual-refresh .vc-plugins-info-card {

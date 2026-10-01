@@ -22,6 +22,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Read message color context directly and set favorite-emoji drag classes through React instead of scheduling a frame for every row.
 - Remove unused Google Font metadata, cancel replaced or closed searches and keep the search field available while loading.
 - Reuse the shared addon card for online themes and omit empty source-badge tooltips.
+- Delete unused plugin-modal layouts and obsolete warning, text and footer stylesheet overrides.
 - Decode favorite-file metadata only when saved metadata changes and compare file-row permissions by value.
 - Refresh favorite-file links outside render selectors, deduplicate active requests, bound retained links and clear pending work on stop or account changes.
 - Skip plugin registry searches for ordinary messages, remove per-card dependency maps and unused toolbox icon styles.

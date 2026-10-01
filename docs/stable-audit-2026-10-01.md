@@ -79,6 +79,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Favourite sends: browser downloads now enforce the native path's 500 MiB limit while streaming, reject redirects and unapproved destinations, and construct the File directly from bounded chunks. Delete the extra whole-file ArrayBuffer copy. Stop/account changes cancel renderer-owned lifetimes and the sender rechecks its opening account before draft mutation and send. Upload failures preserve other drafts. Two regressions fail before the change; four focused tests pass afterwards for valid metadata, draft preservation, declared/streamed limits, account changes, cancellation, timeout and upload failure. Native downloads retain their existing timeout and may finish after renderer cancellation, but the cancelled result cannot upload or send.
 
+- Plugin modal styles: remove orphaned header layouts, old warning/footer rules and unprefixed text/button overrides. The complete modal and settings sources use the remaining card, warning and confirmation classes; a repository-wide caller search found no producers for the removed selectors. Stylesheet lint passes. No component behavior changes or performance measurements are claimed for this deletion.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

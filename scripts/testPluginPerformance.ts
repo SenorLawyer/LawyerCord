@@ -10557,9 +10557,11 @@ test("folder zipping drains directory batches and rejects read and size failures
         "@api/Settings": { definePluginSettings: () => ({ store: { extensions: "" } }) },
         "@utils/constants": { EquicordDevs: {} },
         "@utils/Logger": { Logger: class {} },
+        "@utils/misc": {},
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
-        "@webpack/common": {}, fflate: {}
+        "@webpack/common": {}, "./compression": {}
     }, {}, "readDirectoryEntry");
+    const { signal } = new AbortController();
     const directory = (name: string, batches: object[][]) => ({
         name, isDirectory: true,
         createReader: () => ({ readEntries: (resolve: (entries: object[]) => void) => resolve(batches.shift() ?? []) })
@@ -10570,12 +10572,12 @@ test("folder zipping drains directory batches and rejects read and size failures
             ? reject(new Error("Read failed"))
             : resolve({ size, arrayBuffer: async () => new Uint8Array([7]).buffer })
     });
-    const files = await readDirectory(directory("root", [[file("a")], [directory("nested", [[file("b")]])]]));
+    const files = await readDirectory(directory("root", [[file("a")], [directory("nested", [[file("b")]])]]), signal);
     assert.deepEqual(Object.keys(files), ["a", "nested/b"]);
     assert.deepEqual(Array.from(files["nested/b"]), [7]);
-    await assert.rejects(readDirectory(directory("root", [[file("bad", 1, true)]])), /Read failed/);
-    await assert.rejects(readDirectory(directory("root", [[file("large", 100 * 1024 * 1024 + 1)]])), /too large/);
-    await assert.rejects(readDirectory(directory("root", [Array.from({ length: 501 }, (_, i) => file(String(i)))])), /more than 500/);
+    await assert.rejects(readDirectory(directory("root", [[file("bad", 1, true)]]), signal), /Read failed/);
+    await assert.rejects(readDirectory(directory("root", [[file("large", 100 * 1024 * 1024 + 1)]]), signal), /too large/);
+    await assert.rejects(readDirectory(directory("root", [Array.from({ length: 501 }, (_, i) => file(String(i)))]), signal), /more than 500/);
 });
 
 test("random mentions use the destination channel and preserve text when no members are loaded", () => {

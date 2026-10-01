@@ -8,7 +8,7 @@
     "types": "src/index.d.ts",
     "type": "module",
     "dependencies": {
-        "moment": "2.30.1",
+        "moment": "2.31.0",
         "type-fest": "^5.7.0"
     },
     "peerDependencies": {

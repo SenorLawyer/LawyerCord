@@ -2,6 +2,39 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 3.1.2.0 - 2026-10-01 (Nightly)
+
+### Changed
+
+- Return the Nightly codebase to Stable 3.0.1.0 for the full project audit. Later Nightly changes are removed and fixes are evaluated against Stable.
+
+### Fixed
+
+- Update vulnerable fast-uri, brace-expansion, Moment and DOMPurify dependencies.
+
+## 3.1.1.0 - 2026-09-29 (Nightly)
+
+### Fixed
+
+- Fix Windows updates failing when the installed archive is locked, retaining a backup and restoring it after a failed write.
+- Load Discord modal components before rendering them and preserve the shared button export during startup.
+- Reduce desktop startup code by loading packaged media only when used.
+- Reduce repeated schedule formatting and log-file reads in automations.
+- Avoid repeated cloud sync attempts caused by error notifications and unnecessary V1 upload snapshots.
+- Reduce redundant presence checks, sticker searches, session reads, reaction renders, and hidden call timers.
+- Repair role interaction patches and route built-in media through the selected Discord audio output.
+- Update built-in presentation effects with bounded playback and complete resource cleanup.
+
+## 3.1.0.0 - 2026-09-29 (Nightly)
+
+### Added
+
+- Update built-in client presentation.
+
+### Fixed
+
+- Update the lint tooling's URI dependency to address security advisories.
+
 ## 3.0.1.0 - 2026-09-28
 
 ### Fixed

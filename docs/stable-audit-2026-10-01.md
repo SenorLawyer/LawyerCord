@@ -89,6 +89,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Numeric settings: delete the single-use serializer and validate conversion before persistence. Preserve intermediate typed text, reject blank and non-finite numbers, and reject fractional/exponent bigint input without throwing. Bigint uses a text input with a numeric keyboard so native number stepping cannot round snowflake IDs. Existing custom validators still receive the raw input string and their settings receiver. Three regressions fail against preceding source; all four focused tests pass after the fix. The broader typed-validator contract remains a separate compatibility review.
 
+- Plugin author lifecycle: stop the sequential lookup loop on modal close or author-list replacement, clear replaced lists and reject late results before creating dummy users or setting state. Preserve author order, the six-avatar bound and fallback names. Three regressions fail against preceding source; all four focused tests pass afterwards. An already submitted user lookup may complete after closing because its wrapper exposes no cancellation, but cannot continue the loop or mutate the displayed list.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

@@ -30,6 +30,7 @@ import { debounce } from "@shared/debounce";
 import { gitRemote } from "@shared/vencordUserAgent";
 import { classNameFactory } from "@utils/css";
 import { proxyLazy } from "@utils/lazy";
+import { Logger } from "@utils/Logger";
 import { Margins } from "@utils/margins";
 import { classes, isObjectEmpty } from "@utils/misc";
 import { useForceUpdater } from "@utils/react";
@@ -46,6 +47,7 @@ import { openContributorModal } from "./ContributorModal";
 import { GithubButton, WebsiteButton } from "./LinkIconButton";
 
 const cl = classNameFactory("vc-plugin-modal-");
+const logger = new Logger("PluginModal");
 
 const AvatarStyles = findCssClassesLazy("moreUsers", "avatar", "clickableAvatar");
 const ConfirmModal = findComponentByCodeLazy('parentComponent:"ConfirmModal"');
@@ -104,20 +106,17 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
     const [authors, setAuthors] = useState<Partial<User>[]>([]);
 
     useEffect(() => {
-        (async () => {
-            for (const [index, user] of plugin.authors.slice(0, 6).entries()) {
-                try {
-                    const author = user.id
-                        ? await UserUtils.getUser(String(user.id))
-                            .catch(() => makeDummyUser({ username: user.name }))
-                        : makeDummyUser({ username: user.name });
-
-                    setAuthors(a => [...a, author]);
-                } catch (e) {
-                    continue;
-                }
+        let active = true;
+        setAuthors([]);
+        void (async () => {
+            for (const user of plugin.authors.slice(0, 6)) {
+                const author = user.id ? await UserUtils.getUser(String(user.id)).catch(() => null) : null;
+                if (!active) return;
+                const resolvedAuthor = author ?? makeDummyUser({ username: user.name });
+                setAuthors(a => [...a, resolvedAuthor]);
             }
-        })();
+        })().catch(() => logger.warn("Could not load the plugin authors."));
+        return () => { active = false; };
     }, [plugin.authors]);
 
     function handleResetClick() {

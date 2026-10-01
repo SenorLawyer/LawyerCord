@@ -19,6 +19,7 @@ function loadFavourite() {
     const gifs: Record<string, { src: string; format: number; width: number; height: number; order: number; }> = {};
     const protoStore = { frecencyWithoutFetchingLatest: { favoriteGifs: { gifs } } };
     const mocks: Record<string, unknown> = {
+        "@api/PluginManager": {},
         "@utils/css": { classNameFactory: () => () => "" }, "@utils/discord": {},
         "@utils/lazy": { proxyLazy: (factory: () => unknown) => factory() },
         "@utils/Queue": { Queue: class {} }, "@utils/react": {},

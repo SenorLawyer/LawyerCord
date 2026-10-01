@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { isPluginEnabled } from "@api/PluginManager";
 import { classNameFactory } from "@utils/css";
 import { sendMessage } from "@utils/discord";
 import { proxyLazy } from "@utils/lazy";
@@ -11,7 +12,7 @@ import { useForceUpdater } from "@utils/react";
 import { PluginNative } from "@utils/types";
 import { Channel, MessageAttachment } from "@vencord/discord-types";
 import { findByCodeLazy, findByPropsLazy } from "@webpack";
-import { Constants, DraftType, FluxDispatcher, lodash, MessageActions, PendingReplyStore, PermissionStore, RestAPI, Toasts, UploadAttachmentStore, UploadHandler, UploadManager, useCallback, useEffect, useMemo, useRef, UserSettingsActionCreators, UserSettingsProtoStore, useStateFromStores } from "@webpack/common";
+import { Constants, DraftType, FluxDispatcher, lodash, MessageActions, PendingReplyStore, PermissionStore, RestAPI, Toasts, UploadAttachmentStore, UploadHandler, UploadManager, useCallback, useEffect, useMemo, useRef, UserSettingsActionCreators, UserSettingsProtoStore, UserStore, useStateFromStores } from "@webpack/common";
 import { deflateSync, Inflate } from "fflate";
 import { Key } from "react";
 import { JsonValue } from "type-fest";
@@ -160,57 +161,105 @@ export const isAllowedHost = proxyLazy(() => {
     return (value: string) => allowedHosts.has(value);
 });
 
-async function fetchAttachment(attachment: MessageAttachment): Promise<File> {
+const attachmentRequests = new Set<AbortController>();
+
+export function cancelAttachmentSends() {
+    for (const controller of attachmentRequests) controller.abort();
+    attachmentRequests.clear();
+}
+
+async function fetchAttachment(attachment: MessageAttachment, signal: AbortSignal): Promise<File> {
     if (!IS_WEB) {
         const result = await Native.fetchAttachment(attachment);
+        if (signal.aborted) throw new Error("Attachment download was cancelled.");
         if (!result.success) throw new Error(result.error);
         return new File([result.data], result.filename, { type: result.type });
     }
 
     const { content_type, filename } = attachment;
     const url = URL.parse(attachment.url);
-    if (!url || !isAllowedHost(url.hostname)) throw new Error("Invalid URL");
+    if (!url || url.protocol !== "https:" || url.port || url.username || url.password || !isAllowedHost(url.hostname))
+        throw new Error("Invalid attachment URL.");
 
-    const res = await fetch(url, { headers: { Accept: "*/*" } });
-    if (!res.ok) throw new Error("Server error");
+    const maxBytes = 500 * 1024 * 1024;
+    const res = await fetch(url, { headers: { Accept: "*/*" }, redirect: "error", signal });
+    if (!res.ok || !res.body || Number(res.headers.get("content-length")) > maxBytes) {
+        await res.body?.cancel();
+        throw new Error("Could not download this attachment.");
+    }
 
-    const blob = await res.blob();
-    const type = blob.type || content_type || "application/octet-stream";
-    const data = await blob.arrayBuffer();
+    const reader = res.body.getReader();
+    const chunks: Uint8Array<ArrayBuffer>[] = [];
+    let size = 0;
+    try {
+        for (;;) {
+            if (signal.aborted) throw new Error("Attachment download was cancelled.");
+            const { done, value } = await reader.read();
+            if (done) break;
+            size += value.byteLength;
+            if (size > maxBytes) throw new Error("Attachment exceeds the download size limit.");
+            chunks.push(value);
+        }
+    } finally {
+        try {
+            await reader.cancel();
+        } finally {
+            reader.releaseLock();
+        }
+    }
 
-    return new File([data], filename, { type });
+    if (signal.aborted) throw new Error("Attachment download was cancelled.");
+    return new File(chunks, filename, { type: res.headers.get("content-type") || content_type || "application/octet-stream" });
 }
 
 export async function sendAttachment(attachment: MessageAttachment, channel: Channel) {
+    const accountId = UserStore.getCurrentUser()?.id;
+    if (!accountId || !isPluginEnabled("FavouriteAnything")) return;
+    const controller = new AbortController();
+    attachmentRequests.add(controller);
+    const timeout = setTimeout(() => controller.abort(), 120_000);
+    const isCurrent = () => !controller.signal.aborted && UserStore.getCurrentUser()?.id === accountId && isPluginEnabled("FavouriteAnything");
     const { filename, title, description } = attachment;
-    const file = await fetchAttachment(attachment).catch(() =>
-        Toasts.show({ message: `Couldn't fetch ${filename}`, id: Toasts.genId(), type: Toasts.Type.FAILURE })
-    );
-    if (!file) return;
+    try {
+        const file = await fetchAttachment(attachment, controller.signal).catch(() => {
+            if (isCurrent()) Toasts.show({ message: `Couldn't fetch ${filename}`, id: Toasts.genId(), type: Toasts.Type.FAILURE });
+            return null;
+        });
+        if (!file || !isCurrent()) return;
+        clearTimeout(timeout);
 
-    // Using promptToUpload instead of addFiles directly since it has file size checks with error popups
-    await UploadHandler.promptToUpload([file], channel, DraftType.ChannelMessage).catch(() =>
-        Toasts.show({ message: `Couldn't upload ${filename}`, id: Toasts.genId(), type: Toasts.Type.FAILURE })
-    );
+        // Using promptToUpload instead of addFiles directly since it has file size checks with error popups
+        const uploaded = await UploadHandler.promptToUpload([file], channel, DraftType.ChannelMessage).then(() => true, () => {
+            if (isCurrent()) Toasts.show({ message: `Couldn't upload ${filename}`, id: Toasts.genId(), type: Toasts.Type.FAILURE });
+            return false;
+        });
+        if (!uploaded || !isCurrent()) return;
 
-    const uploads = [...UploadAttachmentStore.getUploads(channel.id, DraftType.ChannelMessage)];
-    const uploadIdx = uploads.findIndex(({ item }) => item.file === file);
-    if (uploadIdx === -1) return;
+        const uploads = [...UploadAttachmentStore.getUploads(channel.id, DraftType.ChannelMessage)];
+        const uploadIdx = uploads.findIndex(({ item }) => item.file === file);
+        if (uploadIdx === -1) return;
 
-    const reply = PendingReplyStore.getPendingReply(channel.id);
+        const reply = PendingReplyStore.getPendingReply(channel.id);
 
-    const [upload] = uploads.splice(uploadIdx);
-    UploadManager.setUploads({ uploads, channelId: channel.id, draftType: DraftType.ChannelMessage });
-    // Empty titles and descriptions are allowed
-    if (title != null) upload.filename = title;
-    if (description != null) upload.description = description;
+        const [upload] = uploads.splice(uploadIdx);
+        UploadManager.setUploads({ uploads, channelId: channel.id, draftType: DraftType.ChannelMessage });
+        // Empty titles and descriptions are allowed
+        if (title != null) upload.filename = title;
+        if (description != null) upload.description = description;
 
-    FluxDispatcher.dispatch({ type: "DELETE_PENDING_REPLY", channelId: channel.id });
+        FluxDispatcher.dispatch({ type: "DELETE_PENDING_REPLY", channelId: channel.id });
 
-    void sendMessage(channel.id, {}, false, {
-        ...MessageActions.getSendMessageOptionsForReply(reply),
-        attachmentsToUpload: [upload]
-    });
+        return await sendMessage(channel.id, {}, false, {
+            ...MessageActions.getSendMessageOptionsForReply(reply),
+            attachmentsToUpload: [upload]
+        }).then(isCurrent, () => {
+            if (isCurrent()) Toasts.show({ message: `Couldn't send ${filename}`, id: Toasts.genId(), type: Toasts.Type.FAILURE });
+            return false;
+        });
+    } finally {
+        clearTimeout(timeout);
+        attachmentRequests.delete(controller);
+    }
 }
 
 export function hasPermission(permission: bigint, channel: Channel | null): boolean {

@@ -13,7 +13,7 @@ import { AttachmentAccessory, AttachmentContextProvider, EmbedAccessory, EmbedCo
 import { SignedUrlsStore } from "./stores";
 import managedStyle from "./style.css?managed";
 import { AttachmentContextProviderProps, EmbedComponent, ExpressionPickerTabProps, ExpressionPickerView, FavouriteItem, FavouriteItemFormat } from "./types";
-import { getThumbnailUrl } from "./utils";
+import { cancelAttachmentSends, getThumbnailUrl } from "./utils";
 
 export default definePlugin({
     name: "FavouriteAnything",
@@ -26,11 +26,12 @@ export default definePlugin({
         SignedUrlsStore.start();
     },
     stop() {
+        cancelAttachmentSends();
         SignedUrlsStore.stop();
     },
     flux: {
-        CONNECTION_OPEN() { SignedUrlsStore.reset(); },
-        LOGOUT() { SignedUrlsStore.reset(); }
+        CONNECTION_OPEN() { cancelAttachmentSends(); SignedUrlsStore.reset(); },
+        LOGOUT() { cancelAttachmentSends(); SignedUrlsStore.reset(); }
     },
     patches: [
         // EMBEDS

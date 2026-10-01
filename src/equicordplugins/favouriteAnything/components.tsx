@@ -220,8 +220,7 @@ export function FilePickerItem({ url, file, channel, onResize, onSubmit, reduceP
             case canAttachFiles:
                 return async () => {
                     setIsFetching(true);
-                    await sendAttachment(attachment, channel!);
-                    ExpressionPickerStore.closeExpressionPicker();
+                    if (channel && await sendAttachment(attachment, channel)) ExpressionPickerStore.closeExpressionPicker();
                     setIsFetching(false);
                 };
             case canSendMessages:

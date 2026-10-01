@@ -77,6 +77,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Favourite signed-link ownership: delete the single-use generic batch queue and move refresh scheduling out of store selectors. Keep one sequential request of up to 50 URLs, deduplicate queued and active URLs, bound retained links to 1,000 and reject expired/invalid results. Stop and connection/account changes clear pending work and invalidate late completions. A runtime proof against the preceding commit executes duplicate requests queued by repeated reads; five focused lifecycle tests pass after the change, along with metadata tests, source lint and TypeScript. Discord's REST wrapper does not expose cancellation, so an already submitted request can finish after stop, but its result cannot update the store or schedule another batch.
 
+- Favourite sends: browser downloads now enforce the native path's 500 MiB limit while streaming, reject redirects and unapproved destinations, and construct the File directly from bounded chunks. Delete the extra whole-file ArrayBuffer copy. Stop/account changes cancel renderer-owned lifetimes and the sender rechecks its opening account before draft mutation and send. Upload failures preserve other drafts. Two regressions fail before the change; four focused tests pass afterwards for valid metadata, draft preservation, declared/streamed limits, account changes, cancellation, timeout and upload failure. Native downloads retain their existing timeout and may finish after renderer cancellation, but the cancelled result cannot upload or send.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

@@ -12,6 +12,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Coalesce stream tracking and event bursts into one frame and skip primary-video layout scans with a sole audio source.
 - Initialize the automation tab on first view and its builder on first use while keeping the engine's startup timing.
 - Clone only selected blocks when duplicating part of an automation.
+- Guess codeblock languages only when no tag was supplied, and skip guessing for blocks over 50,000 characters.
 
 ### Fixed
 

@@ -8,6 +8,7 @@ import { isPluginEnabled } from "@api/PluginManager";
 import shikiCodeblocks from "@plugins/shikiCodeblocks.desktop";
 import { hljs, requireHljs } from "@plugins/shikiCodeblocks.desktop/utils/misc";
 import { EquicordDevs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 
 const PRIMARY_AUTO_LANGUAGES = [
@@ -75,7 +76,6 @@ const MINIMUM_CHARACTERS = 16;
 const MINIMUM_RELEVANCE = 4;
 const MINIMUM_RELEVANCE_WITH_STRONG_SIGNAL = 2;
 const MINIMUM_CONFIDENCE_GAP = 2;
-const MINIMUM_OVERRIDE_RELEVANCE_ADVANTAGE = 2;
 const SECONDARY_MINIMUM_LINES = 4;
 const SECONDARY_MINIMUM_CHARACTERS = 48;
 const SECONDARY_MINIMUM_RELEVANCE = 10;
@@ -160,7 +160,6 @@ type RenderHighlighterArgs = Parameters<NonNullable<typeof shikiCodeblocks.rende
 type RenderHighlighter = NonNullable<typeof shikiCodeblocks.renderHighlighter>;
 type DetectionResult = {
     language: string | null;
-    source: "hint" | "auto" | null;
     relevance: number;
     confidenceGap: number;
 };
@@ -169,6 +168,7 @@ let originalShikiRender: RenderHighlighter | null = null;
 let primaryDetectableLanguagesCache: string[] | null = null;
 let secondaryDetectableLanguagesCache: string[] | null = null;
 const detectionCache = new Map<string, DetectionResult>();
+const logger = new Logger("AutoCodeblockLanguage");
 
 function clearDetectionCaches() {
     primaryDetectableLanguagesCache = null;
@@ -204,14 +204,6 @@ function getLineCount(content: string) {
     }
 
     return count;
-}
-
-function getHighlightRelevance(content: string, language: string) {
-    try {
-        return hljs.highlight(content, { language, ignoreIllegals: true }).relevance ?? 0;
-    } catch {
-        return -1;
-    }
 }
 
 function detectHintedLanguage(content: string) {
@@ -272,7 +264,6 @@ function runAutoDetection(content: string, languages: string[]): DetectionResult
         if (!language) {
             return {
                 language: null,
-                source: null,
                 relevance: 0,
                 confidenceGap: 0,
             };
@@ -284,14 +275,12 @@ function runAutoDetection(content: string, languages: string[]): DetectionResult
 
         return {
             language,
-            source: "auto",
             relevance,
             confidenceGap,
         };
     } catch {
         return {
             language: null,
-            source: null,
             relevance: 0,
             confidenceGap: 0,
         };
@@ -303,7 +292,6 @@ function detectLanguageResult(content: string): DetectionResult {
     if (!trimmed) {
         return {
             language: null,
-            source: null,
             relevance: 0,
             confidenceGap: 0,
         };
@@ -320,7 +308,6 @@ function detectLanguageResult(content: string): DetectionResult {
     if (hintedLanguage) {
         const result: DetectionResult = {
             language: hintedLanguage,
-            source: "hint",
             relevance: Number.POSITIVE_INFINITY,
             confidenceGap: Number.POSITIVE_INFINITY,
         };
@@ -329,14 +316,14 @@ function detectLanguageResult(content: string): DetectionResult {
     }
 
     const strongSignal = hasStrongSignal(trimmed);
+    const lineCount = getLineCount(trimmed);
     const meetsLengthThreshold =
-        getLineCount(trimmed) >= MINIMUM_LINES ||
+        lineCount >= MINIMUM_LINES ||
         trimmed.length >= MINIMUM_CHARACTERS;
 
     if (!strongSignal && !meetsLengthThreshold) {
         const result: DetectionResult = {
             language: null,
-            source: null,
             relevance: 0,
             confidenceGap: 0,
         };
@@ -361,13 +348,12 @@ function detectLanguageResult(content: string): DetectionResult {
     }
 
     const shouldTrySecondaryDetection =
-        getLineCount(trimmed) >= SECONDARY_MINIMUM_LINES ||
+        lineCount >= SECONDARY_MINIMUM_LINES ||
         trimmed.length >= SECONDARY_MINIMUM_CHARACTERS;
 
     if (!shouldTrySecondaryDetection) {
         const result: DetectionResult = {
             language: null,
-            source: null,
             relevance: 0,
             confidenceGap: primaryResult.confidenceGap,
         };
@@ -387,7 +373,6 @@ function detectLanguageResult(content: string): DetectionResult {
 
     const result: DetectionResult = {
         language: null,
-        source: null,
         relevance: 0,
         confidenceGap: Math.max(primaryResult.confidenceGap, secondaryResult.confidenceGap),
     };
@@ -395,29 +380,16 @@ function detectLanguageResult(content: string): DetectionResult {
     return result;
 }
 
-function shouldOverrideLanguage(currentLanguage: string, detected: DetectionResult, content: string) {
-    if (!detected.language || detected.language === currentLanguage) return false;
-    if (detected.source === "hint") return true;
-
-    const currentRelevance = getHighlightRelevance(content, currentLanguage);
-    if (currentRelevance < 0) return true;
-
-    return (
-        detected.relevance >= MINIMUM_RELEVANCE &&
-        detected.confidenceGap >= MINIMUM_CONFIDENCE_GAP &&
-        detected.relevance >= currentRelevance + MINIMUM_OVERRIDE_RELEVANCE_ADVANTAGE
-    );
-}
-
 function installShikiWrapper() {
     if (originalShikiRender || typeof shikiCodeblocks.renderHighlighter !== "function") return;
 
-    originalShikiRender = shikiCodeblocks.renderHighlighter.bind(shikiCodeblocks);
+    const renderHighlighter = shikiCodeblocks.renderHighlighter;
+    originalShikiRender = renderHighlighter;
     shikiCodeblocks.renderHighlighter = (args: RenderHighlighterArgs) => {
         const resolvedLanguage = resolveLanguage(args.lang, args.content);
-        if (resolvedLanguage === args.lang || !resolvedLanguage) return originalShikiRender!(args);
+        if (resolvedLanguage === args.lang || !resolvedLanguage) return renderHighlighter.call(shikiCodeblocks, args);
 
-        return originalShikiRender!({
+        return renderHighlighter.call(shikiCodeblocks, {
             ...args,
             lang: resolvedLanguage,
         });
@@ -432,13 +404,8 @@ function uninstallShikiWrapper() {
 }
 
 function resolveLanguage(currentLanguage: string | undefined, content: string) {
-    const normalizedCurrentLanguage = normalizeLanguage(currentLanguage);
-    const detected = detectLanguageResult(content);
-
-    if (!normalizedCurrentLanguage) return detected.language || currentLanguage;
-    if (shouldOverrideLanguage(normalizedCurrentLanguage, detected, content)) return detected.language;
-
-    return normalizedCurrentLanguage;
+    if (currentLanguage || content.length > MAX_CACHED_CONTENT_LENGTH) return currentLanguage;
+    return detectLanguageResult(content).language || currentLanguage;
 }
 
 export default definePlugin({
@@ -467,7 +434,7 @@ export default definePlugin({
 
     start() {
         clearDetectionCaches();
-        void Promise.resolve(requireHljs()).finally(clearDetectionCaches);
+        void Promise.resolve(requireHljs()).then(clearDetectionCaches, error => logger.error("Failed to load the highlighter", error));
         installShikiWrapper();
     },
 

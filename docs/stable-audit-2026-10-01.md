@@ -39,6 +39,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Animalese sound loading: cancel replaced downloads and prevent pending messages from recreating audio after stop. Each load owns its cancellation and completion; late completions cannot replace current buffers. Regression cases cover stop, restart, rapid quality changes, returning to a loaded quality and network failure/retry. Both original lifecycle regressions fail before the change; all four tests pass after it. The new metadata and audio tests run in the existing performance check.
 
+- Codeblock language guessing: delete explicit-language overriding, its extra highlighter pass and obsolete result metadata. Preserve author-supplied tags, including plain text, and skip guessing above the existing 50,000-character bound. Untagged hints and cached detection remain; Shiki receives the original tagged props and restores the original render function on stop. Three regressions fail before the change and pass afterwards.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

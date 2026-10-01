@@ -53,6 +53,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Keep incomplete numeric setting edits visible without saving invalid values, and preserve exact bigint input without floating point stepping.
 - Cancel server asset exports on stop or account connection changes, enforce a 100 MiB total and two minute deadline, and reject failed downloads before archiving.
 - Filter ignored call events before Discord stores run, remove updates dispatched during rendering and read each channel's live call for manual dismissal.
+- Remove Orbolay readiness polling, keep socket callbacks scoped to their connection and account, and validate local commands.
 - Prevent keyboard sound setting changes from creating audio players after the plugin stops.
 - Avoid per-emoji settings reads and duplicate channel lookups when adding a Husk reaction, preserve the last matching emoji and handle failed requests.
 - Subscribe contributor cards only to their displayed enable flags, keep their user profile selector current and handle failed profile lookups.

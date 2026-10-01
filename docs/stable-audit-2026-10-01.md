@@ -45,6 +45,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Hidden call timers: extend the existing fixed-timer hook to disable scheduling when unused and include interval changes in effect ownership. Hidden self timers and absent voice connections retain hooks without scheduling ticks. Both regressions fail before the change and pass afterwards, including cleanup and interval changes. Source lint passes.
 
+- Snowfall compatibility cleanup: use standard transforms, transitions and transition events supported by the declared browser minimums. Delete prefix probing and unsafe style casts, defer SVG encoding until image snow is selected, and read viewport dimensions when the effect starts. This removes startup work from disabled Snowfall. Source lint and TypeScript pass.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

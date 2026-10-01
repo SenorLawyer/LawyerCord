@@ -8,6 +8,7 @@ import { definePluginSettings } from "@api/Settings";
 import { Heading } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
 import { EquicordDevs } from "@utils/constants";
+import { makeLazy } from "@utils/lazy";
 import definePlugin, { OptionType } from "@utils/types";
 import { createRoot, React } from "@webpack/common";
 import type { Root } from "react-dom/client";
@@ -39,7 +40,7 @@ const SnowfallCSS = `
 `;
 
 // SVG snowflake images as data URIs
-const SNOWFLAKE_SVGS = [
+const getSnowflakeSvgs = makeLazy(() => [
     // 6-pointed snowflake
     "data:image/svg+xml," + encodeURIComponent(`
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
@@ -94,7 +95,7 @@ const SNOWFLAKE_SVGS = [
             <use href="#discord" fill="#FFF" x="110" y="41.7" width="30" height="30" transform="rotate(30, 125, 56.7)"/>
         </svg>
     `),
-];
+]);
 
 const settings = definePluginSettings({
     typeOfSnow: {
@@ -132,8 +133,8 @@ const settings = definePluginSettings({
 });
 
 class CopleSnow {
-    private static winWidth = window.innerWidth;
-    private static winHeight = window.innerHeight;
+    private static winWidth = 0;
+    private static winHeight = 0;
 
     static readonly defaultOptions = {
         minSize: 10,
@@ -144,30 +145,6 @@ class CopleSnow {
         autoplay: true,
         interval: 200
     };
-
-    private static cssPrefix(propertyName: string): string | null {
-        const capitalize = propertyName.charAt(0).toUpperCase() + propertyName.slice(1);
-        const tempDiv = document.createElement("div");
-        const { style } = tempDiv;
-        const prefixes = ["Webkit", "Moz", "ms", "O"];
-
-        if (propertyName in style) return propertyName;
-        for (const prefix of prefixes) {
-            const name = prefix + capitalize;
-            if (name in style) return name;
-        }
-        return null;
-    }
-
-    private static readonly cssPrefixedNames = {
-        transform: this.cssPrefix("transform"),
-        transition: this.cssPrefix("transition")
-    };
-
-    private static readonly transitionEndEvent =
-        { WebkitTransition: "webkitTransitionEnd", OTransition: "oTransitionEnd", Moztransition: "transitionend", transition: "transitionend" }[
-        this.cssPrefixedNames.transition ?? "transition"
-        ] ?? "transitionend";
 
     private static random(min: number, max: number, deviation?: number): number {
         if (deviation !== undefined) {
@@ -181,10 +158,7 @@ class CopleSnow {
     }
 
     private static setStyle(element: HTMLElement, rules: Record<string, string | number>) {
-        for (const [name, value] of Object.entries(rules)) {
-            const cssName = CopleSnow.cssPrefixedNames[name as keyof typeof CopleSnow.cssPrefixedNames] || name;
-            (element.style as any)[cssName] = value;
-        }
+        Object.assign(element.style, rules);
     }
 
     private options = { ...CopleSnow.defaultOptions };
@@ -200,6 +174,8 @@ class CopleSnow {
 
     constructor(newOptions: Partial<typeof CopleSnow.defaultOptions> = {}) {
         Object.assign(this.options, newOptions);
+        CopleSnow.winWidth = window.innerWidth;
+        CopleSnow.winHeight = window.innerHeight;
 
         this.$snowfield = document.createElement("div");
         this.$snowfield.id = "snowfield";
@@ -222,7 +198,7 @@ class CopleSnow {
                 this.queue.push(snowflake);
             }
         };
-        this.$snowfield.addEventListener(CopleSnow.transitionEndEvent, this.transitionEndHandler);
+        this.$snowfield.addEventListener("transitionend", this.transitionEndHandler);
 
         this.visibilityHandler = () => {
             if (this.disposed) return;
@@ -260,7 +236,7 @@ class CopleSnow {
         }
 
         snowflake.className = `snowflake snowflake-${type}`;
-        (snowflake as any).dataset.type = type;
+        snowflake.dataset.type = type;
 
         return snowflake;
     }
@@ -365,7 +341,7 @@ class CopleSnow {
         if (this.$snowfield.parentNode) {
             this.$snowfield.remove();
         }
-        this.$snowfield.removeEventListener(CopleSnow.transitionEndEvent, this.transitionEndHandler);
+        this.$snowfield.removeEventListener("transitionend", this.transitionEndHandler);
         window.removeEventListener("resize", this.resizeHandler);
         document.removeEventListener("visibilitychange", this.visibilityHandler);
     }
@@ -394,7 +370,7 @@ function getCurrentSnowOptions(): Partial<typeof CopleSnow.defaultOptions> {
         interval: 1000 / settings.store.flakesPerSecond
     };
 
-    if (snowType === "image") snowOptions.content = SNOWFLAKE_SVGS;
+    if (snowType === "image") snowOptions.content = getSnowflakeSvgs();
     else if (snowType === "text") snowOptions.content = "❄";
 
     return snowOptions;

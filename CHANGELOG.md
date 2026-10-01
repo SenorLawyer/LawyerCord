@@ -11,6 +11,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 ### Fixed
 
 - Update vulnerable fast-uri, brace-expansion, Moment and DOMPurify dependencies.
+- Prevent duplicate declarative plugin registrations and release manager-owned handlers even when a plugin stop callback fails.
 
 ## 3.1.1.0 - 2026-09-29 (Nightly)
 

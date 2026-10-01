@@ -91,6 +91,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Plugin author lifecycle: stop the sequential lookup loop on modal close or author-list replacement, clear replaced lists and reject late results before creating dummy users or setting state. Preserve author order, the six-avatar bound and fallback names. Three regressions fail against preceding source; all four focused tests pass afterwards. An already submitted user lookup may complete after closing because its wrapper exposes no cancellation, but cannot continue the loop or mutate the displayed list.
 
+- Contributor modal subscriptions: replace its global settings listener with memoized displayed plugin enable paths, retain card toggle updates, supply the profile selector user dependency and handle failed profile fetches. All three regressions fail against preceding source and pass afterwards. The shared SettingsStore proof avoids 102 updates for unrelated plugin values and a theme change while retaining enable updates and cleanup. Source lint and TypeScript pass.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

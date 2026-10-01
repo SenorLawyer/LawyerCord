@@ -48,6 +48,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Preserve expanded editor component identity when a parent supplies a new render callback.
 - Remove nested switch labels while preserving row activation, keyboard toggling and accessible names.
 - Keep incomplete numeric setting edits visible without saving invalid values, and preserve exact bigint input without floating point stepping.
+- Subscribe contributor cards only to their displayed enable flags, keep their user profile selector current and handle failed profile lookups.
 - Stop closed or changed plugin modals from appending stale authors or creating fallback users after a lookup finishes.
 - Keep QR confirmation timers across rerenders, cancel partial holds on release or close, prevent duplicate submissions and retain successful login state during cleanup.
 - Own QR image decoding, preview delays and handshakes per scan, release image URLs, reject stale account results and support keyboard confirmation holds.

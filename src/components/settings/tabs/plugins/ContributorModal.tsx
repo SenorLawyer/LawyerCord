@@ -13,6 +13,7 @@ import { Paragraph } from "@components/Paragraph";
 import { EquicordDevsById, VencordDevsById } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import { fetchUserProfile } from "@utils/discord";
+import { Logger } from "@utils/Logger";
 import { pluralise } from "@utils/misc";
 import { RenderModalProps, User } from "@vencord/discord-types";
 import { Modal, openModal, showToast, useEffect, useMemo, UserProfileStore, useStateFromStores } from "@webpack/common";
@@ -23,19 +24,18 @@ import { GithubButton, WebsiteButton } from "./LinkIconButton";
 import { PluginCard } from "./PluginCard";
 
 const cl = classNameFactory("vc-author-modal-");
+const logger = new Logger("ContributorModal");
 
 export function openContributorModal(user: User) {
     openModal(modalProps => <ContributorModal user={user} modalProps={modalProps} />);
 }
 
 function ContributorModal({ user, modalProps }: { user: User; modalProps: RenderModalProps; }) {
-    useSettings();
-
-    const profile = useStateFromStores([UserProfileStore], () => UserProfileStore.getUserProfile(user.id));
+    const profile = useStateFromStores([UserProfileStore], () => UserProfileStore.getUserProfile(user.id), [user.id]);
 
     useEffect(() => {
         if (!profile && !user.bot && user.id)
-            fetchUserProfile(user.id);
+            fetchUserProfile(user.id).catch(() => logger.warn("Could not load contributor profile."));
     }, [user.id, user.bot, profile]);
 
     const githubName = profile?.connectedAccounts?.find(a => a.type === "github")?.name;
@@ -54,6 +54,9 @@ function ContributorModal({ user, modalProps }: { user: User; modalProps: Render
             .filter(p => !p.name.endsWith("API"))
             .sort((a, b) => Number(a.required ?? false) - Number(b.required ?? false));
     }, [user.id, user.username]);
+
+    const enabledSettings = useMemo(() => plugins.map(plugin => `plugins.${plugin.name}.enabled` as const), [plugins]);
+    useSettings(enabledSettings);
 
     const ContributedHyperLink = <Link href="https://github.com/ProtonDev-sys/ProtonnCord">contributed</Link>;
 

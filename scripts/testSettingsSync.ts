@@ -793,7 +793,7 @@ test("cloud checkpoints preserve persisted fields and reject intervening setting
         const plain = { cloud: { settingsSyncVersion: 1 }, plugins: { Sound: { value: "original" } } };
         let persisted = { ...structuredClone(plain), cloud: { ...plain.cloud, otherWindow: true }, otherWindow: true };
         const storage = { Vencord_settingsDirty: "true" };
-        const notifications: { color: string }[] = [];
+        const notifications: { color: string; noPersist?: boolean; }[] = [];
         let manifests = 0;
         let edited = false;
         const store = {
@@ -853,6 +853,7 @@ test("cloud checkpoints preserve persisted fields and reject intervening setting
         assert.equal(manifests, !edited && version === "v2" ? 1 : 0);
         assert.equal(notifications.some(({ color }) => color === "var(--red-360)"), edited);
         assert.equal(notifications.length, 1);
+        assert.equal(notifications[0].noPersist, true, "sync feedback must not write the notification log and schedule another upload");
     }
 });
 
@@ -864,7 +865,7 @@ test("cloud JSON failures do not copy response contents into logs or notificatio
         const legacy = scenario === "timestamp";
         const writes: string[] = [];
         const logs: string[] = [];
-        const notifications: { body: string; color?: string }[] = [];
+        const notifications: { body: string; color?: string; noPersist?: boolean; }[] = [];
         const plain = { cloud: { settingsSyncVersion: 1 } };
         const storage = { Vencord_settingsDirty: "true" };
         const modules: Record<string, unknown> = {
@@ -895,6 +896,7 @@ test("cloud JSON failures do not copy response contents into logs or notificatio
         assert.equal(plain.cloud.settingsSyncVersion, 1);
         assert.equal(storage.Vencord_settingsDirty, "true");
         assert.equal(notifications[0]?.color, "var(--red-360)");
+        assert.equal(notifications[0].noPersist, true, "failed sync must not queue another sync through the notification log");
         assert.equal(logs.length, 1);
         assert.doesNotMatch(logs.join(" ") + JSON.stringify(notifications), /SECRET/, scenario);
         assert.match(notifications[0].body, /invalid JSON/i);

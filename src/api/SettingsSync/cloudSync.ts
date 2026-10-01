@@ -174,6 +174,7 @@ async function applyDownloads(downloads: SyncResponse["downloads"], context: Awa
 
 function handleAuthFailure() {
     showNotification({
+        noPersist: true,
         title: "Cloud Settings",
         body: "Cloud sync was disabled because this account isn't connected. Reconnect in Cloud Settings.",
         color: "var(--yellow-360)",
@@ -230,6 +231,7 @@ async function doSyncV2(uploads: SyncRequest["uploads"], clientManifest: Manifes
         showNotification({
             title: "Cloud Settings",
             body: `Could not synchronize settings (API returned ${res.status}).`,
+            noPersist: true,
             color: "var(--red-360)",
         });
         return null;
@@ -368,6 +370,7 @@ async function deleteV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>
         showNotification({
             title: "Cloud Settings",
             body: `Could not fetch manifest for deletion (API returned ${manifestRes.status}).`,
+            noPersist: true,
             color: "var(--red-360)",
         });
         return;
@@ -399,6 +402,7 @@ async function deleteV2(context: Awaited<ReturnType<typeof getCloudSyncContext>>
     showNotification({
         title: "Cloud Settings",
         body: "Settings deleted from cloud!",
+        noPersist: true,
         color: "var(--green-360)",
     });
 }
@@ -429,6 +433,7 @@ async function putV1(context: Awaited<ReturnType<typeof getCloudSyncContext>>, m
         showNotification({
             title: "Cloud Settings",
             body: `Could not synchronize settings to cloud (API returned ${res.status}).`,
+            noPersist: true,
             color: "var(--red-360)",
         });
         return;
@@ -502,6 +507,7 @@ async function getV1(context: Awaited<ReturnType<typeof getCloudSyncContext>>, s
         showNotification({
             title: "Cloud Settings",
             body: `Could not synchronize settings from the cloud (API returned ${res.status}).`,
+            noPersist: true,
             color: "var(--red-360)",
         });
         return false;
@@ -574,6 +580,7 @@ async function deleteV1(context: Awaited<ReturnType<typeof getCloudSyncContext>>
         showNotification({
             title: "Cloud Settings",
             body: `Could not delete settings (API returned ${res.status}).`,
+            noPersist: true,
             color: "var(--red-360)",
         });
         return;
@@ -583,6 +590,7 @@ async function deleteV1(context: Awaited<ReturnType<typeof getCloudSyncContext>>
     showNotification({
         title: "Cloud Settings",
         body: "Settings deleted from cloud!",
+        noPersist: true,
         color: "var(--green-360)",
     });
 }
@@ -636,6 +644,7 @@ export async function putCloudSettings(manual?: boolean) {
             showNotification({
                 title: "Cloud Settings",
                 body: `Could not synchronize settings to the cloud (${String(e)}).`,
+                noPersist: true,
                 color: "var(--red-360)",
             });
         }
@@ -666,6 +675,7 @@ export async function getCloudSettings(shouldNotify = true, force = false) {
             showNotification({
                 title: "Cloud Settings",
                 body: `Could not synchronize settings from the cloud (${String(e)}).`,
+                noPersist: true,
                 color: "var(--red-360)",
             });
             return false;
@@ -691,6 +701,7 @@ export async function deleteCloudSettings() {
             showNotification({
                 title: "Cloud Settings",
                 body: `Could not delete settings (${String(e)}).`,
+                noPersist: true,
                 color: "var(--red-360)",
             });
         }
@@ -723,6 +734,7 @@ export async function eraseAllCloudData() {
             showNotification({
                 title: "Cloud Integrations",
                 body: "Successfully erased all data.",
+                noPersist: true,
                 color: "var(--green-360)",
             });
         } catch (error: unknown) {
@@ -731,6 +743,7 @@ export async function eraseAllCloudData() {
             showNotification({
                 title: "Cloud Integrations",
                 body: `Could not finish erasing cloud data (${String(error)}).`,
+                noPersist: true,
                 color: "var(--red-360)",
             });
         }

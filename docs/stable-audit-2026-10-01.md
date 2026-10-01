@@ -38,3 +38,5 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 - Open the PR with only `release:nightly`, attach it to this chat and enable auto-merge.
 
 Signed-in Discord behavior and provider-dependent integrations require separate runtime evidence. Source inspection and mocked tests cannot establish that every possible defect has been eliminated.
+
+Cloud feedback regression: two tests fail against Stable because operation notifications persist to the notification log, which marks cloud data dirty and schedules another upload. All 49 SettingsSync tests pass after making cloud operation feedback transient. TypeScript and source lint pass.

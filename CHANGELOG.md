@@ -29,6 +29,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Skip plugin registry searches for ordinary messages, remove per-card dependency maps and unused toolbox icon styles.
 - Ignore unrelated voice updates in user indicators and keep channel, permission and tooltip subscriptions current.
 - Export server assets with sequential bounded downloads and the shared queued ZIP compressor instead of concurrent whole-response copies and synchronous renderer compression.
+- Replace idle voice polling with store notifications and prevent disabled restart timers from being recreated by settings edits.
 - Update existing keyboard audio volumes instead of rebuilding and preloading the entire pool for every slider edit.
 - Run clip conversions one at a time and release the FFmpeg worker and its WASM memory after each operation.
 

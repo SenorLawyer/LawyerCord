@@ -112,3 +112,5 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 - Open the PR with only `release:nightly`, attach it to this chat and enable auto-merge.
 
 Signed-in Discord behavior and provider-dependent integrations require separate runtime evidence. Source inspection and mocked tests cannot establish that every possible defect has been eliminated.
+
+- Idle restart ownership: delete 30-second voice polling and the duplicate toolbox apply callback. Voice changes suspend the timer while in a call and resume the original idle deadline on leaving. Settings callbacks cannot install listeners or timers outside the plugin lifetime. Three regressions fail before the fix; all four tests pass afterwards, preserving activity throttling and unrelated-store deadline behavior. The shared-compressor full-suite fixture now uses its moved import; all 812 existing tests and timezone checks pass.

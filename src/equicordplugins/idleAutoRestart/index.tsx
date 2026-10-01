@@ -12,16 +12,16 @@ import { Menu, VoiceStateStore } from "@webpack/common";
 
 const logger = new Logger("IdleAutoRestart");
 const activityThrottleMs = 1_000;
-const voiceChannelRecheckMs = 30_000;
 const maxTimeoutMs = 2_147_483_647;
 
+let active = false;
 let lastActivity = 0;
 let lastActivityUpdate = 0;
 let restartTimeoutId: ReturnType<typeof setTimeout> | null = null;
 let activityListenersAttached = false;
 
 function clearRestartTimer() {
-    if (!restartTimeoutId) return;
+    if (restartTimeoutId === null) return;
 
     clearTimeout(restartTimeoutId);
     restartTimeoutId = null;
@@ -33,19 +33,14 @@ function getIdleMs() {
 
 function scheduleRestartCheck(delay = getIdleMs() - (Date.now() - lastActivity)) {
     clearRestartTimer();
-    if (!settings.store.isEnabled) return;
+    if (!active || !settings.store.isEnabled || VoiceStateStore.isCurrentClientInVoiceChannel()) return;
 
     restartTimeoutId = setTimeout(checkIdleTimeout, Math.min(Math.max(delay, 0), maxTimeoutMs));
 }
 
 function checkIdleTimeout() {
     restartTimeoutId = null;
-    if (!settings.store.isEnabled) return;
-
-    if (VoiceStateStore.isCurrentClientInVoiceChannel()) {
-        scheduleRestartCheck(voiceChannelRecheckMs);
-        return;
-    }
+    if (!active || !settings.store.isEnabled || VoiceStateStore.isCurrentClientInVoiceChannel()) return;
 
     if (Date.now() - lastActivity < getIdleMs()) {
         scheduleRestartCheck();
@@ -83,6 +78,7 @@ function detachActivityListeners() {
 }
 
 function applyEnabledState(enabled: boolean) {
+    if (!active) return;
     if (enabled) {
         attachActivityListeners();
         resetIdleTimer();
@@ -90,6 +86,11 @@ function applyEnabledState(enabled: boolean) {
         clearRestartTimer();
         detachActivityListeners();
     }
+}
+
+function onVoiceChange() {
+    if (VoiceStateStore.isCurrentClientInVoiceChannel()) clearRestartTimer();
+    else if (restartTimeoutId === null) scheduleRestartCheck();
 }
 
 const settings = definePluginSettings({
@@ -136,17 +137,20 @@ export default definePlugin({
                 label={settings.store.isEnabled ? "Disable Auto Idle Restart" : "Enable Auto Idle Restart"}
                 action={() => {
                     settings.store.isEnabled = !settings.store.isEnabled;
-                    applyEnabledState(settings.store.isEnabled);
                 }}
             />
         );
     },
 
     start() {
+        active = true;
+        VoiceStateStore.addChangeListener(onVoiceChange);
         if (settings.store.isEnabled) applyEnabledState(true);
     },
 
     stop() {
+        active = false;
+        VoiceStateStore.removeChangeListener(onVoiceChange);
         clearRestartTimer();
         detachActivityListeners();
     },

@@ -7839,6 +7839,69 @@ test("profile presets wait for custom status updates and propagate failure", asy
 
 });
 
+test("automation settings initialize only on first render with a stable tab identity", () => {
+    let loads = 0;
+    const Component = () => null;
+    const { LazyComponent } = loadSource("src/utils/lazyReact.tsx", { "./lazy": { makeLazy } }, {
+        React: { createElement: (type: unknown) => ({ type }) }
+    });
+    const mocks = Object.fromEntries([
+        "./styles.css", "./changelog", "./patchHelper", "./plugins", "./plugins/ContributorModal", "./plugins/PluginModal",
+        "./sync/BackupAndRestoreTab", "./sync/CloudTab", "./themes", "./updater", "./vencord"
+    ].map(name => [name, {}]));
+    const tabs = loadSource("src/components/settings/tabs/index.ts", {
+        ...mocks,
+        "@utils/lazyReact": { LazyComponent },
+        "./BaseTab": { wrapTab: (component: { displayName?: string; }, name: string) => { component.displayName = `${name}SettingsTab`; return component; } },
+        "./automations": { __esModule: true, get default() { loads++; return Component; } }
+    });
+    const Tab = tabs.AutomationsTab;
+    assert.equal(loads, 0, "importing settings must not initialize the automation tab");
+    assert.equal(Tab.displayName, "AutomationsSettingsTab");
+    assert.equal(Tab({}).type, Component);
+    assert.equal(Tab({}).type, Component);
+    assert.equal(loads, 1);
+    assert.equal(tabs.AutomationsTab, Tab);
+});
+
+test("automation builder initializes when opened rather than when the tab is viewed", () => {
+    let loads = 0;
+    const opened: unknown[] = [];
+    const automation = { id: "new" };
+    const current = { loaded: true, systemEnabled: true, automations: [], drafts: [], runs: [], guilds: [], globalLimit: 1 };
+    const mocks = Object.fromEntries([
+        "./builder.css", "./styles.css", "@components/Button", "@components/Divider", "@components/FormSwitch", "@components/Heading",
+        "@components/Icons", "@components/Paragraph", "@components/settings/AddonCard", "@components/settings/QuickAction", "@components/settings/SpecialCard",
+        "@utils/discord", "@utils/web", "./blocks", "./fields", "./openRouter", "./RunHistory", "./workflow"
+    ].map(name => [name, {}]));
+    const modules: Record<string, object> = {
+        ...mocks,
+        "@components/settings/tabs/BaseTab": { wrapTab: (component: unknown) => component },
+        "@utils/margins": { Margins: {} },
+        "@webpack/common": { React: {
+            useSyncExternalStore: () => current, useEffect() {}, useState: (value: unknown) => [value, () => {}],
+            createElement: (type: unknown, props: object | null, ...children: unknown[]) => ({ type, props: { ...props, children } })
+        } },
+        "./engine": {},
+        "./model": { createAutomation: () => automation },
+        "./templates": { TEMPLATE_NAMES: [] },
+        "./BuilderModal": { openAutomationBuilder: (value: unknown) => opened.push(value) }
+    };
+    const { outputText } = transpileModule(readFileSync("src/components/settings/tabs/automations/index.tsx", "utf8"), {
+        compilerOptions: { jsx: JsxEmit.React, module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    });
+    const { default: Tab } = runInNewContext(outputText + "\nexports;", {
+        exports: {}, require: (name: string) => { assert.ok(name in modules, name); if (name === "./BuilderModal") loads++; return modules[name]; }
+    });
+    assert.equal(loads, 0);
+    const tree = Tab();
+    assert.equal(loads, 0, "viewing the automation tab must not initialize the editor");
+    const create = tree.props.children[1].props.children[0];
+    create.props.onClick();
+    create.props.onClick();
+    assert.deepEqual(opened, [automation, automation]);
+});
+
 test("primary stream audio batches event bursts into one frame and cancels stopped work", () => {
     const frames = new Map<number, () => void>();
     let frameId = 0;
@@ -7852,6 +7915,7 @@ test("primary stream audio batches event bursts into one frame and cancels stopp
     }, {
         document: { querySelectorAll: () => { scans++; return []; } },
         window: { setInterval: (callback: () => void) => { tick = callback; return 1; }, clearInterval() {} },
+        queueMicrotask,
         requestAnimationFrame: (callback: () => void) => { frames.set(++frameId, callback); return frameId; },
         cancelAnimationFrame: (id: number) => frames.delete(id)
     });

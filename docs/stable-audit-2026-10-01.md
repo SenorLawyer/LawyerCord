@@ -42,3 +42,5 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 Signed-in Discord behavior and provider-dependent integrations require separate runtime evidence. Source inspection and mocked tests cannot establish that every possible defect has been eliminated.
 
 Cloud feedback regression: two tests fail against Stable because operation notifications persist to the notification log, which marks cloud data dirty and schedules another upload. All 49 SettingsSync tests pass after making cloud operation feedback transient. TypeScript and source lint pass.
+
+Automation UI initialization: the registry uses the existing LazyComponent and keeps the tab error boundary outside the lazy factory. The builder is required only from its open action. Both new regressions fail against Stable and pass after deferral; the engine retains its direct core import. TypeScript, source lint, standalone desktop and Chromium/Firefox/userscript builds pass. The IIFE still bundles the code, so this defers initialization rather than reducing initial download or parse size.

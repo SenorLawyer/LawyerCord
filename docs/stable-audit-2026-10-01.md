@@ -23,6 +23,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 - Dependency updates pass the audit at the low severity threshold with no known advisories. TypeScript passes.
 - Two lifecycle regressions fail against Stable and pass after the manager fix. The focused suite passes all seven tests. Duplicate starts now stop before registration; stop failures still log and release manager-owned commands, hooks, renderers and Flux callbacks. Plugin-owned cleanup failures remain reported failures.
 - Remove the obsolete Encryptcord message suppression. No bundled plugin uses that name.
+- Server list boundaries retain their registration keys when neighboring components are removed, added or reordered. The regression fails against Stable and all three focused badge/server-list tests pass with the fix.
+- Delete the permanently disabled CSS-debugging chunk path, unused script imports and an unreachable QR video preview. Existing QR callers provide images or null.
 
 ## Completion requirements
 

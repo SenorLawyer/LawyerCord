@@ -25,9 +25,15 @@ export const enum ServerListRenderPosition {
     Below,
 }
 
-const componentsIn = new Map<ComponentType, number>();
-const componentsAbove = new Map<ComponentType, number>();
-const componentsBelow = new Map<ComponentType, number>();
+interface ServerListElement {
+    priority: number;
+    id: number;
+}
+
+let nextId = 0;
+const componentsIn = new Map<ComponentType, ServerListElement>();
+const componentsAbove = new Map<ComponentType, ServerListElement>();
+const componentsBelow = new Map<ComponentType, ServerListElement>();
 
 function getRenderMap(position: ServerListRenderPosition) {
     switch (position) {
@@ -41,7 +47,8 @@ function getRenderMap(position: ServerListRenderPosition) {
 }
 
 export function addServerListElement(position: ServerListRenderPosition, renderFunction: ComponentType, priority = 0) {
-    getRenderMap(position).set(renderFunction, priority);
+    const components = getRenderMap(position);
+    components.set(renderFunction, { priority, id: components.get(renderFunction)?.id ?? nextId++ });
 }
 
 export function removeServerListElement(position: ServerListRenderPosition, renderFunction: ComponentType) {
@@ -50,9 +57,9 @@ export function removeServerListElement(position: ServerListRenderPosition, rend
 
 export const renderAll = (position: ServerListRenderPosition) => {
     return Array.from(getRenderMap(position).entries())
-        .sort((a, b) => b[1] - a[1])
-        .map(([Component], i) => (
-            <ErrorBoundary noop key={i}>
+        .sort((a, b) => b[1].priority - a[1].priority)
+        .map(([Component, { id }]) => (
+            <ErrorBoundary noop key={id}>
                 <Component />
             </ErrorBoundary>
         ));

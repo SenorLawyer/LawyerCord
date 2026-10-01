@@ -27,6 +27,39 @@ function loadSource(path: string, mocks: Record<string, object>, globals: Record
 
 const boundary = { __esModule: true, default: { wrap: (component: (props: object) => unknown) => (props: object) => component(props) } };
 
+interface RenderedElement {
+    type: unknown;
+    props: { key: number; children: RenderedElement; };
+}
+
+test("server list boundaries retain their keys when neighbors and priorities change", () => {
+    const api: {
+        addServerListElement(position: number, component: () => null, priority?: number): void;
+        removeServerListElement(position: number, component: () => null): void;
+        renderAll(position: number): RenderedElement[];
+    } = loadSource("src/api/ServerList.tsx", { "@components/ErrorBoundary": boundary }, {
+        React: { createElement: (type: unknown, props: object, children: unknown) => ({ type, props: { ...props, children } }) }
+    });
+    for (const position of [0, 1, 2]) {
+        const first = () => null;
+        const second = () => null;
+        const inserted = () => null;
+        api.addServerListElement(position, first, 10);
+        api.addServerListElement(position, second, 0);
+        const original = api.renderAll(position);
+        const secondKey = original[1].props.key;
+        api.removeServerListElement(position, first);
+        assert.equal(api.renderAll(position)[0].props.key, secondKey);
+        api.addServerListElement(position, inserted, 20);
+        assert.equal(api.renderAll(position)[1].props.key, secondKey);
+        api.addServerListElement(position, second, 30);
+        const reordered = api.renderAll(position);
+        assert.equal(reordered[0].props.children.type, second);
+        assert.equal(reordered[0].props.key, secondKey);
+        assert.notEqual(reordered[0].props.key, reordered[1].props.key);
+    }
+});
+
 test("badge registration preserves caller objects and dynamic component identity", () => {
     const api = loadSource("src/api/Badges.ts", {
         "@components/ErrorBoundary": boundary,

@@ -49,6 +49,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Preserve expanded editor component identity when a parent supplies a new render callback.
 - Remove nested switch labels while preserving row activation, keyboard toggling and accessible names.
 - Keep incomplete numeric setting edits visible without saving invalid values, and preserve exact bigint input without floating point stepping.
+- Filter ignored call events before Discord stores run, remove updates dispatched during rendering and read each channel's live call for manual dismissal.
 - Prevent keyboard sound setting changes from creating audio players after the plugin stops.
 - Avoid per-emoji settings reads and duplicate channel lookups when adding a Husk reaction, preserve the last matching emoji and handle failed requests.
 - Subscribe contributor cards only to their displayed enable flags, keep their user profile selector current and handle failed profile lookups.

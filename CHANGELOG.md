@@ -20,6 +20,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Keep ChannelTabs mention and Nitro glows static instead of continuously repainting blurred shadows and icon colors.
 - Remove the command palette's preliminary image decoding and synthetic attachment metadata from local previews.
 - Read message color context directly and set favorite-emoji drag classes through React instead of scheduling a frame for every row.
+- Reuse the shared addon card for online themes and omit empty source-badge tooltips.
 - Decode favorite-file metadata only when saved metadata changes and compare file-row permissions by value.
 - Skip plugin registry searches for ordinary messages, remove per-card dependency maps and unused toolbox icon styles.
 - Ignore unrelated voice updates in user indicators and keep channel, permission and tooltip subscriptions current.
@@ -39,6 +40,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Prevent late command palette startup from registering after stop, preserve edits made during hydration, and release preview URLs without waiting for image decoding.
 - Save local guild icons atomically, reject stale pickers and writes after stop, and retain the MIME type of images identified by extension.
 - Cancel the entire clip upload when stopped or closed, keep cancellation scoped to its modal, reject account changes before later sends, and release unused picker tokens.
+- Preserve expanded editor component identity when a parent supplies a new render callback.
 - Bound favorite-file metadata to 64 KiB, stop decompression in bounded chunks and validate saved attachment fields and destinations.
 - Validate local clip metadata, cap its JSON at 1 MiB, remove temporary directories after failed writes, and retain failed cleanup tokens for retry.
 

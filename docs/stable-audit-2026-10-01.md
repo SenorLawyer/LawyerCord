@@ -69,6 +69,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Favourite metadata boundary: cap encoded and decoded metadata at 64 KiB and feed the inflater 256 compressed bytes at a time. Reject oversized expansion before decoding its text. Validate tuple shape, field types, format and relative destinations while preserving valid saved data and missing optional-field defaults. Metadata-validation and decompression-limit regressions fail before the change; three focused tests, source lint and TypeScript pass afterwards.
 
+- Shared card ownership: delete the duplicate online-theme card layout and use AddonCard with the same editable-title input. Omit empty source-badge tooltips. Expanded sections now call their render callback instead of treating each new callback as a new component type. The identity regression fails before the change and passes afterwards, including lazy collapsed content; source lint and TypeScript pass.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

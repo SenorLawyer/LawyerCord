@@ -16,115 +16,27 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import "./AddonCard.css";
+import type { ComponentProps } from "react";
 
-import { Badge } from "@components/Badge";
-import { BaseText } from "@components/BaseText";
-import { Switch } from "@components/settings";
-import { classNameFactory } from "@utils/css";
-import { useRef } from "@webpack/common";
-import type { MouseEventHandler, ReactNode } from "react";
-
+import { AddonCard } from "./AddonCard";
 import { EditableText } from "./EditableText";
 
-const cl = classNameFactory("vc-addon-");
-
-interface Props {
-    name: ReactNode;
-    description: ReactNode;
-    enabled: boolean;
-    setEnabled: (enabled: boolean) => void;
-    disabled?: boolean;
-    isNew?: boolean;
-    onMouseEnter?: MouseEventHandler<HTMLDivElement>;
-    onMouseLeave?: MouseEventHandler<HTMLDivElement>;
-
-    infoButton?: ReactNode;
-    footer?: ReactNode;
-    author?: ReactNode;
-
+interface Props extends ComponentProps<typeof AddonCard> {
     customName?: string;
     onEditName?: (newName: string) => void;
 }
 
-export function OnlineThemeCard({
-    disabled,
-    isNew,
-    name,
-    infoButton,
-    footer,
-    author,
-    enabled,
-    setEnabled,
-    description,
-    onMouseEnter,
-    onMouseLeave,
-    customName,
-    onEditName,
-}: Props) {
-    const titleRef = useRef<HTMLDivElement>(null);
-    const titleContainerRef = useRef<HTMLDivElement>(null);
-
+export function OnlineThemeCard({ customName, name, onEditName, ...props }: Props) {
     return (
-        <div
-            className={cl("card", { "card-disabled": disabled })}
-            onMouseEnter={onMouseEnter}
-            onMouseLeave={onMouseLeave}
-        >
-            <div className={cl("header")}>
-                <div className={cl("name-author")}>
-                    <BaseText size="md" weight="bold" className={cl("name")}>
-                        <div ref={titleContainerRef} className={cl("title-container")}>
-                            <div
-                                ref={titleRef}
-                                className={cl("title")}
-                                onMouseOver={() => {
-                                    const title = titleRef.current!;
-                                    const titleContainer = titleContainerRef.current!;
-
-                                    title.style.setProperty("--offset", `${titleContainer.clientWidth - title.scrollWidth}px`);
-                                    title.style.setProperty("--duration", `${Math.max(0.5, (title.scrollWidth - titleContainer.clientWidth) / 7)}s`);
-                                }}
-                            >
-                                {onEditName ? (
-                                    <EditableText
-                                        value={customName || (name ? name.toString() : "")}
-                                        onChange={onEditName}
-                                        className={cl("editable")}
-                                    />
-                                ) : (
-                                    customName || name
-                                )}
-                            </div>
-                        </div>
-                        {isNew && <Badge text="NEW" variant="danger" />}
-                    </BaseText>
-
-                    {!!author && (
-                        <BaseText size="md" color="text-subtle" className={cl("author")}>
-                            {author}
-                        </BaseText>
-                    )}
-                </div>
-
-                {infoButton}
-
-                <Switch
-                    checked={enabled}
-                    onChange={setEnabled}
-                    disabled={disabled}
+        <AddonCard
+            {...props}
+            name={onEditName ? (
+                <EditableText
+                    value={customName || (name ? name.toString() : "")}
+                    onChange={onEditName}
+                    className="vc-addon-editable"
                 />
-            </div>
-
-            <div
-                className={cl("note")}
-                style={{ lineHeight: "1.25em", fontSize: "small" }}
-                title={description ? description.toString() : ""}
-            >
-                {description}
-            </div>
-
-            {footer && <div className={cl("footer")}>{footer}</div>}
-        </div>
+            ) : customName || name}
+        />
     );
 }

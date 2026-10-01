@@ -82,7 +82,7 @@ export function AddonCard({ disabled, isNew, sourceBadge, tooltip, name, infoBut
                     )}
                 </div>
 
-                <Tooltip text={tooltip}>
+                {sourceBadge != null && <Tooltip text={tooltip}>
                     {({ onMouseEnter, onMouseLeave }) => (
                         <div
                             className={cl("source")}
@@ -92,7 +92,7 @@ export function AddonCard({ disabled, isNew, sourceBadge, tooltip, name, infoBut
                             {sourceBadge}
                         </div>
                     )}
-                </Tooltip>
+                </Tooltip>}
 
                 {infoButton}
 

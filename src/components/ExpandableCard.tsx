@@ -22,7 +22,7 @@ export type ExpandableSectionProps = PropsWithChildren<{
 /**
  * A card component that can expand and collapse to show/hide content. The header (props.children) is always visible, and the content (props.renderContent) is only visible when expanded.
  */
-export function ExpandableSection({ children, renderContent: Content, className, initialExpanded = false }: ExpandableSectionProps) {
+export function ExpandableSection({ children, renderContent, className, initialExpanded = false }: ExpandableSectionProps) {
     const [expanded, setExpanded] = useState(initialExpanded);
 
     const Icon = expanded ? DownArrow : RightArrow;
@@ -36,7 +36,7 @@ export function ExpandableSection({ children, renderContent: Content, className,
 
             {expanded
                 ? <div className="vc-expandable-card-content">
-                    <Content />
+                    {renderContent()}
                 </div>
                 : null
             }

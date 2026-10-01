@@ -63,6 +63,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - UserVoiceShow subscriptions: combine displayed voice flags and channel into one value-compared selector so unrelated voice changes do not rerender every indicator. Subscribe to displayed channel, permissions and tooltip users with explicit dependencies. The regression fails before the change and passes afterwards; source lint and TypeScript pass.
 
+- Required helper message work: reject ineligible support messages before plugin-name scans and render its single button directly. Delete each chat card's full dependency map and conditional memo hook; compute active dependents only for required cards. Delete toolbox icon styles with no rendered users. Both helper regressions fail before the change and pass afterwards; source/style lint and TypeScript pass.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

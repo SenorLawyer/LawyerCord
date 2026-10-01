@@ -17,7 +17,7 @@ import { TooltipContainer } from "@components/TooltipContainer";
 import { EQUIBOT_USER_ID } from "@utils/constants";
 import { isEquicordGuild, isEquicordSupport } from "@utils/misc";
 import { Message } from "@vencord/discord-types";
-import { showToast, Tooltip, useMemo } from "@webpack/common";
+import { showToast, Tooltip } from "@webpack/common";
 import { JSX } from "react";
 
 import plugins, { ExcludedPlugins } from "~plugins";
@@ -61,24 +61,12 @@ export function ChatPluginCard({ url, description }: { url: string, description:
 
     const onRestartNeeded = () => showToast("A restart is required for the change to take effect!");
 
-    const depMap = useMemo(() => {
-        const o = {} as Record<string, string[]>;
-        for (const plugin in plugins) {
-            const deps = plugins[plugin].dependencies;
-            if (deps) {
-                for (const dep of deps) {
-                    o[dep] ??= [];
-                    o[dep].push(plugin);
-                }
-            }
-        }
-        return o;
-    }, []);
-
     const required = isPluginRequired(pluginName);
-    const dependents = depMap[p.name]?.filter(d => isPluginEnabled(d));
 
     if (required) {
+        const dependents = p.required ? [] : Object.values(plugins)
+            .filter(plugin => plugin.dependencies?.includes(p.name) && isPluginEnabled(plugin.name))
+            .map(plugin => plugin.name);
         const tooltipText = p.required || !dependents.length
             ? "This plugin is required for LawyerCord to function."
             : <PluginDependencyList deps={dependents} />;

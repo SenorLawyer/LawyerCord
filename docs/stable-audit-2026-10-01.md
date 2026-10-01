@@ -81,6 +81,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Plugin modal styles: remove orphaned header layouts, old warning/footer rules and unprefixed text/button overrides. The complete modal and settings sources use the remaining card, warning and confirmation classes; a repository-wide caller search found no producers for the removed selectors. Stylesheet lint passes. No component behavior changes or performance measurements are claimed for this deletion.
 
+- Shared switch labeling: replace its empty inner label with the existing container div so FormSwitch and BooleanSetting provide one label per input. A Chromium proof renders the source-derived control before/after and preserves its accessible name, row-title click, Space key, disabled behavior and standalone input click. Parent labels fall from two to one. Repository CSS callers do not depend on the old label tag. No new component prop or permanent regression suite is needed for this two-line markup correction.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

@@ -45,6 +45,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Cancel the entire clip upload when stopped or closed, keep cancellation scoped to its modal, reject account changes before later sends, and release unused picker tokens.
 - Stop Windows release and build checks on the first failed native command and report failed source-channel updates immediately.
 - Preserve expanded editor component identity when a parent supplies a new render callback.
+- Remove nested switch labels while preserving row activation, keyboard toggling and accessible names.
 - Bound favorite-file metadata to 64 KiB, stop decompression in bounded chunks and validate saved attachment fields and destinations.
 - Bound browser favorite-file downloads, remove their extra ArrayBuffer copy and prevent pending uploads from sending after an account change or plugin stop.
 - Validate local clip metadata, cap its JSON at 1 MiB, remove temporary directories after failed writes, and retain failed cleanup tokens for retry.

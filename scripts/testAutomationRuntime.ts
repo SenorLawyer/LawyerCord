@@ -214,6 +214,15 @@ async function main() {
     scheduled.schedule.weekdays = [1];
     assert.equal(new Date(nextOccurrence(scheduled, Date.parse("2026-08-31T08:00:00Z"))).toISOString(), "2026-09-07T07:00:00.000Z");
 
+    scheduled.schedule = { interval: 1, unit: "minutes", startAt: Date.parse("2026-01-01T00:00:00Z"), timezone: "UTC", activeStart: "23:59", activeEnd: "00:00" };
+    assert.equal(nextOccurrence(scheduled, scheduled.schedule.startAt), Date.parse("2026-01-01T23:59:00Z"));
+    assert.equal(nextOccurrence(scheduled, Date.parse("2026-01-01T23:59:00Z")), Date.parse("2026-01-02T23:59:00Z"));
+    scheduled.schedule.activeEnd = "23:59";
+    assert.equal(nextOccurrence(scheduled, scheduled.schedule.startAt), scheduled.schedule.startAt + 60_000);
+    scheduled.schedule = { interval: 1, unit: "days", startAt: 0, mode: "cron", timezone: "Europe/Amsterdam", cron: "30 * * * *", activeStart: "02:00", activeEnd: "03:00" };
+    assert.equal(nextOccurrence(scheduled, Date.parse("2026-03-28T23:00:00Z")), Date.parse("2026-03-30T00:30:00Z"));
+    assert.equal(nextOccurrence(scheduled, Date.parse("2026-10-24T22:00:00Z")), Date.parse("2026-10-25T00:30:00Z"));
+
     const initial = { workflow: waiting, past: [], future: [] };
     const edited = editorReducer(initial, { type: "edit", workflow: { ...waiting, name: "Changed" } });
     assert.equal(editorReducer(edited, { type: "undo" }).workflow.name, waiting.name);

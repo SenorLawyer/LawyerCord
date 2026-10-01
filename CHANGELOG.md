@@ -17,6 +17,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Stop hidden self call timers and disconnected voice timers from ticking.
 - Remove obsolete Snowfall browser prefix detection and prepare its SVG images only when image snow is selected.
 - Coalesce ChannelTabs unread fallback writes and reuse unchanged snapshots instead of cloning and serializing the entire account cache.
+- Keep ChannelTabs mention and Nitro glows static instead of continuously repainting blurred shadows and icon colors.
 
 ### Fixed
 

@@ -586,21 +586,7 @@
 /* Red glow effect for tabs with mentions */
 /* stylelint-disable-next-line no-descending-specificity */
 .vc-channeltabs-tab:has([data-has-mention="true"]) {
-    animation: vc-channeltabs-mention-pulse 2s ease-in-out infinite;
     box-shadow: 0 0 8px rgb(242 63 66 / 60%), 0 0 16px rgb(242 63 66 / 30%);
-}
-
-@keyframes vc-channeltabs-mention-pulse {
-
-    /* stylelint-disable-next-line rule-empty-line-before */
-    0%,
-    100% {
-        box-shadow: 0 0 8px rgb(242 63 66 / 60%), 0 0 16px rgb(242 63 66 / 30%);
-    }
-
-    50% {
-        box-shadow: 0 0 12px rgb(242 63 66 / 80%), 0 0 24px rgb(242 63 66 / 50%);
-    }
 }
 
 /* Enhance glow for selected tabs with mentions */
@@ -613,21 +599,7 @@
 
 /* Pink Nitro glow effect (easter egg) */
 .vc-channeltabs-tab-nitro {
-    animation: vc-channeltabs-nitro-pulse 3s ease-in-out infinite;
     box-shadow: 0 0 10px rgb(255 115 250 / 70%), 0 0 20px rgb(255 115 250 / 40%);
-}
-
-@keyframes vc-channeltabs-nitro-pulse {
-
-    /* stylelint-disable-next-line rule-empty-line-before */
-    0%,
-    100% {
-        box-shadow: 0 0 10px rgb(255 115 250 / 70%), 0 0 20px rgb(255 115 250 / 40%);
-    }
-
-    50% {
-        box-shadow: 0 0 16px rgb(255 115 250 / 90%), 0 0 32px rgb(255 115 250 / 60%);
-    }
 }
 
 /* Enhanced Nitro glow for selected tab */
@@ -645,20 +617,6 @@
 
 .vc-channeltabs-tab-nitro .vc-channeltabs-tab-inner svg path {
     fill: rgb(255 115 250) !important;
-    animation: vc-channeltabs-nitro-icon-gradient 3s ease-in-out infinite;
-}
-
-@keyframes vc-channeltabs-nitro-icon-gradient {
-
-    /* stylelint-disable-next-line rule-empty-line-before */
-    0%,
-    100% {
-        fill: rgb(255 115 250);
-    }
-
-    50% {
-        fill: rgb(255 180 250);
-    }
 }
 
 /* Tab closing animation */
@@ -755,6 +713,7 @@
     bottom: 0;
     width: 3px;
     background: var(--brand-500);
+    box-shadow: 0 0 8px var(--brand-500);
     border-radius: 3px;
     animation: vc-channeltabs-drop-indicator 0.5s ease-in-out infinite;
 }
@@ -765,12 +724,10 @@
     0%,
     100% {
         opacity: 0.6;
-        box-shadow: 0 0 8px var(--brand-500);
     }
 
     50% {
         opacity: 1;
-        box-shadow: 0 0 12px var(--brand-500);
     }
 }
 

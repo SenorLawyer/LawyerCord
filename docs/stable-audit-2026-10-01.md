@@ -49,6 +49,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - ChannelTabs fallback work: unchanged updates retain their snapshot instead of copying and serializing all cached channels. Bursts coalesce into one active write plus a latest-state write. Loads remain retryable, writes wait for hydration, and concurrent accounts retain separate records. Seven focused tests pass; three initial regressions fail before the fix. Badge selectors now supply channel dependencies, complete store subscriptions and value equality. Source lint and TypeScript pass.
 
+- ChannelTabs idle paint: remove infinite mention/Nitro shadow and icon-fill animations while retaining static colors, glows and saved glow toggles. The drag insertion marker keeps its shadow fixed and animates opacity only. Stylesheet lint passes. This removes continuous paint work visible in the CSS; affected-device FPS remains unmeasured.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

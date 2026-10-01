@@ -57,7 +57,10 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Message and emoji render work: remove CustomUserColors selected-channel lookups, the duplicate server-setting check and the exception/logging path. Use the message context already supplied by Discord. The regression fails before the fix and passes afterwards for DMs, servers, previews and gradients. DragFavoriteEmotes applies the existing pointer-events class directly in React instead of scheduling and cancelling one animation frame per emoji. Source lint and TypeScript pass.
 
+- Clip upload lifetime: each modal owns its controller, which also covers picking, reservation, stamping, conversion, PUT and later sends. Stop aborts every registered lifetime; closing one modal leaves others running. Operations retain their opening account and check it before later stages. Picker tokens are released even when metadata processing is cancelled. Delete the cached FFmpeg instance and per-file cleanup; the existing Queue runs one conversion worker, which terminates on completion, failure or cancellation. Four original regressions fail before the change; six focused tests pass afterwards. Source lint and TypeScript pass. Conversion workers are tested with lifecycle fixtures, not real codec output; future conversions reinitialize WASM.
+
 ## Completion requirements
+
 
 
 - Account for every baseline path with an explicit disposition and evidence scope.

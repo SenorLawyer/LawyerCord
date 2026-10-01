@@ -9,10 +9,10 @@ import { Flex } from "@components/Flex";
 import { Heading } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
 import type { RenderModalProps } from "@vencord/discord-types";
-import { Checkbox, Modal, openModal, showToast, Toasts, useEffect, useState } from "@webpack/common";
+import { Checkbox, Modal, openModal, showToast, Toasts, useEffect, UserStore, useState, useStateFromStores } from "@webpack/common";
 
 import { ApplicationField, BooleanField, DateTimeField, getDateTimeLocalValue, ParticipantField, TextField } from "./fields";
-import { abortActiveClipUploads, type ClipMetadata, getClipCreatedAt, getClipTitleFromName, getDefaultClipTitle, getDefaultFileName, getErrorMessage, getParticipantIds, getString, isValidDate, pickClipFile, uploadClipFile } from "./upload";
+import { type ClipMetadata, getClipCreatedAt, getClipTitleFromName, getDefaultClipTitle, getDefaultFileName, getErrorMessage, getParticipantIds, getString, isValidDate, pickClipFile, trackClipUpload, uploadClipFile } from "./upload";
 
 export function openUploadClipFileModal(channelId: string, clip?: ClipMetadata | null) {
     openModal(modalProps => (
@@ -38,20 +38,36 @@ function UploadClipFileModal({ modalProps, channelId, clip }: { modalProps: Rend
     const [applicationId, setApplicationId] = useState(getString(clip?.applicationId) ?? "");
     const [uploading, setUploading] = useState(false);
     const [parseMetadata, setParseMetadata] = useState(false);
+    const [controller] = useState(() => new AbortController());
+    const [userId] = useState(() => UserStore.getCurrentUser()?.id);
+    const currentUserId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
 
-    const canUpload = Boolean(file && fileName.trim() && title.trim() && isValidDate(createdAt)) && !uploading;
+    const canUpload = Boolean(userId && userId === currentUserId && file && fileName.trim() && title.trim() && isValidDate(createdAt)) && !uploading;
     const notice = createdAt && !isValidDate(createdAt)
         ? { message: "Created at must be a valid date.", type: "critical" as const }
         : undefined;
 
-    useEffect(() => abortActiveClipUploads, []);
+    useEffect(() => {
+        const close = () => modalProps.onClose();
+        const cleanup = trackClipUpload(controller);
+        controller.signal.addEventListener("abort", close, { once: true });
+        return () => {
+            controller.signal.removeEventListener("abort", close);
+            cleanup();
+        };
+    }, [controller]);
+    useEffect(() => {
+        if (currentUserId !== userId) controller.abort();
+    }, [controller, currentUserId, userId]);
 
     async function chooseClipFile() {
+        if (!userId || controller.signal.aborted) return;
         let result;
         try {
-            result = await pickClipFile(parseMetadata);
+            result = await pickClipFile(parseMetadata, controller.signal, userId);
             if (!result) return;
         } catch (error) {
+            if (controller.signal.aborted) return;
             showToast(getErrorMessage(error), Toasts.Type.FAILURE);
             return;
         }
@@ -89,7 +105,9 @@ function UploadClipFileModal({ modalProps, channelId, clip }: { modalProps: Rend
             applicationId: applicationId.trim() || undefined,
             remoteClipId: getString(clip?.remoteClipId),
             eventsTimeline: clip?.eventsTimeline
-        });
+        }, controller.signal, userId);
+
+        if (controller.signal.aborted) return;
 
         if (success) {
             modalProps.onClose();

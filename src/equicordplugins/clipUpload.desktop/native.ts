@@ -108,6 +108,10 @@ export async function createTempVideoFile(_: IpcMainInvokeEvent, token: string):
     }
 }
 
+export function releaseVideoFile(_: IpcMainInvokeEvent, token: unknown): void {
+    if (typeof token === "string") pendingTokens.delete(token);
+}
+
 export async function createTempVideoFileFromBytes(_: IpcMainInvokeEvent, name: string, data: Uint8Array): Promise<string | null> {
     if (typeof name !== "string" || !(data instanceof Uint8Array) || data.byteLength === 0 || data.byteLength > MAX_CLIP_SIZE) return null;
 

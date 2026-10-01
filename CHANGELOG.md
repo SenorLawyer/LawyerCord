@@ -20,6 +20,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Keep ChannelTabs mention and Nitro glows static instead of continuously repainting blurred shadows and icon colors.
 - Remove the command palette's preliminary image decoding and synthetic attachment metadata from local previews.
 - Read message color context directly and set favorite-emoji drag classes through React instead of scheduling a frame for every row.
+- Run clip conversions one at a time and release the FFmpeg worker and its WASM memory after each operation.
 
 ### Fixed
 
@@ -34,6 +35,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Retry failed ChannelTabs fallback loads and keep badge subscriptions current when channels or accounts change.
 - Prevent late command palette startup from registering after stop, preserve edits made during hydration, and release preview URLs without waiting for image decoding.
 - Save local guild icons atomically, reject stale pickers and writes after stop, and retain the MIME type of images identified by extension.
+- Cancel the entire clip upload when stopped or closed, keep cancellation scoped to its modal, reject account changes before later sends, and release unused picker tokens.
 
 ## 3.1.1.0 - 2026-09-29 (Nightly)
 

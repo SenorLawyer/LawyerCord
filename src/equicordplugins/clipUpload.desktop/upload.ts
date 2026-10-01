@@ -8,7 +8,7 @@ import { Logger } from "@utils/Logger";
 import { isObject } from "@utils/misc";
 import type { PluginNative } from "@utils/types";
 import type { User } from "@vencord/discord-types";
-import { Constants, MediaEngineStore, RestAPI, showToast, SnowflakeUtils, Toasts } from "@webpack/common";
+import { Constants, MediaEngineStore, RestAPI, showToast, SnowflakeUtils, Toasts, UserStore } from "@webpack/common";
 
 import { convertClipToMp4 } from "./ffmpeg";
 const logger = new Logger("ClipUpload");
@@ -71,6 +71,35 @@ export function abortActiveClipUploads() {
     uploadAbortControllers.clear();
 }
 
+export function trackClipUpload(controller: AbortController) {
+    uploadAbortControllers.add(controller);
+    return () => {
+        uploadAbortControllers.delete(controller);
+        controller.abort();
+    };
+}
+
+async function runClipOperation<T>(signal: AbortSignal | undefined, userId: string | undefined, run: (signal: AbortSignal, check: () => void) => Promise<T>) {
+    const controller = new AbortController();
+    const cleanup = trackClipUpload(controller);
+    const abort = () => controller.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
+    const check = () => {
+        if (controller.signal.aborted || !userId || userId !== UserStore.getCurrentUser()?.id) {
+            controller.abort();
+            throw new DOMException("Upload canceled.", "AbortError");
+        }
+    };
+    try {
+        check();
+        return await run(controller.signal, check);
+    } finally {
+        signal?.removeEventListener("abort", abort);
+        cleanup();
+    }
+}
+
 export function getClipTitleFromName(name: string) {
     const extensionStart = name.lastIndexOf(".");
     return extensionStart > 0 ? name.slice(0, extensionStart) : name;
@@ -121,14 +150,17 @@ function getTempVideoFileName(fileName: string) {
     return `${getClipTitleFromName(fileName) || defaultFileName}.mp4`;
 }
 
-async function readStampedVideoFile(token: string, name: string, type: string) {
+async function readStampedVideoFile(token: string, name: string, type: string, check: () => void) {
     const tmpToken = await Native.createTempVideoFile(token);
     if (!tmpToken) throw new Error("Couldn't prepare the selected file.");
 
     try {
-        await updateTempVideoMetadata(tmpToken);
+        check();
+        await updateTempVideoMetadata(tmpToken, check);
+        check();
 
         const data = await Native.readVideoFile(tmpToken);
+        check();
         if (!data) throw new Error("Couldn't read the selected file.");
 
         return new File([new Uint8Array(data)], name, { type });
@@ -137,10 +169,11 @@ async function readStampedVideoFile(token: string, name: string, type: string) {
     }
 }
 
-async function updateTempVideoMetadata(tmpToken: string) {
+async function updateTempVideoMetadata(tmpToken: string, check: () => void) {
     // We need the absolute path here because Discord's MediaEngineStore requires it
     // and it is a renderer-only module, so this cannot be done in the main process.
     const tmpPath = await Native.getTempVideoFilePath(tmpToken);
+    check();
     if (!tmpPath) throw new Error("Couldn't prepare the selected file.");
 
     const mediaEngine = MediaEngineStore.getMediaEngine();
@@ -149,14 +182,19 @@ async function updateTempVideoMetadata(tmpToken: string) {
     await mediaEngine.updateClipMetadata(tmpPath, "{}");
 }
 
-async function stampVideoFile(file: File, fileName: string) {
-    const tmpToken = await Native.createTempVideoFileFromBytes(getTempVideoFileName(fileName), new Uint8Array(await file.arrayBuffer()));
+async function stampVideoFile(file: File, fileName: string, check: () => void) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    check();
+    const tmpToken = await Native.createTempVideoFileFromBytes(getTempVideoFileName(fileName), bytes);
     if (!tmpToken) throw new Error("Couldn't prepare the selected file.");
 
     try {
-        await updateTempVideoMetadata(tmpToken);
+        check();
+        await updateTempVideoMetadata(tmpToken, check);
+        check();
 
         const data = await Native.readVideoFile(tmpToken);
+        check();
         if (!data) throw new Error("Couldn't read the selected file.");
 
         return new File([new Uint8Array(data)], fileName, { type: "video/mp4" });
@@ -177,19 +215,24 @@ export interface ParsedClipMetadata {
     version?: number;
 }
 
-export async function pickClipFile(parseFileMetadata: boolean) {
-    const picked = await Native.chooseVideoFile();
-    if (!picked) return null;
-
-    let metadata: ParsedClipMetadata | null = null;
-    if (parseFileMetadata) {
-        const result = await Native.parseClipFileMetadata(picked.token);
-        metadata = result?.[0] ?? null;
-    }
-
-    const file = await readStampedVideoFile(picked.token, picked.name, picked.type);
-
-    return { file, metadata };
+export function pickClipFile(parseFileMetadata: boolean, signal?: AbortSignal, userId = UserStore.getCurrentUser()?.id) {
+    return runClipOperation(signal, userId, async (_signal, check) => {
+        const picked = await Native.chooseVideoFile();
+        if (!picked) return null;
+        try {
+            check();
+            let metadata: ParsedClipMetadata | null = null;
+            if (parseFileMetadata) {
+                const result = await Native.parseClipFileMetadata(picked.token);
+                check();
+                metadata = result?.[0] ?? null;
+            }
+            const file = await readStampedVideoFile(picked.token, picked.name, picked.type, check);
+            return { file, metadata };
+        } finally {
+            await Native.releaseVideoFile(picked.token);
+        }
+    });
 }
 
 function isCompatibleClipFile(file: File) {
@@ -235,32 +278,27 @@ async function reserveClipUpload(options: ClipUploadOptions, file: File) {
     return parseAttachmentUploadResponse(response).attachments?.[0];
 }
 
-async function uploadReservedClip(attachment: NonNullable<Awaited<ReturnType<typeof reserveClipUpload>>>, uploadFile: File) {
-    const uploadAbortController = new AbortController();
-    uploadAbortControllers.add(uploadAbortController);
-
-    try {
-        const uploadResponse = await fetch(attachment.upload_url, {
-            method: "PUT",
-            body: uploadFile,
-            signal: uploadAbortController.signal,
-            referrer: "https://discord.com/",
-            referrerPolicy: "strict-origin-when-cross-origin",
-            mode: "cors",
-            credentials: "omit"
-        });
-
-        if (!uploadResponse.ok) throw new Error("Upload failed.");
-    } finally {
-        uploadAbortControllers.delete(uploadAbortController);
-    }
+async function uploadReservedClip(attachment: NonNullable<Awaited<ReturnType<typeof reserveClipUpload>>>, uploadFile: File, signal: AbortSignal) {
+    const uploadResponse = await fetch(attachment.upload_url, {
+        method: "PUT",
+        body: uploadFile,
+        signal,
+        referrer: "https://discord.com/",
+        referrerPolicy: "strict-origin-when-cross-origin",
+        mode: "cors",
+        credentials: "omit"
+    });
+    if (!uploadResponse.ok) throw new Error("Upload failed.");
 }
 
-async function sendClipUpload(uploadFile: File, options: ClipUploadOptions) {
+async function sendClipUpload(uploadFile: File, options: ClipUploadOptions, signal: AbortSignal, check: () => void) {
+    check();
     const attachment = await reserveClipUpload(options, uploadFile);
+    check();
     if (!attachment) throw new Error("Discord did not return an upload slot.");
 
-    await uploadReservedClip(attachment, uploadFile);
+    await uploadReservedClip(attachment, uploadFile, signal);
+    check();
 
     const messageResponse = await RestAPI.post({
         url: Constants.Endpoints.MESSAGES(options.channelId),
@@ -289,6 +327,7 @@ async function sendClipUpload(uploadFile: File, options: ClipUploadOptions) {
         }
     }) as RestResponse;
 
+    check();
     if (messageResponse.ok === false) throw messageResponse;
 }
 
@@ -321,24 +360,27 @@ function shouldRetryWithFFmpeg(error: unknown) {
     return getRestErrorCode(error) === 50174 || errorText.includes("not a valid clip");
 }
 
-export async function uploadClipFile(file: File, options: ClipUploadOptions) {
+export async function uploadClipFile(file: File, options: ClipUploadOptions, signal?: AbortSignal, userId = UserStore.getCurrentUser()?.id) {
     try {
-        showToast("Checking clip file.", Toasts.Type.MESSAGE);
-
-        const uploadFile = await prepareClipFile(file, options.fileName);
-
-        try {
-            await sendClipUpload(uploadFile, options);
-        } catch (error) {
-            if (!shouldRetryWithFFmpeg(error)) throw error;
-
-            showToast("Converting clip file.", Toasts.Type.MESSAGE);
-            await sendClipUpload(await stampVideoFile(await convertClipToMp4(file, options.fileName), options.fileName), options);
-        }
-
-        showToast("Clip uploaded.", Toasts.Type.SUCCESS);
-        return true;
+        return await runClipOperation(signal, userId, async (operationSignal, check) => {
+            showToast("Checking clip file.", Toasts.Type.MESSAGE);
+            const uploadFile = prepareClipFile(file, options.fileName);
+            try {
+                await sendClipUpload(uploadFile, options, operationSignal, check);
+            } catch (error) {
+                check();
+                if (!shouldRetryWithFFmpeg(error)) throw error;
+                showToast("Converting clip file.", Toasts.Type.MESSAGE);
+                const converted = await convertClipToMp4(file, options.fileName, operationSignal);
+                check();
+                const stamped = await stampVideoFile(converted, options.fileName, check);
+                await sendClipUpload(stamped, options, operationSignal, check);
+            }
+            showToast("Clip uploaded.", Toasts.Type.SUCCESS);
+            return true;
+        });
     } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return false;
         logger.error(error);
         showToast(getErrorMessage(error), Toasts.Type.FAILURE);
         return false;

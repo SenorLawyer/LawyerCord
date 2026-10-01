@@ -18,6 +18,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Remove obsolete Snowfall browser prefix detection and prepare its SVG images only when image snow is selected.
 - Coalesce ChannelTabs unread fallback writes and reuse unchanged snapshots instead of cloning and serializing the entire account cache.
 - Keep ChannelTabs mention and Nitro glows static instead of continuously repainting blurred shadows and icon colors.
+- Remove the command palette's preliminary image decoding and synthetic attachment metadata from local previews.
 
 ### Fixed
 
@@ -30,6 +31,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Ignore malformed browser startup metadata and CSS URLs outside the packaged extension stylesheet.
 - Cancel Animalese sound downloads on stop and quality changes, and prevent pending messages from restarting stopped audio.
 - Retry failed ChannelTabs fallback loads and keep badge subscriptions current when channels or accounts change.
+- Prevent late command palette startup from registering after stop, preserve edits made during hydration, and release preview URLs without waiting for image decoding.
 
 ## 3.1.1.0 - 2026-09-29 (Nightly)
 

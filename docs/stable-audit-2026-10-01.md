@@ -51,6 +51,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - ChannelTabs idle paint: remove infinite mention/Nitro shadow and icon-fill animations while retaining static colors, glows and saved glow toggles. The drag insertion marker keeps its shadow fixed and animates opacity only. Stylesheet lint passes. This removes continuous paint work visible in the CSS; affected-device FPS remains unmeasured.
 
+- Command palette lifecycle and preview: hydrate all command data before installing handlers, reject stopped/superseded starts and register synchronously. Persisted values reject obsolete reads and preserve intervening edits. Delete the preliminary image decoder, unused dimensions and synthetic attachment metadata; the effect owns and revokes each local URL directly. Three regressions fail before the change and pass afterwards. Source lint and TypeScript pass. Malformed image files now use the image element's native error/alt display instead of waiting for a preliminary decode.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

@@ -8,9 +8,9 @@ import { generateId } from "@api/Commands";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { classNameFactory } from "@utils/css";
 import { LazyComponent } from "@utils/react";
-import type { Message, MessageAttachment } from "@vencord/discord-types";
+import type { Message } from "@vencord/discord-types";
 import { find, findByCodeLazy } from "@webpack";
-import { moment, SelectedChannelStore, useEffect, useMemo, useRef, UserStore, useState } from "@webpack/common";
+import { moment, SelectedChannelStore, useEffect, useMemo, UserStore, useState } from "@webpack/common";
 
 const cl = classNameFactory("vc-cmdpal-");
 
@@ -26,88 +26,24 @@ const MessagePreview = LazyComponent<{
     hideSimpleEmbedContent: boolean;
 }>(() => find(m => m?.type?.toString().includes("previewLinkTarget:") && !m?.type?.toString().includes("HAS_THREAD")));
 
-function getImageBox(url: string): Promise<{ width: number; height: number; } | null> {
-    return new Promise(resolve => {
-        const img = new Image();
-        img.onload = () => resolve({ width: img.width, height: img.height });
-        img.onerror = () => resolve(null);
-        img.src = url;
-    });
-}
-
-async function buildAttachments(files: File[]): Promise<MessageAttachment[]> {
-    return Promise.all(files.map(async file => {
-        const url = URL.createObjectURL(file);
-        const attachment: MessageAttachment = {
-            id: generateId(),
-            filename: file.name,
-            content_type: undefined,
-            size: file.size,
-            spoiler: false,
-            url: url + "#",
-            proxy_url: url + "#",
-        };
-
-        if (file.type.startsWith("image/")) {
-            const box = await getImageBox(url);
-            if (box) {
-                attachment.width = box.width;
-                attachment.height = box.height;
-            }
-        } else if (file.type) {
-            attachment.content_type = file.type;
-        }
-
-        return attachment;
-    }));
-}
-
 export function MessageMarkdownPreview({ content, channelId, files }: {
     content: string;
     channelId?: string | null;
     files?: File[];
 }) {
-    const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
-    const attachmentsRef = useRef(attachments);
-    attachmentsRef.current = attachments;
+    const [attachments, setAttachments] = useState<{ file: File; url: string; }[]>([]);
 
     useEffect(() => {
-        if (!files?.length) {
-            setAttachments(prev => {
-                for (const attachment of prev) {
-                    URL.revokeObjectURL(attachment.url.replace(/#$/, ""));
-                }
-                return [];
-            });
-            return;
-        }
-
-        let cancelled = false;
-        void buildAttachments(files).then(next => {
-            if (cancelled) {
-                for (const attachment of next) {
-                    URL.revokeObjectURL(attachment.url.replace(/#$/, ""));
-                }
-                return;
-            }
-            setAttachments(prev => {
-                for (const attachment of prev) {
-                    URL.revokeObjectURL(attachment.url.replace(/#$/, ""));
-                }
-                return next;
-            });
-        });
+        const next = files?.map(file => ({ file, url: URL.createObjectURL(file) })) ?? [];
+        setAttachments(next);
 
         return () => {
-            cancelled = true;
-            for (const attachment of attachmentsRef.current) {
-                URL.revokeObjectURL(attachment.url.replace(/#$/, ""));
-            }
+            for (const attachment of next) URL.revokeObjectURL(attachment.url);
         };
     }, [files]);
 
     const message = useMemo((): Message | null => {
-        if (!content.trim() && attachments.length === 0) return null;
+        if (!content.trim()) return null;
 
         const resolvedChannelId = channelId ?? SelectedChannelStore.getChannelId() ?? "1337";
         const draft = createBotMessage({ content, channelId: resolvedChannelId, embeds: [] });
@@ -118,7 +54,7 @@ export function MessageMarkdownPreview({ content, channelId, files }: {
         draft.timestamp = moment();
 
         return populateMessagePrototype(draft) ?? draft;
-    }, [attachments, channelId, content]);
+    }, [channelId, content]);
 
     if (!message && attachments.length === 0) return null;
 
@@ -143,32 +79,31 @@ export function MessageMarkdownPreview({ content, channelId, files }: {
                 )}
                 {attachments.length > 0 && (
                     <div className={cl("preview-attachments")}>
-                        {attachments.map(attachment => {
-                            const src = attachment.url.replace(/#$/, "");
-                            if (attachment.width && attachment.height) {
+                        {attachments.map(({ file, url }) => {
+                            if (file.type.startsWith("image/")) {
                                 return (
                                     <img
-                                        key={attachment.id}
+                                        key={url}
                                         className={cl("preview-image")}
-                                        src={src}
-                                        alt={attachment.filename}
+                                        src={url}
+                                        alt={file.name}
                                     />
                                 );
                             }
-                            if (attachment.content_type?.startsWith("video/")) {
+                            if (file.type.startsWith("video/")) {
                                 return (
                                     <video
-                                        key={attachment.id}
+                                        key={url}
                                         className={cl("preview-video")}
-                                        src={src}
+                                        src={url}
                                         controls
                                         preload="metadata"
                                     />
                                 );
                             }
                             return (
-                                <div key={attachment.id} className={cl("preview-file")}>
-                                    {attachment.filename}
+                                <div key={url} className={cl("preview-file")}>
+                                    {file.name}
                                 </div>
                             );
                         })}

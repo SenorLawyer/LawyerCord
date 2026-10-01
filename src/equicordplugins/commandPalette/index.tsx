@@ -11,7 +11,7 @@ import definePlugin from "@utils/types";
 
 import { clearRegistry, getCommandById } from "./api/registry";
 import type { PaletteContext } from "./api/types";
-import { registerBuiltinCommands } from "./commands";
+import { loadCustomCommands, registerBuiltinCommands } from "./commands";
 import { DEFAULT_HOTKEY, settings } from "./settings";
 import { loadAliases } from "./state/aliases";
 import { loadFrecency, recordUse } from "./state/frecency";
@@ -28,6 +28,7 @@ const headlessCtx: PaletteContext = {
 };
 
 const MODIFIER_KEYS = ["meta", "ctrl", "shift", "alt"];
+let startGeneration = 0;
 
 function hasModifier(combo: string[]) {
     return combo.some(key => MODIFIER_KEYS.includes(key) && key !== "shift");
@@ -78,14 +79,17 @@ export default definePlugin({
     settings,
 
     async start() {
+        const generation = ++startGeneration;
+        await Promise.all([loadFrecency(), loadPins(), loadAliases(), loadHotkeys(), loadCustomCommands()]);
+        if (generation !== startGeneration) return;
+
+        registerBuiltinCommands();
         installKeyboardListeners();
         setGlobalKeyHandler(handleGlobalKey);
-
-        await Promise.all([loadFrecency(), loadPins(), loadAliases(), loadHotkeys()]);
-        await registerBuiltinCommands();
     },
 
     stop() {
+        startGeneration++;
         closePalette();
         removeKeyboardListeners();
         clearRegistry();

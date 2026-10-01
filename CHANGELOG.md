@@ -18,6 +18,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Prevent duplicate declarative plugin registrations and release manager-owned handlers even when a plugin stop callback fails.
 - Preserve server list component state when neighboring registrations or priorities change.
 - Prevent cloud sync feedback from changing the notification log and scheduling another upload.
+- Ignore Roblox process results from a stopped plugin run or a previous account.
 
 ## 3.1.1.0 - 2026-09-29 (Nightly)
 

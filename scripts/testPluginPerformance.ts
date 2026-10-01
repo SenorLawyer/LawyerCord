@@ -7839,6 +7839,40 @@ test("profile presets wait for custom status updates and propagate failure", asy
 
 });
 
+test("Roblox activity discards process checks after stop, restart or account change", async () => {
+    for (const interruption of ["stop", "restart", "account"]) {
+        let userId = "1045011641940574208";
+        const pending: { resolve(value: boolean): void; promise: Promise<boolean>; }[] = [];
+        const sent: unknown[] = [];
+        const { default: plugin } = loadSource("src/equicordplugins/robloxActivity.desktop/index.ts", {
+            "@api/Settings": { definePluginSettings: () => ({ store: { pollInterval: 60, channelId: "channel", guildId: "guild" } }) },
+            "@utils/constants": { EquicordDevs: {} },
+            "@utils/discord": { sendMessage: async (_channelId: string, value: unknown) => sent.push(value) },
+            "@utils/Logger": { Logger: class { error() {} } },
+            "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) }, PresenceStore: { getActivities: () => [] }, ChannelStore: { getChannel: () => ({ guild_id: "guild" }) } }
+        }, {
+            VencordNative: { pluginHelpers: { RobloxActivity: { isRobloxRunning: () => { const read = Promise.withResolvers<boolean>(); pending.push(read); return read.promise; } } } },
+            setInterval: () => 1, clearInterval() {}
+        });
+        plugin.start();
+        assert.equal(pending.length, 1);
+        if (interruption === "account") userId = "519508374581149707";
+        else plugin.stop();
+        if (interruption === "restart") plugin.start();
+        pending[0].resolve(true);
+        await setImmediate();
+        assert.equal(sent.length, 0, interruption);
+        if (interruption === "stop") plugin.start();
+        plugin.flux.PRESENCE_UPDATE();
+        assert.equal(pending.length, 2);
+        pending[1].resolve(true);
+        await setImmediate();
+        assert.equal(sent.length, 1, "current process checks must still report activity");
+        plugin.stop();
+    }
+});
+
 test("automation settings initialize only on first render with a stable tab identity", () => {
     let loads = 0;
     const Component = () => null;

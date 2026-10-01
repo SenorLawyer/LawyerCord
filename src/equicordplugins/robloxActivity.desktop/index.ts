@@ -22,6 +22,7 @@ let isPlaying = false;
 let robloxActivity: Activity | undefined;
 let pollInterval: ReturnType<typeof setInterval> | undefined;
 let polling = false;
+let generation = 0;
 
 const settings = definePluginSettings({
     guildId: {
@@ -76,10 +77,13 @@ async function checkProcess() {
     if (!isAllowedUser()) return;
     if (polling) return;
     polling = true;
+    const currentGeneration = generation;
+    const userId = UserStore.getCurrentUser()?.id;
 
     try {
         const processRunning = await Native.isRobloxRunning();
         const currentUserId = UserStore.getCurrentUser()?.id;
+        if (generation !== currentGeneration || currentUserId !== userId) return;
         robloxActivity = currentUserId
             ? PresenceStore.getActivities(currentUserId).find(activity => activity.type === 0 && /roblox/i.test(activity.name))
             : undefined;
@@ -125,10 +129,12 @@ export default definePlugin({
     enabledByDefault: true,
     settings,
     start() {
+        generation++;
         void checkProcess();
         pollInterval = setInterval(checkProcess, settings.store.pollInterval * 1000);
     },
     stop() {
+        generation++;
         if (pollInterval !== undefined) {
             clearInterval(pollInterval);
             pollInterval = undefined;

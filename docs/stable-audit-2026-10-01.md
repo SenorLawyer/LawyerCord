@@ -75,6 +75,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Release validation failure propagation: enable PowerShell native-command errors in Windows release tests and build blocks, and explicitly reject each failed update-channel write. Runtime proofs execute the extracted workflow bodies through PowerShell with controlled native commands. Before the change, an early test/build failure and a failed channel update return success after later commands run. Afterwards, each stops at the failed command, including first/middle/final test failures. Ubuntu CI already uses Bash with exit-on-error. No release was dispatched by these proofs.
 
+- Favourite signed-link ownership: delete the single-use generic batch queue and move refresh scheduling out of store selectors. Keep one sequential request of up to 50 URLs, deduplicate queued and active URLs, bound retained links to 1,000 and reject expired/invalid results. Stop and connection/account changes clear pending work and invalidate late completions. A runtime proof against the preceding commit executes duplicate requests queued by repeated reads; five focused lifecycle tests pass after the change, along with metadata tests, source lint and TypeScript. Discord's REST wrapper does not expose cancellation, so an already submitted request can finish after stop, but its result cannot update the store or schedule another batch.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

@@ -10,7 +10,7 @@ import { LazyComponentWrapper } from "@utils/lazyReact";
 import { Embed, ListRow, Message, MessageAttachment, ScrollerBaseRef } from "@vencord/discord-types";
 import { ChannelType } from "@vencord/discord-types/enums";
 import { findByCodeLazy, findComponentByCode, findComponentByCodeLazy, findCssClassesLazy, proxyLazyWebpack } from "@webpack";
-import { ChannelStore, ExpressionPickerStore, ListScrollerThin, lodash, PermissionsBits, PermissionStore, React, useCallback, useEffect, useMemo, useRef, useState, useStateFromStores } from "@webpack/common";
+import { ChannelStore, ExpressionPickerStore, ListScrollerThin, lodash, PermissionsBits, PermissionStore, React, useCallback, useEffect, useMemo, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
 import { ReactNode } from "react";
 
 import { SignedUrlsStore } from "./stores";
@@ -188,6 +188,7 @@ function Demo() {
 
 export function FilePickerItem({ url, file, channel, onResize, onSubmit, reducePadding }: FilePickerItemProps) {
     const [isFetching, setIsFetching] = useState(false);
+    const accountId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
 
     const ref = useRef<HTMLDivElement>(null);
     useResizeObserver(ref, ({ height }) => onResize(url, height), [onResize, url]);
@@ -198,6 +199,11 @@ export function FilePickerItem({ url, file, channel, onResize, onSubmit, reduceP
         [file],
         lodash.isEqual
     ) as MessageAttachment;
+
+    useEffect(() => {
+        SignedUrlsStore.refresh(file.url);
+        SignedUrlsStore.refresh(file.proxy_url);
+    }, [file, attachment.url, attachment.proxy_url, accountId]);
 
     const { canAttachFiles, canSendMessages } = useStateFromStores(
         [PermissionStore],

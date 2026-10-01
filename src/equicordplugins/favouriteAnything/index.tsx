@@ -22,6 +22,16 @@ export default definePlugin({
     authors: [Devs.nin0dev, EquicordDevs.davri],
     searchTerms: ["favorite"],
     managedStyle,
+    start() {
+        SignedUrlsStore.start();
+    },
+    stop() {
+        SignedUrlsStore.stop();
+    },
+    flux: {
+        CONNECTION_OPEN() { SignedUrlsStore.reset(); },
+        LOGOUT() { SignedUrlsStore.reset(); }
+    },
     patches: [
         // EMBEDS
         {

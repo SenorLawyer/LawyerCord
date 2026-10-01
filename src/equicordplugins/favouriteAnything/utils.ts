@@ -7,7 +7,6 @@
 import { classNameFactory } from "@utils/css";
 import { sendMessage } from "@utils/discord";
 import { proxyLazy } from "@utils/lazy";
-import { Queue } from "@utils/Queue";
 import { useForceUpdater } from "@utils/react";
 import { PluginNative } from "@utils/types";
 import { Channel, MessageAttachment } from "@vencord/discord-types";
@@ -306,41 +305,4 @@ export function useListScroller() {
     }, []);
 
     return [rowHeights.current, handleResize] as const;
-}
-
-// Wrapper class for Queue which allows batching multiple requests into one.
-// A request is fired immediately if at least `maxCount` items are in this queue,
-// or if enough time (`timeout`) has passed since the last item was added.
-// Subsequent requests are fired in sequence.
-export class BatchedRequestQueue<T> {
-    private items: T[] = [];
-    private timer: NodeJS.Timeout | null = null;
-    private readonly queue: Queue = new Queue();
-
-    constructor(
-        private readonly cb: (items: T[]) => Promise<void>,
-        private readonly options: { maxCount: number; timeout?: number; }
-    ) { }
-
-    public add(item: T) {
-        if (this.items.indexOf(item) !== -1) return;
-        this.items.push(item);
-
-        if (this.items.length >= this.options.maxCount) {
-            this.flush();
-        } else {
-            if (this.timer) clearTimeout(this.timer);
-            this.timer = setTimeout(() => this.flush(), this.options.timeout);
-        }
-    }
-
-    private flush() {
-        if (this.timer) clearTimeout(this.timer);
-        this.timer = null;
-
-        if (this.items.length === 0) return;
-
-        const batch = this.items.splice(0, 50);
-        this.queue.push(() => this.cb(batch).catch(() => this.items.push(...batch)));
-    }
 }

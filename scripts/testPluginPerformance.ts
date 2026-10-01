@@ -10559,7 +10559,7 @@ test("folder zipping drains directory batches and rejects read and size failures
         "@utils/Logger": { Logger: class {} },
         "@utils/misc": {},
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
-        "@webpack/common": {}, "./compression": {}
+        "@webpack/common": {}, "@utils/zip": {}
     }, {}, "readDirectoryEntry");
     const { signal } = new AbortController();
     const directory = (name: string, batches: object[][]) => ({

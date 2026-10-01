@@ -9,9 +9,8 @@ import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import { sleep } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
+import { createZipFile } from "@utils/zip";
 import { ChannelStore, DraftType, SelectedChannelStore, showToast, Toasts, UploadHandler, UserStore } from "@webpack/common";
-
-import { createZipFile } from "./compression";
 
 const logger = new Logger("AutoZipper");
 const MAX_ZIP_INPUT_BYTES = 100 * 1024 * 1024;

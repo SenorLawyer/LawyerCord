@@ -40,7 +40,7 @@ function fixture() {
             UploadHandler: { promptToUpload: (files: File[], channel: { id: string }) => uploads.push({ files, channel }) }
         },
         "fflate": { zipSync: () => { synchronousCalls++; return new Uint8Array([1]); } },
-        "./compression": { createZipFile: (name: string, files: Record<string, Uint8Array>, signal: AbortSignal) =>
+        "@utils/zip": { createZipFile: (name: string, files: Record<string, Uint8Array>, signal: AbortSignal) =>
             new Promise<File>((resolve, reject) => operations.push({ name, files, signal, resolve, reject })) }
     };
     const { default: plugin } = runInNewContext(`${outputText}\nexports;`, {
@@ -145,7 +145,7 @@ function compressionFixture() {
             };
         }
     }
-    const code = transpileModule(readFileSync("src/equicordplugins/autoZipper/compression.ts", "utf8"), {
+    const code = transpileModule(readFileSync("src/utils/zip.ts", "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
     }).outputText;
     const mocks: Record<string, unknown> = {

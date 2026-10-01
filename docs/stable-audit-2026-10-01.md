@@ -55,7 +55,10 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Clientside guild icon ownership: delete the duplicate Blob snapshot and startup storage rewrite. Use the existing atomic DataStore update for save/reset and reject stopped or superseded operations before runtime URL creation. Legacy data URLs remain supported without rewriting storage on read. Images accepted by extension retain their MIME type across restart. All three original runtime regressions fail before the fix; five lifecycle tests and the existing normalization checks pass afterwards. Source lint and TypeScript pass.
 
+- Message and emoji render work: remove CustomUserColors selected-channel lookups, the duplicate server-setting check and the exception/logging path. Use the message context already supplied by Discord. The regression fails before the fix and passes afterwards for DMs, servers, previews and gradients. DragFavoriteEmotes applies the existing pointer-events class directly in React instead of scheduling and cancelling one animation frame per emoji. Source lint and TypeScript pass.
+
 ## Completion requirements
+
 
 - Account for every baseline path with an explicit disposition and evidence scope.
 - Finish the semantic review and validate every changed behavior with the smallest sufficient proof.

@@ -19,6 +19,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Coalesce ChannelTabs unread fallback writes and reuse unchanged snapshots instead of cloning and serializing the entire account cache.
 - Keep ChannelTabs mention and Nitro glows static instead of continuously repainting blurred shadows and icon colors.
 - Remove the command palette's preliminary image decoding and synthetic attachment metadata from local previews.
+- Read message color context directly and set favorite-emoji drag classes through React instead of scheduling a frame for every row.
 
 ### Fixed
 

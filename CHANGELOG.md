@@ -56,6 +56,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Remove Orbolay readiness polling, keep socket callbacks scoped to their connection and account, and validate local commands.
 - Prevent keyboard sound setting changes from creating audio players after the plugin stops.
 - Avoid per-emoji settings reads and duplicate channel lookups when adding a Husk reaction, preserve the last matching emoji and handle failed requests.
+- Keep HomeTyping subscribed to account and private-channel changes, and reapply Nitro upsell overrides for every premium tier on reconnect.
 - Subscribe contributor cards only to their displayed enable flags, keep their user profile selector current and handle failed profile lookups.
 - Stop closed or changed plugin modals from appending stale authors or creating fallback users after a lookup finishes.
 - Keep QR confirmation timers across rerenders, cancel partial holds on release or close, prevent duplicate submissions and retain successful login state during cleanup.

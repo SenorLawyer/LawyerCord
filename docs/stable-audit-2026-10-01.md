@@ -71,6 +71,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Shared card ownership: delete the duplicate online-theme card layout and use AddonCard with the same editable-title input. Omit empty source-badge tooltips. Expanded sections now call their render callback instead of treating each new callback as a new component type. The identity regression fails before the change and passes afterwards, including lazy collapsed content; source lint and TypeScript pass.
 
+- Font search ownership: remove unused font variant, axis and category parsing, and validate only the metadata rendered by the UI. Each query effect owns its request and cancellable debounce. Replacement/unmount abort the old request and discard its completion; the input stays available during loading. Reuse font removal on stop. Both lifecycle regressions fail before the change and pass afterwards; source lint and TypeScript pass. Universal font-variable selectors remain a separate finding pending compatibility evidence.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

@@ -20,6 +20,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Keep ChannelTabs mention and Nitro glows static instead of continuously repainting blurred shadows and icon colors.
 - Remove the command palette's preliminary image decoding and synthetic attachment metadata from local previews.
 - Read message color context directly and set favorite-emoji drag classes through React instead of scheduling a frame for every row.
+- Remove unused Google Font metadata, cancel replaced or closed searches and keep the search field available while loading.
 - Reuse the shared addon card for online themes and omit empty source-badge tooltips.
 - Decode favorite-file metadata only when saved metadata changes and compare file-row permissions by value.
 - Skip plugin registry searches for ordinary messages, remove per-card dependency maps and unused toolbox icon styles.

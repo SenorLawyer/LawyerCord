@@ -9301,7 +9301,7 @@ test("FontLoader uses the escaped selected family for body and code fonts", asyn
         "@api/Settings": { definePluginSettings: () => ({ store }), migratePluginSetting: () => {} },
         "@components/Card": {}, "@components/Heading": {}, "@components/Paragraph": {},
         "@shared/debounce": {}, "@utils/constants": { EquicordDevs: {} },
-        "@utils/margins": {}, "@utils/misc": {},
+        "@utils/margins": {}, "@utils/misc": {}, "@utils/Logger": { Logger: class { warn() {} error() {} } },
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
         "@webpack/common": {}
     }, {

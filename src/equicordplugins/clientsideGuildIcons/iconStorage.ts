@@ -4,9 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-export interface NormalizedGuildIcons {
-    icons: Record<string, Blob>;
-    needsWrite: boolean;
+export function readStoredGuildIcons(value: unknown): Record<string, unknown> {
+    return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 export async function normalizeStoredGuildIcon(value: unknown): Promise<Blob | null> {
@@ -17,19 +16,13 @@ export async function normalizeStoredGuildIcon(value: unknown): Promise<Blob | n
     return blob?.type.startsWith("image/") ? blob : null;
 }
 
-export async function normalizeStoredGuildIcons(value: unknown): Promise<NormalizedGuildIcons> {
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-        return { icons: {}, needsWrite: value != null };
-    }
-
+export async function normalizeStoredGuildIcons(value: unknown): Promise<Record<string, Blob>> {
     const icons: Record<string, Blob> = {};
-    let needsWrite = false;
 
-    for (const [guildId, storedIcon] of Object.entries(value)) {
+    for (const [guildId, storedIcon] of Object.entries(readStoredGuildIcons(value))) {
         const icon = await normalizeStoredGuildIcon(storedIcon);
         if (icon) icons[guildId] = icon;
-        if (!(storedIcon instanceof Blob) || !icon) needsWrite = true;
     }
 
-    return { icons, needsWrite };
+    return icons;
 }

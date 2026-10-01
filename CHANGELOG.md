@@ -32,6 +32,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Cancel Animalese sound downloads on stop and quality changes, and prevent pending messages from restarting stopped audio.
 - Retry failed ChannelTabs fallback loads and keep badge subscriptions current when channels or accounts change.
 - Prevent late command palette startup from registering after stop, preserve edits made during hydration, and release preview URLs without waiting for image decoding.
+- Save local guild icons atomically, reject stale pickers and writes after stop, and retain the MIME type of images identified by extension.
 
 ## 3.1.1.0 - 2026-09-29 (Nightly)
 

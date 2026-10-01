@@ -18,12 +18,10 @@ async function main(): Promise<void> {
     assert.equal(await normalizeStoredGuildIcon("https://example.com/icon.png"), null, "remote URLs are not accepted as local icon data");
 
     const migrated = await normalizeStoredGuildIcons({ malformed: "data:image/png;base64,%%%", guild: pngDataUrl, invalid: "not-an-image" });
-    assert.equal(Object.keys(migrated.icons).length, 1, "invalid stored icons are removed");
-    assert.equal(migrated.needsWrite, true, "legacy or invalid data requests a canonical rewrite");
+    assert.equal(Object.keys(migrated).length, 1, "invalid stored icons are removed from the runtime map");
 
     const canonical = await normalizeStoredGuildIcons({ guild: storedBlob });
-    assert.deepEqual(canonical.icons, { guild: storedBlob }, "canonical Blob records are preserved");
-    assert.equal(canonical.needsWrite, false, "canonical Blob records do not trigger redundant writes");
+    assert.deepEqual(canonical, { guild: storedBlob }, "canonical Blob records are preserved");
 
     console.log("clientsideGuildIcons storage checks passed");
 }

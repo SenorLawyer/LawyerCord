@@ -53,6 +53,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Command palette lifecycle and preview: hydrate all command data before installing handlers, reject stopped/superseded starts and register synchronously. Persisted values reject obsolete reads and preserve intervening edits. Delete the preliminary image decoder, unused dimensions and synthetic attachment metadata; the effect owns and revokes each local URL directly. Three regressions fail before the change and pass afterwards. Source lint and TypeScript pass. Malformed image files now use the image element's native error/alt display instead of waiting for a preliminary decode.
 
+- Clientside guild icon ownership: delete the duplicate Blob snapshot and startup storage rewrite. Use the existing atomic DataStore update for save/reset and reject stopped or superseded operations before runtime URL creation. Legacy data URLs remain supported without rewriting storage on read. Images accepted by extension retain their MIME type across restart. All three original runtime regressions fail before the fix; five lifecycle tests and the existing normalization checks pass afterwards. Source lint and TypeScript pass.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

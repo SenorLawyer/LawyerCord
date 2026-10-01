@@ -13,6 +13,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Initialize the automation tab on first view and its builder on first use while keeping the engine's startup timing.
 - Clone only selected blocks when duplicating part of an automation.
 - Guess codeblock languages only when no tag was supplied, and skip guessing for blocks over 50,000 characters.
+- Move large automatic ZIP compression to one worker, yield between bounded batches of small files, and retain the originating upload channel.
 
 ### Fixed
 

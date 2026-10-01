@@ -41,6 +41,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Codeblock language guessing: delete explicit-language overriding, its extra highlighter pass and obsolete result metadata. Preserve author-supplied tags, including plain text, and skip guessing above the existing 50,000-character bound. Untagged hints and cached detection remain; Shiki receives the original tagged props and restores the original render function on stop. Three regressions fail before the change and pass afterwards.
 
+- Automatic ZIP compression: remove synchronous whole-archive deflation from the renderer. Reuse fflate streaming compression and the existing Queue, with one worker active across uploads. Small files below 64 KiB avoid worker startup and batches yield after an 8 ms budget; larger inputs are fed in 64 KiB copies so transfer cannot detach the original data or leave a whole-input CRC pass on the renderer. Stop cancels compression and pending delivery; delivery retains the initiating channel and account. Existing 100 MiB and 500-file bounds and original-file fallback remain. Eight tests cover real worker-backed roundtrips, event-loop progress, worker limits, cancellation, special names, folder paths, limits, failed compression and stale delivery. Desktop builds pass. These proofs do not establish Discord frame rates on affected devices.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

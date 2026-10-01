@@ -61,15 +61,18 @@ export function reconcileUnreadFallbackCache(
     cachedUnreadCounts: Record<string, number>,
     channelStates: ChannelUnreadState[]
 ): Record<string, number> {
-    const nextCachedUnreadCounts = { ...cachedUnreadCounts };
+    let nextCachedUnreadCounts = cachedUnreadCounts;
 
     for (const state of channelStates) {
         if (state.unreadCount > 0) {
+            if (nextCachedUnreadCounts[state.channelId] === state.unreadCount) continue;
+            if (nextCachedUnreadCounts === cachedUnreadCounts) nextCachedUnreadCounts = { ...cachedUnreadCounts };
             nextCachedUnreadCounts[state.channelId] = state.unreadCount;
             continue;
         }
 
-        if (!state.hasUnread) {
+        if (!state.hasUnread && state.channelId in nextCachedUnreadCounts) {
+            if (nextCachedUnreadCounts === cachedUnreadCounts) nextCachedUnreadCounts = { ...cachedUnreadCounts };
             delete nextCachedUnreadCounts[state.channelId];
         }
     }

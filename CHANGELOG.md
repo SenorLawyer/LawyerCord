@@ -16,6 +16,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Move large automatic ZIP compression to one worker, yield between bounded batches of small files, and retain the originating upload channel.
 - Stop hidden self call timers and disconnected voice timers from ticking.
 - Remove obsolete Snowfall browser prefix detection and prepare its SVG images only when image snow is selected.
+- Coalesce ChannelTabs unread fallback writes and reuse unchanged snapshots instead of cloning and serializing the entire account cache.
 
 ### Fixed
 
@@ -27,6 +28,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Advance past oversized automation log lines instead of rereading the same 4 MiB chunk indefinitely.
 - Ignore malformed browser startup metadata and CSS URLs outside the packaged extension stylesheet.
 - Cancel Animalese sound downloads on stop and quality changes, and prevent pending messages from restarting stopped audio.
+- Retry failed ChannelTabs fallback loads and keep badge subscriptions current when channels or accounts change.
 
 ## 3.1.1.0 - 2026-09-29 (Nightly)
 

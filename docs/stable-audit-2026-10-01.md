@@ -47,6 +47,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Snowfall compatibility cleanup: use standard transforms, transitions and transition events supported by the declared browser minimums. Delete prefix probing and unsafe style casts, defer SVG encoding until image snow is selected, and read viewport dimensions when the effect starts. This removes startup work from disabled Snowfall. Source lint and TypeScript pass.
 
+- ChannelTabs fallback work: unchanged updates retain their snapshot instead of copying and serializing all cached channels. Bursts coalesce into one active write plus a latest-state write. Loads remain retryable, writes wait for hydration, and concurrent accounts retain separate records. Seven focused tests pass; three initial regressions fail before the fix. Badge selectors now supply channel dependencies, complete store subscriptions and value equality. Source lint and TypeScript pass.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

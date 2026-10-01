@@ -67,6 +67,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Favourite file render work: compare lightweight saved metadata before decoding and memoize decoded items. Unrelated settings updates no longer inflate every favourite or rerender the picker. Preserve its documented retention of removed items until the query changes. Complete callback dependencies and compare file-row permissions by value. The regression fails before the change and passes afterwards for 100 unrelated updates, changed metadata and picker retention; source lint and TypeScript pass.
 
+- Favourite metadata boundary: cap encoded and decoded metadata at 64 KiB and feed the inflater 256 compressed bytes at a time. Reject oversized expansion before decoding its text. Validate tuple shape, field types, format and relative destinations while preserving valid saved data and missing optional-field defaults. Metadata-validation and decompression-limit regressions fail before the change; three focused tests, source lint and TypeScript pass afterwards.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

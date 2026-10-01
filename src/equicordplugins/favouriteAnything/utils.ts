@@ -13,7 +13,7 @@ import { PluginNative } from "@utils/types";
 import { Channel, MessageAttachment } from "@vencord/discord-types";
 import { findByCodeLazy, findByPropsLazy } from "@webpack";
 import { Constants, DraftType, FluxDispatcher, lodash, MessageActions, PendingReplyStore, PermissionStore, RestAPI, Toasts, UploadAttachmentStore, UploadHandler, UploadManager, useCallback, useEffect, useMemo, useRef, UserSettingsActionCreators, UserSettingsProtoStore, useStateFromStores } from "@webpack/common";
-import { deflateSync, inflateSync } from "fflate";
+import { deflateSync, Inflate } from "fflate";
 import { Key } from "react";
 import { JsonValue } from "type-fest";
 
@@ -28,7 +28,8 @@ export const useResizeObserver: ResizeObserverHook = findByCodeLazy("borderBoxSi
 export const ImageUtils: ImageUtils_ = findByPropsLazy("isAnimated", "getFormatQuality");
 export const transformAttachment: AttachmentTransformer = findByCodeLazy("return{uniqueId", ".IS_ANIMATED");
 
-const encoder = new TextEncoder(), decoder = new TextDecoder();
+const encoder = new TextEncoder();
+const MAX_METADATA_BYTES = 64 * 1024;
 
 const defineItem = <const A, const B extends JsonValue>(item: CustomItemDef<A, B>) => item;
 function defineItems<T extends Record<CustomItemFormat, CustomItemDef>>(def: ItemsDef<T>) {
@@ -39,22 +40,34 @@ function defineItems<T extends Record<CustomItemFormat, CustomItemDef>>(def: Ite
             try {
                 const obj = [format, def[format].encode(data)];
 
-                const buf = deflateSync(encoder.encode(JSON.stringify(obj)));
-                return uint8ArrayToBase64(buf);
+                const bytes = encoder.encode(JSON.stringify(obj));
+                if (bytes.byteLength > MAX_METADATA_BYTES) return null;
+                const encoded = uint8ArrayToBase64(deflateSync(bytes));
+                return encoded.length <= MAX_METADATA_BYTES ? encoded : null;
             } catch {
                 return null;
             }
         },
         decode: (raw: string) => {
             try {
-                if (!raw) return null;
+                if (!raw || raw.length > MAX_METADATA_BYTES) return null;
 
-                const buf = inflateSync(base64ToUint8Array(raw));
-                const parsed: unknown[] | null = JSON.parse(decoder.decode(buf));
-                if (!Array.isArray(parsed)) return null;
+                const compressed = base64ToUint8Array(raw);
+                const decoder = new TextDecoder();
+                let text = "";
+                let size = 0;
+                const inflater = new Inflate((chunk, final) => {
+                    size += chunk.byteLength;
+                    if (size > MAX_METADATA_BYTES) throw new Error("Favourite metadata is too large.");
+                    text += decoder.decode(chunk, { stream: !final });
+                });
+                for (let offset = 0; offset < compressed.length; offset += 256)
+                    inflater.push(compressed.subarray(offset, offset + 256), offset + 256 >= compressed.length);
+                const parsed: unknown = JSON.parse(text);
+                if (!Array.isArray(parsed) || parsed.length !== 2) return null;
 
                 const [format, data] = parsed as [keyof typeof def, JsonValue];
-                if (!(format in def)) return null;
+                if (typeof format !== "number" || !Object.hasOwn(def, format)) return null;
 
                 return { format, data: def[format].decode(data) } as {
                     [F in CustomItemFormat]: { format: F; data: Type<F>; };
@@ -82,17 +95,29 @@ export const defs = defineItems({
             title ?? null,
             description ?? null
         ],
-        decode: ([id, filename, size, path, content_type, title, description]) => ({
-            id: id ?? "0",
-            filename: filename ?? "UNKNOWN",
-            size: +size! || 0,
-            url: `${new URL(path!, `https://${window.GLOBAL_ENV.CDN_HOST}`)}`,
-            proxy_url: `${new URL(path!, `https://${window.GLOBAL_ENV.MEDIA_PROXY_ENDPOINT}`)}`,
-            content_type: content_type ?? "application/octet-stream",
-            spoiler: filename?.startsWith("SPOILER_") ?? false,
-            title: title ?? undefined,
-            description: description ?? undefined
-        }),
+        decode: data => {
+            if (!Array.isArray(data) || data.length < 4 || data.length > 7) return null;
+            const [id, filename, size, path, content_type, title, description] = data;
+            if ([id, filename, content_type, title, description].some(value => value != null && typeof value !== "string")
+                || (size != null && (typeof size !== "number" || !Number.isFinite(size) || size < 0))
+                || typeof path !== "string" || !path.startsWith("/") || path.startsWith("//")) return null;
+            const cdn = new URL(`https://${window.GLOBAL_ENV.CDN_HOST}`);
+            const media = new URL(`https://${window.GLOBAL_ENV.MEDIA_PROXY_ENDPOINT}`);
+            const url = new URL(path, cdn);
+            const proxy = new URL(path, media);
+            if (url.origin !== cdn.origin || proxy.origin !== media.origin) return null;
+            return {
+                id: id ?? "0",
+                filename: filename ?? "UNKNOWN",
+                size: size ?? 0,
+                url: `${url}`,
+                proxy_url: `${proxy}`,
+                content_type: content_type || "application/octet-stream",
+                spoiler: filename?.startsWith("SPOILER_") ?? false,
+                title: title ?? undefined,
+                description: description ?? undefined
+            };
+        },
         stringify: ({ title, filename }) => title?.trim() || filename
     })
     // This could be expanded in the future with other item types (e.g. voice messages)

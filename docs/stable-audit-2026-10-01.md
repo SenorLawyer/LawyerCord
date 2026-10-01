@@ -29,6 +29,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 - Construct one active-hours formatter per schedule search. DST gaps, DST overlaps, overnight windows and equal start/end hours retain their behavior. A local median benchmark of five minute-interval searches through 1,439 candidates falls from 692 ms to 13 ms. Formatter construction falls from 1,440 to two per search, including timezone validation.
 - Replace deep cloning of primitive audio records with shallow snapshots. Retained processor references cannot alter the previous snapshot, original options remain separate and volume/speed updates still reach the audio element. The local median for 50,000 preprocessing updates falls from 357 ms to 62 ms. These are focused synthetic measurements, not whole-client latency claims.
 
+- Coalesce PrimaryStreamAudio tracking and Flux bursts into one animation frame. A sole audio source needs no primary-video scan. The regression fails against Stable; both focused renderer tests and the selection/volume suite pass. Pending frames are cancelled on stop. This removes demonstrated repeated work, but does not establish the cause of friends' reported 3 FPS.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

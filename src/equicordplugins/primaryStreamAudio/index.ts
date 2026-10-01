@@ -11,6 +11,7 @@ import { ChannelRTCStore, SelectedChannelStore } from "@webpack/common";
 import { getEffectiveVolume, MIN_VIDEO_AREA, type PrimaryStreamAudioStores, type StreamAudioData, UPDATE_INTERVAL_MS } from "./logic";
 
 let updateInterval: number | undefined;
+let updateFrame: number | undefined;
 const trackedAudio = new Set<StreamAudioData>();
 
 const stores: PrimaryStreamAudioStores = {
@@ -80,7 +81,7 @@ function pruneTrackedAudio() {
     }
 }
 
-function applyAudioState(data: StreamAudioData, domState: DomStreamAudioState) {
+function applyAudioState(data: StreamAudioData, domState?: DomStreamAudioState) {
     const volume = getEffectiveVolume(data, trackedAudio, stores, domState);
 
     if (data.gainNode) {
@@ -97,12 +98,15 @@ function updateTrackedAudio() {
     if (!trackedAudio.size) return;
     // Reading the DOM state measures every video element, which forces a layout. Once per tick
     // is enough: setting a gain or volume cannot move anything on the page.
-    const domState = getDomStreamAudioState();
+    const domState = trackedAudio.size > 1 ? getDomStreamAudioState() : undefined;
     for (const data of trackedAudio) applyAudioState(data, domState);
 }
 
 function scheduleUpdateTrackedAudio() {
-    queueMicrotask(updateTrackedAudio);
+    updateFrame ??= requestAnimationFrame(() => {
+        updateFrame = undefined;
+        updateTrackedAudio();
+    });
 }
 
 export default definePlugin({
@@ -134,6 +138,10 @@ export default definePlugin({
     },
 
     stop() {
+        if (updateFrame !== undefined) {
+            cancelAnimationFrame(updateFrame);
+            updateFrame = undefined;
+        }
         if (updateInterval != null) {
             window.clearInterval(updateInterval);
             updateInterval = undefined;
@@ -159,7 +167,7 @@ export default definePlugin({
 
     getAudioElementVolume(data: StreamAudioData) {
         trackedAudio.add(data);
-        return Math.min(getEffectiveVolume(data, trackedAudio, stores, getDomStreamAudioState()), 1);
+        return Math.min(getEffectiveVolume(data, trackedAudio, stores, trackedAudio.size > 1 ? getDomStreamAudioState() : undefined), 1);
     },
 
     flux: {

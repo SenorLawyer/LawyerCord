@@ -7839,6 +7839,49 @@ test("profile presets wait for custom status updates and propagate failure", asy
 
 });
 
+test("primary stream audio batches event bursts into one frame and cancels stopped work", () => {
+    const frames = new Map<number, () => void>();
+    let frameId = 0;
+    let scans = 0;
+    let tick: (() => void) | undefined;
+    const logic = loadSource("src/equicordplugins/primaryStreamAudio/logic.ts", {});
+    const { default: plugin } = loadSource("src/equicordplugins/primaryStreamAudio/index.ts", {
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+        "@webpack/common": {}, "./logic": logic
+    }, {
+        document: { querySelectorAll: () => { scans++; return []; } },
+        window: { setInterval: (callback: () => void) => { tick = callback; return 1; }, clearInterval() {} },
+        requestAnimationFrame: (callback: () => void) => { frames.set(++frameId, callback); return frameId; },
+        cancelAnimationFrame: (id: number) => frames.delete(id)
+    });
+    plugin.start();
+    const first = { id: "owner-a", _speakingFlags: 2 };
+    const second = { id: "owner-b", _speakingFlags: 2 };
+    plugin.trackStreamAudio(first);
+    assert.equal(frames.size, 1);
+    frames.get(1)?.(); frames.delete(1);
+    tick?.();
+    assert.equal(scans, 0, "a single stream never needs a DOM primary selection");
+    for (let index = 0; index < 30; index++) {
+        plugin.trackStreamAudio(second);
+        plugin.flux.STREAM_UPDATE();
+    }
+    assert.equal(frames.size, 1);
+    assert.equal(scans, 0);
+    frames.get(2)?.(); frames.delete(2);
+    assert.equal(scans, 1);
+    plugin.flux.STREAM_UPDATE();
+    plugin.stop();
+    assert.equal(frames.size, 0);
+    plugin.start();
+    plugin.trackStreamAudio(first);
+    assert.equal(frames.size, 1);
+    frames.get(4)?.(); frames.delete(4);
+    assert.equal(scans, 1);
+    plugin.stop();
+});
+
 test("primary stream audio reads stores initialized after module evaluation", () => {
     const common: Record<string, unknown> = {};
     const logic = loadSource("src/equicordplugins/primaryStreamAudio/logic.ts", {});

@@ -25,6 +25,9 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 - Remove the obsolete Encryptcord message suppression. No bundled plugin uses that name.
 - Server list boundaries retain their registration keys when neighboring components are removed, added or reordered. The regression fails against Stable and all three focused badge/server-list tests pass with the fix.
 - Delete the permanently disabled CSS-debugging chunk path, unused script imports and an unreachable QR video preview. Existing QR callers provide images or null.
+- Delete IndexedDB cursor fallbacks. The browser manifests require Chrome 91/111 and Firefox 128, all of which provide `getAll` and `getAllKeys`. Seven focused DataStore tests pass, including atomic writes, request failures and paired bulk reads in one transaction.
+- Construct one active-hours formatter per schedule search. DST gaps, DST overlaps, overnight windows and equal start/end hours retain their behavior. A local median benchmark of five minute-interval searches through 1,439 candidates falls from 692 ms to 13 ms. Formatter construction falls from 1,440 to two per search, including timezone validation.
+- Replace deep cloning of primitive audio records with shallow snapshots. Retained processor references cannot alter the previous snapshot, original options remain separate and volume/speed updates still reach the audio element. The local median for 50,000 preprocessing updates falls from 357 ms to 62 ms. These are focused synthetic measurements, not whole-client latency claims.
 
 ## Completion requirements
 

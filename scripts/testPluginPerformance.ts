@@ -10601,6 +10601,46 @@ test("queued task failures are reported without interrupting ordered work", asyn
     assert.equal(calls.at(-1), "resumed");
 });
 
+test("audio processing keeps original, current and previous snapshots independent", async () => {
+    const snapshots: { audio: string; volume: number; speed: number; }[] = [];
+    const plugin = loadComponent("src/equicordplugins/_api/audioPlayer.ts", {}, {
+        "@api/AudioPlayer": {
+            audioProcessorFunctions: { custom(data: { audio: string; volume: number; speed: number; }) {
+                snapshots.push(data);
+                data.audio = "custom";
+                data.volume /= 2;
+                data.speed *= 2;
+            } },
+            AudioType: {}, identifyAudioType: () => "url"
+        },
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin }
+    }, { structuredClone }).default;
+    let destroyed = 0;
+    const original = { audio: "original", type: "url", volume: 0.8, speed: 1 };
+    const player = { preprocessDataOriginal: original, destroyAudio() { destroyed++; } };
+    plugin.processAudio(player);
+    assert.deepEqual(original, { audio: "original", type: "url", volume: 0.8, speed: 1 });
+    const element = { volume: 0.4, playbackRate: 2 };
+    Object.assign(player, { _audio: Promise.resolve(element) });
+    original.volume = 0.6;
+    original.speed = 3;
+    plugin.processAudio(player);
+    snapshots[0].volume = 0;
+    snapshots[0].speed = 0;
+    await setImmediate();
+    assert.equal(destroyed, 1);
+    assert.deepEqual(element, { volume: 0.3, playbackRate: 6 });
+    const result = player as typeof player & {
+        preprocessDataPrevious: typeof original;
+        preprocessDataCurrent: typeof original;
+    };
+    assert.equal(result.preprocessDataPrevious.volume, 0.4);
+    assert.equal(result.preprocessDataPrevious.speed, 2);
+    assert.equal(result.preprocessDataCurrent.volume, 0.3);
+    assert.equal(original.volume, 0.6);
+});
+
 test("audio player preserves zero volume and clamps explicit values", () => {
     const plugin = loadComponent("src/equicordplugins/_api/audioPlayer.ts", {}, {
         "@api/AudioPlayer": { audioProcessorFunctions: {}, AudioType: {}, identifyAudioType: () => "url" },

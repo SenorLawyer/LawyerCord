@@ -130,8 +130,8 @@ export default definePlugin({
     },
 
     processAudio(player: AudioPlayerInternal) {
-        player.preprocessDataPrevious = player.preprocessDataCurrent ? structuredClone(player.preprocessDataCurrent) : null;
-        player.preprocessDataCurrent = structuredClone(player.preprocessDataOriginal);
+        player.preprocessDataPrevious = player.preprocessDataCurrent ? { ...player.preprocessDataCurrent } : null;
+        player.preprocessDataCurrent = { ...player.preprocessDataOriginal };
         player.preprocessDataCurrent.volume *= 100;
 
         for (const processor of Object.values(audioProcessorFunctions)) {
@@ -166,7 +166,7 @@ export default definePlugin({
         player: AudioPlayerInternal,
         options: AudioPlayerOptions = {},
         audio: string,
-        unused: any,
+        unused: unknown,
         internalVolume: number,
         channel: string
     ) {

@@ -85,9 +85,11 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - QR confirmation lifetime: delete the animation controller, per-frame DOM writes and idle frame loop, and render progress through a CSS transform transition. The hold timer retains the existing 1,250 ms requirement and survives rerenders. Release, pointer cancellation, lost capture, blur and close cancel partial holds; repeated presses submit once. Late completions cannot update a closed modal, and successful closes no longer invoke the stale abort callback. Delete eager image preloads and orphaned preview styles. Five regressions fail before the change; six focused tests and source/style checks pass afterwards. A Chromium proof verifies partial/full/released fill and visible text. No live authentication request was sent. QR scanner work and account ownership remain separate review findings.
 
-## Completion requirements
-
 - QR scanner lifetime: delete FileReader base64 copies and the mutable callback wrapper. Each scan owns its image URL, decoding callbacks, preview timer, initiating account and confirmation. Stop, account connection changes and tab close invalidate the scan; image failures reset it and duplicate inputs cannot overlap. Confirmation preserves the 1,250 ms hold for pointer, Space and Enter input. Cancellation errors are handled without logging the handshake. Nine added checks fail against the preceding source; all 15 scanner/confirmation tests pass afterwards, including bounded canvas dimensions and URL cleanup. Source/style lint and TypeScript pass. Already submitted REST requests cannot be cancelled by the wrapper; late handshakes are cancelled only under their original account. No live authentication request was sent.
+
+- Numeric settings: delete the single-use serializer and validate conversion before persistence. Preserve intermediate typed text, reject blank and non-finite numbers, and reject fractional/exponent bigint input without throwing. Bigint uses a text input with a numeric keyboard so native number stepping cannot round snowflake IDs. Existing custom validators still receive the raw input string and their settings receiver. Three regressions fail against preceding source; all four focused tests pass after the fix. The broader typed-validator contract remains a separate compatibility review.
+
+## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.
 - Finish the semantic review and validate every changed behavior with the smallest sufficient proof.

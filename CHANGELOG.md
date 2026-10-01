@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Changed
 
+- Bind Questify startup, timers, requests and alert callbacks to the active account session. Stop stale work and remove per-status payload logging and timestamp formatting.
+
 - Return the Nightly codebase to Stable 3.0.1.0 for the full project audit. Later Nightly changes are removed and fixes are evaluated against Stable.
 - Remove obsolete IndexedDB cursor fallbacks and unreachable QR video and chunk debugging code.
 - Reuse the active-hours formatter during schedule searches and shallow-copy primitive audio processing records.

@@ -23,8 +23,9 @@ interface TimerProps {
 
 export function Timer({ time, userId }: Readonly<TimerProps>) {
     const { format, showSeconds, showRoleColor, trackSelf } = settings.use(TIMER_SETTINGS);
-    const durationMs = useFixedTimer({ initialTime: time });
-    if (userId === UserStore.getCurrentUser()?.id && !trackSelf) {
+    const visible = userId !== UserStore.getCurrentUser()?.id || trackSelf;
+    const durationMs = useFixedTimer({ initialTime: time, enabled: visible });
+    if (!visible) {
         // don't show for self
         return null;
     }

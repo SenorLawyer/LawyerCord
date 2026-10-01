@@ -43,6 +43,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Automatic ZIP compression: remove synchronous whole-archive deflation from the renderer. Reuse fflate streaming compression and the existing Queue, with one worker active across uploads. Small files below 64 KiB avoid worker startup and batches yield after an 8 ms budget; larger inputs are fed in 64 KiB copies so transfer cannot detach the original data or leave a whole-input CRC pass on the renderer. Stop cancels compression and pending delivery; delivery retains the initiating channel and account. Existing 100 MiB and 500-file bounds and original-file fallback remain. Eight tests cover real worker-backed roundtrips, event-loop progress, worker limits, cancellation, special names, folder paths, limits, failed compression and stale delivery. Desktop builds pass. These proofs do not establish Discord frame rates on affected devices.
 
+- Hidden call timers: extend the existing fixed-timer hook to disable scheduling when unused and include interval changes in effect ownership. Hidden self timers and absent voice connections retain hooks without scheduling ticks. Both regressions fail before the change and pass afterwards, including cleanup and interval changes. Source lint passes.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

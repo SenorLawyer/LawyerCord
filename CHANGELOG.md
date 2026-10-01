@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Changed
 
+- Initialize the Remix editor and its Discord chunks on first use. Discard pending modal loading after stop, restart or account replacement.
+
 - Bind Questify startup, timers, requests and alert callbacks to the active account session. Stop stale work and remove per-status payload logging and timestamp formatting.
 
 - Return the Nightly codebase to Stable 3.0.1.0 for the full project audit. Later Nightly changes are removed and fixes are evaluated against Stable.

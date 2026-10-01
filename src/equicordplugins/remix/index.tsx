@@ -9,15 +9,30 @@ import { PaintbrushIcon } from "@components/Icons";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
 import { extractAndLoadChunksLazy } from "@webpack";
-import { ChannelStore, closeModal, DraftType, FluxDispatcher, Menu, openModal, PendingReplyStore, SelectedChannelStore, UploadHandler } from "@webpack/common";
+import { ChannelStore, DraftType, FluxDispatcher, Menu, openModalLazy, PendingReplyStore, SelectedChannelStore, UploadHandler, UserStore } from "@webpack/common";
 
-import RemixModal from "./RemixModal";
 import css from "./styles.css?managed";
 
 const requireCreateStickerModal = extractAndLoadChunksLazy([".CREATE_STICKER_MODAL,", "isDisplayingIndividualStickers"]);
 const requireSettingsMenu = extractAndLoadChunksLazy(['type:"USER_SETTINGS_MODAL_OPEN"']);
 
 const validMediaTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+let lifetime: object | undefined;
+
+function openRemix(url?: string) {
+    const owner = lifetime;
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!owner || !userId) return;
+
+    return openModalLazy(async () => {
+        await requireCreateStickerModal();
+        await requireSettingsMenu();
+        if (owner !== lifetime || userId !== UserStore.getCurrentUser()?.id) return () => null;
+        const { default: RemixModal } = await import("./RemixModal");
+        if (owner !== lifetime || userId !== UserStore.getCurrentUser()?.id) return () => null;
+        return modalProps => <RemixModal modalProps={modalProps} close={modalProps.onClose} url={url} />;
+    });
+}
 
 const UploadContextMenuPatch: NavContextMenuPatchCallback = (children, props) => {
     if (children.find(c => c?.props?.id === "vc-remix")) return;
@@ -25,11 +40,7 @@ const UploadContextMenuPatch: NavContextMenuPatchCallback = (children, props) =>
     children.push(<Menu.MenuItem
         id="vc-remix"
         label="Remix"
-        action={() => {
-            const key = openModal(props =>
-                <RemixModal modalProps={props} close={() => closeModal(key)} />
-            );
-        }}
+        action={() => openRemix()}
     />);
 };
 
@@ -48,11 +59,7 @@ const MessageContextMenuPatch: NavContextMenuPatchCallback = (children, props) =
         id="vc-remix"
         label="Remix"
         icon={PaintbrushIcon}
-        action={() => {
-            const key = openModal(modalProps =>
-                <RemixModal modalProps={modalProps} close={() => closeModal(key)} url={url} />
-            );
-        }}
+        action={() => openRemix(url)}
     />);
 };
 
@@ -76,9 +83,10 @@ export default definePlugin({
         "message": MessageContextMenuPatch,
     },
     managedStyle: css,
-    async start() {
-
-        await requireCreateStickerModal();
-        await requireSettingsMenu();
+    start() {
+        lifetime = {};
+    },
+    stop() {
+        lifetime = undefined;
     },
 });

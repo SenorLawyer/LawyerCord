@@ -12,7 +12,7 @@ import { useForceUpdater } from "@utils/react";
 import { PluginNative } from "@utils/types";
 import { Channel, MessageAttachment } from "@vencord/discord-types";
 import { findByCodeLazy, findByPropsLazy } from "@webpack";
-import { Constants, DraftType, FluxDispatcher, MessageActions, PendingReplyStore, PermissionStore, RestAPI, Toasts, UploadAttachmentStore, UploadHandler, UploadManager, useCallback, useEffect, useRef, UserSettingsActionCreators, UserSettingsProtoStore, useStateFromStores } from "@webpack/common";
+import { Constants, DraftType, FluxDispatcher, lodash, MessageActions, PendingReplyStore, PermissionStore, RestAPI, Toasts, UploadAttachmentStore, UploadHandler, UploadManager, useCallback, useEffect, useMemo, useRef, UserSettingsActionCreators, UserSettingsProtoStore, useStateFromStores } from "@webpack/common";
 import { deflateSync, inflateSync } from "fflate";
 import { Key } from "react";
 import { JsonValue } from "type-fest";
@@ -222,24 +222,22 @@ function fuzzySearch(searchQuery: string, searchString: string) {
 export function useFavourites(itemFormat: CustomItemFormat, searchQuery?: string) {
     useEffect(() => void UserSettingsActionCreators.FrecencyUserSettingsActionCreators.loadIfNecessary(), []);
 
-    const items = useStateFromStores(
+    const savedItems = useStateFromStores(
         [UserSettingsProtoStore],
         () => {
             const gifs: Record<string, FavouriteItem> | undefined =
                 UserSettingsProtoStore.frecencyWithoutFetchingLatest.favoriteGifs?.gifs;
-            if (!gifs) return null;
-
-            return Object.entries(gifs)
-                .filter(([, { format }]) => format === FavouriteItemFormat.NONE)
-                .map(([url, { src, ...rest }]) => ({
-                    ...rest,
-                    ...defs.decode(URL.parse(src)?.hash.replace("#", "") ?? "")!,
-                    url
-                }))
-                .filter(({ format, data }) => data && format === itemFormat);
+            return gifs ? Object.entries(gifs)
+                .filter(([, item]) => item.format === FavouriteItemFormat.NONE)
+                .map(([url, { src, order, width, height }]) => ({ url, src, order, width, height })) : null;
         },
-        [itemFormat]
+        [],
+        lodash.isEqual
     );
+    const items = useMemo(() => savedItems?.flatMap(({ src, ...item }) => {
+        const decoded = defs.decode(URL.parse(src)?.hash.slice(1) ?? "");
+        return decoded?.data && decoded.format === itemFormat ? [{ ...item, ...decoded }] : [];
+    }) ?? null, [savedItems, itemFormat]);
 
     const { state } = useStateFromStores(
         [UserSettingsProtoStore],

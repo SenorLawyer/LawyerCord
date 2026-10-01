@@ -86,11 +86,11 @@ export function FilePicker({ onSelectItem }: FilePickerProps) {
     const channel = useStateFromStores([ChannelStore], () => ChannelStore.getChannel(channelId), [channelId]);
 
     const favs = useFavourites(CustomItemFormat.ATTACHMENT, query);
-    const count = useMemo(() => (favs ? Object.keys(favs).length : 0), [favs]);
+    const count = favs?.length ?? 0;
 
     const [rowHeights, handleResize] = useListScroller();
 
-    const handleSubmit = useCallback((url: string) => onSelectItem({ url }), []);
+    const handleSubmit = useCallback((url: string) => onSelectItem({ url }), [onSelectItem]);
     const handleChange = useCallback((query: string) => ExpressionPickerStore.setSearchQuery(query), []);
     const handleClear = useCallback(() => ExpressionPickerStore.setSearchQuery(""), []);
 
@@ -205,7 +205,8 @@ export function FilePickerItem({ url, file, channel, onResize, onSubmit, reduceP
             canAttachFiles: hasPermission(PermissionsBits.ATTACH_FILES, channel),
             canSendMessages: hasPermission(PermissionsBits.SEND_MESSAGES, channel)
         }),
-        [channel]
+        [channel],
+        lodash.isEqual
     );
 
     const handleClick = useMemo(() => {
@@ -222,7 +223,7 @@ export function FilePickerItem({ url, file, channel, onResize, onSubmit, reduceP
             default:
                 return null;
         }
-    }, [attachment, canAttachFiles, canSendMessages, channel, url]);
+    }, [attachment, canAttachFiles, canSendMessages, channel, url, onSubmit]);
 
     return (
         <div ref={ref} className={cl("attachment-container", reducePadding && "reduced-padding")}>

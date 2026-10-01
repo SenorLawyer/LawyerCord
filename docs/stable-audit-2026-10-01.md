@@ -65,6 +65,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Required helper message work: reject ineligible support messages before plugin-name scans and render its single button directly. Delete each chat card's full dependency map and conditional memo hook; compute active dependents only for required cards. Delete toolbox icon styles with no rendered users. Both helper regressions fail before the change and pass afterwards; source/style lint and TypeScript pass.
 
+- Favourite file render work: compare lightweight saved metadata before decoding and memoize decoded items. Unrelated settings updates no longer inflate every favourite or rerender the picker. Preserve its documented retention of removed items until the query changes. Complete callback dependencies and compare file-row permissions by value. The regression fails before the change and passes afterwards for 100 unrelated updates, changed metadata and picker retention; source lint and TypeScript pass.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

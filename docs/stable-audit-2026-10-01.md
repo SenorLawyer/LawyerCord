@@ -59,9 +59,9 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Clip upload lifetime: each modal owns its controller, which also covers picking, reservation, stamping, conversion, PUT and later sends. Stop aborts every registered lifetime; closing one modal leaves others running. Operations retain their opening account and check it before later stages. Picker tokens are released even when metadata processing is cancelled. Delete the cached FFmpeg instance and per-file cleanup; the existing Queue runs one conversion worker, which terminates on completion, failure or cancellation. Four original regressions fail before the change; six focused tests pass afterwards. Source lint and TypeScript pass. Conversion workers are tested with lifecycle fixtures, not real codec output; future conversions reinitialize WASM.
 
+- Clip native boundary: validate metadata field types and reject metadata over 1 MiB before text decoding and JSON parsing. The malformed-metadata regression fails before the change. Failed temp writes now remove their directories; failed deletion logs a scrubbed warning and retains its token for retry. Eight focused clip tests and the existing 500 MiB read-cap/byte-writer check pass, along with source lint and TypeScript. Reading metadata still reads the bounded whole video; reducing those repeated file reads remains a separate performance finding.
+
 ## Completion requirements
-
-
 
 - Account for every baseline path with an explicit disposition and evidence scope.
 - Finish the semantic review and validate every changed behavior with the smallest sufficient proof.

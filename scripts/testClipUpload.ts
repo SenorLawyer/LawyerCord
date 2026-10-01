@@ -6,6 +6,9 @@
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import * as path from "node:path";
+import { Readable } from "node:stream";
+import { buffer } from "node:stream/consumers";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
@@ -131,13 +134,13 @@ test("closing one modal cancels only its upload", async () => {
     closeSecond();
 });
 
-function loadSource(path: string, mocks: Record<string, unknown>) {
-    const { outputText } = transpileModule(readFileSync(path, "utf8"), {
+function loadSource(filePath: string, mocks: Record<string, unknown>) {
+    const { outputText } = transpileModule(readFileSync(filePath, "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
     });
     return runInNewContext(`${outputText}\nexports;`, {
         exports: {}, require: (name: string) => { assert.ok(name in mocks, name); return mocks[name]; },
-        File, Uint8Array, DOMException
+        File, Uint8Array, DOMException, Buffer
     });
 }
 
@@ -196,4 +199,67 @@ test("clip conversions run one worker and release it on cancellation, failure an
     await failure;
     assert.equal(active, 0);
     assert.equal(peak, 1);
+});
+
+test("clip metadata rejects malformed fields and oversized JSON before returning it to the renderer", async () => {
+    const footer = Buffer.from([0x75, 0x75, 0x69, 0x64, 0xA1, 0xC8, 0x52, 0x99, 0x33, 0x46, 0x4D, 0xB8, 0x88, 0xF0, 0x83, 0xF5, 0x7A, 0x75, 0xA5, 0xEF]);
+    let payload = Buffer.alloc(0);
+    let nextId = 0;
+    const native = loadSource("src/equicordplugins/clipUpload.desktop/native.ts", {
+        "@main/ipcMain": { ensureSafePath: (root: string, name: string) => path.join(root, name) },
+        "@main/utils/constants": { DATA_DIR: "fixture" }, "@utils/Logger": { Logger: class { warn() {} } },
+        crypto: { randomUUID: () => String(++nextId) },
+        electron: { dialog: { showOpenDialog: async () => ({ filePaths: ["clip.mp4"], canceled: false }) } },
+        fs: { createReadStream: () => Readable.from([payload]) },
+        "fs/promises": {}, path, "stream/consumers": { buffer }
+    });
+    const valid = { id: "123", applicationId: "456", applicationName: "Game", users: ["789"], version: 1 };
+    for (const value of [valid, [valid], { applicationName: {} }, { users: [123] }, { version: "1" }, { applicationId: [] }, { applicationName: "x".repeat(1024 * 1024) }]) {
+        payload = Buffer.concat([Buffer.from([1]), footer, Buffer.from(JSON.stringify(value))]);
+        const selected = await native.chooseVideoFile({});
+        const metadata = await native.parseClipFileMetadata({}, selected.token);
+        if (value === valid || Array.isArray(value)) assert.deepEqual(structuredClone(metadata), [valid]);
+        else assert.equal(metadata, null);
+        native.releaseVideoFile({}, selected.token);
+        assert.equal(await native.parseClipFileMetadata({}, selected.token), null);
+    }
+});
+
+test("temporary clip creation cleans up failed writes and failed deletion remains retryable", async () => {
+    let nextId = 0;
+    let failWrite = true;
+    let failDelete = false;
+    let warnings = 0;
+    const removed: string[] = [];
+    const root = path.resolve("fixture", "clipUpload");
+    const native = loadSource("src/equicordplugins/clipUpload.desktop/native.ts", {
+        "@main/ipcMain": { ensureSafePath: (base: string, name: string) => {
+            const resolved = path.resolve(base, name);
+            return resolved.startsWith(path.resolve(base) + path.sep) ? resolved : null;
+        } },
+        "@main/utils/constants": { DATA_DIR: path.resolve("fixture") },
+        "@utils/Logger": { Logger: class { warn() { warnings++; } } },
+        crypto: { randomUUID: () => String(++nextId) }, electron: {}, fs: {},
+        "fs/promises": {
+            mkdir: async () => {},
+            writeFile: async () => { if (failWrite) throw new Error("Private filesystem details"); },
+            rm: async (target: string) => {
+                assert.ok(target.startsWith(root + path.sep));
+                if (failDelete) throw new Error("Private filesystem details");
+                removed.push(target);
+            }
+        }, path, "stream/consumers": {}
+    });
+    assert.equal(await native.createTempVideoFileFromBytes({}, "clip.mp4", new Uint8Array([1])), null);
+    assert.equal(removed.length, 1);
+    failWrite = false;
+    const token = await native.createTempVideoFileFromBytes({}, "clip.mp4", new Uint8Array([1]));
+    failDelete = true;
+    await native.deleteTempVideoFile({}, token);
+    assert.equal(warnings, 1);
+    assert.ok(native.getTempVideoFilePath({}, token));
+    failDelete = false;
+    await native.deleteTempVideoFile({}, token);
+    assert.equal(native.getTempVideoFilePath({}, token), null);
+    assert.equal(removed.length, 2);
 });

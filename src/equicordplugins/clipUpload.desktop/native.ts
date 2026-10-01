@@ -6,11 +6,12 @@
 
 import { ensureSafePath } from "@main/ipcMain";
 import { DATA_DIR } from "@main/utils/constants";
+import { Logger } from "@utils/Logger";
 import { randomUUID } from "crypto";
 import { dialog, type IpcMainInvokeEvent } from "electron";
 import { createReadStream } from "fs";
 import { mkdir, rm, writeFile } from "fs/promises";
-import { basename, extname, join, resolve } from "path";
+import { basename, extname, join, relative, resolve } from "path";
 import { buffer } from "stream/consumers";
 
 interface TempEntry {
@@ -31,6 +32,8 @@ const tempEntries = new Map<string, TempEntry>();
 const CLIP_UPLOAD_DIR = join(DATA_DIR, "clipUpload");
 const ALLOWED_EXTENSIONS = new Set([".mp4", ".m4v"]);
 const MAX_CLIP_SIZE = 500 * 1024 * 1024; // 500MB
+const MAX_METADATA_SIZE = 1024 * 1024;
+const logger = new Logger("ClipUpload");
 const MIME_TYPES: Record<string, string> = {
     ".mp4": "video/mp4",
     ".m4v": "video/mp4",
@@ -65,13 +68,22 @@ async function parseClipMetadata(filePath: string): Promise<RawClipAttachment[] 
         const footerIdx = buf.indexOf(CLIP_FOOTER);
         if (footerIdx === -1) return null;
 
-        const jsonStr = buf.subarray(footerIdx + CLIP_FOOTER_SIZE).toString("utf-8");
-        const parsed = JSON.parse(jsonStr);
-        if (parsed && typeof parsed === "object") return Array.isArray(parsed) ? parsed : [parsed];
-        return null;
+        const metadata = buf.subarray(footerIdx + CLIP_FOOTER_SIZE);
+        if (metadata.length > MAX_METADATA_SIZE) return null;
+        const parsed: unknown = JSON.parse(metadata.toString("utf-8"));
+        const entries: unknown[] = Array.isArray(parsed) ? parsed : [parsed];
+        return entries.every(isClipAttachment) ? entries : null;
     } catch {
         return null;
     }
+}
+
+function isClipAttachment(value: unknown): value is RawClipAttachment {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const record = value as Record<string, unknown>;
+    return ["id", "applicationId", "applicationName"].every(key => record[key] === undefined || typeof record[key] === "string")
+        && (record.version === undefined || typeof record.version === "number" && Number.isFinite(record.version))
+        && (record.users === undefined || Array.isArray(record.users) && record.users.every((id: unknown) => typeof id === "string"));
 }
 
 export async function chooseVideoFile(_: IpcMainInvokeEvent): Promise<{ token: string; name: string; type: string; } | null> {
@@ -118,12 +130,11 @@ export async function createTempVideoFileFromBytes(_: IpcMainInvokeEvent, name: 
     const fileName = basename(name);
     if (fileName !== name || !ALLOWED_EXTENSIONS.has(extname(fileName).toLowerCase())) return null;
 
+    const tmpDir = join(CLIP_UPLOAD_DIR, randomUUID());
+    const tmpPath = ensureSafePath(tmpDir, fileName);
+    if (!tmpPath) return null;
+
     try {
-        const tmpDir = join(CLIP_UPLOAD_DIR, randomUUID());
-        const tmpPath = join(tmpDir, fileName);
-
-        if (!ensureSafePath(tmpDir, fileName)) return null;
-
         await mkdir(tmpDir, { recursive: true });
         await writeFile(tmpPath, data);
 
@@ -131,6 +142,7 @@ export async function createTempVideoFileFromBytes(_: IpcMainInvokeEvent, name: 
         tempEntries.set(tmpToken, { tmpDir, tmpPath });
         return tmpToken;
     } catch {
+        await rm(tmpDir, { force: true, recursive: true }).catch(() => logger.warn("Could not remove temporary clip files."));
         return null;
     }
 }
@@ -158,13 +170,15 @@ export async function deleteTempVideoFile(_: IpcMainInvokeEvent, token: string):
     const entry = tempEntries.get(token);
     if (!entry) return;
 
-    tempEntries.delete(token);
-
-    if (!ensureSafePath(CLIP_UPLOAD_DIR, entry.tmpDir)) return;
+    const tmpDir = ensureSafePath(CLIP_UPLOAD_DIR, relative(CLIP_UPLOAD_DIR, entry.tmpDir));
+    if (!tmpDir) return;
 
     try {
-        await rm(entry.tmpDir, { force: true, recursive: true });
-    } catch { }
+        await rm(tmpDir, { force: true, recursive: true });
+        tempEntries.delete(token);
+    } catch {
+        logger.warn("Could not remove temporary clip files.");
+    }
 }
 
 export async function parseClipFileMetadata(_: IpcMainInvokeEvent, token: string): Promise<RawClipAttachment[] | null> {

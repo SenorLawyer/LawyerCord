@@ -10608,6 +10608,7 @@ test("clip file reads share the size cap and selected files reuse the byte write
     const native = loadComponent("src/equicordplugins/clipUpload.desktop/native.ts", {}, {
         "@main/ipcMain": { ensureSafePath: () => true },
         "@main/utils/constants": { DATA_DIR: "fixture" },
+        "@utils/Logger": { Logger: class { warn() {} } },
         crypto: { randomUUID: () => String(++id) },
         electron: { dialog: { showOpenDialog: async () => ({ filePaths: ["clip.mp4"], canceled: false }) } },
         fs: { createReadStream: (_path: string, options: { end: number; }) => {

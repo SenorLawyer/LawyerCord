@@ -21,6 +21,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Remove the command palette's preliminary image decoding and synthetic attachment metadata from local previews.
 - Read message color context directly and set favorite-emoji drag classes through React instead of scheduling a frame for every row.
 - Remove unused Google Font metadata, cancel replaced or closed searches and keep the search field available while loading.
+- Load QR login images when shown and replace its idle JavaScript progress loop with a CSS hold transition.
 - Reuse the shared addon card for online themes and omit empty source-badge tooltips.
 - Delete unused plugin-modal layouts and obsolete warning, text and footer stylesheet overrides.
 - Decode favorite-file metadata only when saved metadata changes and compare file-row permissions by value.
@@ -46,6 +47,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Stop Windows release and build checks on the first failed native command and report failed source-channel updates immediately.
 - Preserve expanded editor component identity when a parent supplies a new render callback.
 - Remove nested switch labels while preserving row activation, keyboard toggling and accessible names.
+- Keep QR confirmation timers across rerenders, cancel partial holds on release or close, prevent duplicate submissions and retain successful login state during cleanup.
 - Bound favorite-file metadata to 64 KiB, stop decompression in bounded chunks and validate saved attachment fields and destinations.
 - Bound browser favorite-file downloads, remove their extra ArrayBuffer copy and prevent pending uploads from sending after an account change or plugin stop.
 - Validate local clip metadata, cap its JSON at 1 MiB, remove temporary directories after failed writes, and retain failed cleanup tokens for retry.

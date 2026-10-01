@@ -15,7 +15,6 @@ import { removeFromArray } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import { Button } from "@webpack/common";
 
-import { preload, unload } from "./images";
 import openQrModal from "./ui/modals/QrModal";
 
 const settings = definePluginSettings({
@@ -67,11 +66,9 @@ export default definePlugin({
             Component: openQrModal,
             Icon: QrCodeIcon
         });
-        preload();
     },
 
     stop() {
         removeFromArray(SettingsPlugin.customEntries, e => e.key === "equicord_login_with_qr");
-        unload();
     },
 });

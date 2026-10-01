@@ -83,6 +83,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Shared switch labeling: replace its empty inner label with the existing container div so FormSwitch and BooleanSetting provide one label per input. A Chromium proof renders the source-derived control before/after and preserves its accessible name, row-title click, Space key, disabled behavior and standalone input click. Parent labels fall from two to one. Repository CSS callers do not depend on the old label tag. No new component prop or permanent regression suite is needed for this two-line markup correction.
 
+- QR confirmation lifetime: delete the animation controller, per-frame DOM writes and idle frame loop, and render progress through a CSS transform transition. The hold timer retains the existing 1,250 ms requirement and survives rerenders. Release, pointer cancellation, lost capture, blur and close cancel partial holds; repeated presses submit once. Late completions cannot update a closed modal, and successful closes no longer invoke the stale abort callback. Delete eager image preloads and orphaned preview styles. Five regressions fail before the change; six focused tests and source/style checks pass afterwards. A Chromium proof verifies partial/full/released fill and visible text. No live authentication request was sent. QR scanner work and account ownership remain separate review findings.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

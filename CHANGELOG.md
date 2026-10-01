@@ -30,6 +30,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Ignore unrelated voice updates in user indicators and keep channel, permission and tooltip subscriptions current.
 - Export server assets with sequential bounded downloads and the shared queued ZIP compressor instead of concurrent whole-response copies and synchronous renderer compression.
 - Replace idle voice polling with store notifications and prevent disabled restart timers from being recreated by settings edits.
+- Save Quest filter choices only when they change and shallow-copy their primitive records instead of serializing and parsing them during rendering.
+- Keep Discord's lazy Quest artwork loading by default while preserving the saved preload option, and remove the redundant badge component.
 - Update existing keyboard audio volumes instead of rebuilding and preloading the entire pool for every slider edit.
 - Run clip conversions one at a time and release the FFmpeg worker and its WASM memory after each operation.
 

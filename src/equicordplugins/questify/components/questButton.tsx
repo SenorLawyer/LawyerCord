@@ -72,10 +72,6 @@ function suffixClassNames(classNames: string[], suffix: string): string {
     return suffixedClassNames;
 }
 
-function QuestButtonLowerBadge(props: QuestButtonLowerBadgeProps & { className: string; }): JSX.Element {
-    return <ServerListItemLowerBadgeComponent {...props} />;
-}
-
 function QuestButtonView({
     id,
     className,
@@ -98,7 +94,7 @@ function QuestButtonView({
     const lowerBadge = badgeProps.count === 0
         ? null
         : (
-            <QuestButtonLowerBadge
+            <ServerListItemLowerBadgeComponent
                 {...badgeProps}
                 className={lowerBadgeClass}
                 style={{ ...(badgeProps.style ?? {}), ...lowerBadgeSize }}

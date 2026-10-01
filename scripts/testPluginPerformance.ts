@@ -6115,6 +6115,7 @@ test("quest settings migration removes retired automation state and preserves pr
 test("quest sort settings keep every status exactly once", () => {
     const defaults = ["UNCLAIMED", "CLAIMED", "IGNORED", "EXPIRED"];
     const mocks = {
+        "@webpack/common": {},
         "../settings/access": {},
         "../settings/def": { defaultQuestOrder: defaults },
         "../settings/rerender": {},

@@ -5,6 +5,7 @@
  */
 
 import type { Quest } from "@vencord/discord-types";
+import { lodash } from "@webpack/common";
 
 import { getQuestifySettings, useQuestifySettings } from "../settings/access";
 import { defaultClaimedSubsort, defaultExpiredSubsort, defaultIgnoredSubsort, defaultQuestOrder, defaultUnclaimedSubsort, type QuestOrderStatus, type QuestSubsort, type QuestTileColorSetting, type QuestTileGradient } from "../settings/def";
@@ -287,32 +288,25 @@ export function setLastSortChoice(sort: string): void {
     getQuestifySettings().lastQuestPageSort = sort || "questify";
 }
 
-function getFilterChoiceKey({ group, filter }: { group: string; filter: string; }): string {
-    return JSON.stringify([group, filter]);
-}
-
 export function getLastFilterChoices(): { group: string, filter: string; }[] | null {
     const { rememberQuestPageFilters, lastQuestPageFilters } = getQuestifySettings();
 
-    return rememberQuestPageFilters
-        ? Object.values(lastQuestPageFilters).map(item => JSON.parse(JSON.stringify(item)))
-        : null;
+    if (!rememberQuestPageFilters) return null;
+    if (!lastQuestPageFilters || typeof lastQuestPageFilters !== "object") return [];
+    return Object.values(lastQuestPageFilters).flatMap(item =>
+        item && typeof item === "object" && "group" in item && "filter" in item
+            && typeof item.group === "string" && typeof item.filter === "string"
+            ? [{ group: item.group, filter: item.filter }]
+            : []
+    );
 }
 
 export function setLastFilterChoices(filters: { group: string, filter: string; }[] | null): void {
-    if (!filters?.length) {
-        getQuestifySettings().lastQuestPageFilters = {};
-
+    if (filters?.length && !filters.every(filter => filter?.group && filter?.filter)) {
         return;
     }
 
-    if (!filters.every(filter => filter?.group && filter?.filter)) {
-        return;
-    }
-
-    getQuestifySettings().lastQuestPageFilters = JSON.parse(JSON.stringify(filters)).reduce((acc, item) => {
-        acc[getFilterChoiceKey(item)] = item;
-
-        return acc;
-    }, {} as Record<string, { group: string, filter: string; }>);
+    const next = Object.fromEntries((filters ?? []).map(({ group, filter }) => [JSON.stringify([group, filter]), { group, filter }]));
+    const settings = getQuestifySettings();
+    if (!lodash.isEqual(settings.lastQuestPageFilters, next)) settings.lastQuestPageFilters = next;
 }

@@ -20,6 +20,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Keep ChannelTabs mention and Nitro glows static instead of continuously repainting blurred shadows and icon colors.
 - Remove the command palette's preliminary image decoding and synthetic attachment metadata from local previews.
 - Read message color context directly and set favorite-emoji drag classes through React instead of scheduling a frame for every row.
+- Ignore unrelated voice updates in user indicators and keep channel, permission and tooltip subscriptions current.
 - Run clip conversions one at a time and release the FFmpeg worker and its WASM memory after each operation.
 
 ### Fixed

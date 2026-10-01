@@ -10,9 +10,9 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import ShowHiddenChannelsPlugin from "@plugins/showHiddenChannels";
 import { classNameFactory } from "@utils/css";
 import { classes } from "@utils/misc";
-import { Channel, User } from "@vencord/discord-types";
+import { Channel } from "@vencord/discord-types";
 import { findByPropsLazy, findCssClassesLazy } from "@webpack";
-import { ChannelRouter, ChannelStore, Parser, PermissionsBits, PermissionStore, React, showToast, Toasts, Tooltip, useMemo, UserStore, UserSummaryItem, useStateFromStores, VoiceStateStore } from "@webpack/common";
+import { ChannelRouter, ChannelStore, lodash, Parser, PermissionsBits, PermissionStore, React, showToast, Toasts, Tooltip, UserStore, UserSummaryItem, useStateFromStores, VoiceStateStore } from "@webpack/common";
 import { PropsWithChildren } from "react";
 
 const cl = classNameFactory("vc-uvs-");
@@ -89,18 +89,11 @@ interface VoiceChannelTooltipProps {
 }
 
 function VoiceChannelTooltip({ channel, isLocked }: VoiceChannelTooltipProps) {
-    const voiceStates = useStateFromStores([VoiceStateStore], () => VoiceStateStore.getVoiceStatesForChannel(channel.id));
-
-    const users = useMemo(() => {
-        const users: User[] = [];
-
-        for (const key in voiceStates) {
-            const user = UserStore.getUser(voiceStates[key].userId);
-            if (user != null) users.push(user);
-        }
-
-        return users;
-    }, [voiceStates]);
+    const users = useStateFromStores([VoiceStateStore, UserStore], () =>
+        Object.values(VoiceStateStore.getVoiceStatesForChannel(channel.id)).flatMap(state => {
+            const user = UserStore.getUser(state.userId);
+            return user ? [user] : [];
+        }), [channel.id], lodash.isEqual);
 
     const Icon = isLocked ? LockedSpeakerIcon : SpeakerIcon;
     return (
@@ -144,23 +137,26 @@ export function clearVoiceChannelIndicatorTimers() {
 }
 
 export const VoiceChannelIndicator = ErrorBoundary.wrap(({ userId, isProfile, isActionButton, shouldHighlight }: VoiceChannelIndicatorProps) => {
-    const channelId = useStateFromStores([VoiceStateStore], () => VoiceStateStore.getVoiceStateForUser(userId)?.channelId);
-
-    const { isMuted, isDeaf } = useStateFromStores([VoiceStateStore], () => {
+    const { channelId, isMuted, isDeaf } = useStateFromStores([VoiceStateStore], () => {
         const voiceState = VoiceStateStore.getVoiceStateForUser(userId);
         return {
+            channelId: voiceState?.channelId,
             isMuted: voiceState?.mute || voiceState?.selfMute || false,
             isDeaf: voiceState?.deaf || voiceState?.selfDeaf || false
         };
-    });
+    }, [userId], lodash.isEqual);
 
-    const channel = channelId == null ? undefined : ChannelStore.getChannel(channelId);
+    const channel = useStateFromStores([ChannelStore], () => channelId == null ? undefined : ChannelStore.getChannel(channelId), [channelId]);
+    const { canView, canConnect } = useStateFromStores([PermissionStore], () => ({
+        canView: !!channel && (channel.isPrivate() || PermissionStore.can(PermissionsBits.VIEW_CHANNEL, channel)),
+        canConnect: !!channel && (channel.isPrivate() || PermissionStore.can(PermissionsBits.CONNECT, channel))
+    }), [channel], lodash.isEqual);
     if (channel == null) return null;
 
     const isDM = channel.isDM() || channel.isMultiUserDM();
-    if (!isDM && !PermissionStore.can(PermissionsBits.VIEW_CHANNEL, channel) && !isPluginEnabled(ShowHiddenChannelsPlugin.name)) return null;
+    if (!canView && !isPluginEnabled(ShowHiddenChannelsPlugin.name)) return null;
 
-    const isLocked = !isDM && (!PermissionStore.can(PermissionsBits.VIEW_CHANNEL, channel) || !PermissionStore.can(PermissionsBits.CONNECT, channel));
+    const isLocked = !canView || !canConnect;
 
     function onClick(e: React.MouseEvent) {
         e.preventDefault();

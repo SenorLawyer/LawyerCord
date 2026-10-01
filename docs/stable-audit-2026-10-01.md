@@ -61,6 +61,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Clip native boundary: validate metadata field types and reject metadata over 1 MiB before text decoding and JSON parsing. The malformed-metadata regression fails before the change. Failed temp writes now remove their directories; failed deletion logs a scrubbed warning and retains its token for retry. Eight focused clip tests and the existing 500 MiB read-cap/byte-writer check pass, along with source lint and TypeScript. Reading metadata still reads the bounded whole video; reducing those repeated file reads remains a separate performance finding.
 
+- UserVoiceShow subscriptions: combine displayed voice flags and channel into one value-compared selector so unrelated voice changes do not rerender every indicator. Subscribe to displayed channel, permissions and tooltip users with explicit dependencies. The regression fails before the change and passes afterwards; source lint and TypeScript pass.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

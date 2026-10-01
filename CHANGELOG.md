@@ -19,6 +19,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Preserve server list component state when neighboring registrations or priorities change.
 - Prevent cloud sync feedback from changing the notification log and scheduling another upload.
 - Ignore Roblox process results from a stopped plugin run or a previous account.
+- Advance past oversized automation log lines instead of rereading the same 4 MiB chunk indefinitely.
 
 ## 3.1.1.0 - 2026-09-29 (Nightly)
 

@@ -325,6 +325,7 @@ interface CodexSessionHeader {
 
 interface TrackedFile {
     offset: number;
+    discarding?: boolean;
     session?: CodexSessionHeader;
 }
 
@@ -339,6 +340,7 @@ const system = {
     roblox: {
         file: "",
         offset: 0,
+        discarding: false,
         silent: true,
         session: null as { game: RobloxGame; joinedAt: number; } | null,
         pendingJoin: null as { jobId: string; placeId: string; } | null,
@@ -420,17 +422,26 @@ async function scanProcesses(): Promise<void> {
 }
 
 /** New bytes since the last read, minus any half-written last line, which is picked up next time. */
-async function readAppended(path: string, offset: number): Promise<{ lines: string[]; offset: number; }> {
+async function readAppended(path: string, offset: number, discarding = false): Promise<{ lines: string[]; offset: number; discarding: boolean; }> {
     const handle = await open(path, "r");
     try {
         const { size } = await handle.stat();
         const start = size < offset ? 0 : offset;
-        if (size === start) return { lines: [], offset: size };
+        if (size < offset) discarding = false;
+        if (size === start) return { lines: [], offset: size, discarding };
         const length = Math.min(size - start, READ_CAP);
         const buffer = Buffer.alloc(length);
         const { bytesRead } = await handle.read(buffer, 0, length, start);
-        const end = buffer.subarray(0, bytesRead).lastIndexOf(0x0A) + 1;
-        return { lines: buffer.subarray(0, end).toString("utf8").split("\n"), offset: start + end };
+        const bytes = buffer.subarray(0, bytesRead);
+        let begin = 0;
+        if (discarding) {
+            const newline = bytes.indexOf(0x0A);
+            if (newline < 0) return { lines: [], offset: start + bytesRead, discarding: true };
+            begin = newline + 1;
+        }
+        const end = bytes.lastIndexOf(0x0A) + 1;
+        if (end === 0 && bytesRead === READ_CAP) return { lines: [], offset: start + bytesRead, discarding: true };
+        return { lines: bytes.subarray(begin, end).toString("utf8").split("\n"), offset: start + end, discarding: false };
     } finally {
         await handle.close();
     }
@@ -512,10 +523,12 @@ async function scanRoblox(): Promise<void> {
         state.silent = state.file === "";
         state.file = file;
         state.offset = 0;
+        state.discarding = false;
         state.pendingJoin = null;
     }
-    const { lines, offset } = await readAppended(file, state.offset);
+    const { lines, offset, discarding } = await readAppended(file, state.offset, state.discarding);
     state.offset = offset;
+    state.discarding = discarding;
     for (const line of lines) {
         const parsed = parseRobloxLine(line);
         if (!parsed) continue;
@@ -576,9 +589,10 @@ async function scanCodex(): Promise<void> {
                 continue;
             }
         }
-        let read: { lines: string[]; offset: number; };
-        try { read = await readAppended(file, tracked.offset); } catch { continue; }
+        let read: Awaited<ReturnType<typeof readAppended>>;
+        try { read = await readAppended(file, tracked.offset, tracked.discarding); } catch { continue; }
         tracked.offset = read.offset;
+        tracked.discarding = read.discarding;
         for (const line of read.lines) {
             const parsed = parseCodexLine(line);
             if (!parsed) continue;

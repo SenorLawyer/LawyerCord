@@ -48,3 +48,5 @@ Automation UI initialization: the registry uses the existing LazyComponent and k
 RobloxActivity lifecycle: a pending process check could send a session notification after disabling the plugin or changing accounts. The regression fails on Stable and passes for stop, restart and account change after rejecting stale generations and account IDs. Current checks still report sessions; TypeScript and source lint pass.
 
 Oversized system log lines: Stable stops advancing when a line exceeds its 4 MiB read cap, causing repeated reads and hiding all later events. Keep a discard flag in each scanner until the next newline. The regression fails against Stable; native tests now cover large lines, real Codex polling, partial UTF-8 lines, short reads and truncation. Native and Discord automation suites, TypeScript and source lint pass. The byte cap remains in place.
+
+Automation editor duplication: delete the whole-workflow copy before selection. Reuse cloneBlock for selected blocks, leaving unrelated blocks untouched. The new regression fails against Stable and the runtime/editor suite passes, including independent nested data in the copied selection. Source lint passes.

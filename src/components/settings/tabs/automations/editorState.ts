@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { type Automation, cloneAutomation, remapBlockConfig, remapEdge, removeEdgeTarget } from "./model";
+import { type Automation, cloneBlock, remapBlockConfig, remapEdge, removeEdgeTarget } from "./model";
 
 export interface EditorState {
     workflow: Automation;
@@ -47,8 +47,8 @@ export function removeBlocks(workflow: Automation, ids: Set<string>): Automation
 
 export function duplicateBlocks(workflow: Automation, selected: Set<string>): { workflow: Automation; ids: Set<string>; } {
     const ids = new Map([...selected].map(id => [id, crypto.randomUUID()]));
-    const copies = cloneAutomation(workflow).blocks.filter(block => selected.has(block.id)).map(block => ({
-        ...block,
+    const copies = workflow.blocks.filter(block => selected.has(block.id)).map(block => ({
+        ...cloneBlock(block),
         id: ids.get(block.id) ?? block.id,
         next: remapEdge(block.next, ids),
         alternate: remapEdge(block.alternate, ids),

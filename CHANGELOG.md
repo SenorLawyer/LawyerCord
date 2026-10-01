@@ -22,6 +22,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Ignore Roblox process results from a stopped plugin run or a previous account.
 - Advance past oversized automation log lines instead of rereading the same 4 MiB chunk indefinitely.
 - Ignore malformed browser startup metadata and CSS URLs outside the packaged extension stylesheet.
+- Cancel Animalese sound downloads on stop and quality changes, and prevent pending messages from restarting stopped audio.
 
 ## 3.1.1.0 - 2026-09-29 (Nightly)
 

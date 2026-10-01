@@ -37,6 +37,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 - Automation editor duplication: delete the whole-workflow copy before selection. Reuse cloneBlock for selected blocks, leaving unrelated blocks untouched. The new regression fails against Stable and the runtime/editor suite passes, including independent nested data in the copied selection. Source lint passes.
 - Browser startup metadata: malformed messages could throw, prematurely consume initialization or select arbitrary CSS URLs. Validate the metadata shape and packaged Chrome/Firefox stylesheet URLs before resolving readiness. The regression fails before the change and passes afterwards. Source lint and TypeScript pass. This validates the destination, not the identity of a same-page sender.
 
+- Animalese sound loading: cancel replaced downloads and prevent pending messages from recreating audio after stop. Each load owns its cancellation and completion; late completions cannot replace current buffers. Regression cases cover stop, restart, rapid quality changes, returning to a loaded quality and network failure/retry. Both original lifecycle regressions fail before the change; all four tests pass after it. The new metadata and audio tests run in the existing performance check.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

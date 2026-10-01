@@ -95,6 +95,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 - Husk reaction work: read settings once per search, stop at the last matching emoji using a reverse scan, reuse the rendered channel and use the shared reaction endpoint. Preserve bigint fallback and handle request rejection with one error toast and a scrubbed warning. Both regressions fail before the fix and pass afterwards, including a 10,000-emoji server whose last emoji matches. Source lint passes.
 
+- Keyboard audio pool: update existing shared audio-player volumes instead of deleting and preloading every player on each volume-slider event. Gate pack rebuilds on active plugin lifetime. Both regressions fail before the change and pass afterwards; the 101-edit fixture creates 12 players once instead of 1,224 while retaining typing playback, pack replacement and teardown. Source lint and TypeScript pass. No audio latency or affected-device FPS claim follows from these fixtures.
+
 ## Completion requirements
 
 - Account for every baseline path with an explicit disposition and evidence scope.

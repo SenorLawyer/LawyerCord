@@ -28,6 +28,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Refresh favorite-file links outside render selectors, deduplicate active requests, bound retained links and clear pending work on stop or account changes.
 - Skip plugin registry searches for ordinary messages, remove per-card dependency maps and unused toolbox icon styles.
 - Ignore unrelated voice updates in user indicators and keep channel, permission and tooltip subscriptions current.
+- Update existing keyboard audio volumes instead of rebuilding and preloading the entire pool for every slider edit.
 - Run clip conversions one at a time and release the FFmpeg worker and its WASM memory after each operation.
 
 ### Fixed
@@ -48,6 +49,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Preserve expanded editor component identity when a parent supplies a new render callback.
 - Remove nested switch labels while preserving row activation, keyboard toggling and accessible names.
 - Keep incomplete numeric setting edits visible without saving invalid values, and preserve exact bigint input without floating point stepping.
+- Prevent keyboard sound setting changes from creating audio players after the plugin stops.
 - Avoid per-emoji settings reads and duplicate channel lookups when adding a Husk reaction, preserve the last matching emoji and handle failed requests.
 - Subscribe contributor cards only to their displayed enable flags, keep their user profile selector current and handle failed profile lookups.
 - Stop closed or changed plugin modals from appending stale authors or creating fallback users after a lookup finishes.

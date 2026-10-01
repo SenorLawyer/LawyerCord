@@ -14,7 +14,7 @@ import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
 const { outputText } = transpileModule(readFileSync("src/api/DataStore/index.ts", "utf8"), {
     compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
 });
-const { delMany, entries, setMany, update, updateMany } = runInNewContext(`${outputText}\nexports;`, { exports: {}, structuredClone });
+const { delMany, entries, keys, values, setMany, update, updateMany } = runInNewContext(`${outputText}\nexports;`, { exports: {}, structuredClone });
 
 test("DataStore multi-key updates share one transaction and abort partial writes", async () => {
     for (const outcome of ["get-error", "read-error", "updater-error", "put-error", "abort", "commit"] as const) {
@@ -156,19 +156,39 @@ for (const [name, batch, input] of [
     });
 }
 
-test("DataStore cursor entries reuse the existing transaction", async () => {
-    let transactions = 0;
-    const pending = entries(async (_mode: string, callback: (store: object) => unknown) => {
-        transactions++;
-        const transaction: { oncomplete?: () => void; } = {};
-        const request: { result: { key: string; value: number; continue(): void; } | null; onsuccess?: () => void; } = {
-            result: { key: "fixture", value: 4, continue() { request.result = null; request.onsuccess?.(); transaction.oncomplete?.(); } }
-        };
-        const result = callback({ transaction, openCursor: () => request });
-        queueMicrotask(() => request.onsuccess?.());
-        return result;
-    });
-    const result = await pending;
-    assert.equal(JSON.stringify(result), JSON.stringify([["fixture", 4]]));
-    assert.equal(transactions, 1);
+test("DataStore bulk reads preserve key/value pairing in one transaction and reject request errors", async () => {
+    for (const read of [keys, values, entries]) {
+        for (const failed of [undefined, "keys", "values"] as const) {
+            const storedKeys = [1, "fixture", ["compound", 2]];
+            const storedValues = [null, { saved: true }, new Map([["item", 4]])];
+            const requests: { name: string; result: unknown; error: Error; onsuccess?: () => void; onerror?: () => void; }[] = [];
+            const error = new Error("Read failed");
+            let transactions = 0;
+            const pending = read(async (mode: string, callback: (store: object) => unknown) => {
+                transactions++;
+                assert.equal(mode, "readonly");
+                const request = (name: string, result: unknown) => {
+                    const value = { name, result, error };
+                    requests.push(value);
+                    return value;
+                };
+                return callback({
+                    getAllKeys: () => request("keys", storedKeys),
+                    getAll: () => request("values", storedValues)
+                });
+            });
+            const rejecting = requests.some(request => request.name === failed);
+            const checked = rejecting ? assert.rejects(pending, (reason: unknown) => reason === error) : pending;
+            for (const request of requests.toReversed()) {
+                if (request.name === failed) request.onerror?.();
+                else request.onsuccess?.();
+            }
+            await checked;
+            if (!rejecting) {
+                const expected = read === keys ? storedKeys : read === values ? storedValues : storedKeys.map((key, index) => [key, storedValues[index]]);
+                assert.deepEqual(structuredClone(await pending), expected);
+            }
+            assert.equal(transactions, 1);
+        }
+    }
 });

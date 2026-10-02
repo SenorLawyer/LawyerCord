@@ -8,6 +8,7 @@ import { definePluginSettings } from "@api/Settings";
 import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import { sleep } from "@utils/misc";
+import { Queue } from "@utils/Queue";
 import definePlugin, { OptionType } from "@utils/types";
 import { createZipFile } from "@utils/zip";
 import { ChannelStore, DraftType, SelectedChannelStore, showToast, Toasts, UploadHandler, UserStore } from "@webpack/common";
@@ -138,42 +139,41 @@ async function processFiles(files: File[], signal: AbortSignal): Promise<File[]>
 
 let interceptingEvents = false;
 const pendingUploads = new Set<AbortController>();
+const preparationQueue = new Queue();
 
-async function uploadProcessedFiles(process: (signal: AbortSignal) => Promise<File[]>) {
+function uploadProcessedFiles(process: (signal: AbortSignal) => Promise<File[]>) {
     const controller = new AbortController();
     const { signal } = controller;
     const channelId = SelectedChannelStore.getChannelId();
     const userId = UserStore.getCurrentUser()?.id;
     pendingUploads.add(controller);
-    try {
-        const files = await process(signal);
-        await sleep(10);
-        if (signal.aborted || userId !== UserStore.getCurrentUser()?.id) return;
-        const channel = ChannelStore.getChannel(channelId);
-        if (channel && files.length) await UploadHandler.promptToUpload(files, channel, DraftType.ChannelMessage);
-    } catch (error) {
-        if (!signal.aborted) {
-            logger.error("Failed to prepare upload", error);
-            notifyZipFailure("Could not prepare files for upload.");
+    preparationQueue.push(async () => {
+        try {
+            if (signal.aborted || userId !== UserStore.getCurrentUser()?.id) return;
+            const files = await process(signal);
+            await sleep(10);
+            if (signal.aborted || userId !== UserStore.getCurrentUser()?.id) return;
+            const channel = ChannelStore.getChannel(channelId);
+            if (channel && files.length) await UploadHandler.promptToUpload(files, channel, DraftType.ChannelMessage);
+        } catch (error) {
+            if (!signal.aborted) {
+                logger.error("Failed to prepare upload", error);
+                notifyZipFailure("Could not prepare files for upload.");
+            }
+        } finally {
+            pendingUploads.delete(controller);
         }
-    } finally {
-        pendingUploads.delete(controller);
-    }
+    });
 }
 
 function handleDrop(event: DragEvent) {
     if (!event.dataTransfer) return;
 
-    const items = Array.from(event.dataTransfer.items);
-    if (items.length === 0) return;
-
-    const hasTargetedItem = items.some(item => {
-        const entry = item.webkitGetAsEntry();
-        if (entry?.isDirectory) return true;
-
-        const file = item.kind === "file" ? item.getAsFile() : null;
-        return file != null && shouldZipFile(file);
-    });
+    const items = Array.from(event.dataTransfer.items, item => ({
+        entry: item.webkitGetAsEntry(),
+        file: item.kind === "file" ? item.getAsFile() : null
+    }));
+    const hasTargetedItem = items.some(({ entry, file }) => entry?.isDirectory || file != null && shouldZipFile(file));
 
     if (!hasTargetedItem) return;
 
@@ -182,9 +182,8 @@ function handleDrop(event: DragEvent) {
 
     void uploadProcessedFiles(async signal => {
         const files: File[] = [];
-        for (const item of items) {
+        for (const { entry, file } of items) {
             if (signal.aborted) throw new DOMException("Upload cancelled.", "AbortError");
-            const entry = item.webkitGetAsEntry();
             if (entry?.isDirectory) {
                 try {
                     const fileEntries = await readDirectoryEntry(entry as FileSystemDirectoryEntry, signal);
@@ -194,9 +193,8 @@ function handleDrop(event: DragEvent) {
                     logger.error(`Failed to zip folder ${entry.name}:`, error);
                     notifyZipFailure(`Failed to zip folder ${entry.name}.`);
                 }
-            } else if (item.kind === "file") {
-                const file = item.getAsFile();
-                if (file) files.push(...await processFiles([file], signal));
+            } else if (file) {
+                files.push(...await processFiles([file], signal));
             }
         }
         return files;

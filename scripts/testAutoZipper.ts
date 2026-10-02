@@ -40,6 +40,7 @@ function fixture() {
             UploadHandler: { promptToUpload: (files: File[], channel: { id: string }) => uploads.push({ files, channel }) }
         },
         "fflate": { zipSync: () => { synchronousCalls++; return new Uint8Array([1]); } },
+        "@utils/Queue": { Queue },
         "@utils/zip": { createZipFile: (name: string, files: Record<string, Uint8Array>, signal: AbortSignal) =>
             new Promise<File>((resolve, reject) => operations.push({ name, files, signal, resolve, reject })) }
     };
@@ -252,4 +253,56 @@ test("AutoZipper retains file fallback on compression failure and the size limit
     assert.equal(f.operations.length, 1);
     assert.equal(f.uploads[1].files[0], oversized);
     f.plugin.stop();
+});
+
+test("AutoZipper captures every dropped file before drag access expires", async () => {
+    const f = fixture();
+    const first = new File(["executable"], "first.exe");
+    const second = new File(["image"], "second.png");
+    let accessible = true;
+    f.plugin.start();
+    f.drop([first, second].map(file => ({
+        kind: "file",
+        webkitGetAsEntry: () => accessible ? fileEntry(file) : null,
+        getAsFile: () => accessible ? file : null
+    })));
+    accessible = false;
+    await setImmediate();
+    assert.equal(f.operations.length, 1);
+    const zipped = new File(["archive"], "first.zip");
+    f.operations[0].resolve(zipped);
+    await setImmediate(); await setImmediate();
+    assert.deepEqual(Array.from(f.uploads[0].files, file => file.name), ["first.zip", "second.png"]);
+    f.plugin.stop();
+});
+
+test("AutoZipper reads only one upload batch at a time and skips cancelled queued batches", async () => {
+    for (const cancel of [false, true]) {
+        const f = fixture();
+        let secondReads = 0;
+        const second = new File(["second"], "second.exe");
+        const read = second.arrayBuffer.bind(second);
+        second.arrayBuffer = () => { secondReads++; return read(); };
+        f.plugin.start();
+        f.paste(new File(["first"], "first.exe"));
+        f.paste(second);
+        await setImmediate();
+        assert.equal(f.operations.length, 1);
+        assert.equal(secondReads, 0);
+        if (cancel) f.plugin.stop();
+        f.operations[0].resolve(new File(["archive"], "first.zip"));
+        await setImmediate(); await setImmediate(); await setImmediate();
+        if (cancel) {
+            assert.equal(secondReads, 0);
+            assert.equal(f.operations.length, 1);
+            assert.equal(f.uploads.length, 0);
+        } else {
+            assert.equal(secondReads, 1);
+            assert.equal(f.operations.length, 2);
+            f.operations[1].resolve(new File(["archive"], "second.zip"));
+            await setImmediate(); await setImmediate();
+            assert.equal(f.uploads.length, 2);
+        }
+        f.plugin.stop();
+    }
 });

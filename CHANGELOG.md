@@ -88,6 +88,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Capture all dropped files before browser drag access expires, and prepare one automatic ZIP upload at a time before allocating input bytes.
+
 - Keep KeywordNotify configuration editable while disabled, reject stopped startup and release retained message records and menu callbacks on stop.
 
 - Search the correct DM or guild endpoint for LastActive, select the actual author/channel hit and reject stale navigation and retained stopped actions.

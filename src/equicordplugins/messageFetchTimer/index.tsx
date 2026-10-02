@@ -6,24 +6,15 @@
 
 import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
 import { definePluginSettings } from "@api/Settings";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { EquicordDevs } from "@utils/constants";
-import { getCurrentChannel } from "@utils/discord";
+import { proxyLazy } from "@utils/lazy";
 import definePlugin, { OptionType } from "@utils/types";
-import { FluxDispatcher, React } from "@webpack/common";
+import { moment, React, zustandCreate } from "@webpack/common";
 
-interface FetchTiming {
-    channelId: string;
-    startTime: number;
-    endTime?: number;
-    duration?: number;
-    timestamp?: Date;
-}
-
-let currentFetch: FetchTiming | null = null;
-let currentChannelId: string | null = null;
-const channelTimings: Map<string, { time: number; timestamp: Date; }> = new Map();
-const MAX_CHANNEL_TIMINGS = 50;
-const MAX_FETCH_DURATION_MS = 60_000;
+const pendingFetches = new Map<string, number>();
+const useTimings = proxyLazy(() => zustandCreate((): Map<string, { time: number; timestamp: Date; }> => new Map()));
+const TIMING_SETTINGS = ["showIcon", "showMs", "iconColor"] satisfies (keyof typeof settings.store)[];
 
 const settings = definePluginSettings({
     showIcon: {
@@ -43,46 +34,17 @@ const settings = definePluginSettings({
     }
 });
 
-const FetchTimeButton: ChatBarButtonFactory = ({ isMainChat }) => {
-    const { showIcon, showMs, iconColor } = settings.use(["showIcon", "showMs", "iconColor"]);
+const FetchTimeButton: ChatBarButtonFactory = ({ isMainChat, channel }) => {
+    const { showIcon, showMs, iconColor } = settings.use(TIMING_SETTINGS);
+    const timing = useTimings((timings: Map<string, { time: number; timestamp: Date; }>) => timings.get(channel.id));
+    if (!isMainChat || !showIcon || !timing) return null;
 
-    if (!isMainChat || !showIcon || !currentChannelId) {
-        return null;
-    }
-
-    const channelData = channelTimings.get(currentChannelId);
-    if (!channelData) {
-        return null;
-    }
-
-    const { time, timestamp } = channelData;
-    const displayTime = showMs ? `${Math.round(time)}ms` : `${Math.round(time / 1000)}s`;
-
-    if (!showMs && Math.round(time / 1000) === 0) {
-        return null;
-    }
-
-    const timeAgo = formatTimeAgo(timestamp);
-
+    const display = Math.round(timing.time / (showMs ? 1 : 1000));
+    if (!showMs && display === 0) return null;
     return (
-        <ChatBarButton
-            tooltip={`Messages loaded in ${Math.round(time)}ms (${timeAgo})`}
-            onClick={() => { }}
-        >
-            <div style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "4px"
-            }}>
-                {FetchTimeIcon()}
-                <span style={{
-                    fontSize: "12px",
-                    color: iconColor,
-                    fontWeight: "500"
-                }}>
-                    {displayTime}
-                </span>
-            </div>
+        <ChatBarButton onClick={() => { }} tooltip={`Messages loaded in ${Math.round(timing.time)}ms (${moment(timing.timestamp).fromNow()})`}>
+            <FetchTimeIcon />
+            <span style={{ color: iconColor }}>{display}{showMs ? "ms" : "s"}</span>
         </ChatBarButton>
     );
 };
@@ -100,103 +62,42 @@ function FetchTimeIcon() {
     );
 }
 
-function formatTimeAgo(timestamp: Date): string {
-    const now = new Date();
-    const diff = now.getTime() - timestamp.getTime();
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    if (days > 0) {
-        return `${days} day${days > 1 ? "s" : ""} ago`;
-    } else if (hours > 0) {
-        return `${hours} hour${hours > 1 ? "s" : ""} ago`;
-    } else if (minutes > 0) {
-        return `${minutes} minute${minutes > 1 ? "s" : ""} ago`;
-    } else {
-        return "just now";
-    }
-}
-
-function handleChannelSelect(data: any) {
-    const channelId = data.channelId as string | null | undefined;
-
-    if (!channelId) {
-        currentChannelId = null;
-        currentFetch = null;
-        return;
-    }
-
-    if (channelId === currentChannelId) return;
-
-    currentChannelId = channelId;
-    currentFetch = {
-        channelId,
-        startTime: performance.now()
-    };
-}
-
-function handleMessageLoad(data: any) {
-    if (!currentFetch || data.channelId !== currentFetch.channelId) return;
-
-    const endTime = performance.now();
-    if (endTime - currentFetch.startTime > MAX_FETCH_DURATION_MS) {
-        currentFetch = null;
-        return;
-    }
-
-    const existing = channelTimings.get(currentFetch.channelId);
-    if (existing) {
-        currentFetch = null;
-        return;
-    }
-
-    const duration = endTime - currentFetch.startTime;
-
-    channelTimings.set(currentFetch.channelId, {
-        time: duration,
-        timestamp: new Date()
-    });
-    if (channelTimings.size > MAX_CHANNEL_TIMINGS) {
-        const oldestChannelId = channelTimings.keys().next().value;
-        if (oldestChannelId) channelTimings.delete(oldestChannelId);
-    }
-
-    currentFetch = null;
+function clearTimings() {
+    pendingFetches.clear();
+    useTimings.setState(new Map(), true);
 }
 
 export default definePlugin({
     name: "MessageFetchTimer",
-    description: "Shows how long it took to fetch messages for the current channel",
-    dependencies: ["ChatInputButtonAPI"],
+    description: "Shows how long it took to fetch messages for the current channel.",
     tags: ["Chat", "Utility"],
     authors: [EquicordDevs.GroupXyz],
     settings,
-
     chatBarButton: {
         icon: FetchTimeIcon,
-        render: FetchTimeButton
+        render: props => <ErrorBoundary noop><FetchTimeButton {...props} /></ErrorBoundary>
     },
-
-    start() {
-        FluxDispatcher.subscribe("CHANNEL_SELECT", handleChannelSelect);
-        FluxDispatcher.subscribe("LOAD_MESSAGES_SUCCESS", handleMessageLoad);
-        FluxDispatcher.subscribe("MESSAGE_CREATE", handleMessageLoad);
-
-        const currentChannel = getCurrentChannel();
-        if (currentChannel) {
-            currentChannelId = currentChannel.id;
-        }
+    flux: {
+        LOAD_MESSAGES({ channelId }: { channelId: string; }) {
+            pendingFetches.set(channelId, performance.now());
+        },
+        LOAD_MESSAGES_SUCCESS({ channelId }: { channelId: string; }) {
+            const start = pendingFetches.get(channelId);
+            pendingFetches.delete(channelId);
+            if (start === undefined) return;
+            const time = performance.now() - start;
+            if (time > 60_000) return;
+            const timings = new Map(useTimings.getState());
+            timings.delete(channelId);
+            timings.set(channelId, { time, timestamp: new Date() });
+            if (timings.size > 50) timings.delete(timings.keys().next().value);
+            useTimings.setState(timings, true);
+        },
+        LOAD_MESSAGES_FAILURE({ channelId }: { channelId: string; }) {
+            pendingFetches.delete(channelId);
+        },
+        LOGOUT: clearTimings,
+        CONNECTION_OPEN: clearTimings
     },
-
-    stop() {
-        FluxDispatcher.unsubscribe("CHANNEL_SELECT", handleChannelSelect);
-        FluxDispatcher.unsubscribe("LOAD_MESSAGES_SUCCESS", handleMessageLoad);
-        FluxDispatcher.unsubscribe("MESSAGE_CREATE", handleMessageLoad);
-
-        currentFetch = null;
-        channelTimings.clear();
-        currentChannelId = null;
-    }
+    stop: clearTimings
 });

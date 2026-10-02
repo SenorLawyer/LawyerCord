@@ -88,6 +88,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Search the correct DM or guild endpoint for LastActive, select the actual author/channel hit and reject stale navigation and retained stopped actions.
+
 - Measure completed message fetches, publish timing changes to the current channel and clear pending timing on failures and lifecycle changes.
 
 - Update hidden servers when a saved set changes without changing size, and refresh the hidden count when joined guilds change.

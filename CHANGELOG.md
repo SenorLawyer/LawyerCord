@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Changed
 
+- Replace MessageLogger's quadratic edit comparison with the installed bounded diff algorithm, retaining complete text when a detailed diff exceeds its budget.
+
 - Release hidden ImageZoom lens media, pause removed videos and synchronize playback when the lens opens.
 
 - Delete unused Decor modal and button stylesheet rules.

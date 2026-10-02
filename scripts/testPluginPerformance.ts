@@ -21,6 +21,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { runInNewContext } from "node:vm";
 
+import { diffArrays } from "diff";
 import moment from "moment";
 import * as typescript from "typescript";
 import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
@@ -2046,7 +2047,7 @@ test("NoBlockedMessages preserves notifications for unsuppressed AutoMod message
 });
 
 test("message history diffs keep custom emoji markup atomic", () => {
-    const { createWordDiff } = loadSource("src/plugins/messageLogger/diffUtils.ts", {});
+    const { createWordDiff } = loadSource("src/plugins/messageLogger/diffUtils.ts", { diff: { diffArrays } });
     for (const prefix of ["", "a"]) {
         const before = `<${prefix}:old:123>`;
         const after = `<${prefix}:new:456>`;

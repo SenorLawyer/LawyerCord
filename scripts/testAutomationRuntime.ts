@@ -173,6 +173,15 @@ async function main() {
     assert.throws(() => parseWorkflowFile({ ...file, automations: [{ ...waiting, blocks: [{ ...wait, config: { cases: "wrong" } }] }] }), /Switch routes/);
     assert.ok(validateWorkflow(workflow({ ...normal, config: { jsonDrafts: { input: "{" } } })).some(issue => issue.message.includes("invalid JSON")));
     assert.ok(validateWorkflow(workflow({ ...normal, config: { variable: "blocks" } })).some(issue => issue.message.includes("reserved")));
+    const leftMessage = createAutomationBlock("send-message");
+    const rightMessage = createAutomationBlock("send-message");
+    const react = createAutomationBlock("react-message");
+    leftMessage.next = react.id;
+    rightMessage.next = react.id;
+    const ambiguousReaction = workflow(leftMessage, rightMessage, react);
+    assert.ok(validateWorkflow(ambiguousReaction).some(issue => issue.blockId === react.id && issue.message.includes("Several messages")));
+    react.config.input = { kind: "reference", value: `blocks.${leftMessage.id}.value` };
+    assert.ok(!validateWorkflow(ambiguousReaction).some(issue => issue.message.includes("Several messages")));
     const isolated = workflow({ ...normal, config: { variable: "result", input: { kind: "reference", value: "input" } } });
     const isolatedEnv = environment([isolated]);
     const parallel = await Promise.all([1, 2, 3].map(input => executeWorkflow(isolated, { input }, isolatedEnv.env)));

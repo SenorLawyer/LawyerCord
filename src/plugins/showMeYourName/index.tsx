@@ -114,9 +114,8 @@ function resolveColor(
     inGuild: boolean,
     ircColorsEnabled: boolean,
     isHovering: boolean,
+    defaultColor: string | null,
 ): Record<string, any> | null {
-    const defaultColor = getComputedStyle(document.documentElement).getPropertyValue("--text-strong").trim() || null;
-
     if (!defaultColor) { return null; }
 
     savedColor = savedColor.trim() || defaultColor;
@@ -338,6 +337,7 @@ type colorStringsType = { primaryColor: string | null, secondaryColor: string | 
 
 function getTypingMemberListProfilesReactionsVoiceName(
     props: memberListProfileReactionProps,
+    textOnly = false,
 ): [string | null, JSX.Element | null, string | null] {
     const { user, type } = props;
     // props.guildId for member list & preview profile, props.tags.props.displayProfile.guildId
@@ -346,18 +346,18 @@ function getTypingMemberListProfilesReactionsVoiceName(
     const member = guildId && user ? GuildMemberStore.getMember(guildId, user.id) : null;
     const author = user && member ? { ...user, ...member } : user || member || null;
     const shouldHookless = ["typingIndicator", "reactionsTooltip", "profilesTooltip"].includes(type);
-    return renderUsername(author, null, null, type, "", shouldHookless, !!guildId);
+    return renderUsername(author, null, null, type, "", shouldHookless, !!guildId, undefined, undefined, textOnly);
 }
 
 function getTypingMemberListProfilesReactionsVoiceNameText(props: memberListProfileReactionProps): string | null {
-    return getTypingMemberListProfilesReactionsVoiceName(props)[2];
+    return getTypingMemberListProfilesReactionsVoiceName(props, true)[2];
 }
 
 function getTypingMemberListProfilesReactionsVoiceNameElement(props: memberListProfileReactionProps): JSX.Element | null {
     return getTypingMemberListProfilesReactionsVoiceName(props)[1];
 }
 
-function getMessageName(props: messageProps): [string | null, JSX.Element | null, string | null] {
+function getMessageName(props: messageProps, textOnly = false): [string | null, JSX.Element | null, string | null] {
     const { hideDefaultAtSign, replies } = settings.use(["hideDefaultAtSign", "replies"]);
     const { message, userOverride, isRepliedMessage, withMentionPrefix } = props;
     const isWebhook = !!message?.webhookId && !message?.interaction;
@@ -367,7 +367,7 @@ function getMessageName(props: messageProps): [string | null, JSX.Element | null
     const member = isWebhook ? null : target && channel ? GuildMemberStore.getMember(channel.guild_id, target.id) : null;
     const author = user && member ? { ...user, ...member } : user || member || null;
     const mentionSymbol = hideDefaultAtSign && (!isRepliedMessage || replies) ? "" : withMentionPrefix ? "@" : "";
-    return renderUsername(author, channel?.id || null, message?.id || null, isRepliedMessage ? "replies" : "messages", mentionSymbol, false, !!channel?.guild_id, props.colorString, props.colorStrings);
+    return renderUsername(author, channel?.id || null, message?.id || null, isRepliedMessage ? "replies" : "messages", mentionSymbol, false, !!channel?.guild_id, props.colorString, props.colorStrings, textOnly);
 }
 
 function getMessageNameElement(props: messageProps): JSX.Element | null {
@@ -375,7 +375,7 @@ function getMessageNameElement(props: messageProps): JSX.Element | null {
 }
 
 function getMessageNameText(props: messageProps): string | null {
-    return getMessageName(props)[0];
+    return getMessageName(props, true)[0];
 }
 
 function getMentionNameElement(props: mentionProps): JSX.Element | null {
@@ -447,7 +447,8 @@ function renderUsername(
     hookless: boolean,
     inGuild: boolean,
     colorString?: string,
-    colorStrings?: { primaryColor: string | null, secondaryColor: string | null, tertiaryColor: string | null; } | null
+    colorStrings?: { primaryColor: string | null, secondaryColor: string | null, tertiaryColor: string | null; } | null,
+    textOnly = false,
 ): [string | null, JSX.Element | null, string | null] {
     const isMessage = type === "messages";
     const isReply = type === "replies";
@@ -463,6 +464,28 @@ function renderUsername(
     const config = hookless ? settings.store : settings.use(["messages", "replies", "mentions", "typingIndicator", "memberList", "profilePopout", "reactions", "friendNameOnlyInDirectMessages", "customNameOnlyInDirectMessages", "discriminators", "hideDefaultAtSign", "truncateAllNamesWithStreamerMode", "removeDuplicates", "ignoreGradients", "ignoreFonts", "animateGradients", "includedNames", "customNameColor", "friendNameColor", "nicknameColor", "displayNameColor", "usernameColor", "nameSeparator", "triggerNameRerender"]);
     const { messages, replies, mentions, typingIndicator, memberList, profilePopout, reactions, friendNameOnlyInDirectMessages, customNameOnlyInDirectMessages, discriminators, truncateAllNamesWithStreamerMode, removeDuplicates, ignoreGradients, ignoreFonts, animateGradients, includedNames, customNameColor, friendNameColor, nicknameColor, displayNameColor, usernameColor, nameSeparator, triggerNameRerender } = config;
 
+    const { username, display, nick, friend, custom } = getProcessedNames(author, truncateAllNamesWithStreamerMode, discriminators, inGuild, friendNameOnlyInDirectMessages, customNameOnlyInDirectMessages);
+
+    if (isMessage && !messages) {
+        return [null, null, null];
+    } else if (isReply && !replies) {
+        return [null, null, null];
+    } else if (isMention && !mentions) {
+        return [null, null, null];
+    } else if (isTyping && !typingIndicator) {
+        return [null, null, null];
+    } else if (isMember && !memberList) {
+        return [null, null, null];
+    } else if (isProfile && !profilePopout) {
+        return [null, null, null];
+    } else if (isReaction && !reactions) {
+        return [null, null, null];
+    } else if (isVoice && !reactions) {
+        return [null, null, null];
+    } else if (!author || !username) {
+        return [null, null, null];
+    }
+
     const channel = channelId ? ChannelStore.getChannel(channelId) || null : null;
     const message = channelId && messageId ? MessageStore.getMessage(channelId, messageId) : null;
     const groupId = (message as any)?.showMeYourNameGroupId || null;
@@ -475,46 +498,13 @@ function renderUsername(
                 ? hoveringReactionPopoutSet.has((author as User).id)
                 : false;
 
-    if (colorString && !colorStrings) {
-        colorStrings = {
-            primaryColor: colorString,
-            secondaryColor: null,
-            tertiaryColor: null
-        };
-    }
-
-    const ircColorsEnabled = isPluginEnabled(ircColors.name);
-
-    const authorColorStrings = colorStrings || (author as any)?.colorStrings || null;
-    const authorDisplayNameStyles = (!inGuild && !ircColorsEnabled && (author as any)?.displayNameStyles) || null;
-    const effectType = authorDisplayNameStyles ? getEffectType(authorDisplayNameStyles.effectId) : null;
-    const effectCSSVars = authorDisplayNameStyles ? computeEffectCSSVars(authorDisplayNameStyles) : {};
-    const hasEffect = !!effectType;
-    const needsEffectDataAttr = effectType === "neon" || effectType === "toon" || effectType === "pop";
-    const shouldShowEffect = hasEffect && isHovering;
-    const shouldAnimateEffect = shouldShowEffect && !AccessibilityStore.useReducedMotion;
-
-    const canUseGradient = ((author as GuildMember)?.guildId ? (GuildStore.getGuild((author as GuildMember).guildId) ?? {}).premiumFeatures?.features.includes("ENHANCED_ROLE_COLORS") : !inGuild);
-    const useTopRoleStyle = isMention || isReactionsPopout || channel?.isDM() || channel?.isGroupDM();
-    const topRoleStyle = author ? resolveColor(authorColorStrings, authorDisplayNameStyles, "Role", canUseGradient, inGuild, ircColorsEnabled, isHovering) : null;
-    const hasGradient = !!topRoleStyle?.gradient && Object.keys(topRoleStyle.gradient).length > 0;
-
-    const textMutedValue = getComputedStyle(document.documentElement)?.getPropertyValue("--text-muted")?.trim() || "#72767d";
     const options = splitTemplate(includedNames);
-    const resolvedUsernameColor = author ? resolveColor(authorColorStrings, authorDisplayNameStyles, usernameColor.trim(), canUseGradient, inGuild, ircColorsEnabled, isHovering) : null;
-    const resolvedDisplayNameColor = author ? resolveColor(authorColorStrings, authorDisplayNameStyles, displayNameColor.trim(), canUseGradient, inGuild, ircColorsEnabled, isHovering) : null;
-    const resolvedNicknameColor = author ? resolveColor(authorColorStrings, authorDisplayNameStyles, nicknameColor.trim(), canUseGradient, inGuild, ircColorsEnabled, isHovering) : null;
-    const resolvedFriendNameColor = author ? resolveColor(authorColorStrings, authorDisplayNameStyles, friendNameColor.trim(), canUseGradient, inGuild, ircColorsEnabled, isHovering) : null;
-    const resolvedCustomNameColor = author ? resolveColor(authorColorStrings, authorDisplayNameStyles, customNameColor.trim(), canUseGradient, inGuild, ircColorsEnabled, isHovering) : null;
-    const affixColor = { color: textMutedValue, "-webkit-text-fill-color": textMutedValue, isolation: "isolate", "white-space": "pre", "font-family": "var(--font-primary)", "letter-spacing": "normal" };
-    const { username, display, nick, friend, custom } = getProcessedNames(author, truncateAllNamesWithStreamerMode, discriminators, inGuild, friendNameOnlyInDirectMessages, customNameOnlyInDirectMessages);
-
-    const names: Record<string, [string | null, object | null]> = {
-        user: [username, resolvedUsernameColor],
-        display: [display, resolvedDisplayNameColor],
-        nick: [nick, resolvedNicknameColor],
-        friend: [friend, resolvedFriendNameColor],
-        custom: [custom, resolvedCustomNameColor]
+    const names: Record<string, [string | null, string]> = {
+        user: [username, usernameColor],
+        display: [display, displayNameColor],
+        nick: [nick, nicknameColor],
+        friend: [friend, friendNameColor],
+        custom: [custom, customNameColor]
     };
 
     const outputs: any[] = [];
@@ -522,7 +512,7 @@ function renderUsername(
     for (const option of options) {
         const { prefix, suffix, targetProcessedNames } = parseTemplateItem(option);
         let chosenName: string | null = null;
-        let chosenStyle: object | null = null;
+        let chosenStyle: string | null = null;
         let chosenType = "";
 
         for (const name of targetProcessedNames) {
@@ -559,7 +549,7 @@ function renderUsername(
             name: username || "Unknown",
             wrapped: username || "Unknown",
             suffix: "",
-            style: resolvedUsernameColor
+            style: usernameColor
         });
     }
 
@@ -568,52 +558,6 @@ function renderUsername(
     let third = outputs.shift();
     let fourth = outputs.shift();
     let fifth = outputs.shift();
-
-    const firstValueWrapped = hookless ?
-        (first.name || "")
-        : wrapEmojis(first.name || "");
-
-    const secondValueWrapped = hookless ?
-        ((second ?? {}).name || "")
-        : wrapEmojis((second ?? {}).name || "");
-
-    const thirdValueWrapped = hookless ?
-        ((third ?? {}).name || "")
-        : wrapEmojis((third ?? {}).name || "");
-
-    const fourthValueWrapped = hookless ?
-        ((fourth ?? {}).name || "")
-        : wrapEmojis((fourth ?? {}).name || "");
-
-    const fifthValueWrapped = hookless ?
-        ((fifth ?? {}).name || "")
-        : wrapEmojis((fifth ?? {}).name || "");
-
-    first.wrapped = firstValueWrapped;
-    second && (second.wrapped = secondValueWrapped);
-    third && (third.wrapped = thirdValueWrapped);
-    fourth && (fourth.wrapped = fourthValueWrapped);
-    fifth && (fifth.wrapped = fifthValueWrapped);
-
-    if (isMessage && !messages) {
-        return [null, null, null];
-    } else if (isReply && !replies) {
-        return [null, null, null];
-    } else if (isMention && !mentions) {
-        return [null, null, null];
-    } else if (isTyping && !typingIndicator) {
-        return [null, null, null];
-    } else if (isMember && !memberList) {
-        return [null, null, null];
-    } else if (isProfile && !profilePopout) {
-        return [null, null, null];
-    } else if (isReaction && !reactions) {
-        return [null, null, null];
-    } else if (isVoice && !reactions) {
-        return [null, null, null];
-    } else if (!author || !username) {
-        return [null, null, null];
-    }
 
     const uniqueNames = new Set<string>();
     if (first) uniqueNames.add(first.name.toLowerCase());
@@ -664,10 +608,7 @@ function renderUsername(
     fourth = compactedFourth;
     fifth = compactedFifth;
 
-    const shouldGradientGlow = isHovering && hasGradient;
-    const shouldAnimateGradients = shouldGradientGlow && !AccessibilityStore.useReducedMotion;
     const shouldAnimateSecondaryNames = animateGradients && !ignoreGradients;
-
     const firstDataText = mentionSymbol + first.name;
     const secondDataText = second && shouldAnimateSecondaryNames ? second.name : "";
     const thirdDataText = third && shouldAnimateSecondaryNames ? third.name : "";
@@ -679,6 +620,70 @@ function renderUsername(
     if (fourthDataText) allDataText += nameSeparator + fourthDataText;
     if (fifthDataText) allDataText += nameSeparator + fifthDataText;
     allDataText = allDataText.trim();
+
+    if (textOnly) return [allDataText, null, first.name];
+
+    const themeStyle = getComputedStyle(document.documentElement);
+    const defaultColor = themeStyle.getPropertyValue("--text-strong").trim() || null;
+    if (colorString && !colorStrings) {
+        colorStrings = {
+            primaryColor: colorString,
+            secondaryColor: null,
+            tertiaryColor: null
+        };
+    }
+
+    const ircColorsEnabled = isPluginEnabled(ircColors.name);
+
+    const authorColorStrings = colorStrings || (author as any)?.colorStrings || null;
+    const authorDisplayNameStyles = (!inGuild && !ircColorsEnabled && (author as any)?.displayNameStyles) || null;
+    const effectType = authorDisplayNameStyles ? getEffectType(authorDisplayNameStyles.effectId) : null;
+    const effectCSSVars = authorDisplayNameStyles ? computeEffectCSSVars(authorDisplayNameStyles) : {};
+    const hasEffect = !!effectType;
+    const needsEffectDataAttr = effectType === "neon" || effectType === "toon" || effectType === "pop";
+    const shouldShowEffect = hasEffect && isHovering;
+    const shouldAnimateEffect = shouldShowEffect && !AccessibilityStore.useReducedMotion;
+
+    const canUseGradient = ((author as GuildMember)?.guildId ? (GuildStore.getGuild((author as GuildMember).guildId) ?? {}).premiumFeatures?.features.includes("ENHANCED_ROLE_COLORS") : !inGuild);
+    const useTopRoleStyle = isMention || isReactionsPopout || channel?.isDM() || channel?.isGroupDM();
+    const topRoleStyle = author ? resolveColor(authorColorStrings, authorDisplayNameStyles, "Role", canUseGradient, inGuild, ircColorsEnabled, isHovering, defaultColor) : null;
+    const hasGradient = !!topRoleStyle?.gradient && Object.keys(topRoleStyle.gradient).length > 0;
+
+    const textMutedValue = themeStyle.getPropertyValue("--text-muted").trim() || "#72767d";
+    const affixColor = { color: textMutedValue, "-webkit-text-fill-color": textMutedValue, isolation: "isolate", "white-space": "pre", "font-family": "var(--font-primary)", "letter-spacing": "normal" };
+
+    for (const name of [second, third, fourth, fifth]) {
+        if (name) name.style = resolveColor(authorColorStrings, authorDisplayNameStyles, name.style.trim(), canUseGradient, inGuild, ircColorsEnabled, isHovering, defaultColor);
+    }
+
+    const firstValueWrapped = hookless ?
+        (first.name || "")
+        : wrapEmojis(first.name || "");
+
+    const secondValueWrapped = hookless ?
+        ((second ?? {}).name || "")
+        : wrapEmojis((second ?? {}).name || "");
+
+    const thirdValueWrapped = hookless ?
+        ((third ?? {}).name || "")
+        : wrapEmojis((third ?? {}).name || "");
+
+    const fourthValueWrapped = hookless ?
+        ((fourth ?? {}).name || "")
+        : wrapEmojis((fourth ?? {}).name || "");
+
+    const fifthValueWrapped = hookless ?
+        ((fifth ?? {}).name || "")
+        : wrapEmojis((fifth ?? {}).name || "");
+
+    first.wrapped = firstValueWrapped;
+    second && (second.wrapped = secondValueWrapped);
+    third && (third.wrapped = thirdValueWrapped);
+    fourth && (fourth.wrapped = fourthValueWrapped);
+    fifth && (fifth.wrapped = fifthValueWrapped);
+
+    const shouldGradientGlow = isHovering && hasGradient;
+    const shouldAnimateGradients = shouldGradientGlow && !AccessibilityStore.useReducedMotion;
 
     // Only mentions and reactions popouts should patch in the gradient glow or else a double glow will appear on messages.
     const hoveringClass = (isHovering ? " smyn-gradient-hovered" : "");

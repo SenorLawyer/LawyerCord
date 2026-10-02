@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Changed
 
+- Update Song Spotlight progress from media events instead of permanent animation-frame loops and stop loading animations after cards resolve.
+
 - Load the Sekai sticker editor and fonts when opened, release its fonts on close, and remove the Canvas forwarding component.
 - Restore saved sidebar popouts on channel-store changes instead of polling unresolved IDs, and keep already-open windows open.
 - Reject oversized encrypted attachments before reading their bytes, remove a full plaintext encryption copy and release the owned buffer on success or failure.

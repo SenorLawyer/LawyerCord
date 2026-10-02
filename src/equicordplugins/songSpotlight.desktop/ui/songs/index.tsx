@@ -25,7 +25,7 @@ import AudioPlayer from "@equicordplugins/songSpotlight.desktop/ui/components/Au
 import ProgressCircle from "@equicordplugins/songSpotlight.desktop/ui/components/ProgressCircle";
 import ServiceIcon from "@equicordplugins/songSpotlight.desktop/ui/components/ServiceIcon";
 import { openSettingsModal } from "@equicordplugins/songSpotlight.desktop/ui/settings";
-import { RenderInfoEntry, RenderInfoEntryBased, RenderSongInfo } from "@song-spotlight/api/handlers";
+import { RenderInfoEntryBased, RenderSongInfo } from "@song-spotlight/api/handlers";
 import { Song as SongType } from "@song-spotlight/api/structs";
 import { isListLayout, sid } from "@song-spotlight/api/util";
 import { copyWithToast } from "@utils/discord";
@@ -147,8 +147,6 @@ function SongInfo({ owned, song, render, big }: SongInfoProps) {
 
     const audios = useMemo(() => render.form === "single" ? [render.single] : render.list, [render]);
     const audioRef = useRef<HTMLAudioElement>(undefined);
-    const playingRef = useRef<RenderInfoEntry>(undefined);
-    playingRef.current = playing !== undefined ? audios[playing] : undefined;
 
     const duration = useMemo(
         () =>
@@ -287,7 +285,7 @@ function SongInfo({ owned, song, render, big }: SongInfoProps) {
                     <div className={cl("song-progress-container")}>
                         <ProgressCircle
                             border={2.5}
-                            playingRef={playingRef}
+                            playing={playing !== undefined ? audios[playing] : undefined}
                             audioRef={audioRef}
                             className={cl("song-progress")}
                         />

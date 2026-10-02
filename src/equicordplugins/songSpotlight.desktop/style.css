@@ -195,6 +195,7 @@
 
     &:has(> .vc-songspotlight-song)::after {
         opacity: 0;
+        animation: none;
     }
 }
 
@@ -302,11 +303,7 @@
     pointer-events: none;
 
     > circle {
-        will-change: stroke-dashoffset;
-
-        &[data-empty="true"] {
-            transition: 0.18s stroke-dashoffset;
-        }
+        transition: 0.18s stroke-dashoffset;
     }
 }
 

@@ -8,6 +8,8 @@ The baseline contains 1,657 tracked files and approximately 287,000 lines. This 
 
 ## Baseline checks
 
+- Generated lockfile validation covers every YAML member in both Stable and the current tree. All three importers and automatically installed peer specifiers match their manifests, overrides match workspace policy, all 527 resolution records contain valid SHA-512 digest encoding, and all 528 snapshots and 1,104 dependency edges resolve with no unreachable entries. This is exhaustive generated-data validation, not a manual prose reading or a check of dependency implementations. The local proof is `.modules/stable-audit/lockfile-proof.json`.
+- Generated internationalization validation checks all 19,440 pairs with strict member parsing, unique symbolic names and hashes, and the production runtime hash implementation. Zero mismatches were found. This is exhaustive generated-data validation, not manual reading of each pair. The local proof is `.modules/stable-audit/intl-mapping-proof.json`.
 - The existing performance suite passes all 701 tests and the timezone correctness check.
 - The dependency audit reports 14 advisories in fast-uri, brace-expansion, moment and DOMPurify.
 - TypeScript's unused declaration diagnostics identify candidates for inspection. Unused positional arguments and React subscriptions must not be removed blindly.

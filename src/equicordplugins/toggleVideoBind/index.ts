@@ -58,6 +58,7 @@ function handleKeydown({ code, ctrlKey, shiftKey, altKey, repeat }: KeyboardEven
 
 export default definePlugin({
     name: "ToggleVideoBind",
+    performance: { impact: "low", description: "Checks a keyboard shortcut before toggling the camera." },
     description: "Adds a customizable bind to toggle webcam.",
     tags: ["Utility", "Voice"],
     authors: [EquicordDevs.mochienya],

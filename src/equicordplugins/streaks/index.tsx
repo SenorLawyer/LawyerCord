@@ -78,6 +78,7 @@ function clearStreaks() {
 
 export default definePlugin({
     name: "Streaks",
+    performance: { impact: "medium", description: "Checks DM activity, updates streak data and renders badges beside users." },
     description: "Shows a streak next to a user when you exchange DMs with them on consecutive days.",
     authors: [EquicordDevs.Moowi, Devs.thororen],
     tags: ["Friends", "Fun"],

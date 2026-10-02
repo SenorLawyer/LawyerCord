@@ -160,6 +160,10 @@ function CompactConnectionComponent({ connection, theme }: { connection: Connect
 
 export default definePlugin({
     name: "ShowConnections",
+    performance: {
+        impact: "low",
+        description: "Adds connected account icons when a profile renders."
+    },
     description: "Show connected accounts in user popouts",
     tags: ["Friends", "Appearance"],
     authors: [Devs.TheKodeToad],

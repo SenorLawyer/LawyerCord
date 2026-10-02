@@ -431,6 +431,10 @@ let container: HTMLDivElement | null = null;
 
 export default definePlugin({
     name: "Snowfall",
+    performance: {
+        impact: "high",
+        description: "Continuously creates and animates snowflakes across the window while active."
+    },
     description: "Let it snow on Discord",
     tags: ["Appearance"],
     authors: [EquicordDevs.ZcraftElite, EquicordDevs.square],

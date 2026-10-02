@@ -86,6 +86,10 @@ const IS_PATCHED = Symbol("MutualGroupDMs.Patched");
 
 export default definePlugin({
     name: "MutualGroupDMs",
+    performance: {
+        impact: "medium",
+        description: "Scans group DM membership to display mutual conversations in profiles."
+    },
     description: "Shows mutual group dms in profiles",
     tags: ["Friends", "Appearance"],
     authors: [Devs.amia],

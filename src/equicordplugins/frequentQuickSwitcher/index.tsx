@@ -26,6 +26,7 @@ function generateSearchResults(query: string) {
 
 export default definePlugin({
     name: "FrequentQuickSwitcher",
+    performance: { impact: "medium", description: "Filters and sorts channel usage data while searching." },
     description: "Show your most frequently visited channels in the quick switcher.",
     tags: ["Shortcuts", "Servers"],
     authors: [Devs.Samwich],

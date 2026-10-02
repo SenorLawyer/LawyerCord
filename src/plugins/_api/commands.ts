@@ -21,6 +21,10 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "CommandsAPI",
+    performance: {
+        impact: "low",
+        description: "Registers plugin commands and handles them when the command picker or a command is used."
+    },
     authors: [Devs.Arjix],
     description: "Api required by anything that uses commands",
     patches: [

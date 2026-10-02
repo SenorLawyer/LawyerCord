@@ -9,6 +9,7 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "NormalizeMessageLinks",
+    performance: { impact: "low", description: "Normalizes the host when copying a message link." },
     description: "Strip canary/ptb from message links",
     tags: ["Chat"],
     authors: [Devs.bb010g],

@@ -103,6 +103,10 @@ function Layer({ name, mode, baseLayer = false, ...props }: LayerProps) {
 
 export default definePlugin({
     name: "BetterSettings",
+    performance: {
+        impact: "low",
+        description: "Changes settings layer transitions and builds the settings context menu on demand."
+    },
     description: "Enhances your settings-menu-opening experience",
     authors: [Devs.Kyuuhachi],
     tags: ["Appearance", "Customisation", "Organisation"],

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { lyricsRequestGeneration, requestLyrics } from "@equicordplugins/musicControls/lyricsRequest";
 import { Track } from "@equicordplugins/musicControls/tidal/TidalStore";
 
 import { EnhancedLyric } from "./types";
@@ -13,20 +14,13 @@ export async function getLyrics(track: Track | null, retries = 3): Promise<Enhan
 
     const fetchUrl = `https://lrclib.net/api/get?track_name=${encodeURIComponent(track.name)}&artist_name=${encodeURIComponent(track.artist)}`;
 
+    const generation = lyricsRequestGeneration;
     try {
-        const res = await fetch(fetchUrl);
-        if (!res.ok) {
-            if (retries > 1) return getLyrics(track, retries - 1);
-            console.error("Failed to fetch lyrics:", res.status, res.statusText);
-            return null;
-        }
-
-        const data = await res.json();
+        const data = await requestLyrics(fetchUrl) as { syncedLyrics?: string; } | null;
+        if (generation !== lyricsRequestGeneration) return null;
+        if (!data && retries > 1) return getLyrics(track, retries - 1);
         const synced = data?.syncedLyrics;
-        if (!synced) {
-            console.error("Invalid lyrics data", data);
-            return null;
-        }
+        if (!synced) return null;
 
         const parsed: EnhancedLyric[] = synced
             .split("\n")
@@ -43,6 +37,7 @@ export async function getLyrics(track: Track | null, retries = 3): Promise<Enhan
 
         return parsed.length ? parsed : null;
     } catch (err) {
+        if (generation !== lyricsRequestGeneration) return null;
         if (retries > 1) return getLyrics(track, retries - 1);
         console.error("Error fetching lyrics:", err);
         return null;

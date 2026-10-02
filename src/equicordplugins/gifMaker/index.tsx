@@ -487,6 +487,7 @@ function openGifMakerFromItem(item) {
 migratePluginSettings("GifMaker", "gifMaker");
 export default definePlugin({
     name: "GifMaker",
+    performance: { impact: "high", description: "Decodes media and generates animated GIF previews while the editor is open." },
     description: "Create and caption GIFs from any media in chat or the GIF picker.",
     authors: [EquicordDevs.Leon135, EquicordDevs.benjii],
     tags: ["Emotes", "Media"],

@@ -24,6 +24,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "NoServerEmojis",
+    performance: {
+        impact: "low",
+        description: "Filters server emojis when autocomplete results are built."
+    },
     authors: [Devs.UlyssesZhan],
     description: "Do not show server emojis in the autocomplete menu.",
     tags: ["Emotes", "Servers"],

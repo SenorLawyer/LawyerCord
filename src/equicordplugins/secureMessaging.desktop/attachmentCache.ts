@@ -15,6 +15,7 @@ import { isEncryptedMessage } from "./protocol";
 const Native = VencordNative.pluginHelpers.SecureMessaging as PluginNative<typeof import("./native")>;
 const MAX_CACHE_BYTES = 256 * 1024 * 1024;
 const MAX_CACHE_ENTRIES = 128;
+const MAX_PENDING_ATTACHMENTS = 16;
 const SPOILER_FLAG = 8;
 const ANIMATED_FLAG = 32;
 // Discord treats a missing scan version as pending and can obscure media from non-friends.
@@ -45,6 +46,11 @@ interface AttachmentCacheEntry {
 
 const cache = new Map<string, AttachmentCacheEntry>();
 let cachedBytes = 0;
+let pendingAttachments = 0;
+const busyEntry: AttachmentCacheEntry = {
+    attachments: [], bytes: 0, disposed: false, lastAccess: 0, listeners: new Set(), objectUrls: [],
+    status: { status: "failed", reason: "Other encrypted attachments are still loading. Try again when they finish." },
+};
 
 function cacheKey(message: Message): string {
     return `${UserStore.getCurrentUser()?.id ?? ""}\0${message.author.id}\0${discordEditedTimestamp(message)}\0${message.channel_id}\0${message.id}\0${message.content}\0${message.attachments.map(attachment =>
@@ -91,7 +97,7 @@ function failureReason(result: DecryptIncomingAttachmentsResult): string {
     if (result.status === "invalid_input") return result.error;
     if (result.status === "unavailable") return "Secure key storage is unavailable.";
     if ("error" in result && result.error === "attachment_download_failed") return "Discord could not provide the encrypted attachment bytes.";
-    if ("error" in result && result.error === "capacity_exceeded") return "Other encrypted attachments are still loading. Try again when they finish.";
+    if ("error" in result && (result.error === "capacity_exceeded" || result.error === "busy")) return "Other encrypted attachments are still loading. Try again when they finish.";
     if ("error" in result && result.error === "attachment_too_large") return "The encrypted attachments exceed the local safety limit.";
     return "The encrypted attachments could not be decrypted.";
 }
@@ -178,6 +184,7 @@ function ensureEntry(message: Message): AttachmentCacheEntry | null {
         existing.lastAccess = Date.now();
         return existing;
     }
+    if (pendingAttachments >= MAX_PENDING_ATTACHMENTS) return busyEntry;
     const entry: AttachmentCacheEntry = {
         attachments: [],
         bytes: 0,
@@ -188,11 +195,12 @@ function ensureEntry(message: Message): AttachmentCacheEntry | null {
         status: { status: "loading" },
     };
     cache.set(key, entry);
+    pendingAttachments++;
     void loadEntry(message, entry, key).catch(() => {
         if (entry.disposed) return;
         entry.status = { status: "failed", reason: "The encrypted attachments could not be loaded." };
         notify(entry);
-    }).finally(() => pruneCache(key));
+    }).finally(() => { pendingAttachments--; pruneCache(key); });
     return entry;
 }
 

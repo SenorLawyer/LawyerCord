@@ -144,6 +144,10 @@ export function BadgeContextMenu({ badge }: { badge: Omit<ProfileBadge, "id"> & 
 
 export default definePlugin({
     name: "BadgeAPI",
+    performance: {
+        impact: "medium",
+        description: "Refreshes contributor badges periodically and adds badges when profiles render."
+    },
     description: "API to add badges to users",
     authors: [Devs.Megu, Devs.Ven, Devs.TheSun],
     required: true,

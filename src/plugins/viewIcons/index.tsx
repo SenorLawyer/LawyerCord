@@ -186,6 +186,10 @@ const GroupDMContext: NavContextMenuPatchCallback = (children, { channel }: Grou
 
 export default definePlugin({
     name: "ViewIcons",
+    performance: {
+        impact: "low",
+        description: "Opens full size user, server, and role images when requested."
+    },
     authors: [Devs.Ven, Devs.TheKodeToad, Devs.Nuckyz, Devs.nyx],
     description: "Makes avatars and banners in user profiles clickable, adds View Icon/Banner entries in the user, server and group channel context menu.",
     tags: ["Media", "Servers", "Appearance"],

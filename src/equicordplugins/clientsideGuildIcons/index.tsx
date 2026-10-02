@@ -109,6 +109,7 @@ function getGuildId(config: unknown) {
 
 export default definePlugin({
     name: "ClientsideGuildIcons",
+    performance: { impact: "low", description: "Loads saved server icons at startup and substitutes their image URLs." },
     description: "Change server icons locally from the server right-click menu.",
     tags: ["Appearance", "Customisation", "Servers"],
     authors: [EquicordDevs.nobody],

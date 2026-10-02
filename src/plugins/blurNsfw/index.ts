@@ -51,6 +51,10 @@ function setCss() {
 
 export default definePlugin({
     name: "BlurNSFW",
+    performance: {
+        impact: "medium",
+        description: "Applies image blur to matching visible attachments until they are hovered."
+    },
     description: "Blur attachments in NSFW channels until hovered",
     tags: ["Privacy", "Appearance"],
     authors: [Devs.Ven],

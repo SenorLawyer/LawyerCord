@@ -158,9 +158,13 @@ export const settings = definePluginSettings({
         component: () => (
             <ButtonCompat
                 color={ButtonCompat.Colors.RED}
-                onClick={() => {
-                    clearLyricsCache();
-                    showToast("Lyrics cache purged", Toasts.Type.SUCCESS);
+                onClick={async () => {
+                    try {
+                        await clearLyricsCache();
+                        showToast("Lyrics cache purged", Toasts.Type.SUCCESS);
+                    } catch {
+                        showToast("Could not clear the lyrics cache.", Toasts.Type.FAILURE);
+                    }
                 }}
             >
                 Purge Cache

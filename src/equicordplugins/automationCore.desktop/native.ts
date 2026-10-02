@@ -35,6 +35,7 @@ let modelCache: { models: OpenRouterModel[]; fetchedAt: number; } | null = null;
 let knownModelIds = new Set<string>();
 
 const completions = new Map<string, AbortController>();
+const programs = new Map<string, AbortController>();
 
 interface CompletionInput {
     requestId: string;
@@ -229,17 +230,17 @@ export async function completeOpenRouter(_event: IpcMainInvokeEvent, value: unkn
     if (completions.has(requestKey)) return { success: false, error: "This AI request is already running." };
     const controller = new AbortController();
     completions.set(requestKey, controller);
-    let key: string | null;
+    const cancel = () => controller.abort();
+    _event.sender.once("destroyed", cancel);
+    _event.sender.once("render-process-gone", cancel);
+    const timeout = setTimeout(cancel, input.timeoutSeconds * 1000);
     try {
-        key = await readKey();
-    } catch {
-        completions.delete(requestKey);
-        return { success: false, error: "The OpenRouter key could not be read." };
-    }
-    if (!key) { completions.delete(requestKey); return { success: false, error: "Add an OpenRouter API key in Automation settings." }; }
-
-    const timeout = setTimeout(() => controller.abort(), input.timeoutSeconds * 1000);
-    try {
+        if (_event.sender.isDestroyed()) return { success: false, error: "The AI request was cancelled." };
+        let key: string | null;
+        try { key = await readKey(); }
+        catch { return { success: false, error: "The OpenRouter key could not be read." }; }
+        if (controller.signal.aborted) return { success: false, error: "The AI request was cancelled." };
+        if (!key) return { success: false, error: "Add an OpenRouter API key in Automation settings." };
         const response = await fetch(OPENROUTER_URL, {
             method: "POST",
             redirect: "error",
@@ -299,6 +300,8 @@ export async function completeOpenRouter(_event: IpcMainInvokeEvent, value: unkn
     } finally {
         clearTimeout(timeout);
         completions.delete(requestKey);
+        _event.sender.removeListener("destroyed", cancel);
+        _event.sender.removeListener("render-process-gone", cancel);
     }
 }
 
@@ -374,7 +377,7 @@ function num(value: unknown): number {
     return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
-function spawnText(command: string, args: string[], timeoutMs: number): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean; }> {
+function spawnText(command: string, args: string[], timeoutMs: number, signal?: AbortSignal): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean; }> {
     return new Promise(resolve => {
         let stdout = "";
         let stderr = "";
@@ -383,14 +386,17 @@ function spawnText(command: string, args: string[], timeoutMs: number): Promise<
         try {
             child = spawn(command, args, { windowsHide: true, shell: false });
         } catch (error) {
-            resolve({ code: null, stdout: "", stderr: error instanceof Error ? error.message : "The program could not be started.", timedOut: false });
+            resolve({ code: null, stdout: "", stderr: "The program could not be started.", timedOut: false });
             return;
         }
-        const timer = setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs);
+        const cancel = () => { child.kill("SIGKILL"); };
+        signal?.addEventListener("abort", cancel, { once: true });
+        const timer = setTimeout(() => { timedOut = true; child.kill("SIGKILL"); }, timeoutMs);
         child.stdout?.on("data", (chunk: Buffer) => { if (stdout.length < OUTPUT_CAP) stdout += chunk.toString("utf8").slice(0, OUTPUT_CAP - stdout.length); });
         child.stderr?.on("data", (chunk: Buffer) => { if (stderr.length < OUTPUT_CAP) stderr += chunk.toString("utf8").slice(0, OUTPUT_CAP - stderr.length); });
-        child.on("error", error => { clearTimeout(timer); resolve({ code: null, stdout, stderr: stderr || error.message, timedOut }); });
-        child.on("close", code => { clearTimeout(timer); resolve({ code, stdout, stderr, timedOut }); });
+        child.on("error", () => { stderr ||= "The program could not be started."; });
+        child.on("close", code => { clearTimeout(timer); signal?.removeEventListener("abort", cancel); resolve({ code, stdout, stderr, timedOut }); });
+        if (signal?.aborted) cancel();
     });
 }
 
@@ -641,15 +647,21 @@ async function scanCodex(): Promise<void> {
 }
 
 let systemScan: Promise<void> | undefined;
+let systemScanSources: (() => Promise<void>)[] = [];
 
 async function scanSystem(types: string[]): Promise<void> {
-    while (systemScan) await systemScan;
+    const scans = [
+        ...(types.some(type => type.startsWith("roblox-")) ? [scanRoblox] : []),
+        ...(types.some(type => type.startsWith("codex-")) ? [scanCodex] : []),
+        ...(types.some(type => type.startsWith("process-") || type.startsWith("roblox-")) ? [scanProcesses] : []),
+    ];
+    while (systemScan) {
+        const covered = scans.every(scan => systemScanSources.includes(scan));
+        await systemScan;
+        if (covered) return;
+    }
+    systemScanSources = scans;
     systemScan = (async () => {
-        const scans = [
-            ...(types.some(type => type.startsWith("roblox-")) ? [scanRoblox] : []),
-            ...(types.some(type => type.startsWith("codex-")) ? [scanCodex] : []),
-            ...(types.some(type => type.startsWith("process-") || type.startsWith("roblox-")) ? [scanProcesses] : []),
-        ];
         for (const scan of scans) {
             try { await scan(); }
             catch (error) { system.lastError = error instanceof Error ? error.message : String(error); }
@@ -724,17 +736,39 @@ export async function codexRecentSessions(_event: IpcMainInvokeEvent, limit: unk
     return sessions;
 }
 
+export function cancelProgram(event: IpcMainInvokeEvent, requestId: unknown): { success: boolean; } {
+    if (typeof requestId !== "string" || !/^[\w-]{1,80}$/.test(requestId)) return { success: false };
+    programs.get(`${event.sender.id}:${requestId}`)?.abort();
+    return { success: true };
+}
+
 export async function runProgram(_event: IpcMainInvokeEvent, input: unknown): Promise<{ success: boolean; code?: number | null; stdout?: string; stderr?: string; error?: string; }> {
     const value = record(input);
+    if (typeof value.requestId !== "string" || !/^[\w-]{1,80}$/.test(value.requestId)) return { success: false, error: "The program request is invalid." };
     const command = str(value.command).trim();
     const args = Array.isArray(value.args) ? value.args : [];
     const timeoutSeconds = num(value.timeoutSeconds) || 60;
     if (!command || command.length > 500 || /[\r\n]/.test(command)) return { success: false, error: "Choose a program to run." };
     if (args.length > 64 || !args.every(arg => typeof arg === "string" && arg.length <= 2000)) return { success: false, error: "Program arguments must be short text, one per line." };
-    const result = await spawnText(command, args.map(String), Math.min(600, Math.max(1, timeoutSeconds)) * 1000);
-    if (result.timedOut) return { success: false, error: "The program took too long and was stopped." };
-    if (result.code === null && !result.stdout) return { success: false, error: result.stderr.slice(0, 300) || "The program could not be started." };
-    return { success: true, code: result.code, stdout: result.stdout, stderr: result.stderr };
+    const requestKey = `${_event.sender.id}:${value.requestId}`;
+    if (programs.has(requestKey) || programs.size >= 32) return { success: false, error: "Too many program requests are active." };
+    if (_event.sender.isDestroyed()) return { success: false, error: "The program request was cancelled." };
+    const controller = new AbortController();
+    programs.set(requestKey, controller);
+    const cancel = () => controller.abort();
+    _event.sender.once("destroyed", cancel);
+    _event.sender.once("render-process-gone", cancel);
+    try {
+        const result = await spawnText(command, args.map(String), Math.min(600, Math.max(1, timeoutSeconds)) * 1000, controller.signal);
+        if (controller.signal.aborted) return { success: false, error: "The program was stopped." };
+        if (result.timedOut) return { success: false, error: "The program took too long and was stopped." };
+        if (result.code === null && !result.stdout) return { success: false, error: result.stderr.slice(0, 300) || "The program could not be started." };
+        return { success: true, code: result.code, stdout: result.stdout, stderr: result.stderr };
+    } finally {
+        programs.delete(requestKey);
+        _event.sender.removeListener("destroyed", cancel);
+        _event.sender.removeListener("render-process-gone", cancel);
+    }
 }
 
 export async function readTextFile(_event: IpcMainInvokeEvent, input: unknown): Promise<{ success: boolean; text?: string; error?: string; }> {

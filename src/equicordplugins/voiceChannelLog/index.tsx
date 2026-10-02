@@ -96,6 +96,7 @@ const patchChannelContextMenu: NavContextMenuPatchCallback = (children, { channe
 
 export default definePlugin({
     name: "VoiceChannelLog",
+    performance: { impact: "medium", description: "Processes voice events and renders retained history when the log opens." },
     description: "Logs voice channel activity including joins, leaves, soundboard, mute, camera, screenshare, and more.",
     tags: ["Servers", "Utility", "Voice"],
     authors: [Devs.Sqaaakoi, Devs.thororen, EquicordDevs.nyx, Devs.Moxxie, EquicordDevs.Fres, Devs.amy],

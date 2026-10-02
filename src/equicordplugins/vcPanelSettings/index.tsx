@@ -213,6 +213,7 @@ function VoiceSettings() {
 
 export default definePlugin({
     name: "VCPanelSettings",
+    performance: { impact: "low", description: "Shows device controls when the voice settings panel is expanded." },
     description: "Control voice settings right from the voice panel",
     tags: ["Utility", "Voice"],
     authors: [Devs.nin0dev],

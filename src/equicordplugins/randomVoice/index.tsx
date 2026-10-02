@@ -872,6 +872,7 @@ function renderOperationGroup({
 
 export default definePlugin({
     name: "RandomVoice",
+    performance: { impact: "medium", description: "Scans server voice channels when choosing a call and can repeat this when your call becomes empty." },
     description: "Adds a button near mute to join a random voice channel.",
     dependencies: ["UserAreaAPI"],
     tags: ["Fun", "Voice"],

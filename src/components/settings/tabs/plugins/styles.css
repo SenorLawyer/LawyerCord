@@ -39,14 +39,33 @@
 
 .vc-plugins-filter-controls {
     display: grid;
-    height: 40px;
     gap: 10px;
     grid-template-columns: 1fr 1fr;
-    align-items: center;
+    align-items: start;
 }
 
 .vc-plugins-filter-control {
     height: 40px;
+}
+
+.vc-plugins-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.vc-plugins-impact {
+    display: block;
+    margin-top: 8px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.vc-plugins-impact-help {
+    color: var(--text-muted);
+    font-size: 12px;
 }
 
 .vc-plugins-info-card {

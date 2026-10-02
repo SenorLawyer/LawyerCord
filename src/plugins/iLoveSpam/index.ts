@@ -23,6 +23,10 @@ import definePlugin from "@utils/types";
 migratePluginSettings("ILoveSpam", "IloveSpam", "iLoveSpam");
 export default definePlugin({
     name: "ILoveSpam",
+    performance: {
+        impact: "low",
+        description: "Removes existing message spam filtering checks."
+    },
     description: "Do not hide messages from 'likely spammers'",
     tags: ["Utility", "Chat"],
     authors: [Devs.botato, Devs.Nyako],

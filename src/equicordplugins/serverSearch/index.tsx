@@ -26,6 +26,7 @@ function SearchIcon() {
 
 export default definePlugin({
     name: "ServerSearch",
+    performance: { impact: "low", description: "Adds a button that opens the quick switcher." },
     authors: [EquicordDevs.camila314],
     description: "Navigate your servers better with a quick search button",
     tags: ["Shortcuts", "Servers"],

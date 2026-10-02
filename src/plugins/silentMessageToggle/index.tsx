@@ -108,6 +108,10 @@ const SilentMessageToggle: ChatBarButtonFactory = ({ isMainChat }) => {
 
 export default definePlugin({
     name: "SilentMessageToggle",
+    performance: {
+        impact: "low",
+        description: "Adds a composer toggle and adjusts the outgoing message notification flag."
+    },
     authors: [Devs.Nuckyz, Devs.CatNoir, EquicordDevs.Z1xus],
     description: "Adds a button to the chat bar to toggle sending a silent message.",
     dependencies: ["ChatInputButtonAPI"],

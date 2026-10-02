@@ -53,7 +53,7 @@ export type NativeFailure =
     | { status: "unavailable"; reason: VaultUnavailableReason; }
     | {
         status: "failed";
-        error: "attachment_download_failed" | "attachment_too_large" | "capacity_exceeded" | "counter_exhausted" |
+        error: "busy" | "attachment_download_failed" | "attachment_too_large" | "capacity_exceeded" | "counter_exhausted" |
         "cryptographic_operation_failed" | "message_too_long" | "screen_capture_protection_failed" | "storage_error";
     };
 
@@ -314,6 +314,8 @@ let cachedQuarantineSignature: string | null = null;
 let cachedVault: VaultFile | null = null;
 let cachedVaultSignature: string | null = null;
 let operationQueue: Promise<void> = Promise.resolve();
+let pendingOperations = 0;
+const MAX_PENDING_OPERATIONS = 256;
 
 class VaultOperationError extends Error {
     constructor(readonly code: "capacity_exceeded" | "cryptographic_operation_failed" | "storage_error" | VaultUnavailableReason) {
@@ -931,6 +933,8 @@ async function saveVault(vault: VaultFile): Promise<void> {
 }
 
 async function runSerialized<T>(operation: () => Promise<T>): Promise<T | NativeFailure> {
+    if (pendingOperations >= MAX_PENDING_OPERATIONS) return { status: "failed", error: "busy" };
+    pendingOperations++;
     const execute = async (): Promise<T | NativeFailure> => {
         let releaseLock: (() => Promise<void>) | null = null;
         try {
@@ -948,7 +952,11 @@ async function runSerialized<T>(operation: () => Promise<T>): Promise<T | Native
     };
     const result = operationQueue.then(execute, execute);
     operationQueue = result.then(() => undefined, () => undefined);
-    return result;
+    try {
+        return await result;
+    } finally {
+        pendingOperations--;
+    }
 }
 
 async function loadAccount(localUserId: string): Promise<AccountContext> {

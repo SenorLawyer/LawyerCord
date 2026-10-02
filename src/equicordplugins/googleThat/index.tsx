@@ -74,6 +74,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "GoogleThat",
+    performance: { impact: "low", description: "Builds a search link when its command is used." },
     description: "Adds a command to send a internet search link",
     dependencies: ["CommandsAPI"],
     tags: ["Commands", "Utility"],

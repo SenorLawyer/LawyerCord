@@ -12,6 +12,10 @@ import { UserStore } from "@webpack/common";
 
 export default definePlugin({
     name: "ThemeAttributes",
+    performance: {
+        impact: "low",
+        description: "Adds descriptive attributes when Discord elements render for theme selectors."
+    },
     description: "Adds data attributes to various elements for theming purposes",
     tags: ["Appearance", "Customisation"],
     authors: [Devs.Ven, Devs.Board],

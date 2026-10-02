@@ -74,6 +74,7 @@ function stopAllServices() {
 
 export default definePlugin({
     name: "RichPresence",
+    performance: { impact: "medium", description: "Polls enabled media services and processes local game presence updates." },
     description: "Unified rich presence hub for AudioBookShelf, osu!, stats.fm, Jellyfin, Navidrome, and Gensokyo Radio.",
     tags: ["Activity"],
     authors: [

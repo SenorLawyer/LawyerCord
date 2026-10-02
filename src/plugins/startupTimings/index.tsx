@@ -26,6 +26,10 @@ import StartupTimingPage from "./StartupTimingPage";
 
 export default definePlugin({
     name: "StartupTimings",
+    performance: {
+        impact: "low",
+        description: "Reports recorded startup timing once after the client starts."
+    },
     description: "Adds Startup Timings to the Settings menu",
     tags: ["Developers"],
     authors: [Devs.Megu],

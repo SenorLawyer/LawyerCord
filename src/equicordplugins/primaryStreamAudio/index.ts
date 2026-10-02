@@ -111,6 +111,7 @@ function scheduleUpdateTrackedAudio() {
 
 export default definePlugin({
     name: "PrimaryStreamAudio",
+    performance: { impact: "medium", description: "Checks stream layout four times per second to select which screenshare audio plays." },
     description: "Only plays audio from the currently focused/big screenshare stream.",
     tags: ["Media", "Voice", "Utility"],
     authors: [EquicordDevs.nobody],

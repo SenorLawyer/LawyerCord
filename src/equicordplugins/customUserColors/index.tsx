@@ -125,6 +125,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "CustomUserColors",
+    performance: { impact: "low", description: "Looks up saved colors when user names render." },
     description: "Lets you add a custom color to any user, anywhere! Highly recommend to use with typingTweaks and roleColorEverywhere",
     tags: ["Appearance", "Customisation", "Chat"],
     authors: [EquicordDevs.mochienya],

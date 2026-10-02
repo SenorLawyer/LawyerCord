@@ -13,6 +13,7 @@ import style from "./style.css?managed";
 
 export default definePlugin({
     name: "FullVCPFP",
+    performance: { impact: "medium", description: "Reads voice state and speaking participants for each call tile." },
     description: "Makes avatars take up the entire voice call tile.",
     tags: ["Appearance", "Voice"],
     authors: [EquicordDevs.mochienya],

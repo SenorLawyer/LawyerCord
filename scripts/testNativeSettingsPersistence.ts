@@ -5,6 +5,7 @@
  */
 
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,6 +34,7 @@ function fixture(renderer = "{}", native = "{}") {
             if (name === "@utils/mergeDefaults") return { mergeDefaults };
             if (name === "electron") return { ipcMain: { handle: (name: string, fn: (...args: unknown[]) => unknown) => handlers.set(name, fn), on() { } } };
             if (name === "./utils/constants") return { SETTINGS_DIR: directory, SETTINGS_FILE: rendererFile, NATIVE_SETTINGS_FILE: nativeFile };
+            if (name === "crypto") return { randomUUID };
             if (name === "fs") return {
                 ...fs,
                 writeFileSync(path: string, data: string) {

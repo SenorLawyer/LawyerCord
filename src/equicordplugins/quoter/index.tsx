@@ -57,6 +57,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "Quoter",
+    performance: { impact: "medium", description: "Loads fonts and renders quote images on a canvas while the quote editor is open." },
     description: "Adds the ability to create an inspirational quote image from a message.",
     tags: ["Chat"],
     authors: [Devs.Samwich, Devs.thororen, EquicordDevs.neoarz, Devs.prism],

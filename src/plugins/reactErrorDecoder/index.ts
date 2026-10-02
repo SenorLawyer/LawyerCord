@@ -24,6 +24,10 @@ let ERROR_CODES: Record<string, string> | undefined;
 
 export default definePlugin({
     name: "ReactErrorDecoder",
+    performance: {
+        impact: "low",
+        description: "Loads React error descriptions once and expands errors when they occur."
+    },
     description: 'Replaces "Minified React Error" with the actual error.',
     tags: ["Developers"],
     authors: [Devs.Cyn, Devs.maisymoe],

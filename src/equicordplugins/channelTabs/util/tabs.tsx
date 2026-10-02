@@ -383,6 +383,15 @@ function cacheCurrentTabState() {
     }
 }
 
+let restorationFrame: number | undefined;
+let restorationTimer: ReturnType<typeof setTimeout> | undefined;
+
+function cancelTabRestoration() {
+    if (restorationFrame !== undefined) cancelAnimationFrame(restorationFrame);
+    clearTimeout(restorationTimer);
+    restorationFrame = restorationTimer = undefined;
+}
+
 function restoreTabState(tabId: number) {
     if (!settings.store.renderAllTabs) return;
 
@@ -390,8 +399,12 @@ function restoreTabState(tabId: number) {
     if (!cached) return;
 
     // restore scroll pos after delay to make sure content loaded
-    requestAnimationFrame(() => {
-        setTimeout(() => {
+    const channelId = openTabs.find(tab => tab.id === tabId)?.channelId;
+    restorationFrame = requestAnimationFrame(() => {
+        restorationFrame = undefined;
+        restorationTimer = setTimeout(() => {
+            restorationTimer = undefined;
+            if (currentlyOpenTab !== tabId || SelectedChannelStore.getChannelId() !== channelId) return;
             const scrollContainer = getScrollContainer();
             if (scrollContainer) {
                 scrollContainer.scrollTop = cached.scrollPosition;
@@ -401,6 +414,7 @@ function restoreTabState(tabId: number) {
 }
 
 export function moveToTab(id: number) {
+    cancelTabRestoration();
     const tab = openTabs.find(v => v.id === id);
     if (tab === undefined) return logger.error("Couldn't find channel tab with ID " + id, openTabs);
 
@@ -464,6 +478,8 @@ export function moveToTab(id: number) {
 
 export async function openStartupTabs(props: BasicChannelTabsProps & { userId: string; }, setUserId: (id: string) => void): Promise<void> {
     const { userId } = props;
+    const generation = ++hydrationGeneration;
+    cancelTabRestoration();
 
     if (hydratedUserId === userId && openTabs.length) {
         setUserId(userId);
@@ -472,7 +488,6 @@ export async function openStartupTabs(props: BasicChannelTabsProps & { userId: s
     }
 
     setUserId("");
-    const generation = ++hydrationGeneration;
     await saveQueue;
     if (generation !== hydrationGeneration) return;
 
@@ -484,6 +499,7 @@ export async function openStartupTabs(props: BasicChannelTabsProps & { userId: s
             if (generation !== hydrationGeneration) return;
             savedTabs = persistedTabs?.[userId];
         } catch (error) {
+            if (generation !== hydrationGeneration) return;
             logger.error("Failed to load persisted tabs from DataStore", error);
             showToast("Failed to load saved tabs", Toasts.Type.FAILURE);
         }
@@ -569,7 +585,11 @@ export function setOpenTab(id: number) {
 export function setUpdaterFunction(fn: UpdateFunction): () => void {
     update = fn;
     return () => {
-        if (update === fn) update = unsetUpdate;
+        if (update !== fn) return;
+        update = unsetUpdate;
+        hydrationGeneration++;
+        cancelTabRestoration();
+        clearNavigationFlag();
     };
 }
 
@@ -579,6 +599,7 @@ export function switchChannel(ch: BasicChannelTabsProps) {
 }
 
 export function navigateToBookmark(ch: BasicChannelTabsProps) {
+    cancelTabRestoration();
     // check if independent mode is enabled
     if (settings.store.bookmarksIndependentFromTabs) {
         // set flag that we're viewing via bookmark

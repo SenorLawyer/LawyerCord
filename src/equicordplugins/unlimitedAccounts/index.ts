@@ -31,6 +31,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "UnlimitedAccounts",
+    performance: { impact: "low", description: "Changes the account limit checks in the account switcher." },
     description: "Increases the amount of accounts you can add.",
     tags: ["Utility"],
     authors: [Devs.thororen],

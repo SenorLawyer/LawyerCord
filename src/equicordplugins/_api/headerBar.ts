@@ -11,6 +11,7 @@ export default definePlugin({
     name: "HeaderBarAPI",
     description: "API to add buttons to the header bar and channel toolbar.",
     authors: [Devs.prism],
+    performance: { impact: "low", description: "Renders registered buttons when the channel header changes." },
 
     patches: [
         {

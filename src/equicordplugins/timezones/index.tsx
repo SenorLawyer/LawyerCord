@@ -293,6 +293,7 @@ migratePluginSetting("Timezones", "showOwnTimezone", "Show Own Timezone");
 migratePluginSetting("Timezones", "twentyFourHourFormat", "24h Time");
 export default definePlugin({
     name: "Timezones",
+    performance: { impact: "medium", description: "Formats times in message headers and refreshes open profile clocks." },
     authors: [Devs.Aria, EquicordDevs.creations],
     description: "Shows the local time of users in profiles and message headers",
     tags: ["Appearance", "Chat", "Utility"],

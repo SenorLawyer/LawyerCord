@@ -144,6 +144,10 @@ function makeContextMenuPatch(childId: string | string[], type: MenuItemParentTy
 
 export default definePlugin({
     name: "PermissionsViewer",
+    performance: {
+        impact: "medium",
+        description: "Derives role and member permission lists while permission panels are open."
+    },
     description: "View the permissions a user or channel has, and the roles of a server",
     tags: ["Servers", "Roles", "Utility"],
     authors: [Devs.Nuckyz, Devs.Ven],

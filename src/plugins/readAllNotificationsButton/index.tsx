@@ -74,6 +74,10 @@ const ReadAllButton = () => (
 
 export default definePlugin({
     name: "ReadAllNotificationsButton",
+    performance: {
+        impact: "low",
+        description: "Collects unread channels and marks them read when the button is clicked."
+    },
     description: "Read all server notifications with a single button click!",
     tags: ["Notifications", "Shortcuts"],
     authors: [Devs.kemo, EquicordDevs.KrystalSkull],

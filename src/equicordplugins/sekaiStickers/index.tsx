@@ -43,6 +43,10 @@ const SekaiStickerChatButton = ErrorBoundary.wrap(() => (
 
 export default definePlugin({
     name: "SekaiStickers",
+    performance: {
+        impact: "medium",
+        description: "Loads character images and fonts and redraws a canvas while the sticker editor is open."
+    },
     description: "Sekai Stickers built in discord originally from github.com/TheOriginalAyaka",
     dependencies: ["ChatInputButtonAPI"],
     tags: ["Chat", "Emotes"],

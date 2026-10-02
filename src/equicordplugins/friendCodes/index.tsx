@@ -11,6 +11,7 @@ import FriendCodesPanel from "./FriendCodesPanel";
 
 export default definePlugin({
     name: "FriendCodes",
+    performance: { impact: "low", description: "Loads invitation codes when the friend code panel is opened." },
     description: "Generate FriendCodes to easily add friends",
     tags: ["Friends", "Utility"],
     authors: [Devs.HypedDomi],

@@ -97,6 +97,10 @@ export default definePlugin({
     name: "VoiceMessages",
     description: "Allows you to send voice messages like on mobile. To do so, right click the upload button and click Send Voice Message",
     tags: ["Voice"],
+    performance: {
+        impact: "medium",
+        description: "Records and decodes audio only while you use the recorder. Long recordings can use more memory."
+    },
     authors: [Devs.Ven, Devs.Vap, Devs.Nickyux],
     settings,
 

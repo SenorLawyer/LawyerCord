@@ -10,6 +10,7 @@ import { ChannelStore, GuildMemberStore } from "@webpack/common";
 
 export default definePlugin({
     name: "AtSomeone",
+    performance: { impact: "low", description: "Selects a random member when sending a matching message." },
     authors: [Devs.Joona],
     description: "Mention someone randomly",
     tags: ["Chat", "Fun"],

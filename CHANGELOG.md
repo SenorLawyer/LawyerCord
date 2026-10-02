@@ -2,6 +2,35 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 4.0.0.0 - 2026-10-03 (Nightly)
+
+### Added
+
+- Combine plugin status, source, tags, settings, new-plugin and expected performance impact filters. Sort by name, new plugins or reviewed workload.
+- Record qualitative performance impact and its source rationale in each reviewed plugin's configuration and generated plugin metadata.
+
+### Fixed
+
+- Store lyric history per track, preserve existing saved lyrics during migration, and avoid cloning the complete history during playback. Older builds cannot display newly saved per-track entries after a downgrade.
+- Limit lyric requests and translation workers, cancel stopped requests, retain physical admission until settlement, and keep transient failures retryable.
+- Isolate settings proxy invalidation to changed objects and their ancestors. Preserve sibling identities and release removed object ownership and property aliases.
+- Coalesce desktop settings bursts before crossing the native bridge, preserve failed-save notifications, and prevent delayed writes from overwriting reload or sync changes.
+- Reject automation run admission across session replacement, enforce workflow queue limits during cooldown, and share concurrent scans of the same native event sources.
+- Cancel workflow-owned native programs and AI requests when their owning run or renderer stops, with bounded native admission and cleanup after physical settlement.
+- Reuse mounted message edit diffs and defer fallback code highlighting until a codeblock becomes visible.
+- Deduplicate song-link lookups, bound pending native requests and response bodies, and provide retry feedback.
+- Bound voice-message playback preparation and sound-effect bursts, release stopped audio, and discard stale voice join messages and song previews.
+- Prevent cancelled Discord MCP requests and file uploads from starting later sends, deletions or public shares.
+- Release Remix crop listeners when its tool or editor closes, and reuse SecureMessaging render callbacks while attachment work is pending.
+- Bound SecureMessaging vault, attachment and preview queues, cancel obsolete unfurl retries, and keep temporary saturation retryable.
+- Cancel stale ChannelTabs hydration and replace pending scroll restoration when navigating or closing its container.
+- Resolve Discord's modal and confirmation implementations before their named export chunks load, fixing a reproduced cold-load failure affecting plugin settings and the voice recorder.
+- Construct only the current 36 plugin cards per page, keep required-plugin lists bounded, and avoid catalog redraws for unrelated plugin settings.
+- Preserve unread plugin updates when the new-plugin modal closes or fails. Save acknowledgment only after an explicit action and preserve new plugins during legacy migration.
+- Render plugin author placeholders without dispatching user updates during React rendering, and use the current confirmation contract for resets and disabling plugins.
+- Ignore unrelated presence updates when checking local Roblox processes.
+- Preserve newer QuickCSS changes and disabled state while its initial read is pending.
+
 ## 3.1.4.0 - 2026-10-02 (Nightly)
 
 ### Changed

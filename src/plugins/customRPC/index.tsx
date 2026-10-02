@@ -314,6 +314,10 @@ function stopTimestampLoop() {
 
 export default definePlugin({
     name: "CustomRPC",
+    performance: {
+        impact: "medium",
+        description: "Updates custom presence on configuration changes and runs an optional timestamp loop."
+    },
     description: "Add a fully customisable Rich Presence (Game status) to your Discord profile",
     tags: ["Activity", "Customisation"],
     authors: [Devs.captain, Devs.AutumnVN, Devs.nin0dev],

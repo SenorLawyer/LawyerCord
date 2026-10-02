@@ -9,6 +9,10 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "NoMaskedUrlPaste",
+    performance: {
+        impact: "low",
+        description: "Changes how pasted links replace selected composer text."
+    },
     authors: [Devs.CatNoir],
     description: "Pasting a link while having text selected will not paste as masked URL",
     tags: ["Chat", "Utility"],

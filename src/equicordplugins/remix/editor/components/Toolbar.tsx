@@ -46,6 +46,11 @@ export const Toolbar = () => {
     const [size, setSize] = useState(currentSize);
     const [fill, setFill] = useState(currentFill);
 
+    useEffect(() => () => {
+        tools[currentTool]?.unselected();
+        currentTool = "none";
+    }, []);
+
     function changeTool(newTool: Tool) {
         const oldTool = tool;
 

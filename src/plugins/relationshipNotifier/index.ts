@@ -36,6 +36,10 @@ function clearStartupSyncTimeout() {
 
 export default definePlugin({
     name: "RelationshipNotifier",
+    performance: {
+        impact: "low",
+        description: "Compares relationship and server changes and notifies when a removal occurs."
+    },
     description: "Notifies you when a friend, group chat, or server removes you.",
     tags: ["Friends", "Notifications"],
     authors: [Devs.nick],

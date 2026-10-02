@@ -9,6 +9,10 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "FixCodeblockGap",
+    performance: {
+        impact: "low",
+        description: "Changes codeblock parsing to remove trailing gaps."
+    },
     description: "Removes the gap between codeblocks and text below it",
     tags: ["Appearance"],
     authors: [Devs.Grzesiek11],

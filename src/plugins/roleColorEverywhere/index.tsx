@@ -74,6 +74,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "RoleColorEverywhere",
+    performance: {
+        impact: "medium",
+        description: "Reads role colors while mentions, member headings, voice users, and optional message text render."
+    },
     authors: [Devs.KingFish, Devs.lewisakura, Devs.AutumnVN, Devs.Kyuuhachi, Devs.jamesbt365],
     description: "Adds the top role color anywhere possible",
     tags: ["Roles", "Appearance"],

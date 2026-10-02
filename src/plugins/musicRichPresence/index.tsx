@@ -225,6 +225,10 @@ migratePluginSettings("MusicRichPresence", "LastFMRichPresence");
 migratePluginSetting("MusicRichPresence", "showLastFmLogo", "showLogo");
 export default definePlugin({
     name: "MusicRichPresence",
+    performance: {
+        impact: "medium",
+        description: "Polls the selected music service every sixteen seconds and resolves presence artwork."
+    },
     description: "Rich Presence for Last.FM/Listenbrainz",
     tags: ["Activity", "Media"],
     searchTerms: ["lastfm", "LastFMRichPresence"],

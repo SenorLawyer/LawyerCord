@@ -23,6 +23,10 @@ import managedStyle from "./style.css?managed";
 
 export default definePlugin({
     name: "MessageDecorationsAPI",
+    performance: {
+        impact: "low",
+        description: "Routes message decoration rendering to enabled plugin callbacks."
+    },
     description: "API to add decorations to messages",
     authors: [Devs.TheSun],
 

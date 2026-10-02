@@ -9,6 +9,7 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "DisableCameras",
+    performance: { impact: "low", description: "Changes the default camera flag when joining calls." },
     description: "Disables cameras in a call by default",
     tags: ["Appearance", "Customisation", "Media", "Privacy"],
     authors: [Devs.Joona],

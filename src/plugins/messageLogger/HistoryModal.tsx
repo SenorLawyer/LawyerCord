@@ -14,7 +14,7 @@ import { RenderModalProps } from "@vencord/discord-types";
 import { findCssClassesLazy } from "@webpack";
 import { Modal, openModal, TabBar, Timestamp, useState } from "@webpack/common";
 
-import { parseEditContent, settings } from ".";
+import { EditContent, settings } from ".";
 
 const CodeContainerClasses = findCssClassesLazy("markup", "codeContainer");
 const MiscClasses = findCssClassesLazy("messageContent", "markupRtl");
@@ -86,7 +86,7 @@ export function HistoryModal({ modalProps, message }: { modalProps: RenderModalP
             </TabBar>
 
             <div className={classes(CodeContainerClasses.markup, MiscClasses.messageContent, Margins.top20)}>
-                {parseEditContent(contents[currentTab], message, showDiff ? currentTab === contents.length - 1 ? undefined : contents[contents.length - 1] : undefined)}
+                <EditContent content={contents[currentTab]} message={message} previousContent={showDiff ? currentTab === contents.length - 1 ? undefined : contents[contents.length - 1] : undefined} />
             </div>
         </Modal>
     );

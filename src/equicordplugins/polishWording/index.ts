@@ -63,6 +63,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "PolishWording",
+    performance: { impact: "low", description: "Formats wording and punctuation when you send a message." },
     description: "Tweaks your messages to make them look nicer and have better grammar. See settings",
     dependencies: ["MessageEventsAPI"],
     tags: ["Chat"],

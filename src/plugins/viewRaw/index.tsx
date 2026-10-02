@@ -174,6 +174,10 @@ const devContextCallback: NavContextMenuPatchCallback = (children, { id }: { id:
 migratePluginSettings("ViewRaw", "ViewRawVariant");
 export default definePlugin({
     name: "ViewRaw",
+    performance: {
+        impact: "low",
+        description: "Serializes and renders raw object data when its context menu action is selected."
+    },
     description: "Copy and view the raw content/data of any message, channel or guild",
     dependencies: ["MessagePopoverAPI"],
     tags: ["Chat", "Developers"],

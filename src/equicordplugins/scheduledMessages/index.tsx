@@ -100,6 +100,7 @@ function handleReactionEvent(event: FluxReactionEvent): void {
 
 export default definePlugin({
     name: "ScheduledMessages",
+    performance: { impact: "medium", description: "Checks pending scheduled messages and builds local message previews." },
     description: "Schedule messages to be sent at a specific time or after a delay.",
     tags: ["Chat", "Utility"],
     dependencies: ["ChatInputButtonAPI", "MessageAccessoriesAPI", "MessageEventsAPI"],

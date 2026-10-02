@@ -21,6 +21,8 @@ export function sendSync<T = any>(event: IpcEvents, ...args: any[]) {
     return ipcRenderer.sendSync(event, ...args) as T;
 }
 
+const settingsSession = sendSync<string>(IpcEvents.GET_SETTINGS_SESSION);
+
 const PluginHelpers = {} as Record<string, Record<string, (...args: any[]) => Promise<any>>>;
 const pluginIpcMap = sendSync<PluginIpcMappings>(IpcEvents.GET_PLUGIN_IPC_METHOD_MAP);
 
@@ -55,7 +57,11 @@ export default {
 
     settings: {
         get: () => sendSync<Settings>(IpcEvents.GET_SETTINGS),
-        set: (settings: Settings, pathToNotify?: string, expected?: string) => invoke<void>(IpcEvents.SET_SETTINGS, settings, pathToNotify, expected),
+        set: (settings: Settings, pathToNotify?: string | string[], expected?: string, revision?: number) => invoke<void>(IpcEvents.SET_SETTINGS, settings, pathToNotify, expected, revision, settingsSession),
+        setSync: (settings: Settings, paths: string[], revision: number) => {
+            const error = sendSync<string | undefined>(IpcEvents.SET_SETTINGS, settings, paths, undefined, revision, settingsSession);
+            if (error) throw new Error(error);
+        },
         getSettingsDir: () => invoke<string>(IpcEvents.GET_SETTINGS_DIR),
 
         openFolder: () => invoke<void>(IpcEvents.OPEN_SETTINGS_FOLDER),

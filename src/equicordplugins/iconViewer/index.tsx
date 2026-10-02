@@ -18,6 +18,7 @@ import { SettingsAbout } from "./components/Modals";
 
 export default definePlugin({
     name: "IconViewer",
+    performance: { impact: "low", description: "Searches and progressively renders icons while its settings tab is open." },
     description: "Adds a new tab to settings to preview all icons.",
     tags: ["Developers"],
     authors: [EquicordDevs.iamme],

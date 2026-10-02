@@ -154,6 +154,10 @@ const imageContextMenuPatch: NavContextMenuPatchCallback = (children, props) => 
 
 export default definePlugin({
     name: "ImageZoom",
+    performance: {
+        impact: "medium",
+        description: "Updates a magnifier on animation frames while the media viewer is open."
+    },
     description: "Lets you zoom in to images and gifs. Use scroll wheel to zoom in and shift + scroll wheel to increase lens radius / size",
     tags: ["Media", "Utility"],
     authors: [Devs.Aria],

@@ -48,6 +48,7 @@ export const settings = definePluginSettings({
 
 export default definePlugin({
     name: "UnitConverter",
+    performance: { impact: "medium", description: "Mounts a conversion control for each message and converts text on demand." },
     description: "Converts between metric and imperial units.",
     dependencies: ["MessagePopoverAPI"],
     tags: ["Utility"],

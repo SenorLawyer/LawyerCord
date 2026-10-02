@@ -125,6 +125,7 @@ function makeContextItem(props) {
 
 export default definePlugin({
     name: "Ghosted",
+    performance: { impact: "medium", description: "Scans direct messages on store updates and adds per-channel indicators." },
     description: "A cute ghost will appear if you don't answer their DMs",
     tags: ["Chat", "Utility"],
     authors: [EquicordDevs.vei, Devs.sadan, EquicordDevs.justjxke, EquicordDevs.iamme],

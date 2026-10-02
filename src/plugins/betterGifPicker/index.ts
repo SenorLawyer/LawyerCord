@@ -20,6 +20,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "BetterGifPicker",
+    performance: {
+        impact: "low",
+        description: "Changes the GIF picker default category and selection behavior."
+    },
     description: "Makes the gif picker open the favourite category by default",
     tags: ["Emotes", "Customisation"],
     authors: [Devs.Samwich, EquicordDevs.justjxke],

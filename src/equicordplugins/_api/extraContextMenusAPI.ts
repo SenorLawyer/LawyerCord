@@ -12,6 +12,7 @@ export default definePlugin({
     name: "ExtraContextMenusAPI",
     description: "API that adds more context menus to patch.",
     authors: [EquicordDevs.thororen],
+    performance: { impact: "low", description: "Adds a context menu handler when the GIF picker renders." },
     required: true,
 
     patches: [

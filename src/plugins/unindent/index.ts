@@ -22,6 +22,10 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "Unindent",
+    performance: {
+        impact: "low",
+        description: "Removes common indentation when sending a codeblock."
+    },
     description: "Trims leading indentation from codeblocks",
     dependencies: ["MessageEventsAPI"],
     tags: ["Chat", "Utility"],

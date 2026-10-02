@@ -44,7 +44,8 @@ export class SettingsStore<T extends object> {
     private pathListeners = new Map<string, Set<(newData: any) => void>>();
     private prefixListeners = new Map<string, Set<(newData: any, path: string) => void>>();
     private globalListeners = new Set<(newData: T, path: string) => void>();
-    private proxyCache = new WeakMap<object, WeakMap<T, Map<string, object>>>();
+    private proxyCache = new WeakMap<object, WeakMap<T, Map<string, { proxy: object; ancestors: WeakRef<object>[]; }>>>();
+    private proxyGenerations = new WeakMap<object, number>();
     private proxyRevision = 0;
 
     /**
@@ -62,15 +63,16 @@ export class SettingsStore<T extends object> {
         Object.assign(this, options);
     }
 
-    private makeProxy<O extends object>(object: O, root: T, path = ""): O {
+    private makeProxy<O extends object>(object: O, root: T, path = "", ancestors: WeakRef<object>[] = []): O {
         let roots = this.proxyCache.get(object);
         if (!roots) this.proxyCache.set(object, roots = new WeakMap());
         let paths = roots.get(root);
         if (!paths) roots.set(root, paths = new Map());
         const cached = paths.get(path);
-        if (cached) return cached as O;
+        if (cached && cached.ancestors.length === ancestors.length && cached.ancestors.every((ancestor, index) => ancestor.deref() === ancestors[index].deref())) return cached.proxy as O;
+        const reference = new WeakRef(object);
 
-        let children = new WeakMap<object, Map<string | symbol, object>>();
+        let children = new WeakMap<object, Map<string | symbol, { proxy: object; generation: number; }>>();
         let revision = this.proxyRevision;
         const proxy = new Proxy(object, {
             get: (target: O, key: string | symbol, receiver: unknown) => {
@@ -86,13 +88,14 @@ export class SettingsStore<T extends object> {
                     revision = this.proxyRevision;
                 }
                 if (typeof value === "object" && value !== null) {
+                    const generation = this.proxyGenerations.get(value) ?? 0;
                     const cachedChild = children.get(value)?.get(key);
-                    if (cachedChild) return cachedChild;
+                    if (cachedChild?.generation === generation) return cachedChild.proxy;
                     if (!Reflect.get(value, SYM_IS_PROXY)) {
-                        const child = this.makeProxy(value, root, `${path}${path && "."}${String(key)}`);
+                        const child = this.makeProxy(value, root, `${path}${path && "."}${String(key)}`, [...ancestors, reference]);
                         let keys = children.get(value);
                         if (!keys) children.set(value, keys = new Map());
-                        keys.set(key, child);
+                        keys.set(key, { proxy: child, generation });
                         return child;
                     }
                 }
@@ -102,18 +105,26 @@ export class SettingsStore<T extends object> {
                 if (typeof value === "object" && value !== null && Reflect.get(value, SYM_IS_PROXY)) {
                     value = Reflect.get(value, SYM_GET_RAW_TARGET);
                 }
-                if (Reflect.get(target, key) === value) return true;
+                const previous = Reflect.get(target, key);
+                if (previous === value) return true;
                 if (!Reflect.set(target, key, value)) return false;
-                this.notifyListeners(`${path}${path && "."}${String(key)}`, value, root);
+                if (typeof previous === "object" && previous !== null) children.get(previous)?.delete(key);
+                this.notifyListeners(`${path}${path && "."}${String(key)}`, value, root, [...ancestors, reference]);
                 return true;
             },
             deleteProperty: (target: O, key: string | symbol) => {
+                const previous = Reflect.get(target, key);
                 if (!Reflect.deleteProperty(target, key)) return false;
-                this.notifyListeners(`${path}${path && "."}${String(key)}`, undefined, root);
+                if (typeof previous === "object" && previous !== null) children.get(previous)?.delete(key);
+                this.notifyListeners(`${path}${path && "."}${String(key)}`, undefined, root, [...ancestors, reference]);
                 return true;
             }
         });
-        paths.set(path, proxy);
+        if (paths.size >= 64) for (const key of paths.keys()) {
+            paths.delete(key);
+            break;
+        }
+        paths.set(path, { proxy, ancestors });
         return proxy;
     }
 
@@ -124,10 +135,14 @@ export class SettingsStore<T extends object> {
         }
     }
 
-    private notifyListeners(pathStr: string, value: any, root: T) {
-        this.proxyCache = new WeakMap();
-        this.proxyRevision++;
+    private notifyListeners(pathStr: string, value: any, root: T, ancestors: WeakRef<object>[]) {
         const paths = pathStr.split(".");
+        for (const reference of ancestors) {
+            const ancestor = reference.deref();
+            if (!ancestor) continue;
+            this.proxyCache.delete(ancestor);
+            this.proxyGenerations.set(ancestor, (this.proxyGenerations.get(ancestor) ?? 0) + 1);
+        }
 
         // Because we support any type of settings with OptionType.CUSTOM, and those objects get proxied recursively,
         // the path ends up including all the nested paths (plugins.pluginName.settingName.example.one).
@@ -157,7 +172,7 @@ export class SettingsStore<T extends object> {
      * @param value New data
      * @param pathToNotify Optional path to notify instead of globally. Used to transfer path via ipc
      */
-    public setData(value: T, pathToNotify?: string) {
+    public setData(value: T, pathToNotify?: string | string[]) {
         if (this.readOnly) throw new Error("SettingsStore is read-only");
 
         this.plain = value;
@@ -165,7 +180,10 @@ export class SettingsStore<T extends object> {
         this.proxyRevision++;
         this.store = this.makeProxy(value, value);
 
-        if (pathToNotify) {
+        const paths = Array.isArray(pathToNotify)
+            ? pathToNotify.includes("") ? [...new Set([...this.pathListeners.keys(), ...this.prefixListeners.keys()])] : pathToNotify
+            : pathToNotify ? [pathToNotify] : [];
+        paths: for (const pathToNotify of paths) {
             let v = value;
 
             const path = pathToNotify.split(".");
@@ -174,7 +192,7 @@ export class SettingsStore<T extends object> {
                     console.warn(
                         `Settings#setData: Path ${pathToNotify} does not exist in new data. Not dispatching update`
                     );
-                    return;
+                    continue paths;
                 }
                 v = v[p];
             }

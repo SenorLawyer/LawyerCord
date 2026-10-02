@@ -29,6 +29,7 @@ export const enum IpcEvents {
     GET_THEME_SYSTEM_VALUES = "VencordGetThemeSystemValues",
     GET_SETTINGS_DIR = "VencordGetSettingsDir",
     GET_SETTINGS = "VencordGetSettings",
+    GET_SETTINGS_SESSION = "VencordGetSettingsSession",
     SET_SETTINGS = "VencordSetSettings",
     THEME_UPDATE = "VencordThemeUpdate",
     OPEN_EXTERNAL = "VencordOpenExternal",

@@ -22,6 +22,10 @@ interface UserMentionComponentProps {
 
 export default definePlugin({
     name: "FullUserInChatbox",
+    performance: {
+        impact: "low",
+        description: "Reads the mentioned user and adds interaction controls to composer mentions."
+    },
     description: "Makes the user mention in the chatbox have more functionalities, like left/right clicking",
     tags: ["Shortcuts", "Utility"],
     authors: [Devs.sadan],

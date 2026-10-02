@@ -99,6 +99,10 @@ const ChatBarContextCheckbox: NavContextMenuPatchCallback = children => {
 
 export default definePlugin({
     name: "Signature",
+    performance: {
+        impact: "low",
+        description: "Adds your signature when sending a message."
+    },
     description: "Automated fingerprint/end text",
     dependencies: ["CommandsAPI", "ChatInputButtonAPI"],
     tags: ["Appearance", "Chat"],

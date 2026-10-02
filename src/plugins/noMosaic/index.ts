@@ -19,6 +19,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "NoMosaic",
+    performance: {
+        impact: "medium",
+        description: "Renders attachments individually instead of grouping them into a mosaic."
+    },
     authors: [Devs.AutumnVN],
     description: "Removes Discord image mosaic",
     tags: ["Media", "Appearance", "Chat"],

@@ -303,6 +303,7 @@ const handleThemeNamesChange = () => settings.store.autoRefresh && debouncedRefr
 
 export default definePlugin({
     name: "QuickThemeSwitcher",
+    performance: { impact: "medium", description: "Checks local theme files every two seconds when automatic refresh is enabled." },
     description: "Quickly switch between themes using keyboard shortcuts.",
     tags: ["Appearance", "Utility"],
     authors: [Devs.prism],

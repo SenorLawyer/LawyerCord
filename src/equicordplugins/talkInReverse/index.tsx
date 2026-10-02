@@ -62,6 +62,7 @@ function ReverseMessageIcon({ enabled = false }: ReverseMessageIconProps) {
 
 export default definePlugin({
     name: "TalkInReverse",
+    performance: { impact: "low", description: "Reverses message text when sending with the toggle enabled." },
     authors: [EquicordDevs.Tolgchu],
     description: "Reverses the message content before sending it.",
     tags: ["Chat", "Fun"],

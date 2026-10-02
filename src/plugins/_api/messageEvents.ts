@@ -21,6 +21,10 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "MessageEventsAPI",
+    performance: {
+        impact: "low",
+        description: "Runs registered callbacks when messages are sent, edited, or clicked."
+    },
     description: "Api required by anything using message events.",
     authors: [Devs.Arjix, Devs.hunt, Devs.Ven],
     patches: [

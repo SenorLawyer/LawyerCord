@@ -26,6 +26,7 @@ let oldTrendingCat: Category[] | null = null;
 
 export default definePlugin({
     name: "GifCollections",
+    performance: { impact: "medium", description: "Sorts saved GIF collections and refreshes expired links while the picker is open." },
     description: "Allows you to create collections of gifs.",
     tags: ["Chat", "Emotes"],
     authors: [EquicordDevs.creations],

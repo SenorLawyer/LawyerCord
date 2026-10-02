@@ -37,6 +37,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "SpotifyCrack",
+    performance: {
+        impact: "low",
+        description: "Changes Spotify playback and listening permission checks."
+    },
     description: "Free listen along, no auto-pausing in voice chat, and allows activity to continue playing when idling",
     tags: ["Media", "Utility", "Activity"],
     authors: [Devs.Cyn, Devs.Nuckyz],

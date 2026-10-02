@@ -33,6 +33,7 @@ function getMembersInRole(roleId: string, guildId: string) {
 
 export default definePlugin({
     name: "InRole",
+    performance: { impact: "low", description: "Scans loaded guild members when a role lookup is requested." },
     description: "Know who is in a role with the role context menu or /inrole command (read plugin info!)",
     tags: ["Commands", "Roles"],
     authors: [Devs.nin0dev],

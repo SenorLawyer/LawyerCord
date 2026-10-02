@@ -100,6 +100,10 @@ function getGifSearchTarget(gif: Gif) {
 
 export default definePlugin({
     name: "FavoriteGifSearch",
+    performance: {
+        impact: "medium",
+        description: "Filters saved GIF URLs as the favorite GIF search query changes."
+    },
     authors: [Devs.Aria],
     description: "Adds a search bar to favorite gifs.",
     tags: ["Media", "Customisation"],

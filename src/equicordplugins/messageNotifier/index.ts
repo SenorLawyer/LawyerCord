@@ -56,6 +56,7 @@ function parseUserIds(value: string): Set<string> {
 export default definePlugin({
     authors: [EquicordDevs.cassie, EquicordDevs.mochienya],
     name: "MessageNotifier",
+    performance: { impact: "low", description: "Checks configured author IDs on incoming messages." },
     description: "Get toasts for when chosen users send a message",
     tags: ["Chat", "Notifications"],
     settings,

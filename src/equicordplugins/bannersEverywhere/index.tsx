@@ -72,6 +72,7 @@ const MAX_PNG_CACHE_SIZE = 100;
 
 export default definePlugin({
     name: "BannersEverywhere",
+    performance: { impact: "medium", description: "Loads and converts banner images for member list rows." },
     description: "Displays banners in the member list ",
     tags: ["Appearance", "Customisation"],
     authors: [Devs.ImLvna, Devs.AutumnVN],

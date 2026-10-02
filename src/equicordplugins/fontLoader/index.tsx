@@ -230,6 +230,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "FontLoader",
+    performance: { impact: "low", description: "Loads a selected font and searches font previews while settings are open." },
     description: "Loads any font from Google Fonts",
     tags: ["Appearance", "Customisation"],
     authors: [EquicordDevs.vmohammad],

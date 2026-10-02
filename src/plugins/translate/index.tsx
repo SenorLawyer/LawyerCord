@@ -93,6 +93,10 @@ function clearTranslateTooltipTimeout() {
 
 export default definePlugin({
     name: "Translate",
+    performance: {
+        impact: "low",
+        description: "Requests translations when selected or when outgoing automatic translation is enabled."
+    },
     description: "Translate messages with Google Translate, DeepL or Kagi.",
     dependencies: ["ChatInputButtonAPI", "MessageAccessoriesAPI", "MessagePopoverAPI"],
     tags: ["Chat", "Utility"],

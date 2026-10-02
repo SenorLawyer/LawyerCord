@@ -109,6 +109,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "RPCEditor",
+    performance: { impact: "low", description: "Applies saved replacements when your local activity changes." },
     description: "Edit the type and content of any Rich Presence",
     tags: ["Customisation"],
     authors: [Devs.Nyako, Devs.nin0dev],

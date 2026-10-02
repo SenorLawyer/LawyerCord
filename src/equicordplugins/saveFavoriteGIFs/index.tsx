@@ -143,6 +143,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "SaveFavoriteGIFs",
+    performance: { impact: "low", description: "Exports saved GIF links and checks availability only on request." },
     description: "Export favorited GIF urls",
     dependencies: ["CommandsAPI"],
     tags: ["Emotes", "Utility"],

@@ -83,6 +83,10 @@ function fixImageUrl(urlString: string) {
 
 export default definePlugin({
     name: "WebContextMenus",
+    performance: {
+        impact: "low",
+        description: "Builds browser context menus and fetches image data only for requested image actions."
+    },
     description: "Re-adds context menus missing in the web version of Discord: Links & Images (Copy/Open Link/Image), Text Area (Copy, Cut, Paste, SpellCheck)",
     tags: ["Utility"],
     authors: [Devs.Ven],

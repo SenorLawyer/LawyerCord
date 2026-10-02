@@ -15,6 +15,7 @@ import { settings } from "./utils/settings";
 
 export default definePlugin({
     name: "ThemeLibrary",
+    performance: { impact: "medium", description: "Fetches and filters theme cards while the theme library is open." },
     description: "A library of themes for Vencord.",
     tags: ["Appearance", "Customisation"],
     authors: [EquicordDevs.Fafa],

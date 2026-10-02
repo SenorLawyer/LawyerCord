@@ -46,6 +46,10 @@ const contextMenuPatch: NavContextMenuPatchCallback = (children, props: { channe
 
 export default definePlugin({
     name: "ChannelTabs",
+    performance: {
+        impact: "medium",
+        description: "Updates tab and bookmark badges from channel activity and renders tab animations."
+    },
     description: "Group your commonly visited channels in tabs, like a browser",
     tags: ["Appearance", "Customisation", "Organisation", "Servers"],
     authors: [Devs.TheSun, Devs.TheKodeToad, EquicordDevs.keifufu, Devs.Nickyux, EquicordDevs.DiabeloDEV, EquicordDevs.justjxke, EquicordDevs.keircn],

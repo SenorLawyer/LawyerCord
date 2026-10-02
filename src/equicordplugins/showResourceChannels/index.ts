@@ -9,6 +9,7 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "ShowResourceChannels",
+    performance: { impact: "low", description: "Changes the resource channel visibility check." },
     description: "shows the channels hidden behind the server resources in the channel list",
     tags: ["Servers"],
     authors: [EquicordDevs.VillainsRule],

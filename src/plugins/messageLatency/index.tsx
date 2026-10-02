@@ -32,6 +32,10 @@ const DURATION_UNITS = [
 
 export default definePlugin({
     name: "MessageLatency",
+    performance: {
+        impact: "low",
+        description: "Compares message timestamps and adds latency indicators during message rendering."
+    },
     description: "Displays an indicator for messages that took ≥n seconds to send",
     tags: ["Chat", "Utility"],
     authors: [Devs.arHSM],

@@ -11,6 +11,7 @@ export default definePlugin({
     name: "ProfileCollectionsAPI",
     description: "API to add collections to the user profile panel like discords game collection.",
     authors: [Devs.thororen],
+    performance: { impact: "low", description: "Renders registered collections when a user profile opens." },
     patches: [
         // message and member list popouts
         {

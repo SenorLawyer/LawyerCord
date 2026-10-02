@@ -112,6 +112,7 @@ const userContextMenuPatch: NavContextMenuPatchCallback = (children, { user, gui
 
 export default definePlugin({
     name: "CopyProfileColors",
+    performance: { impact: "low", description: "Reads profile colors when user menus open or copy is requested." },
     description: "A plugin to copy people's profile gradient colors to clipboard.",
     tags: ["Appearance", "Customisation"],
     authors: [EquicordDevs.Crxa, EquicordDevs.Cortex, EquicordDevs.Gir0fa],

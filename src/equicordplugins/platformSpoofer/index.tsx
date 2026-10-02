@@ -50,6 +50,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "PlatformSpoofer",
+    performance: { impact: "low", description: "Substitutes platform details when identifying to the gateway." },
     description: "Spoof what platform or device you're on",
     tags: ["Utility"],
     authors: [EquicordDevs.Drag, EquicordDevs.neoarz],

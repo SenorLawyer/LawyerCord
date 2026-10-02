@@ -1137,6 +1137,10 @@ const messageSendListener = (_channelId: string, messageObj: { content: string; 
 
 export default definePlugin({
     name: "FavoriteEmojiFirst",
+    performance: {
+        impact: "medium",
+        description: "Matches saved aliases and reorders emoji results as autocomplete searches change."
+    },
     authors: [Devs.Aria, Devs.Ven, EquicordDevs.justjxke],
     tags: ["Emotes", "Customisation"],
     description: "Puts your favorite emoji first in the emoji autocomplete and also has emoji alias.",

@@ -116,6 +116,10 @@ function playSample(type: string) {
 migrateSettingsFromPlugin("VcNarrator", "VcNarratorCustom", "enabled");
 export default definePlugin({
     name: "VcNarrator",
+    performance: {
+        impact: "low",
+        description: "Queues speech when relevant voice membership and mute state changes occur."
+    },
     description: "Announces when users join, leave, or move voice channels via narrator",
     tags: ["Voice", "Accessibility"],
     authors: [Devs.Ven],

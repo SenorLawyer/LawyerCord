@@ -9,6 +9,10 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "ImageLink",
+    performance: {
+        impact: "low",
+        description: "Removes Discord URL transformations when copying an image link."
+    },
     description: "Never hide image links in messages, even if it's the only content",
     tags: ["Media", "Appearance"],
     authors: [Devs.Kyuuhachi, Devs.Sqaaakoi],

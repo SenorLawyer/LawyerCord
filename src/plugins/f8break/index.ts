@@ -21,6 +21,10 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "F8Break",
+    performance: {
+        impact: "low",
+        description: "Checks key presses for the developer pause shortcut."
+    },
     description: "Pause the client when you press F8 with DevTools (+ breakpoints) open.",
     tags: ["Developers", "Shortcuts"],
     authors: [Devs.lewisakura],

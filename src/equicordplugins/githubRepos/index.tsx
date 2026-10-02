@@ -34,6 +34,7 @@ export const settings = definePluginSettings({
 
 export default definePlugin({
     name: "GitHubRepos",
+    performance: { impact: "low", description: "Fetches public repositories when a GitHub linked profile is opened." },
     description: "Displays a user's public GitHub repositories in their profile",
     dependencies: ["ProfileCollectionsAPI"],
     tags: ["Appearance"],

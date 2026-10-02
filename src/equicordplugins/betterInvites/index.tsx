@@ -33,6 +33,7 @@ function lurk(id: string) {
 
 export default definePlugin({
     name: "BetterInvites",
+    performance: { impact: "medium", description: "Adds inviter details and parsed timestamps to rendered invites." },
     description: "See invites expiration date, view inviter profile and preview servers before joining by clicking the name",
     tags: ["Appearance", "Customisation", "Chat", "Servers"],
     authors: [EquicordDevs.iamme, Devs.thororen],

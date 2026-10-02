@@ -140,6 +140,7 @@ function ChatBadges({ author }: { author: User; }) {
 
 export default definePlugin({
     name: "ShowBadgesInChat",
+    performance: { impact: "medium", description: "Checks user badges and renders additional icons beside visible messages." },
     authors: [Devs.Inbestigator, EquicordDevs.KrystalSkull],
     description: "Shows the message author's badges beside their name in chat.",
     dependencies: ["MessageDecorationsAPI"],

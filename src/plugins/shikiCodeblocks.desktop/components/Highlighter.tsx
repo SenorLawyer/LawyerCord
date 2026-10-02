@@ -121,7 +121,7 @@ export const Highlighter = ({
                 />
                 <Code
                     theme={themeBase}
-                    useHljs={useHljs}
+                    useHljs={useHljs && isIntersecting}
                     lang={lang}
                     content={content}
                     tokens={highlight?.content === content && highlight.lang === lang && highlight.themeId === currentThemeId ? highlight.tokens : null}

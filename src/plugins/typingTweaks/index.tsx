@@ -116,6 +116,10 @@ const TypingUser = ErrorBoundary.wrap(function TypingUser({ user, guildId }: Typ
 migratePluginToSettings(true, "TypingTweaks", "AmITyping", "amITyping");
 export default definePlugin({
     name: "TypingTweaks",
+    performance: {
+        impact: "medium",
+        description: "Adds avatars and user details while the current channel typing indicator updates."
+    },
     description: "Show avatars and role colours in the typing indicator",
     tags: ["Appearance", "Customisation"],
     authors: [Devs.zt, Devs.sadan, EquicordDevs.MrDiamond],

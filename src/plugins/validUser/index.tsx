@@ -204,6 +204,10 @@ function MentionWrapper({ data, UserMention, RoleMention, parse, props }: Mentio
 
 export default definePlugin({
     name: "ValidUser",
+    performance: {
+        impact: "low",
+        description: "Fetches missing user details through a bounded queue when unknown mentions are hovered."
+    },
     description: "Fix mentions for unknown users showing up as '@unknown-user' (hover over a mention to fix it)",
     tags: ["Chat", "Utility"],
     authors: [Devs.Ven, Devs.Dolfies],

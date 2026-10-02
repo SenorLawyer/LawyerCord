@@ -21,6 +21,10 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "BetterGifAltText",
+    performance: {
+        impact: "low",
+        description: "Adds descriptive GIF labels while image controls render."
+    },
     authors: [Devs.Ven],
     description:
         "Change GIF alt text from simply being 'GIF' to containing the gif tags / filename",

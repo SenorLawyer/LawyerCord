@@ -47,6 +47,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "UserVoiceShow",
+    performance: {
+        impact: "medium",
+        description: "Subscribes visible profile voice indicators to channel membership and permission changes."
+    },
     description: "Shows an indicator when a user is in a Voice Channel",
     tags: ["Voice", "Appearance", "Friends"],
     dependencies: ["MemberListDecoratorsAPI", "MessageDecorationsAPI", "NicknameIconsAPI"],

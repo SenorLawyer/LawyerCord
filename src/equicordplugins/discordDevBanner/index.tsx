@@ -13,6 +13,7 @@ import { makeDevBanner, settings } from "./components";
 
 export default definePlugin({
     name: "DiscordDevBanner",
+    performance: { impact: "low", description: "Formats build information when the developer banner renders." },
     description: "Enables the Discord developer banner, in which displays the build-ID",
     tags: ["Appearance", "Console", "Developers"],
     authors: [EquicordDevs.KrystalSkull, Devs.thororen],

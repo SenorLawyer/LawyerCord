@@ -61,6 +61,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "NoReplyMention",
+    performance: {
+        impact: "low",
+        description: "Changes the mention default when creating a reply."
+    },
     description: "Disables reply pings by default",
     tags: ["Chat", "Notifications"],
     authors: [Devs.DustyAngel47, Devs.rae, Devs.pylix, Devs.outfoxxed],

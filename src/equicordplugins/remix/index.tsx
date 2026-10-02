@@ -75,6 +75,7 @@ export function sendRemix(blob: Blob) {
 
 export default definePlugin({
     name: "RemixRevived",
+    performance: { impact: "medium", description: "Uses image canvases and drawing tools while the remix editor is open." },
     description: "Revives Remix and breings it to Desktop",
     tags: ["Customisation", "Fun"],
     authors: [EquicordDevs.MrDiamond, EquicordDevs.meowabyte],

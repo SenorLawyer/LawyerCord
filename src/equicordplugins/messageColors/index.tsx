@@ -26,6 +26,7 @@ const requiredFirstCharacters = ["r", "R", "h", "H", "#"];
 export default definePlugin({
     authors: [EquicordDevs.Hen],
     name: "MessageColors",
+    performance: { impact: "medium", description: "Parses color codes while rendering message text." },
     description: "Displays color codes like #FF0042 inside of messages",
     tags: ["Appearance", "Chat"],
     settings,

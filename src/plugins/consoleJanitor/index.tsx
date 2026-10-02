@@ -116,6 +116,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "ConsoleJanitor",
+    performance: {
+        impact: "low",
+        description: "Filters Discord log calls through configured logger checks."
+    },
     description: "Disables annoying console messages/errors",
     authors: [Devs.Nuckyz, Devs.sadan],
     tags: ["Developers", "Console", "Utility"],

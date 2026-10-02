@@ -32,6 +32,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "UnreadCountBadge",
+    performance: { impact: "medium", description: "Subscribes each channel badge to unread and mute state." },
     authors: [Devs.Joona],
     description: "Shows unread message count badges on channels in the channel list",
     tags: ["Appearance", "Customisation", "Servers"],

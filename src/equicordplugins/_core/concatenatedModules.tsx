@@ -14,6 +14,7 @@ export default definePlugin({
     name: "ConcatenatedModules",
     description: "Extract modules that have been concatenated by the bundler",
     authors: [Devs.thororen],
+    performance: { impact: "low", description: "Captures the icon module once when Discord loads it." },
     patches: [
         {
             find: "AngleBracketsIcon",

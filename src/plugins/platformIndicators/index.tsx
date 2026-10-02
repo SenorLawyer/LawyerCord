@@ -223,6 +223,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "PlatformIndicators",
+    performance: {
+        impact: "medium",
+        description: "Subscribes visible user indicators to presence and session changes."
+    },
     description: "Adds platform indicators (Desktop, Mobile, Web...) to users",
     dependencies: ["MemberListDecoratorsAPI", "MessageDecorationsAPI", "NicknameIconsAPI"],
     tags: ["Appearance"],

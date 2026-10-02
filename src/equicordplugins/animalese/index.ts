@@ -241,6 +241,7 @@ function playSound(buffer: AudioBuffer, volume: number) {
 
 export default definePlugin({
     name: "Animalese",
+    performance: { impact: "high", description: "Synthesizes and plays audio for messages in the selected channel." },
     description: "Plays animal crossing animalese for every message sent (they yap a lot)",
     tags: ["Customisation", "Fun"],
     authors: [EquicordDevs.ryanamay, EquicordDevs.Mocha],

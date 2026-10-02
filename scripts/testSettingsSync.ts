@@ -12,10 +12,26 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { isDeepStrictEqual } from "node:util";
-import { runInNewContext } from "node:vm";
+import { runInNewContext as evaluateContext } from "node:vm";
 import { createSourceFile, isCallExpression, isFunctionDeclaration, isPropertyAccessExpression, isVariableStatement, JsxEmit, ModuleKind, type Node, ScriptTarget, transpileModule } from "typescript";
 
 import { readResponseText } from "../src/shared/readResponseText";
+
+function runInNewContext(code: string, context: Record<string, unknown> = {}) {
+    const require = context.require as ((name: string) => unknown) | undefined;
+    return evaluateContext(code, {
+        ...context,
+        require: (name: string) => {
+            const module = require?.(name);
+            if (name !== "@api/Settings") return module;
+            const native = context.VencordNative as { settings: { set(value: unknown, path?: string, expected?: string): Promise<void>; }; };
+            const settings = typeof module === "object" && module !== null ? module : {};
+            if (!("flushSettings" in settings)) Object.assign(settings, { flushSettings: async () => {} });
+            if (!("persistSettings" in settings)) Object.assign(settings, { persistSettings: async (value: unknown, expected?: string, onSaved?: () => void) => { await native.settings.set(value, undefined, expected); onSaved?.(); } });
+            return settings;
+        }
+    });
+}
 
 const lodash = { isEqual: (a: unknown, b: unknown) => isDeepStrictEqual(structuredClone(a), structuredClone(b)) };
 
@@ -420,24 +436,24 @@ test("desktop settings saves preserve the previous file and store when disk writ
         RendererSettings.addChangeListener("plugins.Sound.volume", (value: number) => changes.push(value));
         const next = { plugins: { Sound: { volume: 70 } } };
         for (failure of ["write", "rename"]) {
-            assert.throws(() => save(undefined, next, "plugins.Sound.volume"), /^Error: Failed to save settings\.$/);
+            assert.throws(() => save({ sender: {} }, next, "plugins.Sound.volume"), /^Error: Failed to save settings\.$/);
             assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), initial);
             assert.equal(RendererSettings.plain.plugins.Sound.volume, 20);
             assert.deepEqual(changes, []);
         }
         failure = "";
-        save(undefined, next, "plugins.Sound.volume");
+        save({ sender: {} }, next, "plugins.Sound.volume");
         assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), next);
         assert.equal(RendererSettings.plain.plugins.Sound.volume, 70);
         assert.deepEqual(changes, [70]);
-        assert.throws(() => save(undefined, initial, "plugins.Sound.volume", JSON.stringify(initial)), /Settings changed during sync/);
+        assert.throws(() => save({ sender: {} }, initial, "plugins.Sound.volume", JSON.stringify(initial)), /Settings changed during sync/);
         assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), next);
         assert.equal(RendererSettings.plain.plugins.Sound.volume, 70);
         assert.deepEqual(changes, [70]);
         const checkpoint = { ...next, cloud: { settingsSyncVersion: 10 } };
-        save(undefined, checkpoint, undefined, JSON.stringify(next));
-        assert.throws(() => save(undefined, initial, "plugins.Sound.volume", JSON.stringify(next)), /Settings changed during sync/);
-        save(undefined, initial, "plugins.Sound.volume", JSON.stringify(checkpoint));
+        save({ sender: {} }, checkpoint, undefined, JSON.stringify(next));
+        assert.throws(() => save({ sender: {} }, initial, "plugins.Sound.volume", JSON.stringify(next)), /Settings changed during sync/);
+        save({ sender: {} }, initial, "plugins.Sound.volume", JSON.stringify(checkpoint));
         assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), initial);
         assert.deepEqual(changes, [70, 20]);
         assert.equal(errors.length, 2);
@@ -584,6 +600,7 @@ test("cloud settings imports stage changes and reject newer persisted settings",
         }, expected);
         assert.equal(plain.plugins.Sound.volume, 20);
         assert.equal(persisted.plugins.Sound.volume, 20);
+        await new Promise<void>(resolve => setImmediate(resolve));
         assert.ok(release);
         if (change === "persisted") persisted.plugins.Sound.volume = 90;
         if (change === "cloud") persisted.cloud.url = "https://second.invalid";
@@ -1208,7 +1225,7 @@ test("cloud configuration changes persist locally without changing sync timestam
             let dirty = 0;
             let scheduled = 0;
             const callback = runInNewContext(`${compiled}\nlistener;`, {
-                SettingsStore: { plain }, Date: { now: () => 100 },
+                SettingsStore: { plain }, Date: { now: () => 100 }, settingsRevision: 0, settingsSave: undefined, batchSettings: false,
                 VencordNative: { settings: { set: async () => { saves++; } } },
                 markLocalSettingsDirty: () => dirty++, saveSettingsOnFrequentAction: () => scheduled++
             });

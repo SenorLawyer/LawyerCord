@@ -73,6 +73,10 @@ async function updateStatus(isPlaying: boolean) {
 migratePluginSettings("AutoDNDWhilePlaying", "StatusWhilePlaying");
 export default definePlugin({
     name: "AutoDNDWhilePlaying",
+    performance: {
+        impact: "low",
+        description: "Updates online status in response to running game changes."
+    },
     description: "Automatically updates your online status (online, idle, dnd) when launching games",
     tags: ["Activity", "Utility"],
     authors: [Devs.thororen],

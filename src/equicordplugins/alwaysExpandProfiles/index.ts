@@ -9,6 +9,7 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "AlwaysExpandProfiles",
+    performance: { impact: "low", description: "Opens the full profile when a profile is requested." },
     description: "Always expands profile popouts to the full modal",
     tags: ["Appearance", "Utility"],
     authors: [Devs.thororen],

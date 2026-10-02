@@ -449,6 +449,7 @@ function onToggle(e: KeyboardEvent) {
 
 export default definePlugin({
     name: "ElementHighlighter",
+    performance: { impact: "high", description: "Scans stylesheet rules and reads layout while inspecting hovered elements." },
     description: "Highlight and inspect elements easily.",
     tags: ["Developers"],
     authors: [Devs.prism],

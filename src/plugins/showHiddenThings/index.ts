@@ -35,6 +35,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "ShowHiddenThings",
+    performance: {
+        impact: "low",
+        description: "Changes visibility flags for existing Discord information and controls."
+    },
     searchTerms: ["ShowTimeouts", "ShowInvitesPaused", "ShowModView"],
     description: "Displays various hidden & moderator-only things regardless of permissions.",
     tags: ["Servers", "Utility"],

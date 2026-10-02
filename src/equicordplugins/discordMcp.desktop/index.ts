@@ -127,6 +127,7 @@ const waveformCache = new Map<string, Promise<string>>();
 const subscriptions = new Map<string, MessageSubscription>();
 
 let bridgeGeneration = 0;
+let requestGeneration = 0;
 
 function McpClientSetup() {
     const { mcpClients } = settings.use(MCP_CLIENT_SETTINGS_KEYS);
@@ -257,15 +258,15 @@ async function generateAttachmentWaveformFromBytes(bytes: Uint8Array, contentTyp
     return generateWaveform(await decodeAudio(blob), 16_000);
 }
 
-function generateAttachmentWaveform(attachment: RawAttachment): Promise<string> {
+function generateAttachmentWaveform(attachment: RawAttachment, check: () => void): Promise<string> {
     if (typeof attachment.url !== "string") throw new Error("Voice attachment is missing its Discord CDN URL");
     const cached = waveformCache.get(attachment.url);
     if (cached) return cached;
 
     const pending = Native.fetchDiscordAttachment(attachment.url)
-        .then(({ contentType, data }) => generateAttachmentWaveformFromBytes(data, contentType))
+        .then(({ contentType, data }) => { check(); return generateAttachmentWaveformFromBytes(data, contentType); })
         .catch(error => {
-            waveformCache.delete(attachment.url as string);
+            if (waveformCache.get(attachment.url as string) === pending) waveformCache.delete(attachment.url as string);
             throw error;
         });
     waveformCache.set(attachment.url, pending);
@@ -273,7 +274,7 @@ function generateAttachmentWaveform(attachment: RawAttachment): Promise<string> 
     return pending;
 }
 
-async function serializeMessageWithVoiceWaveform(message: any) {
+async function serializeMessageWithVoiceWaveform(message: any, check: () => void) {
     const serialized = serializeMessage(message);
     if (!serialized.isVoiceMessage) return serialized;
 
@@ -282,7 +283,7 @@ async function serializeMessageWithVoiceWaveform(message: any) {
         if (attachment.waveform) return;
         const rawAttachment = rawAttachments[index];
         if (!rawAttachment) return;
-        attachment.waveform = await generateAttachmentWaveform(rawAttachment);
+        attachment.waveform = await generateAttachmentWaveform(rawAttachment, check);
         attachment.waveformSource = "generated";
     }));
     return serialized;
@@ -537,7 +538,7 @@ async function readMessages(args: ToolArguments) {
     return response.body.map(serializeMessage);
 }
 
-async function bulkReadMessages(args: ToolArguments) {
+async function bulkReadMessages(args: ToolArguments, check: () => void) {
     if (!Array.isArray(args.channel_ids) || args.channel_ids.length < 1 || args.channel_ids.length > 10)
         throw new Error("channel_ids must contain 1 to 10 channel IDs available to the authenticated account");
     const channelIds = [...new Set(args.channel_ids.map(requireAccessibleChannel))];
@@ -547,6 +548,7 @@ async function bulkReadMessages(args: ToolArguments) {
 
     const channels: Array<{ channelId: string; messages: any[]; }> = [];
     for (const channelId of channelIds) {
+        check();
         channels.push({
             channelId,
             messages: await readMessages({ channel_id: channelId, limit: limitPerChannel }),
@@ -569,7 +571,7 @@ function extractSearchHit(group: unknown): any | null {
     return group.find(message => message?.hit === true && message?.id) ?? group.find(message => message?.id) ?? null;
 }
 
-async function searchMessages(args: ToolArguments) {
+async function searchMessages(args: ToolArguments, check: () => void) {
     const requestedChannelId = optionalSnowflake(args.channel_id, "channel_id");
     const requestedGuildId = optionalSnowflake(args.guild_id, "guild_id");
     if (!requestedChannelId && !requestedGuildId)
@@ -616,6 +618,7 @@ async function searchMessages(args: ToolArguments) {
     let exhausted = false;
 
     while (messages.length < limit && initialOffset + consumedResults <= 5_000) {
+        check();
         const parameters = new URLSearchParams(staticParameters);
         parameters.set("offset", String(initialOffset + consumedResults));
         const response = await RestAPI.get({ url: `${baseUrl}?${parameters}`, retries: 2 });
@@ -673,22 +676,26 @@ async function searchMessages(args: ToolArguments) {
     };
 }
 
-async function getMessage(args: ToolArguments) {
+async function getMessage(args: ToolArguments, check: () => void) {
     const channelId = requireAccessibleChannel(args.channel_id);
     const messageId = requireSnowflake(args.message_id, "message_id");
-    return serializeMessageWithVoiceWaveform(await fetchMessage(channelId, messageId));
+    const message = await fetchMessage(channelId, messageId);
+    check();
+    return serializeMessageWithVoiceWaveform(message, check);
 }
 
-async function downloadAttachment(args: ToolArguments) {
+async function downloadAttachment(args: ToolArguments, check: () => void) {
     const channelId = requireAccessibleChannel(args.channel_id);
     const messageId = requireSnowflake(args.message_id, "message_id");
     const attachmentId = requireSnowflake(args.attachment_id, "attachment_id");
     const message = await fetchMessage(channelId, messageId);
+    check();
     const attachment = (message.attachments as RawAttachment[] | undefined)?.find(item => String(item.id) === attachmentId);
     if (!attachment || typeof attachment.url !== "string" || typeof attachment.filename !== "string")
         throw new Error("Attachment was not found on that message");
 
     const downloaded = await Native.downloadDiscordAttachment(attachment.url, attachment.filename);
+    check();
     const { data, ...download } = downloaded;
     const serializedAttachment = serializeAttachment(attachment);
     if (!serializedAttachment.waveform && Boolean(Number(message.flags ?? 0) & MessageFlags.IS_VOICE_MESSAGE)) {
@@ -703,13 +710,14 @@ async function downloadAttachment(args: ToolArguments) {
     };
 }
 
-async function sendMessage(args: ToolArguments) {
+async function sendMessage(args: ToolArguments, check: () => void) {
     const channelId = requireAccessibleChannel(args.channel_id);
     const content = normalizeMessageContent(args.content);
     const replyToMessageId = optionalSnowflake(args.reply_to_message_id, "reply_to_message_id");
     const channel = ChannelStore.getChannel(channelId);
     if (!channel) throw new Error("Channel is not available in the authenticated Discord client");
     if (replyToMessageId) await fetchMessage(channelId, replyToMessageId);
+    check();
 
     const response = await RestAPI.post({
         url: Constants.Endpoints.MESSAGES(channelId),
@@ -736,13 +744,15 @@ async function sendMessage(args: ToolArguments) {
     return serializeMessage(message);
 }
 
-async function deleteOwnMessage(args: ToolArguments) {
+async function deleteOwnMessage(args: ToolArguments, check: () => void) {
     const channelId = requireAccessibleChannel(args.channel_id);
     const messageId = requireSnowflake(args.message_id, "message_id");
     if (!await Native.isSentMessage(channelId, messageId))
         throw new Error("Refusing to delete a message that was not sent by Discord MCP");
 
+    check();
     const message = await fetchMessage(channelId, messageId);
+    check();
     if (String(message.author?.id) !== UserStore.getCurrentUser()?.id)
         throw new Error("Refusing to delete a message not authored by the authenticated account");
 
@@ -751,7 +761,7 @@ async function deleteOwnMessage(args: ToolArguments) {
     return { deleted: true, channelId, messageId };
 }
 
-async function executeTool(tool: DiscordMcpToolName, rawArguments: unknown): Promise<unknown> {
+async function executeTool(tool: DiscordMcpToolName, rawArguments: unknown, check: () => void): Promise<unknown> {
     const args = argsOf(rawArguments);
     switch (tool) {
         case "connection_status": return {
@@ -776,12 +786,12 @@ async function executeTool(tool: DiscordMcpToolName, rawArguments: unknown): Pro
         case "list_server_channels": return listServerChannels(requireSnowflake(args.guild_id, "guild_id"));
         case "list_dms": return listDms();
         case "read_messages": return readMessages(args);
-        case "bulk_read_messages": return bulkReadMessages(args);
-        case "search_messages": return searchMessages(args);
-        case "get_message": return getMessage(args);
-        case "download_attachment": return downloadAttachment(args);
-        case "send_message": return sendMessage(args);
-        case "delete_own_message": return deleteOwnMessage(args);
+        case "bulk_read_messages": return bulkReadMessages(args, check);
+        case "search_messages": return searchMessages(args, check);
+        case "get_message": return getMessage(args, check);
+        case "download_attachment": return downloadAttachment(args, check);
+        case "send_message": return sendMessage(args, check);
+        case "delete_own_message": return deleteOwnMessage(args, check);
         case "subscribe_channel": return subscribeChannel(args);
         case "wait_for_message": return waitForSubscription(args);
         case "list_subscriptions": return listSubscriptions();
@@ -794,7 +804,14 @@ async function handleBridgeRequest(request: Awaited<ReturnType<typeof Native.tak
     try {
         if (!DISCORD_MCP_TOOL_NAMES.includes(request.tool as DiscordMcpToolName))
             throw new Error("Unsupported Discord MCP tool");
-        const result = await executeTool(request.tool as DiscordMcpToolName, request.arguments);
+        const generation = requestGeneration;
+        const accountId = UserStore.getCurrentUser()?.id;
+        const check = () => {
+            if (generation !== requestGeneration || accountId !== UserStore.getCurrentUser()?.id)
+                throw new Error("Discord MCP request was cancelled because the session changed.");
+        };
+        const result = await executeTool(request.tool as DiscordMcpToolName, request.arguments, check);
+        check();
         await Native.writeResponse({ id: request.id, ok: true, result });
     } catch (error) {
         await Native.writeResponse({ id: request.id, ok: false, error: errorMessage(error) });
@@ -822,11 +839,17 @@ async function bridgeLoop(generation: number): Promise<void> {
 
 export default definePlugin({
     name: "DiscordMCP",
+    performance: {
+        impact: "medium",
+        description: "Waits for local agent requests and tracks subscribed channel messages while enabled."
+    },
     description: "A local, fixed-surface MCP bridge for agent access to every channel visible to this authenticated Discord client.",
     authors: [EquicordDevs.nobody],
     settings,
 
     flux: {
+        LOGOUT() { requestGeneration++; clearSubscriptions(); waveformCache.clear(); },
+        CONNECTION_OPEN() { requestGeneration++; clearSubscriptions(); waveformCache.clear(); },
         MESSAGE_CREATE: handleMessageCreate,
     },
 
@@ -839,6 +862,8 @@ export default definePlugin({
 
     stop() {
         bridgeGeneration++;
+        requestGeneration++;
+        waveformCache.clear();
         clearSubscriptions();
     },
 });

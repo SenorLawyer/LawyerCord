@@ -37,6 +37,10 @@ const nameMap = {
 
 export default definePlugin({
     name: "ContextMenuAPI",
+    performance: {
+        impact: "low",
+        description: "Runs registered menu patches when a context menu opens."
+    },
     description: "API for adding/removing items to/from context menus.",
     authors: [Devs.Nuckyz, Devs.Ven, Devs.Kyuuhachi],
     required: true,

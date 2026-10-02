@@ -40,6 +40,7 @@ function saveFavoriteChannels(state: unknown) {
 
 export default definePlugin({
     name: "LawyersFakeNitro",
+    performance: { impact: "low", description: "Restores local favorites and saves local settings updates." },
     description: "Unlocks high-quality streaming and stores Favorites locally without changing other Nitro features.",
     authors: [EquicordDevs.SenorLawyer],
 

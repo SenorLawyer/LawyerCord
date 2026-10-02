@@ -47,6 +47,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "StreamingCodecDisabler",
+    performance: { impact: "low", description: "Filters codec options when a stream connection is configured." },
     description: "Disable codecs for streaming of your choice",
     tags: ["Utility", "Voice"],
     authors: [EquicordDevs.davidkra230],

@@ -11,6 +11,7 @@ export default definePlugin({
     name: "ProfileSectionsAPI",
     description: "API to add sections near the 'Member Since' area of user profile panels.",
     authors: [Devs.thororen],
+    performance: { impact: "low", description: "Renders registered sections when a user profile opens." },
     patches: [
         // dm user sidebar
         {

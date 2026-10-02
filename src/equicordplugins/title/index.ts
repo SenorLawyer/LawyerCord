@@ -28,6 +28,7 @@ function setTitle(v: string) {
 
 export default definePlugin({
     name: "Title",
+    performance: { impact: "low", description: "Updates the window title when its setting changes." },
     description: "Replaces the window title prefix",
     tags: ["Customisation"],
     authors: [Devs.Kyuuhachi],

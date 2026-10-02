@@ -115,6 +115,7 @@ export const settings = definePluginSettings({
 
 export default definePlugin({
     name: "ToastNotifications",
+    performance: { impact: "medium", description: "Checks incoming messages and renders a limited stack of message previews." },
     description: "Show a pop-up toast notification, configurable for DMs, group, friends, or guild channels.",
     tags: ["Appearance", "Customisation", "Notifications"],
     authors: [EquicordDevs.Skully, EquicordDevs.Ethan, EquicordDevs.Buzzy],

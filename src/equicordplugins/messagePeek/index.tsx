@@ -245,6 +245,7 @@ function shouldShowActivity(lastMessage: Message | undefined, hasActivity: boole
 
 export default definePlugin({
     name: "MessagePeek",
+    performance: { impact: "medium", description: "Parses message previews in DM rows and fetches recent messages at startup." },
     description: "Shows the last message preview and timestamp in the Direct Messages list.",
     dependencies: ["MemberListDecoratorsAPI"],
     tags: ["Appearance", "Chat"],

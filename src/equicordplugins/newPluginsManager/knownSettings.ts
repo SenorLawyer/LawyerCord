@@ -46,7 +46,7 @@ export async function getKnownSettings(): Promise<KnownPluginSettingsMap> {
         const knownPlugins = Array.isArray(legacyData)
             ? legacyData.filter((plugin): plugin is string => typeof plugin === "string")
             : [];
-        const settings = getCurrentSettings([...new Set([...Object.keys(plugins), ...knownPlugins])]);
+        const settings = getCurrentSettings(Array.isArray(legacyData) ? [...new Set(knownPlugins)] : Object.keys(plugins));
         await persistKnownSettings(settings);
         return settings;
     }

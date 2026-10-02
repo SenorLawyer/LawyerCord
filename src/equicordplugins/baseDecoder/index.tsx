@@ -86,6 +86,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "DecodeBase64",
+    performance: { impact: "low", description: "Decodes message text when its popover action is used." },
     description: "Decode base64 content of any message and copy the decoded content.",
     dependencies: ["MessagePopoverAPI"],
     tags: ["Appearance", "Customisation", "Chat"],

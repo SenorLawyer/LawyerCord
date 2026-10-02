@@ -7,10 +7,13 @@
 import { BaseText } from "@components/BaseText";
 import { Card } from "@components/Card";
 import { HeadphonesIcon } from "@components/Icons";
+import { Logger } from "@utils/Logger";
 import { Button, useEffect, useState } from "@webpack/common";
 
 import pl, { Native, settings, SongLinkResult } from ".";
 import { Providers } from "./Providers";
+
+const logger = new Logger("SongLink");
 
 interface SongLinkerProps {
     url: string;
@@ -19,9 +22,12 @@ interface SongLinkerProps {
 
 export default function SongLinker({ url, onResolved }: SongLinkerProps) {
     const [songData, setSongData] = useState<SongLinkResult>();
+    const [failed, setFailed] = useState(false);
+    const [attempt, setAttempt] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
+        setFailed(false);
 
         async function loadSongData() {
             const cached = pl.getFromCache(url);
@@ -41,7 +47,10 @@ export default function SongLinker({ url, onResolved }: SongLinkerProps) {
                 setSongData(sd);
                 onResolved?.(url, sd);
             } catch (error) {
-                if (!cancelled) console.error("Failed to fetch song link", error);
+                if (!cancelled) {
+                    logger.warn("Failed to fetch song link", error);
+                    setFailed(true);
+                }
             }
         }
 
@@ -50,7 +59,9 @@ export default function SongLinker({ url, onResolved }: SongLinkerProps) {
         return () => {
             cancelled = true;
         };
-    }, [url]);
+    }, [url, attempt]);
+
+    if (failed) return <BaseText>Could not load this song link. <Button onClick={() => setAttempt(value => value + 1)}>Retry</Button></BaseText>;
 
     return <BaseText>
         {

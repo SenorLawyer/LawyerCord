@@ -9,6 +9,10 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "NicknameIconsAPI",
+    performance: {
+        impact: "low",
+        description: "Routes profile nickname icon rendering to enabled plugin callbacks."
+    },
     description: "API to add icons to the nickname, in profiles",
     authors: [Devs.Nuckyz],
     patches: [

@@ -99,6 +99,7 @@ function getEmojiIdThatShouldBeUsed(guildId: string) {
 
 export default definePlugin({
     name: "Husk",
+    performance: { impact: "low", description: "Adds a reaction shortcut and finds its emoji when clicked." },
     description: "Adds Husk button (check settings to change used emoji)",
     dependencies: ["MessagePopoverAPI"],
     tags: ["Emotes", "Fun"],

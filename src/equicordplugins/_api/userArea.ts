@@ -16,6 +16,7 @@ export default definePlugin({
     name: "UserAreaAPI",
     description: "API to add buttons to the user area panel.",
     authors: [Devs.prism],
+    performance: { impact: "low", description: "Renders registered buttons when the account panel changes." },
 
     patches: [
         {

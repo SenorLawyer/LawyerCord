@@ -76,6 +76,7 @@ const recordingMenu: NavContextMenuPatchCallback = (children, { channel }: { cha
 
 export default definePlugin({
     name: "ScreenRecorder",
+    performance: { impact: "high", description: "Captures and encodes screen video while recording." },
     description: "Adds an option to record your screen and upload the recording to the channel.",
     tags: ["Chat"],
     authors: [Devs.AutumnVN],

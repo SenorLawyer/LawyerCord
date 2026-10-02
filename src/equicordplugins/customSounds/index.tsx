@@ -317,6 +317,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "CustomSounds",
+    performance: { impact: "medium", description: "Preloads configured audio files and substitutes them when Discord plays sounds." },
     description: "Customize Discord's sounds.",
     dependencies: ["AudioPlayerAPI"],
     tags: ["Customisation", "Notifications", "Voice"],

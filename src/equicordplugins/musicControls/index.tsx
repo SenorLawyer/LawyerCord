@@ -23,6 +23,7 @@ import { Devs, EquicordDevs } from "@utils/constants";
 import { SYM_LAZY_CACHED } from "@utils/lazy";
 import definePlugin from "@utils/types";
 
+import { startLyricsRequests, stopLyricsRequests } from "./lyricsRequest";
 import { settings, toggleHoverControls } from "./settings";
 import { migrateOldLyrics } from "./spotify/lyrics/api";
 import { SpotifyLyrics } from "./spotify/lyrics/components/lyrics";
@@ -35,6 +36,7 @@ import { TidalStore } from "./tidal/TidalStore";
 
 export default definePlugin({
     name: "MusicControls",
+    performance: { impact: "medium", description: "Updates playback controls and lyrics while music plays, with optional lyric translation requests." },
     description: "Music Controls and Lyrics for multiple services ",
     authors: [Devs.Ven, Devs.afn, Devs.KraXen72, Devs.Av32000, Devs.nin0dev, Devs.thororen, EquicordDevs.vmohammad, Devs.Joona],
     settings,
@@ -116,6 +118,7 @@ export default definePlugin({
     },
 
     async start() {
+        startLyricsRequests();
         (SpotifyLrcStore as typeof SpotifyLrcStore & { [SYM_LAZY_CACHED]?: typeof SpotifyLrcStore; })[SYM_LAZY_CACHED]?.init();
         (TidalStore as typeof TidalStore & { [SYM_LAZY_CACHED]?: typeof TidalStore; })[SYM_LAZY_CACHED]?.socket.reconnect();
         (TidalLrcStore as typeof TidalLrcStore & { [SYM_LAZY_CACHED]?: typeof TidalLrcStore; })[SYM_LAZY_CACHED]?.init();
@@ -124,6 +127,7 @@ export default definePlugin({
     },
 
     stop() {
+        stopLyricsRequests();
         (SpotifyLrcStore as typeof SpotifyLrcStore & { [SYM_LAZY_CACHED]?: typeof SpotifyLrcStore; })[SYM_LAZY_CACHED]?.destroy();
         (TidalLrcStore as any)[SYM_LAZY_CACHED]?.destroy?.();
         (TidalStore as any)[SYM_LAZY_CACHED]?.destroy?.();

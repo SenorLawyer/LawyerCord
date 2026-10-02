@@ -2,7 +2,7 @@
 
 `package.json` is the source of truth for the LawyerCord version.
 
-The current source version is `3.1.4.0`, targeting Nightly from the audited Stable `3.0.1.0` baseline. The current Stable release version is `3.0.1.0`, including the `3.0.0.0` audit and update-channel fixes.
+The current source version is `4.0.0.0`, targeting Nightly from the audited Stable `3.0.1.0` baseline. The current Stable release version is `3.0.1.0`, including the `3.0.0.0` audit and update-channel fixes.
 
 The current four-part format is retained for upstream compatibility:
 
@@ -14,6 +14,14 @@ major.minor.patch.packaging
 - Increment `minor` for backwards-compatible features.
 - Increment `patch` for backwards-compatible fixes, performance improvements and security hardening.
 - Increment `packaging` for rebuilds that change distribution metadata without changing source behavior.
+
+## Compatibility in 4.0.0.0
+
+MusicControls stores saved Spotify lyrics per track instead of rewriting the entire history. Existing history is imported once and retained in its legacy format until the user clears it. Lyrics and translations saved after upgrading are available in the new format; older builds cannot display those new entries after a downgrade. This stored-data change requires a major version increment.
+
+Automation program requests also carry an identifier so stopping a workflow can cancel its owned native process. Renderer and native code must come from the same release artifact.
+
+Desktop settings persistence uses document sessions and ordered revisions to reject delayed writes after reload. The matching native bridge provides synchronous unload persistence; external hosts without that capability keep immediate saves.
 
 ## Compatibility in 3.0.0.0
 

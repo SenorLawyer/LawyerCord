@@ -15,7 +15,7 @@ import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
 import type * as Engine from "../src/components/settings/tabs/automations/engine";
 import * as Model from "../src/components/settings/tabs/automations/model";
 
-function fixture(poll?: (cursor: number) => Promise<{ cursor: number; events: unknown[]; }>) {
+function fixture(poll?: (cursor: number) => Promise<{ cursor: number; events: unknown[]; }>, programs: Record<string, unknown> = {}) {
     const data = new Map<string, unknown>();
     const writes: string[][] = [];
     let clones = 0;
@@ -61,7 +61,7 @@ function fixture(poll?: (cursor: number) => Promise<{ cursor: number; events: un
             .replace("const byId = new Map(automation.blocks.map", "countCompilation(); const byId = new Map(automation.blocks.map");
         const code = transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;
         runInNewContext(code, { exports, Error, countSystemCandidate: () => systemCandidates++,
-            VencordNative: { pluginHelpers: { AutomationCore: { async pollSystemEvents(cursor: number, types: string[]) { systemTypes.push([...types]); if (poll) return poll(cursor); return { cursor: 1, events: [{ type: "process-start", process: { name: "unmatched.exe", pid: 1 } }] }; } } } }, countValidation: () => validations++, countCompilation: () => compilations++, crypto, AbortController, AbortSignal, setTimeout, clearTimeout, setInterval, clearInterval, window: { setTimeout, clearTimeout },
+            VencordNative: { pluginHelpers: { AutomationCore: { ...programs, async pollSystemEvents(cursor: number, types: string[]) { systemTypes.push([...types]); if (poll) return poll(cursor); return { cursor: 1, events: [{ type: "process-start", process: { name: "unmatched.exe", pid: 1 } }] }; } } } }, countValidation: () => validations++, countCompilation: () => compilations++, crypto, AbortController, AbortSignal, setTimeout, clearTimeout, setInterval, clearInterval, window: { setTimeout, clearTimeout },
             structuredClone(value: unknown) { if (value && typeof value === "object" && "blocks" in value && Array.isArray(value.blocks)) clones++; return structuredClone(value); },
             require(name: string) {
                 if (name === "@api/DataStore") return storage;
@@ -174,6 +174,35 @@ test("Account changes cancel delayed work and reject already queued runs", async
         assert.equal((await f.api.runAutomation(flow.id)).success, true);
         assert.equal(f.posts(), 1, "A new explicit run may use the new account in the isolated fixture.");
     } finally { f.api.stopAutomationEngine(); }
+});
+
+test("Run admission belongs to the session that requested it before loading yields", async () => {
+    for (const replacement of ["account", "round-trip", "restart"]) {
+        const f = fixture();
+        await f.api.loadAutomationState();
+        const flow = workflow();
+        const send = Model.createAutomationBlock("send-message");
+        send.config = { channelId: "100000000000000002", content: "Fixture only." };
+        flow.blocks = [send];
+        flow.entryId = send.id;
+        await f.api.replaceAutomations([flow]);
+        await f.api.setAutomationSystemEnabled(true);
+        await f.api.startAutomationEngine();
+        try {
+            const run = f.api.runAutomation(flow.id);
+            if (replacement === "restart") {
+                f.api.stopAutomationEngine();
+                await f.api.startAutomationEngine();
+            } else {
+                f.switchAccount();
+                if (replacement === "round-trip") f.switchAccount("original-account");
+            }
+            assert.equal((await run).success, false, replacement);
+            assert.equal(f.posts(), 0, `${replacement} must discard the prior session's admission`);
+            assert.equal((await f.api.runAutomation(flow.id)).success, true);
+            assert.equal(f.posts(), 1);
+        } finally { f.api.stopAutomationEngine(); }
+    }
 });
 
 test("Edits during a run affect the next run without changing its active definition", async () => {
@@ -313,4 +342,36 @@ for (const returnToOriginal of [false, true]) test(`System polling discards even
         assert.equal((await f.api.runAutomation(flow.id)).success, true);
         assert.equal(f.posts(), 1, "Fresh work in the current account still executes.");
     } finally { release?.(); f.api.stopAutomationEngine(); }
+});
+
+
+test("Stop and account replacement cancel the exact native program request", async () => {
+    for (const reason of ["stop", "account", "ipcerror"]) {
+        let requestId = "";
+        const cancelled: string[] = [];
+        let release: (() => void) | undefined;
+        const f = fixture(undefined, {
+            runProgram(input: { requestId: string; }) { requestId = input.requestId; return new Promise(resolve => { release = () => resolve({ success: false, error: "Stopped" }); }); },
+            async cancelProgram(id: string) { cancelled.push(id); if (reason === "ipcerror") throw new Error("Renderer disconnected"); }
+        });
+        await f.api.loadAutomationState();
+        const flow = workflow();
+        const program = Model.createAutomationBlock("run-program");
+        program.config.value = "fixture";
+        flow.blocks = [program];
+        flow.entryId = program.id;
+        await f.api.replaceAutomations([flow]);
+        await f.api.setAutomationSystemEnabled(true);
+        await f.api.startAutomationEngine();
+        try {
+            const run = f.api.runAutomation(flow.id);
+            await new Promise(resolve => setImmediate(resolve));
+            assert.ok(requestId);
+            if (reason !== "account") f.api.stopAutomationEngine();
+            else f.switchAccount();
+            assert.deepEqual(cancelled, [requestId]);
+            release?.();
+            assert.equal((await run).success, false);
+        } finally { release?.(); f.api.stopAutomationEngine(); }
+    }
 });

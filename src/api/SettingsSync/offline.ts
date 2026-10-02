@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { DefaultSettings, PlainSettings } from "@api/Settings";
+import { DefaultSettings, flushSettings, persistSettings, PlainSettings } from "@api/Settings";
 import { Logger } from "@utils/Logger";
 import { isObject } from "@utils/misc";
 import { chooseFile, saveFile } from "@utils/web";
@@ -148,6 +148,7 @@ function validateSettingTypes(settings: object, defaults: object) {
 }
 
 export async function captureCloudImportState(syncDataStore = true) {
+    await flushSettings();
     const settings = JSON.stringify(VencordNative.settings.get());
     const quickCss = await VencordNative.quickCss.get();
     const entries = syncDataStore ? await DataStore.entries<IDBValidKey, unknown>(undefined, key => !isLocalDataStoreKey(key)) : [];
@@ -207,11 +208,15 @@ export async function importSettings(data: string, type: BackupType = "all", clo
     try {
         checkCurrent?.();
         if (settings) {
+            await flushSettings();
+            checkCurrent?.();
             const next: typeof PlainSettings = expected ? JSON.parse(expected.settings) : structuredClone(PlainSettings);
             deepMerge(next, settings);
-            await VencordNative.settings.set(next, undefined, expected?.settings);
+            await persistSettings(next, expected?.settings, () => {
+                checkCurrent?.();
+                deepMerge(PlainSettings, settings);
+            });
             checkCurrent?.();
-            deepMerge(PlainSettings, settings);
             if (expected) expected.settings = JSON.stringify(next);
         }
         checkCurrent?.();
@@ -247,6 +252,7 @@ export async function importSettings(data: string, type: BackupType = "all", clo
 }
 
 export async function exportSettings({ syncDataStore = true, type = "all", minify, cloud = false }: { syncDataStore?: boolean; type?: BackupType; minify?: boolean; cloud?: boolean; }) {
+    await flushSettings();
     let settings: object | undefined = type === "all" || type === "plugins" ? VencordNative.settings.get() : undefined;
     if (cloud && settings) settings = omitCloudSettings(settings);
     const quickCss = type === "all" || type === "css" ? await VencordNative.quickCss.get() : undefined;

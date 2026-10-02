@@ -43,6 +43,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "PartyMode",
+    performance: { impact: "high", description: "Enables confetti and screen shake during chat interactions." },
     description: "Allows you to use party mode cause the party never ends ✨",
     tags: ["Fun"],
     authors: [Devs.UwUDev],

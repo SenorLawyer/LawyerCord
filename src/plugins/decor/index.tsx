@@ -30,6 +30,10 @@ let configuration: Promise<void> | undefined;
 
 export default definePlugin({
     name: "Decor",
+    performance: {
+        impact: "medium",
+        description: "Resolves custom decorations for displayed users and adds decoration rendering to avatars."
+    },
     description: "Create and use your own custom avatar decorations, or pick your favorite from the presets.",
     tags: ["Appearance", "Customisation"],
     authors: [Devs.FieryFlames],

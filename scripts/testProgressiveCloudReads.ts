@@ -44,7 +44,7 @@ test("cloud snapshots and exports exclude local model values before deserializin
     };
     const settings = { plugins: {}, cloud: { url: "https://first.invalid" } };
     const offline = load("src/api/SettingsSync/offline.ts", {
-        "@api/Settings": { DefaultSettings: settings, PlainSettings: settings },
+        "@api/Settings": { DefaultSettings: settings, PlainSettings: settings, flushSettings: async () => {} },
         "@utils/Logger": { Logger: class {} },
         "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
         "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "1" }) } },

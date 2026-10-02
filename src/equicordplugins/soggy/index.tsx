@@ -131,6 +131,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "Soggy",
+    performance: {
+        impact: "medium",
+        description: "Preloads two sounds and plays music while the cat window is open."
+    },
     description: "Adds a soggy button to the toolbox",
     tags: ["Fun"],
     authors: [EquicordDevs.sliwka],

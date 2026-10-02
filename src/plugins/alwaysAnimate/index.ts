@@ -55,6 +55,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "AlwaysAnimate",
+    performance: {
+        impact: "high",
+        description: "Keeps visible avatars, server icons, and other supported decorations animating without hover."
+    },
     description: "Animates anything that can be animated",
     tags: ["Appearance", "Fun"],
     authors: [Devs.FieryFlames],

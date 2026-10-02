@@ -1035,6 +1035,7 @@ function buildWebdavAuthHeader(): string | null {
 }
 
 async function createWebdavShare(relativePath: string, serverOrigin: string, filename: string): Promise<string> {
+    checkUploadOwner();
     const { webdavServerType, webdavShareType } = settings.store as {
         webdavServerType?: string;
         webdavShareType?: string;

@@ -19,7 +19,7 @@
 import "./styles.css";
 
 import * as DataStore from "@api/DataStore";
-import { isPluginEnabled, stopPlugin } from "@api/PluginManager";
+import { hasAnyVisibleSettings, isPluginEnabled, stopPlugin } from "@api/PluginManager";
 import { useSettings } from "@api/Settings";
 import { Button } from "@components/Button";
 import { Card } from "@components/Card";
@@ -30,17 +30,17 @@ import { Paragraph } from "@components/Paragraph";
 import { SettingsTab } from "@components/settings";
 import { ChangeList } from "@utils/ChangeList";
 import { classNameFactory } from "@utils/css";
-import { isTruthy } from "@utils/guards";
+import { makeLazy } from "@utils/lazy";
 import { Logger } from "@utils/Logger";
 import { Margins } from "@utils/margins";
 import { classes } from "@utils/misc";
-import { useAwaiter, useCleanupEffect, useIntersection } from "@utils/react";
-import { PluginTag, PluginTags } from "@utils/types";
-import { Alerts, ConfirmModal, lodash, openModal, Parser, React, SearchableSelect, Select, TextInput, Toasts, Tooltip, useCallback, useMemo, useRef, useState } from "@webpack/common";
-import { JSX } from "react";
+import { useAwaiter, useCleanupEffect } from "@utils/react";
+import { PluginTags } from "@utils/types";
+import { Alerts, ConfirmModal, lodash, openModal, Parser, React, SearchableSelect, Select, TextInput, Toasts, Tooltip, useCallback, useRef, useState } from "@webpack/common";
 
 import Plugins, { ExcludedPlugins, PluginMeta } from "~plugins";
 
+import { CatalogFilters, catalogPage, createCatalog, DEFAULT_FILTERS, filterCatalog, IMPACT_LABELS } from "./catalog";
 import { PluginCard } from "./PluginCard";
 import { openWarningModal } from "./PluginModal";
 import { StockPluginsCard, UserPluginsCard } from "./PluginStatCards";
@@ -96,16 +96,15 @@ function ReloadRequiredCard({ required, enabledPlugins, openWarningModal, resetC
     );
 }
 
-const enum SearchStatus {
-    ALL,
-    ENABLED,
-    DISABLED,
-    EQUICORD,
-    VENCORD,
-    NEW,
-    USER_PLUGINS,
-    API_PLUGINS
-}
+const getCatalog = makeLazy(() => createCatalog(Plugins, PluginMeta));
+const getEnabledPaths = makeLazy(() => ["plugins" as const, ...getCatalog().flatMap(({ plugin }) => [`plugins.${plugin.name}` as const, `plugins.${plugin.name}.enabled` as const])]);
+const getDependencyMap = makeLazy(() => {
+    const dependencies: Record<string, string[]> = {};
+    for (const { plugin } of getCatalog()) for (const dependency of plugin.dependencies ?? []) {
+        (dependencies[dependency] ??= []).push(plugin.name);
+    }
+    return dependencies;
+});
 
 export const ExcludedReasons: Record<"web" | "discordDesktop" | "vesktop" | "equibop" | "desktop" | "dev", string> = {
     desktop: "Discord Desktop app or Vesktop/Equibop",
@@ -142,7 +141,10 @@ function ExcludedPluginsList({ search }: { search: string; }) {
 }
 
 export default function PluginSettings() {
-    const settings = useSettings();
+    const settings = useSettings(getEnabledPaths());
+    const catalog = getCatalog();
+    const depMap = getDependencyMap();
+    const hasUserPlugins = !IS_STANDALONE && Object.values(PluginMeta).some(meta => meta.userPlugin);
     const changeRef = useRef<ChangeList<string>>(null);
     const changes = changeRef.current ??= new ChangeList<string>();
 
@@ -182,68 +184,16 @@ export default function PluginSettings() {
         };
     }, []);
 
-    const depMap = useMemo(() => {
-        const o = {} as Record<string, string[]>;
-        for (const plugin in Plugins) {
-            const deps = Plugins[plugin].dependencies;
-            if (deps) {
-                for (const dep of deps) {
-                    o[dep] ??= [];
-                    o[dep].push(plugin);
-                }
-            }
-        }
-        return o;
-    }, []);
-
-    const sortedPlugins = useMemo(() => Object.values(Plugins)
-        .sort((a, b) => a.name.localeCompare(b.name)), []);
-
-    const hasUserPlugins = useMemo(() => !IS_STANDALONE && Object.values(PluginMeta).some(m => m.userPlugin), []);
-
-    const [searchValue, setSearchValue] = useState({ value: "", tags: [] as PluginTag[], status: SearchStatus.ALL });
-
-    const search = searchValue.value.toLowerCase();
-    const onSearch = (query: string) => setSearchValue(prev => ({ ...prev, value: query }));
-
-    const pluginFilter = useCallback((plugin: typeof Plugins[keyof typeof Plugins], newPluginsSet: Set<string> | null) => {
-        const { status, tags } = searchValue;
-
-        switch (status) {
-            case SearchStatus.DISABLED:
-                if (isPluginEnabled(plugin.name)) return false;
-                break;
-            case SearchStatus.ENABLED:
-                if (!isPluginEnabled(plugin.name)) return false;
-                break;
-            case SearchStatus.EQUICORD:
-                if (!PluginMeta[plugin.name].folderName.startsWith("src/equicordplugins/")) return false;
-                break;
-            case SearchStatus.VENCORD:
-                if (!PluginMeta[plugin.name].folderName.startsWith("src/plugins/")) return false;
-                break;
-            case SearchStatus.NEW:
-                if (!newPluginsSet?.has(plugin.name)) return false;
-                break;
-            case SearchStatus.USER_PLUGINS:
-                if (!PluginMeta[plugin.name]?.userPlugin) return false;
-                break;
-            case SearchStatus.API_PLUGINS:
-                if (!plugin.name.endsWith("API")) return false;
-                break;
-        }
-
-        if (tags.length && tags.some(t => !plugin.tags?.includes(t))) return false;
-
-        if (!search.length) return true;
-
-        return (
-            plugin.name.toLowerCase().includes(search.replace(/\s+/g, "")) ||
-            plugin.name.match(/[A-Z]/g)?.join("").toLowerCase().includes(search) || // acronyms like BF for BetterFolders
-            plugin.description.toLowerCase().includes(search) ||
-            plugin.searchTerms?.some(t => t.toLowerCase().includes(search))
-        );
-    }, [searchValue, search]);
+    const [filters, setFilters] = useState<CatalogFilters>(DEFAULT_FILTERS);
+    const [page, setPage] = useState(0);
+    const [requiredPage, setRequiredPage] = useState(0);
+    const search = filters.query.trim().toLowerCase();
+    function updateFilters(update: Partial<CatalogFilters>) {
+        setFilters(previous => ({ ...previous, ...update }));
+        setPage(0);
+        setRequiredPage(0);
+    }
+    const sortedPlugins = catalog.map(entry => entry.plugin);
 
     const [newPluginsSet] = useAwaiter(() => DataStore.get("Vencord_existingPlugins").then((cachedPlugins: Record<string, number> | undefined) => {
         const now = Date.now() / 1000;
@@ -257,58 +207,22 @@ export default function PluginSettings() {
                 newPlugins.push(p);
             }
         }
-        DataStore.set("Vencord_existingPlugins", existingTimestamps);
+        if (!lodash.isEqual(cachedPlugins, existingTimestamps)) void DataStore.set("Vencord_existingPlugins", existingTimestamps).catch(error => logger.error("Could not save new plugin history", error));
 
         return lodash.isEqual(newPlugins, sortedPluginNames) ? null : new Set(newPlugins);
     }));
 
     const handleRestartNeeded = useCallback((name: string, key: string) => changes.handleChange(`${name}:${key}`), [changes]);
 
-    const { plugins, requiredPlugins } = useMemo(() => {
-        const plugins = [] as JSX.Element[];
-        const requiredPlugins = [] as JSX.Element[];
-
-        const showApi = searchValue.status === SearchStatus.API_PLUGINS;
-        for (const p of sortedPlugins) {
-            if (p.hidden || (!p.settings?.def && p.name.endsWith("API") && !showApi))
-                continue;
-
-            if (!pluginFilter(p, newPluginsSet)) continue;
-
-            const isRequired = p.required || p.isDependency || depMap[p.name]?.some(d => settings.plugins[d].enabled);
-
-            if (isRequired) {
-                const tooltipText = p.required || !depMap[p.name]
-                    ? "This plugin is required for LawyerCord to function."
-                    : <PluginDependencyList deps={depMap[p.name]?.filter(d => settings.plugins[d].enabled)} />;
-
-                requiredPlugins.push(
-                    <Tooltip text={tooltipText} key={p.name}>
-                        {({ onMouseLeave, onMouseEnter }) => (
-                            <PluginCard
-                                onMouseLeave={onMouseLeave}
-                                onMouseEnter={onMouseEnter}
-                                onRestartNeeded={handleRestartNeeded}
-                                disabled={true}
-                                plugin={p}
-                            />
-                        )}
-                    </Tooltip>
-                );
-            } else {
-                plugins.push(
-                    <PluginCard
-                        onRestartNeeded={handleRestartNeeded}
-                        disabled={false}
-                        plugin={p}
-                        isNew={newPluginsSet?.has(p.name)}
-                        key={p.name}
-                    />
-                );
-            }
-        }
-        return { plugins, requiredPlugins };
-    }, [sortedPlugins, searchValue, newPluginsSet, depMap, settings.plugins, pluginFilter, handleRestartNeeded]);
+    const enabled = new Set(catalog.filter(({ plugin }) => isPluginEnabled(plugin.name)).map(({ plugin }) => plugin.name));
+    const plugins = [] as typeof sortedPlugins;
+    const requiredPlugins = [] as typeof sortedPlugins;
+    for (const plugin of filterCatalog(catalog, filters, enabled, newPluginsSet, plugin => hasAnyVisibleSettings(plugin) || Boolean(plugin.settingsAboutComponent))) {
+        const required = plugin.required || plugin.isDependency || depMap[plugin.name]?.some(name => enabled.has(name));
+        (required ? requiredPlugins : plugins).push(plugin);
+    }
+    const visible = catalogPage(plugins, page);
+    const requiredVisible = catalogPage(requiredPlugins, requiredPage);
 
     function resetCheckAndDo() {
         let restartNeeded = false;
@@ -350,30 +264,12 @@ export default function PluginSettings() {
         }
     }
 
-    // Code directly taken from supportHelper.tsx
-    const { totalStockPlugins, totalUserPlugins, enabledStockPlugins, enabledUserPlugins, enabledPlugins } = useMemo(() => {
-        const isApiPlugin = (plugin: string) => plugin.endsWith("API") || Plugins[plugin].required;
-
-        const totalPlugins = Object.keys(Plugins).filter(p => !isApiPlugin(p));
-        const enabledPlugins = Object.keys(Plugins).filter(p => isPluginEnabled(p) && !isApiPlugin(p));
-
-        const totalStockPlugins = totalPlugins.filter(p => !PluginMeta[p].userPlugin && !Plugins[p].hidden).length;
-        const totalUserPlugins = totalPlugins.filter(p => PluginMeta[p].userPlugin).length;
-        const enabledStockPlugins = enabledPlugins.filter(p => !PluginMeta[p].userPlugin).length;
-        const enabledUserPlugins = enabledPlugins.filter(p => PluginMeta[p].userPlugin).length;
-        return { totalStockPlugins, totalUserPlugins, enabledStockPlugins, enabledUserPlugins, enabledPlugins };
-    }, [settings.plugins]);
-    const [visibleCount, setVisibleCount] = useState(36);
-
-    const [sentinelRef, isSentinelVisible] = useIntersection();
-    React.useEffect(() => {
-        if (isSentinelVisible && visibleCount < plugins.length) {
-            const timeout = setTimeout(() => setVisibleCount(v => Math.min(v + 36, plugins.length)), 100);
-            return () => clearTimeout(timeout);
-        }
-    }, [isSentinelVisible, visibleCount, plugins.length]);
-
-    const visiblePlugins = plugins.slice(0, visibleCount);
+    const totalPlugins = sortedPlugins.filter(plugin => !plugin.name.endsWith("API") && !plugin.required && !plugin.hidden);
+    const enabledPlugins = totalPlugins.filter(plugin => enabled.has(plugin.name)).map(plugin => plugin.name);
+    const totalStockPlugins = totalPlugins.filter(plugin => !PluginMeta[plugin.name].userPlugin).length;
+    const totalUserPlugins = totalPlugins.length - totalStockPlugins;
+    const enabledStockPlugins = enabledPlugins.filter(name => !PluginMeta[name].userPlugin).length;
+    const enabledUserPlugins = enabledPlugins.length - enabledStockPlugins;
 
     return (
         <SettingsTab>
@@ -402,8 +298,8 @@ export default function PluginSettings() {
                 <TextInput
                     inputClassName={cl("filter-control")}
                     placeholder="Search for a plugin..."
-                    value={searchValue.value}
-                    onChange={onSearch}
+                    value={filters.query}
+                    onChange={query => updateFilters({ query })}
                     autoFocus
                 />
             </ErrorBoundary>
@@ -411,26 +307,49 @@ export default function PluginSettings() {
             <ErrorBoundary noop>
                 <div className={classes(Margins.bottom20, Margins.top8, cl("filter-controls"))}>
                     <Select
-                        options={[
-                            { label: "Show All", value: SearchStatus.ALL, default: true },
-                            { label: "Show Enabled", value: SearchStatus.ENABLED },
-                            { label: "Show Disabled", value: SearchStatus.DISABLED },
-                            { label: "Show LawyerCord", value: SearchStatus.EQUICORD },
-                            { label: "Show Vencord", value: SearchStatus.VENCORD },
-                            { label: "Show New", value: SearchStatus.NEW },
-                            hasUserPlugins && { label: "Show UserPlugins", value: SearchStatus.USER_PLUGINS },
-                            { label: "Show API Plugins", value: SearchStatus.API_PLUGINS },
-                        ].filter(isTruthy)}
+                        options={[{ label: "All statuses", value: "all" }, { label: "Enabled", value: "enabled" }, { label: "Disabled", value: "disabled" }]}
                         serialize={String}
-                        select={status => setSearchValue(prev => ({ ...prev, status }))}
-                        isSelected={v => v === searchValue.status}
-                        closeOnSelect={true}
-                        placeholder="Filter by Type"
+                        select={status => updateFilters({ status })}
+                        isSelected={value => value === filters.status}
+                        closeOnSelect
+                        placeholder="Status"
+                    />
+                    <Select
+                        options={[{ label: "All sources", value: "all" }, { label: "LawyerCord", value: "lawyercord" }, { label: "Vencord", value: "vencord" }, ...hasUserPlugins ? [{ label: "User plugins", value: "user" }] : []]}
+                        serialize={String}
+                        select={source => updateFilters({ source })}
+                        isSelected={value => value === filters.source}
+                        closeOnSelect
+                        placeholder="Source"
+                    />
+                    <Select
+                        options={[{ label: "All plugins", value: "all" }, { label: "New plugins", value: "new" }, { label: "With settings", value: "settings" }, { label: "API plugins", value: "api" }]}
+                        serialize={String}
+                        select={feature => updateFilters({ feature })}
+                        isSelected={value => value === filters.feature}
+                        closeOnSelect
+                        placeholder="Features"
+                    />
+                    <Select
+                        options={[{ label: "All performance impacts", value: "all" }, ...Object.entries(IMPACT_LABELS).map(([value, label]) => ({ label, value }))]}
+                        serialize={String}
+                        select={impact => updateFilters({ impact })}
+                        isSelected={value => value === filters.impact}
+                        closeOnSelect
+                        placeholder="Expected impact"
+                    />
+                    <Select
+                        options={[{ label: "Name", value: "name" }, { label: "Lowest expected impact", value: "impact" }, { label: "New plugins first", value: "new" }]}
+                        serialize={String}
+                        select={sort => updateFilters({ sort })}
+                        isSelected={value => value === filters.sort}
+                        closeOnSelect
+                        placeholder="Sort"
                     />
                     <SearchableSelect
                         options={PluginTags.map(tag => ({ label: tag, value: tag }))}
-                        value={searchValue.tags}
-                        onChange={tags => setSearchValue(prev => ({ ...prev, tags }))}
+                        value={filters.tags}
+                        onChange={tags => updateFilters({ tags })}
                         closeOnSelect={false}
                         placeholder="Filter by Tags"
                         multi
@@ -438,20 +357,19 @@ export default function PluginSettings() {
                 </div>
             </ErrorBoundary>
 
-            <HeadingTertiary className={Margins.top20}>Plugins</HeadingTertiary>
+            <HeadingTertiary className={Margins.top20}>Plugins ({plugins.length})</HeadingTertiary>
+            <Paragraph className={cl("impact-help")}>Expected impact is a source review of background work, not an FPS measurement. Plugins without a review are marked Not reviewed.</Paragraph>
 
             {plugins.length || requiredPlugins.length
                 ? (
                     <>
                         <div className={cl("grid")}>
-                            {visiblePlugins.length
-                                ? visiblePlugins
+                            {visible.entries.length
+                                ? visible.entries.map(plugin => <PluginCard key={plugin.name} plugin={plugin} disabled={false} onRestartNeeded={handleRestartNeeded} isNew={newPluginsSet?.has(plugin.name)} />)
                                 : <Paragraph>No plugins meet the search criteria.</Paragraph>
                             }
                         </div>
-                        {visibleCount < plugins.length && (
-                            <div ref={sentinelRef} style={{ height: 32 }} />
-                        )}
+                        <CatalogPagination page={visible.page} pageCount={visible.pageCount} onChange={setPage} label="Plugins" />
                     </>
                 )
                 : <ExcludedPluginsList search={search} />
@@ -460,16 +378,36 @@ export default function PluginSettings() {
             <Divider className={Margins.top20} />
 
             <HeadingTertiary className={classes(Margins.top20, Margins.bottom8)}>
-                Required Plugins
+                Required Plugins ({requiredPlugins.length})
             </HeadingTertiary>
 
             <div className={cl("grid")}>
-                {requiredPlugins.length
-                    ? requiredPlugins
+                {requiredVisible.entries.length
+                    ? requiredVisible.entries.map(plugin => (
+                        <Tooltip key={plugin.name} text={plugin.required || !depMap[plugin.name]
+                            ? "This plugin is required for LawyerCord to function."
+                            : <PluginDependencyList deps={depMap[plugin.name].filter(name => enabled.has(name))} />}>
+                            {({ onMouseLeave, onMouseEnter }) => <PluginCard plugin={plugin} disabled onMouseLeave={onMouseLeave} onMouseEnter={onMouseEnter} onRestartNeeded={handleRestartNeeded} />}
+                        </Tooltip>
+                    ))
                     : <Paragraph>No plugins meet the search criteria.</Paragraph>
                 }
             </div>
+            <CatalogPagination page={requiredVisible.page} pageCount={requiredVisible.pageCount} onChange={setRequiredPage} label="Required plugins" />
         </SettingsTab >
+    );
+}
+
+interface CatalogPaginationProps { page: number; pageCount: number; label: string; onChange(page: number): void; }
+
+export function CatalogPagination({ page, pageCount, label, onChange }: CatalogPaginationProps) {
+    if (pageCount <= 1) return null;
+    return (
+        <div className={cl("pagination")} aria-label={`${label} pages`}>
+            <Button variant="secondary" size="small" disabled={page === 0} onClick={() => onChange(page - 1)} aria-label={`Previous ${label.toLowerCase()} page`}>Previous</Button>
+            <Paragraph>{page + 1} of {pageCount}</Paragraph>
+            <Button variant="secondary" size="small" disabled={page === pageCount - 1} onClick={() => onChange(page + 1)} aria-label={`Next ${label.toLowerCase()} page`}>Next</Button>
+        </div>
     );
 }
 

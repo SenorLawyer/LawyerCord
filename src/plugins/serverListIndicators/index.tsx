@@ -147,6 +147,10 @@ export const settings = definePluginSettings({
 
 export default definePlugin({
     name: "ServerListIndicators",
+    performance: {
+        impact: "medium",
+        description: "Counts friends and servers again when the relevant Discord stores change."
+    },
     description: "Add online friend count or server count in the server list",
     tags: ["Servers", "Appearance"],
     authors: [Devs.Rini, EquicordDevs.Panniku],

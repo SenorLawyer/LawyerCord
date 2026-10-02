@@ -15,6 +15,7 @@ import type { ReactNode } from "react";
 
 export default definePlugin({
     name: "BetterBlockedUsers",
+    performance: { impact: "low", description: "Filters blocked users while searching the blocked list." },
     description: "Allows you to search in blocked users list and makes names selectable in settings.",
     tags: ["Appearance", "Shortcuts"],
     authors: [EquicordDevs.TheArmagan],

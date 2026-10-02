@@ -146,6 +146,10 @@ const listener: MessageSendListener = async (channelId, message) => {
 
 export default definePlugin({
     name: "SplitLargeMessages",
+    performance: {
+        impact: "low",
+        description: "Splits oversized messages and sends their parts sequentially."
+    },
     description: "Splits oversized messages into Discord-sized chunks before sending.",
     dependencies: ["MessageEventsAPI"],
     tags: ["Chat", "Utility"],

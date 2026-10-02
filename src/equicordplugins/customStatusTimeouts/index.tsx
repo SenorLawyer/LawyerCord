@@ -81,6 +81,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "CustomStatusTimeouts",
+    performance: { impact: "low", description: "Builds and sorts timeout presets when the status menu opens." },
     description: "Adds configurable timeout presets to the status (presence) menu.",
     tags: ["Activity", "Utility"],
     authors: [EquicordDevs.Kiri, EquicordDevs.thororen],

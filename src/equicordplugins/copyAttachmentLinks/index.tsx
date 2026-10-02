@@ -88,6 +88,7 @@ const messageContextPatch: NavContextMenuPatchCallback = (children, { message }:
 
 export default definePlugin({
     name: "CopyAttachmentLinks",
+    performance: { impact: "low", description: "Builds attachment copy actions when a message menu opens." },
     description: "Adds message context menu items to copy attachment URLs or Markdown links.",
     tags: ["Chat", "Utility"],
     authors: [EquicordDevs.nobody],

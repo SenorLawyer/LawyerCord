@@ -104,6 +104,7 @@ export const settings = definePluginSettings({
 
 export default definePlugin({
     name: "KeyboardNavigation",
+    performance: { impact: "low", description: "Checks keyboard shortcuts and searches actions while its palette is open." },
     description: "Allows you to navigate the UI with a keyboard.",
     tags: ["Accessibility", "Shortcuts"],
     authors: [Devs.Ethan],

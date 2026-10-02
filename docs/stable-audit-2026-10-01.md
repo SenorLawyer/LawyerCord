@@ -132,3 +132,5 @@ Signed-in Discord behavior and provider-dependent integrations require separate 
 - Quest selection work: delete progress/completion sorting and repeated ignored-list copies. Scan once, parse each valid progress timestamp once and retain first-entry ties and claimed/ignored/expired precedence. Three regressions fail before the change and pass afterwards; source lint and TypeScript pass.
 
 - Scheduled timer account ownership: select only the signed-in account's unattempted messages for due checks and timer scheduling. Ownerless legacy records remain paused and queues remain intact. No timer runs while signed out or for a foreign-only queue. Three initial regressions fail before the change; all 44 scheduling checks, source lint and TypeScript pass afterwards.
+
+- RPCEditor cleanup: delete its entire orphaned stylesheet. A repository-wide search finds the sole class only in that file, and the plugin has no stylesheet import. This removes unused rules without changing rendered UI.

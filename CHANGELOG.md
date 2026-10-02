@@ -65,6 +65,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Update hidden servers when a saved set changes without changing size, and refresh the hidden count when joined guilds change.
+
 - Update vulnerable fast-uri, brace-expansion, Moment and DOMPurify dependencies.
 - Prevent duplicate declarative plugin registrations and release manager-owned handlers even when a plugin stop callback fails.
 - Preserve server list component state when neighboring registrations or priorities change.

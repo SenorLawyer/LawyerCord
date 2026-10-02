@@ -15,12 +15,14 @@ import { openHiddenServersModal } from "./HiddenServersMenu";
 const cl = classNameFactory("vc-hideservers-");
 
 function HiddenServersButton() {
-    const hiddenGuilds = useStateFromStores([HiddenServersStore], () => HiddenServersStore.hiddenGuilds, undefined, (old, newer) => old.size === newer.size);
     // if youve left a server dont show it in the count
-    let actuallyHidden = 0;
-    for (const guildId of hiddenGuilds) {
-        if (GuildStore.getGuild(guildId)) actuallyHidden++;
-    }
+    const actuallyHidden = useStateFromStores([HiddenServersStore, GuildStore], () => {
+        let count = 0;
+        for (const guildId of HiddenServersStore.hiddenGuilds) {
+            if (GuildStore.getGuild(guildId)) count++;
+        }
+        return count;
+    });
 
     return (
         <div className={cl("button-wrapper")}>

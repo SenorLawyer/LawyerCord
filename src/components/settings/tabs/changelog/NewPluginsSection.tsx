@@ -12,13 +12,38 @@ import { Paragraph } from "@components/Paragraph";
 import { PluginCard } from "@components/settings/tabs/plugins/PluginCard";
 import { ChangeList } from "@utils/ChangeList";
 import { classNameFactory } from "@utils/css";
+import { makeLazy } from "@utils/lazy";
 import { Margins } from "@utils/margins";
 import { useForceUpdater } from "@utils/react";
+import type { Plugin } from "@utils/types";
 import { React, Tooltip } from "@webpack/common";
 
 import Plugins from "~plugins";
 
 const cl = classNameFactory("vc-changelog-");
+
+const getDependencyMap = makeLazy(() => {
+    const dependents = new Map<string, string[]>();
+    for (const plugin of Object.values(Plugins)) {
+        for (const dependency of plugin.dependencies ?? []) {
+            const names = dependents.get(dependency) ?? [];
+            names.push(plugin.name);
+            dependents.set(dependency, names);
+        }
+    }
+    return dependents;
+});
+
+function visiblePlugins(names: string[]) {
+    return names.map(name => Plugins[name]).filter(plugin => plugin && !plugin.hidden);
+}
+
+function usePluginSettings(plugins: Plugin[]) {
+    const paths = React.useMemo(() => [...new Set(plugins.flatMap(plugin =>
+        [plugin.name, ...getDependencyMap().get(plugin.name) ?? []]
+    ))].map(name => `plugins.${name}.enabled` as const), [plugins]);
+    return useSettings(paths);
+}
 
 interface NewPluginsSectionProps {
     newPlugins: string[];
@@ -27,41 +52,21 @@ interface NewPluginsSectionProps {
 export function NewPluginsSection({
     newPlugins,
 }: NewPluginsSectionProps) {
-    const settings = useSettings();
     const changes = React.useMemo(() => new ChangeList<string>(), []);
     const forceUpdate = useForceUpdater();
 
-    const depMap = React.useMemo(() => {
-        const o = {} as Record<string, string[]>;
-        for (const plugin in Plugins) {
-            const deps = Plugins[plugin].dependencies;
-            if (deps) {
-                for (const dep of deps) {
-                    o[dep] ??= [];
-                    o[dep].push(plugin);
-                }
-            }
-        }
-        return o;
-    }, []);
-
-    const mapPlugins = (array: string[]) =>
-        array
-            .map(pn => Plugins[pn])
-            .filter(p => p && !p.hidden)
-            .sort((a, b) => a.name.localeCompare(b.name));
-
     const sortedPlugins = React.useMemo(
-        () => mapPlugins(newPlugins),
+        () => visiblePlugins(newPlugins).sort((a, b) => a.name.localeCompare(b.name)),
         [newPlugins],
     );
+    const settings = usePluginSettings(sortedPlugins);
 
     if (sortedPlugins.length === 0) {
         return null;
     }
 
     const makeDependencyList = (deps: string[]) => {
-        if (!deps) return null;
+        if (!deps.length) return null;
         return (
             <React.Fragment>
                 <Paragraph>This plugin is required by:</Paragraph>
@@ -86,19 +91,14 @@ export function NewPluginsSection({
 
             <div className={cl("new-plugins-grid")}>
                 {sortedPlugins.map(plugin => {
+                    const dependents = getDependencyMap().get(plugin.name)?.filter(name => settings.plugins[name].enabled) ?? [];
                     const isRequired =
                         plugin.required ||
-                        depMap[plugin.name]?.some(
-                            d => settings.plugins[d].enabled,
-                        ) ||
+                        dependents.length > 0 ||
                         plugin.name.endsWith("API");
                     const tooltipText = plugin.required
                         ? "This plugin is required for LawyerCord to function."
-                        : makeDependencyList(
-                            depMap[plugin.name]?.filter(
-                                d => settings.plugins[d].enabled,
-                            ),
-                        );
+                        : makeDependencyList(dependents);
 
                     if (isRequired) {
                         return (
@@ -185,27 +185,22 @@ interface NewPluginsCompactProps {
 }
 
 function CompactPluginCard({
-    pluginName,
-    depMap,
+    plugin,
     settings,
 }: {
-    pluginName: string;
-    depMap: Record<string, string[]>;
-    settings: any;
+    plugin: Plugin;
+    settings: ReturnType<typeof useSettings>;
 }) {
-    const plugin = Plugins[pluginName];
-    if (!plugin || plugin.hidden) return null;
+    const dependents = getDependencyMap().get(plugin.name)?.filter(name => settings.plugins[name].enabled) ?? [];
 
     const isRequired =
         plugin.required ||
-        depMap[plugin.name]?.some(d => settings.plugins[d].enabled);
+        dependents.length > 0;
 
     const tooltipText = plugin.required
         ? "This plugin is required for LawyerCord to function."
-        : depMap[plugin.name]?.length > 0
-            ? `This plugin is required by: ${depMap[plugin.name]
-                ?.filter(d => settings.plugins[d].enabled)
-                .join(", ")}`
+        : dependents.length > 0
+            ? `This plugin is required by: ${dependents.join(", ")}`
             : null;
 
     return (
@@ -233,37 +228,23 @@ export function NewPluginsCompact({
     newPlugins,
     maxDisplay = 20,
 }: NewPluginsCompactProps) {
-    const settings = useSettings();
+    const availablePlugins = React.useMemo(() => visiblePlugins(newPlugins), [newPlugins]);
+    const displayPlugins = React.useMemo(() => availablePlugins.slice(0, maxDisplay), [availablePlugins, maxDisplay]);
+    const settings = usePluginSettings(displayPlugins);
 
-    const depMap = React.useMemo(() => {
-        const o = {} as Record<string, string[]>;
-        for (const plugin in Plugins) {
-            const deps = Plugins[plugin].dependencies;
-            if (deps) {
-                for (const dep of deps) {
-                    o[dep] ??= [];
-                    o[dep].push(plugin);
-                }
-            }
-        }
-        return o;
-    }, []);
-
-    if (newPlugins.length === 0) {
+    if (availablePlugins.length === 0) {
         return null;
     }
 
-    const displayPlugins = newPlugins.slice(0, maxDisplay);
-    const hasMore = newPlugins.length > maxDisplay;
+    const hasMore = availablePlugins.length > maxDisplay;
 
     return (
         <div className={cl("new-plugins-compact")}>
             <div className="vc-changelog-plugins-list">
-                {displayPlugins.map(pluginName => (
+                {displayPlugins.map(plugin => (
                     <CompactPluginCard
-                        key={pluginName}
-                        pluginName={pluginName}
-                        depMap={depMap}
+                        key={plugin.name}
+                        plugin={plugin}
                         settings={settings}
                     />
                 ))}
@@ -271,7 +252,7 @@ export function NewPluginsCompact({
                 {hasMore && (
                     <div className="vc-changelog-entry">
                         <div className="vc-changelog-entry-message">
-                            +{newPlugins.length - maxDisplay} more plugins
+                            +{availablePlugins.length - maxDisplay} more plugins
                         </div>
                     </div>
                 )}

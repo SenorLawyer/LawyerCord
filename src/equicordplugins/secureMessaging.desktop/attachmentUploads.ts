@@ -14,6 +14,7 @@ import {
     encryptAttachmentBytes,
     encryptedAttachmentFilename,
     generateAttachmentBundleMaterial,
+    MAX_ATTACHMENT_BYTES,
     MAX_ATTACHMENT_COUNT,
     MAX_TOTAL_ATTACHMENT_BYTES,
     type SecureStickerItem,
@@ -35,6 +36,8 @@ function assertUpload(upload: CloudUpload): asserts upload is MutableCloudUpload
     if (!upload || upload.status !== "NOT_STARTED" || upload.isThumbnail || upload.uploadedFilename || upload.responseUrl ||
         upload.item?.platform !== CloudUploadPlatform.WEB || !(upload.item.file instanceof File) || upload.item.file.size < 1)
         throw new Error("Secure Messaging can only encrypt attachments before Discord starts uploading them");
+    if (upload.item.file.size > MAX_ATTACHMENT_BYTES)
+        throw new Error("Secure Messaging attachments exceed the 100 MiB per-file safety limit");
 }
 
 async function imageDimensions(file: File): Promise<{ height: number; width: number; } | null> {

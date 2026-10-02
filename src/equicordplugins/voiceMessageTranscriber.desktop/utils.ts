@@ -5,7 +5,9 @@
  */
 
 import { DataStore } from "@api/index";
+import { MAX_FILE_BYTES, readResponseBody } from "@equicordplugins/fileUpload/request";
 import { classNameFactory } from "@utils/css";
+import { Queue } from "@utils/Queue";
 import { lodash } from "@webpack/common";
 
 import { TranscriptionProgress } from "./transcriptionData";
@@ -115,10 +117,13 @@ export const LANGUAGES = {
 export const cl = classNameFactory("vc-transcription-");
 
 export async function decodeAudio(blob: Blob): Promise<Float32Array> {
+    if (blob.size > 25 * 1024 * 1024) throw new Error("Voice messages must be smaller than 25 MB.");
     const arrayBuffer = await blob.arrayBuffer();
     const audioContext = new AudioContext({ sampleRate: 16000 });
     try {
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        if (!Number.isFinite(audioBuffer.duration) || audioBuffer.duration > 600 || audioBuffer.numberOfChannels > 8)
+            throw new Error("Voice messages must be at most 10 minutes long with at most 8 channels.");
 
         // Mix down to mono
         const channelData = audioBuffer.getChannelData(0);
@@ -262,9 +267,15 @@ async function runTranscription({ audio, model, quantized, language }) {
 }
 `;
 
+const transcriptionQueue = new Queue();
+
 export class TranscriptionWorker {
-    private worker: Worker;
-    private workerUrl: string;
+    private worker?: Worker;
+    private workerUrl?: string;
+    private audio?: Float32Array | (() => Promise<Float32Array>);
+    private queued = false;
+    private finish?: () => void;
+    private timeout?: ReturnType<typeof setTimeout>;
     private terminated = false;
     private downloads = new AbortController();
 
@@ -274,21 +285,19 @@ export class TranscriptionWorker {
         private onError: (error: unknown) => void,
         private onPartial: (output: unknown) => void,
         private onProgress: (progress: TranscriptionProgress) => void = () => { }
-    ) {
+    ) { }
+
+    private start() {
         const blob = new Blob([workerCode], { type: "text/javascript" });
         this.workerUrl = URL.createObjectURL(blob);
-        try {
-            this.worker = new Worker(this.workerUrl, { type: "module" });
-        } catch (error) {
-            URL.revokeObjectURL(this.workerUrl);
-            throw error;
-        }
+        this.worker = new Worker(this.workerUrl, { type: "module" });
         this.worker.onmessage = this.handleMessage.bind(this);
         this.worker.onerror = () => {
             if (this.terminated) return;
             this.terminate();
             this.onError(new Error("The speech recognition worker failed. Try transcribing again."));
         };
+        return this.worker;
     }
 
     private getMimeType(url: string): string {
@@ -306,6 +315,8 @@ export class TranscriptionWorker {
     }
 
     private async handleMessage(event: MessageEvent) {
+        const { worker } = this;
+        if (this.terminated || !worker) return;
         const { type, id, url, status, output, error } = event.data;
 
         switch (type) {
@@ -317,18 +328,19 @@ export class TranscriptionWorker {
 
                     let buffer: ArrayBuffer;
                     if (lodash.isArrayBuffer(cachedData)) {
+                        if (cachedData.byteLength > MAX_FILE_BYTES) throw new Error("The cached speech model is too large.");
                         buffer = cachedData;
                     } else {
                         const res = await fetch(url, { signal: this.downloads.signal });
                         if (!res.ok) throw new Error("Failed to fetch " + url);
 
-                        buffer = await res.arrayBuffer();
+                        buffer = await (await readResponseBody(res, MAX_FILE_BYTES, this.downloads.signal)).arrayBuffer();
                         if (this.terminated) return;
                         await DataStore.set(`VoiceMessageTranscriber_${url}`, buffer);
                         if (this.terminated) return;
                     }
 
-                    this.worker.postMessage({
+                    worker.postMessage({
                         type: "fetch_response",
                         id,
                         response: buffer,
@@ -339,7 +351,7 @@ export class TranscriptionWorker {
                     }, [buffer]);
                 } catch (err) {
                     if (this.terminated) return;
-                    this.worker.postMessage({
+                    worker.postMessage({
                         type: "fetch_response",
                         id,
                         error: String(err)
@@ -350,6 +362,7 @@ export class TranscriptionWorker {
                 this.onStatus(status);
                 break;
             case "complete":
+                this.terminate();
                 this.onComplete(output);
                 break;
             case "partial":
@@ -359,26 +372,48 @@ export class TranscriptionWorker {
                 this.onProgress(event.data.data);
                 break;
             case "error":
+                this.terminate();
                 this.onError(error);
                 break;
         }
     }
 
-    public run(audio: Float32Array, model: string, quantized: boolean = true, language?: string) {
-        this.worker.postMessage({
-            type: "run",
-            audio,
-            model,
-            quantized,
-            language
-        }, [audio.buffer]);
+    public run(audio: Float32Array | (() => Promise<Float32Array>), model: string, quantized: boolean = true, language?: string) {
+        if (this.queued || this.terminated) return;
+        this.queued = true;
+        this.audio = audio;
+        transcriptionQueue.push(() => new Promise<void>(resolve => {
+            if (this.terminated || !this.audio) return resolve();
+            this.finish = resolve;
+            this.timeout = setTimeout(() => {
+                this.terminate();
+                this.onError(new Error("Transcription took too long. Try a smaller model."));
+            }, 600_000);
+            void (async () => {
+                if (!this.audio) return;
+                const audio = typeof this.audio === "function" ? await this.audio() : this.audio;
+                this.audio = undefined;
+                if (this.terminated) return;
+                const worker = this.start();
+                const samples = new Float32Array(audio);
+                worker.postMessage({ type: "run", audio: samples, model, quantized, language }, [samples.buffer]);
+            })().catch(error => {
+                if (this.terminated) return;
+                this.terminate();
+                this.onError(error);
+            });
+        }));
     }
 
     public terminate() {
         if (this.terminated) return;
         this.terminated = true;
         this.downloads.abort();
-        this.worker.terminate();
-        URL.revokeObjectURL(this.workerUrl);
+        this.worker?.terminate();
+        this.audio = undefined;
+        clearTimeout(this.timeout);
+        if (this.workerUrl) URL.revokeObjectURL(this.workerUrl);
+        this.finish?.();
+        this.finish = undefined;
     }
 }

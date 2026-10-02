@@ -2,6 +2,23 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 3.1.3.0 - 2026-10-02 (Nightly)
+
+### Changed
+
+- Reuse compiled automation definitions across runs, persist only changed records, serialize native polling and cancel account-bound work promptly.
+- Evaluate automation regular expressions in a bounded cancellable worker so pathological patterns cannot freeze Discord.
+- Move GIF palette generation and encoding to a worker while preserving encoded output, and bound decoded media work before allocating frame buffers.
+- Load name hover formatting on demand and share Shiki startup, grammar and theme requests with cleanup and response deadlines.
+- Page message logs without hydrating every search result, coalesce cleanup and release message and attachment caches on session changes.
+- Write log exports to temporary files and replace the destination only after a successful finish. Close imports, exports and downloads on cancellation or renderer loss.
+- Bound upload requests and responses, preserve upload ownership during asynchronous preparation and prevent authorization headers from following cross-origin redirects.
+- Keep activity heatmap storage within its displayed 28 days and avoid flushing storage while rendering.
+- Update changelog history atomically, reject obsolete intersection observer callbacks and clean up partial plugin command registration.
+- Cancel obsolete osu presence lookups and attachment/audio work when their owning session ends.
+- Serialize speech model work and defer audio preparation until needed. Build only displayed mutual-server icons and keep member lists current with their stores.
+- Convert animated FakeNitro stickers in the bounded shared worker and coalesce image magnifier movement into one update per frame.
+
 ## 3.1.2.0 - 2026-10-02 (Nightly)
 
 ### Changed

@@ -6,7 +6,8 @@
 
 import { useEffect, useState } from "@webpack/common";
 
-import { countMessagesByStatusIDB, countMessagesIDB, DBMessageRecord, DBMessageStatus, getDateStortedMessagesByStatusIDB } from "../db";
+import { countMessagesIDB, DBMessageRecord, DBMessageStatus, getMessagesPageIDB } from "../db";
+import { Flogger } from "../index";
 import { doesMatch, tokenizeQuery } from "../utils/parseQuery";
 import { LogTabs } from "./LogsModal";
 
@@ -33,65 +34,54 @@ export function useMessages(query: string, currentTab: LogTabs, sortNewest: bool
     const [messages, setMessages] = useState<DBMessageRecord[]>([]);
     const [statusTotal, setStatusTotal] = useState<number>(0);
     const [total, setTotal] = useState<number>(0);
+    const [revision, setRevision] = useState(0);
 
     const debouncedQuery = useDebouncedValue(query, 300);
 
     useEffect(() => {
-        countMessagesIDB().then(x => setTotal(x));
-    }, [pending]);
-
-    useEffect(() => {
-        let isMounted = true;
+        const controller = new AbortController();
+        setPending(true);
 
         const loadMessages = async () => {
             const status = getStatus(currentTab);
 
-            if (debouncedQuery === "") {
-                const [messages, statusTotal] = await Promise.all([
-                    getDateStortedMessagesByStatusIDB(sortNewest, numDisplayedMessages, status),
-                    countMessagesByStatusIDB(status),
-                ]);
-
-                if (isMounted) {
-                    setMessages(messages);
-                    setStatusTotal(statusTotal);
-                }
-
-                setPending(false);
-            } else {
-                const allMessages = await getDateStortedMessagesByStatusIDB(sortNewest, Number.MAX_SAFE_INTEGER, status);
-                const { queries, rest } = tokenizeQuery(debouncedQuery);
-
-                const filteredMessages = allMessages.filter(record => {
-                    for (const query of queries) {
-                        const matching = doesMatch(query.key, query.value, record.message);
-                        if (query.negate ? matching : !matching) {
-                            return false;
-                        }
+            const { queries, rest } = tokenizeQuery(debouncedQuery);
+            const terms = rest.map(term => term.toLowerCase());
+            const matches = debouncedQuery === "" ? undefined : (record: DBMessageRecord) => {
+                for (const query of queries) {
+                    const matching = doesMatch(query.key, query.value, record.message);
+                    if (query.negate ? matching : !matching) {
+                        return false;
                     }
-
-                    return rest.every(r =>
-                        record.message.content.toLowerCase().includes(r.toLowerCase())
-                    );
-                });
-
-                if (isMounted) {
-                    setMessages(filteredMessages);
-                    setStatusTotal(Number.MAX_SAFE_INTEGER);
                 }
-                setPending(false);
+
+                const content = record.message.content.toLowerCase();
+                return terms.every(term => content.includes(term));
+            };
+            const [page, total] = await Promise.all([
+                getMessagesPageIDB(sortNewest, numDisplayedMessages, status, matches, controller.signal),
+                countMessagesIDB()
+            ]);
+            if (!controller.signal.aborted) {
+                setMessages(page.messages);
+                setStatusTotal(page.total);
+                setTotal(total);
             }
         };
 
-        loadMessages();
+        void loadMessages().catch(error => {
+            if (!controller.signal.aborted) Flogger.error("Failed to load message logs", error);
+        }).finally(() => {
+            if (!controller.signal.aborted) setPending(false);
+        });
 
         return () => {
-            isMounted = false;
+            controller.abort();
         };
 
-    }, [debouncedQuery, sortNewest, numDisplayedMessages, currentTab, pending]);
+    }, [debouncedQuery, sortNewest, numDisplayedMessages, currentTab, revision]);
 
-    return { messages, statusTotal, total, pending, reset: () => setPending(true) };
+    return { messages, statusTotal, total, pending, reset: () => setRevision(value => value + 1) };
 }
 
 function getStatus(currentTab: LogTabs) {

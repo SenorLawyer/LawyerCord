@@ -47,6 +47,7 @@ async function fixture(chunks: string[] = []) {
                     resolve();
                 })),
                 store: {
+                    put: async (record: LogRecord) => { pending.set(record.message_id, structuredClone(record)); return record.message_id; },
                     getKey: async (key: string) => pending.has(key) ? key : undefined,
                     add: async (record: LogRecord) => {
                         if (record.message_id === failureId || pending.has(record.message_id)) {
@@ -63,6 +64,7 @@ async function fixture(chunks: string[] = []) {
     const toast = { genId: () => "toast", show: (notice: { message: string; type: string; }) => notices.push(notice), Type: { FAILURE: "failure", SUCCESS: "success" } };
     const db = load(process.env.AUDIT_LOG_IMPORT_DB_SOURCE ?? "src/equicordplugins/messageLoggerEnhanced/db.ts", {
         "@webpack/common": { Toasts: toast }, idb: { openDB: async () => database },
+        "./utils/LimitedMap": load("src/equicordplugins/messageLoggerEnhanced/utils/LimitedMap.ts", { "../index": { settings: { store: { cacheLimit: 1000 } } } }),
         "./utils": { getMessageStatus: (value: LogMessage) => { if (!value.deleted) throw new Error("Unknown status"); return "DELETED"; } },
         "./utils/cleanUp": { stripTransientRenderState() {} }, "./utils/constants": {}, "./utils/saveImage": {}
     }) as { importMessagesIDB?: (messages: LogMessage[]) => Promise<number>; addMessagesBulkIDB(messages: LogMessage[]): Promise<void>; cachedMessages: Map<string, LogMessage>; };
@@ -117,4 +119,11 @@ test("Repeated imports count only committed new records and keep saved cache ent
     assert.equal(await f.db.importMessagesIDB([message("new")]), 0);
     assert.equal(f.db.cachedMessages.get("saved")?.content, "cached original");
     assert.equal(f.db.cachedMessages.get("new")?.content, "new");
+});
+
+test("Bulk deletion logging updates already edited records without aborting the other deletions", async () => {
+    const f = await fixture();
+    await f.db.addMessagesBulkIDB([message("saved", "deleted replacement"), message("new")]);
+    assert.equal(f.saved.get("saved")?.message.content, "deleted replacement");
+    assert.equal(f.saved.get("new")?.message.content, "new");
 });

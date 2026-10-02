@@ -11,6 +11,7 @@ import { LoggedMessageJSON } from "./types";
 import { getMessageStatus } from "./utils";
 import { stripTransientRenderState } from "./utils/cleanUp";
 import { DB_NAME, DB_VERSION } from "./utils/constants";
+import { LimitedMap } from "./utils/LimitedMap";
 import { clearAttachmentBlobUrlCache, getAttachmentBlobUrl } from "./utils/saveImage";
 
 export enum DBMessageStatus {
@@ -41,15 +42,27 @@ export interface MLIDB extends DBSchema {
 }
 
 export let db: IDBPDatabase<MLIDB>;
-export const cachedMessages = new Map<string, LoggedMessageJSON>();
+let dbPromise: Promise<IDBPDatabase<MLIDB>> | undefined;
+let cacheGeneration = 0;
+export const cachedMessages = new LimitedMap<string, LoggedMessageJSON>();
+
+export function clearMessageCache() {
+    cacheGeneration++;
+    cachedMessages.clear();
+    clearAttachmentBlobUrlCache();
+}
 
 // this is probably not the best way to do this
-async function cacheRecords(records: DBMessageRecord[]) {
+async function cacheRecords(records: DBMessageRecord[], signal?: AbortSignal, generation = cacheGeneration) {
     for (const r of records) {
+        signal?.throwIfAborted();
+        if (generation !== cacheGeneration) break;
         cacheRecord(r);
 
         for (const att of r.message.attachments) {
             const blobUrl = await getAttachmentBlobUrl(att);
+            signal?.throwIfAborted();
+            if (generation !== cacheGeneration) return records;
             if (blobUrl) {
                 att.url = blobUrl + "#";
                 att.proxy_url = blobUrl + "#";
@@ -59,7 +72,7 @@ async function cacheRecords(records: DBMessageRecord[]) {
     return records;
 }
 
-async function cacheRecord(record?: DBMessageRecord | null) {
+function cacheRecord(record?: DBMessageRecord | null) {
     if (!record) return record;
 
     stripTransientRenderState(record.message);
@@ -69,7 +82,7 @@ async function cacheRecord(record?: DBMessageRecord | null) {
 
 export async function initIDB() {
     if (db) return;
-    db = await openDB<MLIDB>(DB_NAME, DB_VERSION, {
+    db = await (dbPromise ??= openDB<MLIDB>(DB_NAME, DB_VERSION, {
         upgrade(db) {
             const messageStore = db.createObjectStore("messages", { keyPath: "message_id" });
             messageStore.createIndex("by_channel_id", "channel_id");
@@ -77,43 +90,31 @@ export async function initIDB() {
             messageStore.createIndex("by_timestamp", "message.timestamp");
             messageStore.createIndex("by_timestamp_and_message_id", ["channel_id", "message.timestamp"]);
         }
-    });
-}
-initIDB();
-
-export async function hasMessageIDB(message_id: string) {
-    return cachedMessages.has(message_id) || (await db.count("messages", message_id)) > 0;
+    }).catch(error => {
+        dbPromise = undefined;
+        throw error;
+    }));
 }
 
 export async function countMessagesIDB() {
+    await initIDB();
     return db.count("messages");
 }
 
-export async function countMessagesByStatusIDB(status: DBMessageStatus) {
-    return db.countFromIndex("messages", "by_status", status);
-}
-
-export async function getAllMessagesIDB() {
-    return cacheRecords(await db.getAll("messages"));
-}
-
-export async function getMessagesForChannelIDB(channel_id: string) {
-    return cacheRecords(await db.getAllFromIndex("messages", "by_channel_id", channel_id));
-}
-
 export async function getMessageIDB(message_id: string) {
-    return cacheRecord(await db.get("messages", message_id));
-}
-
-export async function getMessagesByStatusIDB(status: DBMessageStatus) {
-    return cacheRecords(await db.getAllFromIndex("messages", "by_status", status));
+    const generation = cacheGeneration;
+    await initIDB();
+    const record = await db.get("messages", message_id);
+    return generation === cacheGeneration ? cacheRecord(record) : record;
 }
 
 export async function getOldestMessagesIDB(limit: number) {
-    return cacheRecords(await db.getAllFromIndex("messages", "by_timestamp", undefined, limit));
+    await initIDB();
+    return db.getAllFromIndex("messages", "by_timestamp", undefined, limit);
 }
 
 export async function* iterateAllMessagesIDB(batchSize = 100) {
+    await initIDB();
     let lastId: string | undefined;
     while (true) {
         const batch: DBMessageRecord[] = [];
@@ -138,6 +139,7 @@ export async function* iterateAllMessagesIDB(batchSize = 100) {
 }
 
 export async function getOlderThanTimestampIDB(timestamp: string) {
+    await initIDB();
     const tx = db.transaction("messages", "readonly");
     const { store } = tx;
     const index = store.index("by_timestamp");
@@ -153,7 +155,7 @@ export async function getOlderThanTimestampIDB(timestamp: string) {
         messages.push(c.value);
     }
 
-    return cacheRecords(messages);
+    return messages;
 }
 
 export async function getOlderThanTimestampForGuildsIDB(timestamp: string, currentChannelId?: string, preserveCurrentChannel?: boolean) {
@@ -167,28 +169,36 @@ export async function getOlderThanTimestampForGuildsIDB(timestamp: string, curre
     });
 }
 
-export async function getDateStortedMessagesByStatusIDB(newest: boolean, limit: number, status: DBMessageStatus) {
+export async function getMessagesPageIDB(newest: boolean, limit: number, status: DBMessageStatus, matches?: (record: DBMessageRecord) => boolean, signal?: AbortSignal) {
+    const generation = cacheGeneration;
+    await initIDB();
+    signal?.throwIfAborted();
     const tx = db.transaction("messages", "readonly");
     const { store } = tx;
     const index = store.index("by_status");
 
     const direction = newest ? "prev" : "next";
-    const cursor = await index.openCursor(IDBKeyRange.only(status), direction);
-
-    if (!cursor) {
-        return [];
-    }
+    const [cursor, statusTotal] = await Promise.all([
+        index.openCursor(IDBKeyRange.only(status), direction),
+        matches ? 0 : index.count(status)
+    ]);
 
     const messages: DBMessageRecord[] = [];
-    for await (const c of cursor) {
-        messages.push(c.value);
-        if (messages.length >= limit) break;
+    let total = matches ? 0 : statusTotal;
+    if (cursor) for await (const c of cursor) {
+        signal?.throwIfAborted();
+        if (matches && !matches(c.value)) continue;
+        if (matches) total++;
+        if (messages.length < limit) messages.push(c.value);
+        if (!matches && messages.length >= limit) break;
     }
-
-    return cacheRecords(messages);
+    signal?.throwIfAborted();
+    return { messages: await cacheRecords(messages, signal, generation), total };
 }
 
 export async function getMessagesByChannelAndAfterTimestampIDB(channel_id: string, start: string) {
+    const generation = cacheGeneration;
+    await initIDB();
     const tx = db.transaction("messages", "readonly");
     const { store } = tx;
     const index = store.index("by_timestamp_and_message_id");
@@ -204,10 +214,11 @@ export async function getMessagesByChannelAndAfterTimestampIDB(channel_id: strin
         messages.push(c.value);
     }
 
-    return cacheRecords(messages);
+    return cacheRecords(messages, undefined, generation);
 }
 
 export async function addMessageIDB(message: LoggedMessageJSON, status: DBMessageStatus) {
+    const generation = cacheGeneration;
     stripTransientRenderState(message);
 
     if (!db) await initIDB();
@@ -218,17 +229,19 @@ export async function addMessageIDB(message: LoggedMessageJSON, status: DBMessag
         message,
     });
 
-    cachedMessages.set(message.id, message);
+    if (generation === cacheGeneration) cachedMessages.set(message.id, message);
 }
 
 export async function addMessagesBulkIDB(messages: LoggedMessageJSON[], status?: DBMessageStatus) {
+    const generation = cacheGeneration;
+    await initIDB();
     messages.forEach(stripTransientRenderState);
 
     const tx = db.transaction("messages", "readwrite");
     const { store } = tx;
 
     await Promise.all([
-        ...messages.map(message => store.add({
+        ...messages.map(message => store.put({
             channel_id: message.channel_id,
             message_id: message.id,
             status: status ?? getMessageStatus(message),
@@ -237,10 +250,11 @@ export async function addMessagesBulkIDB(messages: LoggedMessageJSON[], status?:
         tx.done
     ]);
 
-    messages.forEach(message => cachedMessages.set(message.id, message));
+    if (generation === cacheGeneration) messages.forEach(message => cachedMessages.set(message.id, message));
 }
 
 export async function importMessagesIDB(messages: LoggedMessageJSON[]) {
+    const generation = cacheGeneration;
     await initIDB();
     const records = messages.map(message => {
         stripTransientRenderState(message);
@@ -258,17 +272,19 @@ export async function importMessagesIDB(messages: LoggedMessageJSON[]) {
             }
         })()
     ]);
-    for (const message of imported) cachedMessages.set(message.id, message);
+    if (generation === cacheGeneration) for (const message of imported) cachedMessages.set(message.id, message);
     return imported.length;
 }
 
 export async function deleteMessageIDB(message_id: string) {
+    await initIDB();
     await db.delete("messages", message_id);
 
     cachedMessages.delete(message_id);
 }
 
 export async function deleteMessagesBulkIDB(message_ids: string[]) {
+    await initIDB();
     const tx = db.transaction("messages", "readwrite");
     const { store } = tx;
 
@@ -277,8 +293,8 @@ export async function deleteMessagesBulkIDB(message_ids: string[]) {
 }
 
 export async function clearMessagesIDB(showToast = true) {
-    cachedMessages.clear();
-    clearAttachmentBlobUrlCache();
+    await initIDB();
+    clearMessageCache();
     await db.clear("messages");
     if (!showToast) return;
 

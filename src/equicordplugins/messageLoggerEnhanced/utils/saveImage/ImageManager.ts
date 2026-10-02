@@ -25,7 +25,7 @@ import {
 } from "@api/DataStore";
 import { sleep } from "@utils/misc";
 
-import { Flogger, Native } from "../..";
+import { Flogger, Native, settings } from "../..";
 import { LoggedAttachment } from "../../types";
 import { DEFAULT_IMAGE_CACHE_DIR } from "../constants";
 
@@ -33,49 +33,71 @@ const ImageStore = createStore("MessageLoggerImageData", "MessageLoggerImageStor
 
 interface IDBSavedImage { attachmentId: string, path: string; }
 const idbSavedImages = new Map<string, IDBSavedImage>();
-(async () => {
-    try {
+let imagePaths: Promise<void> | undefined;
+export let downloadLifetime = new AbortController();
+const downloads = new Map<string, Promise<string | undefined>>();
 
-        const paths = await keys(ImageStore);
-        paths.forEach(path => {
+function loadImagePaths() {
+    const owner = downloadLifetime;
+    return imagePaths ??= keys(ImageStore).then(paths => {
+        if (owner.signal.aborted) return;
+        for (const path of paths) {
             const str = path.toString();
-            if (!str.startsWith(DEFAULT_IMAGE_CACHE_DIR)) return;
-
-            idbSavedImages.set(str.split("/")?.[1]?.split(".")?.[0], { attachmentId: str.split("/")?.[1]?.split(".")?.[0], path: str });
-        });
-    } catch (err) {
+            if (!str.startsWith(`${DEFAULT_IMAGE_CACHE_DIR}/`)) continue;
+            const attachmentId = str.split("/")[1].split(".")[0];
+            idbSavedImages.set(attachmentId, { attachmentId, path: str });
+        }
+    }).catch(err => {
+        if (downloadLifetime === owner) imagePaths = undefined;
         Flogger.error("Failed to get idb images", err);
-    }
-})();
+    });
+}
 
-export async function getImage(attachmentId: string, fileExt?: string | null): Promise<any> {
+export function stopDownloads() {
+    downloadLifetime.abort();
+    downloadLifetime = new AbortController();
+    downloads.clear();
+    idbSavedImages.clear();
+    imagePaths = undefined;
+}
+
+export async function getImage(attachmentId: string, fileExt?: string | null): Promise<Uint8Array<ArrayBuffer> | null> {
+    const owner = downloadLifetime;
+    await loadImagePaths();
+    if (owner.signal.aborted) return null;
     // for people who have access to native api but some images are still in idb
     // also for people who dont have native api
     const idbPath = idbSavedImages.get(attachmentId)?.path;
     if (idbPath)
-        return get(idbPath, ImageStore);
+        return (await get<Uint8Array<ArrayBuffer>>(idbPath, ImageStore)) ?? null;
 
     if (IS_WEB) return null;
 
     return await Native.getImageNative(attachmentId);
 }
 
-export async function downloadAttachment(attachemnt: LoggedAttachment): Promise<string | undefined> {
-    if (IS_WEB) {
-        return await downloadAttachmentWeb(attachemnt);
-    }
-
-    const { path, error } = await Native.downloadAttachment(attachemnt);
-
-    if (error || !path) {
-        Flogger.error("Failed to download attachment", error, path);
-        return;
-    }
-
-    return path;
+export function downloadAttachment(attachment: LoggedAttachment): Promise<string | undefined> {
+    const cached = downloads.get(attachment.id);
+    if (cached) return cached;
+    const owner = downloadLifetime;
+    const promise = (async () => {
+        if (IS_WEB) return downloadAttachmentWeb(attachment, AbortSignal.any([owner.signal, AbortSignal.timeout(120_000)]));
+        const { path, error } = await Native.downloadAttachment(attachment);
+        if (owner.signal.aborted) return;
+        if (error || !path) {
+            Flogger.error("Failed to download attachment", error);
+            return;
+        }
+        return path;
+    })().finally(() => {
+        if (downloads.get(attachment.id) === promise) downloads.delete(attachment.id);
+    });
+    downloads.set(attachment.id, promise);
+    return promise;
 }
 
 export async function deleteImage(attachmentId: string): Promise<void> {
+    await loadImagePaths();
     const idbPath = idbSavedImages.get(attachmentId)?.path;
     if (idbPath) {
         idbSavedImages.delete(attachmentId);
@@ -87,14 +109,16 @@ export async function deleteImage(attachmentId: string): Promise<void> {
     await Native.deleteFileNative(attachmentId);
 }
 
-async function downloadAttachmentWeb(attachemnt: LoggedAttachment, attempts = 0) {
+async function downloadAttachmentWeb(attachemnt: LoggedAttachment, signal: AbortSignal, attempts = 0): Promise<string | undefined> {
     if (!attachemnt?.url || !attachemnt?.id || !attachemnt?.fileExtension) {
         Flogger.error("Invalid attachment", attachemnt);
         return;
     }
 
-    const res = await fetch(attachemnt.url);
+    signal.throwIfAborted();
+    const res = await fetch(attachemnt.url, { signal });
     if (res.status !== 200) {
+        await res.body?.cancel();
         if (res.status === 404 || res.status === 403) return;
         attempts++;
         if (attempts > 3) {
@@ -103,12 +127,39 @@ async function downloadAttachmentWeb(attachemnt: LoggedAttachment, attempts = 0)
         }
 
         await sleep(1000);
-        return downloadAttachmentWeb(attachemnt, attempts);
+        return downloadAttachmentWeb(attachemnt, signal, attempts);
     }
-    const ab = await res.arrayBuffer();
+    const maxBytes = Math.min(settings.store.attachmentSizeLimitInMegabytes, 500) * 1024 * 1024;
+    if (!res.body || Number(res.headers.get("content-length")) > maxBytes) {
+        await res.body?.cancel();
+        return;
+    }
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    try {
+        for (;;) {
+            const { done, value } = await reader.read();
+            signal.throwIfAborted();
+            if (done) break;
+            size += value.byteLength;
+            if (size > maxBytes) return;
+            chunks.push(value);
+        }
+    } finally {
+        try { await reader.cancel(); }
+        finally { reader.releaseLock(); }
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.byteLength;
+    }
     const path = `${DEFAULT_IMAGE_CACHE_DIR}/${attachemnt.id}${attachemnt.fileExtension}`;
 
-    await set(path, new Uint8Array(ab), ImageStore);
+    await set(path, bytes, ImageStore);
+    signal.throwIfAborted();
     idbSavedImages.set(attachemnt.id, { attachmentId: attachemnt.id, path });
 
     return path;

@@ -25,94 +25,169 @@ import type { IShikiTheme, IThemedToken } from "@vap/shiki";
 import { getGrammar, languages, loadLanguages, resolveLang } from "./languages";
 import { themes } from "./themes";
 
-const themeUrls = Object.values(themes);
+const defaultTheme = themes.DarkPlus;
 
-let resolveClient: (client: WorkerClient<ShikiSpec>) => void;
+interface WorkerSession {
+    controller: AbortController;
+    client: WorkerClient<ShikiSpec> | null;
+    ready?: Promise<WorkerClient<ShikiSpec>>;
+    languages: Map<string, Promise<void>>;
+    themes: Map<string, Promise<void>>;
+    themeRequest: number;
+}
+
+let session: WorkerSession | undefined;
+
+function waitForWork<T>(owner: WorkerSession, factory: () => Promise<T>): Promise<T> {
+    const { signal } = owner.controller;
+    signal.throwIfAborted();
+    return new Promise<T>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            owner.controller.abort(new Error("The code highlighter took too long to respond."));
+            if (session === owner) shiki.destroy();
+        }, shiki.timeoutMs);
+        const abort = () => {
+            clearTimeout(timeout);
+            reject(signal.reason);
+        };
+        signal.addEventListener("abort", abort, { once: true });
+        Promise.resolve().then(() => {
+            signal.throwIfAborted();
+            return factory();
+        }).then(value => {
+            clearTimeout(timeout);
+            signal.removeEventListener("abort", abort);
+            if (signal.aborted) reject(signal.reason);
+            else resolve(value);
+        }, error => {
+            clearTimeout(timeout);
+            signal.removeEventListener("abort", abort);
+            reject(error);
+        });
+    });
+}
+
+async function readySession() {
+    const owner = session;
+    if (!owner?.ready) throw new Error("The code highlighter is stopped.");
+    const client = await owner.ready;
+    owner.controller.signal.throwIfAborted();
+    return { owner, client };
+}
+
+async function setTheme(owner: WorkerSession, client: WorkerClient<ShikiSpec>, themeUrl: string, request?: number) {
+    const { themeData } = await waitForWork(owner, () => client.run("getTheme", { theme: themeUrl }));
+    owner.controller.signal.throwIfAborted();
+    if (request !== undefined && owner.themeRequest !== request) return;
+    const theme: IShikiTheme = JSON.parse(themeData);
+    shiki.currentThemeUrl = themeUrl;
+    shiki.currentTheme = theme;
+    dispatchTheme({ id: themeUrl, theme });
+}
+
+function loadTheme(owner: WorkerSession, client: WorkerClient<ShikiSpec>, themeUrl: string) {
+    let work = owner.themes.get(themeUrl);
+    if (!work) {
+        work = waitForWork(owner, () => client.run("loadTheme", { theme: themeUrl })).catch(error => {
+            owner.themes.delete(themeUrl);
+            throw error;
+        });
+        owner.themes.set(themeUrl, work);
+    }
+    return work;
+}
+
+function loadLang(owner: WorkerSession, client: WorkerClient<ShikiSpec>, langId: string) {
+    const lang = resolveLang(langId);
+    if (!lang) return;
+    let work = owner.languages.get(lang.id);
+    if (!work) {
+        work = (async () => {
+            const grammar = lang.grammar ?? await waitForWork(owner, () => getGrammar(lang, owner.controller.signal));
+            await waitForWork(owner, () => client.run("loadLanguage", { lang: { ...lang, grammar } }));
+        })().catch(error => {
+            owner.languages.delete(lang.id);
+            throw error;
+        });
+        owner.languages.set(lang.id, work);
+    }
+    return work;
+}
 
 export const shiki = {
-    client: null as WorkerClient<ShikiSpec> | null,
+    get client() { return session?.client ?? null; },
     currentTheme: null as IShikiTheme | null,
     currentThemeUrl: null as string | null,
     timeoutMs: 10000,
     languages,
     themes,
-    loadedThemes: new Set<string>(),
-    loadedLangs: new Set<string>(),
-    clientPromise: new Promise<WorkerClient<ShikiSpec>>(resolve => resolveClient = resolve),
-
     init: async (initThemeUrl: string | undefined) => {
-        /** https://stackoverflow.com/q/58098143 */
-        const workerBlob = await fetch(shikiWorkerSrc).then(res => res.blob());
-
-        const client = shiki.client = new WorkerClient<ShikiSpec>(
-            "shiki-client",
-            "shiki-host",
-            workerBlob,
-            { name: "ShikiWorker" },
-        );
-        await client.init();
-
-        const themeUrl = initThemeUrl || themeUrls[0];
-
-        await loadLanguages();
-        await client.run("setOnigasm", { wasm: shikiOnigasmSrc });
-        await client.run("setHighlighter", { theme: themeUrl, langs: [] });
-        shiki.loadedThemes.add(themeUrl);
-        await shiki._setTheme(themeUrl);
-        resolveClient(client);
-    },
-    _setTheme: async (themeUrl: string) => {
-        shiki.currentThemeUrl = themeUrl;
-        const { themeData } = await shiki.client!.run("getTheme", { theme: themeUrl });
-        shiki.currentTheme = JSON.parse(themeData);
-        dispatchTheme({ id: themeUrl, theme: shiki.currentTheme });
+        if (session?.ready) return void await session.ready;
+        const owner: WorkerSession = {
+            controller: new AbortController(), client: null,
+            languages: new Map(), themes: new Map(), themeRequest: 0
+        };
+        session = owner;
+        const timeout = setTimeout(() => owner.controller.abort(new Error("The code highlighter took too long to start.")), shiki.timeoutMs);
+        owner.ready = (async () => {
+            /** https://stackoverflow.com/q/58098143 */
+            const workerBlob = await waitForWork(owner, () => fetch(shikiWorkerSrc, { signal: owner.controller.signal }).then(res => {
+                if (!res.ok) throw new Error("Could not load the code highlighter.");
+                return res.blob();
+            }));
+            owner.controller.signal.throwIfAborted();
+            const client = owner.client = new WorkerClient<ShikiSpec>("shiki-client", "shiki-host", workerBlob, { name: "ShikiWorker" });
+            await waitForWork(owner, () => client.init());
+            await waitForWork(owner, () => loadLanguages(owner.controller.signal));
+            await waitForWork(owner, () => client.run("setOnigasm", { wasm: shikiOnigasmSrc }));
+            const themeUrl = initThemeUrl || defaultTheme;
+            await waitForWork(owner, () => client.run("setHighlighter", { theme: themeUrl, langs: [] }));
+            owner.themes.set(themeUrl, Promise.resolve());
+            await setTheme(owner, client, themeUrl);
+            return client;
+        })().catch(error => {
+            if (session === owner) shiki.destroy();
+            throw error;
+        }).finally(() => clearTimeout(timeout));
+        await owner.ready;
     },
     loadTheme: async (themeUrl: string) => {
-        const client = await shiki.clientPromise;
-        if (shiki.loadedThemes.has(themeUrl)) return;
-
-        await client.run("loadTheme", { theme: themeUrl });
-
-        shiki.loadedThemes.add(themeUrl);
+        const { owner, client } = await readySession();
+        await loadTheme(owner, client, themeUrl);
     },
     setTheme: async (themeUrl: string) => {
-        await shiki.clientPromise;
-        themeUrl ||= themeUrls[0];
-        if (!shiki.loadedThemes.has(themeUrl)) await shiki.loadTheme(themeUrl);
-
-        await shiki._setTheme(themeUrl);
+        const requestedSession = session;
+        if (!requestedSession) return;
+        const request = ++requestedSession.themeRequest;
+        const { owner, client } = await readySession();
+        themeUrl ||= defaultTheme;
+        await loadTheme(owner, client, themeUrl);
+        await setTheme(owner, client, themeUrl, request);
     },
     loadLang: async (langId: string) => {
-        const client = await shiki.clientPromise;
-        const lang = resolveLang(langId);
-
-        if (!lang || shiki.loadedLangs.has(lang.id)) return;
-
-        await client.run("loadLanguage", {
-            lang: {
-                ...lang,
-                grammar: lang.grammar ?? await getGrammar(lang),
-            }
-        });
-        shiki.loadedLangs.add(lang.id);
+        const { owner, client } = await readySession();
+        await loadLang(owner, client, langId);
     },
     tokenizeCode: async (code: string, langId: string): Promise<IThemedToken[][]> => {
-        const client = await shiki.clientPromise;
+        const { owner, client } = await readySession();
         const lang = resolveLang(langId);
         if (!lang) return [];
-
-        if (!shiki.loadedLangs.has(lang.id)) await shiki.loadLang(lang.id);
-
-        return await client.run("codeToThemedTokens", {
-            code,
-            lang: langId,
-            theme: shiki.currentThemeUrl ?? themeUrls[0],
-        });
+        const theme = shiki.currentThemeUrl ?? defaultTheme;
+        await loadLang(owner, client, lang.id);
+        const tokens = await waitForWork(owner, () => client.run("codeToThemedTokens", { code, lang: langId, theme }));
+        owner.controller.signal.throwIfAborted();
+        if (shiki.currentThemeUrl !== theme) throw new Error("The code theme changed.");
+        return tokens;
     },
     destroy() {
+        const owner = session;
+        session = undefined;
+        owner?.controller.abort(new Error("The code highlighter stopped."));
+        owner?.client?.destroy();
+        owner?.languages.clear();
+        owner?.themes.clear();
         shiki.currentTheme = null;
         shiki.currentThemeUrl = null;
         dispatchTheme({ id: null, theme: null });
-        shiki.client?.destroy();
     }
 };

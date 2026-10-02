@@ -22,8 +22,8 @@ interface TestPlugin {
     userProfileBadges?: object[];
     renderMessageAccessory?: () => unknown;
     onBeforeMessageSend?: () => void;
-    start?(): void;
-    stop?(): void;
+    start?(): void | Promise<void>;
+    stop?(): void | Promise<void>;
     onMessageClick?(this: TestPlugin): void;
     flux?: Record<string, (this: TestPlugin, data: unknown) => void | Promise<void>>;
 }
@@ -33,6 +33,7 @@ function loadManager() {
     const settings: Record<string, { enabled: boolean; }> = {};
     const errors: unknown[][] = [];
     const registeredCommands = new Map<string, object>();
+    const commandRegistry: Record<string, object> = {};
     let commandRegistrations = 0;
     const sendListeners = new Set<() => void>();
     const accessories = new Map<string, () => unknown>();
@@ -49,8 +50,14 @@ function loadManager() {
     const mocks: Record<string, object> = {
         "~plugins": { __esModule: true, default: plugins },
         "@api/Commands": {
-            registerCommand: (command: { name: string; }) => { commandRegistrations++; registeredCommands.set(command.name, command); },
-            unregisterCommand: (name: string) => registeredCommands.delete(name)
+            commands: commandRegistry,
+            registerCommand: (command: { name: string; }) => {
+                if (registeredCommands.has(command.name)) throw new Error("Duplicate command.");
+                commandRegistrations++;
+                registeredCommands.set(command.name, command);
+                commandRegistry[command.name] = command;
+            },
+            unregisterCommand: (name: string) => { delete commandRegistry[name]; return registeredCommands.delete(name); }
         },
         "@api/MessageEvents": {
             addMessagePreSendListener: (listener: () => void) => sendListeners.add(listener),
@@ -89,7 +96,7 @@ function loadManager() {
         settings[plugin.name] = { enabled: false };
         return plugin;
     }
-    return { manager, add, plugins, settings, dispatcher, handlers, errors, accessories, sendListeners, registeredCommands, get commandRegistrations() { return commandRegistrations; } };
+    return { manager, add, plugins, settings, dispatcher, handlers, errors, accessories, sendListeners, registeredCommands, commandRegistry, get commandRegistrations() { return commandRegistrations; } };
 }
 
 test("plugins without start callbacks register their commands only once", () => {
@@ -215,4 +222,52 @@ test("declarative send hooks enable their API and clean up on stop", () => {
         assert.equal(sendListeners.size, 0);
     }
     assert.equal(calls, 2);
+});
+
+
+test("async lifecycle rejections are logged and stop still releases registrations", async () => {
+    const fixture = loadManager();
+    const plugin = fixture.add({
+        name: "AsyncFixture", commands: [{ name: "async" }],
+        async start() { throw new Error("Start rejected"); },
+        async stop() { throw new Error("Stop rejected"); }
+    });
+    assert.equal(fixture.manager.startPlugin(plugin), true);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.match(String(fixture.errors[0][0]), /Failed to start AsyncFixture/);
+    assert.equal(fixture.manager.stopPlugin(plugin), true);
+    assert.equal(plugin.started, false);
+    assert.equal(fixture.registeredCommands.size, 0);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.match(String(fixture.errors[1][0]), /Failed to stop AsyncFixture/);
+});
+
+test("failed command registration rolls back the plugin without removing another owner's command", () => {
+    const fixture = loadManager();
+    const other = fixture.add({ name: "Other", commands: [{ name: "shared" }] });
+    let stops = 0;
+    const plugin = fixture.add({ name: "Fixture", commands: [{ name: "first" }, { name: "shared" }], stop() { stops++; } });
+    fixture.manager.startPlugin(other);
+    assert.equal(fixture.manager.startPlugin(plugin), false);
+    assert.equal(plugin.started, false);
+    assert.equal(stops, 1);
+    assert.deepEqual([...fixture.registeredCommands.keys()], ["shared"]);
+    assert.equal(other.started, true);
+});
+
+
+test("Stopping declarative root commands releases their registered subcommand copies", () => {
+    const fixture = loadManager();
+    const root = { name: "root" };
+    const plugin = fixture.add({ name: "Fixture", commands: [root] });
+    fixture.manager.startPlugin(plugin);
+    fixture.registeredCommands.delete(root.name);
+    delete fixture.commandRegistry[root.name];
+    for (const name of ["root one", "root two"]) {
+        const child = { ...root, name, rootCommand: root };
+        fixture.registeredCommands.set(name, child);
+        fixture.commandRegistry[name] = child;
+    }
+    assert.equal(fixture.manager.stopPlugin(plugin), true);
+    assert.equal(fixture.registeredCommands.size, 0);
 });

@@ -11,8 +11,6 @@ const MIN_REQUEST_GAP_MS = 1_000;
 const SETTLE_MS = 700;
 const MAX_RESULTS = 25;
 
-/** Queries already sent this session. Repeating one costs nothing. */
-const requested = new Set<string>();
 let lastRequestAt = 0;
 
 function isGuildId(value: string): boolean {
@@ -40,8 +38,7 @@ function matchesFromStore(guildId: string, query: string): string[] {
  *
  * This goes through the gateway request Discord's own member list uses, not the REST
  * search endpoint, so it cannot burn a REST rate limit. Requests are debounced per
- * keystroke, spaced by at least a second globally, and never repeated for a query
- * already asked this session.
+ * keystroke and spaced by at least a second globally.
  */
 export function searchGuildMembers(guildId: string, query: string, onResults: (ids: string[]) => void): () => void {
     const trimmed = query.trim();
@@ -50,24 +47,26 @@ export function searchGuildMembers(guildId: string, query: string, onResults: (i
         return () => { };
     }
 
+    const accountId = UserStore.getCurrentUser()?.id;
     let cancelled = false;
     let settleId: number | undefined;
 
-    const debounceId = window.setTimeout(() => {
-        if (cancelled) return;
+    let debounceId: number;
+    const search = () => {
+        if (cancelled || UserStore.getCurrentUser()?.id !== accountId) return;
         onResults(matchesFromStore(guildId, trimmed));
 
-        const key = `${guildId}:${trimmed.toLowerCase()}`;
         const now = Date.now();
-        if (requested.has(key) || now - lastRequestAt < MIN_REQUEST_GAP_MS) return;
-        requested.add(key);
+        const remaining = MIN_REQUEST_GAP_MS - (now - lastRequestAt);
+        if (remaining > 0) { debounceId = window.setTimeout(search, remaining); return; }
         lastRequestAt = now;
         FluxDispatcher.dispatch({ type: "GUILD_MEMBERS_REQUEST", guildIds: [guildId], query: trimmed, limit: MAX_RESULTS });
 
         settleId = window.setTimeout(() => {
-            if (!cancelled) onResults(matchesFromStore(guildId, trimmed));
+            if (!cancelled && UserStore.getCurrentUser()?.id === accountId) onResults(matchesFromStore(guildId, trimmed));
         }, SETTLE_MS);
-    }, DEBOUNCE_MS);
+    };
+    debounceId = window.setTimeout(search, DEBOUNCE_MS);
 
     return () => {
         cancelled = true;

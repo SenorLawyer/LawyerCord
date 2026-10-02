@@ -51,6 +51,7 @@ import {
     parseComponents,
 } from "./model";
 import { completeOpenRouter, getAutomationAISettings, loadOpenRouterModels } from "./openRouter";
+import { evaluateRegex, stopRegexWorker } from "./regex";
 import { createRunQueue, type QueuedRun } from "./runQueue";
 import { checkCancelled, delay, executeWorkflow, type RunContext, type RunEvent, updateSavedValue } from "./runtime";
 import { nextOccurrence } from "./scheduling";
@@ -162,8 +163,10 @@ let drafts: Automation[] = [];
 let logs: AutomationLog[] = [];
 let logBuffer: AutomationLog[] = [];
 let logCursor = 0;
+const dirtyKeys = new Set<string>();
 function recordLog(log: AutomationLog): void {
     logBuffer[logCursor++ % MAX_LOGS] = log;
+    dirtyKeys.add(LOGS_KEY);
 }
 function flushLogs(): void {
     if (!logCursor) return;
@@ -182,11 +185,14 @@ let engineRunning = false;
 let systemEnabled = false;
 let engineAvailable = false;
 let engineGeneration = 0;
+let engineAccountId: string | undefined;
+let triggerController = new AbortController();
 let timerId: number | undefined;
 let globalLimit = 4;
 const queue = createRunQueue(() => notify());
 const nextDue = new Map<string, number>();
 let triggerIndex = compileTriggers([]);
+const systemTriggers = new Map<AutomationTrigger["type"], Automation[]>();
 const waitListeners = new Map<string, Set<(event: unknown) => void>>();
 const eventHandlers = new Map<string, (event: unknown) => void>();
 let notifyTimer: ReturnType<typeof setTimeout> | undefined;
@@ -214,13 +220,23 @@ function runtimeSnapshot(workflow: Automation): Automation {
     return snapshot;
 }
 
+function updateRunMetadata(id: string, metadata: Pick<Automation, "lastRunAt" | "lastStatus" | "lastScheduledAt">): void {
+    automations = automations.map(workflow => {
+        if (workflow.id !== id) return workflow;
+        const updated = { ...workflow, ...metadata };
+        const snapshot = runtimeSnapshots.get(workflow);
+        if (snapshot) runtimeSnapshots.set(updated, snapshot);
+        return updated;
+    });
+}
+
 function rememberEffect(key: string): void {
     engineEffects.set(key, Date.now() + 15_000);
     for (const [id, expires] of engineEffects) if (expires < Date.now() || engineEffects.size > 200) engineEffects.delete(id);
 }
 
 function syncTriggerSubscription(): void {
-    const wanted = new Set([...triggerIndex.keys(), ...waitListeners.keys()]);
+    const wanted = new Set(["LOGOUT", "CONNECTION_OPEN", ...triggerIndex.keys(), ...waitListeners.keys()]);
     for (const [event, handler] of eventHandlers) if (!engineRunning || !wanted.has(event)) {
         FluxDispatcher.unsubscribe(event as import("@vencord/discord-types").FluxEvents, handler);
         eventHandlers.delete(event);
@@ -229,8 +245,18 @@ function syncTriggerSubscription(): void {
     for (const event of wanted) if (!eventHandlers.has(event)) {
         if (event === "VOICE_STATE_UPDATES") previousOwnVoice = SelectedChannelStore.getVoiceChannelId() ?? "";
         const handler = (payload: unknown) => {
+            if (event === "LOGOUT" || event === "CONNECTION_OPEN") {
+                const accountId = event === "LOGOUT" ? undefined : isRecord(payload) && isRecord(payload.user) ? payload.user.id : UserStore.getCurrentUser()?.id;
+                if (event === "LOGOUT" || accountId !== engineAccountId) {
+                    triggerController.abort();
+                    triggerController = new AbortController();
+                    queue.cancel();
+                }
+                engineAccountId = typeof accountId === "string" ? accountId : undefined;
+            }
             for (const listener of waitListeners.get(event) ?? []) listener(payload);
-            handleTriggerEvent(event, payload);
+            const owner = triggerController;
+            void handleTriggerEvent(event, payload).catch(error => { if (!owner.signal.aborted) logger.warn("Automation trigger failed", error); });
         };
         eventHandlers.set(event, handler);
         FluxDispatcher.subscribe(event as import("@vencord/discord-types").FluxEvents, handler);
@@ -250,7 +276,16 @@ function listen(event: string, listener: (payload: unknown) => void): () => void
 }
 
 function refreshTriggerCache(): void {
-    for (const workflow of automations) if (engineRunning && workflow.enabled) runtimeSnapshot(workflow);
+    queue.retainWorkflows(automations.map(workflow => workflow.id));
+    systemTriggers.clear();
+    for (const workflow of automations) if (engineRunning && workflow.enabled) {
+        runtimeSnapshot(workflow);
+        if (usesSystemTrigger(workflow)) {
+            const candidates = systemTriggers.get(workflow.trigger.type) ?? [];
+            candidates.push(workflow);
+            systemTriggers.set(workflow.trigger.type, candidates);
+        }
+    }
     triggerIndex = compileTriggers(engineRunning ? automations : []);
     const now = Date.now();
     for (const id of nextDue.keys()) if (!automations.some(a => a.id === id && a.enabled && a.trigger.type === "schedule")) nextDue.delete(id);
@@ -271,7 +306,7 @@ function usesSystemTrigger(automation: Automation): boolean {
 
 /** Polls the main process for computer events only while an enabled automation wants them. */
 function syncSystemPolling(): void {
-    const wanted = engineRunning && automations.some(usesSystemTrigger);
+    const wanted = engineRunning && systemTriggers.size > 0;
     if (!wanted && systemTimer !== undefined) { clearInterval(systemTimer); systemTimer = undefined; }
     if (wanted && systemTimer === undefined) systemTimer = setInterval(() => void pollSystem(), 2_000);
 }
@@ -299,13 +334,15 @@ async function pollSystem(): Promise<void> {
     if (systemBusy || !engineRunning) return;
     systemBusy = true;
     const generation = engineGeneration;
+    const { signal } = triggerController;
     try {
-        const types = [...new Set(automations.filter(usesSystemTrigger).map(a => a.trigger.type))];
+        const types = [...systemTriggers.keys()];
         const { events, cursor } = await native().pollSystemEvents(systemCursor, types);
         if (!engineRunning || generation !== engineGeneration) return;
         systemCursor = cursor;
-        for (const event of events) for (const automation of automations) {
-            if (usesSystemTrigger(automation) && systemTriggerMatches(automation.trigger, event)) void runAutomationWithVariables(automation.id, systemVariables(event));
+        if (signal.aborted) return;
+        for (const event of events) for (const automation of systemTriggers.get(event.type) ?? []) {
+            if (systemTriggerMatches(automation.trigger, event)) void runAutomationWithVariables(automation.id, systemVariables(event));
         }
     } catch (error) {
         logger.warn("Computer events could not be read", error);
@@ -322,17 +359,20 @@ function notify(): void {
 }
 
 let writePending = false;
-function queueWrite(): Promise<void> {
+function queueWrite(...keys: string[]): Promise<void> {
+    for (const key of keys) dirtyKeys.add(key);
     if (writePending) return writeQueue;
     writePending = true;
     writeQueue = writeQueue.catch((error: unknown) => logger.error("Could not save automation state", error)).then(async () => {
         writePending = false;
         flushLogs();
-        await DataStore.setMany([
-            [WORKFLOWS_KEY, { version: 2, automations, globalLimit, systemEnabled }],
-            [LOGS_KEY, logs.map(({ preview: _preview, inputPreview: _inputPreview, ...log }) => log)],
-            [GUILDS_KEY, guilds],
-        ]);
+        const pending = [...dirtyKeys];
+        dirtyKeys.clear();
+        const entries: [string, unknown][] = pending.map(key => [key, key === WORKFLOWS_KEY ? { version: 2, automations, globalLimit, systemEnabled }
+            : key === LOGS_KEY ? logs.map(({ preview: _preview, inputPreview: _inputPreview, ...log }) => log)
+                : key === COMMANDS_KEY ? commandCache : guilds]);
+        try { if (entries.length) await DataStore.setMany(entries); }
+        catch (error) { for (const key of pending) dirtyKeys.add(key); throw error; }
     });
     return writeQueue;
 }
@@ -433,7 +473,7 @@ export async function discardAutomationDraft(id: string): Promise<void> {
 export async function setAutomationRunLimit(value: number): Promise<void> {
     queue.setLimit(value);
     globalLimit = value;
-    await queueWrite();
+    await queueWrite(WORKFLOWS_KEY);
 }
 
 export function subscribeAutomationState(listener: () => void): () => void {
@@ -447,8 +487,9 @@ export async function replaceAutomations(next: Automation[]): Promise<void> {
     nextDue.clear();
     refreshTriggerCache();
     guilds = collectGuildReferences(automations, guilds);
+    dirtyKeys.add(GUILDS_KEY);
     notify();
-    await queueWrite();
+    await queueWrite(WORKFLOWS_KEY);
     scheduleEngine();
 }
 
@@ -464,8 +505,9 @@ export async function upsertAutomation(value: Automation): Promise<void> {
     nextDue.delete(next.id);
     refreshTriggerCache();
     guilds = collectGuildReferences(automations, guilds);
+    dirtyKeys.add(GUILDS_KEY);
     notify();
-    await queueWrite();
+    await queueWrite(WORKFLOWS_KEY);
     scheduleEngine();
 }
 
@@ -476,9 +518,10 @@ export async function deleteAutomation(id: string): Promise<void> {
     automations = automations.filter(automation => automation.id !== id);
     refreshTriggerCache();
     logs = logs.filter(log => log.automationId !== id);
+    dirtyKeys.add(LOGS_KEY);
     await discardAutomationDraft(id);
     notify();
-    await queueWrite();
+    await queueWrite(WORKFLOWS_KEY);
     scheduleEngine();
 }
 
@@ -515,7 +558,7 @@ function rememberCommands(choices: AutomationCommandChoice[]): void {
         commandCache[choice.id] = entry;
         changed = true;
     }
-    if (changed) void queueWrite();
+    if (changed) void queueWrite(COMMANDS_KEY);
 }
 
 function isGuildReference(value: unknown): value is GuildReference {
@@ -880,10 +923,10 @@ async function runCommand(config: AutomationBlock["config"], context: ExecutionC
     return toRuntimeMessage(response.body) ?? { commandId, applicationId, channelId };
 }
 
-function matchesReply(message: RuntimeMessage, mode: AutomationMatchMode, query: string, regex?: RegExp): boolean {
+async function matchesReply(message: RuntimeMessage, mode: AutomationMatchMode, query: string, signal: AbortSignal): Promise<boolean> {
     if (!query) return true;
     if (mode === "exact") return message.content === query;
-    if (mode === "regex") return regex?.test(message.content) ?? false;
+    if (mode === "regex") return (await evaluateRegex(query, [message.content], false, signal)).matches[0];
     return message.content.toLowerCase().includes(query.toLowerCase());
 }
 
@@ -895,14 +938,6 @@ function waitForReply(config: AutomationBlock["config"], context: ExecutionConte
     const authorId = resolveTemplate(config.authorId, context.variables).trim();
     const query = resolveTemplate(config.matchText, context.variables);
     const mode = config.matchMode || "contains";
-    let regex: RegExp | undefined;
-    if (mode === "regex" && query) {
-        try {
-            regex = new RegExp(query, "i");
-        } catch {
-            throw new Error("Reply regex is not valid.");
-        }
-    }
     const timeoutSeconds = Math.min(86_400, Math.max(1, Math.trunc(config.timeoutSeconds || 60)));
     // Only a genuine reply to the message this flow just sent counts, unless the block opts out.
     const awaitedId = config.requireReply === false ? undefined : context.lastMessage?.id;
@@ -913,6 +948,7 @@ function waitForReply(config: AutomationBlock["config"], context: ExecutionConte
         const finish = (value: RuntimeMessage | Error | null) => {
             if (settled) return;
             settled = true;
+            matching.abort();
             window.clearTimeout(timeoutId);
             unsubscribe();
             context.signal.removeEventListener("abort", cancel);
@@ -920,22 +956,24 @@ function waitForReply(config: AutomationBlock["config"], context: ExecutionConte
             if (value instanceof Error) reject(value);
             else resolve(value);
         };
-        const onMessage = (event: MessageCreateEvent) => {
+        const matching = new AbortController();
+        const onMessage = async (event: MessageCreateEvent) => {
             if (settled || event.optimistic || (event.type && event.type !== "MESSAGE_CREATE")) return;
             const message = toRuntimeMessage(event.message);
             if (!message || message.channel_id !== channelId || (authorId && message.author.id !== authorId)) return;
             // Discord echoes back the message this flow just sent. Waiting on yourself is never the intent.
             if (selfId && message.author.id === selfId) return;
             if (awaitedId && message.referencedId !== awaitedId) return;
-            if (!matchesReply(message, mode, query, regex)) return;
-            finish(message);
+            try {
+                if (await matchesReply(message, mode, query, matching.signal)) finish(message);
+            } catch (error) { if (!settled) finish(error instanceof Error ? error : new Error("Reply matching failed.")); }
         };
         const cancel = () => finish(new Error("Automation stopped."));
         // Nothing arrived. Resolving null sends the flow down the block's "Timed out" port.
         const timeoutId = window.setTimeout(() => finish(null), timeoutSeconds * 1000);
 
         pendingWaits.add(cancel);
-        const unsubscribe = listen("MESSAGE_CREATE", payload => { if (isRecord(payload)) onMessage(payload); });
+        const unsubscribe = listen("MESSAGE_CREATE", payload => { if (isRecord(payload)) void onMessage(payload); });
         context.signal.addEventListener("abort", cancel, { once: true });
         if (context.signal.aborted) cancel();
     });
@@ -944,6 +982,7 @@ function waitForReply(config: AutomationBlock["config"], context: ExecutionConte
 async function fetchLatestDm(config: AutomationBlock["config"], context: ExecutionContext): Promise<RuntimeMessage[]> {
     const userId = resolveUserId(config, context, "DM user ID");
     const channelId = await resolveDmChannel(userId);
+    checkCancelled(context.signal);
     if (!MessageStore.isReady(channelId)) await MessageActions.fetchMessages({ channelId });
     const messages = MessageStore.getMessages(channelId)?._array ?? [];
     const limit = Math.min(100, Math.max(1, Math.trunc(config.limit || 10)));
@@ -977,7 +1016,7 @@ function mentionsCurrentUser(value: unknown, userId: string): boolean {
     );
 }
 
-async function fetchRecentMentions(config: AutomationBlock["config"]): Promise<RuntimeMessage[]> {
+async function fetchRecentMentions(config: AutomationBlock["config"], signal: AbortSignal): Promise<RuntimeMessage[]> {
     const currentUser = UserStore.getCurrentUser();
     if (!currentUser) throw new Error("Discord user data is unavailable.");
     const channelIds = new Set<string>();
@@ -992,7 +1031,8 @@ async function fetchRecentMentions(config: AutomationBlock["config"]): Promise<R
     const limit = Math.min(100, Math.max(1, Math.trunc(config.limit || 50)));
     const messages: RuntimeMessage[] = [];
     for (const channelId of [...channelIds].slice(0, 20)) {
-        if (messages.length) await sleep(350);
+        if (messages.length) await delay(350, signal);
+        checkCancelled(signal);
         const response = await RestAPI.get({ url: Constants.Endpoints.MESSAGES(channelId), query: { limit: Math.min(limit, 50) } });
         if (!Array.isArray(response.body)) continue;
         for (const raw of response.body) {
@@ -1181,7 +1221,7 @@ function findComponent(message: RuntimeMessage, type: number, config: Automation
     return hit ? { component: hit.component, row: hit.row, index: hit.position } : undefined;
 }
 
-function findSelectOption(component: AutomationComponent, mode: AutomationOptionMode, query: string): string {
+async function findSelectOption(component: AutomationComponent, mode: AutomationOptionMode, query: string, signal: AbortSignal): Promise<string> {
     if (!component.options?.length) throw new Error("The select menu has no options.");
     if (mode === "index") {
         const index = Number.parseInt(query, 10);
@@ -1189,18 +1229,11 @@ function findSelectOption(component: AutomationComponent, mode: AutomationOption
         return component.options[index - 1].value;
     }
 
-    let regex: RegExp | undefined;
-    if (mode === "regex") {
-        try {
-            regex = new RegExp(query, "i");
-        } catch {
-            throw new Error("Select option regex is not valid.");
-        }
-    }
-    const option = component.options.find(item => {
+    const matches = mode === "regex" ? (await evaluateRegex(query, component.options.map(item => `${item.label}\n${item.value}`), false, signal)).matches : [];
+    const option = component.options.find((item, index) => {
         const text = `${item.label}\n${item.value}`;
         if (mode === "exact") return item.label === query || item.value === query;
-        if (mode === "regex") return regex?.test(text) ?? false;
+        if (mode === "regex") return matches[index];
         return text.toLowerCase().includes(query.toLowerCase());
     });
     if (!option) throw new Error("No select option matched the configured value.");
@@ -1235,12 +1268,14 @@ async function interactWithComponent(block: AutomationBlock, context: ExecutionC
         custom_id: component.component.custom_id,
     };
     if (type === 3) {
-        data.values = [findSelectOption(
+        data.values = [await findSelectOption(
             component.component,
             block.config.optionMode || "exact",
             resolveTemplate(block.config.optionQuery, context.variables),
+            context.signal,
         )];
     }
+    checkCancelled(context.signal);
     const response = await postInteraction(message, 3, data);
     context.lastChannelId = message.channel_id;
     return response || message;
@@ -1622,7 +1657,7 @@ async function executeBlock(block: AutomationBlock, context: ExecutionContext): 
             value = await fetchChannelMessages(config, context);
             break;
         case "fetch-mentions":
-            value = await fetchRecentMentions(config);
+            value = await fetchRecentMentions(config, context.signal);
             break;
         case "fetch-unread":
             value = await fetchChannelMessages(config, context, true);
@@ -1743,8 +1778,7 @@ export function getAutomationNextRunAt(automation: Automation, now = Date.now())
 }
 
 function traceRun(event: RunEvent): void {
-    const automation = automations.find(item => item.id === event.workflowId);
-    recordLog({ id: crypto.randomUUID(), automationId: event.workflowId, automationName: automation?.name ?? "Test workflow", timestamp: Date.now(), blockLabel: automation?.blocks.find(block => block.id === event.blockId)?.type, ...event });
+    recordLog({ id: crypto.randomUUID(), automationId: event.workflowId, automationName: event.automationName ?? "Test workflow", timestamp: Date.now(), ...event });
     notify();
 }
 
@@ -1783,23 +1817,27 @@ async function externalBlock(block: AutomationBlock, run: RunContext) {
     return { value: variables.__blockResult, usage: block.type.startsWith("ai-") || block.config.aiEnabled ? variables.aiUsage : undefined, port: passed ? "next" as const : "alternate" as const };
 }
 
-async function executeRun(workflow: Automation, variables: Record<string, unknown>, signal: AbortSignal, runId: string, dryRun = false): Promise<unknown> {
+async function executeRun(workflow: Automation, variables: Record<string, unknown>, signal: AbortSignal, runId: string, dryRun = false, accountId = UserStore.getCurrentUser()?.id): Promise<unknown> {
     workflow = runtimeSnapshot(workflow);
+    const checkAccount = () => {
+        if (UserStore.getCurrentUser()?.id !== accountId) throw new Error("The Discord account changed. Run the workflow again from the intended account.");
+    };
     const append = (status: "running" | "success" | "failure", message: string) => {
         recordLog({ id: crypto.randomUUID(), runId, automationId: workflow.id, automationName: workflow.name, timestamp: Date.now(), status, message });
         notify();
     };
     append("running", dryRun ? "Test started." : "Run started.");
     try {
-        const result = await executeWorkflow(workflow, variables, { now: Date.now, random: Math.random, delay, external: externalBlock, persistent: persistentValue, workflows: () => [...automations.filter(a => a.id !== workflow.id), workflow], trace: traceRun }, { signal, runId, dryRun, immutableSnapshot: true });
+        if (!dryRun) checkAccount();
+        const result = await executeWorkflow(workflow, variables, { now: Date.now, random: Math.random, delay, external: (block, run) => { checkAccount(); return externalBlock(block, run); }, persistent: (...args) => { checkAccount(); return persistentValue(...args); }, snapshot: runtimeSnapshot, workflows: () => [...automations.filter(a => a.id !== workflow.id), workflow], trace: traceRun }, { signal, runId, dryRun, immutableSnapshot: true });
         append("success", dryRun ? "Test completed." : "Run completed.");
-        if (!dryRun) automations = automations.map(a => a.id === workflow.id ? { ...a, lastRunAt: Date.now(), lastStatus: "success" } : a);
+        if (!dryRun) updateRunMetadata(workflow.id, { lastRunAt: Date.now(), lastStatus: "success" });
         return result;
     } catch (error) {
         append("failure", getErrorMessage(error));
-        if (!dryRun) automations = automations.map(a => a.id === workflow.id ? { ...a, lastRunAt: Date.now(), lastStatus: "failure" } : a);
+        if (!dryRun) updateRunMetadata(workflow.id, { lastRunAt: Date.now(), lastStatus: "failure" });
         throw error;
-    } finally { notify(); if (!dryRun) await queueWrite(); }
+    } finally { notify(); if (!dryRun) await queueWrite(WORKFLOWS_KEY); }
 }
 
 async function runAutomationWithVariables(id: string, variables: Record<string, unknown>): Promise<AutomationRunResult> {
@@ -1807,8 +1845,9 @@ async function runAutomationWithVariables(id: string, variables: Record<string, 
     if (!engineRunning) return { success: false, error: "Enable the automation system before running a workflow." };
     const workflow = automations.find(a => a.id === id);
     if (!workflow) return { success: false, error: "Workflow was not found." };
+    const accountId = UserStore.getCurrentUser()?.id;
     try {
-        await queue.enqueue(workflow, (signal, runId) => executeRun(workflow, variables, signal, runId));
+        await queue.enqueue(workflow, (signal, runId) => executeRun(workflow, variables, signal, runId, false, accountId));
         return { success: true };
     } catch (error) {
         const message = getErrorMessage(error);
@@ -1824,7 +1863,13 @@ export async function testAutomation(workflow: Automation): Promise<AutomationRu
     catch (error) { return { success: false, error: getErrorMessage(error) }; }
 }
 
-function handleTriggerEvent(type: string, payload: unknown): void {
+async function handleTriggerEvent(type: string, payload: unknown): Promise<void> {
+    const { signal } = triggerController;
+    const failed = (automation: Automation, error: unknown) => {
+        recordLog({ id: crypto.randomUUID(), automationId: automation.id, automationName: automation.name, timestamp: Date.now(), status: "failure", message: getErrorMessage(error) });
+        notify();
+        void queueWrite(LOGS_KEY);
+    };
     if (!engineRunning || !triggerIndex.has(type) || !isRecord(payload) || payload.optimistic) return;
     const user = UserStore.getCurrentUser();
     if (!user) return;
@@ -1832,8 +1877,9 @@ function handleTriggerEvent(type: string, payload: unknown): void {
         for (const event of normalizeClientEvents(type, payload)) {
             const channel = event.channelId ? ChannelStore.getChannel(event.channelId) : undefined;
             event.guildId ||= channel?.guild_id ?? "";
-            const matches = matchTriggers(triggerIndex, { type, channelId: event.channelId, guildId: event.guildId, authorId: event.userId, status: event.status, content: "", self: event.userId === user.id, bot: event.user?.bot === true, mention: false, fromEngine: false });
-            for (const automation of matches) void runAutomationWithVariables(automation.id, { triggerEvent: event, triggerUserId: event.userId, __channelId: event.channelId });
+            const matches = await matchTriggers(triggerIndex, { type, channelId: event.channelId, guildId: event.guildId, authorId: event.userId, status: event.status, content: "", self: event.userId === user.id, bot: event.user?.bot === true, mention: false, fromEngine: false }, signal, failed);
+            checkCancelled(signal);
+            for (const automation of matches) if (automations.some(current => current.id === automation.id && current.enabled && current.updatedAt === automation.updatedAt)) void runAutomationWithVariables(automation.id, { triggerEvent: event, triggerUserId: event.userId, __channelId: event.channelId });
         }
         return;
     }
@@ -1855,10 +1901,11 @@ function handleTriggerEvent(type: string, payload: unknown): void {
         const effectKey = `${type}:${type === "MESSAGE_CREATE" ? raw.nonce : id}`;
         const ownEffect = (engineEffects.get(effectKey) ?? 0) >= Date.now() && (!type.startsWith("MESSAGE_REACTION") || authorId === user.id);
         if (ownEffect) engineEffects.delete(effectKey);
-        const matches = matchTriggers(triggerIndex, { type, channelId: channelId || previousChannel, guildId, authorId, content: String(raw.content ?? ""), self: authorId === user.id, bot: author?.bot === true, mention: mentionsCurrentUser(raw, user.id), fromEngine: ownEffect || type === "MESSAGE_CREATE" && sentByEngine.has(id), emoji, voice });
+        const matches = await matchTriggers(triggerIndex, { type, channelId: channelId || previousChannel, guildId, authorId, content: String(raw.content ?? ""), self: authorId === user.id, bot: author?.bot === true, mention: mentionsCurrentUser(raw, user.id), fromEngine: ownEffect || type === "MESSAGE_CREATE" && sentByEngine.has(id), emoji, voice }, signal, failed);
+        checkCancelled(signal);
         if (!matches.length) continue;
         const message = toRuntimeMessage(raw);
-        for (const automation of matches) void runAutomationWithVariables(automation.id, { triggerEvent: event, triggerMessage: message, triggerUserId: authorId, lastMessage: message });
+        for (const automation of matches) if (automations.some(current => current.id === automation.id && current.enabled && current.updatedAt === automation.updatedAt)) void runAutomationWithVariables(automation.id, { triggerEvent: event, triggerMessage: message, triggerUserId: authorId, lastMessage: message });
     }
 }
 
@@ -1868,11 +1915,11 @@ function processDueAutomations(): void {
         const due = nextDue.get(automation.id);
         if (due === undefined || due > now) continue;
         nextDue.set(automation.id, nextOccurrence(automation, now));
-        automations = automations.map(a => a.id === automation.id ? { ...a, lastScheduledAt: due } : a);
+        updateRunMetadata(automation.id, { lastScheduledAt: due });
         if (now - due < 5000 || automation.schedule.missed !== "skip") void runAutomation(automation.id);
     }
     notify();
-    void queueWrite();
+    void queueWrite(WORKFLOWS_KEY);
 }
 
 function scheduleEngine(): void {
@@ -1888,6 +1935,8 @@ export async function startAutomationEngine(): Promise<void> {
     await loadAutomationState();
     if (!engineAvailable || !systemEnabled || engineRunning) return;
     engineRunning = true;
+    triggerController = new AbortController();
+    engineAccountId = UserStore.getCurrentUser()?.id;
     engineGeneration++;
     refreshTriggerCache();
     scheduleEngine();
@@ -1900,12 +1949,15 @@ export async function startAutomationEngine(): Promise<void> {
 export function stopAutomationEngine(): void {
     engineAvailable = false;
     engineRunning = false;
+    triggerController.abort();
+    stopRegexWorker();
     engineGeneration++;
     queue.cancel();
     syncTriggerSubscription();
     syncSystemPolling();
     nextDue.clear();
     triggerIndex = compileTriggers([]);
+    systemTriggers.clear();
     if (timerId !== undefined) {
         window.clearTimeout(timerId);
         timerId = undefined;
@@ -1924,7 +1976,7 @@ export async function setAutomationSystemEnabled(value: boolean): Promise<void> 
         engineAvailable = available;
     } else if (available) await startAutomationEngine();
     notify();
-    await queueWrite();
+    await queueWrite(WORKFLOWS_KEY);
 }
 
 function guildReferenceFromGuild(guild: Guild): GuildReference {
@@ -1986,7 +2038,7 @@ export async function refreshGuildReferences(references?: GuildReference[]): Pro
 
     guilds = next;
     notify();
-    await queueWrite();
+    await queueWrite(GUILDS_KEY);
     return next.map(reference => ({ ...reference }));
 }
 

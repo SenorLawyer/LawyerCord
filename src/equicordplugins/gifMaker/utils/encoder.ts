@@ -6,16 +6,16 @@
 
 import { sleep } from "@utils/misc";
 import type { PluginNative } from "@utils/types";
-import { applyPalette, GIFEncoder, quantize } from "gifenc";
-import { decompressFrames, parseGIF } from "gifuct-js";
+import { decompressFrame, parseGIF } from "gifuct-js";
 
 import { CAPTIONS } from "../captions";
 import { measureTextLines } from "../captions/caption";
 import type { GifMakerOptions } from "../types";
+import { encodeGif } from "./encode";
+import { MAX_MEDIA_BYTES, MAX_TOTAL_PIXELS, MEDIA_TIMEOUT, readMediaResponse, validateDimensions } from "./limits";
 
 const MAX_FRAMES = 200;
 const INTERNAL_FPS = 30;
-const PALETTE_COLORS = 255;
 
 const ALLOWED_MEDIA_HOSTS = new Set([
     "cdn.discordapp.com",
@@ -32,7 +32,7 @@ const ALLOWED_MEDIA_HOSTS = new Set([
     "media4.giphy.com",
 ]);
 
-const MediaNative = VencordNative?.pluginHelpers?.gifMaker as PluginNative<typeof import("../native")> | undefined;
+const MediaNative = VencordNative?.pluginHelpers?.GifMaker as PluginNative<typeof import("../native")> | undefined;
 
 const blobUrlMap = new WeakMap<HTMLElement, string>();
 
@@ -44,25 +44,32 @@ function isDiscordCdnUrl(url: string): boolean {
     }
 }
 
-async function fetchFullGifBytes(url: string): Promise<Uint8Array> {
-    const resolved = resolveMediaUrl(url);
+async function getMediaBlob(url: string, signal?: AbortSignal): Promise<Blob> {
+    signal?.throwIfAborted();
     if (MediaNative) {
-        const { data } = await MediaNative.fetchMedia(resolved);
-        return new Uint8Array(data);
+        const id = signal ? crypto.randomUUID() : undefined;
+        const abort = () => { void MediaNative.cancelMedia(id); };
+        signal?.addEventListener("abort", abort, { once: true });
+        try {
+            const result = await MediaNative.fetchMedia(url, id);
+            signal?.throwIfAborted();
+            if (result.error !== undefined) throw new Error(result.error);
+            if (result.data.byteLength > MAX_MEDIA_BYTES) throw new Error("Media must be smaller than 50 MB.");
+            return new Blob([result.data], { type: result.type });
+        } finally {
+            signal?.removeEventListener("abort", abort);
+        }
     }
-    const res = await fetch(resolved);
-    if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
-    return new Uint8Array(await res.arrayBuffer());
-}
-
-async function getMediaBlobUrl(url: string): Promise<string> {
-    if (MediaNative) {
-        const { data, type } = await MediaNative.fetchMedia(url);
-        if (data) return URL.createObjectURL(new Blob([data], { type }));
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    const timeout = setTimeout(abort, MEDIA_TIMEOUT);
+    try {
+        return await readMediaResponse(await fetch(url, { signal: controller.signal }), controller.signal);
+    } finally {
+        clearTimeout(timeout);
+        signal?.removeEventListener("abort", abort);
     }
-    const res = await fetch(url);
-    const blob = await res.blob();
-    return URL.createObjectURL(blob);
 }
 
 const mediaProxyParser = /^https:\/\/(?:images-ext-\d+|cdn)\.discord(?:app|cdn)\.net\/external\/[^/]+\/(?<protocol>https?)\/(?<rest>.+)$/i;
@@ -77,7 +84,14 @@ function resolveMediaUrl(url: string): string {
     return normalized;
 }
 
-export function cleanupBlobUrl(el: HTMLElement) {
+export function cleanupBlobUrl(el: HTMLImageElement | HTMLVideoElement) {
+    if ("pause" in el) {
+        el.pause();
+        el.removeAttribute("src");
+        el.load();
+    } else {
+        el.removeAttribute("src");
+    }
     const blobUrl = blobUrlMap.get(el);
     if (blobUrl) {
         URL.revokeObjectURL(blobUrl);
@@ -85,70 +99,108 @@ export function cleanupBlobUrl(el: HTMLElement) {
     }
 }
 
-export function loadImage(url: string): Promise<HTMLImageElement> {
+export async function loadImage(url: string, signal?: AbortSignal): Promise<HTMLImageElement> {
+    signal?.throwIfAborted();
+    const resolved = resolveMediaUrl(url);
+    const blob = isDiscordCdnUrl(resolved) ? await getMediaBlob(resolved, signal) : null;
+    signal?.throwIfAborted();
     return new Promise((resolve, reject) => {
         const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error(`Failed to load image: ${url}`));
-        img.crossOrigin = "anonymous";
-
-        const resolved = resolveMediaUrl(url);
-        if (isDiscordCdnUrl(resolved)) {
-            getMediaBlobUrl(resolved).then(blobUrl => {
-                blobUrlMap.set(img, blobUrl);
-                img.src = blobUrl;
-            }).catch(reject);
-        } else {
-            img.src = resolved;
-        }
-    });
-}
-
-function createVideoElement(src: string): Promise<HTMLVideoElement> {
-    return new Promise((resolve, reject) => {
-        const v = document.createElement("video");
-        v.preload = "auto";
-        v.muted = true;
-        v.crossOrigin = "anonymous";
-
-        v.addEventListener("loadedmetadata", () => {
-            const { duration, videoWidth, videoHeight } = v;
-            if (!isFinite(duration) || duration <= 0 || !videoWidth || !videoHeight) {
-                reject(new Error(`Invalid video: duration=${duration} w=${videoWidth} h=${videoHeight}`));
-                return;
+        const cleanup = () => {
+            clearTimeout(timeout);
+            signal?.removeEventListener("abort", abort);
+            img.onload = img.onerror = null;
+        };
+        const fail = (error: unknown) => {
+            cleanup();
+            cleanupBlobUrl(img);
+            reject(error);
+        };
+        const abort = () => fail(signal?.reason);
+        const timeout = setTimeout(() => fail(new Error("The image took too long to load.")), MEDIA_TIMEOUT);
+        signal?.addEventListener("abort", abort, { once: true });
+        img.onload = () => {
+            try {
+                validateDimensions(img.naturalWidth, img.naturalHeight);
+                cleanup();
+                resolve(img);
+            } catch (error) {
+                fail(error);
             }
-            resolve(v);
-        }, { once: true });
-
-        v.addEventListener("error", () => {
-            reject(new Error(`Video load failed: ${src} (code=${v.error?.code})`));
-        }, { once: true });
-
-        v.src = src;
-        v.load();
+        };
+        img.onerror = () => fail(new Error("Could not load the image."));
+        img.crossOrigin = "anonymous";
+        if (blob) {
+            const blobUrl = URL.createObjectURL(blob);
+            blobUrlMap.set(img, blobUrl);
+            img.src = blobUrl;
+        } else img.src = resolved;
     });
 }
 
-export function loadVideo(url: string): Promise<HTMLVideoElement> {
+export async function loadVideo(url: string, signal?: AbortSignal): Promise<HTMLVideoElement> {
+    signal?.throwIfAborted();
     const resolved = resolveMediaUrl(url);
-    if (isDiscordCdnUrl(resolved)) {
-        return getMediaBlobUrl(resolved).then(blobUrl =>
-            createVideoElement(blobUrl).then(video => {
-                blobUrlMap.set(video, blobUrl);
-                return video;
-            })
-        );
-    }
-    return createVideoElement(resolved);
+    const blob = isDiscordCdnUrl(resolved) ? await getMediaBlob(resolved, signal) : null;
+    signal?.throwIfAborted();
+    return new Promise((resolve, reject) => {
+        const video = document.createElement("video");
+        const cleanup = () => {
+            clearTimeout(timeout);
+            signal?.removeEventListener("abort", abort);
+            video.removeEventListener("loadedmetadata", loaded);
+            video.removeEventListener("error", failed);
+        };
+        const fail = (error: unknown) => {
+            cleanup();
+            cleanupBlobUrl(video);
+            reject(error);
+        };
+        const abort = () => fail(signal?.reason);
+        const failed = () => fail(new Error("Could not load the video."));
+        const loaded = () => {
+            try {
+                validateDimensions(video.videoWidth, video.videoHeight);
+                if (!Number.isFinite(video.duration) || video.duration <= 0) throw new Error("The video has an invalid duration.");
+                cleanup();
+                resolve(video);
+            } catch (error) {
+                fail(error);
+            }
+        };
+        const timeout = setTimeout(() => fail(new Error("The video took too long to load.")), MEDIA_TIMEOUT);
+        signal?.addEventListener("abort", abort, { once: true });
+        video.addEventListener("loadedmetadata", loaded);
+        video.addEventListener("error", failed);
+        video.preload = "auto";
+        video.muted = true;
+        video.crossOrigin = "anonymous";
+        if (blob) {
+            const blobUrl = URL.createObjectURL(blob);
+            blobUrlMap.set(video, blobUrl);
+            video.src = blobUrl;
+        } else video.src = resolved;
+        video.load();
+    });
 }
 
-function waitForSeek(video: HTMLVideoElement): Promise<void> {
-    return new Promise(resolve => {
-        if (video.seeking) {
-            video.addEventListener("seeked", () => resolve(), { once: true });
-        } else {
-            resolve();
-        }
+function waitForSeek(video: HTMLVideoElement, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+    if (!video.seeking) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+        const cleanup = () => {
+            clearTimeout(timeout);
+            signal?.removeEventListener("abort", abort);
+            video.removeEventListener("seeked", seeked);
+            video.removeEventListener("error", failed);
+        };
+        const abort = () => { cleanup(); reject(signal?.reason); };
+        const failed = () => { cleanup(); reject(new Error("Could not seek the video.")); };
+        const seeked = () => { cleanup(); resolve(); };
+        const timeout = setTimeout(failed, MEDIA_TIMEOUT);
+        signal?.addEventListener("abort", abort, { once: true });
+        video.addEventListener("seeked", seeked);
+        video.addEventListener("error", failed);
     });
 }
 
@@ -167,12 +219,20 @@ async function encodeFrames(
     frameCount: number,
     drawFrame: (ctx: CanvasRenderingContext2D, i: number) => void | Promise<void>,
     delays?: number[],
+    signal?: AbortSignal,
 ): Promise<Blob> {
+    signal?.throwIfAborted();
+    validateDimensions(width, height);
+    if (!Number.isSafeInteger(frameCount) || frameCount < 1 || frameCount > MAX_FRAMES)
+        throw new Error("GIFs must contain between 1 and 200 frames.");
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return new Blob();
     const captionHeight = getCaptionHeight(ctx, width, options);
     const gifHeight = height + captionHeight;
+    validateDimensions(width, gifHeight);
+    if (width * gifHeight * frameCount > MAX_TOTAL_PIXELS)
+        throw new Error("This GIF is too large to process. Choose smaller dimensions.");
     canvas.width = width;
     canvas.height = gifHeight;
 
@@ -181,12 +241,14 @@ async function encodeFrames(
     const frameLength = canvas.width * canvas.height * 4;
     const combined = new Uint8ClampedArray(frameLength * frameCount);
     for (let i = 0; i < frameCount; i++) {
+        signal?.throwIfAborted();
         ctx.clearRect(0, 0, width, gifHeight);
 
         ctx.save();
         ctx.translate(0, captionHeight);
         await drawFrame(ctx, i);
         ctx.restore();
+        signal?.throwIfAborted();
 
         const caption = CAPTIONS.find(c => c.type === options.captionMode);
         if (caption) {
@@ -196,41 +258,31 @@ async function encodeFrames(
         }
 
         combined.set(ctx.getImageData(0, 0, width, gifHeight).data, i * frameLength);
+        if (i % 4 === 3) await sleep(0);
     }
 
-    const palette = quantize(combined, PALETTE_COLORS);
-    const gif = GIFEncoder();
-
-    for (let i = 0; i < frameCount; i++) {
-        const index = applyPalette(combined.subarray(i * frameLength, (i + 1) * frameLength), palette);
-        gif.writeFrame(index, width, gifHeight, {
-            delay: delays ? delays[i] : defaultDelay,
-            palette: i === 0 ? palette : undefined,
-        });
-    }
-
-    gif.finish();
-    const bytes = gif.bytesView();
-    return new Blob([new Uint8Array(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength)], { type: "image/gif" });
+    await sleep(0);
+    signal?.throwIfAborted();
+    return encodeGif(combined, width, gifHeight, delays ?? new Array(frameCount).fill(defaultDelay), signal);
 }
 
-async function createGifFromImage(url: string, options: GifMakerOptions): Promise<Blob> {
-    const img = await loadImage(url);
+async function createGifFromImage(url: string, options: GifMakerOptions, signal?: AbortSignal): Promise<Blob> {
+    const img = await loadImage(url, signal);
     try {
         return await encodeFrames(options.width, options.height, options, 1, ctx => {
             ctx.drawImage(img, 0, 0, options.width, options.height);
-        });
+        }, undefined, signal);
     } finally {
         cleanupBlobUrl(img);
     }
 }
 
-async function createGifFromVideo(url: string, options: GifMakerOptions): Promise<Blob> {
-    const video = await loadVideo(url);
+async function createGifFromVideo(url: string, options: GifMakerOptions, signal?: AbortSignal): Promise<Blob> {
+    const video = await loadVideo(url, signal);
     try {
         const { duration } = video;
         const frameCount = Math.min(
-            Math.floor(duration * INTERNAL_FPS),
+            Math.max(1, Math.floor(duration * INTERNAL_FPS)),
             MAX_FRAMES
         );
 
@@ -240,9 +292,9 @@ async function createGifFromVideo(url: string, options: GifMakerOptions): Promis
 
         return await encodeFrames(options.width, options.height, options, frameCount, async (ctx, i) => {
             video.currentTime = i * interval;
-            await waitForSeek(video);
+            await waitForSeek(video, signal);
             ctx.drawImage(video, 0, 0, options.width, options.height);
-        }, delays);
+        }, delays, signal);
     } finally {
         cleanupBlobUrl(video);
     }
@@ -261,24 +313,39 @@ function hasExt(url: string, ext: string): boolean {
     }
 }
 
-export async function createGif(url: string, isVideo: boolean, options: GifMakerOptions): Promise<Blob> {
-    if (isVideo) return createGifFromVideo(url, options);
+export async function createGif(url: string, isVideo: boolean, options: GifMakerOptions, signal?: AbortSignal): Promise<Blob> {
+    signal?.throwIfAborted();
+    validateDimensions(options.width, options.height);
+    if (isVideo) return createGifFromVideo(url, options, signal);
     if (hasExt(url, ".gif")) {
         try {
-            return await createGifFromAnimatedImage(url, options);
+            return await createGifFromAnimatedImage(url, options, signal);
         } catch (err) {
             if (!(err instanceof Error) || err.message !== "No animated frames found") {
                 throw err;
             }
         }
     }
-    return createGifFromImage(url, options);
+    return createGifFromImage(url, options, signal);
 }
 
-async function createGifFromAnimatedImage(url: string, options: GifMakerOptions): Promise<Blob> {
-    const bytes = await fetchFullGifBytes(url);
-    const parsedGif = parseGIF(bytes.buffer as ArrayBuffer);
-    const frames = decompressFrames(parsedGif, true);
+async function createGifFromAnimatedImage(url: string, options: GifMakerOptions, signal?: AbortSignal): Promise<Blob> {
+    const blob = await getMediaBlob(resolveMediaUrl(url), signal);
+    const bytes = await blob.arrayBuffer();
+    signal?.throwIfAborted();
+    const parsedGif = parseGIF(bytes);
+    validateDimensions(parsedGif.lsd.width, parsedGif.lsd.height);
+    const frames = parsedGif.frames.filter(frame => "image" in frame);
+    if (frames.length > MAX_FRAMES) throw new Error("GIFs must contain at most 200 frames.");
+    let sourcePixels = 0;
+    for (const frame of frames) {
+        const { width, height, left, top } = frame.image.descriptor;
+        validateDimensions(width, height);
+        sourcePixels += width * height;
+        if (sourcePixels > MAX_TOTAL_PIXELS) throw new Error("This GIF contains too many source pixels to process.");
+        if (left + width > parsedGif.lsd.width || top + height > parsedGif.lsd.height)
+            throw new Error("The GIF contains an invalid frame rectangle.");
+    }
 
     if (frames.length <= 1) throw new Error("No animated frames found");
 
@@ -294,27 +361,30 @@ async function createGifFromAnimatedImage(url: string, options: GifMakerOptions)
     const patchCanvas = document.createElement("canvas");
 
     const totalFrames = frames.length;
-    const snapshots = Array.from({ length: 2 }, () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = gifW;
-        canvas.height = gifH;
-        return canvas;
-    });
+    const snapshot = document.createElement("canvas");
+    snapshot.width = gifW;
+    snapshot.height = gifH;
+    const snapshotCtx = snapshot.getContext("2d");
+    if (!snapshotCtx) throw new Error("Failed to get canvas context for frame snapshot.");
 
     return await encodeFrames(options.width, options.height, options, totalFrames, async (encodeCtx, i) => {
-        const frame = frames[i];
+        signal?.throwIfAborted();
+        const frame = decompressFrame(frames[i], parsedGif.gct, true);
 
         if (i > 0) {
             const prev = frames[i - 1];
-            if (prev.disposalType === 2) {
-                ctx.clearRect(prev.dims.left, prev.dims.top, prev.dims.width, prev.dims.height);
-            } else if (prev.disposalType === 3 && i > 1) {
-                const prevCtx = snapshots[i % 2].getContext("2d");
-                if (prevCtx) {
-                    const prevState = prevCtx.getImageData(0, 0, gifW, gifH);
-                    ctx.putImageData(prevState, 0, 0);
-                }
+            const dims = prev.image.descriptor;
+            if (prev.gce?.extras.disposal === 2) {
+                ctx.clearRect(dims.left, dims.top, dims.width, dims.height);
+            } else if (prev.gce?.extras.disposal === 3) {
+                ctx.clearRect(0, 0, gifW, gifH);
+                ctx.drawImage(snapshot, 0, 0);
             }
+        }
+
+        if (frames[i].gce?.extras.disposal === 3) {
+            snapshotCtx.clearRect(0, 0, gifW, gifH);
+            snapshotCtx.drawImage(composite, 0, 0);
         }
 
         const patchData = new ImageData(
@@ -329,15 +399,10 @@ async function createGifFromAnimatedImage(url: string, options: GifMakerOptions)
         patchCtx.putImageData(patchData, 0, 0);
         ctx.drawImage(patchCanvas, frame.dims.left, frame.dims.top);
 
-        const snap = snapshots[i % 2];
-        const snapCtx = snap.getContext("2d");
-        if (!snapCtx) throw new Error("Failed to get canvas context for frame snapshot.");
-        snapCtx.clearRect(0, 0, gifW, gifH);
-        snapCtx.drawImage(composite, 0, 0);
         encodeCtx.drawImage(composite, 0, 0, options.width, options.height);
 
         if (i % 20 === 19) {
             await sleep(0);
         }
-    }, frames.map(frame => frame.delay));
+    }, frames.map(frame => frame.gce ? (frame.gce.delay || 10) * 10 : 0), signal);
 }

@@ -18,7 +18,8 @@ function fixture() {
     const source = readFileSync(process.env.AUDIT_VALUES_SOURCE ?? "src/components/settings/tabs/automations/values.ts", "utf8");
     const code = transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;
     const exports: { executeValue?: (block: AutomationBlock, variables: Record<string, unknown>, now: number, random: () => number) => unknown; } = {};
-    runInNewContext(code, { exports, structuredClone, RegExp: CountedRegExp, require() {
+    runInNewContext(code, { exports, structuredClone, RegExp: CountedRegExp, require(name: string) {
+        if (name === "./regex") return { async evaluateRegex(pattern: string, texts: string[]) { const regex = new CountedRegExp(pattern, "i"); return { matches: texts.map(text => regex.test(text)) }; } };
         return { isRecord: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) };
     } });
     assert.ok(exports.executeValue);
@@ -28,11 +29,11 @@ function fixture() {
     } };
 }
 
-test("Array filters expand the comparison once and compile one regex per block", () => {
+test("Array filters expand the comparison once and compile one regex per block", async () => {
     const f = fixture();
     let reads = 0;
     const variables = { items: Array.from({ length: 1000 }, (_, i) => ({ content: i % 2 ? "no" : "yes" })), get pattern() { reads++; return "^yes$"; } };
-    const result = f.run("filter-array", { sourceVariable: "items", fieldPath: "content", compareValue: "{{pattern}}", operator: "regex" }, variables) as unknown[];
+    const result = await f.run("filter-array", { sourceVariable: "items", fieldPath: "content", compareValue: "{{pattern}}", operator: "regex" }, variables) as unknown[];
     assert.equal(result.length, 500);
     assert.equal(reads, 1);
     assert.equal(f.patterns(), 1);
@@ -49,18 +50,18 @@ test("Value operations do not expand an unused value template", () => {
     assert.equal(f.run("text-variable", { sourceVariable: "items.length", operation: "append", value: " items" }, variables), "3 items");
 });
 
-test("Filters preserve ordering, operators, empty inputs and invalid-pattern behavior", () => {
+test("Filters preserve ordering, operators, empty inputs and invalid-pattern behavior", async () => {
     const f = fixture();
     const items = [1, 2, 3, 2];
     for (const [operator, compareValue, expected] of [
         ["equals", "2", [2, 2]], ["not-equals", "2", [1, 3]], ["greater", "2", [3]],
         ["less", "2", [1]], ["contains", "2", [2, 2]], ["regex", "^[12]$", [1, 2, 2]]
     ] as const) {
-        const result = f.run("filter-array", { sourceVariable: "items", operator, compareValue }, { items }) as number[];
+        const result = await f.run("filter-array", { sourceVariable: "items", operator, compareValue }, { items }) as number[];
         assert.deepEqual(Array.from(result), expected);
     }
     assert.deepEqual(Array.from(f.run("filter-array", { sourceVariable: "items", operator: "regex", compareValue: "[" }, { items: [] }) as unknown[]), []);
-    assert.throws(() => f.run("filter-array", { sourceVariable: "items", operator: "regex", compareValue: "[" }, { items }));
+    await assert.rejects(Promise.resolve(f.run("filter-array", { sourceVariable: "items", operator: "regex", compareValue: "[" }, { items })));
     assert.throws(() => f.run("filter-array", { sourceVariable: "items" }, { items: "invalid" }));
     assert.deepEqual(items, [1, 2, 3, 2]);
 });

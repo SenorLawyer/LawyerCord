@@ -17,10 +17,11 @@ import ircColors from "@plugins/ircColors";
 import mentionAvatars from "@plugins/mentionAvatars";
 import { Devs, EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/index";
+import { proxyLazy } from "@utils/lazy";
 import definePlugin, { OptionType } from "@utils/types";
 import { GuildMember, Message, RenderModalProps, User } from "@vencord/discord-types";
 import { findByCodeLazy, findStoreLazy } from "@webpack";
-import { ChannelStore, GuildMemberStore, GuildStore, Menu, MessageStore, Modal, openModal, RelationshipStore, StreamerModeStore, TextInput, useEffect, useState } from "@webpack/common";
+import { ChannelStore, GuildMemberStore, GuildStore, Menu, MessageStore, Modal, openModal, RelationshipStore, StreamerModeStore, TextInput, useEffect, useState, useStateFromStores, zustandCreate } from "@webpack/common";
 import { JSX } from "react";
 
 const SMYNC = classNameFactory();
@@ -35,6 +36,12 @@ const templatePattern = /(?:\{(?:custom|friend|nick|display|user)(?:,\s*(?:custo
 
 type CustomNicknameData = Record<string, string>;
 let customNicknames: CustomNicknameData = {};
+const useNameState = proxyLazy(() => zustandCreate(() => ({ revision: 0 })));
+let nicknameLoad = 0;
+
+function notifyNames() {
+    useNameState.setState({ revision: useNameState.getState().revision + 1 });
+}
 
 let toCSSCache: Map<string, string | null> | null = null;
 let toCSSProbe: HTMLDivElement | null = null;
@@ -357,8 +364,12 @@ function getTypingMemberListProfilesReactionsVoiceNameElement(props: memberListP
     return getTypingMemberListProfilesReactionsVoiceName(props)[1];
 }
 
+const MESSAGE_KEYS = ["hideDefaultAtSign", "replies"] satisfies (keyof typeof settings.store)[];
+const MENTION_KEYS = ["hideDefaultAtSign", "mentions"] satisfies (keyof typeof settings.store)[];
+const HOVER_KEYS = ["alwaysShowEffects"] satisfies (keyof typeof settings.store)[];
+
 function getMessageName(props: messageProps, textOnly = false): [string | null, JSX.Element | null, string | null] {
-    const { hideDefaultAtSign, replies } = settings.use(["hideDefaultAtSign", "replies"]);
+    const { hideDefaultAtSign, replies } = settings.use(MESSAGE_KEYS);
     const { message, userOverride, isRepliedMessage, withMentionPrefix } = props;
     const isWebhook = !!message?.webhookId && !message?.interaction;
     const channel = message ? ChannelStore.getChannel(message.channel_id) || null : null;
@@ -379,7 +390,7 @@ function getMessageNameText(props: messageProps): string | null {
 }
 
 function getMentionNameElement(props: mentionProps): JSX.Element | null {
-    const { hideDefaultAtSign, mentions } = settings.use(["hideDefaultAtSign", "mentions"]);
+    const { hideDefaultAtSign, mentions } = settings.use(MENTION_KEYS);
     const { channelId, userId, props: nestedProps } = props;
     const channel = channelId ? ChannelStore.getChannel(channelId) || null : null;
     const user = UserStore.getUser(userId);
@@ -438,6 +449,8 @@ function computeEffectCSSVars(styles: any): Record<string, string> {
     };
 }
 
+const NAME_KEYS = ["voiceChannels", "alwaysShowEffects", "messages", "replies", "mentions", "typingIndicator", "memberList", "profilePopout", "reactions", "friendNameOnlyInDirectMessages", "customNameOnlyInDirectMessages", "discriminators", "hideDefaultAtSign", "truncateAllNamesWithStreamerMode", "removeDuplicates", "ignoreGradients", "ignoreFonts", "animateGradients", "includedNames", "customNameColor", "friendNameColor", "nicknameColor", "displayNameColor", "usernameColor", "nameSeparator"] satisfies (keyof typeof settings.store)[];
+
 function renderUsername(
     author: User | GuildMember | null,
     channelId: string | null,
@@ -461,8 +474,26 @@ function renderUsername(
     const isReaction = isReactionsTooltip || isReactionsPopout;
     const isVoice = type === "voiceChannel";
 
-    const config = hookless ? settings.store : settings.use(["messages", "replies", "mentions", "typingIndicator", "memberList", "profilePopout", "reactions", "friendNameOnlyInDirectMessages", "customNameOnlyInDirectMessages", "discriminators", "hideDefaultAtSign", "truncateAllNamesWithStreamerMode", "removeDuplicates", "ignoreGradients", "ignoreFonts", "animateGradients", "includedNames", "customNameColor", "friendNameColor", "nicknameColor", "displayNameColor", "usernameColor", "nameSeparator", "triggerNameRerender"]);
-    const { messages, replies, mentions, typingIndicator, memberList, profilePopout, reactions, friendNameOnlyInDirectMessages, customNameOnlyInDirectMessages, discriminators, truncateAllNamesWithStreamerMode, removeDuplicates, ignoreGradients, ignoreFonts, animateGradients, includedNames, customNameColor, friendNameColor, nicknameColor, displayNameColor, usernameColor, nameSeparator, triggerNameRerender } = config;
+    const config = hookless ? settings.store : settings.use(NAME_KEYS);
+    const { messages, replies, mentions, typingIndicator, memberList, profilePopout, reactions, friendNameOnlyInDirectMessages, customNameOnlyInDirectMessages, discriminators, truncateAllNamesWithStreamerMode, removeDuplicates, ignoreGradients, ignoreFonts, animateGradients, includedNames, customNameColor, friendNameColor, nicknameColor, displayNameColor, usernameColor, nameSeparator, voiceChannels, alwaysShowEffects } = config;
+
+    const authorId = author && "id" in author ? author.id : undefined;
+    if (!hookless) {
+        useNameState(() => authorId ? customNicknames[authorId] : undefined);
+        useStateFromStores([RelationshipStore], () => authorId ? RelationshipStore.getNickname(authorId) : undefined, [authorId]);
+        useStateFromStores([StreamerModeStore], () => StreamerModeStore.enabled);
+        useStateFromStores([AccessibilityStore], () => AccessibilityStore.useReducedMotion);
+    }
+
+    const channel = channelId ? ChannelStore.getChannel(channelId) || null : null;
+    const message = channelId && messageId ? MessageStore.getMessage(channelId, messageId) : null;
+    const groupId = (message as Message & { showMeYourNameGroupId?: string; } | null)?.showMeYourNameGroupId;
+    const getHovering = () => !textOnly && (alwaysShowEffects || ((isMessage || isMention)
+        ? !!((messageId && hoveringMessageMap.has(messageId)) || (groupId && hoveringMessageMap.has(groupId)))
+        : isReply
+            ? !!((messageId && hoveringRepliesMap.has(messageId)) || (groupId && hoveringRepliesMap.has(groupId)))
+            : isReactionsPopout && !!authorId && hoveringReactionPopoutMap.has(authorId)));
+    const isHovering = hookless ? getHovering() : useNameState(getHovering);
 
     const { username, display, nick, friend, custom } = getProcessedNames(author, truncateAllNamesWithStreamerMode, discriminators, inGuild, friendNameOnlyInDirectMessages, customNameOnlyInDirectMessages);
 
@@ -480,23 +511,11 @@ function renderUsername(
         return [null, null, null];
     } else if (isReaction && !reactions) {
         return [null, null, null];
-    } else if (isVoice && !reactions) {
+    } else if (isVoice && !voiceChannels) {
         return [null, null, null];
     } else if (!author || !username) {
         return [null, null, null];
     }
-
-    const channel = channelId ? ChannelStore.getChannel(channelId) || null : null;
-    const message = channelId && messageId ? MessageStore.getMessage(channelId, messageId) : null;
-    const groupId = (message as any)?.showMeYourNameGroupId || null;
-
-    const isHovering = (isMessage || isMention)
-        ? ((messageId && hoveringMessageMap.has(messageId)) || (groupId && hoveringMessageMap.has(groupId)))
-        : isReply
-            ? (messageId && hoveringRepliesMap.has(messageId)) || (groupId && hoveringRepliesMap.has(groupId))
-            : isReactionsPopout
-                ? hoveringReactionPopoutSet.has((author as User).id)
-                : false;
 
     const options = splitTemplate(includedNames);
     const names: Record<string, [string | null, string]> = {
@@ -728,7 +747,9 @@ function renderUsername(
                 <span
                     className={SMYNC(firstGroupClasses, { [gradientClasses]: shouldGradientGlow })}
                     data-text={shouldGradientGlow ? firstDataText : undefined}
-                    style={(shouldGradientGlow && useTopRoleStyle && topRoleStyle ? topRoleStyle.gradient.animated : undefined) as React.CSSProperties}
+                    style={(shouldGradientGlow && useTopRoleStyle && topRoleStyle
+                        ? shouldAnimateGradients ? topRoleStyle.gradient.animated : topRoleStyle.gradient.static.original
+                        : undefined) as React.CSSProperties}
                 >
                     <span
                         className={SMYNC(firstNameClasses, {
@@ -798,86 +819,45 @@ function renderUsername(
 
 const hoveringMessageMap = new Map<string, number>();
 const hoveringRepliesMap = new Map<string, number>();
-const hoveringReactionPopoutSet = new Set<string>();
+const hoveringReactionPopoutMap = new Map<string, number>();
 
-function handleHoveringMessage(message: any, isHovering: boolean) {
+function changeHover(map: Map<string, number>, id: string | undefined, delta: number) {
+    if (!id) return;
+    const previous = map.get(id) ?? 0;
+    const count = Math.max(0, previous + delta);
+    if (count) map.set(id, count);
+    else map.delete(id);
+    if (!!previous !== !!count) notifyNames();
+}
+
+function handleHoveringMessage(message: Message & { showMeYourNameGroupId?: string; }, isHovering: boolean) {
     const messageId = message?.id;
     const repliedId = message?.messageReference?.message_id;
-    const groupId = message?.showMeYourNameGroupId ?? "";
-
-    const effectiveIsHovering = settings.store.alwaysShowEffects || isHovering;
+    const groupId = message?.showMeYourNameGroupId;
+    const { alwaysShowEffects } = settings.use(HOVER_KEYS);
+    const effectiveIsHovering = alwaysShowEffects || isHovering;
 
     useEffect(() => {
-        if (!message) return;
-
-        if (effectiveIsHovering) {
-            addHoveringMessage(messageId);
-            addHoveringMessage(groupId);
-            addHoveringReply(repliedId);
-        } else {
-            removeHoveringMessage(messageId);
-            removeHoveringMessage(groupId);
-            removeHoveringReply(repliedId);
-        }
-    }, [messageId, groupId, effectiveIsHovering]);
+        if (!effectiveIsHovering) return;
+        changeHover(hoveringMessageMap, messageId, 1);
+        changeHover(hoveringMessageMap, groupId, 1);
+        changeHover(hoveringRepliesMap, repliedId, 1);
+        return () => {
+            changeHover(hoveringMessageMap, messageId, -1);
+            changeHover(hoveringMessageMap, groupId, -1);
+            changeHover(hoveringRepliesMap, repliedId, -1);
+        };
+    }, [messageId, groupId, repliedId, effectiveIsHovering]);
 }
 
-function addHoveringMessage(id: string) {
-    if (!id) return;
-
-    const currentCount = hoveringMessageMap.get(id) || 0;
-    hoveringMessageMap.set(id, currentCount + 1);
-
-    if (currentCount === 0) {
-        settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
-    }
-}
-
-function removeHoveringMessage(id: string) {
-    if (!id) return;
-
-    const currentCount = hoveringMessageMap.get(id) || 0;
-
-    if (currentCount <= 1) {
-        hoveringMessageMap.delete(id);
-        settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
-    } else {
-        hoveringMessageMap.set(id, currentCount - 1);
-    }
-}
-
-function addHoveringReply(id: string) {
-    if (!id) return;
-
-    const currentCount = hoveringRepliesMap.get(id) || 0;
-    hoveringRepliesMap.set(id, currentCount + 1);
-
-    if (currentCount === 0) {
-        settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
-    }
-}
-
-function removeHoveringReply(id: string) {
-    if (!id) return;
-
-    const currentCount = hoveringRepliesMap.get(id) || 0;
-
-    if (currentCount <= 1) {
-        hoveringRepliesMap.delete(id);
-        settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
-    } else {
-        hoveringRepliesMap.set(id, currentCount - 1);
-    }
-}
-
-function addHoveringReactionPopout(id: string) {
-    hoveringReactionPopoutSet.add(id);
-    settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
-}
-
-function removeHoveringReactionPopout(id: string) {
-    hoveringReactionPopoutSet.delete(id);
-    settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
+function useReactionHover(id: string) {
+    const [hovering, setHovering] = useState(false);
+    useEffect(() => {
+        if (!hovering) return;
+        changeHover(hoveringReactionPopoutMap, id, 1);
+        return () => changeHover(hoveringReactionPopoutMap, id, -1);
+    }, [id, hovering]);
+    return { onMouseEnter: () => setHovering(true), onMouseLeave: () => setHovering(false) };
 }
 
 function CustomNicknameModal({ modalProps, user }: { modalProps: RenderModalProps; user: User; }) {
@@ -902,7 +882,7 @@ function CustomNicknameModal({ modalProps, user }: { modalProps: RenderModalProp
                         }
 
                         await DataStore.set("SMYNCustomNicknames", customNicknames);
-                        settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
+                        notifyNames();
                         modalProps.onClose();
                     }
                 },
@@ -933,7 +913,7 @@ function CustomNicknameModal({ modalProps, user }: { modalProps: RenderModalProp
                     setValue("");
                     delete customNicknames[user.id];
                     await DataStore.set("SMYNCustomNicknames", customNicknames);
-                    settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
+                    notifyNames();
                 }}
             >
                 Reset SMYN Nickname
@@ -1256,7 +1236,7 @@ export default definePlugin({
                 {
                     // Track hovering over reaction popouts.
                     match: /(?<=\(0,\i.\i\)\(\i.\i,{className:\i.\i,)(?=(?:align:\i\.\i\.\i\.CENTER|onContextMenu:\i=>))/g,
-                    replace: "onMouseEnter:()=>{$self.addHoveringReactionPopout(arguments[0].user.id)},onMouseLeave:()=>{$self.removeHoveringReactionPopout(arguments[0].user.id)},"
+                    replace: "...$self.useReactionHover(arguments[0].user.id),"
                 },
                 {
                     // Replace names in reaction popouts.
@@ -1283,11 +1263,19 @@ export default definePlugin({
         convertToRGBCtx = convertToRGBCanvas.getContext("2d", { willReadFrequently: true });
         convertToRGBCache = new Map();
 
+        const load = ++nicknameLoad;
         const data = await DataStore.get<CustomNicknameData>("SMYNCustomNicknames");
+        if (load !== nicknameLoad) return;
         customNicknames = data ?? {};
+        notifyNames();
     },
 
     stop() {
+        nicknameLoad++;
+        hoveringMessageMap.clear();
+        hoveringRepliesMap.clear();
+        hoveringReactionPopoutMap.clear();
+        notifyNames();
         toCSSCache?.clear();
         toCSSCache = null;
         toCSSProbe = null;
@@ -1301,33 +1289,8 @@ export default definePlugin({
         "user-context": userContextPatch
     },
 
-    flux: {
-        RELATIONSHIP_UPDATE(data) {
-            // Allows rerendering when changing friend names.
-            settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
-        },
-
-        RUNNING_STREAMER_TOOLS_CHANGE(data) {
-            // Allows rerendering when toggling streamer mode.
-            settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
-        },
-
-        ACCESSIBILITY_SYSTEM_PREFERS_REDUCED_MOTION_CHANGED(data) {
-            // Allows rerendering when toggling reduced motion.
-            settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
-        },
-
-        ACCESSIBILITY_SET_PREFERS_REDUCED_MOTION(data) {
-            // Allows rerendering when toggling reduced motion.
-            settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
-        }
-    },
-
-    addHoveringMessage,
-    removeHoveringMessage,
     handleHoveringMessage,
-    addHoveringReactionPopout,
-    removeHoveringReactionPopout,
+    useReactionHover,
     getMessageName,
     getMessageNameText,
     getMessageNameElement,

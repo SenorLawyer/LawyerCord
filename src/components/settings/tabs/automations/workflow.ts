@@ -113,7 +113,18 @@ const numericFields = new Set(["timeoutSeconds", "durationSeconds", "limit", "re
 const booleanFields = new Set(["descending", "includeBots", "aiEnabled", "allowMentions", "silent", "requireReply"]);
 const structuredFields = new Set(["input", "secondInput", "cases", "sample", "unsupported", "embed", "components", "modalFields", "commandOptions", "jsonDrafts"]);
 
+const validated = new WeakMap<Automation, { issues: WorkflowIssue[]; calls: AutomationBlock[]; }>();
+
 export function validateWorkflow(automation: Automation, workflows: Automation[] = [automation]): WorkflowIssue[] {
+    let result = Object.isFrozen(automation) ? validated.get(automation) : undefined;
+    if (!result) {
+        result = { issues: validateDefinition(automation), calls: automation.blocks.filter(block => block.type === "call-workflow") };
+        if (Object.isFrozen(automation)) validated.set(automation, result);
+    }
+    return [...result.issues, ...result.calls.filter(block => !workflows.some(item => item.id === block.config.workflowId)).map(block => ({ blockId: block.id, message: "Choose an existing workflow.", severity: "error" as const }))];
+}
+
+function validateDefinition(automation: Automation): WorkflowIssue[] {
     const issues: WorkflowIssue[] = [];
     const add = (message: string, blockId?: string, severity: WorkflowIssue["severity"] = "error") => issues.push({ message, blockId, severity });
     if (automation.trigger.type === "schedule") {
@@ -161,12 +172,11 @@ export function validateWorkflow(automation: Automation, workflows: Automation[]
         }
         if (config.retryCount && !SAFE_RETRY_TYPES.has(block.type)) add("Retries are only available for read operations.", block.id);
         if (config.retryCount !== undefined && (!Number.isInteger(config.retryCount) || config.retryCount < 0 || config.retryCount > 5)) add("Choose between zero and five retries.", block.id);
-        if (block.type === "call-workflow") {
-            if (!workflows.some(item => item.id === config.workflowId)) add("Choose an existing workflow.", block.id);
-            if (config.workflowId === automation.id) add("A workflow cannot call itself.", block.id);
-        }
+        if (block.type === "call-workflow" && config.workflowId === automation.id) add("A workflow cannot call itself.", block.id);
         if (config.matchMode === "regex" || config.operator === "regex") {
-            try { new RegExp(config.matchText ?? config.compareValue ?? ""); } catch { add("Enter a valid regular expression.", block.id); }
+            const pattern = config.matchText ?? config.compareValue ?? "";
+            if (pattern.length > 4096) add("Use a regular expression with at most 4096 characters.", block.id);
+            else try { new RegExp(pattern); } catch { add("Enter a valid regular expression.", block.id); }
         }
     }
     return issues;

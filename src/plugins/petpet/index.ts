@@ -20,14 +20,17 @@ import { ApplicationCommandInputType, ApplicationCommandOptionType, findOption, 
 import { migratePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
 import { makeLazy } from "@utils/lazy";
+import { sleep } from "@utils/misc";
 import definePlugin from "@utils/types";
 import { CommandArgument, CommandContext } from "@vencord/discord-types";
-import { DraftType, UploadAttachmentStore, UploadHandler, UploadManager, UserUtils } from "@webpack/common";
+import { DraftType, UploadAttachmentStore, UploadHandler, UploadManager, UserStore, UserUtils } from "@webpack/common";
 import { GIFEncoder, nearestColorIndex, quantize } from "gifenc";
 
 const DEFAULT_DELAY = 20;
 const DEFAULT_RESOLUTION = 128;
 const FRAMES = 10;
+let generation = 0;
+let stopped = false;
 
 const getFrames = makeLazy(() => Promise.all(
     Array.from(
@@ -119,6 +122,8 @@ export default definePlugin({
     dependencies: ["CommandsAPI"],
     tags: ["Fun", "Commands"],
     authors: [Devs.Ven, Devs.u32],
+    start() { stopped = false; },
+    stop() { stopped = true; generation++; },
     commands: [
         {
             inputType: ApplicationCommandInputType.BUILT_IN,
@@ -132,7 +137,7 @@ export default definePlugin({
                 },
                 {
                     name: "resolution",
-                    description: "Resolution for the gif. Defaults to 120. If you enter an insane number and it freezes Discord that's your fault.",
+                    description: "Output size in pixels, from 16 to 512. Defaults to 128.",
                     type: ApplicationCommandOptionType.INTEGER
                 },
                 {
@@ -157,11 +162,23 @@ export default definePlugin({
                 }
             ],
             execute: async (opts, cmdCtx) => {
+                const owner = generation;
+                const userId = UserStore.getCurrentUser()?.id;
+                const current = () => !stopped && generation === owner && UserStore.getCurrentUser()?.id === userId;
+                if (!current()) return;
+                const resolution = findOption(opts, "resolution", DEFAULT_RESOLUTION);
+                if (!Number.isSafeInteger(resolution) || resolution < 16 || resolution > 512)
+                    return sendBotMessage(cmdCtx.channel.id, { content: "Resolution must be a whole number from 16 to 512." });
+                const delay = findOption(opts, "delay", DEFAULT_DELAY);
+                if (!Number.isSafeInteger(delay) || delay < 20 || delay > 655350)
+                    return sendBotMessage(cmdCtx.channel.id, { content: "Delay must be a whole number from 20 to 655350 milliseconds." });
                 const frames = await getFrames();
+                if (!current()) return;
 
                 const noServerPfp = findOption(opts, "no-server-pfp", false);
                 try {
                     var url = await resolveImage(opts, cmdCtx, noServerPfp);
+                    if (!current()) return;
                     if (!url) throw "No Image specified!";
                 } catch (err) {
                     UploadManager.clearAll(cmdCtx.channel.id, DraftType.SlashCommand);
@@ -172,12 +189,9 @@ export default definePlugin({
                 }
 
                 const avatar = await loadImage(url);
-
-                const delay = findOption(opts, "delay", DEFAULT_DELAY);
-                // Frame delays < 20ms don't function correctly on chromium and firefox
-                if (delay < 20) return sendBotMessage(cmdCtx.channel.id, { content: "Delay must be at least 20." });
-
-                const resolution = findOption(opts, "resolution", DEFAULT_RESOLUTION);
+                if (!current()) return;
+                if (avatar.naturalWidth * avatar.naturalHeight > 4 * 1024 * 1024)
+                    return sendBotMessage(cmdCtx.channel.id, { content: "Choose an image with at most 4 million pixels." });
 
                 const gif = GIFEncoder();
 
@@ -188,7 +202,8 @@ export default definePlugin({
                 // Ensure there is sufficient space for the palette generation image
                 canvas.height = Math.max(resolution, 2 * paletteImageSize);
 
-                const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+                const ctx = canvas.getContext("2d", { willReadFrequently: true });
+                if (!ctx) return;
 
                 UploadManager.clearAll(cmdCtx.channel.id, DraftType.SlashCommand);
 
@@ -201,6 +216,7 @@ export default definePlugin({
                 const cache = new Array(2 ** 16);
 
                 for (let i = 0; i < FRAMES; i++) {
+                    if (!current()) return;
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                     const j = i < FRAMES / 2 ? i : FRAMES - i;
@@ -221,15 +237,15 @@ export default definePlugin({
                         delay,
                         palette: i === 0 ? palette : undefined,
                     });
+                    await sleep(0);
                 }
 
                 gif.finish();
-                // @ts-ignore This causes a type error on *only some* typescript versions.
                 // usage adheres to mdn https://developer.mozilla.org/en-US/docs/Web/API/File/File#parameters
-                const file = new File([gif.bytesView()], "petpet.gif", { type: "image/gif" });
+                const file = new File([new Uint8Array(gif.bytesView())], "petpet.gif", { type: "image/gif" });
                 // Immediately after the command finishes, Discord clears all input, including pending attachments.
                 // Thus, setTimeout is needed to make this execute after Discord cleared the input
-                setTimeout(() => UploadHandler.promptToUpload([file], cmdCtx.channel, DraftType.ChannelMessage), 10);
+                setTimeout(() => { if (current()) UploadHandler.promptToUpload([file], cmdCtx.channel, DraftType.ChannelMessage); }, 10);
             },
         },
     ]

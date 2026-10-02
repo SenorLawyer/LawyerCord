@@ -39,9 +39,7 @@ const cl = classNameFactory("vc-imgzoom-");
 export const Magnifier = ErrorBoundary.wrap<MagnifierProps>(({ instance, size: initialSize, zoom: initalZoom }) => {
     const [ready, setReady] = useState(false);
 
-    const [lensPosition, setLensPosition] = useState<Vec2>({ x: 0, y: 0 });
-    const [imagePosition, setImagePosition] = useState<Vec2>({ x: 0, y: 0 });
-    const [opacity, setOpacity] = useState(0);
+    const [position, setPosition] = useState<{ lens: Vec2; image: Vec2; box: DOMRect; } | null>(null);
 
     const isShiftDown = useRef(false);
 
@@ -63,6 +61,9 @@ export const Magnifier = ErrorBoundary.wrap<MagnifierProps>(({ instance, size: i
 
     // since we accessing document im gonna use useLayoutEffect
     useLayoutEffect(() => {
+        setPosition(null);
+        setReady(false);
+        isShiftDown.current = false;
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.key === "Shift") {
                 isShiftDown.current = true;
@@ -73,21 +74,29 @@ export const Magnifier = ErrorBoundary.wrap<MagnifierProps>(({ instance, size: i
                 isShiftDown.current = false;
             }
         };
-        const updateMousePosition = (e: MouseEvent) => {
+        let frame: number | undefined;
+        let pointer: MouseEvent;
+        const updatePosition = () => {
+            frame = undefined;
             if (!element.current) return;
-
-            if (instance.state.mouseOver && instance.state.mouseDown) {
-                const offset = size.current / 2;
-                const pos = { x: e.pageX, y: e.pageY };
-                const x = -((pos.x - element.current.getBoundingClientRect().left) * zoom.current - offset);
-                const y = -((pos.y - element.current.getBoundingClientRect().top) * zoom.current - offset);
-                setLensPosition({ x: e.x - offset, y: e.y - offset });
-                setImagePosition({ x, y });
-                setOpacity(1);
-            } else {
-                setOpacity(0);
+            if (!instance.state.mouseOver || !instance.state.mouseDown) {
+                setPosition(null);
+                return;
             }
-
+            const offset = size.current / 2;
+            const box = element.current.getBoundingClientRect();
+            setPosition({
+                lens: { x: pointer.x - offset, y: pointer.y - offset },
+                image: {
+                    x: -((pointer.pageX - box.left) * zoom.current - offset),
+                    y: -((pointer.pageY - box.top) * zoom.current - offset)
+                },
+                box
+            });
+        };
+        const updateMousePosition = (e: MouseEvent) => {
+            pointer = e;
+            if (frame === undefined) frame = requestAnimationFrame(updatePosition);
         };
 
         const onMouseDown = (e: MouseEvent) => {
@@ -101,15 +110,16 @@ export const Magnifier = ErrorBoundary.wrap<MagnifierProps>(({ instance, size: i
                 }
 
                 updateMousePosition(e);
-                setOpacity(1);
             }
         };
 
         const onMouseUp = () => {
-            setOpacity(0);
+            if (frame !== undefined) cancelAnimationFrame(frame);
+            frame = undefined;
+            setPosition(null);
         };
 
-        const onWheel = async (e: WheelEvent) => {
+        const onWheel = (e: WheelEvent) => {
             if (instance.state.mouseOver && instance.state.mouseDown && !isShiftDown.current) {
                 const val = zoom.current + ((e.deltaY / 100) * (settings.store.invertScroll ? -1 : 1)) * settings.store.zoomSpeed;
                 zoom.current = val <= 1 ? 1 : val;
@@ -146,6 +156,7 @@ export const Magnifier = ErrorBoundary.wrap<MagnifierProps>(({ instance, size: i
         document.addEventListener("wheel", onWheel);
 
         return () => {
+            if (frame !== undefined) cancelAnimationFrame(frame);
             document.removeEventListener("keydown", onKeyDown);
             document.removeEventListener("keyup", onKeyUp);
             document.removeEventListener("mousemove", updateMousePosition);
@@ -157,7 +168,7 @@ export const Magnifier = ErrorBoundary.wrap<MagnifierProps>(({ instance, size: i
             originalVideoElementRef.current = null;
             element.current = null;
         };
-    }, []);
+    }, [instance]);
 
     const imageSrc = useMemo(() => {
         try {
@@ -172,17 +183,15 @@ export const Magnifier = ErrorBoundary.wrap<MagnifierProps>(({ instance, size: i
         }
     }, [instance.props.src]);
 
-    if (!ready || opacity === 0) return null;
+    if (!ready || !position) return null;
 
-    const box = element.current?.getBoundingClientRect();
-
-    if (!box) return null;
+    const { lens: lensPosition, image: imagePosition, box } = position;
 
     return (
         <div
             className={cl("lens", { "nearest-neighbor": settings.store.nearestNeighbour, square: settings.store.square })}
             style={{
-                opacity,
+                opacity: 1,
                 width: size.current + "px",
                 height: size.current + "px",
                 transform: `translate(${lensPosition.x}px, ${lensPosition.y}px)`,

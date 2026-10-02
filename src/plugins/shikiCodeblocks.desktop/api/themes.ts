@@ -16,8 +16,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { IShikiTheme } from "@vap/shiki";
-
 export const SHIKI_REPO = "shikijs/textmate-grammars-themes";
 export const SHIKI_REPO_COMMIT = "bc5436518111d87ea58eb56d97b3f9bec30e6b83";
 export const shikiRepoTheme = (name: string) => `https://cdn.jsdelivr.net/gh/${SHIKI_REPO}@${SHIKI_REPO_COMMIT}/packages/tm-themes/themes/${name}.json`;
@@ -89,29 +87,4 @@ export const themes = {
     VitesseBlack: shikiRepoTheme("vitesse-black"),
     VitesseDark: shikiRepoTheme("vitesse-dark"),
     VitesseLight: shikiRepoTheme("vitesse-light"),
-};
-
-export const themeCache = new Map<string, IShikiTheme>();
-const themePromises = new Map<string, Promise<IShikiTheme>>();
-
-export const getTheme = (url: string): Promise<IShikiTheme> => {
-    if (themeCache.has(url)) return Promise.resolve(themeCache.get(url)!);
-
-    const cachedPromise = themePromises.get(url);
-    if (cachedPromise) return cachedPromise;
-
-    const themePromise = fetch(url)
-        .then(res => res.json())
-        .then(theme => {
-            themeCache.set(url, theme);
-            themePromises.delete(url);
-            return theme;
-        })
-        .catch(error => {
-            themePromises.delete(url);
-            throw error;
-        });
-
-    themePromises.set(url, themePromise);
-    return themePromise;
 };

@@ -18,7 +18,7 @@
 
 import { addProfileBadge, removeProfileBadge } from "@api/Badges";
 import { addChatBarButton, addChatBarButtonWrapper, removeChatBarButton, removeChatBarButtonWrapper } from "@api/ChatButtons";
-import { registerCommand, unregisterCommand } from "@api/Commands";
+import { commands as registeredCommands, registerCommand, unregisterCommand } from "@api/Commands";
 import { addContextMenuPatch, removeContextMenuPatch } from "@api/ContextMenu";
 import { addMemberListDecorator, removeMemberListDecorator } from "@api/MemberListDecorators";
 import { addMessageAccessory, removeMessageAccessory } from "@api/MessageAccessories";
@@ -250,7 +250,7 @@ export const startPlugin = traceFunction("startPlugin", function startPlugin(p: 
     if (p.start) {
         logger.info("Starting plugin", name);
         try {
-            p.start();
+            Promise.resolve(p.start()).catch(e => logger.error(`Failed to start ${name}\n`, e));
         } catch (e) {
             logger.error(`Failed to start ${name}\n`, e);
             return false;
@@ -266,6 +266,7 @@ export const startPlugin = traceFunction("startPlugin", function startPlugin(p: 
                 registerCommand(cmd, name);
             } catch (e) {
                 logger.error(`Failed to register command ${cmd.name}\n`, e);
+                stopPlugin(p);
                 return false;
             }
         }
@@ -334,7 +335,7 @@ export const stopPlugin = traceFunction("stopPlugin", function stopPlugin(p: Plu
     if (p.stop) {
         logger.info("Stopping plugin", name);
         try {
-            p.stop();
+            Promise.resolve(p.stop()).catch(e => logger.error(`Failed to stop ${name}\n`, e));
         } catch (e) {
             logger.error(`Failed to stop ${name}\n`, e);
             success = false;
@@ -345,7 +346,8 @@ export const stopPlugin = traceFunction("stopPlugin", function stopPlugin(p: Plu
 
     if (commands?.length) {
         logger.debug("Unregistering commands of plugin", name);
-        for (const cmd of commands) {
+        for (const cmd of Object.values(registeredCommands)) {
+            if (!commands.some(command => command === cmd || "rootCommand" in cmd && command === cmd.rootCommand)) continue;
             try {
                 unregisterCommand(cmd.name);
             } catch (e) {

@@ -19,6 +19,8 @@ function fixture() {
     const store = { transformEmojis: true, transformStickers: true, transformCompoundSentence: true };
     const modules: Record<string, unknown> = {
         "@api/MessageEvents": {}, "@api/Settings": { definePluginSettings: () => ({ store }) }, "@components/Paragraph": {},
+        "@equicordplugins/fileUpload/request": { readResponseBody: () => assert.fail("Rendering must not download stickers") },
+        "@equicordplugins/fileUpload/utils/apngToGif": { convertApngToGif: () => assert.fail("Rendering must not convert stickers") },
         "@utils/apng": {}, "@utils/constants": { Devs: {} }, "@utils/Logger": { Logger: class { error() {} } },
         "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },

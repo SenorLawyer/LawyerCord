@@ -9,7 +9,7 @@ import "./styles.css";
 import { definePluginSettings } from "@api/Settings";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { createRoot, React, showToast, Toasts } from "@webpack/common";
+import { createRoot, React, showToast, Toasts, UserStore } from "@webpack/common";
 
 interface AudioKeeperProps {
     kind: "audio" | "voice";
@@ -90,6 +90,8 @@ const waveformBarsCache = new Map<string, readonly number[]>();
 let widgetContainer: HTMLDivElement | null = null;
 let widgetRoot: ReturnType<typeof createRoot> | null = null;
 let NativeVoiceMessage: React.ComponentType<VoiceMessageProps> | null = null;
+let stopped = false;
+let generation = 0;
 
 const settings = definePluginSettings({
     keepVoiceMessages: {
@@ -193,6 +195,7 @@ function getTitle(kind: AudioKeeperProps["kind"], src: string) {
 }
 
 function continueDetached(kind: AudioKeeperProps["kind"], snapshot: AudioSnapshot, renderNativePlayer?: () => React.ReactNode, waveform?: string) {
+    if (stopped) return;
     if (!snapshot.src || Number.isFinite(snapshot.duration) && snapshot.currentTime >= snapshot.duration - 0.25) return;
 
     if (settings.store.showWidget && renderNativePlayer) {
@@ -235,7 +238,9 @@ function continueCustomDetached(kind: AudioKeeperProps["kind"], snapshot: AudioS
     audio.playbackRate = snapshot.playbackRate;
 
     const updateWidget = () => notifyWidget();
-    const cleanup = () => stopDetached(snapshot.src);
+    const cleanup = () => {
+        if (detachedPlayers.get(snapshot.src)?.audio === audio) stopDetached(snapshot.src);
+    };
     const removeListeners = () => {
         audio.removeEventListener("play", updateWidget);
         audio.removeEventListener("pause", updateWidget);
@@ -272,6 +277,7 @@ function continueCustomDetached(kind: AudioKeeperProps["kind"], snapshot: AudioS
     notifyWidget();
 
     audio.play().then(() => {
+        if (detachedPlayers.get(snapshot.src)?.audio !== audio) return;
         if (settings.store.showToast) {
             showToast("Continuing audio playback in the background.", Toasts.Type.MESSAGE);
         }
@@ -359,7 +365,9 @@ function setVolume(player: CustomDetachedPlayer, value: string) {
 
 function togglePlayback(player: CustomDetachedPlayer) {
     if (player.audio.paused) {
-        void player.audio.play().catch(() => stopDetached(player.src));
+        void player.audio.play().catch(() => {
+            if (detachedPlayers.get(player.src) === player) stopDetached(player.src);
+        });
         return;
     }
 
@@ -462,7 +470,13 @@ function DetachedAudioWidget() {
         return () => window.removeEventListener("resize", clampCurrentWidgetPosition);
     }, [clampCurrentWidgetPosition]);
 
-    React.useEffect(clampCurrentWidgetPosition);
+    React.useEffect(() => {
+        const widget = widgetRef.current;
+        if (!widget) return;
+        const observer = new ResizeObserver(clampCurrentWidgetPosition);
+        observer.observe(widget);
+        return () => observer.disconnect();
+    }, [clampCurrentWidgetPosition, detachedPlayers.size]);
 
     const onDragStart = (event: React.PointerEvent<HTMLElement>) => {
         if (event.button !== 0 || (event.target as HTMLElement).closest("button, input")) return;
@@ -524,10 +538,13 @@ function NativeDetachedPlayerControls({ player }: { player: NativeDetachedPlayer
         let attachAttempts = 0;
 
         const updateWidget = () => {
+            if (detachedPlayers.get(player.src) !== player) return;
             if (audio) player.snapshot = capture(audio);
             notifyWidget();
         };
-        const cleanup = () => stopDetached(player.src);
+        const cleanup = () => {
+            if (detachedPlayers.get(player.src) === player) stopDetached(player.src);
+        };
         const removeListeners = () => {
             if (!audio) return;
 
@@ -546,7 +563,7 @@ function NativeDetachedPlayerControls({ player }: { player: NativeDetachedPlayer
 
             if (!audio) {
                 if (++attachAttempts > maxAudioAttachFrames) {
-                    stopDetached(player.src);
+                    cleanup();
                     return;
                 }
 
@@ -764,7 +781,9 @@ function AudioKeeper({ kind, mediaRef, renderNativePlayer, src, waveform }: Audi
     renderNativePlayerRef.current = renderNativePlayer;
 
     React.useEffect(() => {
-        if (!src || !shouldTrack(kind)) return;
+        if (stopped || !src || !shouldTrack(kind)) return;
+        const owner = generation;
+        const userId = UserStore.getCurrentUser()?.id;
 
         let audio: HTMLAudioElement | null = null;
         let frame = 0;
@@ -832,7 +851,7 @@ function AudioKeeper({ kind, mediaRef, renderNativePlayer, src, waveform }: Audi
             audio?.removeEventListener("volumechange", updateSnapshot);
 
             const recentlyPaused = Date.now() - lastPauseAt < 250;
-            if (snapshot && started && !ended && (!audio?.paused || recentlyPaused)) {
+            if (owner === generation && userId === UserStore.getCurrentUser()?.id && snapshot && started && !ended && (!audio?.paused || recentlyPaused)) {
                 continueDetached(kind, snapshot, renderNativePlayerRef.current, waveform);
             }
         };
@@ -872,7 +891,18 @@ export default definePlugin({
         },
     ],
 
+    start() {
+        stopped = false;
+    },
+
+    flux: {
+        CONNECTION_OPEN() { generation++; stopAllDetached(); },
+        LOGOUT() { generation++; stopAllDetached(); }
+    },
+
     stop() {
+        stopped = true;
+        generation++;
         stopAllDetached();
         unmountWidgetRoot();
         widgetSubscribers.clear();

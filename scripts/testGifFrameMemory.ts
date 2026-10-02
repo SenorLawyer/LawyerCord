@@ -10,11 +10,13 @@ import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { applyPalette, GIFEncoder, quantize } from "gifenc";
 import { decompressFrames, parseGIF } from "gifuct-js";
+import * as limits from "../src/equicordplugins/gifMaker/utils/limits";
+
 import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 interface Pixels { width: number; height: number; data: Uint8ClampedArray; }
 
-async function fixture() {
+async function fixture(disposals = [1, 3, 2, 1]) {
     const path = process.env.AUDIT_GIF_ENCODER_SOURCE ?? "src/equicordplugins/gifMaker/utils/encoder.ts";
     const { outputText } = transpileModule(readFileSync(path, "utf8"), {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
@@ -24,7 +26,7 @@ async function fixture() {
     const indexedBuffers: ArrayBufferLike[] = [];
     const encodedPixels: number[][] = [];
     const frames = Array.from({ length: 20 }, (_, i) => ({
-        dims: { left: i % 2, top: 0, width: 1, height: 1 }, disposalType: [1, 3, 2, 1][i % 4], delay: (i + 1) * 10,
+        dims: { left: i % 2, top: 0, width: 1, height: 1 }, disposalType: disposals[i % disposals.length], delay: (i + 1) * 10,
         patch: new Uint8ClampedArray([i * 10, 255 - i * 10, 50, 255])
     }));
     class Canvas {
@@ -53,16 +55,26 @@ async function fixture() {
         constructor(public data: Uint8ClampedArray, public width: number, public height: number) {}
     }
     const modules: Record<string, unknown> = {
+        "./limits": limits,
         "@utils/misc": { sleep: async () => {} }, "../captions": { CAPTIONS: [] }, "../captions/caption": {},
-        "gifuct-js": { parseGIF: () => ({ lsd: { width: 2, height: 1 } }), decompressFrames: () => frames },
+        "gifuct-js": { parseGIF: () => ({ lsd: { width: 2, height: 1 }, frames: frames.map((frame, index) => ({ index, image: { descriptor: frame.dims }, gce: { delay: frame.delay / 10, extras: { disposal: frame.disposalType } } })) }),
+            decompressFrame: (frame: { index: number; }) => frames[frame.index] },
         "gifenc": { GIFEncoder, quantize: (pixels: Uint8Array | Uint8ClampedArray, colors: number) => { palettePixels = pixels; return quantize(pixels, colors); },
             applyPalette: (pixels: Uint8Array | Uint8ClampedArray, palette: number[][]) => { indexedBuffers.push(pixels.buffer); encodedPixels.push(Array.from(pixels)); return applyPalette(pixels, palette); } }
     };
+    const workerSource = transpileModule(readFileSync("src/equicordplugins/gifMaker/utils/encode.worker.ts", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    }).outputText;
+    modules["./encode"] = { encodeGif: (pixels: Uint8ClampedArray, width: number, height: number, delays: number[]) => new Promise<Blob>(resolve => {
+        const worker = { onmessage: (_event: object) => {}, postMessage: (bytes: Uint8Array<ArrayBuffer>) => resolve(new Blob([bytes], { type: "image/gif" })) };
+        runInNewContext(workerSource, { self: worker, exports: {}, Uint8Array, require: (name: string) => modules[name] });
+        worker.onmessage({ data: { pixels, width, height, delays } });
+    }) };
     const exports = {};
     runInNewContext(outputText, {
         exports, require: (name: string) => { assert.ok(name in modules, name); return modules[name]; },
         Blob, URL, Uint8Array, Uint8ClampedArray, ArrayBuffer, ImageData,
-        VencordNative: { pluginHelpers: { gifMaker: { fetchMedia: async () => ({ data: new ArrayBuffer(8) }) } } },
+        VencordNative: { pluginHelpers: { GifMaker: { fetchMedia: async () => ({ data: new ArrayBuffer(8) }) } } },
         document: { createElement: (name: string) => { assert.equal(name, "canvas"); canvases++; return new Canvas(); } }
     });
     const encoder = exports as { createGif: (url: string, video: boolean, options: object) => Promise<Blob>; };
@@ -70,12 +82,14 @@ async function fixture() {
     const decoded = decompressFrames(parseGIF(await blob.arrayBuffer()), true);
     const expected: number[][] = [];
     let pixels = new Uint8ClampedArray(8);
+    let saved = new Uint8ClampedArray(8);
     for (let i = 0; i < frames.length; i++) {
         if (i > 0) {
             const previous = frames[i - 1];
             if (previous.disposalType === 2) pixels.fill(0, previous.dims.left * 4, (previous.dims.left + 1) * 4);
-            else if (previous.disposalType === 3 && i > 1) pixels = new Uint8ClampedArray(expected[i - 2]);
+            else if (previous.disposalType === 3) pixels = new Uint8ClampedArray(saved);
         }
+        if (frames[i].disposalType === 3) saved = new Uint8ClampedArray(pixels);
         pixels.set(frames[i].patch, frames[i].dims.left * 4);
         expected.push(Array.from(pixels));
     }
@@ -95,4 +109,9 @@ test("GifMaker indexes views into its global palette buffer without retaining a 
 test("GifMaker retains a fixed number of source canvases while preserving frame disposal, colors and delays", async () => {
     const f = await fixture();
     assert.ok(f.canvases <= 5, `Created ${f.canvases} canvases for 20 frames.`);
+});
+
+test("GifMaker restores the pre-frame canvas for first and consecutive restore-previous frames", async () => {
+    await fixture([3, 3, 3, 1]);
+    await fixture([2, 3, 3, 1]);
 });

@@ -6,6 +6,7 @@
 
 import { CLIENT_EVENTS, isClientEventType } from "./clientEvents";
 import { type Automation, type AutomationTriggerType, isRecord } from "./model";
+import { evaluateRegex } from "./regex";
 
 export const TRIGGER_EVENTS: Partial<Record<AutomationTriggerType, string>> = {
     message: "MESSAGE_CREATE", mention: "MESSAGE_CREATE", dm: "MESSAGE_CREATE",
@@ -33,7 +34,7 @@ interface CompiledTrigger {
     automation: Automation;
     query: string;
     lowerQuery: string;
-    regex?: RegExp;
+
 }
 
 export function compileTriggers(automations: Automation[]) {
@@ -47,11 +48,7 @@ export function compileTriggers(automations: Automation[]) {
         const author = automation.trigger.authorId?.trim() || "";
         const list = authors.get(author) ?? [];
         const query = automation.trigger.matchText ?? "";
-        let regex: RegExp | undefined;
-        if (query && automation.trigger.matchMode === "regex") {
-            try { regex = new RegExp(query, "i"); } catch { continue; }
-        }
-        list.push({ automation, query, lowerQuery: query.toLowerCase(), regex });
+        list.push({ automation, query, lowerQuery: query.toLowerCase() });
         authors.set(author, list);
         channels.set(channel, authors);
         events.set(event, channels);
@@ -59,7 +56,7 @@ export function compileTriggers(automations: Automation[]) {
     return events;
 }
 
-export function matchTriggers(index: ReturnType<typeof compileTriggers>, event: TriggerEvent): Automation[] {
+export async function matchTriggers(index: ReturnType<typeof compileTriggers>, event: TriggerEvent, signal?: AbortSignal, failed?: (automation: Automation, error: unknown) => void): Promise<Automation[]> {
     if (event.fromEngine) return [];
     const channels = index.get(event.type);
     if (!channels) return [];
@@ -69,13 +66,19 @@ export function matchTriggers(index: ReturnType<typeof compileTriggers>, event: 
         const authors = channels.get(channelId);
         if (!authors) continue;
         for (const authorId of event.authorId ? ["", event.authorId] : [""]) {
-            for (const { automation, query, lowerQuery, regex } of authors.get(authorId) ?? []) {
+            for (const { automation, query, lowerQuery } of authors.get(authorId) ?? []) {
                 const t = automation.trigger;
                 if (event.self && !t.includeSelf || event.bot && t.includeBots === false) continue;
                 if (t.guildId === "@me" ? Boolean(event.guildId) : Boolean(t.guildId && t.guildId !== event.guildId)) continue;
                 if (t.status && t.status !== event.status || t.emoji && t.emoji !== event.emoji) continue;
                 if (t.type === "dm" && event.guildId || t.type === "mention" && !event.mention || t.type.startsWith("voice-") && t.type !== event.voice) continue;
-                if (query && !(regex ? regex.test(event.content) : t.matchMode === "exact" ? event.content === query : (lowerContent ??= event.content.toLowerCase()).includes(lowerQuery))) continue;
+                try {
+                    if (query && !(t.matchMode === "regex" ? (await evaluateRegex(query, [event.content], false, signal)).matches[0] : t.matchMode === "exact" ? event.content === query : (lowerContent ??= event.content.toLowerCase()).includes(lowerQuery))) continue;
+                } catch (error) {
+                    if (signal?.aborted || !failed) throw error;
+                    failed(automation, error);
+                    continue;
+                }
                 matches.push(automation);
             }
         }

@@ -18,27 +18,18 @@
 
 import { settings } from "../index";
 
-export class LimitedMap<K, V> {
-    public map: Map<K, V> = new Map();
-    constructor() { }
-
+export class LimitedMap<K, V> extends Map<K, V> {
     set(key: K, value: V) {
-        if (settings.store.cacheLimit > 0 && this.map.size >= settings.store.cacheLimit) {
-            // delete the first entry
-            this.map.delete(this.map.keys().next().value!);
+        const { cacheLimit } = settings.store;
+        super.delete(key);
+        super.set(key, value);
+        if (cacheLimit > 0) {
+            while (this.size > cacheLimit) {
+                const oldest = this.keys().next();
+                if (oldest.done) break;
+                super.delete(oldest.value);
+            }
         }
-        this.map.set(key, value);
-    }
-
-    get(key: K) {
-        return this.map.get(key);
-    }
-
-    delete(key: K) {
-        return this.map.delete(key);
-    }
-
-    clear() {
-        this.map.clear();
+        return this;
     }
 }

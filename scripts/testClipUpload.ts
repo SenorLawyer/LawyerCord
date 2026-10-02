@@ -205,13 +205,25 @@ test("clip metadata rejects malformed fields and oversized JSON before returning
     const footer = Buffer.from([0x75, 0x75, 0x69, 0x64, 0xA1, 0xC8, 0x52, 0x99, 0x33, 0x46, 0x4D, 0xB8, 0x88, 0xF0, 0x83, 0xF5, 0x7A, 0x75, 0xA5, 0xEF]);
     let payload = Buffer.alloc(0);
     let nextId = 0;
+    let bytesRead = 0;
+    let opened = 0;
+    let closed = 0;
     const native = loadSource("src/equicordplugins/clipUpload.desktop/native.ts", {
         "@main/ipcMain": { ensureSafePath: (root: string, name: string) => path.join(root, name) },
         "@main/utils/constants": { DATA_DIR: "fixture" }, "@utils/Logger": { Logger: class { warn() {} } },
         crypto: { randomUUID: () => String(++nextId) },
         electron: { dialog: { showOpenDialog: async () => ({ filePaths: ["clip.mp4"], canceled: false }) } },
-        fs: { createReadStream: () => Readable.from([payload]) },
-        "fs/promises": {}, path, "stream/consumers": { buffer }
+        fs: { createReadStream: () => { bytesRead += payload.length; return Readable.from([payload]); } },
+        "fs/promises": { open: async () => {
+            opened++;
+            return { stat: async () => ({ size: payload.length }), close: async () => { closed++; },
+                read: async (target: Buffer, offset: number, length: number, position: number) => {
+                    const count = Math.min(length, 4096, payload.length - position);
+                    payload.copy(target, offset, position, position + count);
+                    bytesRead += count;
+                    return { bytesRead: count };
+                } };
+        } }, path, "stream/consumers": { buffer }
     });
     const valid = { id: "123", applicationId: "456", applicationName: "Game", users: ["789"], version: 1 };
     for (const value of [valid, [valid], { applicationName: {} }, { users: [123] }, { version: "1" }, { applicationId: [] }, { applicationName: "x".repeat(1024 * 1024) }]) {
@@ -223,6 +235,12 @@ test("clip metadata rejects malformed fields and oversized JSON before returning
         native.releaseVideoFile({}, selected.token);
         assert.equal(await native.parseClipFileMetadata({}, selected.token), null);
     }
+    payload = Buffer.concat([Buffer.alloc(16 * 1024 * 1024), footer, Buffer.from(JSON.stringify(valid))]);
+    bytesRead = 0;
+    const selected = await native.chooseVideoFile({});
+    assert.deepEqual(structuredClone(await native.parseClipFileMetadata({}, selected.token)), [valid]);
+    assert.ok(bytesRead <= 1024 * 1024 + footer.length, `Read ${bytesRead} bytes for metadata`);
+    assert.equal(closed, opened);
 });
 
 test("temporary clip creation cleans up failed writes and failed deletion remains retryable", async () => {
@@ -253,13 +271,20 @@ test("temporary clip creation cleans up failed writes and failed deletion remain
     assert.equal(await native.createTempVideoFileFromBytes({}, "clip.mp4", new Uint8Array([1])), null);
     assert.equal(removed.length, 1);
     failWrite = false;
-    const token = await native.createTempVideoFileFromBytes({}, "clip.mp4", new Uint8Array([1]));
+    const owner = { senderFrame: {} };
+    const foreign = { senderFrame: {} };
+    const token = await native.createTempVideoFileFromBytes(owner, "clip.mp4", new Uint8Array([1]));
+    assert.equal(native.getTempVideoFilePath(foreign, token), null);
+    assert.equal(await native.readVideoFile(foreign, token), null);
+    await native.deleteTempVideoFile(foreign, token);
+    assert.ok(native.getTempVideoFilePath(owner, token));
+    assert.equal(removed.length, 1);
     failDelete = true;
-    await native.deleteTempVideoFile({}, token);
+    await native.deleteTempVideoFile(owner, token);
     assert.equal(warnings, 1);
-    assert.ok(native.getTempVideoFilePath({}, token));
+    assert.ok(native.getTempVideoFilePath(owner, token));
     failDelete = false;
-    await native.deleteTempVideoFile({}, token);
-    assert.equal(native.getTempVideoFilePath({}, token), null);
+    await native.deleteTempVideoFile(owner, token);
+    assert.equal(native.getTempVideoFilePath(owner, token), null);
     assert.equal(removed.length, 2);
 });

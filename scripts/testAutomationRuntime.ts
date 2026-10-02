@@ -153,10 +153,10 @@ async function main() {
     const trigger = { ...createAutomation(), enabled: true, trigger: { type: "message" as const, channelId: "chosen" } };
     const index = compileTriggers([trigger]);
     const event: TriggerEvent = { type: "MESSAGE_CREATE", channelId: "chosen", guildId: "", authorId: "user", content: "hello", self: false, bot: false, mention: false, fromEngine: false };
-    assert.equal(matchTriggers(index, event).length, 1);
-    assert.equal(matchTriggers(index, { ...event, channelId: "other" }).length, 0);
-    assert.equal(matchTriggers(index, { ...event, fromEngine: true }).length, 0);
-    assert.equal(matchTriggers(index, { ...event, self: true }).length, 0);
+    assert.equal((await matchTriggers(index, event)).length, 1);
+    assert.equal((await matchTriggers(index, { ...event, channelId: "other" })).length, 0);
+    assert.equal((await matchTriggers(index, { ...event, fromEngine: true })).length, 0);
+    assert.equal((await matchTriggers(index, { ...event, self: true })).length, 0);
     assert.equal(compileTriggers([{ ...trigger, enabled: false }]).size, 0);
 
     const legacy = { ...waiting, schemaVersion: undefined };

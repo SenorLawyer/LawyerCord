@@ -1877,7 +1877,7 @@ test("FakeNitro checks emoji and sticker access in the destination guild", async
     const { default: plugin } = loadSource("src/plugins/fakeNitro/index.tsx", {
         "@api/MessageEvents": { addMessagePreSendListener: (fn: typeof preSend) => { preSend = fn; }, addMessagePreEditListener() {} },
         "@api/Settings": { definePluginSettings: () => ({ store: { enableStickerBypass: true, enableEmojiBypass: false } }) },
-        "@components/Paragraph": {}, "@utils/apng": {}, "@utils/constants": { Devs: {} },
+        "@components/Paragraph": {}, "@equicordplugins/fileUpload/request": {}, "@equicordplugins/fileUpload/utils/apngToGif": {}, "@utils/constants": { Devs: {} },
         "@utils/discord": { getCurrentGuild: () => ({ id: "selected" }) }, "@utils/Logger": {},
         "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
         "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
@@ -1905,6 +1905,7 @@ test("name formatting preserves Discord user objects", () => {
         "@api/Settings": { definePluginSettings: () => ({ store: {} }) }, "@components/Button": {},
         "@components/ErrorBoundary": {}, "@components/Heading": {}, "@plugins/ircColors": {}, "@plugins/mentionAvatars": {},
         "@utils/constants": { Devs: {}, EquicordDevs: {} }, "@utils/index": { classNameFactory: () => () => "" },
+        "@utils/lazy": { proxyLazy: (factory: () => object) => new Proxy({}, { get: (_target, key) => Reflect.get(factory(), key) }) },
         "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
         "@webpack": { findStoreLazy: () => ({}), findByCodeLazy: () => () => {} },
         "@webpack/common": { StreamerModeStore: { enabled: false }, RelationshipStore: { getNickname: () => null } },
@@ -5092,9 +5093,11 @@ test("transcription worker cancellation aborts model downloads and startup failu
     const { TranscriptionWorker } = loadSource("src/equicordplugins/voiceMessageTranscriber.desktop/utils.ts", {
         "@api/index": { DataStore: { get: async () => undefined, set: async () => { writes++; } } },
         "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/Queue": loadSource("src/utils/Queue.ts", { "./Logger": { Logger: class { error() {} } } }),
+        "@equicordplugins/fileUpload/request": loadSource("src/equicordplugins/fileUpload/request.ts", {}, { URL, Blob, Uint8Array }),
         "@webpack/common": { lodash: { isArrayBuffer: () => false } },
     }, {
-        Blob, AbortController,
+        Blob, AbortController, Float32Array, setTimeout: () => 1, clearTimeout() {},
         URL: class extends URL {
             static createObjectURL() { return "blob:worker"; }
             static revokeObjectURL() { revocations++; }
@@ -5112,6 +5115,8 @@ test("transcription worker cancellation aborts model downloads and startup failu
         },
     });
     const worker = new TranscriptionWorker(() => {}, () => {}, (error: Error) => errors.push(error), () => {});
+    worker.run(new Float32Array([0]), "model");
+    await setImmediate();
     const pending = instance.onmessage?.({ data: { type: "fetch_request", id: "model", url: "https://huggingface.co/model" } });
     await setImmediate();
     assert.equal(signal?.aborted, false);
@@ -5123,7 +5128,9 @@ test("transcription worker cancellation aborts model downloads and startup failu
     worker.terminate();
     assert.equal(terminations, 1);
     assert.equal(revocations, 1);
-    new TranscriptionWorker(() => {}, () => {}, (error: Error) => errors.push(error), () => {});
+    const secondWorker = new TranscriptionWorker(() => {}, () => {}, (error: Error) => errors.push(error), () => {});
+    secondWorker.run(new Float32Array([0]), "model");
+    await setImmediate();
     instance.onerror?.();
     instance.onerror?.();
     assert.equal(errors.length, 1);
@@ -5131,7 +5138,10 @@ test("transcription worker cancellation aborts model downloads and startup failu
     assert.equal(terminations, 2);
     assert.equal(revocations, 2);
     constructorFails = true;
-    assert.throws(() => new TranscriptionWorker(() => {}, () => {}, () => {}, () => {}), /Worker construction failed/);
+    const failedWorker = new TranscriptionWorker(() => {}, () => {}, (error: Error) => errors.push(error), () => {});
+    failedWorker.run(new Float32Array([0]), "model");
+    await setImmediate();
+    assert.match(errors.at(-1)?.message ?? "", /Worker construction failed/);
     assert.equal(revocations, 3);
     assert.equal(terminations, 2);
 });
@@ -8014,9 +8024,11 @@ test("background audio position effects settle after clamping", () => {
     type Position = { left: number; top: number; } | null;
     let position: Position = null;
     let refIndex = 0;
-    const effects: (() => void)[] = [];
+    const effects: (() => void | (() => void))[] = [];
     const viewport = { innerWidth: 800, innerHeight: 600 };
     const widget = { getBoundingClientRect: () => ({ width: 200, height: 100 }) };
+    let resize = () => {};
+    let disconnected = false;
     const render = loadSource("src/equicordplugins/persistentAudioPlayback/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
         "@utils/constants": { EquicordDevs: {} },
@@ -8028,9 +8040,16 @@ test("background audio position effects settle after clamping", () => {
             useCallback: (callback: () => void) => callback,
             useEffect: (effect: () => void) => effects.push(effect)
         } }
-    }, { window: viewport }, "DetachedAudioWidget");
+    }, { window: viewport, ResizeObserver: class {
+        constructor(callback: () => void) { resize = callback; }
+        observe(target: unknown) { assert.equal(target, widget); }
+        disconnect() { disconnected = true; }
+    } }, "DetachedAudioWidget");
     render();
-    const clamp = effects[effects.length - 1];
+    const cleanup = effects[effects.length - 1]();
+    assert.equal(typeof cleanup, "function");
+    if (typeof cleanup !== "function") return;
+    const clamp = () => resize();
     clamp();
     assert.equal(position, null);
     const dragged = { left: 100, top: 100 };
@@ -8044,6 +8063,8 @@ test("background audio position effects settle after clamping", () => {
     const clamped = position;
     clamp();
     assert.equal(position, clamped);
+    cleanup();
+    assert.equal(disconnected, true);
 });
 
 test("new plugin notifications return failures to the flux dispatcher", async () => {
@@ -9062,7 +9083,7 @@ test("logger export iteration preserves stored attachment URLs without populatin
         "@webpack/common": {},
         idb: { openDB: async () => ({ transaction: () => ({ store: { openCursor: async () => ({ value: record, continue: async () => null }) } }) }) },
         "./utils": {}, "./utils/cleanUp": { stripTransientRenderState: () => assert.fail("Export must not prepare display records") },
-        "./utils/constants": {},
+        "./utils/constants": {}, "./utils/LimitedMap": { LimitedMap: Map },
         "./utils/saveImage": { getAttachmentBlobUrl: () => assert.fail("Export must not read attachment files") }
     });
     await setImmediate();
@@ -9079,7 +9100,9 @@ test("native logger imports preserve Unicode across bounded chunks", async () =>
     const bytes = Buffer.from(text);
     let position = 0;
     let closed = 0;
+    const event = { sender: { id: 1, isDestroyed: () => false, once() {}, removeListener() {} } };
     const module = loadSource("src/equicordplugins/messageLoggerEnhanced/native/import.ts", {
+        "@utils/Logger": { Logger: class { warn() {} } },
         "node:crypto": { randomUUID: () => "fixture" },
         "node:fs/promises": { open: async () => ({
             async read(target: Buffer, offset: number, length: number) {
@@ -9091,16 +9114,16 @@ test("native logger imports preserve Unicode across bounded chunks", async () =>
             async close() { closed++; }
         }) },
         electron: { dialog: { showOpenDialog: async () => ({ filePaths: ["fixture.json"] }) } }
-    }, { Buffer, TextDecoder });
-    const id = await module.startNativeLogImport({});
+    }, { Buffer, TextDecoder, setTimeout, clearTimeout });
+    const id = await module.startNativeLogImport(event);
     let result = "";
     for (;;) {
-        const chunk = await module.readNativeLogChunk({}, id, Number.MAX_SAFE_INTEGER);
+        const chunk = await module.readNativeLogChunk(event, id, Number.MAX_SAFE_INTEGER);
         if (chunk === null) break;
         result += chunk;
     }
     assert.equal(result, text);
-    await module.closeNativeLogImport({}, id);
+    await module.closeNativeLogImport(event, id);
     assert.equal(closed, 1);
 });
 
@@ -9379,7 +9402,7 @@ test("File upload destination selection respects disabled fallbacks and host ord
         "@equicordplugins/fileUpload/constants": {}, "@equicordplugins/fileUpload/settings": { settings: { store } },
         "@equicordplugins/fileUpload/types": types, "@utils/clipboard": {}, "@utils/discord": {},
         "@utils/Logger": { Logger: class {} }, "@utils/web": {}, "@webpack/common": {},
-        "./apngToGif": {}, "./getMediaUrl": {}, "./s3": {}, "./sharex": {}
+        "./apngToGif": {}, "./getMediaUrl": {}, "./s3": {}, "./sharex": {}, "../request": {}
     }, { IS_DISCORD_DESKTOP: false }, "({ buildUploadOrder })");
     assert.throws(() => upload.buildUploadOrder("catbox", "file.exe"), /Choose another service/);
     assert.throws(() => upload.buildUploadOrder("0x0", "file.png"), /Choose another service/);
@@ -9399,15 +9422,15 @@ test("File uploads report failure, busy state and success", async () => {
         "@equicordplugins/fileUpload/constants": {}, "@equicordplugins/fileUpload/settings": {},
         "@equicordplugins/fileUpload/types": { ServiceType: {}, serviceLabels: {} }, "@utils/clipboard": {}, "@utils/discord": {},
         "@utils/Logger": { Logger: class { error() {} } }, "@utils/web": {},
-        "@webpack/common": { showToast: () => {}, Toasts: { Type: {} } },
-        "./apngToGif": {}, "./getMediaUrl": {}, "./s3": {}, "./sharex": {}
-    }, { IS_DISCORD_DESKTOP: false, setTimeout: () => 0 }, `
+        "@webpack/common": { showToast: () => {}, Toasts: { Type: {} }, UserStore: { getCurrentUser: () => ({ id: "owner" }) }, SelectedChannelStore: { getChannelId: () => "channel" } },
+        "./apngToGif": {}, "./getMediaUrl": {}, "./s3": {}, "./sharex": {}, "../request": {}
+    }, { IS_DISCORD_DESKTOP: false, setTimeout: () => 0, clearTimeout() {}, AbortController }, `
         isConfigured = () => true;
         isFileTypeAllowed = () => true;
         uploadPreparedBlob = async () => { throw new Error("Failed"); };
         ({ uploadProvidedFiles, succeed() { uploadPreparedBlob = async () => "url"; }, busy() { isUploading = true; },
             cancelLate() {
-                cancelRequested = false;
+                beginUpload();
                 buildUploadOrder = () => ["fixture"];
                 uploadToService = async () => { cancelRequested = true; return "url"; };
                 return uploadWithFallbacks({ size: 1 }, "fixture.txt", "fixture");
@@ -10623,7 +10646,14 @@ test("clip file reads share the size cap and selected files reuse the byte write
             reads++;
             return Readable.from([payload]);
         } },
-        "fs/promises": { mkdir: async () => {}, writeFile: async (_path: string, data: Buffer) => { writes.push(data); } },
+        "fs/promises": {
+            mkdir: async () => {}, writeFile: async (_path: string, data: Buffer) => { writes.push(data); },
+            open: async () => ({
+                stat: async () => ({ size: oversized ? 500 * 1024 * 1024 + 1 : payload.length }),
+                read: async (target: Buffer, offset: number, length: number, position: number) => { reads++; payload.copy(target, offset, position, position + length); return { bytesRead: length }; },
+                close: async () => {}
+            })
+        },
         path,
         "stream/consumers": { buffer: async (stream: Readable) => oversized ? { length: 500 * 1024 * 1024 + 1 } : buffer(stream) }
     }, { Buffer, Uint8Array });
@@ -10640,7 +10670,7 @@ test("clip file reads share the size cap and selected files reuse the byte write
     assert.equal(await native.createTempVideoFile({}, large.token), null);
     assert.equal(await native.readVideoFile({}, temp), null);
     assert.equal(writes.length, 1);
-    assert.equal(reads, 6);
+    assert.equal(reads, 5);
 });
 
 test("favourite attachment downloads validate IPC input and bound network responses", async () => {
@@ -11413,7 +11443,7 @@ test("member counts subscribe to scalar values and tooltip renders skip channel 
     assert.equal(selectors[5].value, null);
 });
 
-test("APNG failed worker loads terminate and concurrent conversions share the retry", async () => {
+test("APNG failed worker loads terminate and queued conversions retry with fresh workers", async () => {
     const workers: { loaded: boolean; terminated: boolean; }[] = [];
     let loads = 0;
     const module = loadComponent("src/equicordplugins/fileUpload/utils/apngToGif.ts", {}, {
@@ -11423,17 +11453,25 @@ test("APNG failed worker loads terminate and concurrent conversions share the re
             constructor() { workers.push(this); }
             terminate() { this.terminated = true; }
             async writeFile() {}
-            async exec() {}
+            async exec() { return 0; }
             async readFile() { return new Uint8Array([1]); }
             async deleteFile() {}
         } },
-        "@utils/ffmpeg": { loadFFmpeg: async (worker: { loaded: boolean; }) => { if (++loads === 1) throw new Error("Load failed"); worker.loaded = true; } }
-    }, { Blob, console: { error() {} } });
-    assert.equal(await module.convertApngToGif(new Blob()), null);
+        "@utils/ffmpeg": { loadFFmpeg: async (worker: { loaded: boolean; }) => { if (++loads === 1) throw new Error("Load failed"); worker.loaded = true; } },
+        "@utils/Logger": { Logger: class { error() {} } },
+        "@utils/Queue": loadSource("src/utils/Queue.ts", { "./Logger": { Logger: class { error() {} } } })
+    }, { Blob, Uint8Array, DataView, setTimeout, clearTimeout });
+    const data = new Uint8Array(33);
+    data.set([137, 80, 78, 71, 13, 10, 26, 10]);
+    const view = new DataView(data.buffer);
+    view.setUint32(8, 13); view.setUint32(12, 0x49484452); view.setUint32(16, 1); view.setUint32(20, 1);
+    const png = new Blob([data]);
+    assert.equal(await module.convertApngToGif(png), null);
     assert.equal(workers[0].terminated, true);
-    const results = await Promise.all([module.convertApngToGif(new Blob()), module.convertApngToGif(new Blob())]);
-    assert.equal(loads, 2);
+    const results = await Promise.all([module.convertApngToGif(png), module.convertApngToGif(png)]);
+    assert.equal(loads, 3);
     assert.equal(results.every(result => result instanceof Blob), true);
+    assert.equal(workers.every(worker => worker.terminated), true);
 });
 
 test("DevCompanion replacement closes the old socket and ignores its late events", () => {
@@ -17279,9 +17317,11 @@ test("desktop voice recording settles failed audio reads", async () => {
         const states: boolean[] = [];
         let toasts = 0;
         const blobs: Blob[] = [];
+        let refIndex = 0;
         const React = { createElement: (type: unknown, props: object) => ({ type, props }) };
         const { VoiceRecorderDesktop } = loadSource("src/plugins/voiceMessages/components/DesktopRecorder.tsx", {
             "@webpack/common": { React, Button: "button", useState: () => [true, (value: boolean) => states.push(value)],
+                useRef: () => ({ current: ++refIndex === 1 || refIndex === 3 }), useEffect() {},
                 Toasts: { Type: { FAILURE: "failure" } }, showToast: () => toasts++ },
             "..": { settings: { store: {} } }
         }, {
@@ -17299,6 +17339,66 @@ test("desktop voice recording settles failed audio reads", async () => {
         assert.equal(toasts, phase === "success" ? 0 : 1, phase);
         assert.equal(blobs.length, phase === "success" ? 1 : 0, phase);
     }
+});
+
+test("desktop voice recording cancels late startup and consumes its temporary recording after unmount", async () => {
+    let startup: (success: boolean) => void = () => {};
+    let stopped: (file: string) => Promise<void> = async () => {};
+    let cleanup = () => {};
+    let starts = 0;
+    let stops = 0;
+    let reads = 0;
+    let updates = 0;
+    const React = { createElement: (type: unknown, props: object) => ({ type, props }) };
+    const { VoiceRecorderDesktop } = loadSource("src/plugins/voiceMessages/components/DesktopRecorder.tsx", {
+        "@webpack/common": { React, Button: "button", useState: () => [false, () => updates++],
+            useRef: (value: boolean) => ({ current: value }), useEffect: (effect: () => () => void) => cleanup = effect(),
+            MediaEngineStore: { getInputDeviceId: () => "default" }, Toasts: { Type: {} }, showToast: () => updates++ },
+        "..": { settings: { store: {} } }
+    }, {
+        React, Blob, VencordNative: { pluginHelpers: { VoiceMessages: { readRecording: async () => { reads++; return new Uint8Array([1]); } } } },
+        DiscordNative: { nativeModules: { requireModule: () => ({
+            startLocalAudioRecording: (_options: object, callback: typeof startup) => { starts++; startup = callback; },
+            stopLocalAudioRecording: (callback: typeof stopped) => { stops++; stopped = callback; }
+        }) } }
+    });
+    const button = VoiceRecorderDesktop({ setAudioBlob: () => updates++, onRecordingChange: () => updates++ });
+    button.props.onClick();
+    button.props.onClick();
+    assert.equal(starts, 1);
+    cleanup();
+    startup(true);
+    assert.equal(stops, 1);
+    await stopped("recording.ogg");
+    assert.equal(reads, 1);
+    assert.equal(updates, 0);
+});
+
+test("Petpet bounds allocations before loading frames and ignores frames completing after stop", async () => {
+    let loads = 0;
+    let finish: (frames: unknown[]) => void = () => {};
+    let messages = 0;
+    let canvases = 0;
+    const plugin = loadSource("src/plugins/petpet/index.ts", {
+        "@api/Commands": { ApplicationCommandInputType: {}, ApplicationCommandOptionType: {},
+            findOption: (opts: Record<string, unknown>, key: string, fallback: unknown) => opts[key] ?? fallback,
+            sendBotMessage: () => messages++ },
+        "@api/Settings": { migratePluginSettings() {} }, "@utils/constants": { Devs: {} },
+        "@utils/lazy": { makeLazy: () => () => { loads++; return new Promise(resolve => finish = resolve); } },
+        "@utils/misc": { sleep: async () => {} }, "@utils/types": { __esModule: true, default: (value: unknown) => value },
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "owner" }) } }, "gifenc": {}
+    }, { document: { createElement: () => canvases++ } }).default;
+    const execute = plugin.commands[0].execute;
+    await execute({ resolution: 100000 }, { channel: { id: "channel" } });
+    await execute({ delay: 0 }, { channel: { id: "channel" } });
+    assert.equal(messages, 2);
+    assert.equal(loads, 0);
+    const pending = execute({}, { channel: { id: "channel" } });
+    plugin.stop();
+    finish([]);
+    await pending;
+    assert.equal(loads, 1);
+    assert.equal(canvases, 0);
 });
 
 test("stale transcription audio failures preserve a newer cached request", async () => {
@@ -17360,13 +17460,17 @@ test("transcription model requests reject insecure and credentialed URLs before 
     const { TranscriptionWorker } = loadSource("src/equicordplugins/voiceMessageTranscriber.desktop/utils.ts", {
         "@api/index": { DataStore: { get: async () => { reads++; return new ArrayBuffer(1); } } },
         "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/Queue": loadSource("src/utils/Queue.ts", { "./Logger": { Logger: class { error() {} } } }),
+        "@equicordplugins/fileUpload/request": loadSource("src/equicordplugins/fileUpload/request.ts", {}, { URL, Blob, Uint8Array }),
         "@webpack/common": { lodash: { isArrayBuffer: () => true } }
     }, {
-        Blob, AbortController,
+        Blob, AbortController, Float32Array, setTimeout: () => 1, clearTimeout() {},
         URL: class extends URL { static createObjectURL() { return "blob:worker"; } static revokeObjectURL() {} },
         Worker: class { constructor() { instance = this; } onmessage?: (event: object) => Promise<void>; terminate() {} postMessage(value: { error?: string; }) { responses.push(value); } }
     });
     const worker = new TranscriptionWorker(() => {}, () => {}, () => {}, () => {});
+    worker.run(new Float32Array([0]), "model");
+    await setImmediate();
     for (const url of ["http://huggingface.co/model", "https://user:password@huggingface.co/model", "https://cdn.jsdelivr.net:8080/model", "https://example.com/model"]) {
         await instance.onmessage?.({ data: { type: "fetch_request", id: "model", url } });
         assert.equal(reads, 0, url);
@@ -17432,19 +17536,23 @@ test("transcription model responses describe the transferred bytes", async () =>
         const buffer = new ArrayBuffer(8);
         const responses: Array<{ response: ArrayBuffer; headers: Record<string, string>; }> = [];
         const { TranscriptionWorker } = loadSource("src/equicordplugins/voiceMessageTranscriber.desktop/utils.ts", {
-            "@api/index": { DataStore: { get: async () => cached ? buffer : undefined, set: async (_key: string, value: ArrayBuffer) => { assert.equal(value, buffer); writes++; } } },
+            "@api/index": { DataStore: { get: async () => cached ? buffer : undefined, set: async (_key: string, value: ArrayBuffer) => { assert.deepEqual(new Uint8Array(value), new Uint8Array(buffer)); writes++; } } },
             "@utils/css": { classNameFactory: () => () => "" },
+            "@utils/Queue": loadSource("src/utils/Queue.ts", { "./Logger": { Logger: class { error() {} } } }),
+        "@equicordplugins/fileUpload/request": loadSource("src/equicordplugins/fileUpload/request.ts", {}, { URL, Blob, Uint8Array }),
             "@webpack/common": { lodash: { isArrayBuffer: (value: unknown) => value === buffer } }
         }, {
-            Blob, AbortController,
+            Blob, AbortController, Float32Array, setTimeout: () => 1, clearTimeout() {},
             URL: class extends URL { static createObjectURL() { return "blob:worker"; } static revokeObjectURL() {} },
-            Worker: class { constructor() { instance = this; } onmessage?: (event: object) => Promise<void>; terminate() {} postMessage(value: typeof responses[number], transfer: ArrayBuffer[]) { assert.equal(transfer[0], buffer); responses.push(value); } },
-            fetch: async () => { requests++; return { ok: true, headers: { get: () => "3" }, arrayBuffer: async () => buffer }; }
+            Worker: class { constructor() { instance = this; } onmessage?: (event: object) => Promise<void>; terminate() {} postMessage(value: typeof responses[number] & { type: string; }, transfer: ArrayBuffer[]) { if (value.type === "run") return; assert.equal(transfer[0], value.response); responses.push(value); } },
+            fetch: async () => { requests++; return new Response(buffer, { headers: { "Content-Length": "3" } }); }
         });
         const worker = new TranscriptionWorker(() => {}, () => {}, () => {}, () => {});
+        worker.run(new Float32Array([0]), "model");
+        await setImmediate();
         await instance.onmessage?.({ data: { type: "fetch_request", id: "model", url: "https://huggingface.co/model.json" } });
         assert.equal(responses.length, 1);
-        assert.equal(responses[0].response, buffer);
+        assert.deepEqual(new Uint8Array(responses[0].response), new Uint8Array(buffer));
         assert.equal(responses[0].headers["Content-Length"], "8");
         assert.equal(responses[0].headers["Content-Type"], "application/json");
         assert.equal(writes, cached ? 0 : 1);

@@ -14,7 +14,7 @@ export interface QueuedRun {
 
 interface Job {
     id: string;
-    workflow: Automation;
+    workflow: Pick<Automation, "id" | "runMode" | "concurrency" | "cooldownSeconds">;
     controller: AbortController;
     execute(signal: AbortSignal, id: string): Promise<unknown>;
     resolve(value: unknown): void;
@@ -25,6 +25,7 @@ export function createRunQueue(onChange: () => void, now: () => number = Date.no
     const pending: Job[] = [];
     const active = new Map<string, Job>();
     const lastStarted = new Map<string, number>();
+    let retained = new Set<string>();
     let limit = 4;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let snapshot: QueuedRun[] = [];
@@ -52,10 +53,16 @@ export function createRunQueue(onChange: () => void, now: () => number = Date.no
             });
         }
         if (Number.isFinite(wakeAt)) timer = setTimeout(pump, Math.min(2_147_000_000, Math.max(1, wakeAt - now())));
+        const owned = new Set([...retained, ...pending.map(job => job.workflow.id), ...[...active.values()].map(job => job.workflow.id)]);
+        for (const id of lastStarted.keys()) if (!owned.has(id)) lastStarted.delete(id);
         changed();
     };
     return {
         snapshot: () => snapshot,
+        retainWorkflows(ids: string[]) {
+            retained = new Set(ids);
+            pump();
+        },
         setLimit(value: number) {
             if (!Number.isInteger(value) || value < 1 || value > 32) throw new Error("Choose between 1 and 32 active runs.");
             limit = value;
@@ -67,7 +74,7 @@ export function createRunQueue(onChange: () => void, now: () => number = Date.no
             if ((workflow.runMode ?? "skip") === "skip" && (running || queued > 0)) return Promise.reject(new Error("Trigger skipped because this workflow is already running."));
             if (queued >= (workflow.queueLimit ?? 50) && (running || active.size >= limit) || pending.length >= 200) return Promise.reject(new Error("Run queue is full. The newest trigger was rejected."));
             return new Promise((resolve, reject) => {
-                pending.push({ id: crypto.randomUUID(), workflow: structuredClone(workflow), controller: new AbortController(), execute, resolve, reject });
+                pending.push({ id: crypto.randomUUID(), workflow: { id: workflow.id, runMode: workflow.runMode, concurrency: workflow.concurrency, cooldownSeconds: workflow.cooldownSeconds }, controller: new AbortController(), execute, resolve, reject });
                 pump();
             });
         },

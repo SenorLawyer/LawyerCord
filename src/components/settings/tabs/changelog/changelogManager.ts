@@ -213,7 +213,6 @@ export async function saveUpdateSession(
     newSettings: Map<string, string[]>,
     forceLog: boolean = false,
 ): Promise<void> {
-    const history = await getChangelogHistory();
     const lastSeenHash = await getLastSeenHash();
     const currentHash = gitHash;
 
@@ -274,14 +273,7 @@ export async function saveUpdateSession(
     };
 
     // Add to beginning of history (most recent first)
-    history.unshift(session);
-
-    // Keep only last 50 sessions to prevent storage bloat
-    if (history.length > 50) {
-        history.splice(50);
-    }
-
-    await DataStore.set(CHANGELOG_HISTORY_KEY, history);
+    await DataStore.update<ChangelogHistory>(CHANGELOG_HISTORY_KEY, history => [session, ...history ?? []].slice(0, 50));
 
     if (!forceLog) {
         await setLastSeenHash(currentHash);
@@ -431,9 +423,7 @@ export async function clearChangelogHistory(): Promise<void> {
 }
 
 export async function clearIndividualLog(logId: string): Promise<void> {
-    const history = await getChangelogHistory();
-    const filteredHistory = history.filter(log => log.id !== logId);
-    await DataStore.set(CHANGELOG_HISTORY_KEY, filteredHistory);
+    await DataStore.update<ChangelogHistory>(CHANGELOG_HISTORY_KEY, history => (history ?? []).filter(log => log.id !== logId));
 }
 
 export async function initializeChangelog(): Promise<void> {

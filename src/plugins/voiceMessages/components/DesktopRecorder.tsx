@@ -17,7 +17,7 @@
 */
 
 import { PluginNative } from "@utils/types";
-import { Button, MediaEngineStore, showToast, Toasts, useState } from "@webpack/common";
+import { Button, MediaEngineStore, showToast, Toasts, useEffect, useRef, useState } from "@webpack/common";
 
 import { settings, type VoiceRecorder } from "..";
 
@@ -25,6 +25,14 @@ const Native = VencordNative.pluginHelpers.VoiceMessages as PluginNative<typeof 
 
 export const VoiceRecorderDesktop: VoiceRecorder = ({ setAudioBlob, onRecordingChange }) => {
     const [recording, setRecording] = useState(false);
+    const mounted = useRef(true);
+    const pending = useRef(false);
+    const recordingRef = useRef(false);
+
+    useEffect(() => () => {
+        mounted.current = false;
+        if (recordingRef.current && !pending.current) stopRecording();
+    }, []);
 
     const changeRecording = (recording: boolean) => {
         setRecording(recording);
@@ -32,8 +40,10 @@ export const VoiceRecorderDesktop: VoiceRecorder = ({ setAudioBlob, onRecordingC
     };
 
     function toggleRecording() {
+        if (pending.current || !mounted.current) return;
         const discordVoice = DiscordNative.nativeModules.requireModule("discord_voice");
-        const nowRecording = !recording;
+        const nowRecording = !recordingRef.current;
+        pending.current = true;
 
         if (nowRecording) {
             discordVoice.startLocalAudioRecording(
@@ -43,27 +53,39 @@ export const VoiceRecorderDesktop: VoiceRecorder = ({ setAudioBlob, onRecordingC
                     deviceId: MediaEngineStore.getInputDeviceId(),
                 },
                 (success: boolean) => {
-                    if (success)
-                        changeRecording(true);
-                    else
+                    pending.current = false;
+                    recordingRef.current = success;
+                    if (success) {
+                        if (mounted.current) changeRecording(true);
+                        else stopRecording();
+                    } else if (mounted.current)
                         showToast("Failed to start recording", Toasts.Type.FAILURE);
                 }
             );
         } else {
-            discordVoice.stopLocalAudioRecording(async (filePath: string) => {
+            stopRecording();
+        }
+    }
+
+    function stopRecording() {
+        pending.current = true;
+        const discordVoice = DiscordNative.nativeModules.requireModule("discord_voice");
+        discordVoice.stopLocalAudioRecording(async (filePath: string) => {
                 try {
                     const buf = filePath ? await Native.readRecording(filePath) : null;
+                    if (!mounted.current) return;
                     if (buf)
                         setAudioBlob(new Blob([new Uint8Array(buf)], { type: "audio/ogg; codecs=opus" }));
                     else
                         showToast("Failed to finish recording", Toasts.Type.FAILURE);
                 } catch {
-                    showToast("Failed to finish recording", Toasts.Type.FAILURE);
+                    if (mounted.current) showToast("Failed to finish recording", Toasts.Type.FAILURE);
                 } finally {
-                    changeRecording(false);
+                    pending.current = false;
+                    recordingRef.current = false;
+                    if (mounted.current) changeRecording(false);
                 }
             });
-        }
     }
 
     return (

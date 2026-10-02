@@ -25,6 +25,9 @@ function fixture() {
     });
     let busy = false;
     let cancellations = 0;
+    let account = "account";
+    let fail: ((files: File[]) => void) | undefined;
+    const restored: UploadEvent[] = [];
     const uploaded: File[][] = [];
     const interceptors: unknown[] = [];
     const listeners = new Map<string, unknown>();
@@ -36,15 +39,15 @@ function fixture() {
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
         "@webpack": { findByPropsLazy: () => ({ getUserMaxFileSize: () => 100 }) },
         "@webpack/common": {
-            DraftType: { ChannelMessage: 0 }, UserStore: { getCurrentUser: () => ({ id: "account" }) },
-            FluxDispatcher: { addInterceptor: (listener: unknown) => interceptors.push(listener), _interceptors: interceptors }
+            DraftType: { ChannelMessage: 0 }, UserStore: { getCurrentUser: () => ({ id: account }) }, SelectedChannelStore: { getChannelId: () => "channel" },
+            FluxDispatcher: { dispatch: (event: UploadEvent) => restored.push(event), addInterceptor: (listener: unknown) => interceptors.push(listener), _interceptors: interceptors }
         },
         "./settings": { settings: { store: { bypassDiscordUpload: true, bypassDiscordUploadOnlyOverLimit: false, autoUploadPastedFiles: true } } },
         "./types": {}, "./utils/getMediaUrl": {},
         "./utils/upload": {
             isConfigured: () => true, isUploadInProgress: () => busy,
             isFileTypeAllowed: (file: File) => file.name.endsWith(".png"),
-            uploadProvidedFiles: async (files: File[]) => { if (busy) return false; uploaded.push(files); return true; },
+            uploadProvidedFiles: async (files: File[], _force: boolean, onFailure?: (files: File[]) => void) => { fail = onFailure; if (busy) return false; uploaded.push(files); return true; },
             cancelCurrentUpload: () => { cancellations++; }, logger: {}
         }
     };
@@ -55,7 +58,7 @@ function fixture() {
             removeEventListener: (name: string, listener: unknown) => { assert.equal(listeners.get(name), listener); listeners.delete(name); }
         }
     }) as { plugin: { start(): void; stop(): void; shouldBypassDiscordUploadSizeCheck(): boolean; }; interceptUploadAddFiles(event: UploadEvent): void; handlePaste(event: object): void; };
-    return { ...exports, uploaded, listeners, interceptors, setBusy: () => { busy = true; }, get cancellations() { return cancellations; } };
+    return { ...exports, restored, fail: (files: File[]) => fail?.(files), switchAccount: () => account = "other", uploaded, listeners, interceptors, setBusy: () => { busy = true; }, get cancellations() { return cancellations; } };
 }
 
 test("FileUpload retains disallowed files and wrapper metadata while intercepting each allowed file once", () => {
@@ -92,4 +95,20 @@ test("FileUpload stop cancels work and releases the exact dispatcher and paste l
     const f = fixture(); f.plugin.start(); assert.equal(f.interceptors.length, 1); assert.equal(f.listeners.size, 1);
     f.plugin.stop(); assert.equal(f.cancellations, 1); assert.equal(f.interceptors.length, 0); assert.equal(f.listeners.size, 0);
     f.plugin.stop(); assert.equal(f.cancellations, 2);
+});
+
+
+test("Failed intercepted files return to the original draft with their metadata", () => {
+    const f = fixture();
+    const first = new File(["first"], "first.png");
+    const failed = new File(["failed"], "failed.png");
+    const wrapper = { id: "failed", item: { file: failed }, description: "Keep this" };
+    f.interceptUploadAddFiles({ type: "UPLOAD_ATTACHMENT_ADD_FILES", draftType: 0, files: [first], uploads: [wrapper] });
+    f.fail([failed]);
+    assert.equal(f.restored.length, 1);
+    assert.deepEqual(Array.from(f.restored[0].uploads as unknown[]), [wrapper]);
+    assert.deepEqual(Array.from(f.restored[0].files as unknown[]), []);
+    f.switchAccount();
+    f.fail([failed]);
+    assert.equal(f.restored.length, 1);
 });

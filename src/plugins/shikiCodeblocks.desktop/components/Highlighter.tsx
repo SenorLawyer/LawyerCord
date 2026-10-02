@@ -80,9 +80,9 @@ export const Highlighter = ({
 
     const [rootRef, isIntersecting] = useIntersection(true);
 
-    const [tokens] = useAwaiter(async () => {
-        if (!shikiLang || useHljs || !isIntersecting) return null;
-        return await shiki.tokenizeCode(content, lang!);
+    const [highlight] = useAwaiter(async () => {
+        if (!lang || !shikiLang || useHljs || !isIntersecting) return null;
+        return { tokens: await shiki.tokenizeCode(content, lang), content, lang, themeId: currentThemeId };
     }, {
         fallbackValue: null,
         deps: [lang, content, currentThemeId, isIntersecting, useHljs],
@@ -124,7 +124,7 @@ export const Highlighter = ({
                     useHljs={useHljs}
                     lang={lang}
                     content={content}
-                    tokens={tokens}
+                    tokens={highlight?.content === content && highlight.lang === lang && highlight.themeId === currentThemeId ? highlight.tokens : null}
                 />
                 {!isPreview && <ButtonRow
                     content={content}

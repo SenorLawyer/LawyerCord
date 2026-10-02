@@ -17,6 +17,8 @@ function fixture(animated: boolean) {
     let cursor = 0;
     let bounds = 0;
     let paused = 0;
+    let frameId = 0;
+    const frames = new Map<number, () => void>();
     const states: unknown[] = [];
     const refs: { current: unknown; }[] = [];
     const effects = new Map<number, (() => void) | undefined>();
@@ -47,6 +49,8 @@ function fixture(animated: boolean) {
     });
     const api = runInNewContext(`${outputText}\nexports;`, {
         exports: {}, URL, React: { createElement },
+        requestAnimationFrame: (callback: () => void) => { const id = ++frameId; frames.set(id, callback); return id; },
+        cancelAnimationFrame: (id: number) => frames.delete(id),
         document: { getElementById: (id: string) => id === "modal" ? element : null,
             addEventListener: (name: string, callback: (event: object) => void) => listeners.set(name, callback),
             removeEventListener: (name: string) => listeners.delete(name) },
@@ -54,7 +58,7 @@ function fixture(animated: boolean) {
     }) as { Magnifier(props: object): Element | null; };
     const instance = { props: { animated, src: "https://media.discordapp.net/attachments/1/image.png" }, state: { readyState: "READY", mouseOver: true, mouseDown: true } };
     return { video, originalVideo, settings, instance,
-        render() { cursor = 0; const result = api.Magnifier({ instance, zoom: 2, size: 100 }); for (const effect of pendingEffects.splice(0)) effect(); return result; },
+        render() { for (const [id, callback] of [...frames]) { frames.delete(id); callback(); } cursor = 0; const result = api.Magnifier({ instance, zoom: 2, size: 100 }); for (const effect of pendingEffects.splice(0)) effect(); return result; },
         event(name: string, event: object = { button: 0, pageX: 50, pageY: 40, x: 50, y: 40 }) { const listener = listeners.get(name); assert.ok(listener); listener(event); },
         unmount() { for (const cleanup of effects.values()) cleanup?.(); },
         counts: () => ({ bounds, paused, listeners: listeners.size }) };

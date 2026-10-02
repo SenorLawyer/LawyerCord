@@ -13139,6 +13139,50 @@ test("failed embed requests report once without updating the message", async () 
 });
 
 
+test("sidebar popout restoration reacts to stores without polling and releases pending listeners", () => {
+    for (const scenario of ["complete", "stop", "account", "setting"]) {
+        let userId = "account";
+        const settings = { store: { persistPopoutWindows: true, popoutAlwaysOnTop: true } };
+        const listeners = new Set<() => void>();
+        const userListeners = new Set<() => void>();
+        const opened: string[] = [];
+        const channels = new Map<string, object>();
+        const channel = (id: string) => ({ id, name: id, isPrivate: () => true });
+        channels.set("ready", channel("ready"));
+        channels.set("already", channel("already"));
+        let polls = 0;
+        let persisted = 0;
+        const source = loadSource("src/equicordplugins/sidebarChat/index.tsx", {
+            "@api/ContextMenu": {}, "@api/HeaderBar": {},
+            "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+            "@utils/constants": { Devs: {}, EquicordDevs: {} }, "@utils/css": { classNameFactory: () => () => "" },
+            "@utils/discord": {}, "@utils/types": { __esModule: true, default: (value: unknown) => value },
+            "@vencord/discord-types/enums": { ChannelType: {} },
+            "@webpack": { findComponentByCodeLazy: () => ({}), findByPropsLazy: () => ({}), findCssClassesLazy: () => ({}), findStoreLazy: () => ({}), extractAndLoadChunksLazy: () => () => Promise.resolve() },
+            "@webpack/common": {
+                ChannelStore: { getChannel: (id: string) => channels.get(id), addChangeListener: (fn: () => void) => listeners.add(fn), removeChangeListener: (fn: () => void) => listeners.delete(fn) },
+                UserStore: { getCurrentUser: () => ({ id: userId }), addChangeListener: (fn: () => void) => userListeners.add(fn), removeChangeListener: (fn: () => void) => userListeners.delete(fn) },
+                PopoutActions: { open: (key: string) => opened.push(key), setAlwaysOnTop() {}, close: () => assert.fail("Restoring must not close an already-open popout.") }
+            },
+            "./store": { settings, getPersistedPopoutChannelIds: () => ["already", "ready", "pending"], getPopoutWindowKey: (id: string) => id,
+                isPopoutWindowOpen: (id: string) => id === "already" || opened.includes(id), syncPersistedPopoutWindows: () => persisted++ },
+            "./styles.css?managed": {}
+        }, { window: { setInterval: () => { polls++; return 1; }, clearInterval() {} } }, "({ restorePersistedPopouts, clearPersistedPopoutRestore })");
+        source.restorePersistedPopouts();
+        assert.deepEqual(opened, ["ready"]);
+        assert.equal(polls, 0);
+        assert.equal(listeners.size, 1); assert.equal(userListeners.size, 1);
+        if (scenario === "stop") source.clearPersistedPopoutRestore();
+        if (scenario === "account") { userId = "other"; for (const fn of [...userListeners]) fn(); }
+        if (scenario === "setting") settings.store.persistPopoutWindows = false;
+        channels.set("pending", channel("pending"));
+        for (const fn of [...listeners]) fn();
+        assert.deepEqual(opened, scenario === "complete" ? ["ready", "pending"] : ["ready"]);
+        assert.equal(listeners.size, 0); assert.equal(userListeners.size, 0);
+        assert.equal(persisted, scenario === "complete" ? 1 : 0);
+    }
+});
+
 test("sidebar DM lookups cannot override newer navigation or a closed sidebar", async () => {
     const pending: Array<(id: string) => void> = [];
     let handlers: Record<string, (payload?: object) => Promise<void> | void> = {};

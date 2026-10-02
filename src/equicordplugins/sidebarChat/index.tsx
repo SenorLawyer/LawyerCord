@@ -113,15 +113,13 @@ function getPopoutMenuLabel(channelId: string) {
     return isPopoutWindowOpen(channelId) ? "Close popout chat" : "Popout chat";
 }
 
-let restorePersistedPopoutsInterval: number | null = null;
+let stopPersistedPopoutRestore: (() => void) | undefined;
 let restoringPersistedPopouts = false;
 
-function clearPersistedPopoutRestoreLoop() {
+function clearPersistedPopoutRestore() {
     restoringPersistedPopouts = false;
-    if (restorePersistedPopoutsInterval !== null) {
-        window.clearInterval(restorePersistedPopoutsInterval);
-        restorePersistedPopoutsInterval = null;
-    }
+    stopPersistedPopoutRestore?.();
+    stopPersistedPopoutRestore = undefined;
 }
 
 async function waitForChannel(channelId: string, timeoutMs = 2500) {
@@ -202,9 +200,9 @@ function openPopout(channelId: string, syncPersistence = true) {
 }
 
 function restorePersistedPopouts() {
-    if (!settings.store.persistPopoutWindows) return;
-
-    clearPersistedPopoutRestoreLoop();
+    clearPersistedPopoutRestore();
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!settings.store.persistPopoutWindows || !userId) return;
 
     const pendingRestoreIds = new Set(getPersistedPopoutChannelIds());
     if (pendingRestoreIds.size === 0) return;
@@ -212,25 +210,31 @@ function restorePersistedPopouts() {
     restoringPersistedPopouts = true;
 
     const attemptRestore = () => {
+        if (!settings.store.persistPopoutWindows || UserStore.getCurrentUser()?.id !== userId) {
+            clearPersistedPopoutRestore();
+            return;
+        }
         for (const channelId of pendingRestoreIds) {
             const channel = ChannelStore.getChannel(channelId);
             if (!channel || !canOpenPopout(channel)) continue;
 
             pendingRestoreIds.delete(channelId);
-            openPopout(channelId, false);
+            if (!isPopoutWindowOpen(channelId)) openPopout(channelId, false);
         }
 
         if (pendingRestoreIds.size === 0) {
-            clearPersistedPopoutRestoreLoop();
+            clearPersistedPopoutRestore();
             syncPersistedPopoutWindows();
         }
     };
 
+    ChannelStore.addChangeListener(attemptRestore);
+    UserStore.addChangeListener(attemptRestore);
+    stopPersistedPopoutRestore = () => {
+        ChannelStore.removeChangeListener(attemptRestore);
+        UserStore.removeChangeListener(attemptRestore);
+    };
     attemptRestore();
-
-    if (pendingRestoreIds.size > 0) {
-        restorePersistedPopoutsInterval = window.setInterval(attemptRestore, 250);
-    }
 }
 
 const createSidebarChatContextMenuItem = (id: string, guildId: string | null) => {
@@ -352,7 +356,7 @@ export default definePlugin({
     },
 
     stop() {
-        clearPersistedPopoutRestoreLoop();
+        clearPersistedPopoutRestore();
         syncPersistedPopoutWindows();
         for (const windowKey of getOpenPopoutWindowKeys()) {
             PopoutActions.close(windowKey);

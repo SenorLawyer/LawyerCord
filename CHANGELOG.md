@@ -6,6 +6,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Changed
 
+- Restore saved sidebar popouts on channel-store changes instead of polling unresolved IDs, and keep already-open windows open.
 - Reject oversized encrypted attachments before reading their bytes, remove a full plaintext encryption copy and release the owned buffer on success or failure.
 - Delete the unused RPCEditor stylesheet.
 - Stop scheduled-message polling while signed out or when only another account owns queued messages.

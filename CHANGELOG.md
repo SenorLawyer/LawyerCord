@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Changed
 
+- Remove unlimited serialized-message and search-query caches from MessageLoggerEnhanced, retain conversion only for the mounted log row and use the native array search.
+
 - Encode GIFs from one shared output-pixel buffer and retain only two source-frame snapshots instead of one canvas per frame.
 
 - Preserve filtered-out and busy upload batches, leave mixed clipboard files with Discord and request upload cancellation on plugin stop.

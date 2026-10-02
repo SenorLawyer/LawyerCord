@@ -293,7 +293,7 @@ interface LMessageProps {
     reset: () => void;
 }
 function LMessage({ log, isGroupStart, reset, }: LMessageProps) {
-    const message = useMemo(() => messageJsonToMessageClass(log), [log]);
+    const message = useMemo(() => messageJsonToMessageClass(log), [log.message]);
 
     if (!message) return null;
 

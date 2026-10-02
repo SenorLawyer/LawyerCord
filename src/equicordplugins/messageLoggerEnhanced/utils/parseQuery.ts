@@ -20,7 +20,6 @@ import { ChannelStore, GuildStore } from "@webpack/common";
 
 import { LoggedMessageJSON } from "../types";
 import { getGuildIdByChannel } from "./index";
-import { memoize } from "./memoize";
 
 const validIdSearchTypes = ["server", "guild", "channel", "in", "user", "from", "message", "has", "before", "after", "around", "near", "during"] as const;
 type ValidIdSearchTypesUnion = typeof validIdSearchTypes[number];
@@ -31,7 +30,7 @@ interface QueryResult {
     negate: boolean;
 }
 
-export const parseQuery = memoize((query: string = ""): QueryResult | string => {
+export const parseQuery = (query: string = ""): QueryResult | string => {
     let trimmedQuery = query.trim();
     if (!trimmedQuery) {
         return query;
@@ -58,7 +57,7 @@ export const parseQuery = memoize((query: string = ""): QueryResult | string => 
         value: id,
         negate,
     };
-});
+};
 
 export const tokenizeQuery = (query: string) => {
     const parts = query.split(" ").map(parseQuery);

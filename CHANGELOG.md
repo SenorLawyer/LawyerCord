@@ -88,6 +88,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Fixed
 
+- Keep KeywordNotify configuration editable while disabled, reject stopped startup and release retained message records and menu callbacks on stop.
+
 - Search the correct DM or guild endpoint for LastActive, select the actual author/channel hit and reject stale navigation and retained stopped actions.
 
 - Measure completed message fetches, publish timing changes to the current channel and clear pending timing on failures and lifecycle changes.

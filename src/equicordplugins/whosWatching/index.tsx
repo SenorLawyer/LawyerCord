@@ -18,16 +18,20 @@ import { Margins } from "@utils/margins";
 import { classes, getUserAvatarUrl } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import { User } from "@vencord/discord-types";
-import { findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
-import { ApplicationStreamingStore, Clickable, RelationshipStore, Tooltip, UserStore, useStateFromStores } from "@webpack/common";
-import { JSX } from "react";
+import { findCssClassesLazy } from "@webpack";
+import { ApplicationStreamingStore, Clickable, lodash, RelationshipStore, Tooltip, UserStore, UserSummaryItem, useStateFromStores } from "@webpack/common";
+import type { ComponentType, JSX } from "react";
 
 interface WatchingProps {
     userIds: string[];
     guildId?: string;
 }
 
-const UserSummaryItem = findComponentByCodeLazy("defaultRenderUser", "showDefaultAvatarsForNullUsers");
+interface StreamIconProps {
+    OriginalComponent: ComponentType<Record<string, unknown>>;
+    [key: string]: unknown;
+}
+
 const AvatarStyles = findCssClassesLazy("moreUsers", "clickableAvatar", "avatar");
 const cl = classNameFactory("vc-whos-watching-");
 
@@ -89,12 +93,13 @@ export default definePlugin({
         {
             find: ".Masks.STATUS_SCREENSHARE,width:32",
             replacement: {
-                match: /\((\i\.\i)(?=,{mask:\i\.\i\.Masks\.STATUS_SCREENSHARE)/,
-                replace: "($self.component({OriginalComponent:$1})"
+                match: /\((\i\.\i),\{(?=mask:\i\.\i\.Masks\.STATUS_SCREENSHARE)/,
+                replace: "($self.StreamIcon,{OriginalComponent:$1,"
             }
         },
         {
             find: ",setIsForceShowSharingPopout:",
+            predicate: () => settings.store.showPanel,
             replacement: {
                 match: /"div"(?=.{0,50}stream:\i,canGoLive:\i)/,
                 replace: "$self.WrapperComponent"
@@ -103,12 +108,12 @@ export default definePlugin({
     ],
     WrapperComponent: ErrorBoundary.wrap(props => {
         const stream = useStateFromStores([ApplicationStreamingStore], () => ApplicationStreamingStore.getCurrentUserActiveStream());
+        const userIds = useStateFromStores([ApplicationStreamingStore], () => stream ? ApplicationStreamingStore.getViewerIds(stream) : [], [stream], lodash.isEqual);
         if (!stream) return <div {...props}>{props.children}</div>;
 
         let missingUsers = 0;
-        const userIds: string[] = ApplicationStreamingStore.getViewerIds(stream);
         const users = userIds.map(id => UserStore.getUser(id)).filter(user => Boolean(user) ? true : (missingUsers += 1, false));
-        const guildId = stream?.guildId ?? "";
+        const guildId = stream.guildId ?? "";
 
         function renderMoreUsers(_label: string, count: number) {
             const sliced = users.slice(count - 1);
@@ -143,9 +148,9 @@ export default definePlugin({
                                 max={12}
                                 showDefaultAvatarsForNullUsers
                                 renderMoreUsers={renderMoreUsers}
-                                renderUser={(user: User, index: number) => (
+                                renderUser={(user: User) => (
                                     <Clickable
-                                        key={index}
+                                        key={user.id}
                                         className={AvatarStyles.clickableAvatar}
                                         onClick={() => openUserProfile(user.id)}
                                     >
@@ -167,21 +172,17 @@ export default definePlugin({
             </div>
         );
     }),
-    component: function ({ OriginalComponent }) {
-        return ErrorBoundary.wrap(props => {
-            const stream = useStateFromStores([ApplicationStreamingStore], () => ApplicationStreamingStore.getCurrentUserActiveStream());
-            if (!stream) return null;
+    StreamIcon: ErrorBoundary.wrap(({ OriginalComponent, ...props }: StreamIconProps) => {
+        const stream = useStateFromStores([ApplicationStreamingStore], () => ApplicationStreamingStore.getCurrentUserActiveStream());
+        const viewers = useStateFromStores([ApplicationStreamingStore], () => stream ? ApplicationStreamingStore.getViewerIds(stream) : [], [stream], lodash.isEqual);
+        if (!stream) return null;
 
-            const viewers = ApplicationStreamingStore.getViewerIds(stream);
-            const guildId = stream?.guildId ?? "";
-
-            return <Tooltip text={<Watching userIds={viewers} guildId={guildId} />}>
-                {({ onMouseEnter, onMouseLeave }) => (
-                    <div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
-                        <OriginalComponent {...props} />
-                    </div>
-                )}
-            </Tooltip>;
-        });
-    }
+        return <Tooltip text={<Watching userIds={viewers} guildId={stream.guildId ?? ""} />}>
+            {({ onMouseEnter, onMouseLeave }) => (
+                <div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+                    <OriginalComponent {...props} />
+                </div>
+            )}
+        </Tooltip>;
+    }, { noop: true })
 });

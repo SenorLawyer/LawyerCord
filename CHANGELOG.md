@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Changed
 
+- Keep the screenshare spectator icon mounted across renders, subscribe to viewer changes and honor the saved panel toggle.
+
 - Let Chromium defer offscreen TIDAL player frames until they approach the viewport.
 
 - Remove Timezones stylesheet rules for modal layouts that no longer exist.

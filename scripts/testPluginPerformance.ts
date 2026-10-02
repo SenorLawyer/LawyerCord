@@ -13054,23 +13054,26 @@ test("Sekai sticker images survive rerenders and exports keep their original cha
         "@components/Flex": { Flex: "flex" }, "@components/FormSwitch": {}, "@components/Heading": {},
         "@equicordplugins/sekaiStickers/characters.json": { characters: Array.from({ length: 51 }, () => ({ character: "fixture", img: "fixture.png", defaultText: { x: 1, y: 1, r: 0, s: 20 } })) },
         "@webpack/common": { React, Modal: "modal", SelectedChannelStore: { getChannelId: () => selectedChannel }, ChannelStore: { getChannel: (id: string) => id }, UploadHandler: { promptToUpload: (_files: unknown, channel: unknown) => { uploadedChannel = channel; } } },
-        "./Canvas": { __esModule: true, default: "canvas" }, "./Picker": {},
+        "@utils/Logger": { Logger: class { warn() {} } }, "./Picker": {},
     }, { React, Image: TestImage, File, document: { fonts: { check: () => true } } });
     const render = () => {
         stateIndex = 0;
+        effects.length = 0;
         return Editor({ modalProps: { onClose: () => closed++ }, settings: { store: { AutoCloseModal: true } } });
     };
     let tree = render();
-    const cleanup = effects[0]();
+    const cleanup = effects[1]();
     assert.equal(tree.props.actions[1].disabled, true);
     images[0].onload?.();
+    states[0] = true;
     tree = render();
     assert.equal(images.length, 1, "a render reuses the loaded image");
     const callbacks: Array<(blob: Blob | null) => void> = [];
     const canvas = { toBlob: (callback: (blob: Blob | null) => void) => callbacks.push(callback) };
     let drawnImage: unknown;
     const context = { canvas, clearRect() {}, drawImage: (image: unknown) => { drawnImage = image; }, save() {}, restore() {}, translate() {}, rotate() {}, strokeText() {}, fillText() {} };
-    tree.props.children[0].props.children[0].props.children[0].props.draw(context);
+    ref.current = { ...canvas, getContext: () => context };
+    effects[2]();
     assert.equal(drawnImage, images[0]);
     tree.props.actions[1].onClick();
     callbacks[0](null);
@@ -13082,7 +13085,7 @@ test("Sekai sticker images survive rerenders and exports keep their original cha
     assert.equal(closed, 1);
     cleanup();
     assert.equal(images[0].onload, null, "cleanup detaches the obsolete load handler");
-    states[1] = 50;
+    states[2] = 50;
     tree = render();
     assert.equal(tree.props.actions[1].disabled, true, "a new character cannot export the previous image");
 });

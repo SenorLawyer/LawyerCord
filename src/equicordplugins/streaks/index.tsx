@@ -19,7 +19,7 @@ import { useAuthorizationStore } from "./stores/AuthorizationStore";
 import { useStreaksStore } from "./stores/StreaksStore";
 
 const cl = classNameFactory("vc-streaks-");
-const pendingRefreshes = new Set<ReturnType<typeof setTimeout>>();
+const pendingRefreshes = new Map<string, ReturnType<typeof setTimeout>>();
 let generation = 0;
 const COLOR_SETTINGS = ["eliteColor", "diamondColor", "platinumColor", "goldColor", "silverColor", "bronzeColor", "defaultColor"] satisfies (keyof typeof settings.def)[];
 
@@ -45,8 +45,7 @@ const colorFor = (streak: number) => {
 const StreakBadge = ({ userId }: { userId: string; }) => {
     settings.use(COLOR_SETTINGS);
     const currentUserId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
-    const streaks = useStreaksStore(state => state.streaks);
-    const streak = streaks[userId];
+    const streak = useStreaksStore(state => state.streaks[userId]);
 
     if (!streak || streak.count < 1) return null;
     if (!(streak.user_a_id === currentUserId && streak.user_b_id === userId
@@ -70,6 +69,13 @@ const StreakBadge = ({ userId }: { userId: string; }) => {
     );
 };
 
+function clearStreaks() {
+    generation++;
+    for (const timer of pendingRefreshes.values()) clearTimeout(timer);
+    pendingRefreshes.clear();
+    useStreaksStore.getState().clear();
+}
+
 export default definePlugin({
     name: "Streaks",
     description: "Shows a streak next to a user when you exchange DMs with them on consecutive days.",
@@ -78,16 +84,11 @@ export default definePlugin({
     dependencies: ["MessageDecorationsAPI", "MemberListDecoratorsAPI", "ConcatenatedModules"],
     settings,
 
-    stop() {
-        generation++;
-        for (const timer of pendingRefreshes) clearTimeout(timer);
-        pendingRefreshes.clear();
-        useStreaksStore.getState().clear();
-    },
+    stop: clearStreaks,
 
     flux: {
         async CONNECTION_OPEN() {
-            useStreaksStore.getState().clear();
+            clearStreaks();
             if (useAuthorizationStore.getState().isAuthorized()) {
                 await useStreaksStore.getState().fetch();
             }
@@ -117,21 +118,22 @@ export default definePlugin({
                     useStreaksStore.getState().update(recipientId);
                 }
             } else if (message.author.id === recipientId) {
-                if (!theirFlag) {
+                if (!theirFlag && !pendingRefreshes.has(recipientId)) {
                     const requestGeneration = generation;
                     const timer = setTimeout(async () => {
-                        pendingRefreshes.delete(timer);
-                        if (requestGeneration !== generation || UserStore.getCurrentUser()?.id !== me) return;
-                        const before = useStreaksStore.getState().streaks[recipientId]?.count;
-                        await useStreaksStore.getState().refresh(recipientId);
-                        if (requestGeneration !== generation || UserStore.getCurrentUser()?.id !== me) return;
-                        const after = useStreaksStore.getState().streaks[recipientId]?.count;
+                        try {
+                            if (requestGeneration !== generation || UserStore.getCurrentUser()?.id !== me) return;
+                            const before = useStreaksStore.getState().streaks[recipientId]?.count;
+                            await useStreaksStore.getState().refresh(recipientId);
+                            if (requestGeneration !== generation || UserStore.getCurrentUser()?.id !== me) return;
+                            const after = useStreaksStore.getState().streaks[recipientId]?.count;
 
-                        if (before === after) {
-                            useStreaksStore.getState().update(recipientId);
+                            if (before === after) await useStreaksStore.getState().update(recipientId);
+                        } finally {
+                            if (requestGeneration === generation) pendingRefreshes.delete(recipientId);
                         }
                     }, 1000);
-                    pendingRefreshes.add(timer);
+                    pendingRefreshes.set(recipientId, timer);
                 }
             }
         },

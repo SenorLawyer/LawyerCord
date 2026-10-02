@@ -1153,6 +1153,7 @@ test("Streaks badges only display the current account's conversation", () => {
     const streak = { user_a_id: "first", user_b_id: "target", count: 2 };
     const userStore = { getCurrentUser: () => currentId ? { id: currentId } : undefined };
     let subscriptions = 0;
+    let select: (state: object) => unknown = () => undefined;
     const api = loadSource("src/equicordplugins/streaks/index.tsx", {
         "@equicordplugins/_core/concatenatedModules": {},
         "@utils/constants": { Devs: {}, EquicordDevs: {} },
@@ -1163,7 +1164,7 @@ test("Streaks badges only display the current account's conversation", () => {
                 assert.equal(stores[0], userStore); subscriptions++; return selector();
             } },
         "./settings": { settings: { store: {}, use() {} } }, "./stores/AuthorizationStore": {},
-        "./stores/StreaksStore": { useStreaksStore: (selector: (state: object) => unknown) => selector({ streaks: { target: streak } }) },
+        "./stores/StreaksStore": { useStreaksStore: (selector: (state: object) => unknown) => { select = selector; return selector({ streaks: { target: streak } }); } },
     }, { React: { createElement: () => ({}) } }, "({ StreakBadge })");
     for (const id of ["first", "second", "target", undefined]) {
         currentId = id;
@@ -1173,6 +1174,8 @@ test("Streaks badges only display the current account's conversation", () => {
     [streak.user_a_id, streak.user_b_id] = [streak.user_b_id, streak.user_a_id];
     assert.notEqual(api.StreakBadge({ userId: "target" }), null);
     assert.equal(subscriptions, 5);
+    assert.equal(select({ streaks: { target: streak } }), streak);
+    assert.equal(select({ streaks: { target: streak, other: { count: 99 } } }), streak);
 });
 
 test("Streaks delayed message refresh stops with its account or plugin", async () => {
@@ -20227,5 +20230,59 @@ test("SekaiStickers font loads belong to the open editor and cannot revive after
         assert.equal(added.size, closeEarly ? 0 : 2);
         assert.equal(updates.length, initialUpdates + (closeEarly ? 0 : 1));
         if (!closeEarly) cleanup(); assert.equal(added.size, 0);
+    }
+});
+
+
+test("Streaks coalesces incoming message bursts through refresh and clears reconnect work", async () => {
+    for (const change of ["finish", "changed", "stop", "reconnect"]) {
+        const timers = new Map<number, () => Promise<void>>();
+        let nextId = 0;
+        let refreshes = 0;
+        let updates = 0;
+        let resolve: () => void = () => {};
+        const state = { streaks: {} as Record<string, { count: number; }>,
+            clear() { state.streaks = {}; }, fetch() {},
+            refresh: () => { refreshes++; return new Promise<void>(done => { resolve = done; }); },
+            update: () => { updates++; }
+        };
+        const { default: plugin } = loadSource("src/equicordplugins/streaks/index.tsx", {
+            "@equicordplugins/_core/concatenatedModules": {}, "@utils/constants": { Devs: {}, EquicordDevs: {} },
+            "@utils/css": { classNameFactory: () => () => "fixture" },
+            "@utils/types": { __esModule: true, default: (value: unknown) => value },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: "me" }) },
+                ChannelStore: { getChannel: (id: string) => ({ isDM: () => true, recipients: [id] }) },
+                moment: () => ({ format: () => "2026-10-02" }),
+            },
+            "./settings": { settings: { store: {} } },
+            "./stores/AuthorizationStore": { useAuthorizationStore: { getState: () => ({ isAuthorized: () => true }) } },
+            "./stores/StreaksStore": { useStreaksStore: { getState: () => state } },
+        }, {
+            setTimeout: (callback: () => Promise<void>) => { const id = ++nextId; timers.set(id, callback); return id; },
+            clearTimeout: (id: number) => timers.delete(id),
+        });
+        const message = (peer: string) => plugin.flux.MESSAGE_CREATE({ type: "MESSAGE_CREATE", message: { author: { id: peer } }, channelId: peer });
+        for (let i = 0; i < 100; i++) await message("peer");
+        assert.equal(timers.size, 1, "one timer per peer before its flags arrive");
+        await message("other"); assert.equal(timers.size, 2, "independent peers retain independent refreshes");
+        const callback = timers.get(1); assert.ok(callback); timers.delete(1);
+        const pending = callback(); assert.equal(refreshes, 1);
+        for (let i = 0; i < 100; i++) await message("peer");
+        assert.equal(nextId, 2, "active refresh retains burst ownership");
+        if (change === "stop") plugin.stop();
+        if (change === "reconnect") await plugin.flux.CONNECTION_OPEN();
+        if (change === "stop" || change === "reconnect") assert.equal(timers.size, 0);
+        if (change === "reconnect") { await message("peer"); assert.equal(timers.size, 1); }
+        if (change === "changed") state.streaks.peer = { count: 2 };
+        resolve(); await pending;
+        assert.equal(updates, change === "finish" ? 1 : 0);
+        if (change === "finish") { await message("peer"); assert.equal(nextId, 3, "later messages can refresh again"); }
+        if (change === "reconnect") {
+            await message("peer");
+            assert.equal(nextId, 3, "old completion cannot release the new connection refresh");
+            assert.equal(timers.size, 1);
+        }
+        plugin.stop(); assert.equal(timers.size, 0);
     }
 });

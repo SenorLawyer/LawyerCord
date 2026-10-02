@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Changed
 
+- Coalesce Streaks message bursts into one pending refresh per conversation, discard reconnect work, and subscribe each badge only to its conversation.
+
 - Update Song Spotlight progress from media events instead of permanent animation-frame loops and stop loading animations after cards resolve.
 
 - Load the Sekai sticker editor and fonts when opened, release its fonts on close, and remove the Canvas forwarding component.

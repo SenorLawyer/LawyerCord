@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Changed
 
+- Delete unused ThemeLibrary tab, like-button and contributor declarations.
+
 - Coalesce Streaks message bursts into one pending refresh per conversation, discard reconnect work, and subscribe each badge only to its conversation.
 
 - Update Song Spotlight progress from media events instead of permanent animation-frame loops and stop loading animations after cards resolve.

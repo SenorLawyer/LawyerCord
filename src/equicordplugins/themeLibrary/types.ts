@@ -39,16 +39,6 @@ export interface ThemeInfoModalProps extends RenderModalProps {
     theme: Theme;
 }
 
-export const enum TabItem {
-    THEMES,
-    SUBMIT_THEMES,
-}
-
-export interface LikesComponentProps {
-    theme: Theme;
-    userId: User["id"];
-}
-
 export const enum SearchStatus {
     ALL,
     ENABLED,
@@ -68,10 +58,3 @@ export type ThemeLikeProps = {
         hasLiked?: boolean;
     }];
 };
-
-export interface Contributor {
-    username: User["username"];
-    github_username: string;
-    id: User["id"];
-    avatar: string;
-}

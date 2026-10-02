@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Changed
 
+- Skip FakeNitro message-tree cloning when no emoji or sticker links can be transformed, preserving ordinary message trees and whitespace.
+
 - Limit missing-message preview fetches to their target and mounted lifetime, follow live message/channel stores and ignore stale replies.
 
 - Preserve existing MessageLogger logs during streamed imports, skip duplicate IDs and count only committed additions.

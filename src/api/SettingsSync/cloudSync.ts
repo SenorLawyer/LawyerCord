@@ -136,7 +136,7 @@ async function buildLocalData(checkCurrent: () => void): Promise<Map<string, Uin
     checkCurrent();
     data.set("quickCss", encoder.encode(quickCss));
 
-    const dataStoreEntries = await DataStore.entries();
+    const dataStoreEntries = await DataStore.entries(undefined, key => !isLocalDataStoreKey(key));
     checkCurrent();
     data.set("dataStore", encoder.encode(serializeDataStore(getCloudDataStoreEntries(dataStoreEntries))));
 

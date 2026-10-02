@@ -77,6 +77,7 @@ let initialization: Promise<void> | null = null;
 let bridgeSecret = "";
 let sentMessages = new Set<string>();
 let ledgerWrite = Promise.resolve();
+let attachmentDownloads = 0;
 
 function equalSecret(candidate: unknown): boolean {
     if (typeof candidate !== "string") return false;
@@ -379,32 +380,43 @@ function validateAttachmentUrl(url: string): URL {
 }
 
 async function fetchAttachmentData(url: string): Promise<AttachmentData> {
-    const response = await fetch(validateAttachmentUrl(url), { redirect: "error", signal: AbortSignal.timeout(120_000) });
-    if (!response.ok || !response.body) throw new Error(`Attachment download failed with HTTP ${response.status}`);
-    const declaredSize = Number(response.headers.get("content-length"));
-    if (Number.isFinite(declaredSize) && declaredSize > MAX_ATTACHMENT_SIZE) {
-        await response.body.cancel();
-        throw new Error("Attachment exceeds the 25 MB Discord MCP limit");
-    }
-
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    const reader = response.body.getReader();
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        size += value.byteLength;
-        if (size > MAX_ATTACHMENT_SIZE) {
-            await reader.cancel();
+    const parsed = validateAttachmentUrl(url);
+    if (attachmentDownloads >= 4) throw new Error("Four attachments are already downloading. Try again when one finishes.");
+    attachmentDownloads++;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120_000);
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    try {
+        const response = await fetch(parsed, { redirect: "error", signal: controller.signal });
+        reader = response.body?.getReader();
+        if (!response.ok || !reader) throw new Error(`Attachment download failed with HTTP ${response.status}`);
+        const declaredSize = Number(response.headers.get("content-length"));
+        if (Number.isFinite(declaredSize) && declaredSize > MAX_ATTACHMENT_SIZE)
             throw new Error("Attachment exceeds the 25 MB Discord MCP limit");
-        }
-        chunks.push(value);
-    }
 
-    return {
-        contentType: response.headers.get("content-type")?.split(";", 1)[0] ?? "application/octet-stream",
-        data: Buffer.concat(chunks.map(chunk => Buffer.from(chunk))),
-    };
+        const chunks: Uint8Array[] = [];
+        let size = 0;
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            size += value.byteLength;
+            if (size > MAX_ATTACHMENT_SIZE) throw new Error("Attachment exceeds the 25 MB Discord MCP limit");
+            chunks.push(value);
+        }
+
+        return {
+            contentType: response.headers.get("content-type")?.split(";", 1)[0] ?? "application/octet-stream",
+            data: Buffer.concat(chunks, size),
+        };
+    } finally {
+        clearTimeout(timeout);
+        controller.abort();
+        if (reader) {
+            await reader.cancel().catch(() => undefined);
+            reader.releaseLock();
+        }
+        attachmentDownloads--;
+    }
 }
 
 export async function fetchDiscordAttachment(_: IpcMainInvokeEvent, url: string): Promise<{

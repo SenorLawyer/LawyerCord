@@ -16,7 +16,7 @@ export const LastFMScrobbler: ScrobblerBackend = {
     name: "Last.FM",
     id: "lastfm",
 
-    async fetchTrackData(username: string, apiKey: string): Promise<TrackData | null> {
+    async fetchTrackData(username: string, apiKey: string, signal?: AbortSignal): Promise<TrackData | null> {
         try {
             const params = new URLSearchParams({
                 method: "user.getrecenttracks",
@@ -26,7 +26,7 @@ export const LastFMScrobbler: ScrobblerBackend = {
                 format: "json"
             });
 
-            const res = await fetch(`https://ws.audioscrobbler.com/2.0/?${params}`);
+            const res = await fetch(`https://ws.audioscrobbler.com/2.0/?${params}`, { signal });
             if (!res.ok) throw `${res.status} ${res.statusText}`;
 
             const json = await res.json();
@@ -51,7 +51,7 @@ export const LastFMScrobbler: ScrobblerBackend = {
                 imageURL: trackData.image?.find((x: any) => x.size === "large")?.["#text"]
             } as TrackData;
         } catch (e) {
-            logger.error("Failed to query Last.FM API", e);
+            if (!signal?.aborted) logger.error("Failed to query Last.FM API", e);
             // will clear the rich presence if API fails
             return null;
         }

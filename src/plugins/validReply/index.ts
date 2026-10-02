@@ -5,10 +5,11 @@
  */
 
 import { Devs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { Channel, Message, User } from "@vencord/discord-types";
 import { findByCodeLazy } from "@webpack";
-import { FluxDispatcher, RestAPI } from "@webpack/common";
+import { Constants, FluxDispatcher, RestAPI, UserStore } from "@webpack/common";
 
 const enum ReferencedMessageState {
     Loaded,
@@ -26,7 +27,14 @@ interface Reply {
 }
 
 const fetching = new Map<string, string>();
+const logger = new Logger("ValidReply");
+let generation = 0;
 let ReplyStore: any;
+
+function clearFetching() {
+    generation++;
+    fetching.clear();
+}
 
 const createMessageRecord = findByCodeLazy(".createFromServer(", ".isBlockedForMessage", "messageReference:");
 
@@ -35,6 +43,11 @@ export default definePlugin({
     description: 'Fixes "Message could not be loaded" upon hovering over the reply',
     tags: ["Chat", "Utility"],
     authors: [Devs.newwares],
+    stop: clearFetching,
+    flux: {
+        LOGOUT: clearFetching,
+        CONNECTION_OPEN: clearFetching
+    },
     patches: [
         {
             // Same find as in ReplyTimestamp
@@ -66,9 +79,11 @@ export default definePlugin({
             return;
         }
         fetching.set(messageId, channelId);
+        const owner = generation;
+        const accountId = UserStore.getCurrentUser()?.id;
 
         RestAPI.get({
-            url: `/channels/${channelId}/messages`,
+            url: Constants.Endpoints.MESSAGES(channelId),
             query: {
                 limit: 1,
                 around: messageId
@@ -76,6 +91,7 @@ export default definePlugin({
             retries: 2
         })
             .then(res => {
+                if (owner !== generation || accountId !== UserStore.getCurrentUser()?.id) return;
                 const reply: Message | undefined = res?.body?.[0];
                 if (!reply) return;
 
@@ -101,9 +117,9 @@ export default definePlugin({
                     });
                 }
             })
-            .catch(() => { })
+            .catch(error => logger.warn("Could not load the referenced message.", error))
             .finally(() => {
-                fetching.delete(messageId);
+                if (owner === generation) fetching.delete(messageId);
             });
     }
 });

@@ -13,7 +13,7 @@ import { FluxDispatcher, React } from "@webpack/common";
 import { addCollectionContextMenuPatch, getGifPickerContextMenuItems, RemoveItemContextMenuItems } from "./components/contextMenus";
 import { settings, SortingOptions } from "./settings";
 import { Category, Collection, Gif, GifPickerInstance } from "./types";
-import { cache_collections, refreshCacheCollection, updateGif } from "./utils/collectionManager";
+import { cache_collections, refreshCacheCollection, updateGifUrls } from "./utils/collectionManager";
 import { getFormat } from "./utils/getFormat";
 import { logger, stripPrefix } from "./utils/misc";
 import { batchRefreshAttachmentUrls, isCdnUrlExpired } from "./utils/refreshUrl";
@@ -21,6 +21,7 @@ import { batchRefreshAttachmentUrls, isCdnUrlExpired } from "./utils/refreshUrl"
 let GIF_COLLECTION_PREFIX: string;
 let GIF_ITEM_PREFIX: string;
 let refreshingUrls = false;
+let refreshGeneration = 0;
 let oldTrendingCat: Category[] | null = null;
 
 export default definePlugin({
@@ -67,6 +68,20 @@ export default definePlugin({
         refreshCacheCollection();
         GIF_COLLECTION_PREFIX = settings.store.collectionPrefix;
         GIF_ITEM_PREFIX = settings.store.itemPrefix;
+    },
+
+    stop() {
+        refreshGeneration++;
+        refreshingUrls = false;
+        oldTrendingCat = null;
+    },
+
+    flux: {
+        CONNECTION_OPEN() {
+            refreshGeneration++;
+            refreshingUrls = false;
+            oldTrendingCat = null;
+        }
     },
 
     sortedCollections(): Collection[] {
@@ -119,31 +134,26 @@ export default definePlugin({
 
     async refreshExpiredUrls(urls: string[], expiredGifs: Gif[], query: string) {
         refreshingUrls = true;
+        const generation = refreshGeneration;
         try {
             const fullMap: Record<string, string> = {};
             for (let i = 0; i < urls.length; i += 50) {
                 const result = await batchRefreshAttachmentUrls(urls.slice(i, i + 50));
+                if (generation !== refreshGeneration) return;
                 Object.assign(fullMap, result);
             }
 
             if (!Object.keys(fullMap).length) return;
 
-            let anyUpdated = false;
-            for (const gif of expiredGifs) {
-                const newSrc = fullMap[gif.src] ?? gif.src;
-                const newUrl = fullMap[gif.url] ?? gif.url;
-                if (newSrc !== gif.src || newUrl !== gif.url) {
-                    await updateGif(gif.id, { ...gif, src: newSrc, url: newUrl });
-                    anyUpdated = true;
-                }
-            }
-
-            if (!anyUpdated) return;
+            const updated = await updateGifUrls(new Set(expiredGifs.map(gif => gif.id)), fullMap);
+            if (!updated || generation !== refreshGeneration) return;
 
             FluxDispatcher.dispatch({ type: "GIF_PICKER_QUERY", query: "" });
             FluxDispatcher.dispatch({ type: "GIF_PICKER_QUERY", query });
+        } catch (error) {
+            logger.error("Could not refresh GIF collection links.", error);
         } finally {
-            refreshingUrls = false;
+            if (generation === refreshGeneration) refreshingUrls = false;
         }
     },
 

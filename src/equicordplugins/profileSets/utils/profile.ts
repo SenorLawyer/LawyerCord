@@ -109,9 +109,13 @@ function normalizeDisplayNameStyles(value: DisplayNameStylesLike | null | undefi
 }
 
 export async function imageUrlToBase64(url: string, signal?: AbortSignal): Promise<string | null> {
+    const controller = new AbortController();
+    const abortRequest = () => controller.abort();
+    if (signal?.aborted) return null;
+    signal?.addEventListener("abort", abortRequest, { once: true });
+    const timeout = setTimeout(abortRequest, 30_000);
     try {
-        const timeout = AbortSignal.timeout(30_000);
-        const response = await fetch(url, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
+        const response = await fetch(url, { signal: controller.signal });
         if (!response.ok) {
             await response.body?.cancel();
             return null;
@@ -142,15 +146,18 @@ export async function imageUrlToBase64(url: string, signal?: AbortSignal): Promi
                 fileReader.onload = () => resolve(fileReader.result as string);
                 fileReader.onerror = () => reject(fileReader.error);
                 fileReader.onabort = () => reject(new Error("The profile image conversion was cancelled."));
-                signal?.throwIfAborted();
-                signal?.addEventListener("abort", abort, { once: true });
+                if (controller.signal.aborted) throw new Error("The profile image conversion was cancelled.");
+                controller.signal.addEventListener("abort", abort, { once: true });
                 fileReader.readAsDataURL(blob);
             });
         } finally {
-            signal?.removeEventListener("abort", abort);
+            controller.signal.removeEventListener("abort", abort);
         }
     } catch {
         return null;
+    } finally {
+        clearTimeout(timeout);
+        signal?.removeEventListener("abort", abortRequest);
     }
 }
 
@@ -170,7 +177,7 @@ function checkEmbeddedImageSize(image: string | null | undefined) {
 }
 
 async function processImage(imageData: ImageInput, userId: string, type: "avatar" | "banner", guildId?: string, useGuildPath?: boolean, signal?: AbortSignal): Promise<string | null> {
-    signal?.throwIfAborted();
+    if (signal?.aborted) throw signal.reason ?? new DOMException("The operation was aborted.", "AbortError");
     if (typeof imageData === "object" && imageData) imageData = imageData.imageUri;
     if (!imageData) return null;
 
@@ -202,7 +209,7 @@ async function processImage(imageData: ImageInput, userId: string, type: "avatar
 }
 
 export async function getCurrentProfile(guildId?: string, options: CurrentProfileOptions = {}): Promise<Omit<ProfilePreset, "name" | "timestamp">> {
-    options.signal?.throwIfAborted();
+    if (options.signal?.aborted) throw options.signal.reason ?? new DOMException("The operation was aborted.", "AbortError");
     const currentUser = UserStore.getCurrentUser();
     const baseProfile = UserProfileStore.getUserProfile(currentUser.id);
     const isGuildProfile = options.isGuildProfile ?? Boolean(guildId);
@@ -331,7 +338,7 @@ export async function loadPresetAsPending(preset: ProfilePreset, guildId?: strin
     if (!userId) throw new Error("No account is signed in.");
     const images = [preset.avatarDataUrl, preset.bannerDataUrl];
     for (let index = 0; index < images.length; index++) {
-        options.signal?.throwIfAborted();
+        if (options.signal?.aborted) throw options.signal.reason ?? new DOMException("The operation was aborted.", "AbortError");
         let image = images[index];
         if (image != null && !image.startsWith("data:")) {
             const url = parseUrl(image);

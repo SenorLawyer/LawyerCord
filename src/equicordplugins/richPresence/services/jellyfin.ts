@@ -21,6 +21,7 @@ const logger = new Logger("RichPresence:Jellyfin");
 let updateInterval: NodeJS.Timeout | undefined;
 let hasShownConfigError = false;
 let isUpdating = false;
+let requestController: AbortController | undefined;
 let lastApiErrorAt = 0;
 let updateGeneration = 0;
 
@@ -43,7 +44,7 @@ function reportApiError(logMessage: string, toastMessage?: string, details?: unk
     if (toastMessage) showToast(toastMessage, "failure", { duration: 15000 });
 }
 
-async function fetchMediaData(): Promise<JfMediaData | null> {
+async function fetchMediaData(signal: AbortSignal): Promise<JfMediaData | null> {
     const { jf_serverUrl, jf_apiKey, jf_userId } = settings.store;
     if (!jf_serverUrl || !jf_apiKey || !jf_userId) {
         if (!hasShownConfigError) {
@@ -56,7 +57,7 @@ async function fetchMediaData(): Promise<JfMediaData | null> {
 
     try {
         const baseUrl = (jf_serverUrl.startsWith("http") ? jf_serverUrl : `https://${jf_serverUrl}`).replace(/\/$/, "");
-        const res = await fetch(`${baseUrl}/Sessions?api_key=${jf_apiKey}`);
+        const res = await fetch(`${baseUrl}/Sessions?api_key=${jf_apiKey}`, { signal });
         if (!res.ok) throw `${res.status} ${res.statusText}`;
 
         const contentType = res.headers.get("content-type") ?? "";
@@ -101,15 +102,15 @@ async function fetchMediaData(): Promise<JfMediaData | null> {
             isPaused: !!playState?.IsPaused,
         };
     } catch (e) {
-        reportApiError("Failed to query Jellyfin API", undefined, e);
+        if (!signal.aborted) reportApiError("Failed to query Jellyfin API", undefined, e);
         return null;
     }
 }
 
-async function getActivity(): Promise<Activity | null> {
+async function getActivity(signal: AbortSignal): Promise<Activity | null> {
     const { store } = settings;
-    const mediaData = await fetchMediaData();
-    if (!mediaData) return null;
+    const mediaData = await fetchMediaData(signal);
+    if (!mediaData || signal.aborted) return null;
 
     let richPresenceType: number;
     if (store.jf_overrideType !== "off") {
@@ -243,14 +244,19 @@ async function updatePresence() {
     if (isUpdating) return;
 
     const generation = updateGeneration;
+    const controller = new AbortController();
+    requestController = controller;
+    const timeout = setTimeout(() => controller.abort(), 30_000);
     isUpdating = true;
     try {
-        const activity = await getActivity();
-        if (generation === updateGeneration) setActivity(activity);
+        const activity = await getActivity(controller.signal);
+        if (generation === updateGeneration && !controller.signal.aborted) setActivity(activity);
     } catch (e) {
-        logger.error("Failed to update presence", e);
+        if (!controller.signal.aborted) logger.error("Failed to update presence", e);
         if (generation === updateGeneration) setActivity(null);
     } finally {
+        clearTimeout(timeout);
+        if (requestController === controller) requestController = undefined;
         if (generation === updateGeneration) isUpdating = false;
     }
 }
@@ -267,6 +273,8 @@ export function start() {
 
 export function stop() {
     updateGeneration++;
+    requestController?.abort();
+    requestController = undefined;
     clearInterval(updateInterval);
     updateInterval = undefined;
     isUpdating = false;

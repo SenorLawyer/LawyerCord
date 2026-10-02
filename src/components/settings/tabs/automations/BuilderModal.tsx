@@ -305,31 +305,34 @@ function Builder({ initial, transitionState, onClose }: RenderModalProps & { ini
         let last = origin;
         clicked.current = true;
 
-        const move = (moveEvent: PointerEvent) => {
-            last = { x: moveEvent.clientX, y: moveEvent.clientY };
-            if (!active && Math.hypot(moveEvent.clientX - origin.x, moveEvent.clientY - origin.y) < 5) return;
-            if (!active) { active = true; clicked.current = false; setDrag(source); }
-
+        let frame: number | undefined;
+        const update = () => {
+            frame = undefined;
             if (source.kind === "node") {
                 const from = toCanvas(origin.x, origin.y);
-                const to = toCanvas(moveEvent.clientX, moveEvent.clientY);
+                const to = toCanvas(last.x, last.y);
                 moveNode(source.id, source.nodeX + (to.x - from.x), source.nodeY + (to.y - from.y), false);
                 return;
             }
             if (source.kind === "pan") {
-                setView(current => ({ ...current, x: source.viewX + (moveEvent.clientX - source.startX), y: source.viewY + (moveEvent.clientY - source.startY) }));
+                setView(current => ({ ...current, x: source.viewX + (last.x - source.startX), y: source.viewY + (last.y - source.startY) }));
                 return;
             }
-            setGhost({ x: moveEvent.clientX, y: moveEvent.clientY });
-            setPointer(toCanvas(moveEvent.clientX, moveEvent.clientY));
-            if (source.kind === "edge") setDropTarget(nodeAt(moveEvent.clientX, moveEvent.clientY));
+            setGhost(last);
+            setPointer(toCanvas(last.x, last.y));
+            if (source.kind === "edge") setDropTarget(nodeAt(last.x, last.y));
+        };
+        const move = (moveEvent: PointerEvent) => {
+            last = { x: moveEvent.clientX, y: moveEvent.clientY };
+            if (!active && Math.hypot(last.x - origin.x, last.y - origin.y) < 5) return;
+            if (!active) { active = true; clicked.current = false; setDrag(source); }
+            if (frame === undefined) frame = requestAnimationFrame(update);
         };
 
         const finish = (upEvent: PointerEvent) => {
-            element.removeEventListener("pointermove", move);
-            element.removeEventListener("pointerup", finish);
-            element.removeEventListener("pointercancel", finish);
-            if (element.hasPointerCapture(event.pointerId)) element.releasePointerCapture(event.pointerId);
+            dragCleanup.current?.();
+            last = { x: upEvent.clientX, y: upEvent.clientY };
+            if (active && source.kind === "pan") update();
             const rect = surfaceRef.current?.getBoundingClientRect();
             const inside = rect !== undefined && upEvent.clientX >= rect.left && upEvent.clientX <= rect.right && upEvent.clientY >= rect.top && upEvent.clientY <= rect.bottom;
 
@@ -339,7 +342,7 @@ function Builder({ initial, transitionState, onClose }: RenderModalProps & { ini
                 moveNode(source.id, source.nodeX + (to.x - from.x), source.nodeY + (to.y - from.y), true);
             }
             if (active && source.kind === "edge") {
-                const target = latest.current.dropTarget ?? nodeAt(upEvent.clientX, upEvent.clientY);
+                const target = nodeAt(upEvent.clientX, upEvent.clientY);
                 if (target) connect(source.id, source.port, target);
                 // Let go on empty space, and the next block you pick lands right here, already connected.
                 else if (inside) {
@@ -361,7 +364,14 @@ function Builder({ initial, transitionState, onClose }: RenderModalProps & { ini
             setDropTarget(null);
         };
 
-        dragCleanup.current = () => { element.removeEventListener("pointermove", move); element.removeEventListener("pointerup", finish); element.removeEventListener("pointercancel", finish); };
+        dragCleanup.current = () => {
+            if (frame !== undefined) cancelAnimationFrame(frame);
+            frame = undefined;
+            element.removeEventListener("pointermove", move);
+            element.removeEventListener("pointerup", finish);
+            element.removeEventListener("pointercancel", finish);
+            if (element.hasPointerCapture(event.pointerId)) element.releasePointerCapture(event.pointerId);
+        };
         element.setPointerCapture(event.pointerId);
         element.addEventListener("pointermove", move);
         element.addEventListener("pointerup", finish);

@@ -24,7 +24,7 @@ import { classes } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import { DiscordPlatform, User } from "@vencord/discord-types";
 import { filters, findStoreLazy, mapMangledModuleLazy } from "@webpack";
-import { AuthenticationStore, PresenceStore, Tooltip, UserStore, useStateFromStores } from "@webpack/common";
+import { AuthenticationStore, lodash, PresenceStore, Tooltip, UserStore, useStateFromStores } from "@webpack/common";
 
 export interface Session {
     sessionId: string;
@@ -131,19 +131,6 @@ const PlatformIcon = ({ platform, status, small }) => {
     return <Icon color={useStatusFillColor(status)} tooltip={tooltip} small={small} />;
 };
 
-function useEnsureOwnStatus(user: User) {
-    const currentUserId = AuthenticationStore.getId();
-    if (!currentUserId || user.id !== currentUserId) {
-        return;
-    }
-
-    const sessions = useStateFromStores([SessionsStore], () => SessionsStore.getSessions());
-    if (!sessions || typeof sessions !== "object") return null;
-
-    const { clientStatuses } = PresenceStore.getState();
-    clientStatuses[currentUserId] = getOwnClientStatuses(sessions);
-}
-
 interface PlatformIndicatorProps {
     user: User;
     isProfile?: boolean;
@@ -152,11 +139,13 @@ interface PlatformIndicatorProps {
 }
 
 const PlatformIndicator = ({ user, isProfile, isMessage, isMemberList }: PlatformIndicatorProps) => {
-    if (user == null || (user.bot && !settings.store.showBots)) return null;
-    useEnsureOwnStatus(user);
-
-    const status = useStateFromStores([PresenceStore], () => PresenceStore.getClientStatus(user.id));
-    if (!status) return null;
+    const status = useStateFromStores([AuthenticationStore, SessionsStore, PresenceStore], () => {
+        if (!user) return;
+        if (user.id !== AuthenticationStore.getId()) return PresenceStore.getClientStatus(user.id);
+        const sessions = SessionsStore.getSessions();
+        return sessions ? getOwnClientStatuses(sessions) : undefined;
+    }, [user?.id, user?.bot], lodash.isEqual);
+    if (!status || (user.bot && !settings.store.showBots)) return null;
 
     const icons = Array.from(Object.entries(status), ([platform, status]) => (
         <PlatformIcon

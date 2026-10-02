@@ -2,6 +2,21 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 3.1.4.0 - 2026-10-02 (Nightly)
+
+### Changed
+
+- Reuse settings proxies between mutations and isolate message popover factories so plugin toggles cannot change another component's hook order.
+- Read cloud backup values only after filtering their keys, and inspect downloaded speech models one at a time.
+- Bound notification backlog, CSP reports, voice history, tab reopen history, song profiles, translations, audio downloads and archive work.
+- Defer audio visualization and GIF font loading until needed, and release fonts, preview media and pending profile requests when their views close.
+- Coalesce lyric updates, streak requests, presence polls, theme refreshes and automation model requests. Apply automation drag updates once per frame and preserve previous editor snapshots.
+- Cancel obsolete startup, account and modal work across plugins, release stopped listeners and prevent stale results from replacing current state.
+- Limit secure attachment authentication and download work, settle sibling operations before releasing capacity, wipe discarded plaintext and allow retries after overload. Clear decrypted media on account changes.
+- Bound native Discord MCP attachment downloads and stop Codex history scanning after its first complete header.
+- Preserve older Chromium cancellation behavior in the changed audio, font, profile, repository and database paths.
+- Add source-executing regressions and a per-file performance audit ledger, including remaining profiling limits.
+
 ## 3.1.3.0 - 2026-10-02 (Nightly)
 
 ### Changed

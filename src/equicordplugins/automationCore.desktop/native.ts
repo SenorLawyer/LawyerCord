@@ -559,12 +559,29 @@ async function codexFiles(): Promise<string[]> {
 }
 
 async function readCodexHeader(file: string): Promise<CodexSessionHeader | undefined> {
-    const { lines } = await readAppended(file, 0);
-    for (const line of lines.slice(0, 3)) {
-        const parsed = parseCodexLine(line);
-        if (parsed?.kind === "session") return parsed;
+    const handle = await open(file, "r");
+    try {
+        const chunks: Buffer[] = [];
+        let offset = 0;
+        let newlines = 0;
+        while (offset < READ_CAP && newlines < 3) {
+            const buffer = Buffer.alloc(Math.min(4096, READ_CAP - offset));
+            const { bytesRead } = await handle.read(buffer, 0, buffer.length, offset);
+            if (!bytesRead) break;
+            const bytes = buffer.subarray(0, bytesRead);
+            chunks.push(bytes);
+            offset += bytesRead;
+            for (const byte of bytes) if (byte === 0x0A) newlines++;
+        }
+        const text = Buffer.concat(chunks).toString("utf8");
+        const lines = text.slice(0, text.lastIndexOf("\n") + 1).split("\n");
+        for (const line of lines.slice(0, 3)) {
+            const parsed = parseCodexLine(line);
+            if (parsed?.kind === "session") return parsed;
+        }
+    } finally {
+        await handle.close();
     }
-    return undefined;
 }
 
 function turnFor(turnId: string, header: CodexSessionHeader | undefined, startedAt: number): CodexTurn {

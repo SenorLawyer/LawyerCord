@@ -45,6 +45,10 @@ function load(source: string) {
     };
     let constructions = 0;
     let cursor = 0;
+    let now = 0;
+    class Clock extends Date {
+        static now() { return now; }
+    }
     const createElement = (_type: unknown, props: Record<string, unknown> | null, ...children: unknown[]): Element => ({ props: props ?? {}, children });
     const createFormatter = (locales?: Intl.LocalesArgument, options?: Intl.DateTimeFormatOptions) => {
         constructions++;
@@ -75,7 +79,7 @@ function load(source: string) {
     });
     const module = { exports: {} as Exports };
     runInNewContext(outputText, {
-        module, exports: module.exports, React: { createElement }, Intl: { DateTimeFormat: dateTimeFormat }, Date,
+        module, exports: module.exports, React: { createElement }, Intl: { DateTimeFormat: dateTimeFormat }, Date: Clock,
         require(name: string) {
             const mock = mocks[name];
             assert.ok(mock, `Unexpected import: ${name}`);
@@ -85,6 +89,7 @@ function load(source: string) {
 
     return {
         fixture,
+        advance: (milliseconds: number) => { now += milliseconds; },
         get constructions() { return constructions; },
         getSystemTimezone: module.exports.getSystemTimezone,
         getTime: module.exports.default.getTime,
@@ -139,13 +144,19 @@ function check() {
         }
     }
     Object.assign(runtime.fixture, { systemTimezone: "Asia/Tokyo", showTimezoneInfo: true, showLocalTimezone: false });
+    assert.equal(runtime.getSystemTimezone(), "UTC", "System discovery is shared within its refresh interval");
+    runtime.advance(60_000);
     assert.equal(runtime.getSystemTimezone(), "Asia/Tokyo");
     assert.deepEqual(runtime.render(timestamps[0], "Asia/Tokyo"), reference(runtime.fixture, timestamps[0], "Asia/Tokyo"));
     const systemOptions: Intl.DateTimeFormatOptions = { timeZone: undefined, hour: "numeric", hour12: false };
     const systemTime = runtime.getTime("UTC", timestamps[0], systemOptions);
     assert.equal(systemTime, new Intl.DateTimeFormat("en-US", { ...systemOptions, timeZone: "Asia/Tokyo" }).format(new Date(timestamps[0])));
     runtime.fixture.systemTimezone = "UTC";
-    assert.equal(runtime.getSystemTimezone(), "UTC", "System timezone changes remain visible without a restart");
+    assert.equal(runtime.getSystemTimezone(), "Asia/Tokyo");
+    runtime.advance(59_999);
+    assert.equal(runtime.getSystemTimezone(), "Asia/Tokyo");
+    runtime.advance(1);
+    assert.equal(runtime.getSystemTimezone(), "UTC", "System timezone changes become visible within one minute without a restart");
     const changedSystemTime = runtime.getTime("UTC", timestamps[0], systemOptions);
     assert.notEqual(changedSystemTime, systemTime);
     assert.equal(changedSystemTime, new Intl.DateTimeFormat("en-US", { ...systemOptions, timeZone: "UTC" }).format(new Date(timestamps[0])));
@@ -160,8 +171,8 @@ function check() {
     batch(repeated);
     const repeatedConstructions = repeated.constructions - firstBatchConstructions;
     console.log(JSON.stringify({ firstBatchConstructions, repeatedConstructions, messagesPerBatch: 100 }));
-    assert.equal(firstBatchConstructions, 115, "Five zones reuse three explicit formatters; the 100 system probes remain fresh");
-    assert.equal(repeatedConstructions, 100, "Repeated messages reuse explicit timezone formatters");
+    assert.equal(firstBatchConstructions, 16, "Five zones reuse three explicit formatters and one system discovery");
+    assert.equal(repeatedConstructions, 0, "Repeated messages reuse explicit and system timezone discovery");
     for (const timezone of Intl.supportedValuesOf("timeZone").filter(timezone => !zones.includes(timezone)).slice(0, 160)) {
         assert.deepEqual(repeated.render(timestamps[0], timezone), reference(repeated.fixture, timestamps[0], timezone));
     }

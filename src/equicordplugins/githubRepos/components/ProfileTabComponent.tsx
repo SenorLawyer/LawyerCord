@@ -19,6 +19,12 @@ export function ProfileTabComponent({ id }: { id: string; }) {
     const [userInfo, setUserInfo] = useState<GitHubUserInfo | null>(null);
 
     useEffect(() => {
+        const controller = new AbortController();
+        const { signal } = controller;
+        setRepos([]);
+        setLoading(true);
+        setError(null);
+        setUserInfo(null);
         const fetchData = async () => {
             try {
                 const profile = UserProfileStore.getUserProfile(id);
@@ -40,7 +46,8 @@ export function ProfileTabComponent({ id }: { id: string; }) {
                 }
 
                 const username = githubConnection.name;
-                const userInfoData = await fetchUserInfo(username);
+                const userInfoData = await fetchUserInfo(username, signal);
+                if (signal.aborted) return;
                 if (userInfoData) {
                     setUserInfo(userInfoData);
                 }
@@ -48,24 +55,28 @@ export function ProfileTabComponent({ id }: { id: string; }) {
                 const githubId = githubConnection.id;
 
                 // Try to fetch by ID first, fall back to username
-                const reposById = await fetchReposByUserId(githubId);
+                const reposById = await fetchReposByUserId(githubId, 30, signal);
+                if (signal.aborted) return;
                 if (reposById) {
                     setRepos(reposById);
                     setLoading(false);
                     return;
                 }
 
-                const reposByUsername = await fetchReposByUsername(username);
+                const reposByUsername = await fetchReposByUsername(username, 30, signal);
+                if (signal.aborted) return;
                 setRepos(reposByUsername);
                 setLoading(false);
             } catch (error) {
+                if (signal.aborted) return;
                 const errorMessage = error instanceof Error ? error.message : "Failed to fetch repositories";
                 setError(errorMessage);
                 setLoading(false);
             }
         };
 
-        fetchData();
+        void fetchData();
+        return () => controller.abort();
     }, [id]);
 
     if (loading) return <BaseText size="xs" weight="semibold" className={cl("loading")} >

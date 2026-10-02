@@ -30,8 +30,8 @@ export function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
     });
 }
 
-export async function fetchImageAsBlob(url: string): Promise<Blob> {
-    const response = await fetch(url);
+export async function fetchImageAsBlob(url: string, signal?: AbortSignal): Promise<Blob> {
+    const response = await fetch(url, { signal });
     if (!response.ok) throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
     return await response.blob();
 }
@@ -109,21 +109,8 @@ async function canvasToGif(canvas: HTMLCanvasElement): Promise<Blob> {
     return new Blob([new Uint8Array(gif.bytesView())], { type: "image/gif" });
 }
 
-async function loadAvatarImage(avatarUrl: string): Promise<HTMLImageElement> {
-    const avatarBlob = await fetchImageAsBlob(avatarUrl);
-    const avatar = new Image();
-    const blobUrl = URL.createObjectURL(avatarBlob);
-
-    try {
-        await new Promise<void>((resolve, reject) => {
-            avatar.onload = () => resolve();
-            avatar.onerror = () => reject(new Error("Failed to load avatar image"));
-            avatar.src = blobUrl;
-        });
-        return avatar;
-    } finally {
-        URL.revokeObjectURL(blobUrl);
-    }
+async function loadAvatarImage(avatarUrl: string, signal?: AbortSignal): Promise<HTMLImageElement> {
+    return loadImageFromBlob(await fetchImageAsBlob(avatarUrl, signal), signal);
 }
 
 function applyGrayscaleFilter(ctx: CanvasRenderingContext2D, config: CanvasConfig): void {
@@ -160,23 +147,32 @@ function extractCustomEmojis(text: string): { text: string; emojis: CustomEmojiT
     return { text: cleanText, emojis };
 }
 
-async function loadImageFromBlob(blob: Blob): Promise<HTMLImageElement> {
+async function loadImageFromBlob(blob: Blob, signal?: AbortSignal): Promise<HTMLImageElement> {
     const image = new Image();
     const blobUrl = URL.createObjectURL(blob);
 
+    let abort: (() => void) | undefined;
     try {
         await new Promise<void>((resolve, reject) => {
+            abort = () => {
+                image.src = "";
+                reject(new Error("Quote creation was cancelled."));
+            };
+            if (signal?.aborted) return abort();
+            signal?.addEventListener("abort", abort, { once: true });
             image.onload = () => resolve();
             image.onerror = () => reject(new Error("Failed to load image"));
             image.src = blobUrl;
         });
         return image;
     } finally {
+        if (abort) signal?.removeEventListener("abort", abort);
+        image.onload = image.onerror = null;
         URL.revokeObjectURL(blobUrl);
     }
 }
 
-async function loadCustomEmojiImage(emoji: CustomEmojiToken): Promise<HTMLImageElement | null> {
+async function loadCustomEmojiImage(emoji: CustomEmojiToken, signal?: AbortSignal): Promise<HTMLImageElement | null> {
     const animatedVariants = emoji.animated ? [true, false] : [false];
     for (const animated of animatedVariants) {
         try {
@@ -184,9 +180,10 @@ async function loadCustomEmojiImage(emoji: CustomEmojiToken): Promise<HTMLImageE
                 id: emoji.id,
                 animated,
                 size: 96
-            }));
-            return await loadImageFromBlob(blob);
-        } catch {
+            }), signal);
+            return await loadImageFromBlob(blob, signal);
+        } catch (error) {
+            if (signal?.aborted) throw error;
             continue;
         }
     }
@@ -194,7 +191,7 @@ async function loadCustomEmojiImage(emoji: CustomEmojiToken): Promise<HTMLImageE
     return null;
 }
 
-async function loadCustomEmojiImages(emojis: CustomEmojiToken[]): Promise<Map<string, HTMLImageElement>> {
+async function loadCustomEmojiImages(emojis: CustomEmojiToken[], signal?: AbortSignal): Promise<Map<string, HTMLImageElement>> {
     if (!emojis.length) return new Map<string, HTMLImageElement>();
 
     const unique = new Map<string, CustomEmojiToken>();
@@ -204,7 +201,7 @@ async function loadCustomEmojiImages(emojis: CustomEmojiToken[]): Promise<Map<st
     });
 
     const entries = await Promise.all(
-        Array.from(unique.entries()).map(async ([key, emoji]) => [key, await loadCustomEmojiImage(emoji)] as const)
+        Array.from(unique.entries()).map(async ([key, emoji]) => [key, await loadCustomEmojiImage(emoji, signal)] as const)
     );
 
     return entries.reduce((acc, [key, image]) => {
@@ -401,13 +398,15 @@ function drawWatermark(
 }
 
 export async function createQuoteImage(options: QuoteImageOptions): Promise<Blob> {
-    const { avatarUrl, quote: rawQuote, grayScale, author, watermark, showWatermark, saveAsGif, quoteFont } = options;
+    const { avatarUrl, quote: rawQuote, grayScale, author, watermark, showWatermark, saveAsGif, quoteFont, signal } = options;
 
     await ensureFontLoaded();
+    if (signal?.aborted) throw new Error("Quote creation was cancelled.");
 
     const quote = fixUpQuote(rawQuote);
     const { text: quoteText, emojis } = extractCustomEmojis(quote);
-    const emojiImages = await loadCustomEmojiImages(emojis);
+    const emojiImages = await loadCustomEmojiImages(emojis, signal);
+    if (signal?.aborted) throw new Error("Quote creation was cancelled.");
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Failed to get 2D rendering context");
@@ -418,7 +417,8 @@ export async function createQuoteImage(options: QuoteImageOptions): Promise<Blob
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, CANVAS_CONFIG.width, CANVAS_CONFIG.height);
 
-    const avatar = await loadAvatarImage(avatarUrl);
+    const avatar = await loadAvatarImage(avatarUrl, signal);
+    if (signal?.aborted) throw new Error("Quote creation was cancelled.");
     ctx.drawImage(avatar, 0, 0, CANVAS_CONFIG.height, CANVAS_CONFIG.height);
 
     if (grayScale) {

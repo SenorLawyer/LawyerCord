@@ -5,8 +5,9 @@
  */
 
 import { showNotification } from "@api/Notifications";
+import { isPluginEnabled } from "@api/PluginManager";
 import { settings } from "@equicordplugins/musicControls/settings";
-import { getLyrics, lyricFetchers, providers, updateLyrics } from "@equicordplugins/musicControls/spotify/lyrics/api";
+import { getLyrics, lyricFetchers, lyricsCacheGeneration, providers, updateLyrics } from "@equicordplugins/musicControls/spotify/lyrics/api";
 import { SpotifyStore, type Track } from "@equicordplugins/musicControls/spotify/SpotifyStore";
 import { proxyLazyWebpack } from "@webpack";
 import { Flux, FluxDispatcher } from "@webpack/common";
@@ -29,11 +30,22 @@ function showNotif(title: string, body: string) {
 
 export const SpotifyLrcStore = proxyLazyWebpack(() => {
     let lyricsInfo: LyricsData | null = null;
-    const fetchingTrackIds = new Set<string>();
+    const fetchingTracks = new Map<string, number>();
     let lyricsRequestGeneration = 0;
+    let active = true;
+    let settledKey: string | undefined;
 
     class SpotifyLrcStore extends Flux.Store {
-        init() { }
+        init() {
+            if (!active && isPluginEnabled("MusicControls")) active = true;
+        }
+        destroy() {
+            active = false;
+            lyricsRequestGeneration++;
+            fetchingTracks.clear();
+            settledKey = undefined;
+            lyricsInfo = null;
+        }
         get lyricsInfo() {
             return lyricsInfo;
         }
@@ -41,31 +53,35 @@ export const SpotifyLrcStore = proxyLazyWebpack(() => {
 
     const store = new SpotifyLrcStore(FluxDispatcher, {
         async SPOTIFY_PLAYER_STATE(e: { track: Track | null; }) {
+            if (!active) return;
             const { track } = e;
             if (!track?.id) {
+                settledKey = undefined;
                 lyricsRequestGeneration++;
-                fetchingTrackIds.clear();
+                fetchingTracks.clear();
                 lyricsInfo = null;
                 store.emitChange();
                 return;
             }
 
-            if (fetchingTrackIds.has(track.id)) return;
+            const { lyricsProvider, fallbackProvider, lyricsConversion, translateTo } = settings.store;
+            const key = JSON.stringify([track.id, lyricsCacheGeneration, lyricsProvider, fallbackProvider, lyricsConversion, translateTo]);
+            if (settledKey === key || fetchingTracks.has(track.id)) return;
 
             const generation = ++lyricsRequestGeneration;
-            fetchingTrackIds.add(track.id);
+            fetchingTracks.set(track.id, generation);
 
             let nextLyricsInfo: LyricsData | null;
             try {
                 nextLyricsInfo = await getLyrics(track);
             } finally {
-                fetchingTrackIds.delete(track.id);
+                if (fetchingTracks.get(track.id) === generation) fetchingTracks.delete(track.id);
             }
 
             if (generation !== lyricsRequestGeneration || SpotifyStore.track?.id !== track.id) return;
 
+            settledKey = key;
             lyricsInfo = nextLyricsInfo;
-            const { lyricsConversion } = settings.store;
             if (lyricsConversion !== Provider.None) {
                 FluxDispatcher.dispatch({
                     // @ts-ignore
@@ -79,6 +95,7 @@ export const SpotifyLrcStore = proxyLazyWebpack(() => {
 
         // @ts-ignore
         async SPOTIFY_LYRICS_PROVIDER_CHANGE(e: { provider: Provider; }) {
+            if (!active) return;
             const { track } = SpotifyStore;
             if (!track?.id) return;
 

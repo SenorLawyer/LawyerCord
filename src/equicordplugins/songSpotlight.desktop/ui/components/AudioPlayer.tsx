@@ -58,6 +58,7 @@ export default function AudioPlayer({ audioRef, list, playing, setPlaying, setLo
     const handleRef = useCallback((index: number, node: HTMLAudioElement | null) => {
         if (node) {
             nodes.current.set(index, node);
+            if (node.readyState >= 2) loaded.current.add(index);
 
             const audio = audios[index];
             if (audio?.previewStart === undefined || !audio.previewSlice) return;
@@ -73,6 +74,14 @@ export default function AudioPlayer({ audioRef, list, playing, setPlaying, setLo
             node.addEventListener("timeupdate", timeUpdated);
             nodeEvents.current.set(index, () => node.removeEventListener("timeupdate", timeUpdated));
         } else {
+            const previous = nodes.current.get(index);
+            if (previous) queueMicrotask(() => {
+                if ([...nodes.current.values()].includes(previous)) return;
+                previous.pause();
+                if (globalPlaying === previous) globalPlaying = undefined;
+                if (audioRef.current === previous) audioRef.current = undefined;
+            });
+            loaded.current.delete(index);
             nodes.current.delete(index);
             nodeEvents.current.get(index)?.();
             nodeEvents.current.delete(index);
@@ -97,17 +106,19 @@ export default function AudioPlayer({ audioRef, list, playing, setPlaying, setLo
         if (playing !== undefined) {
             const audio = audios[playing], node = nodes.current.get(playing);
             if (audio && node && loaded.current.has(playing)) {
-                if (globalPlaying) globalPlaying.pause();
+                if (globalPlaying !== node || node.paused) {
+                    if (globalPlaying) globalPlaying.pause();
 
-                node.currentTime = audio.previewStart ? audio.previewStart / 1000 : 0;
-                node.volume = BASE_VOLUME * (settings.store.previewVolume / 100);
-                node.play().catch(error => {
-                    showToast("Failed to play song preview!", Toasts.Type.FAILURE);
-                    logger.error("Failed to play audio", error);
-                    setPlaying(undefined);
-                });
+                    node.currentTime = audio.previewStart ? audio.previewStart / 1000 : 0;
+                    node.volume = BASE_VOLUME * (settings.store.previewVolume / 100);
+                    node.play().catch(error => {
+                        showToast("Failed to play song preview!", Toasts.Type.FAILURE);
+                        logger.error("Failed to play audio", error);
+                        setPlaying(undefined);
+                    });
 
-                globalPlaying = node;
+                    globalPlaying = node;
+                }
             } else {
                 setPlaying(undefined);
             }

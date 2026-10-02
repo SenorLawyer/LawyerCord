@@ -500,8 +500,7 @@ export async function upsertAutomation(value: Automation): Promise<void> {
     if (next.enabled && errors.length) throw new Error(errors[0].message);
     next.updatedAt = Date.now();
     const index = automations.findIndex(automation => automation.id === next.id);
-    if (index === -1) automations.push(next);
-    else automations[index] = next;
+    automations = index === -1 ? [...automations, next] : automations.map((automation, i) => i === index ? next : automation);
     nextDue.delete(next.id);
     refreshTriggerCache();
     guilds = collectGuildReferences(automations, guilds);

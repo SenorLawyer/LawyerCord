@@ -106,6 +106,7 @@ let aliasMap: AliasMap = {};
 let aliasEntries: Array<[string, StoredEmojiRef]> = [];
 const aliasListeners = new Set<() => void>();
 let globalContextPatch: GlobalContextMenuPatchCallback | null = null;
+let startupGeneration = 0;
 const unicodeSurrogateCache = new Map<string, string | null>();
 const aliasResultCache = new Map<string, EmojiResult | null>();
 const maxAliasResultCacheSize = 500;
@@ -202,10 +203,13 @@ function parseAliasMap(value: unknown): AliasMap {
     return parsed;
 }
 
-async function loadAliases() {
+async function loadAliases(generation: number) {
     try {
-        setAliasMap(parseAliasMap(await DataStore.get(DATA_KEY)));
+        const stored = await DataStore.get(DATA_KEY);
+        if (generation !== startupGeneration) return;
+        setAliasMap(parseAliasMap(stored));
     } catch (error) {
+        if (generation !== startupGeneration) return;
         setAliasMap({});
         logger.error("Failed to load emoji aliases.", error);
     }
@@ -1179,7 +1183,9 @@ export default definePlugin({
     injectAliasResults,
 
     async start() {
-        await loadAliases();
+        const generation = ++startupGeneration;
+        await loadAliases(generation);
+        if (generation !== startupGeneration) return;
 
         globalContextPatch = (_navId, children, ...args) => {
             if (_navId === "expression-picker" || _navId === "message" || _navId === "message-actions" || _navId === "textarea-context") {
@@ -1202,8 +1208,8 @@ export default definePlugin({
     },
 
     stop() {
-        if (!globalContextPatch) return;
-        removeGlobalContextMenuPatch(globalContextPatch);
+        startupGeneration++;
+        if (globalContextPatch) removeGlobalContextMenuPatch(globalContextPatch);
         globalContextPatch = null;
         unicodeSurrogateCache.clear();
         aliasResultCache.clear();

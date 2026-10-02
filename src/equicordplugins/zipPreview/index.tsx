@@ -29,6 +29,8 @@ export default definePlugin({
         }
     ],
 
+    flux: { LOGOUT: clearZipPreviewCache },
+
     stop() {
         clearZipPreviewCache();
     },

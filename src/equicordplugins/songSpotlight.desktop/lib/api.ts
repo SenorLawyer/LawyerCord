@@ -95,11 +95,16 @@ export async function authFetch(url: string | URL, options?: RequestInit, userId
 
 export async function getData(): Promise<UserData | undefined> {
     const userId = UserStore.getCurrentUser()?.id;
-    const at = useSongStore.getState().users[userId]?.at;
+    const cached = useSongStore.getState().users[userId];
+    const at = cached?.at;
     return await authFetch(new URL("api/data", apiConstants.api), {
         headers: at ? { "If-Modified-Since": at } : {},
     }).then(async res => {
-        if (!res) return useSongStore.getState().users[userId]?.data;
+        if (!res) {
+            const current = useSongStore.getState().users[userId] ?? cached;
+            if (current) useSongStore.getState().update({ userId, ...current });
+            return current?.data;
+        }
 
         const data = UserDataSchema.max(apiConstants.songLimit).nullable().parse(await res.json()) ?? [];
         useSongStore.getState().update({
@@ -113,11 +118,16 @@ export async function getData(): Promise<UserData | undefined> {
 export async function listData(userId: string): Promise<UserData | undefined> {
     if (userId === UserStore.getCurrentUser()?.id) return await getData();
 
-    const at = useSongStore.getState().users[userId]?.at;
+    const cached = useSongStore.getState().users[userId];
+    const at = cached?.at;
     return await authFetch(new URL(`api/data/${userId}`, apiConstants.api), {
         headers: at ? { "If-Modified-Since": at } : {},
     }).then(async res => {
-        if (!res) return useSongStore.getState().users[userId]?.data;
+        if (!res) {
+            const current = useSongStore.getState().users[userId] ?? cached;
+            if (current) useSongStore.getState().update({ userId, ...current });
+            return current?.data;
+        }
 
         const data = UserDataSchema.max(apiConstants.songLimit).nullable().parse(await res.json()) ?? [];
         useSongStore.getState().update({

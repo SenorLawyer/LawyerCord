@@ -424,13 +424,14 @@ export default definePlugin({
     },
 
     renderMessageAccessory(props) {
+        if (!isSupportChannel(props.channel.id)) return null;
         const buttons = [] as JSX.Element[];
 
         const equicordSupport = isEquicordSupport(props.message.author.id);
 
         const shouldAddUpdateButton =
             !IS_UPDATER_DISABLED
-            && ((isSupportChannel(props.channel.id) && equicordSupport))
+            && equicordSupport
             && props.message.content?.toLowerCase().includes("update");
 
         if (shouldAddUpdateButton) {
@@ -455,7 +456,7 @@ export default definePlugin({
             );
         }
 
-        if (equicordSupport && isSupportChannel(props.channel.id) && PermissionStore.can(PermissionsBits.SEND_MESSAGES, props.channel)) {
+        if (equicordSupport && PermissionStore.can(PermissionsBits.SEND_MESSAGES, props.channel)) {
             if (/\/(?:lawyercord|equicord)-(?:debug|plugins)\b/.test(props.message.content)) {
                 buttons.push(
                     <Button

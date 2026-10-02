@@ -34,12 +34,18 @@ export const useSongStore: ZustandStore<SongState> = proxyLazy(() =>
             update({ userId, data, at }) {
                 userId ??= UserStore.getCurrentUser()?.id;
                 if (userId) {
-                    set({
-                        users: {
-                            ...get().users,
-                            [userId]: { data, at },
-                        },
-                    });
+                    const { [userId]: _, ...users } = get().users;
+                    users[userId] = { data, at };
+                    const selfId = UserStore.getCurrentUser()?.id;
+                    const ids = Object.keys(users);
+                    let remaining = ids.length;
+                    for (const id of ids) {
+                        if (remaining <= 200) break;
+                        if (id === selfId || id === userId) continue;
+                        delete users[id];
+                        remaining--;
+                    }
+                    set({ users });
                 }
                 get().$refresh();
             },

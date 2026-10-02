@@ -15,6 +15,7 @@ export enum QuoteFont {
 }
 
 export interface QuoteImageOptions {
+    signal?: AbortSignal;
     avatarUrl: string;
     quote: string;
     grayScale: boolean;

@@ -33,18 +33,21 @@ const KEY = "HideMedia_HiddenIds";
 let hiddenMessages = new Set<string>();
 let hiddenMessagesLoaded = false;
 let hiddenMessagesLoad: Promise<Set<string>> | null = null;
+let generation = 0;
 
 async function getHiddenMessages() {
     if (hiddenMessagesLoaded) return hiddenMessages;
+    const owner = generation;
 
     hiddenMessagesLoad ??= get(KEY)
         .then(stored => {
+            if (owner !== generation) return new Set<string>();
             hiddenMessages = new Set(Array.isArray(stored) ? stored : []);
             hiddenMessagesLoaded = true;
             return hiddenMessages;
         })
         .finally(() => {
-            hiddenMessagesLoad = null;
+            if (owner === generation) hiddenMessagesLoad = null;
         });
 
     return hiddenMessagesLoad;
@@ -57,12 +60,14 @@ migratePluginSettings("HideMedia", "HideAttachments");
 const hasMedia = (msg: Message) => msg.attachments.length > 0 || msg.embeds.length > 0 || msg.stickerItems.length > 0 || msg.components.length > 0;
 
 async function toggleHide(channelId: string, messageId: string) {
+    const owner = generation;
     const ids = await getHiddenMessages();
+    if (owner !== generation) return;
     if (!ids.delete(messageId))
         ids.add(messageId);
 
     await saveHiddenMessages(ids);
-    updateMessage(channelId, messageId);
+    if (owner === generation) updateMessage(channelId, messageId);
 }
 
 export default definePlugin({
@@ -112,6 +117,7 @@ export default definePlugin({
     },
 
     stop() {
+        generation++;
         hiddenMessages.clear();
         hiddenMessagesLoaded = false;
         hiddenMessagesLoad = null;

@@ -87,6 +87,7 @@ export default definePlugin({
     stop: clearStreaks,
 
     flux: {
+        LOGOUT: clearStreaks,
         async CONNECTION_OPEN() {
             clearStreaks();
             if (useAuthorizationStore.getState().isAuthorized()) {

@@ -23,23 +23,23 @@ export function clearListenBrainzCache() {
 
 const url = (path: string) => `https://listenbrainz.org${path}`;
 
-async function fetchCoverArt(releaseGroupMBID: string, generation: number) {
+async function fetchCoverArt(releaseGroupMBID: string, generation: number, signal?: AbortSignal) {
     if (coverArtCache.has(releaseGroupMBID)) return coverArtCache.get(releaseGroupMBID);
-    const res = await fetch(`https://coverartarchive.org/release-group/${releaseGroupMBID}`);
+    const res = await fetch(`https://coverartarchive.org/release-group/${releaseGroupMBID}`, { signal });
     if (!res.ok) return undefined;
     const image: string = await res.json().then(json => json.images[0].thumbnails.large);
     if (generation === cacheGeneration) coverArtCache.set(releaseGroupMBID, image);
     return image;
 }
 
-async function getUrls(additionalInfo: Record<string, string> | undefined, trackName: string, artistName: string, releaseName: string, generation: number): Promise<Partial<TrackData>> {
+async function getUrls(additionalInfo: Record<string, string> | undefined, trackName: string, artistName: string, releaseName: string, generation: number, signal?: AbortSignal): Promise<Partial<TrackData>> {
     // Well tagged music will have MBIDs which we can use directly. These are optional but highly recommended in ListenBrainz scrobbles.
     // If your music doesn't have these, it's highly recommended to use https://picard.musicbrainz.org/ to automatically add them
     if (additionalInfo?.recording_mbid) {
         const { release_group_mbid, release_mbid, recording_mbid, artist_mbids } = additionalInfo;
 
         return {
-            imageURL: release_group_mbid ? await fetchCoverArt(release_group_mbid, generation) : undefined,
+            imageURL: release_group_mbid ? await fetchCoverArt(release_group_mbid, generation, signal) : undefined,
             trackURL: recording_mbid ? url(`/track/${recording_mbid}`) : undefined,
             albumURL: release_group_mbid
                 ? url(`/release-group/${release_group_mbid}`)
@@ -63,6 +63,7 @@ async function getUrls(additionalInfo: Record<string, string> | undefined, track
     });
 
     const metadata = await fetch("https://musicbrainz.org/ws/2/recording/?" + params + "&query=" + query, {
+        signal,
         headers: { "User-Agent": VENCORD_USER_AGENT }
     })
         .then(res => res.ok ? res.json() : Promise.reject(new Error(`${res.status} ${res.statusText}`)))
@@ -77,7 +78,7 @@ async function getUrls(additionalInfo: Record<string, string> | undefined, track
     const release = metadata.releases?.[0];
 
     const result: Partial<TrackData> = {
-        imageURL: release?.["release-group"] ? await fetchCoverArt(release["release-group"].id, generation) : undefined,
+        imageURL: release?.["release-group"] ? await fetchCoverArt(release["release-group"].id, generation, signal) : undefined,
         trackURL: url(`/track/${metadata.id}/`),
         albumURL: release?.id ? url(`/release/${release.id}/`) : release?.["release-group"]?.id ? url(`/release-group/${release["release-group"].id}/`) : undefined,
         artistURL: artist?.id ? url(`/artist/${artist.id}/`) : undefined,
@@ -90,10 +91,10 @@ export const ListenBrainzScrobbler: ScrobblerBackend = {
     name: "ListenBrainz",
     id: "listenbrainz",
 
-    async fetchTrackData(username: string, _apiKey?: string): Promise<TrackData | null> {
+    async fetchTrackData(username: string, _apiKey?: string, signal?: AbortSignal): Promise<TrackData | null> {
         const generation = cacheGeneration;
         try {
-            const res = await fetch(`https://api.listenbrainz.org/1/user/${username}/playing-now`);
+            const res = await fetch(`https://api.listenbrainz.org/1/user/${username}/playing-now`, { signal });
             if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
 
             const data = await res.json().then(json => json.payload?.listens[0]);
@@ -107,12 +108,12 @@ export const ListenBrainzScrobbler: ScrobblerBackend = {
                 artist: artist_name,
                 album: release_name || "Unknown",
                 serviceName: additional_info?.music_service_name || additional_info?.submission_client,
-                ...await getUrls(additional_info, track_name, artist_name, release_name, generation)
+                ...await getUrls(additional_info, track_name, artist_name, release_name, generation, signal)
             } as TrackData;
 
             return trackData;
         } catch (e) {
-            logger.error("Failed to query ListenBrainz API", e);
+            if (!signal?.aborted) logger.error("Failed to query ListenBrainz API", e);
             // will clear the rich presence if API fails
             return null;
         }

@@ -34,8 +34,16 @@ export function resolveUserTimezone(userId: string): string | null {
     return localTimezone;
 }
 
+let systemTimezone: string | undefined;
+let systemTimezoneUpdatedAt = 0;
+
 export function getSystemTimezone(): string {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const now = Date.now();
+    if (systemTimezone === undefined || now - systemTimezoneUpdatedAt >= 60_000) {
+        systemTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        systemTimezoneUpdatedAt = now;
+    }
+    return systemTimezone;
 }
 
 const classes = findCssClassesLazy("timestamp", "compact", "contentOnly");

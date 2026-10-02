@@ -36,11 +36,6 @@ interface SettingsStoreOptions {
 // merges the SettingsStoreOptions type into the class
 export interface SettingsStore<T extends object> extends SettingsStoreOptions { }
 
-interface ProxyContext<T extends object = any> {
-    root: T;
-    path: string;
-}
-
 /**
  * The SettingsStore allows you to easily create a mutable store that
  * has support for global and path-based change listeners.
@@ -49,90 +44,8 @@ export class SettingsStore<T extends object> {
     private pathListeners = new Map<string, Set<(newData: any) => void>>();
     private prefixListeners = new Map<string, Set<(newData: any, path: string) => void>>();
     private globalListeners = new Set<(newData: T, path: string) => void>();
-    private readonly proxyContexts = new WeakMap<any, ProxyContext<T>>();
-
-    private readonly proxyHandler: ProxyHandler<any> = (() => {
-        const self = this;
-
-        return {
-            get(target, key: any, receiver) {
-                if (key === SYM_IS_PROXY) {
-                    return true;
-                }
-
-                if (key === SYM_GET_RAW_TARGET) {
-                    return target;
-                }
-
-                let v = Reflect.get(target, key, receiver);
-
-                const proxyContext = self.proxyContexts.get(target);
-                if (proxyContext == null) {
-                    return v;
-                }
-
-                const { root, path } = proxyContext;
-
-                if (!(key in target) && self.getDefaultValue != null) {
-                    v = self.getDefaultValue({
-                        target,
-                        key,
-                        root,
-                        path
-                    });
-                }
-
-                if (typeof v === "object" && v !== null && !v[SYM_IS_PROXY]) {
-                    const getPath = `${path}${path && "."}${key}`;
-                    return self.makeProxy(v, root, getPath);
-                }
-
-                return v;
-            },
-            set(target, key: string, value) {
-                if (value?.[SYM_IS_PROXY]) {
-                    value = value[SYM_GET_RAW_TARGET];
-                }
-
-                if (target[key] === value) {
-                    return true;
-                }
-
-                if (!Reflect.set(target, key, value)) {
-                    return false;
-                }
-
-                const proxyContext = self.proxyContexts.get(target);
-                if (proxyContext == null) {
-                    return true;
-                }
-
-                const { root, path } = proxyContext;
-
-                const setPath = `${path}${path && "."}${key}`;
-                self.notifyListeners(setPath, value, root);
-
-                return true;
-            },
-            deleteProperty(target, key: string) {
-                if (!Reflect.deleteProperty(target, key)) {
-                    return false;
-                }
-
-                const proxyContext = self.proxyContexts.get(target);
-                if (proxyContext == null) {
-                    return true;
-                }
-
-                const { root, path } = proxyContext;
-
-                const deletePath = `${path}${path && "."}${key}`;
-                self.notifyListeners(deletePath, undefined, root);
-
-                return true;
-            }
-        };
-    })();
+    private proxyCache = new WeakMap<object, WeakMap<T, Map<string, object>>>();
+    private proxyRevision = 0;
 
     /**
      * The store object. Making changes to this object will trigger the applicable change listeners
@@ -145,17 +58,63 @@ export class SettingsStore<T extends object> {
 
     public constructor(plain: T, options: SettingsStoreOptions = {}) {
         this.plain = plain;
-        this.store = this.makeProxy(plain);
+        this.store = this.makeProxy(plain, plain);
         Object.assign(this, options);
     }
 
-    private makeProxy(object: any, root: T = object, path = "") {
-        this.proxyContexts.set(object, {
-            root,
-            path
-        });
+    private makeProxy<O extends object>(object: O, root: T, path = ""): O {
+        let roots = this.proxyCache.get(object);
+        if (!roots) this.proxyCache.set(object, roots = new WeakMap());
+        let paths = roots.get(root);
+        if (!paths) roots.set(root, paths = new Map());
+        const cached = paths.get(path);
+        if (cached) return cached as O;
 
-        return new Proxy(object, this.proxyHandler);
+        let children = new WeakMap<object, Map<string | symbol, object>>();
+        let revision = this.proxyRevision;
+        const proxy = new Proxy(object, {
+            get: (target: O, key: string | symbol, receiver: unknown) => {
+                if (key === SYM_IS_PROXY) return true;
+                if (key === SYM_GET_RAW_TARGET) return target;
+
+                let value: unknown = Reflect.get(target, key, receiver);
+                if (typeof key === "string" && !(key in target) && this.getDefaultValue != null) {
+                    value = this.getDefaultValue({ target, key, root, path });
+                }
+                if (revision !== this.proxyRevision) {
+                    children = new WeakMap();
+                    revision = this.proxyRevision;
+                }
+                if (typeof value === "object" && value !== null) {
+                    const cachedChild = children.get(value)?.get(key);
+                    if (cachedChild) return cachedChild;
+                    if (!Reflect.get(value, SYM_IS_PROXY)) {
+                        const child = this.makeProxy(value, root, `${path}${path && "."}${String(key)}`);
+                        let keys = children.get(value);
+                        if (!keys) children.set(value, keys = new Map());
+                        keys.set(key, child);
+                        return child;
+                    }
+                }
+                return value;
+            },
+            set: (target: O, key: string | symbol, value: unknown) => {
+                if (typeof value === "object" && value !== null && Reflect.get(value, SYM_IS_PROXY)) {
+                    value = Reflect.get(value, SYM_GET_RAW_TARGET);
+                }
+                if (Reflect.get(target, key) === value) return true;
+                if (!Reflect.set(target, key, value)) return false;
+                this.notifyListeners(`${path}${path && "."}${String(key)}`, value, root);
+                return true;
+            },
+            deleteProperty: (target: O, key: string | symbol) => {
+                if (!Reflect.deleteProperty(target, key)) return false;
+                this.notifyListeners(`${path}${path && "."}${String(key)}`, undefined, root);
+                return true;
+            }
+        });
+        paths.set(path, proxy);
+        return proxy;
     }
 
     private notifyPrefixListeners(pathString: string, pathElements: string[], value: any) {
@@ -166,6 +125,8 @@ export class SettingsStore<T extends object> {
     }
 
     private notifyListeners(pathStr: string, value: any, root: T) {
+        this.proxyCache = new WeakMap();
+        this.proxyRevision++;
         const paths = pathStr.split(".");
 
         // Because we support any type of settings with OptionType.CUSTOM, and those objects get proxied recursively,
@@ -200,7 +161,9 @@ export class SettingsStore<T extends object> {
         if (this.readOnly) throw new Error("SettingsStore is read-only");
 
         this.plain = value;
-        this.store = this.makeProxy(value);
+        this.proxyCache = new WeakMap();
+        this.proxyRevision++;
+        this.store = this.makeProxy(value, value);
 
         if (pathToNotify) {
             let v = value;
@@ -304,6 +267,8 @@ export class SettingsStore<T extends object> {
      * Call all global change listeners
      */
     public markAsChanged() {
+        this.proxyCache = new WeakMap();
+        this.proxyRevision++;
         this.globalListeners.forEach(cb => cb(this.plain, ""));
     }
 }

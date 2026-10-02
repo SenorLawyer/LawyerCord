@@ -5,6 +5,7 @@
  */
 
 import { proxyLazy } from "@utils/lazy";
+import { Logger } from "@utils/Logger";
 import { UserStore, zustandCreate } from "@webpack/common";
 
 import { API_URL } from "../constants";
@@ -29,12 +30,23 @@ export interface StreaksState {
     clear: () => void;
 }
 
+const logger = new Logger("Streaks");
 let generation = 0;
+const requests = new Map<string, AbortController>();
+
+function beginRequest(key: string) {
+    if (requests.has(key)) return;
+    const controller = new AbortController();
+    requests.set(key, controller);
+    return controller;
+}
 
 export const useStreaksStore = proxyLazy(() => zustandCreate((set: (state: Partial<StreaksState>) => void, get: () => StreaksState): StreaksState => ({
     streaks: {},
     clear: () => {
         generation++;
+        for (const controller of requests.values()) controller.abort();
+        requests.clear();
         set({ streaks: {} });
     },
     async fetch() {
@@ -42,10 +54,16 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: (state: Parti
         const myId = UserStore.getCurrentUser()?.id;
         const token = useAuthorizationStore.getState().getToken();
         if (!token) return;
+        const key = "fetch";
+        const controller = beginRequest(key);
+        if (!controller) return;
+        const { signal } = controller;
+        const timeout = setTimeout(() => controller.abort(), 30_000);
 
         try {
             const res = await fetch(`${API_URL}/streaks`, {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${token}` },
+                signal
             });
             if (res.ok) {
                 const data: RemoteStreak[] = await res.json();
@@ -58,7 +76,10 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: (state: Parti
                 set({ streaks: streaksMap });
             }
         } catch (e) {
-            console.error("Failed to fetch streaks", e);
+            if (!signal.aborted) logger.error("Failed to fetch streaks", e);
+        } finally {
+            clearTimeout(timeout);
+            if (requests.get(key) === controller) requests.delete(key);
         }
     },
     async update(recipientId: string) {
@@ -66,11 +87,17 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: (state: Parti
         const myId = UserStore.getCurrentUser()?.id;
         const token = useAuthorizationStore.getState().getToken();
         if (!token) return;
+        const key = `update:${recipientId}`;
+        const controller = beginRequest(key);
+        if (!controller) return;
+        const { signal } = controller;
+        const timeout = setTimeout(() => controller.abort(), 30_000);
 
         try {
             const res = await fetch(`${API_URL}/streaks/${recipientId}`, {
                 method: "POST",
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${token}` },
+                signal
             });
             if (res.ok) {
                 const streak: RemoteStreak = await res.json();
@@ -78,7 +105,10 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: (state: Parti
                 set({ streaks: { ...get().streaks, [recipientId]: streak } });
             }
         } catch (e) {
-            console.error("Failed to update streak", e);
+            if (!signal.aborted) logger.error("Failed to update streak", e);
+        } finally {
+            clearTimeout(timeout);
+            if (requests.get(key) === controller) requests.delete(key);
         }
     },
     async refresh(recipientId: string) {
@@ -86,10 +116,16 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: (state: Parti
         const myId = UserStore.getCurrentUser()?.id;
         const token = useAuthorizationStore.getState().getToken();
         if (!token) return;
+        const key = `refresh:${recipientId}`;
+        const controller = beginRequest(key);
+        if (!controller) return;
+        const { signal } = controller;
+        const timeout = setTimeout(() => controller.abort(), 30_000);
 
         try {
             const res = await fetch(`${API_URL}/streaks/${recipientId}`, {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${token}` },
+                signal
             });
             if (res.ok) {
                 const streak: RemoteStreak = await res.json();
@@ -97,7 +133,10 @@ export const useStreaksStore = proxyLazy(() => zustandCreate((set: (state: Parti
                 set({ streaks: { ...get().streaks, [recipientId]: streak } });
             }
         } catch (e) {
-            console.error("Failed to refresh streak", e);
+            if (!signal.aborted) logger.error("Failed to refresh streak", e);
+        } finally {
+            clearTimeout(timeout);
+            if (requests.get(key) === controller) requests.delete(key);
         }
     }
 })));

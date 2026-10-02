@@ -91,11 +91,12 @@ function failureReason(result: DecryptIncomingAttachmentsResult): string {
     if (result.status === "invalid_input") return result.error;
     if (result.status === "unavailable") return "Secure key storage is unavailable.";
     if ("error" in result && result.error === "attachment_download_failed") return "Discord could not provide the encrypted attachment bytes.";
+    if ("error" in result && result.error === "capacity_exceeded") return "Other encrypted attachments are still loading. Try again when they finish.";
     if ("error" in result && result.error === "attachment_too_large") return "The encrypted attachments exceed the local safety limit.";
     return "The encrypted attachments could not be decrypted.";
 }
 
-async function loadEntry(message: Message, key: string, entry: AttachmentCacheEntry): Promise<void> {
+async function loadEntry(message: Message, entry: AttachmentCacheEntry, key: string): Promise<void> {
     const localUserId = UserStore.getCurrentUser()?.id;
     if (!localUserId) {
         entry.status = { status: "failed", reason: "Discord has no authenticated user." };
@@ -115,7 +116,13 @@ async function loadEntry(message: Message, key: string, entry: AttachmentCacheEn
             url: attachment.url,
         })),
     });
-    if (entry.disposed) return;
+    if (entry.disposed || UserStore.getCurrentUser()?.id !== localUserId) {
+        if (result.status === "decrypted") {
+            for (const attachment of result.attachments) attachment.data.fill(0);
+        }
+        if (!entry.disposed) removeEntry(key, entry);
+        return;
+    }
     if (result.status !== "decrypted") {
         entry.status = { status: "failed", reason: failureReason(result) };
         notify(entry);
@@ -161,7 +168,6 @@ async function loadEntry(message: Message, key: string, entry: AttachmentCacheEn
     entry.status = { status: "ready" };
     cachedBytes += bytes;
     notify(entry);
-    pruneCache(key);
 }
 
 function ensureEntry(message: Message): AttachmentCacheEntry | null {
@@ -182,11 +188,11 @@ function ensureEntry(message: Message): AttachmentCacheEntry | null {
         status: { status: "loading" },
     };
     cache.set(key, entry);
-    void loadEntry(message, key, entry).catch(() => {
+    void loadEntry(message, entry, key).catch(() => {
         if (entry.disposed) return;
         entry.status = { status: "failed", reason: "The encrypted attachments could not be loaded." };
         notify(entry);
-    });
+    }).finally(() => pruneCache(key));
     return entry;
 }
 
@@ -213,4 +219,10 @@ export function subscribeEncryptedAttachmentStatus(message: Message, listener: (
 export function clearEncryptedAttachmentCache(): void {
     for (const [key, entry] of cache) removeEntry(key, entry);
     cachedBytes = 0;
+}
+
+export function retryEncryptedAttachments(message: Message): void {
+    const key = cacheKey(message);
+    const entry = cache.get(key);
+    if (entry?.status.status === "failed") removeEntry(key, entry);
 }

@@ -123,8 +123,13 @@ export class Data {
         if (!this.usersCollection) return;
         if (!force && !this.storageDirty) return;
 
-        await DataStore.set("irememberyou.data", this.usersCollection);
         this.storageDirty = false;
+        try {
+            await DataStore.set("irememberyou.data", this.usersCollection);
+        } catch (error) {
+            this.storageDirty = true;
+            throw error;
+        }
     }
 
     async initializeUsersCollection() {

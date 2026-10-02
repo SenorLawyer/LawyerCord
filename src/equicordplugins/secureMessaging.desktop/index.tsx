@@ -15,6 +15,7 @@ import {
     removeMessagePreEditListener,
     removeMessagePreSendListener,
 } from "@api/MessageEvents";
+import { updateMessage } from "@api/MessageUpdater";
 import { BaseText } from "@components/BaseText";
 import { Button } from "@components/Button";
 import { Heading } from "@components/Heading";
@@ -47,6 +48,7 @@ import {
     clearEncryptedAttachmentCache,
     encryptedAttachmentStatus,
     patchEncryptedMessageAttachments,
+    retryEncryptedAttachments,
     subscribeEncryptedAttachmentStatus,
 } from "./attachmentCache";
 import {
@@ -1069,10 +1071,10 @@ function encryptedStatusText(result: DecryptIncomingResult): string {
 }
 
 function EncryptedAttachmentStatus({ expectedCount, message }: { expectedCount: number; message: Message; }) {
-    const [, setRevision] = useState(0);
+    const [revision, setRevision] = useState(0);
     useEffect(
         () => subscribeEncryptedAttachmentStatus(message, () => setRevision(revision => revision + 1)),
-        [message.channel_id, message.id, message.content, message.attachments],
+        [message.channel_id, message.id, message.content, message.attachments, revision],
     );
     if (expectedCount !== message.attachments.length) {
         return (
@@ -1090,6 +1092,11 @@ function EncryptedAttachmentStatus({ expectedCount, message }: { expectedCount: 
     return (
         <BaseText size="xs" className={status.status === "failed" ? "pc-secure-status-danger" : undefined}>
             {messageText}
+            {status.status === "failed" && <Button size="small" onClick={() => {
+                retryEncryptedAttachments(message);
+                updateMessage(message.channel_id, message.id);
+                setRevision(revision => revision + 1);
+            }}>Try again</Button>}
         </BaseText>
     );
 }
@@ -1421,6 +1428,14 @@ export default definePlugin({
     },
 
     flux: {
+        LOGOUT() {
+            clearEncryptedAttachmentCache();
+            clearEncryptedEmbedCache();
+        },
+        CONNECTION_OPEN() {
+            clearEncryptedAttachmentCache();
+            clearEncryptedEmbedCache();
+        },
         MESSAGE_CREATE: handleKeyAnnouncementDispatch,
         MESSAGE_UPDATE: handleKeyAnnouncementDispatch,
         LOAD_MESSAGES_SUCCESS: handleLoadedKeyAnnouncements,
@@ -1471,19 +1486,19 @@ export default definePlugin({
 
     patchEncryptedAttachments(message: Message, owner: { forceUpdate(): void; }) {
         const ready = screenCaptureProtectionStatus === "ready";
-        if (!ready) pendingEncryptedRenderOwners.add(owner);
+        if (screenCaptureProtectionStatus === "pending") pendingEncryptedRenderOwners.add(owner);
         return patchEncryptedMessageAttachments(message, () => owner.forceUpdate(), ready);
     },
 
     patchEncryptedEmbeds(message: Message, owner: { forceUpdate(): void; }) {
         const ready = screenCaptureProtectionStatus === "ready";
-        if (!ready) pendingEncryptedRenderOwners.add(owner);
+        if (screenCaptureProtectionStatus === "pending") pendingEncryptedRenderOwners.add(owner);
         return patchEncryptedMessageEmbeds(message, () => owner.forceUpdate(), ready);
     },
 
     patchEncryptedStickers(message: Message, owner: { forceUpdate(): void; }) {
         const ready = screenCaptureProtectionStatus === "ready";
-        if (!ready) pendingEncryptedRenderOwners.add(owner);
+        if (screenCaptureProtectionStatus === "pending") pendingEncryptedRenderOwners.add(owner);
         return patchEncryptedMessageStickers(message, () => owner.forceUpdate(), ready);
     },
 

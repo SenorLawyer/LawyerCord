@@ -79,6 +79,13 @@ export class Queue {
         this.run();
     }
 
+    remove(func: () => Promisable<unknown>) {
+        const index = this.queue.indexOf(func);
+        if (index === -1) return false;
+        this.queue.splice(index, 1);
+        return true;
+    }
+
     /**
      * The amount of tasks in the queue
      */

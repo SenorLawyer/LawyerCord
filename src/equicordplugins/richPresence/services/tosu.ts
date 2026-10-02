@@ -98,15 +98,23 @@ async function getBeatmapCover(setId: number, signal: AbortSignal): Promise<stri
     const cachedCover = beatmapCoverCache.get(setId);
     if (cachedCover) return cachedCover;
 
+    if (signal.aborted) return undefined;
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal.addEventListener("abort", abort, { once: true });
+    const timeout = setTimeout(abort, 10_000);
     try {
         const mapBg = await getAsset(`https://assets.ppy.sh/beatmaps/${setId}/covers/list@2x.jpg`);
-        if (!mapBg || signal.aborted) return undefined;
-        const res = await fetch(mapBg.replace(/^mp:/, "https://media.discordapp.net/"), { method: "HEAD", signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]) });
-        if (!res.ok || signal.aborted) return undefined;
+        if (!mapBg || controller.signal.aborted) return undefined;
+        const res = await fetch(mapBg.replace(/^mp:/, "https://media.discordapp.net/"), { method: "HEAD", signal: controller.signal });
+        if (!res.ok || controller.signal.aborted) return undefined;
         if (beatmapCoverCache.size >= MAX_BEATMAP_COVER_CACHE_SIZE) pruneOldestBeatmapCover();
         beatmapCoverCache.set(setId, mapBg);
         return mapBg;
-    } catch { return undefined; }
+    } catch { return undefined; } finally {
+        clearTimeout(timeout);
+        signal.removeEventListener("abort", abort);
+    }
 }
 
 async function onMessage(data: string, generation: number, signal: AbortSignal) {

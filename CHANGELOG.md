@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Changed
 
+- Preserve filtered-out and busy upload batches, leave mixed clipboard files with Discord and request upload cancellation on plugin stop.
+
 - Publish Dragify pointer movement once per animation frame and remove its duplicate ghost-state copy.
 
 - Keep the screenshare spectator icon mounted across renders, subscribe to viewer changes and honor the saved panel toggle.

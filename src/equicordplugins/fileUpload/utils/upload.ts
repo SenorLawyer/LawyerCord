@@ -37,6 +37,10 @@ function toProxyUrl(url: string): string {
 
 let isUploading = false;
 
+export function isUploadInProgress(): boolean {
+    return isUploading;
+}
+
 type UploadPhase = "idle" | "preparing" | "uploading" | "retrying" | "success" | "failed" | "cancelled";
 type EmbedProxyService = "cors" | "nfp";
 

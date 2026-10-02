@@ -390,7 +390,7 @@ test("desktop settings saves preserve the previous file and store when disk writ
         const compiled = transpileModule(readFileSync(path, "utf8"), {
             compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
         }).outputText;
-        return runInNewContext(`${compiled}\nexports;`, { exports: {}, require: (name: string) => modules[name], console: { ...console, error: (...values: unknown[]) => errors.push(values) } });
+        return runInNewContext(`${compiled}\nexports;`, { exports: {}, Error, require: (name: string) => modules[name], console: { ...console, error: (...values: unknown[]) => errors.push(values) } });
     };
     try {
         const { RendererSettings } = evaluate("src/main/settings.ts", {

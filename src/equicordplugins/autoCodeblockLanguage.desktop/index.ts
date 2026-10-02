@@ -383,7 +383,7 @@ function detectLanguageResult(content: string): DetectionResult {
 function installShikiWrapper() {
     if (originalShikiRender || typeof shikiCodeblocks.renderHighlighter !== "function") return;
 
-    const renderHighlighter = shikiCodeblocks.renderHighlighter;
+    const { renderHighlighter } = shikiCodeblocks;
     originalShikiRender = renderHighlighter;
     shikiCodeblocks.renderHighlighter = (args: RenderHighlighterArgs) => {
         const resolvedLanguage = resolveLanguage(args.lang, args.content);

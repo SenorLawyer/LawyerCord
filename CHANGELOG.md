@@ -6,6 +6,11 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Changed
 
+- Scope Changelog plugin-list subscriptions, share its dependency index and sort generated plugin records once.
+- Avoid render-driven Shiki theme requests and skip unused styled-name output before building React elements.
+- Traverse parsed YouTube metadata once, preserving deep objects, JSON revivers and ordinary content.
+- Resolve automation array comparisons once and compile filter patterns once per operation.
+
 - Derive Ghosted icons and counters from current stores, include offscreen DMs, skip hidden counters and delete duplicated state and listeners.
 
 - Apply FullVCPFP avatar styles to the rendered call tile without mutating Discord props, and preserve USRBG styles in either patch order.
@@ -87,6 +92,12 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Run clip conversions one at a time and release the FFmpeg worker and its WASM memory after each operation.
 
 ### Fixed
+
+- Preserve installed archives when installer preparation or replacement fails, using a completed temporary file.
+- Reject malformed client-protocol escapes with the existing not-found response.
+- Validate settings JSON and IPC roots, keep saved files intact after write failures and preserve sync conflict checks.
+- Validate CSP permission fields and recheck saved domain ownership after concurrent confirmations.
+- Require an explicit reaction input when an automation has several possible preceding messages.
 
 - Capture all dropped files before browser drag access expires, and prepare one automatic ZIP upload at a time before allocating input bytes.
 

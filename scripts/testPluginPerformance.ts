@@ -29,6 +29,7 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { makeLazy, proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
+import { Queue } from "../src/utils/Queue";
 import { canonicalizeMatch } from "../src/utils/patches";
 
 test("PictureInPicture keeps original playback after rejected requests", async () => {
@@ -10563,7 +10564,7 @@ test("folder zipping drains directory batches and rejects read and size failures
         "@api/Settings": { definePluginSettings: () => ({ store: { extensions: "" } }) },
         "@utils/constants": { EquicordDevs: {} },
         "@utils/Logger": { Logger: class {} },
-        "@utils/misc": {},
+        "@utils/misc": {}, "@utils/Queue": { Queue },
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
         "@webpack/common": {}, "@utils/zip": {}
     }, {}, "readDirectoryEntry");

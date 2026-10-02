@@ -12443,7 +12443,7 @@ test("scheduled queue serializes reloads and edits across scheduler stops", asyn
     assert.equal(module.getScheduledMessages()[0].id, "stopped");
 });
 
-test("signed-out scheduled messages wait between checks without changing the queue", async () => {
+test("signed-out scheduled messages leave the queue untouched without polling", async () => {
     const delays: number[] = [];
     const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
             "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
@@ -12455,8 +12455,41 @@ test("signed-out scheduled messages wait between checks without changing the que
     await module.loadScheduledMessages();
     module.startScheduler();
     await setImmediate();
-    assert.deepEqual(delays, [10000]);
+    assert.deepEqual(delays, []);
     assert.equal(module.getScheduledMessages()[0].attemptedAt, undefined);
+});
+
+test("scheduled timers ignore ownerless and foreign queues until an owning account connects", async () => {
+    let userId = "account";
+    const timers: number[] = [];
+    const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+        "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+        "@api/DataStore": { get: async () => [scheduledEntry({ id: "legacy", userId: undefined, scheduledTime: 0 }),
+            scheduledEntry({ id: "foreign", userId: "other", scheduledTime: Date.now() + 100_000 })],
+        set: () => assert.fail("No queue writes for another account") },
+        "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
+        ".": { settings: { store: { checkIntervalSeconds: 10 } } }
+    }, { setTimeout: (_callback: unknown, delay: number) => { timers.push(delay); return timers.length; }, clearTimeout: () => {} });
+    await module.loadScheduledMessages(); module.startScheduler(); await setImmediate();
+    for (let i = 0; i < 100; i++) module.scheduleNextCheck();
+    assert.deepEqual(timers, []); assert.equal(module.getScheduledMessages().length, 2);
+    module.stopScheduler(); userId = "other"; module.startScheduler();
+    assert.deepEqual(timers, [10_000]); module.stopScheduler();
+});
+
+test("scheduled timers use the current account's next message while retaining configured check intervals", async () => {
+    const timers: number[] = [];
+    const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+        "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+        "@api/DataStore": { get: async () => [scheduledEntry({ id: "foreign", userId: "other", scheduledTime: Date.now() + 2_000 }),
+            scheduledEntry({ id: "mine", userId: "account", scheduledTime: Date.now() + 100_000 })] },
+        "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) } },
+        ".": { settings: { store: { checkIntervalSeconds: 10 } } }
+    }, { setTimeout: (_callback: unknown, delay: number) => { timers.push(delay); return timers.length; }, clearTimeout: () => {} });
+    await module.loadScheduledMessages(); module.startScheduler();
+    assert.deepEqual(timers, [10_000]); module.stopScheduler();
 });
 
 test("scheduled interval changes only replace an active timer", async () => {
@@ -12465,7 +12498,7 @@ test("scheduled interval changes only replace an active timer", async () => {
     const cleared: number[] = [];
     const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
             "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
-        "@api/DataStore": { get: async () => [scheduledEntry({ id: "future", scheduledTime: Date.now() + 100000 })] },
+        "@api/DataStore": { get: async () => [scheduledEntry({ id: "future", userId: "account", scheduledTime: Date.now() + 100000 })] },
         "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
         "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) },}, ".": { settings: { store: { get checkIntervalSeconds() { return delay; } } } }
     }, { setTimeout: (_callback: unknown, ms: number) => { timers.push(ms); return timers.length; },

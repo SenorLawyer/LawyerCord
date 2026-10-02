@@ -6,6 +6,7 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Changed
 
+- Stop scheduled-message polling while signed out or when only another account owns queued messages.
 - Select Quest progress and completed quests in one pass, and read ignored IDs once per selection.
 - Initialize the Remix editor and its Discord chunks on first use. Discard pending modal loading after stop, restart or account replacement.
 

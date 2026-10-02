@@ -7,47 +7,9 @@
 import { definePluginSettings } from "@api/Settings";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { Channel, Message } from "@vencord/discord-types";
 import { ChannelStore, MessageActions, MessageStore, UserStore } from "@webpack/common";
 
-function shouldEdit(channel: Channel | undefined, message: Message | undefined, timePeriod: number, shouldMergeWithAttachment: boolean) {
-    let should = true;
-
-    if (!channel || !message) return { should: false, content: "" };
-
-    const currentUser = UserStore.getCurrentUser();
-    if (!currentUser) return { should: false, content: "" };
-
-    if (channel.isGroupDM()) {
-        if (channel.name === message.content) {
-            should = false;
-        }
-    }
-
-    if (message.author.id !== currentUser.id) {
-        should = false;
-    }
-
-    if (document.querySelector('[class*="replyBar"]')) {
-        should = false;
-    }
-
-    if ((message.attachments?.length ?? 0) > 0 && !shouldMergeWithAttachment) {
-        should = false;
-    }
-
-    const timestamp = new Date(message.timestamp);
-    const now = new Date();
-
-    if ((now.getTime() - timestamp.getTime()) > (timePeriod * 1000)) {
-        should = false;
-    }
-
-    return {
-        should: should,
-        content: message.content
-    };
-}
+const pendingChannels = new Set<string>();
 
 const settings = definePluginSettings({
     timePeriod: {
@@ -73,22 +35,26 @@ export default definePlugin({
     tags: ["Chat"],
     authors: [EquicordDevs.port22exposed],
     settings,
-    async onBeforeMessageSend(channelId, message) {
-        if (!message.content) return;
-        const lastMessage = MessageStore.getMessages(channelId)?.last?.() as Message | undefined;
+    async onBeforeMessageSend(channelId, message, options) {
+        if (!message.content || options.messageReference || pendingChannels.has(channelId)) return;
+        const lastMessage = MessageStore.getLastMessage(channelId);
         const channel = ChannelStore.getChannel(channelId);
+        const currentUser = UserStore.getCurrentUser();
+        if (!lastMessage || !channel || !currentUser || lastMessage.author.id !== currentUser.id) return;
+        if (channel.isGroupDM() && channel.name === lastMessage.content) return;
 
-        const { should, content } = shouldEdit(channel, lastMessage, settings.store.timePeriod, settings.store.shouldMergeWithAttachment);
+        const { timePeriod, shouldMergeWithAttachment, useSpace } = settings.store;
+        if (lastMessage.attachments.length && !shouldMergeWithAttachment) return;
+        if (Date.now() - new Date(lastMessage.timestamp).getTime() > timePeriod * 1000) return;
 
-        if (should && lastMessage) {
-            const separator = settings.store.useSpace ? " " : "\n";
-            const newContent = content + separator + message.content;
-
+        pendingChannels.add(channelId);
+        try {
             await MessageActions.editMessage(channelId, lastMessage.id, {
-                content: newContent,
+                content: lastMessage.content + (useSpace ? " " : "\n") + message.content,
             });
-
             message.content = "";
+        } finally {
+            pendingChannels.delete(channelId);
         }
     },
 });

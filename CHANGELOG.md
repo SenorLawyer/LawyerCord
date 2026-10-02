@@ -6,6 +6,9 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Changed
 
+- Apply FullVCPFP avatar styles to the rendered call tile without mutating Discord props, and preserve USRBG styles in either patch order.
+- Preserve reply sends and prevent overlapping MessageBurst edits from overwriting each other's text.
+
 - Replace MessageLogger's quadratic edit comparison with the installed bounded diff algorithm, retaining complete text when a detailed diff exceeds its budget.
 
 - Release hidden ImageZoom lens media, pause removed videos and synchronize playback when the lens opens.

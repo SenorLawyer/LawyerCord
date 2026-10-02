@@ -9113,13 +9113,13 @@ test("MessageBurst retains outgoing text until its edit resolves", async () => {
             "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
             "@webpack/common": {
                 ChannelStore: { getChannel: () => ({ isGroupDM: () => false }) },
-                MessageStore: { getMessages: () => ({ last: () => ({ id: "previous", author: { id: "self" }, content: "First", timestamp: new Date() }) }) },
+                MessageStore: { getLastMessage: () => ({ id: "previous", author: { id: "self" }, content: "First", timestamp: new Date(), attachments: [] }) },
                 UserStore: { getCurrentUser: () => ({ id: "self" }) },
                 MessageActions: { editMessage: () => edit }
             }
         }, { document: { querySelector: () => null } }).default;
         const outgoing = { content: "Second" };
-        const pending = plugin.onBeforeMessageSend("channel", outgoing);
+        const pending = plugin.onBeforeMessageSend("channel", outgoing, {});
         assert.equal(outgoing.content, "Second");
         finish();
         if (success) await pending;

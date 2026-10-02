@@ -81,7 +81,7 @@ export default definePlugin({
             find: "\"data-selenium-video-tile\":",
             predicate: () => settings.store.voiceBackground,
             replacement: {
-                match: /(?<=style:)\i(?=,ref:\i,"data-selenium-video-tile":)/,
+                match: /(?<=style:)(?:\i|\{.{0,250}?\})(?=,ref:\i,"data-selenium-video-tile":)/,
                 replace: "{...$&,...$self.getVoiceBackgroundStyles(arguments[0])}"
             }
         },

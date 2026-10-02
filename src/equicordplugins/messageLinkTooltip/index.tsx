@@ -10,14 +10,38 @@ import { definePluginSettings } from "@api/Settings";
 import { getUserSettingLazy } from "@api/UserSettings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
+import { isObject } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
+import type { Channel, Message } from "@vencord/discord-types";
 import { findComponentByCodeLazy } from "@webpack";
-import { ChannelStore, Constants, MessageStore, RestAPI, Tooltip, useEffect, useState, useStateFromStores } from "@webpack/common";
-import type { ComponentType } from "react";
+import { ChannelStore, Constants, MessageStore, RestAPI, Tooltip, useEffect, UserStore,useState, useStateFromStores } from "@webpack/common";
 
-const MessageDisplayCompact = getUserSettingLazy("textAndImages", "messageDisplayCompact")!;
+const MessageDisplayCompact = getUserSettingLazy<boolean>("textAndImages", "messageDisplayCompact")!;
 
-const ChannelMessage = findComponentByCodeLazy("isFirstMessageInForumPost", "trackAnnouncementViews") as ComponentType<any>;
+interface ChannelMessageProps {
+    id: string;
+    message: Message;
+    channel: Channel;
+    subscribeToComponentDispatch: boolean;
+    compact: boolean;
+}
+
+interface MessagePreviewProps {
+    channelId: string;
+    messageId: string;
+}
+
+interface FetchedMessage extends MessagePreviewProps {
+    userId: string;
+    session: symbol;
+    message: Message | null;
+}
+
+const ChannelMessage = findComponentByCodeLazy<ChannelMessageProps>("isFirstMessageInForumPost", "trackAnnouncementViews");
+const DISPLAY_SETTINGS: ["display"] = ["display"];
+const logger = new Logger("MessageLinkTooltip");
+let session: symbol | undefined;
 
 const settings = definePluginSettings({
     onLink: {
@@ -67,6 +91,9 @@ export default definePlugin({
     dependencies: ["UserSettingsAPI"],
 
     settings,
+
+    start() { session = Symbol(); },
+    stop() { session = undefined; },
 
     patches: [
         {
@@ -129,16 +156,16 @@ function withTooltip(Component, props, messageId, channelId) {
     </Tooltip>;
 }
 
-function MessagePreview({ channelId, messageId }) {
-    const channel = ChannelStore.getChannel(channelId);
+function MessagePreview({ channelId, messageId }: MessagePreviewProps) {
+    const channel = useStateFromStores([ChannelStore], () => ChannelStore.getChannel(channelId), [channelId]);
     const message = useMessage(channelId, messageId);
     const rawCompact = MessageDisplayCompact.useSetting();
 
-    const compact = settings.store.display === "compact" ? true : settings.store.display === "cozy" ? false : rawCompact;
+    const { display } = settings.use(DISPLAY_SETTINGS);
+    const compact = display === "compact" ? true : display === "cozy" ? false : rawCompact;
 
-    if (!message) {
-        return <span>Loading...</span>;
-    }
+    if (!channel || message === null) return <span>Message unavailable.</span>;
+    if (!message) return <span>Loading...</span>;
 
     return <ChannelMessage
         id={`message-link-tooltip-${messageId}`}
@@ -149,29 +176,40 @@ function MessagePreview({ channelId, messageId }) {
     />;
 }
 
-function useMessage(channelId, messageId) {
+function useMessage(channelId: string, messageId: string) {
     const cachedMessage = useStateFromStores(
         [MessageStore],
-        () => MessageStore.getMessage(channelId, messageId)
+        () => MessageStore.getMessage(channelId, messageId),
+        [channelId, messageId]
     );
-    const [message, setMessage] = useState(cachedMessage);
+    const userId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
+    const [fetched, setFetched] = useState<FetchedMessage>();
     useEffect(() => {
-        if (message == null)
-            (async () => {
+        if (cachedMessage || !userId || !session) return;
+        const currentSession = session;
+        let cancelled = false;
+        const isCurrent = () => !cancelled && session === currentSession && UserStore.getCurrentUser()?.id === userId;
+        void (async () => {
+            try {
                 const res = await RestAPI.get({
                     url: Constants.Endpoints.MESSAGES(channelId),
-                    query: {
-                        limit: 1,
-                        around: messageId,
-                    },
+                    query: { limit: 1, around: messageId },
                     retries: 2,
                 });
-                const rawMessage = res.body[0];
-                const message = MessageStore.getMessages(channelId)
-                    .receiveMessage(rawMessage)
-                    .get(messageId);
-                setMessage(message);
-            })();
-    });
-    return message;
+                if (!isCurrent()) return;
+                const { body } = res;
+                const rawMessage = Array.isArray(body)
+                    ? body.find((value: unknown) => isObject(value) && "id" in value && value.id === messageId && "channel_id" in value && value.channel_id === channelId)
+                    : undefined;
+                const message: Message | undefined = rawMessage && MessageStore.getMessages(channelId).receiveMessage(rawMessage).get(messageId);
+                setFetched({ channelId, messageId, userId, session: currentSession, message: message ?? null });
+            } catch (error) {
+                if (!isCurrent()) return;
+                logger.error("Could not load message preview", error);
+                setFetched({ channelId, messageId, userId, session: currentSession, message: null });
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [cachedMessage, channelId, messageId, userId]);
+    return cachedMessage ?? (fetched?.channelId === channelId && fetched.messageId === messageId && fetched.userId === userId && fetched.session === session ? fetched.message : undefined);
 }

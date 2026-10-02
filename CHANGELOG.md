@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Changed
 
+- Limit missing-message preview fetches to their target and mounted lifetime, follow live message/channel stores and ignore stale replies.
+
 - Preserve existing MessageLogger logs during streamed imports, skip duplicate IDs and count only committed additions.
 
 - Remove full permission-table expansion from displayed user tags and skip permission computation for webhook and owner tags.

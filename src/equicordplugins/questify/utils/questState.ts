@@ -17,7 +17,6 @@ export enum QuestStatus {
     Unclaimed = "UNCLAIMED",
     Ignored = "IGNORED",
     Expired = "EXPIRED",
-    Unknown = "UNKNOWN"
 }
 
 const questProgressTaskPriority = [
@@ -80,18 +79,22 @@ function getProgressTimestamp(progress: QuestProgressEntry): number {
 
 function getLatestProgressTask(quest: Quest): QuestTask | null {
     const progressEntries = Object.entries(quest.userStatus?.progress ?? {}) as [QuestTaskType, QuestProgressEntry][];
-
-    progressEntries.sort(([, a], [, b]) => getProgressTimestamp(b) - getProgressTimestamp(a));
+    let latestTask: QuestTask | null = null;
+    let latestTime = -Infinity;
 
     for (const [fallbackTaskType, progress] of progressEntries) {
         const task = getQuestTaskByType(quest, progress.eventName ?? fallbackTaskType);
 
         if (task) {
-            return task;
+            const time = getProgressTimestamp(progress);
+            if (time > latestTime) {
+                latestTask = task;
+                latestTime = time;
+            }
         }
     }
 
-    return null;
+    return latestTask;
 }
 
 function getQuestProgressTask(quest: Quest): QuestTask | null {
@@ -139,22 +142,22 @@ export function getQuestStoredProgress(quest: Quest, task: QuestTask): number | 
     return progressMap[task.type]?.value ?? null;
 }
 
-function getCurrentIgnoredQuestIds(): string[] {
-    return Array.from(getQuestifySettings().ignoredQuestIDs[ignoredQuestIDsKey] ?? []);
-}
-
 function getMostRecentlyCompletedUnclaimedQuest(): Quest | null {
-    return Array.from(QuestStore.quests.values())
-        .filter(quest => (
-            Boolean(quest.userStatus?.completedAt)
-            && getQuestStatus(quest, getCurrentIgnoredQuestIds()) === QuestStatus.Unclaimed
-        ))
-        .sort((a, b) => {
-            const aTime = new Date(a.userStatus?.completedAt ?? 0).getTime();
-            const bTime = new Date(b.userStatus?.completedAt ?? 0).getTime();
+    const ignoredQuestIds = getQuestifySettings().ignoredQuestIDs[ignoredQuestIDsKey] ?? [];
+    let latestQuest: Quest | null = null;
+    let latestTime = -Infinity;
 
-            return bTime - aTime;
-        })[0] ?? null;
+    for (const quest of QuestStore.quests.values()) {
+        const completedAt = quest.userStatus?.completedAt;
+        if (!completedAt || getQuestStatus(quest, ignoredQuestIds) !== QuestStatus.Unclaimed) continue;
+        const time = new Date(completedAt).getTime();
+        if (!latestQuest || time > latestTime) {
+            latestQuest = quest;
+            latestTime = time;
+        }
+    }
+
+    return latestQuest;
 }
 
 export function getQuestPanelOverride(quest: Quest | null): Quest | null {
@@ -224,16 +227,13 @@ export function getQuestStatus(
     ignoredQuestIds: ReadonlyArray<string>,
     checkIgnored: boolean = true,
 ): QuestStatus {
-    const completedQuest = quest.userStatus?.completedAt;
-    const claimedQuest = quest.userStatus?.claimedAt;
-    const expiredQuest = new Date(quest.config.expiresAt) < new Date();
-    const questIgnored = ignoredQuestIds.includes(quest.id);
-
-    if (claimedQuest) {
+    if (quest.userStatus?.claimedAt) {
         return QuestStatus.Claimed;
     }
 
-    if (checkIgnored && questIgnored && (!expiredQuest || completedQuest)) {
+    const completedQuest = quest.userStatus?.completedAt;
+    const expiredQuest = new Date(quest.config.expiresAt).getTime() < Date.now();
+    if (checkIgnored && ignoredQuestIds.includes(quest.id) && (!expiredQuest || completedQuest)) {
         return QuestStatus.Ignored;
     }
 
@@ -241,11 +241,7 @@ export function getQuestStatus(
         return QuestStatus.Unclaimed;
     }
 
-    if (expiredQuest) {
-        return QuestStatus.Expired;
-    }
-
-    return QuestStatus.Unknown;
+    return QuestStatus.Expired;
 }
 
 export function countIncludedUnclaimedQuests(

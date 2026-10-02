@@ -240,6 +240,28 @@ export async function addMessagesBulkIDB(messages: LoggedMessageJSON[], status?:
     messages.forEach(message => cachedMessages.set(message.id, message));
 }
 
+export async function importMessagesIDB(messages: LoggedMessageJSON[]) {
+    await initIDB();
+    const records = messages.map(message => {
+        stripTransientRenderState(message);
+        return { channel_id: message.channel_id, message_id: message.id, status: getMessageStatus(message), message };
+    });
+    const tx = db.transaction("messages", "readwrite");
+    const imported: LoggedMessageJSON[] = [];
+    await Promise.all([
+        tx.done,
+        (async () => {
+            for (const record of records) {
+                if (await tx.store.getKey(record.message_id) !== undefined) continue;
+                await tx.store.add(record);
+                imported.push(record.message);
+            }
+        })()
+    ]);
+    for (const message of imported) cachedMessages.set(message.id, message);
+    return imported.length;
+}
+
 export async function deleteMessageIDB(message_id: string) {
     await db.delete("messages", message_id);
 

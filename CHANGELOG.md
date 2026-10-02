@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Changed
 
+- Preserve existing MessageLogger logs during streamed imports, skip duplicate IDs and count only committed additions.
+
 - Remove full permission-table expansion from displayed user tags and skip permission computation for webhook and owner tags.
 
 - Stream bounded MessageLogger attachment downloads into contained temporary files, validate native URLs and extensions, and remove the directory existence race.

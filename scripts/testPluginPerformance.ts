@@ -1877,6 +1877,7 @@ test("FakeNitro checks emoji and sticker access in the destination guild", async
         "@api/Settings": { definePluginSettings: () => ({ store: { enableStickerBypass: true, enableEmojiBypass: false } }) },
         "@components/Paragraph": {}, "@utils/apng": {}, "@utils/constants": { Devs: {} },
         "@utils/discord": { getCurrentGuild: () => ({ id: "selected" }) }, "@utils/Logger": {},
+        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
         "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
         "@vencord/discord-types/enums": { StickerFormatType: {} }, "gifenc": {},
         "@webpack": { findByPropsLazy: () => ({}), proxyLazyWebpack: () => ({}), findByCodeLazy: () => () => false },

@@ -7,9 +7,9 @@
   "secondary_baseline_commit": "fc0de7e443ed551f7bd005bf0a7f71edee48add0",
   "head_commit": "53260d5900b155a60e89a3fbb89489df6a37cc66",
   "head_tree": "c2cc83e433a0aa1e39a0a1d200d10afe73c997b2",
-  "scope": "All first-parent commits after the baseline through HEAD. Bulk historical diffs are selective where stated. Current source review is separate.",
+  "scope": "All first-parent commits after the baseline through the recorded head_commit. Bulk historical diffs are selective where stated. Current candidate follow-up repairs are recorded separately and do not expand this historical inventory.",
   "candidate_manifest": "docs/plugin-settings-review-coverage-2026-10-03.tsv",
-  "candidate_manifest_sha256": "0f4d636f57a9f72986dee1963a480de48c2ce236fc433e72682a0e494bf2d740",
+  "candidate_manifest_sha256": "608deac1ecfa9b086fd0969c07da561197ec99020bb593a2b9cd3452d1cd56ce",
   "candidate_hash_policy": "Mode 120000 hashes link text, not resolved file contents. Other UTF-8 text without NUL uses LF line endings; binary bytes are unchanged. Git blob IDs hash the Git blob header and these bytes. This is a working-tree snapshot, not a claim that the current index or HEAD contains the candidate. The two generated coverage artifacts exclude themselves from the manifest to avoid circular hashes.",
   "prior_coverage": {
     "path": "docs/progressive-performance-coverage-2026-10-02.tsv",
@@ -9935,6 +9935,16 @@
           "disposition": "Path inventoried; review depth is stated at commit level, not a claim of full per-file historical review."
         }
       ]
+    }
+  ],
+  "candidate_followups": [
+    {
+      "pull_request": 57,
+      "path": "scripts/testAutomationNativeLifetime.ts",
+      "review_input_sha256": "4cf325fff32a48437b0760cf4a4904195e7fb17399988c2e091459741aacece2",
+      "review_depth": "current test change reviewed",
+      "reason": "Linux CI exposed the missing encrypted-storage backend fixture; network readiness no longer assumes one event-loop turn.",
+      "validation": "Node 24.19 on Windows executing the Linux source branch: five tests pass. Missing-backend and disabled-cancellation controls fail as expected. An actual Linux CI rerun is still required."
     }
   ]
 }

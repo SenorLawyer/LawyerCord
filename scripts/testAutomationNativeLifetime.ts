@@ -13,22 +13,23 @@ import { runInNewContext } from "node:vm";
 import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 const require = createRequire(import.meta.url);
-function fixture() {
+function fixture(platform: NodeJS.Platform = process.platform) {
     const children: (EventEmitter & { stdout: EventEmitter; stderr: EventEmitter; kills: number; signals: string[]; kill(signal: string): boolean; })[] = [];
-    let networkSignal: AbortSignal | undefined;
+    let notifyNetworkStarted: (signal: AbortSignal) => void = () => {};
+    const networkStarted = new Promise<AbortSignal>(resolve => { notifyNetworkStarted = resolve; });
     let finishNetwork: (() => void) | undefined;
     const source = readFileSync("src/equicordplugins/automationCore.desktop/native.ts", "utf8");
     const code = transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;
     const api = runInNewContext(code + "\nexports;", {
-        exports: {}, Buffer, process, AbortController, DOMException, setTimeout, clearTimeout,
+        exports: {}, Buffer, process: { ...process, platform }, AbortController, DOMException, setTimeout, clearTimeout,
         fetch: (_url: string, options: { signal: AbortSignal; }) => {
-            networkSignal = options.signal;
+            notifyNetworkStarted(options.signal);
             return new Promise((_resolve, reject) => { finishNetwork = () => reject(new DOMException("Stopped", "AbortError")); });
         },
         require(name: string) {
             if (name === "@main/utils/constants") return { DATA_DIR: "fixture" };
             if (name.includes("automations/system")) return {};
-            if (name === "electron") return { safeStorage: { isEncryptionAvailable: () => true, decryptString: () => "fixture" } };
+            if (name === "electron") return { safeStorage: { isEncryptionAvailable: () => true, getSelectedStorageBackend: () => "gnome_libsecret", decryptString: () => "fixture" } };
             if (name === "fs/promises") return { readFile: async () => Buffer.from("fixture") };
             if (name === "child_process") return { spawn: () => {
                 const child = Object.assign(new EventEmitter(), { stdout: new EventEmitter(), stderr: new EventEmitter(), kills: 0, signals: [] as string[], kill(signal: string) { this.kills++; this.signals.push(signal); return true; } });
@@ -39,7 +40,7 @@ function fixture() {
         }
     });
     const sender = Object.assign(new EventEmitter(), { id: 1, isDestroyed: () => false });
-    return { api, sender, children, signal: () => networkSignal, finish: () => finishNetwork?.() };
+    return { api, sender, children, networkStarted, finish: () => finishNetwork?.() };
 }
 
 test("Program cancellation owns only its renderer request and holds admission until close", async () => {
@@ -70,15 +71,15 @@ test("Program cancellation owns only its renderer request and holds admission un
     }
 });
 
-test("Destroyed renderer cancels AI while reservation survives pending network cleanup", async () => {
-    const { api, sender, signal, finish } = fixture();
+test("Destroyed renderer cancels AI while reservation survives pending network cleanup", { timeout: 5000 }, async () => {
+    const { api, sender, networkStarted, finish } = fixture("linux");
     const input = { requestId: "ai", model: "vendor/model", prompt: "fixture", systemPrompt: "", messages: [], maxTokens: 16, temperature: 1, json: false, timeoutSeconds: 300 };
     const pending = api.completeOpenRouter({ sender }, input);
     try {
-        await new Promise(resolve => setImmediate(resolve));
-        assert.ok(signal());
+        const signal = await Promise.race([networkStarted, pending.then(() => assert.fail("The AI request ended before starting its network request."))]);
+        assert.ok(signal);
         sender.emit("destroyed");
-        assert.equal(signal()?.aborted, true);
+        assert.equal(signal.aborted, true);
         assert.equal((await api.completeOpenRouter({ sender }, input)).success, false);
     } finally { finish(); await pending; }
     assert.equal(sender.listenerCount("destroyed"), 0);

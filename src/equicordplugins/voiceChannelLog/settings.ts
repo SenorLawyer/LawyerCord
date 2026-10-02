@@ -8,6 +8,13 @@ import { definePluginSettings } from "@api/Settings";
 import { OptionType } from "@utils/types";
 
 const settings = definePluginSettings({
+    maxEntries: {
+        type: OptionType.SLIDER,
+        description: "Recent events kept per channel, up to 10000 events across 50 channels. Older history is removed.",
+        default: 1000,
+        markers: [100, 500, 1000, 2000, 5000],
+        stickToMarkers: true
+    },
     logJoinLeave: {
         type: OptionType.BOOLEAN,
         description: "Log when users join, leave, or move between voice channels.",

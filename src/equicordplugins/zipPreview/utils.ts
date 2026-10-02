@@ -93,6 +93,7 @@ interface QueuedEntryLoad {
     resolve: (data: Uint8Array) => void;
 }
 
+const archiveLoads = new Set<AbortController>();
 const zipCache = new Map<string, ZipPreviewCacheState>();
 let entrySources = new WeakMap<ZipEntry, { archive: InspectedZipArchive; entry: InspectedZipEntry; }>();
 let pendingEntryLoads = new WeakMap<ZipEntry, Promise<Uint8Array>>();
@@ -119,7 +120,13 @@ export function getCachedZip(url: string): ZipPreviewCacheState {
         return cached;
     }
 
-    const promise = loadZip(url)
+    if (archiveLoads.size >= MAX_CACHE_ENTRIES)
+        return { status: "rejected", message: "Two ZIP previews are already loading. Try again when one finishes." };
+    const controller = new AbortController();
+    archiveLoads.add(controller);
+    const { signal } = controller;
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    const promise = loadZip(url, signal)
         .then(result => {
             if (zipCache.get(url) !== pending) throw new Error(CANCELLED_PREVIEW_MESSAGE);
             zipCache.set(url, { status: "resolved", result });
@@ -135,6 +142,9 @@ export function getCachedZip(url: string): ZipPreviewCacheState {
                 trimZipCache();
             }
             throw error;
+        }).finally(() => {
+            clearTimeout(timeout);
+            archiveLoads.delete(controller);
         });
 
     const pending = { status: "pending" as const, promise };
@@ -144,6 +154,7 @@ export function getCachedZip(url: string): ZipPreviewCacheState {
 }
 
 export function clearZipPreviewCache() {
+    for (const controller of archiveLoads) controller.abort();
     zipCache.clear();
     entrySources = new WeakMap();
     pendingEntryLoads = new WeakMap();
@@ -189,11 +200,12 @@ export function getCodeLanguage(entry: ZipEntry): string {
     return languageMap[entry.extension] ?? entry.extension;
 }
 
-async function loadZip(url: string): Promise<ZipPreviewResult> {
+async function loadZip(url: string, signal: AbortSignal): Promise<ZipPreviewResult> {
     const attachmentPath = getDiscordAttachmentPath(url);
 
     if (attachmentPath) {
         const nativeResult = await fetchNativeDiscordAttachment(attachmentPath);
+        if (signal.aborted) throw new Error(CANCELLED_PREVIEW_MESSAGE);
         if (nativeResult.success && nativeResult.data) {
             if (nativeResult.data.byteLength > MAX_ZIP_BYTES) throw new Error("ZIP is too large to preview.");
             return parseZipBuffer(nativeResult.data);
@@ -206,16 +218,16 @@ async function loadZip(url: string): Promise<ZipPreviewResult> {
         cache: "no-store",
         credentials: "omit",
         redirect: "error",
-        signal: AbortSignal.timeout(30_000)
+        signal
     });
     if (!response.ok) {
-        void response.body?.cancel();
+        await response.body?.cancel().catch(() => undefined);
         throw new Error("Could not fetch ZIP.");
     }
 
     const contentLength = Number(response.headers.get("content-length"));
     if (Number.isFinite(contentLength) && contentLength > MAX_ZIP_BYTES) {
-        void response.body?.cancel();
+        await response.body?.cancel().catch(() => undefined);
         throw new Error("ZIP is too large to preview.");
     }
 

@@ -42,7 +42,7 @@ test("Theme projections preserve filtering and ordering with live nested setting
         pinnedThemes: ["local.css", "https://theme.invalid/a"]
     });
     const settings = store.store;
-    assert.notEqual(settings.pinnedThemes, settings.pinnedThemes);
+    assert.equal(settings.pinnedThemes, settings.pinnedThemes);
     let comparisons = 0;
     for (const onlineThemes of [null, [], [{ link: "https://theme.invalid/a", name: "Online", fileName: "a.css" }]]) {
         for (const userThemes of [null, [], [{ name: "Local", fileName: "local.css" }]]) {

@@ -172,13 +172,21 @@ export function createTab(props: BasicChannelTabsProps | ChannelTabsProps, switc
     update(save);
 }
 
+function rememberClosedTabs(tabs: ChannelTabsProps[]) {
+    closedTabs.push(...tabs);
+    closedTabs.splice(0, Math.max(0, closedTabs.length - 100));
+    const ids = new Set(tabs.map(tab => tab.id));
+    replaceArray(openTabHistory, ...openTabHistory.filter(id => !ids.has(id)));
+    for (const id of ids) tabStateCache.delete(id);
+}
+
 export function closeTab(id: number) {
     if (openTabs.length <= 1) return;
     const i = openTabs.findIndex(v => v.id === id);
     if (i === -1) return logger.error("Couldn't find channel tab with ID " + id, openTabs);
 
     const closed = openTabs.splice(i, 1);
-    closedTabs.push(...closed);
+    rememberClosedTabs(closed);
 
     // the memory leak preventer
     tabStateCache.delete(id);
@@ -186,12 +194,11 @@ export function closeTab(id: number) {
     if (id === currentlyOpenTab) {
         if (openTabHistory.length) {
             // use tab history to find most recently used tab
-            openTabHistory.pop();
             let newTab: ChannelTabsProps | undefined = undefined;
             while (!newTab) {
                 const maybeNewTabId = openTabHistory.at(-1);
                 openTabHistory.pop();
-                if (!maybeNewTabId) {
+                if (maybeNewTabId === undefined) {
                     // fallback: go to tab on the right, or leftmost if closing last tab
                     const fallbackIndex = i < openTabs.length ? i : 0;
                     moveToTab(openTabs[fallbackIndex].id);
@@ -203,7 +210,6 @@ export function closeTab(id: number) {
 
             if (newTab) {
                 moveToTab(newTab.id);
-                openTabHistory.pop();
             }
         } else {
             // no history: go to tab on the right, or leftmost if closing last tab
@@ -221,7 +227,7 @@ export function closeOtherTabs(id: number) {
     if (tab === undefined) return logger.error("Couldn't find channel tab with ID " + id, openTabs);
 
     const removedTabs = openTabs.filter(v => v.id !== id);
-    closedTabs.push(...removedTabs.reverse());
+    rememberClosedTabs(removedTabs.reverse());
     const lastTab = openTabs.find(v => v.id === currentlyOpenTab)!;
     replaceArray(openTabs, tab);
     setOpenTab(id);
@@ -236,7 +242,7 @@ export function closeTabsToTheRight(id: number) {
     if (i === -1) return logger.error("Couldn't find channel tab with ID " + id, openTabs);
 
     const tabsToTheRight = openTabs.filter((_, ind) => ind > i);
-    closedTabs.push(...tabsToTheRight.reverse());
+    rememberClosedTabs(tabsToTheRight.reverse());
     const tabsToTheLeft = openTabs.filter((_, ind) => ind <= i);
     replaceArray(openTabs, ...tabsToTheLeft);
 
@@ -249,7 +255,7 @@ export function closeTabsToTheLeft(id: number) {
     if (i === -1) return logger.error("Couldn't find channel tab with ID " + id, openTabs);
 
     const tabsToTheLeft = openTabs.filter((_, ind) => ind < i);
-    closedTabs.push(...tabsToTheLeft.reverse());
+    rememberClosedTabs(tabsToTheLeft.reverse());
     const tabsToTheRight = openTabs.filter((_, ind) => ind >= i);
     replaceArray(openTabs, ...tabsToTheRight);
 
@@ -555,6 +561,8 @@ export function setOpenTab(id: number) {
     if (i === -1) return logger.error("Couldn't find channel tab with ID " + id, openTabs);
 
     currentlyOpenTab = id;
+    const previous = openTabHistory.indexOf(id);
+    if (previous !== -1) openTabHistory.splice(previous, 1);
     openTabHistory.push(id);
 }
 

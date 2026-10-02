@@ -12,6 +12,8 @@ import { getLyricsLrclib } from "./providers/lrclibAPI";
 import { getLyricsSpotify } from "./providers/SpotifyAPI";
 import { LyricsData, Provider, SyncedLyric } from "./providers/types";
 
+export let lyricsCacheGeneration = 0;
+
 const LyricsCacheKey = "SpotifyLyricsCacheNew";
 
 interface NullLyricCacheEntry {
@@ -73,6 +75,7 @@ export async function getLyrics(track: Track | null): Promise<LyricsData | null>
 export async function clearLyricsCache() {
     nullLyricCache.clear();
     await DataStore.set(LyricsCacheKey, {});
+    lyricsCacheGeneration++;
 }
 
 export async function getLyricsCount(): Promise<number> {
@@ -110,6 +113,7 @@ export async function removeTranslations() {
     }
 
     await DataStore.set(LyricsCacheKey, newCache);
+    lyricsCacheGeneration++;
 }
 
 export async function migrateOldLyrics() {
@@ -131,4 +135,5 @@ export async function migrateOldLyrics() {
 
     await DataStore.set(LyricsCacheKey, result);
     await DataStore.set("SpotifyLyricsCache", {});
+    lyricsCacheGeneration++;
 }

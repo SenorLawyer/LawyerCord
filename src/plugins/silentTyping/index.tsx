@@ -29,6 +29,12 @@ import { Channel } from "@vencord/discord-types";
 import { ChannelStore, FluxDispatcher, Menu, MessageStore, React, SelectedChannelStore, useEffect, UserStore } from "@webpack/common";
 
 const rerenderListeners = new Set<() => void>();
+const expiryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function clearExpiryTimers() {
+    for (const timer of expiryTimers.values()) clearTimeout(timer);
+    expiryTimers.clear();
+}
 
 function triggerChatToggleRerender() {
     for (const listener of rerenderListeners) {
@@ -380,6 +386,8 @@ export default definePlugin({
     },
 
     flux: {
+        LOGOUT: clearExpiryTimers,
+        CONNECTION_OPEN: clearExpiryTimers,
         VOICE_STATE_UPDATES({ voiceStates }) {
             const state = voiceStates?.[0];
 
@@ -409,13 +417,17 @@ export default definePlugin({
                 if (threshold > 0) {
                     triggerChatToggleRerender();
 
-                    setTimeout(() => {
+                    clearTimeout(expiryTimers.get(message.channel_id));
+                    expiryTimers.set(message.channel_id, setTimeout(() => {
+                        expiryTimers.delete(message.channel_id);
                         triggerChatToggleRerender();
-                    }, (threshold * 1000) + 25);
+                    }, (threshold * 1000) + 25));
                 }
             }
         }
     },
+
+    stop: clearExpiryTimers,
 
     patches: [
         {

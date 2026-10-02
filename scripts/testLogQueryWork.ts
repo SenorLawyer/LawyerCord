@@ -39,7 +39,7 @@ async function fixture() {
     };
     function load(path: string) {
         const { outputText } = transpileModule(readFileSync(path, "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } });
-        return runInNewContext(`${outputText}\nexports;`, { exports: {}, IDBKeyRange: { only: (x: unknown) => x, upperBound: (x: unknown) => x },
+        return runInNewContext(`${outputText}\nexports;`, { exports: {}, DOMException, IDBKeyRange: { only: (x: unknown) => x, upperBound: (x: unknown) => x },
             require: (name: string) => { assert.ok(name in mocks, name); return mocks[name]; } });
     }
     mocks["./utils/LimitedMap"] = load("src/equicordplugins/messageLoggerEnhanced/utils/LimitedMap.ts");
@@ -87,7 +87,9 @@ test("Cancelled log queries skip hydration and stop traversing records", async (
     const f = await fixture();
     assert.ok(f.db.getMessagesPageIDB);
     const controller = new AbortController();
-    await assert.rejects(f.db.getMessagesPageIDB(false, 3, "DELETED", () => { controller.abort(); return true; }, controller.signal));
+    Object.defineProperty(controller.signal, "throwIfAborted", { value: undefined });
+    await assert.rejects(f.db.getMessagesPageIDB(false, 3, "DELETED", () => { controller.abort(); return true; }, controller.signal), { name: "AbortError" });
+    assert.ok(f.visits >= 1);
     assert.ok(f.visits <= 2);
     assert.equal(f.images.length, 0);
 });

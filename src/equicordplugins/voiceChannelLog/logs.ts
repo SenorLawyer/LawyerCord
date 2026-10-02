@@ -4,9 +4,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import settings from "./settings";
 import { VoiceChannelLogEntry } from "./types";
 
 const vcLogs = new Map<string, VoiceChannelLogEntry[]>();
+let retainedEntries = 0;
 let vcLogSubscriptions: (() => void)[] = [];
 
 let callStartTime: Date | null = null;
@@ -28,13 +30,27 @@ export function getVcLogs(channelId?: string): VoiceChannelLogEntry[] {
 
 export function addLogEntry(entry: VoiceChannelLogEntry) {
     const existing = vcLogs.get(entry.channelId) ?? [];
-    vcLogs.set(entry.channelId, [...existing, entry]);
+    const entries = [...existing.slice(-(settings.store.maxEntries - 1)), entry];
+    retainedEntries += entries.length - existing.length;
+    vcLogs.delete(entry.channelId);
+    vcLogs.set(entry.channelId, entries);
+    while (vcLogs.size > 50 || retainedEntries > 10_000) {
+        const oldest = vcLogs.keys().next().value;
+        if (oldest === undefined) break;
+        retainedEntries -= vcLogs.get(oldest)?.length ?? 0;
+        vcLogs.delete(oldest);
+    }
     vcLogSubscriptions.forEach(fn => fn());
 }
 
 export function clearLogs(channelId?: string) {
-    if (!channelId) return;
-    vcLogs.set(channelId, []);
+    if (channelId) {
+        retainedEntries -= vcLogs.get(channelId)?.length ?? 0;
+        vcLogs.delete(channelId);
+    } else {
+        vcLogs.clear();
+        retainedEntries = 0;
+    }
     vcLogSubscriptions.forEach(fn => fn());
 }
 

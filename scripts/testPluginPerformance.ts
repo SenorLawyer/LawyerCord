@@ -1296,6 +1296,7 @@ test("Streaks ignores responses for changed accounts or tokens", async () => {
             let writes = 0;
             let state: Record<string, unknown> = {};
             const api = loadSource("src/equicordplugins/streaks/stores/StreaksStore.ts", {
+                "@utils/Logger": { Logger: class { error() { assert.fail("Unexpected request error"); } } },
                 "@api/DataStore": {}, "@utils/lazy": { proxyLazy: (factory: () => unknown) => factory() },
                 "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) },
                     zustandCreate: (init: (set: (value: object) => void, get: () => object) => Record<string, unknown>) => {
@@ -2105,7 +2106,7 @@ test("voice metadata closes its audio context after success and decoding failure
     assert.equal(closes, 2);
 });
 
-test("MusicRichPresence discards stopped, superseded and foreign account updates", async () => {
+test("MusicRichPresence coalesces pending polls and discards stopped and foreign account updates", async () => {
     const activities: unknown[] = [];
     const requests: Array<ReturnType<typeof Promise.withResolvers<unknown>>> = [];
     let userId = "first";
@@ -2130,19 +2131,18 @@ test("MusicRichPresence discards stopped, superseded and foreign account updates
     await setImmediate();
     assert.deepEqual(activities, [null]);
     plugin.start();
-    const newest = plugin.updatePresence();
-    requests[2].resolve({ name: "newest" });
-    await newest;
-    requests[1].resolve({ name: "older" });
+    await plugin.updatePresence();
+    assert.equal(requests.length, 2, "A pending poll must not start another request.");
+    requests[1].resolve({ name: "newest" });
     await setImmediate();
     assert.deepEqual(activities, [null, { name: "newest" }]);
     const foreign = plugin.updatePresence();
     userId = "second";
-    requests[3].resolve({ name: "foreign" });
+    requests[2].resolve({ name: "foreign" });
     await foreign;
     assert.deepEqual(activities, [null, { name: "newest" }]);
     const failed = plugin.updatePresence();
-    requests[4].reject(new Error("asset unavailable"));
+    requests[3].reject(new Error("asset unavailable"));
     await failed;
     plugin.stop();
 });
@@ -5223,7 +5223,7 @@ test("voice activity lookups cannot log into a stopped or different session", as
             "@webpack": { findByPropsLazy: () => actions },
             "@webpack/common": { ApplicationStore: { getApplication: () => undefined }, UserStore: { getCurrentUser: () => ({ id: account }) }, SelectedChannelStore: { getVoiceChannelId: () => channel } },
             "./components/LogsButton": {}, "./components/VoiceChannelLogModal": {},
-            "./logs": { addLogEntry: (entry: object) => entries.push(entry), setCallStartTime() {} },
+            "./logs": { addLogEntry: (entry: object) => entries.push(entry), setCallStartTime() {}, clearLogs() {} },
             "./settings": { __esModule: true, default: { store: { logActivity: true } } },
         });
         assert.equal(lookups, 0);
@@ -6165,7 +6165,6 @@ test("profile images use only the selected guild or global resource", async () =
     for (const type of ["avatar", "banner"]) for (const guild of [false, true]) for (const failed of [false, true]) {
         const urls: string[] = [];
         let blobReads = 0;
-        const signal = new AbortController().signal;
         const deadlines: number[] = [];
         const processImage = loadSource("src/equicordplugins/profileSets/utils/profile.ts", {
             "@api/UserSettings": { getUserSettingLazy: () => ({}) },
@@ -6184,9 +6183,10 @@ test("profile images use only the selected guild or global resource", async () =
                 }
             } }
         }, {
-            AbortSignal: { timeout: (ms: number) => { deadlines.push(ms); return signal; } },
+            setTimeout: (_callback: () => void, ms: number) => { deadlines.push(ms); return 1; }, clearTimeout() {},
             fetch: async (url: string, options: { signal: AbortSignal; }) => {
-                assert.equal(options.signal, signal);
+                assert.ok(options.signal instanceof AbortSignal);
+                assert.equal(options.signal.aborted, false);
                 urls.push(url);
                 return new Response(new Uint8Array([1]), { status: failed ? 404 : 200 });
             },
@@ -8734,6 +8734,7 @@ test("MusicControls reconnects cached Tidal stores without initializing unused s
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
         "./settings": { settings: { store: {} }, toggleHoverControls() {} },
         "./spotify/lyrics/api": { migrateOldLyrics: async () => {} },
+        "./spotify/lyrics/providers/store": { SpotifyLrcStore: {} },
         "./spotify/lyrics/components/lyrics": {},
         "./spotify/PlayerComponent": {},
         "./tidal/lyrics/components/lyrics": {},
@@ -9635,7 +9636,7 @@ test("Discord MCP attachment downloads reject redirects and untrusted origins", 
         "./policy": { DISCORD_MCP_TOOL_NAMES: [] }
     }, {
         __dirname: "/fixture", Buffer, URL,
-        AbortSignal: { timeout: (ms: number) => { deadline = ms; return new AbortController().signal; } },
+        setTimeout: (_callback: () => void, ms: number) => { deadline = ms; return 1; }, clearTimeout() {},
         fetch: async (_url: URL, options?: RequestInit) => {
             requests++;
             if (redirect && options?.redirect === "error") throw new TypeError("Redirect blocked");
@@ -10504,8 +10505,9 @@ test("audio downloads finishing after unmount do not allocate object URLs", asyn
     let finishDownload: (response: Response) => void = () => assert.fail("Download did not start");
     let allocated = 0;
     const Visualizer = loadSource("src/equicordplugins/betterAudioPlayer/index.tsx", {
-        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@api/Settings": { definePluginSettings: () => ({ store: { oscilloscope: true } }) },
         "@utils/constants": { EquicordDevs: {} },
+        "@utils/Logger": { Logger: class { error() {} } },
         "@utils/css": { classNameFactory: () => () => "" },
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
         "@webpack/common": { React }
@@ -10517,7 +10519,7 @@ test("audio downloads finishing after unmount do not allocate object URLs", asyn
         },
         cancelAnimationFrame() {}
     }, "Visualizer");
-    Visualizer({ playerRef: { current: { addEventListener() {}, removeEventListener() {} } }, src: "https://fixture.invalid/audio?signature=original" });
+    Visualizer({ playerRef: { current: { paused: false, addEventListener() {}, removeEventListener() {} } }, src: "https://fixture.invalid/audio?signature=original" });
     const cleanup = effects[0]();
     cleanup();
     finishDownload(new Response("audio"));
@@ -10751,6 +10753,8 @@ test("linked message previews reject neighboring messages returned by an around 
         let stored = 0;
         const cache = new Map();
         const fetchMessage = runInNewContext(`${code}\nfetchMessage;`, {
+            generation: 0,
+            UserStore: { getCurrentUser: () => ({ id: "account" }) },
             messageCache: cache,
             setMessageCache: (key: string, value: unknown) => cache.set(key, value),
             RestAPI: { get: async () => ({ body: [message] }) },
@@ -11587,7 +11591,7 @@ function loadSource(path: string, mocks: Record<string, object>, globals: Record
             assert.fail(`${path}: ${typescript.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`);
     }
     return runInNewContext(code + `\n${result};`, {
-        exports: {}, ...globals,
+        exports: {}, AbortController, AbortSignal, setTimeout, clearTimeout, ...globals,
         require(name: string) {
             if (name.endsWith(".css")) return {};
             assert.ok(name in mocks, name);
@@ -12875,7 +12879,7 @@ test("Jellyfin privacy mode omits all identifying media fields", async () => {
             mediaType = type;
             for (const isPaused of [false, true]) {
                 paused = isPaused;
-                const activity = await getActivity();
+                const activity = await getActivity(new AbortController().signal);
                 assert.deepEqual(JSON.parse(JSON.stringify(activity)), {
                     application_id: "1381368130164625469", name: "Jellyfin",
                     details: type === "Audio" ? "Listening to music" : "Watching media",
@@ -12896,11 +12900,11 @@ test("Jellyfin preserves zero playback position and omits missing position", asy
     }, { fetch: async () => ({ ok: true, headers: { get: () => "application/json" }, json: async () => [
         { UserId: "user", NowPlayingItem: { Name: "Track", Type: "Audio" }, PlayState: { PositionTicks: position } }
     ] }) }, "fetchMediaData");
-    assert.equal((await fetchMediaData()).position, 0);
+    assert.equal((await fetchMediaData(new AbortController().signal)).position, 0);
     position = undefined;
-    assert.equal((await fetchMediaData()).position, undefined);
+    assert.equal((await fetchMediaData(new AbortController().signal)).position, undefined);
     position = 25_000_000;
-    assert.equal((await fetchMediaData()).position, 2);
+    assert.equal((await fetchMediaData(new AbortController().signal)).position, 2);
 });
 
 test("audiobook authorization failures end the current update", async () => {
@@ -12917,9 +12921,9 @@ test("audiobook authorization failures end the current update", async () => {
             ? { ok: true, json: async () => ({ user: { token: "token" } }) }
             : { ok: false, status: 401, statusText: "Unauthorized" };
     } }, "fetchMediaData");
-    assert.equal(await fetchMediaData(), null);
+    assert.equal(await fetchMediaData(new AbortController().signal), null);
     assert.equal(requests.length, 2);
-    assert.equal(await fetchMediaData(), null);
+    assert.equal(await fetchMediaData(new AbortController().signal), null);
     assert.equal(requests.length, 4);
 });
 
@@ -13027,7 +13031,7 @@ test("recent DM cleanup closes an overlay after its setting changes", () => {
 test("secure key reviews from a stopped session cannot change the new session gate", async () => {
     const pending: Array<(result: { status: string; }) => void> = [];
     const mocks: Record<string, object> = {};
-    for (const name of ["@api/ChatButtons", "@api/MessageEvents", "@components/BaseText", "@components/Button", "@components/Heading", "@components/Span", "@utils/clipboard", "@utils/discord", "./attachments", "./attachmentUploads", "./conversationSelection", "./wireAuthorizations"])
+    for (const name of ["@api/ChatButtons", "@api/MessageEvents", "@api/MessageUpdater", "@components/BaseText", "@components/Button", "@components/Heading", "@components/Span", "@utils/clipboard", "@utils/discord", "./attachments", "./attachmentUploads", "./conversationSelection", "./wireAuthorizations"])
         mocks[name] = {};
     mocks["@utils/constants"] = { EquicordDevs: { creations: {} } };
     mocks["@utils/types"] = { __esModule: true, default: (plugin: object) => plugin };
@@ -17514,7 +17518,7 @@ test("transcription model cache controls report storage failures", async () => {
             useState: () => [index++ === 0 ? 12 : ["VoiceMessageTranscriber_model"], (value: unknown) => updates.push(value)],
             useEffect: (callback: () => void) => effect = callback,
             DataStore: {
-                entries: async () => { throw new Error("Read failed"); },
+                keys: async () => { throw new Error("Read failed"); },
                 delMany: async (keys: string[]) => { assert.deepEqual(keys, ["VoiceMessageTranscriber_model"]); if (phase === "delete") throw new Error("Delete failed"); }
             },
             React: { createElement: (type: unknown, props: object) => ({ type, props }) }, Button: "button",

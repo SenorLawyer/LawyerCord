@@ -8,13 +8,14 @@ import { definePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
-import { closeAllModals,SettingsRouter, useState } from "@webpack/common";
+import { closeAllModals,SettingsRouter, useEffect, useState } from "@webpack/common";
 
 import { registerAction } from "./commands";
 import { openCommandPalette } from "./components/CommandPalette";
 
 const cl = classNameFactory("vc-command-palette-");
 let isRecordingGlobal: boolean = false;
+let cancelRecording: (() => void) | undefined;
 
 const modifiers = {
     control: "ctrlKey",
@@ -44,41 +45,38 @@ export const settings = definePluginSettings({
         default: ["Control", "Shift", "P"],
         component: () => {
             const [isRecording, setIsRecording] = useState(false);
+            useEffect(() => () => cancelRecording?.(), []);
 
             const recordKeybind = (setIsRecording: (value: boolean) => void) => {
+                if (isRecordingGlobal) return;
                 const keys: Set<string> = new Set();
-                const keyLists: string[][] = [];
+                let longest: string[] = [];
 
                 setIsRecording(true);
                 isRecordingGlobal = true;
-
-                const updateKeys = () => {
-                    if (keys.size === 0 || !document.querySelector(`.${cl("key-recorder-button")}`)) {
-                        const longestArray = keyLists.reduce((a, b) => a.length > b.length ? a : b);
-                        if (longestArray.length > 0) {
-                            settings.store.hotkey = longestArray.map(key => key.toLowerCase());
-                        }
-                        setIsRecording(false);
-                        isRecordingGlobal = false;
-                        document.removeEventListener("keydown", keydownListener);
-                        document.removeEventListener("keyup", keyupListener);
-                    }
-                    keyLists.push(Array.from(keys));
-                };
 
                 const keydownListener = (e: KeyboardEvent) => {
                     const { key } = e;
                     if (!keys.has(key)) {
                         keys.add(key);
                     }
-                    updateKeys();
+                    if (keys.size > longest.length) longest = Array.from(keys);
                 };
 
                 const keyupListener = (e: KeyboardEvent) => {
                     keys.delete(e.key);
-                    updateKeys();
+                    if (keys.size) return;
+                    cancelRecording?.();
+                    if (longest.length) settings.store.hotkey = longest.map(key => key.toLowerCase());
                 };
 
+                cancelRecording = () => {
+                    document.removeEventListener("keydown", keydownListener);
+                    document.removeEventListener("keyup", keyupListener);
+                    isRecordingGlobal = false;
+                    cancelRecording = undefined;
+                    setIsRecording(false);
+                };
                 document.addEventListener("keydown", keydownListener);
                 document.addEventListener("keyup", keyupListener);
             };
@@ -125,6 +123,7 @@ export default definePlugin({
     },
 
     stop() {
+        cancelRecording?.();
         document.removeEventListener("keydown", this.event);
     },
 

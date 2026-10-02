@@ -21,15 +21,19 @@ function fixture() {
     const { outputText } = transpileModule(source.slice(start, end), { compilerOptions: { target: ScriptTarget.ES2022 } });
     const requests: { id: string; resolve: (user: User) => void; reject: () => void; }[] = [];
     const dummies: string[] = [];
+    const dummyIds: (string | undefined)[] = [];
+    const fallbackAuthorIds = new WeakMap<Author, string>();
+    let nextDummyId = 0;
     let authors: User[] = [];
     let cleanup: (() => void) | undefined;
-    return { requests, dummies, authors: () => authors,
+    return { requests, dummies, dummyIds, authors: () => authors,
         mount(list: Author[]) {
             cleanup?.();
             runInNewContext(outputText, {
                 plugin: { authors: list },
                 UserUtils: { getUser: (id: string) => new Promise<User>((resolve, reject) => requests.push({ id, resolve, reject: () => reject(new Error("Request failed")) })) },
-                makeDummyUser: ({ username }: User) => { dummies.push(username); return { username }; },
+                makeDummyUser: ({ username, id }: User & { id?: string; }) => { dummies.push(username); dummyIds.push(id ?? String(--nextDummyId)); return { username }; },
+                fallbackAuthorIds, generateId: () => String(--nextDummyId),
                 setAuthors: (value: User[] | ((current: User[]) => User[])) => { authors = typeof value === "function" ? value(authors) : value; },
                 useEffect: (effect: () => (() => void) | undefined) => { cleanup = effect(); },
                 logger: { warn() {} }
@@ -46,6 +50,19 @@ test("closed plugin modals cannot append late authors or continue loading", asyn
     f.unmount(); f.requests[0].resolve({ username: "First" }); await settle();
     assert.equal(f.authors().length, 0);
     assert.equal(f.requests.length, 1);
+});
+
+test("reopening failed author profiles reuses each generated user identity", async () => {
+    const f = fixture();
+    const list = [{ id: "1", name: "Unavailable" }];
+    for (let index = 0; index < 100; index++) {
+        f.mount(list);
+        f.requests[index].reject();
+        await settle();
+        f.unmount();
+    }
+    assert.ok(f.dummyIds.every(id => typeof id === "string"));
+    assert.equal(new Set(f.dummyIds).size, 1);
 });
 
 test("closed plugin modals cannot create dummy users from failed lookups", async () => {

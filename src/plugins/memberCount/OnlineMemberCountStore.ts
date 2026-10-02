@@ -14,6 +14,12 @@ export const OnlineMemberCountStore = proxyLazy(() => {
 
     const onlineMemberMap = new Map<string, number>();
     const pendingPreloads = new Set<string>();
+    let generation = 0;
+    const reset = () => {
+        generation++;
+        onlineMemberMap.clear();
+        pendingPreloads.clear();
+    };
 
     class OnlineMemberCountStore extends Flux.Store {
         getCount(guildId?: string) {
@@ -33,18 +39,26 @@ export const OnlineMemberCountStore = proxyLazy(() => {
             if (!guildId || onlineMemberMap.has(guildId) || pendingPreloads.has(guildId)) return;
 
             pendingPreloads.add(guildId);
-            preloadQueue.push(() =>
-                this._ensureCount(guildId)
-                    .finally(() => pendingPreloads.delete(guildId))
+            const owner = generation;
+            preloadQueue.push(() => {
+                if (owner !== generation || !pendingPreloads.has(guildId)) return;
+                return this._ensureCount(guildId)
+                    .finally(() => { if (owner === generation) pendingPreloads.delete(guildId); })
                     .then(
                         () => sleep(200),
                         () => sleep(200)
-                    )
-            );
+                    );
+            });
         }
     }
 
     return new OnlineMemberCountStore(FluxDispatcher, {
+        LOGOUT: reset,
+        CONNECTION_OPEN: reset,
+        GUILD_DELETE({ guild }) {
+            onlineMemberMap.delete(guild.id);
+            pendingPreloads.delete(guild.id);
+        },
         GUILD_MEMBER_LIST_UPDATE({ guildId, groups }: { guildId: string, groups: { count: number; id: string; }[]; }) {
             onlineMemberMap.set(
                 guildId,

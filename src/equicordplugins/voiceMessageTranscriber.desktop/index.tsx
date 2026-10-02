@@ -141,20 +141,26 @@ const settings = definePluginSettings({
             const [deleteKeys, setDeleteKeys] = useState<string[]>([]);
 
             useEffect(() => {
-                DataStore.entries().then(entries => {
+                let active = true;
+                DataStore.keys().then(async storedKeys => {
                     let totalSize = 0;
                     const keys: string[] = [];
 
-                    entries.forEach(([key, value]) => {
-                        if (typeof key === "string" && key.startsWith("VoiceMessageTranscriber_") && lodash.isArrayBuffer(value)) {
+                    for (const key of storedKeys) {
+                        if (!active) return;
+                        if (typeof key !== "string" || !key.startsWith("VoiceMessageTranscriber_")) continue;
+                        const value = await DataStore.get<unknown>(key);
+                        if (lodash.isArrayBuffer(value)) {
                             keys.push(key);
                             totalSize += value.byteLength;
                         }
-                    });
+                    }
 
+                    if (!active) return;
                     setSize(totalSize);
                     setDeleteKeys(keys);
-                }).catch(() => showToast("Failed to load downloaded speech models.", Toasts.Type.FAILURE));
+                }).catch(() => { if (active) showToast("Failed to load downloaded speech models.", Toasts.Type.FAILURE); });
+                return () => { active = false; };
             }, []);
 
             return (

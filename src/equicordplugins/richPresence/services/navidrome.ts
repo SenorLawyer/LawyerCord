@@ -258,6 +258,10 @@ async function getActivity(signal?: AbortSignal): Promise<Activity | null> {
                 const imageUrl = typeof image === "string" ? parseUrl(image) : null;
                 if (imageUrl && (imageUrl.protocol === "https:" || imageUrl.protocol === "http:") && !imageUrl.username && !imageUrl.password) {
                     resolvedCoverArtUrl = imageUrl.href;
+                    if (lastFmCache.size >= 200) {
+                        const oldest = lastFmCache.keys().next().value;
+                        if (oldest !== undefined) lastFmCache.delete(oldest);
+                    }
                     lastFmCache.set(cacheKey, resolvedCoverArtUrl);
                 }
             } catch (e: unknown) {

@@ -21,6 +21,7 @@ let authToken: string | null = null;
 let updateInterval: NodeJS.Timeout | undefined;
 let hasShownConfigError = false;
 let isUpdating = false;
+let requestController: AbortController | undefined;
 let lastAuthFailureAt = 0;
 let updateGeneration = 0;
 
@@ -32,7 +33,7 @@ function setActivity(activity: Activity | null) {
     FluxDispatcher.dispatch({ type: "LOCAL_ACTIVITY_UPDATE", activity, socketId: SOCKET_ID });
 }
 
-async function authenticate(): Promise<boolean> {
+async function authenticate(signal: AbortSignal): Promise<boolean> {
     const { abs_serverUrl, abs_username, abs_password } = settings.store;
     if (!abs_serverUrl || !abs_username || !abs_password) {
         if (!hasShownConfigError) {
@@ -47,6 +48,7 @@ async function authenticate(): Promise<boolean> {
     try {
         const baseUrl = abs_serverUrl.replace(/\/$/, "");
         const res = await fetch(`${baseUrl}/login`, {
+            signal,
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ username: abs_username, password: abs_password }),
@@ -54,6 +56,7 @@ async function authenticate(): Promise<boolean> {
 
         if (!res.ok) throw `${res.status} ${res.statusText}`;
         const data = await res.json();
+        if (signal.aborted) return false;
         authToken = data.user?.token;
         if (authToken) {
             hasShownConfigError = false;
@@ -61,6 +64,7 @@ async function authenticate(): Promise<boolean> {
         }
         return !!authToken;
     } catch (e) {
+        if (signal.aborted) return false;
         logger.error("Failed to authenticate with AudioBookShelf", e);
         authToken = null;
         lastAuthFailureAt = Date.now();
@@ -68,13 +72,14 @@ async function authenticate(): Promise<boolean> {
     }
 }
 
-async function fetchMediaData(): Promise<AbsMediaData | null> {
+async function fetchMediaData(signal: AbortSignal): Promise<AbsMediaData | null> {
     if (!authToken && lastAuthFailureAt && Date.now() - lastAuthFailureAt < AUTH_FAILURE_COOLDOWN_MS) return null;
-    if (!authToken && !(await authenticate())) return null;
+    if (!authToken && !(await authenticate(signal))) return null;
 
     try {
         const baseUrl = settings.store.abs_serverUrl!.replace(/\/$/, "");
         const res = await fetch(`${baseUrl}/api/me/listening-sessions`, {
+            signal,
             headers: { "Authorization": `Bearer ${authToken}` },
         });
 
@@ -101,14 +106,14 @@ async function fetchMediaData(): Promise<AbsMediaData | null> {
             isFinished: activeSession.isFinished || false,
         };
     } catch (e) {
-        logger.error("Failed to query AudioBookShelf API", e);
+        if (!signal.aborted) logger.error("Failed to query AudioBookShelf API", e);
         return null;
     }
 }
 
-async function getActivity(): Promise<Activity | null> {
-    const mediaData = await fetchMediaData();
-    if (!mediaData || mediaData.isFinished) return null;
+async function getActivity(signal: AbortSignal): Promise<Activity | null> {
+    const mediaData = await fetchMediaData(signal);
+    if (!mediaData || mediaData.isFinished || signal.aborted) return null;
 
     const largeImage = mediaData.imageUrl;
     const assets = {
@@ -142,14 +147,19 @@ async function updatePresence() {
     if (isUpdating) return;
 
     const generation = updateGeneration;
+    const controller = new AbortController();
+    requestController = controller;
+    const timeout = setTimeout(() => controller.abort(), 30_000);
     isUpdating = true;
     try {
-        const activity = await getActivity();
-        if (generation === updateGeneration) setActivity(activity);
+        const activity = await getActivity(controller.signal);
+        if (generation === updateGeneration && !controller.signal.aborted) setActivity(activity);
     } catch (e) {
-        logger.error("Failed to update presence", e);
+        if (!controller.signal.aborted) logger.error("Failed to update presence", e);
         if (generation === updateGeneration) setActivity(null);
     } finally {
+        clearTimeout(timeout);
+        if (requestController === controller) requestController = undefined;
         if (generation === updateGeneration) isUpdating = false;
     }
 }
@@ -167,6 +177,8 @@ export function start() {
 
 export function stop() {
     updateGeneration++;
+    requestController?.abort();
+    requestController = undefined;
     clearInterval(updateInterval);
     updateInterval = undefined;
     isUpdating = false;

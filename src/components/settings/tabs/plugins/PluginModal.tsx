@@ -53,6 +53,7 @@ const AvatarStyles = findCssClassesLazy("moreUsers", "avatar", "clickableAvatar"
 const ConfirmModal = findComponentByCodeLazy('parentComponent:"ConfirmModal"');
 const WarningIcon = findComponentByCodeLazy("3.15H3.29c-1.74");
 const UserRecord: Constructor<Partial<User>> = proxyLazy(() => UserStore.getCurrentUser().constructor) as any;
+const fallbackAuthorIds = new WeakMap<Plugin["authors"][number], string>();
 
 interface PluginModalProps extends RenderModalProps {
     plugin: Plugin;
@@ -112,7 +113,12 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
             for (const user of plugin.authors.slice(0, 6)) {
                 const author = user.id ? await UserUtils.getUser(String(user.id)).catch(() => null) : null;
                 if (!active) return;
-                const resolvedAuthor = author ?? makeDummyUser({ username: user.name });
+                let resolvedAuthor = author;
+                if (!resolvedAuthor) {
+                    let id = fallbackAuthorIds.get(user);
+                    if (!id) fallbackAuthorIds.set(user, id = generateId());
+                    resolvedAuthor = makeDummyUser({ username: user.name, id });
+                }
                 setAuthors(a => [...a, resolvedAuthor]);
             }
         })().catch(() => logger.warn("Could not load the plugin authors."));

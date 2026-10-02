@@ -26,6 +26,7 @@ import definePlugin from "@utils/types";
 import { settings, toggleHoverControls } from "./settings";
 import { migrateOldLyrics } from "./spotify/lyrics/api";
 import { SpotifyLyrics } from "./spotify/lyrics/components/lyrics";
+import { SpotifyLrcStore } from "./spotify/lyrics/providers/store";
 import { SpotifyPlayer } from "./spotify/PlayerComponent";
 import { TidalLyrics } from "./tidal/lyrics/components/lyrics";
 import { TidalLrcStore } from "./tidal/lyrics/providers/store";
@@ -115,6 +116,7 @@ export default definePlugin({
     },
 
     async start() {
+        (SpotifyLrcStore as typeof SpotifyLrcStore & { [SYM_LAZY_CACHED]?: typeof SpotifyLrcStore; })[SYM_LAZY_CACHED]?.init();
         (TidalStore as typeof TidalStore & { [SYM_LAZY_CACHED]?: typeof TidalStore; })[SYM_LAZY_CACHED]?.socket.reconnect();
         (TidalLrcStore as typeof TidalLrcStore & { [SYM_LAZY_CACHED]?: typeof TidalLrcStore; })[SYM_LAZY_CACHED]?.init();
         await migrateOldLyrics();
@@ -122,6 +124,7 @@ export default definePlugin({
     },
 
     stop() {
+        (SpotifyLrcStore as typeof SpotifyLrcStore & { [SYM_LAZY_CACHED]?: typeof SpotifyLrcStore; })[SYM_LAZY_CACHED]?.destroy();
         (TidalLrcStore as any)[SYM_LAZY_CACHED]?.destroy?.();
         (TidalStore as any)[SYM_LAZY_CACHED]?.destroy?.();
     },

@@ -18,7 +18,7 @@ import type { RenderModalProps } from "@vencord/discord-types";
 import { Menu, Modal, openModal, React, Select, Slider, TextInput, UploadHandler, useEffect, useRef, useState } from "@webpack/common";
 
 import { CAPTIONS } from "./captions";
-import { fetchAllGoogleFonts, getFontFamilyCss, loadGoogleFont } from "./fonts";
+import { clearFonts, fetchAllGoogleFonts, getFontFamilyCss, loadGoogleFont, retainFonts } from "./fonts";
 import css from "./styles.css?managed";
 import { DEFAULT_OPTIONS, type GifMakerOptions, type GoogleFontMetadata } from "./types";
 import { clamp, getInitialSize, getMediaInfo } from "./utils/contextMenu";
@@ -151,9 +151,11 @@ function FontSelector({ initialFont, onSelect }: { initialFont: string; onSelect
     const [selectedFont, setSelectedFont] = React.useState<string | null>(initialFont !== "Arial" ? initialFont : null);
 
     React.useEffect(() => {
+        let active = true;
         void fetchAllGoogleFonts().then(fetchedFonts => {
-            setFonts(fetchedFonts);
+            if (active) setFonts(fetchedFonts);
         });
+        return () => { active = false; };
     }, []);
 
     const options = fonts.map<SelectOption>(font => ({
@@ -192,6 +194,7 @@ function FontSelector({ initialFont, onSelect }: { initialFont: string; onSelect
 }
 
 function GifMakerModal({ url, isVideo, sourceWidth, sourceHeight, ...props }: RenderModalProps & { url: string; isVideo: boolean; sourceWidth?: number; sourceHeight?: number; }) {
+    useEffect(retainFonts, []);
 
     const [options, setOptions] = useState<GifMakerOptions>(() => {
         const [width, height] = resolveInitialSize(sourceWidth, sourceHeight, settings.store.lastWidth, settings.store.lastHeight);
@@ -496,11 +499,11 @@ export default definePlugin({
 
     start() {
         stopped = false;
-        void fetchAllGoogleFonts();
     },
 
     stop() {
         stopped = true;
+        clearFonts();
         for (const job of jobs) job.abort();
         jobs.clear();
     },

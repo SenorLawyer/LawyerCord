@@ -36,7 +36,7 @@ function fixture() {
     const source = readFileSync("src/equicordplugins/zipPreview/utils.ts", "utf8");
     const code = transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;
     runInNewContext(code, {
-        exports: api, URL, VencordNative: { pluginHelpers: { ZipPreview: {
+        exports: api, URL, AbortController, AbortSignal, setTimeout, clearTimeout, VencordNative: { pluginHelpers: { ZipPreview: {
             fetchDiscordAttachment() {
                 const download = Promise.withResolvers<{ success: boolean; data: ArrayBuffer; }>();
                 downloads.push(download);

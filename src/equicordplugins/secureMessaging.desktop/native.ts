@@ -303,6 +303,8 @@ const ALLOWED_RENDERER_ORIGINS = new Set([
 ]);
 const ALLOWED_ATTACHMENT_HOSTS = new Set(["cdn.discordapp.com", "media.discordapp.net"]);
 const ATTACHMENT_DOWNLOAD_TIMEOUT_MS = 60_000;
+const attachmentRequests = new Set<AbortController>();
+const MAX_ATTACHMENT_REQUESTS = 2;
 const MAX_ATTACHMENT_REDIRECTS = 3;
 
 const pendingReviews = new Map<string, PendingReview>();
@@ -1140,57 +1142,65 @@ function validateDecryptAttachmentsInput(value: unknown): ValidationResult<Decry
     return { ok: true, value: { ...message.value, attachments } };
 }
 
-async function downloadAttachmentUrl(initialUrl: URL, expectedSize: number, channelId: string, attachmentId: string): Promise<Uint8Array> {
+async function downloadAttachmentUrl(initialUrl: URL, expectedSize: number, channelId: string, attachmentId: string, signal: AbortSignal): Promise<Uint8Array> {
     let current = initialUrl;
     for (let redirect = 0; redirect <= MAX_ATTACHMENT_REDIRECTS; redirect++) {
         const response = await fetch(current, {
             redirect: "manual",
-            signal: AbortSignal.timeout(ATTACHMENT_DOWNLOAD_TIMEOUT_MS),
+            signal,
         });
-        if ([301, 302, 303, 307, 308].includes(response.status)) {
-            const location = response.headers.get("location");
-            const next = location ? validateAttachmentUrl(new URL(location, current).toString(), channelId, attachmentId) : null;
-            if (!next || redirect === MAX_ATTACHMENT_REDIRECTS) throw new Error("Unsafe encrypted attachment redirect");
-            current = next;
-            continue;
-        }
-        if (!response.ok || !response.body) throw new Error("Encrypted attachment download failed");
-        const declaredLength = response.headers.get("content-length");
-        if (declaredLength !== null && Number(declaredLength) !== expectedSize)
-            throw new Error("Encrypted attachment length changed");
-        const chunks: Uint8Array[] = [];
-        const reader = response.body.getReader();
-        let length = 0;
-        while (true) {
-            const chunk = await reader.read();
-            if (chunk.done) break;
-            length += chunk.value.byteLength;
-            if (length > expectedSize) {
-                await reader.cancel();
-                throw new Error("Encrypted attachment exceeded its declared size");
+        try {
+            if ([301, 302, 303, 307, 308].includes(response.status)) {
+                const location = response.headers.get("location");
+                const next = location ? validateAttachmentUrl(new URL(location, current).toString(), channelId, attachmentId) : null;
+                if (!next || redirect === MAX_ATTACHMENT_REDIRECTS) throw new Error("Unsafe encrypted attachment redirect");
+                current = next;
+                continue;
             }
-            chunks.push(chunk.value);
+            if (!response.ok || !response.body) throw new Error("Encrypted attachment download failed");
+            const declaredLength = response.headers.get("content-length");
+            if (declaredLength !== null && Number(declaredLength) !== expectedSize)
+                throw new Error("Encrypted attachment length changed");
+            const chunks: Uint8Array[] = [];
+            const reader = response.body.getReader();
+            let length = 0;
+            try {
+                while (true) {
+                    const chunk = await reader.read();
+                    if (chunk.done) break;
+                    length += chunk.value.byteLength;
+                    if (length > expectedSize) {
+                        throw new Error("Encrypted attachment exceeded its declared size");
+                    }
+                    chunks.push(chunk.value);
+                }
+            } finally {
+                reader.releaseLock();
+            }
+            if (length !== expectedSize) throw new Error("Encrypted attachment was truncated");
+            const result = new Uint8Array(length);
+            let offset = 0;
+            for (const chunk of chunks) {
+                result.set(chunk, offset);
+                offset += chunk.byteLength;
+            }
+            return result;
+        } finally {
+            await response.body?.cancel();
         }
-        if (length !== expectedSize) throw new Error("Encrypted attachment was truncated");
-        const result = new Uint8Array(length);
-        let offset = 0;
-        for (const chunk of chunks) {
-            result.set(chunk, offset);
-            offset += chunk.byteLength;
-        }
-        return result;
     }
     throw new Error("Encrypted attachment redirected too many times");
 }
 
-async function downloadEncryptedAttachment(reference: EncryptedAttachmentReference, channelId: string): Promise<Uint8Array> {
+async function downloadEncryptedAttachment(reference: EncryptedAttachmentReference, channelId: string, signal: AbortSignal): Promise<Uint8Array> {
     const urls = [reference.url, reference.proxyUrl];
     for (const value of urls) {
         const url = validateAttachmentUrl(value, channelId, reference.id);
         if (!url) continue;
         try {
-            return await downloadAttachmentUrl(url, reference.size, channelId, reference.id);
-        } catch {
+            return await downloadAttachmentUrl(url, reference.size, channelId, reference.id, signal);
+        } catch (error) {
+            if (signal.aborted) throw error;
             continue;
         }
     }
@@ -2027,48 +2037,84 @@ export async function decryptIncomingAttachments(
     if (!user.ok) return invalidInput(user.error);
     const checkedInput = validateDecryptAttachmentsInput(input);
     if (!checkedInput.ok) return invalidInput(checkedInput.error);
-    const { attachments, ...message } = checkedInput.value;
-    const decrypted = await decryptIncoming(event, user.value, message);
-    if (decrypted.status !== "decrypted") return decrypted;
-    if (!decrypted.attachmentBundle || decrypted.attachmentBundle.count !== attachments.length)
-        return { status: "invalid_message" };
-
-    let ciphertexts: Uint8Array[];
+    if (attachmentRequests.size >= MAX_ATTACHMENT_REQUESTS) return { status: "failed", error: "capacity_exceeded" };
+    const controller = new AbortController();
+    attachmentRequests.add(controller);
+    const timeout = setTimeout(() => controller.abort(), ATTACHMENT_DOWNLOAD_TIMEOUT_MS);
     try {
-        ciphertexts = await Promise.all(attachments.map(attachment => downloadEncryptedAttachment(attachment, message.channelId)));
-    } catch {
-        return { status: "failed", error: "attachment_download_failed" };
-    }
+        const { attachments, ...message } = checkedInput.value;
+        const decrypted = await decryptIncoming(event, user.value, message);
+        if (decrypted.status !== "decrypted") return decrypted;
+        if (controller.signal.aborted) return { status: "failed", error: controller.signal.reason === "screen_capture_protection_failed"
+            ? "screen_capture_protection_failed" : "attachment_download_failed" };
+        if (!decrypted.attachmentBundle || decrypted.attachmentBundle.count !== attachments.length)
+            return { status: "invalid_message" };
 
-    const bundle = decrypted.attachmentBundle;
-    try {
-        if (await attachmentBundleRoot(bundle.id, ciphertexts) !== bundle.root) return { status: "invalid_message" };
-        const masterKey = decodeBase64Url(bundle.key, 32);
-        try {
-            const resolved = await Promise.all(ciphertexts.map(async (ciphertext, index) => ({
-                id: attachments[index].id,
-                ...await decryptAttachmentBytes({
-                    bundleId: bundle.id,
-                    channelId: message.channelId,
-                    ciphertext,
-                    count: bundle.count,
-                    index,
-                    masterKey,
-                    senderUserId: message.discordAuthorId,
-                }),
-            })));
-            if (!screenCaptureProtectionEnabled || !screenCaptureProtectionHealthy) {
-                for (const attachment of resolved) attachment.data.fill(0);
-                return { status: "failed", error: "screen_capture_protection_failed" };
+        const downloads = await Promise.allSettled(attachments.map(async attachment => {
+            try {
+                return await downloadEncryptedAttachment(attachment, message.channelId, controller.signal);
+            } catch (error) {
+                controller.abort();
+                throw error;
             }
-            return { status: "decrypted", plaintext: decrypted.plaintext, attachments: resolved };
-        } finally {
-            masterKey.fill(0);
+        }));
+        const ciphertexts: Uint8Array[] = [];
+        for (const download of downloads) {
+            if (download.status === "fulfilled") ciphertexts.push(download.value);
         }
-    } catch {
-        return { status: "invalid_message" };
+        if (controller.signal.aborted || ciphertexts.length !== attachments.length) {
+            for (const ciphertext of ciphertexts) ciphertext.fill(0);
+            return { status: "failed", error: controller.signal.reason === "screen_capture_protection_failed"
+                ? "screen_capture_protection_failed" : "attachment_download_failed" };
+        }
+
+        const bundle = decrypted.attachmentBundle;
+        try {
+            if (await attachmentBundleRoot(bundle.id, ciphertexts) !== bundle.root) return { status: "invalid_message" };
+            const masterKey = decodeBase64Url(bundle.key, 32);
+            try {
+                const decryptions = await Promise.allSettled(ciphertexts.map(async (ciphertext, index) => ({
+                    id: attachments[index].id,
+                    ...await decryptAttachmentBytes({
+                        bundleId: bundle.id,
+                        channelId: message.channelId,
+                        ciphertext,
+                        count: bundle.count,
+                        index,
+                        masterKey,
+                        senderUserId: message.discordAuthorId,
+                    }),
+                })));
+                const resolved: Extract<DecryptIncomingAttachmentsResult, { status: "decrypted" }>["attachments"] = [];
+                for (const decryption of decryptions) {
+                    if (decryption.status === "fulfilled") resolved.push(decryption.value);
+                }
+                if (resolved.length !== attachments.length) {
+                    for (const attachment of resolved) attachment.data.fill(0);
+                    return { status: "invalid_message" };
+                }
+                const callerFailure = validateIpcCaller(event);
+                if (callerFailure) {
+                    for (const attachment of resolved) attachment.data.fill(0);
+                    return callerFailure;
+                }
+                if (controller.signal.aborted || !screenCaptureProtectionEnabled || !screenCaptureProtectionHealthy) {
+                    for (const attachment of resolved) attachment.data.fill(0);
+                    return { status: "failed", error: "screen_capture_protection_failed" };
+                }
+                return { status: "decrypted", plaintext: decrypted.plaintext, attachments: resolved };
+            } finally {
+                masterKey.fill(0);
+            }
+        } catch {
+            return { status: "invalid_message" };
+        } finally {
+            for (const ciphertext of ciphertexts) ciphertext.fill(0);
+        }
     } finally {
-        for (const ciphertext of ciphertexts) ciphertext.fill(0);
+        controller.abort();
+        clearTimeout(timeout);
+        attachmentRequests.delete(controller);
     }
 }
 
@@ -2118,6 +2164,9 @@ function installNewWindowProtectionHook(): void {
 }
 
 async function applyScreenCaptureProtection(enabled: boolean): Promise<ScreenCaptureProtectionResult> {
+    if (!enabled) {
+        for (const controller of attachmentRequests) controller.abort("screen_capture_protection_failed");
+    }
     const previousEnabled = screenCaptureProtectionEnabled;
     const previousHealthy = screenCaptureProtectionHealthy;
     let windows: BrowserWindow[] = [];

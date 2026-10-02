@@ -55,13 +55,13 @@ export function clearMessageCache() {
 // this is probably not the best way to do this
 async function cacheRecords(records: DBMessageRecord[], signal?: AbortSignal, generation = cacheGeneration) {
     for (const r of records) {
-        signal?.throwIfAborted();
+        if (signal?.aborted) throw new DOMException("Log query canceled.", "AbortError");
         if (generation !== cacheGeneration) break;
         cacheRecord(r);
 
         for (const att of r.message.attachments) {
             const blobUrl = await getAttachmentBlobUrl(att);
-            signal?.throwIfAborted();
+            if (signal?.aborted) throw new DOMException("Log query canceled.", "AbortError");
             if (generation !== cacheGeneration) return records;
             if (blobUrl) {
                 att.url = blobUrl + "#";
@@ -172,7 +172,7 @@ export async function getOlderThanTimestampForGuildsIDB(timestamp: string, curre
 export async function getMessagesPageIDB(newest: boolean, limit: number, status: DBMessageStatus, matches?: (record: DBMessageRecord) => boolean, signal?: AbortSignal) {
     const generation = cacheGeneration;
     await initIDB();
-    signal?.throwIfAborted();
+    if (signal?.aborted) throw new DOMException("Log query canceled.", "AbortError");
     const tx = db.transaction("messages", "readonly");
     const { store } = tx;
     const index = store.index("by_status");
@@ -186,13 +186,13 @@ export async function getMessagesPageIDB(newest: boolean, limit: number, status:
     const messages: DBMessageRecord[] = [];
     let total = matches ? 0 : statusTotal;
     if (cursor) for await (const c of cursor) {
-        signal?.throwIfAborted();
+        if (signal?.aborted) throw new DOMException("Log query canceled.", "AbortError");
         if (matches && !matches(c.value)) continue;
         if (matches) total++;
         if (messages.length < limit) messages.push(c.value);
         if (!matches && messages.length >= limit) break;
     }
-    signal?.throwIfAborted();
+    if (signal?.aborted) throw new DOMException("Log query canceled.", "AbortError");
     return { messages: await cacheRecords(messages, signal, generation), total };
 }
 

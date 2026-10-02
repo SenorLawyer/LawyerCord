@@ -73,7 +73,13 @@ interface MessageEmbedProps {
     channel: Channel;
 }
 
-const messageFetchQueue = new Queue();
+const messageFetchQueue = new Queue(100);
+let generation = 0;
+
+function clearMessageSession() {
+    generation++;
+    messageCache.clear();
+}
 
 const settings = definePluginSettings({
     messageBackgroundColor: {
@@ -159,6 +165,8 @@ async function fetchMessage(channelID: string, messageID: string) {
     if (cached) return cached.message;
 
     setMessageCache(messageID, { fetched: false });
+    const owner = generation;
+    const accountId = UserStore.getCurrentUser()?.id;
 
     const res = await RestAPI.get({
         url: Constants.Endpoints.MESSAGES(channelID),
@@ -168,6 +176,7 @@ async function fetchMessage(channelID: string, messageID: string) {
         },
         retries: 2
     }).catch(() => null);
+    if (owner !== generation || accountId !== UserStore.getCurrentUser()?.id) return;
 
     const msg = res?.body?.[0];
     if (msg?.id !== messageID) return;
@@ -277,10 +286,16 @@ function MessageEmbedAccessory({ message }: { message: Message; }) {
             if (linkedMessage) {
                 setMessageCache(messageID, { message: linkedMessage, fetched: true });
             } else {
-
-                messageFetchQueue.unshift(() => fetchMessage(channelID, messageID)
-                    .then(m => m && updateMessage(message.channel_id, message.id))
-                );
+                const owner = generation;
+                const accountId = UserStore.getCurrentUser()?.id;
+                const parentChannelId = message.channel_id;
+                const parentMessageId = message.id;
+                messageFetchQueue.unshift(async () => {
+                    if (owner !== generation || accountId !== UserStore.getCurrentUser()?.id) return;
+                    const linked = await fetchMessage(channelID, messageID);
+                    if (linked && owner === generation && accountId === UserStore.getCurrentUser()?.id)
+                        updateMessage(parentChannelId, parentMessageId);
+                });
                 continue;
             }
         }
@@ -401,6 +416,10 @@ export default definePlugin({
     dependencies: ["MessageAccessoriesAPI", "MessageUpdaterAPI", "UserSettingsAPI"],
 
     settings,
+    flux: {
+        LOGOUT: clearMessageSession,
+        CONNECTION_OPEN: clearMessageSession
+    },
 
     patches: [
         {
@@ -435,7 +454,7 @@ export default definePlugin({
     },
     stop() {
         removeMessageAccessory("MessageLinkEmbeds");
-        messageCache.clear();
+        clearMessageSession();
         listedIds = new Set();
     }
 });

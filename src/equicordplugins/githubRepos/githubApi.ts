@@ -15,10 +15,10 @@ export interface GitHubUserInfo {
     totalRepos: number;
 }
 
-export async function fetchUserInfo(username: string): Promise<GitHubUserInfo | null> {
+export async function fetchUserInfo(username: string, signal?: AbortSignal): Promise<GitHubUserInfo | null> {
     try {
         const userInfoUrl = `https://api.github.com/users/${username}`;
-        const userInfoResponse = await fetch(userInfoUrl);
+        const userInfoResponse = await fetch(userInfoUrl, { signal });
 
         if (!userInfoResponse.ok) return null;
 
@@ -28,29 +28,31 @@ export async function fetchUserInfo(username: string): Promise<GitHubUserInfo | 
             totalRepos: userData.public_repos
         };
     } catch (error) {
+        if (signal?.aborted) throw signal.reason ?? new DOMException("The operation was aborted.", "AbortError");
         logger.error("Error fetching user info", error);
         return null;
     }
 }
 
-export async function fetchReposByUserId(githubId: string, perPage: number = 30): Promise<GitHubRepo[] | null> {
+export async function fetchReposByUserId(githubId: string, perPage: number = 30, signal?: AbortSignal): Promise<GitHubRepo[] | null> {
     try {
         const apiUrl = `https://api.github.com/user/${githubId}/repos?sort=stars&direction=desc&per_page=${perPage}`;
-        const response = await fetch(apiUrl);
+        const response = await fetch(apiUrl, { signal });
 
         if (!response.ok) return null;
 
         const data = await response.json();
         return sortReposByStars(data);
     } catch (error) {
+        if (signal?.aborted) throw signal.reason ?? new DOMException("The operation was aborted.", "AbortError");
         logger.error("Error fetching repos by ID", error);
         return null;
     }
 }
 
-export async function fetchReposByUsername(username: string, perPage: number = 30): Promise<GitHubRepo[]> {
+export async function fetchReposByUsername(username: string, perPage: number = 30, signal?: AbortSignal): Promise<GitHubRepo[]> {
     const apiUrl = `https://api.github.com/users/${username}/repos?sort=stars&direction=desc&per_page=${perPage}`;
-    const response = await fetch(apiUrl);
+    const response = await fetch(apiUrl, { signal });
 
     if (!response.ok) {
         throw new Error(`Error fetching repos by username: ${response.status}`);

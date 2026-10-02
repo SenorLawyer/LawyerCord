@@ -64,6 +64,17 @@ export function removeMessagePopoverButton(identifier: string) {
     MessagePopoverButtonMap.delete(identifier);
 }
 
+interface PopoverButtonProps {
+    Component: ComponentType<MessagePopoverButtonItem>;
+    message: Message;
+    render: MessagePopoverButtonFactory;
+}
+
+function PopoverButton({ Component, message, render }: PopoverButtonProps) {
+    const item = render(message);
+    return item ? <Component {...item} /> : null;
+}
+
 function VencordPopoverButtons(props: { Component: React.ComponentType<MessagePopoverButtonItem>, message: Message; }) {
     const { Component, message } = props;
 
@@ -71,22 +82,11 @@ function VencordPopoverButtons(props: { Component: React.ComponentType<MessagePo
 
     const elements = Array.from(MessagePopoverButtonMap.entries())
         .filter(([key]) => messagePopoverButtons[key]?.enabled !== false)
-        .map(([key, { render }]) => {
-            try {
-                // FIXME: this should use proper React to ensure hooks work
-                const item = render(message);
-                if (!item) return null;
-
-                return (
-                    <ErrorBoundary key={key} noop>
-                        <Component {...item} />
-                    </ErrorBoundary>
-                );
-            } catch (err) {
-                logger.error(`[${key}]`, err);
-                return null;
-            }
-        });
+        .map(([key, { render }]) => (
+            <ErrorBoundary key={key} noop onError={({ error }) => logger.error(`[${key}]`, error)}>
+                <PopoverButton Component={Component} message={message} render={render} />
+            </ErrorBoundary>
+        ));
 
     return <>{elements}</>;
 }

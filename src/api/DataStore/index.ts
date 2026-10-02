@@ -294,7 +294,13 @@ export function values<T = any>(customStore = defaultGetStore()): Promise<T[]> {
  */
 export function entries<KeyType extends IDBValidKey, ValueType = any>(
     customStore = defaultGetStore(),
+    filter?: (key: KeyType) => boolean,
 ): Promise<[KeyType, ValueType][]> {
+    if (filter) return customStore("readonly", store => promisifyRequest(store.getAllKeys()).then(keys =>
+        Promise.all(keys.filter((key): key is KeyType => filter(key as KeyType)).map(key =>
+            promisifyRequest(store.get(key) as IDBRequest<ValueType>).then(value => [key, value] as [KeyType, ValueType])
+        ))
+    ));
     return customStore("readonly", store => Promise.all([
         promisifyRequest(store.getAllKeys()),
         promisifyRequest(store.getAll() as IDBRequest<ValueType[]>),

@@ -21,22 +21,30 @@ interface UserDecorationsState {
     clear: () => void;
 }
 
-export const useCurrentUserDecorationsStore = proxyLazy(() => zustandCreate((set: any, get: any) => ({
+let generation = 0;
+
+export const useCurrentUserDecorationsStore = proxyLazy(() => zustandCreate((set: (state: Partial<UserDecorationsState>) => void, get: () => UserDecorationsState) => ({
     decorations: [],
     selectedDecoration: null,
     async fetch() {
+        const owner = generation;
         const decorations = await getUserDecorations();
+        if (owner !== generation) return;
         const selectedDecoration = await getUserDecoration();
-
+        if (owner !== generation) return;
         set({ decorations, selectedDecoration });
     },
     async create(newDecoration: NewDecoration) {
+        const owner = generation;
         const decoration = (await setUserDecoration(newDecoration)) as Decoration;
+        if (owner !== generation) return;
         set({ decorations: [...get().decorations, decoration] });
     },
     async delete(decoration: Decoration | string) {
+        const owner = generation;
         const hash = typeof decoration === "object" ? decoration.hash : decoration;
         await deleteDecoration(hash);
+        if (owner !== generation) return;
 
         const { selectedDecoration, decorations } = get();
         const newState = {
@@ -55,5 +63,8 @@ export const useCurrentUserDecorationsStore = proxyLazy(() => zustandCreate((set
             useUsersDecorationsStore.getState().set(currentUserId, decoration ? decorationToAsset(decoration) : null);
         }
     },
-    clear: () => set({ decorations: [], selectedDecoration: null })
-} as UserDecorationsState)));
+    clear() {
+        generation++;
+        set({ decorations: [], selectedDecoration: null });
+    }
+})));

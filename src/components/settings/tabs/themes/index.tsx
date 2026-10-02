@@ -81,6 +81,8 @@ function ThemesTab() {
     const settings = useSettings(["themeLinks", "enabledThemeLinks", "enabledThemes", "enableOnlineThemes", "pinnedThemes", "themeActivationModes.*", "themeNames.*"]);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const onlineLoad = useRef<AbortController | undefined>(undefined);
+    const themeLoads = useRef(new Map<string, AbortController>());
     const [currentThemeLink, setCurrentThemeLink] = useState("");
     const [userThemes, setUserThemes] = useState<UserThemeHeader[] | null>(null);
     const [onlineThemes, setOnlineThemes] = useState<(UserThemeHeader & { link: string; })[] | null>(null);
@@ -89,6 +91,11 @@ function ThemesTab() {
 
     useEffect(() => {
         void updateThemes();
+        return () => {
+            onlineLoad.current?.abort();
+            for (const controller of themeLoads.current.values()) controller.abort();
+            themeLoads.current.clear();
+        };
     }, []);
 
     async function updateThemes() {
@@ -137,12 +144,18 @@ function ThemesTab() {
     }
 
     async function refreshOnlineThemes() {
+        onlineLoad.current?.abort();
+        for (const controller of themeLoads.current.values()) controller.abort();
+        themeLoads.current.clear();
+        const controller = new AbortController();
+        onlineLoad.current = controller;
         const themes = await Promise.all(
             settings.themeLinks.map(async link => {
                 try {
-                    const res = await fetch(link);
+                    const res = await fetch(link, { signal: controller.signal });
                     if (!res.ok) throw new Error(`Failed to fetch ${link}`);
                     const css = await res.text();
+                    if (controller.signal.aborted) return null;
                     inferAndStoreThemeActivationMode(link, css);
 
                     return { ...getThemeInfo(css, link), link };
@@ -151,7 +164,7 @@ function ThemesTab() {
                 }
             })
         );
-        setOnlineThemes(themes.filter(theme => theme !== null));
+        if (!controller.signal.aborted) setOnlineThemes(themes.filter(theme => theme !== null));
     }
 
     function onThemeLinkEnabledChange(link: string, enabled: boolean) {
@@ -201,10 +214,14 @@ function ThemesTab() {
     }
 
     async function refreshOnlineTheme(link: string) {
+        themeLoads.current.get(link)?.abort();
+        const controller = new AbortController();
+        themeLoads.current.set(link, controller);
         try {
-            const res = await fetch(link);
+            const res = await fetch(link, { signal: controller.signal });
             if (!res.ok) throw new Error(`Failed to fetch ${link}`);
             const css = await res.text();
+            if (controller.signal.aborted || !settings.themeLinks.includes(link)) return;
             inferAndStoreThemeActivationMode(link, css);
 
             const updatedTheme = { ...getThemeInfo(css, link), link };
@@ -214,7 +231,9 @@ function ThemesTab() {
             );
             showToast("Theme refreshed!", Toasts.Type.SUCCESS);
         } catch {
-            showToast("Failed to refresh theme", Toasts.Type.FAILURE);
+            if (!controller.signal.aborted) showToast("Failed to refresh theme", Toasts.Type.FAILURE);
+        } finally {
+            if (themeLoads.current.get(link) === controller) themeLoads.current.delete(link);
         }
     }
 

@@ -4,11 +4,34 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { Logger } from "@utils/Logger";
+
 import type { GoogleFontMetadata } from "./types";
 
 const loadedFontFamilies = new Set<string>(["Arial"]);
 const loadingFontFamilies = new Map<string, Promise<void>>();
-const fontObjectUrls = new Set<string>();
+const loadedFonts = new Set<FontFace>();
+const logger = new Logger("GifMaker");
+let fontLifetime = new AbortController();
+let fontConsumers = 0;
+
+export function clearFonts() {
+    fontLifetime.abort();
+    fontLifetime = new AbortController();
+    for (const font of loadedFonts) document.fonts.delete(font);
+    loadedFonts.clear();
+    loadedFontFamilies.clear();
+    loadedFontFamilies.add("Arial");
+    loadingFontFamilies.clear();
+    fontsPromise = null;
+}
+
+export function retainFonts() {
+    fontConsumers++;
+    return () => {
+        if (--fontConsumers === 0) clearFonts();
+    };
+}
 
 export const createGoogleFontUrl = (family: string, options = "") =>
     `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, "+")}${options}&display=swap`;
@@ -50,25 +73,25 @@ function parseFontFaces(css: string) {
         .filter((face): face is NonNullable<typeof face> => face !== null);
 }
 
-async function loadFontFace(family: string, url: string, descriptors: FontFaceDescriptors) {
+async function loadFontFace(family: string, url: string, descriptors: FontFaceDescriptors, signal: AbortSignal) {
     try {
-        const response = await fetch(url);
+        const response = await fetch(url, { signal });
         if (!response.ok) return false;
         const blob = await response.blob();
+        if (signal.aborted) throw signal.reason ?? new DOMException("The operation was aborted.", "AbortError");
         const objectUrl = URL.createObjectURL(blob);
-        fontObjectUrls.add(objectUrl);
-
         try {
             const font = new FontFace(family, `url(${objectUrl})`, descriptors);
             await font.load();
+            if (signal.aborted) throw signal.reason ?? new DOMException("The operation was aborted.", "AbortError");
             document.fonts.add(font);
+            loadedFonts.add(font);
             return true;
-        } catch {
+        } finally {
             URL.revokeObjectURL(objectUrl);
-            fontObjectUrls.delete(objectUrl);
-            return false;
         }
     } catch {
+        if (!signal.aborted) logger.warn("Could not load a GIF caption font.");
         return false;
     }
 }
@@ -80,21 +103,24 @@ export function loadGoogleFont(fontFamily: string) {
     const loading = loadingFontFamilies.get(family);
     if (loading) return loading;
 
+    const { signal } = fontLifetime;
     const loadPromise = (async () => {
         try {
-            const response = await fetch(createGoogleFontUrl(family));
+            const response = await fetch(createGoogleFontUrl(family), { signal });
             if (!response.ok) return;
             const css = await response.text();
-            if (!css) return;
+            if (!css || signal.aborted) return;
 
             const faces = parseFontFaces(css);
-            const results = await Promise.all(faces.map(face => loadFontFace(family, face.url, face.descriptors)));
+            const results = await Promise.all(faces.map(face => loadFontFace(family, face.url, face.descriptors, signal)));
             const loaded = results.some(Boolean);
-            if (loaded) loadedFontFamilies.add(family);
+            if (loaded && !signal.aborted) loadedFontFamilies.add(family);
         } catch {
-            // font load failed silently
+            if (!signal.aborted) logger.warn("Could not load a GIF caption font.");
         }
-    })();
+    })().finally(() => {
+        if (loadingFontFamilies.get(family) === loadPromise) loadingFontFamilies.delete(family);
+    });
 
     loadingFontFamilies.set(family, loadPromise);
     return loadPromise;
@@ -107,16 +133,19 @@ export async function fetchAllGoogleFonts(): Promise<GoogleFontMetadata[]> {
     if (cachedFonts) return cachedFonts;
     if (fontsPromise) return fontsPromise;
 
+    const { signal } = fontLifetime;
     fontsPromise = fetch("https://fonts.google.com/$rpc/fonts.fe.catalog.actions.metadata.MetadataService/FontSearch", {
         body: JSON.stringify([["", null, null, null, null, null, 1], [5], null, 400]),
         headers: {
             "content-type": "application/json+protobuf",
             "x-user-agent": "grpc-web-javascript/0.1"
         },
+        signal,
         method: "POST"
     })
         .then(response => response.ok ? response.json() : null)
         .then(data => {
+            if (signal.aborted) return [];
             const rows = Array.isArray(data?.[1]) ? data[1] as unknown[] : [];
             const fonts: GoogleFontMetadata[] = [];
 
@@ -171,8 +200,8 @@ export async function fetchAllGoogleFonts(): Promise<GoogleFontMetadata[]> {
             return fonts;
         })
         .catch(() => {
-            cachedFonts = [];
-            return cachedFonts;
+            if (!signal.aborted) logger.warn("Could not load the GIF font list.");
+            return [];
         });
 
     return fontsPromise;

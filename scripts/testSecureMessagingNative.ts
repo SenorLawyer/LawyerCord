@@ -713,6 +713,116 @@ async function testNativeLifecycle(bundlePath: string, dataDir: string): Promise
         globalThis.fetch = originalFetch;
         await native.setScreenCaptureProtection(DISCORD_EVENT, true);
     }
+    const capacityAttachmentId = "300000000000000001";
+    const capacityUrl = `https://cdn.discordapp.com/attachments/${DM_CHANNEL_ID}/${capacityAttachmentId}/test.pcaf`;
+    const capacityInput = {
+        ...attachmentMessageInput,
+        content: downloadMessage.content,
+        discordMessageId: messageId(16),
+        attachments: [{ id: capacityAttachmentId, url: capacityUrl, proxyUrl: capacityUrl, size: ciphertext.byteLength }],
+    };
+    const capacityStarted = Promise.withResolvers<void>();
+    const capacityResponses = [Promise.withResolvers<Response>(), Promise.withResolvers<Response>()];
+    const capacitySignals: AbortSignal[] = [];
+    globalThis.fetch = async (_url, options) => {
+        const index = capacitySignals.length;
+        assert.ok(options?.signal);
+        capacitySignals.push(options.signal);
+        if (capacitySignals.length === 2) capacityStarted.resolve();
+        return capacityResponses[index].promise;
+    };
+    try {
+        const pending = [native.decryptIncomingAttachments(DISCORD_EVENT, BOB_ID, capacityInput), native.decryptIncomingAttachments(DISCORD_EVENT, BOB_ID, capacityInput)];
+        await capacityStarted.promise;
+        const saturated = await native.decryptIncomingAttachments(DISCORD_EVENT, BOB_ID, capacityInput);
+        expectStatus(saturated, "failed", "attachment capacity rejects excess work before download");
+        assert.equal(saturated.error, "capacity_exceeded");
+        await native.setScreenCaptureProtection(DISCORD_EVENT, false);
+        assert.ok(capacitySignals.every(signal => signal.aborted));
+        await native.setScreenCaptureProtection(DISCORD_EVENT, true);
+        const stillSaturated = await native.decryptIncomingAttachments(DISCORD_EVENT, BOB_ID, capacityInput);
+        expectStatus(stillSaturated, "failed", "restart cannot reuse slots held by unsettled work");
+        assert.equal(stillSaturated.error, "capacity_exceeded");
+        for (const response of capacityResponses) response.resolve(new Response(new Uint8Array(ciphertext)));
+        for (const result of await Promise.all(pending)) {
+            expectStatus(result, "failed", "stopped generation cannot expose plaintext after restart");
+            assert.equal(result.error, "screen_capture_protection_failed");
+        }
+        globalThis.fetch = async () => new Response(new Uint8Array(ciphertext));
+        const retried = await native.decryptIncomingAttachments(DISCORD_EVENT, BOB_ID, capacityInput);
+        expectStatus(retried, "decrypted", "the exact authenticated message retries after capacity is released");
+        assert.deepEqual(Array.from(retried.attachments[0].data), [42]);
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+    for (const primaryFailure of ["length", "status"]) {
+        let cancelledPrimary = 0;
+        let proxyRequests = 0;
+        let requestSignal: AbortSignal | null | undefined;
+        globalThis.fetch = async (url, options) => {
+            requestSignal = options?.signal;
+            if (String(url).includes("cdn.discordapp.com")) {
+                return new Response(new ReadableStream({ cancel() { cancelledPrimary++; } }), {
+                    status: primaryFailure === "status" ? 503 : 200,
+                    headers: { "content-length": String(ciphertext.byteLength + 1) },
+                });
+            }
+            assert.equal(cancelledPrimary, 1, "the primary response is cancelled before the proxy starts");
+            proxyRequests++;
+            return new Response(new Uint8Array(ciphertext));
+        };
+        try {
+            const result = await native.decryptIncomingAttachments(DISCORD_EVENT, BOB_ID, {
+                ...capacityInput,
+                attachments: capacityInput.attachments.map(attachment => ({ ...attachment, proxyUrl: attachment.url.replace("cdn.discordapp.com", "media.discordapp.net") })),
+            });
+            expectStatus(result, "decrypted", "a rejected primary response can fall back to the proxy");
+            assert.equal(cancelledPrimary, 1);
+            assert.equal(proxyRequests, 1);
+            assert.equal(requestSignal?.aborted, true, "completed bundles abort transport before releasing capacity");
+            globalThis.fetch = async () => new Response(new Uint8Array(ciphertext));
+            expectStatus(await native.decryptIncomingAttachments(DISCORD_EVENT, BOB_ID, capacityInput), "decrypted", "fallback releases admission capacity");
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    }
+    const siblingResponses = [Promise.withResolvers<Response>(), Promise.withResolvers<Response>()];
+    const siblingsAborted = Promise.withResolvers<void>();
+    let siblingCount = 0;
+    let abortedSiblings = 0;
+    const siblingInput = {
+        ...attachmentMessageInput,
+        attachments: ["300000000000000001", "300000000000000002"].map(id => ({
+            id, size: ciphertext.byteLength,
+            url: `https://cdn.discordapp.com/attachments/${DM_CHANNEL_ID}/${id}/test.pcaf`,
+            proxyUrl: `https://media.discordapp.net/attachments/${DM_CHANNEL_ID}/${id}/test.pcaf`,
+        })),
+    };
+    globalThis.fetch = async (url, options) => {
+        if (String(url).includes("300000000000000001")) throw new Error("Download failed.");
+        assert.ok(options?.signal);
+        const index = siblingCount++;
+        options.signal.addEventListener("abort", () => {
+            if (++abortedSiblings === 2) siblingsAborted.resolve();
+        }, { once: true });
+        return siblingResponses[index].promise;
+    };
+    try {
+        const pending = [native.decryptIncomingAttachments(DISCORD_EVENT, BOB_ID, siblingInput), native.decryptIncomingAttachments(DISCORD_EVENT, BOB_ID, siblingInput)];
+        await siblingsAborted.promise;
+        const saturated = await native.decryptIncomingAttachments(DISCORD_EVENT, BOB_ID, siblingInput);
+        expectStatus(saturated, "failed", "failed bundles retain slots while aborted siblings settle");
+        assert.equal(saturated.error, "capacity_exceeded");
+        for (const response of siblingResponses) response.resolve(new Response(new Uint8Array(ciphertext)));
+        for (const result of await Promise.all(pending)) {
+            expectStatus(result, "failed", "sibling failure aborts the complete bundle");
+            assert.equal(result.error, "attachment_download_failed");
+        }
+        globalThis.fetch = async () => new Response(new Uint8Array(ciphertext));
+        expectStatus(await native.decryptIncomingAttachments(DISCORD_EVENT, BOB_ID, capacityInput), "decrypted", "all sibling slots are released after settlement");
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
     const secureSticker = { formatType: 3, id: "749054660769218631", name: "Wave" };
     const encryptedStickerMessage = await native.encryptOutgoing(DISCORD_EVENT, ALICE_ID, {
         plaintext: serializeSecurePlaintext("", null, [secureSticker]),

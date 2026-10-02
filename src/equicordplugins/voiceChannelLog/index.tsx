@@ -13,7 +13,7 @@ import { ApplicationStore, ChannelStore, Menu, RelationshipStore, SelectedChanne
 
 import { LogIcon, OpenLogsButton } from "./components/LogsButton";
 import { openVoiceChannelLog } from "./components/VoiceChannelLogModal";
-import { addLogEntry, setCallStartTime } from "./logs";
+import { addLogEntry, clearLogs, setCallStartTime } from "./logs";
 import settings from "./settings";
 import { EmbeddedActivityEvent, PreviousVoiceState, SoundEvent, VoiceChannelLogEntry, VoiceState } from "./types";
 
@@ -120,12 +120,21 @@ export default definePlugin({
     },
 
     flux: {
+        LOGOUT() {
+            clearSessionState();
+            clearLogs();
+        },
         VOICE_CHANNEL_SELECT({ channelId, currentVoiceChannelId }: { channelId: string | null; currentVoiceChannelId: string | null; }) {
             const leaving = channelId == null && currentVoiceChannelId != null;
             const joining = channelId != null && currentVoiceChannelId == null;
             const oldChannel = currentVoiceChannelId ?? clientOldChannelId;
 
-            if (channelId !== oldChannel) sessionGeneration++;
+            if (channelId !== oldChannel) {
+                sessionGeneration++;
+                previousStates.clear();
+                loggedActivityUsersByApp.clear();
+                existingUsers.clear();
+            }
             clientOldChannelId = channelId ?? undefined;
 
             if (leaving && oldChannel) {
@@ -167,14 +176,18 @@ export default definePlugin({
                 if (userId === clientUserId) continue;
                 if (!shouldLog(userId)) continue;
 
+                const inMyChannel = isSelectedChannel(channelId) || isSelectedChannel(oldChannelId);
+                if (!inMyChannel) {
+                    previousStates.delete(userId);
+                    continue;
+                }
+
                 if (oldChannelId === channelId && !previousStates.has(userId)) {
                     rememberPreviousState(userId, state);
                     continue;
                 }
 
                 const prev = previousStates.get(userId);
-                const inMyChannel = isSelectedChannel(channelId) || isSelectedChannel(oldChannelId);
-
                 if (oldChannelId !== channelId) {
                     if (!oldChannelId && channelId) {
                         const skipJoin = suppressJoins || existingUsers.delete(userId);
@@ -218,7 +231,7 @@ export default definePlugin({
 
                 rememberPreviousState(userId, state);
 
-                if (!channelId) {
+                if (!isSelectedChannel(channelId)) {
                     previousStates.delete(userId);
                 }
             }
@@ -313,5 +326,6 @@ export default definePlugin({
 
     stop() {
         clearSessionState();
+        clearLogs();
     }
 });

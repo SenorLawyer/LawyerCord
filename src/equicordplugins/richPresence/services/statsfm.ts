@@ -24,6 +24,7 @@ const PresenceStore = findByPropsLazy("getLocalPresence");
 
 let updateInterval: NodeJS.Timeout | undefined;
 let isUpdating = false;
+let requestController: AbortController | undefined;
 let lastApiErrorAt = 0;
 let updateGeneration = 0;
 
@@ -43,7 +44,7 @@ function reportApiError(message: string, details: unknown) {
     logger.error(message, details);
 }
 
-async function fetchTrackData(): Promise<SfmTrackData | null> {
+async function fetchTrackData(signal: AbortSignal): Promise<SfmTrackData | null> {
     const username = settings.store.sfm_username?.trim();
     if (!username) {
         lastApiErrorAt = 0;
@@ -51,14 +52,14 @@ async function fetchTrackData(): Promise<SfmTrackData | null> {
     }
 
     try {
-        const res = await fetch(`https://api.stats.fm/api/v1/users/${encodeURIComponent(username)}/streams/current`);
+        const res = await fetch(`https://api.stats.fm/api/v1/users/${encodeURIComponent(username)}/streams/current`, { signal });
         if (!res.ok) throw `${res.status} ${res.statusText}`;
 
         const json = await res.json() as Partial<SfmResponse>;
         lastApiErrorAt = 0;
 
         const trackData = json.item?.track;
-        if (!trackData) return null;
+        if (!trackData || signal.aborted) return null;
 
         const albums = trackData.albums ?? [];
         const artists = trackData.artists ?? [];
@@ -76,7 +77,7 @@ async function fetchTrackData(): Promise<SfmTrackData | null> {
             imageUrl: albums[0]?.image,
         };
     } catch (e) {
-        reportApiError("Failed to query Stats.fm API", e);
+        if (!signal.aborted) reportApiError("Failed to query Stats.fm API", e);
         return null;
     }
 }
@@ -87,7 +88,7 @@ function getLargeImage(track: SfmTrackData): string | undefined {
     if (settings.store.sfm_missingArt === "placeholder") return "placeholder";
 }
 
-async function getActivity(): Promise<Activity | null> {
+async function getActivity(signal: AbortSignal): Promise<Activity | null> {
     if (settings.store.sfm_hideWithExternalRPC) {
         if (PresenceStore.getActivities().some(a => a.application_id !== APPLICATION_ID)) return null;
     }
@@ -97,8 +98,8 @@ async function getActivity(): Promise<Activity | null> {
             return null;
     }
 
-    const trackData = await fetchTrackData();
-    if (!trackData) return null;
+    const trackData = await fetchTrackData(signal);
+    if (!trackData || signal.aborted) return null;
 
     const largeImage = getLargeImage(trackData);
     const assets = largeImage
@@ -148,14 +149,19 @@ async function updatePresence() {
     if (isUpdating) return;
 
     const generation = updateGeneration;
+    const controller = new AbortController();
+    requestController = controller;
+    const timeout = setTimeout(() => controller.abort(), 30_000);
     isUpdating = true;
     try {
-        const activity = await getActivity();
-        if (generation === updateGeneration) setActivity(activity);
+        const activity = await getActivity(controller.signal);
+        if (generation === updateGeneration && !controller.signal.aborted) setActivity(activity);
     } catch (e) {
-        logger.error("Failed to update presence", e);
+        if (!controller.signal.aborted) logger.error("Failed to update presence", e);
         if (generation === updateGeneration) setActivity(null);
     } finally {
+        clearTimeout(timeout);
+        if (requestController === controller) requestController = undefined;
         if (generation === updateGeneration) isUpdating = false;
     }
 }
@@ -171,6 +177,8 @@ export function start() {
 
 export function stop() {
     updateGeneration++;
+    requestController?.abort();
+    requestController = undefined;
     clearInterval(updateInterval);
     updateInterval = undefined;
     isUpdating = false;

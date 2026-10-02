@@ -23,6 +23,7 @@ let cycleSnapshot: string[] = [];
 let cycleIndex = -1;
 let historyPersistTimeout: ReturnType<typeof setTimeout> | null = null;
 let historyDirty = false;
+let startGeneration = 0;
 
 const cl = classNameFactory("vc-rdms-");
 
@@ -378,7 +379,9 @@ export default definePlugin({
     },
 
     async start() {
+        const generation = ++startGeneration;
         const saved = await DataStore.get<string[]>(STORAGE_KEY);
+        if (generation !== startGeneration) return;
         rmdsDmChannelIds = Array.isArray(saved) ? sanitizeHistory(saved) : [];
 
         const current = SelectedChannelStore.getChannelId();
@@ -389,6 +392,7 @@ export default definePlugin({
     },
 
     stop() {
+        startGeneration++;
         document.removeEventListener("keydown", onKeyDown, true);
         document.removeEventListener("keyup", onKeyUp, true);
         isCyclingSessionActive = false;

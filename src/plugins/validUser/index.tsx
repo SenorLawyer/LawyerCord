@@ -56,6 +56,8 @@ function getUserFlagBadges() {
 
 const fetching = new Set<string>();
 const queue = new Queue(5);
+let fetchGeneration = 0;
+let stopped = false;
 
 interface MentionProps {
     data: {
@@ -73,12 +75,13 @@ interface MentionProps {
     UserMention: ComponentType<any>;
 }
 
-async function getUser(id: string) {
+async function getUser(id: string, current: () => boolean) {
     let userObj = UserStore.getUser(id);
     if (userObj)
         return userObj;
 
     const user: any = await RestAPI.get({ url: Constants.Endpoints.USER(id) }).then(response => {
+        if (!current()) return;
         FluxDispatcher.dispatch({
             type: "USER_UPDATE",
             user: response.body,
@@ -86,6 +89,8 @@ async function getUser(id: string) {
 
         return response.body;
     });
+
+    if (!current()) return;
 
     // Populate the profile
     await FluxDispatcher.dispatch(
@@ -164,24 +169,28 @@ function MentionWrapper({ data, UserMention, RoleMention, parse, props }: Mentio
                     if (UserStore.getUser(id))
                         return setUserId(id);
 
+                    const generation = fetchGeneration;
+                    const accountId = UserStore.getCurrentUser()?.id;
+                    const current = () => !stopped && mountedRef.current && generation === fetchGeneration && accountId === UserStore.getCurrentUser()?.id;
                     const fetch = () => {
-                        fetching.add(id);
-
-                        queue.unshift(() =>
-                            getUser(id)
+                        if (!current()) return;
+                        queue.unshift(() => {
+                            if (!current() || fetching.has(id)) return;
+                            fetching.add(id);
+                            return getUser(id, current)
                                 .then(user => {
                                     if (user && mountedRef.current) setUserId(id);
                                 })
                                 .catch(e => {
-                                    if (e?.status === 429) {
+                                    if (current() && e?.status === 429) {
                                         queue.unshift(() => sleep(e?.body?.retry_after ?? 1000).then(fetch));
                                     }
                                 })
                                 .finally(() => {
                                     fetching.delete(id);
                                     return sleep(300);
-                                })
-                        );
+                                });
+                        });
                     };
 
                     fetch();
@@ -199,6 +208,18 @@ export default definePlugin({
     tags: ["Chat", "Utility"],
     authors: [Devs.Ven, Devs.Dolfies],
     searchTerms: ["MentionCacheFix"],
+
+    start() {
+        stopped = false;
+    },
+    stop() {
+        stopped = true;
+        fetchGeneration++;
+    },
+    flux: {
+        LOGOUT() { fetchGeneration++; },
+        CONNECTION_OPEN() { fetchGeneration++; }
+    },
 
     patches: [
         {

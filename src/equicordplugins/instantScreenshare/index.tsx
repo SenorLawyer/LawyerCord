@@ -15,6 +15,9 @@ import { ChannelStore, MediaEngineStore, PermissionsBits, PermissionStore, Selec
 
 import { getCurrentMedia, settings } from "./utils";
 
+let started = false;
+let streamGeneration = 0;
+let lastVoiceChannel: string | null | undefined;
 let hasStreamed = false;
 let isStreaming = false;
 let streamKey: string | null = null;
@@ -24,6 +27,8 @@ const StreamPreviewSettings = getUserSettingLazy("voiceAndVideo", "disableStream
 const ApplicationStreamingSettingsStore = findStoreLazy("ApplicationStreamingSettingsStore");
 
 async function autoStartStream(instant = true) {
+    if (!started) return;
+    const generation = ++streamGeneration;
     const currentUserId = UserStore.getCurrentUser()?.id;
     if (!currentUserId) return;
 
@@ -45,7 +50,9 @@ async function autoStartStream(instant = true) {
     }
 
     const streamMedia = await getCurrentMedia();
-    if (!streamMedia) return;
+    if (!streamMedia || !started || generation !== streamGeneration
+        || UserStore.getCurrentUser()?.id !== currentUserId
+        || SelectedChannelStore.getVoiceChannelId() !== selected) return;
 
     const preview = StreamPreviewSettings.getSetting();
     const { soundshareEnabled } = ApplicationStreamingSettingsStore.getState();
@@ -116,14 +123,30 @@ export default definePlugin({
         }
     ],
 
+    start() {
+        started = true;
+        lastVoiceChannel = SelectedChannelStore.getVoiceChannelId();
+    },
+
     flux: {
+        CONNECTION_OPEN() {
+            streamGeneration++;
+            hasStreamed = false;
+            isStreaming = false;
+            streamKey = null;
+            lastVoiceChannel = SelectedChannelStore.getVoiceChannelId();
+        },
         async VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceState[]; }) {
-            if (!settings.store.toolboxManagement || !settings.store.instantScreenshare) return;
             const myId = UserStore.getCurrentUser()?.id;
             if (!myId) return;
 
             const myState = voiceStates.find(state => state.userId === myId);
             if (!myState) return;
+            if (myState.channelId !== lastVoiceChannel) {
+                streamGeneration++;
+                lastVoiceChannel = myState.channelId;
+            }
+            if (!settings.store.toolboxManagement || !settings.store.instantScreenshare) return;
 
             if (myState.channelId && !hasStreamed) {
                 hasStreamed = true;
@@ -152,6 +175,8 @@ export default definePlugin({
     },
 
     stop() {
+        started = false;
+        streamGeneration++;
         hasStreamed = false;
         isStreaming = false;
         streamKey = null;

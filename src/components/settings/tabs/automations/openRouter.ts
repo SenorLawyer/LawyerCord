@@ -41,7 +41,7 @@ export function subscribeModels(listener: (models: OpenRouterModel[]) => void): 
 /** Loads the live catalogue from OpenRouter. Shared, so many pickers cause one request. */
 export function loadOpenRouterModels(refresh = false): Promise<OpenRouterModel[]> {
     if (cachedModels.length && !refresh) return Promise.resolve(cachedModels);
-    if (inFlight && !refresh) return inFlight;
+    if (inFlight) return inFlight;
 
     inFlight = (async () => {
         if (!IS_DISCORD_DESKTOP) return [];

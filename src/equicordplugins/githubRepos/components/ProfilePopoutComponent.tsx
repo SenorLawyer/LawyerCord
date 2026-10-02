@@ -56,6 +56,12 @@ export function ProfilePopoutComponent({ id, isSideBar = false }: { id: string, 
     };
 
     useEffect(() => {
+        const controller = new AbortController();
+        const { signal } = controller;
+        setRepos([]);
+        setLoading(true);
+        setError(null);
+        setUserInfo(null);
         const fetchData = async () => {
             try {
                 const profile = UserProfileStore.getUserProfile(id);
@@ -68,24 +74,29 @@ export function ProfilePopoutComponent({ id, isSideBar = false }: { id: string, 
                 if (!githubConnection) { setLoading(false); return; }
 
                 const username = githubConnection.name;
-                const userInfoData = await fetchUserInfo(username);
+                const userInfoData = await fetchUserInfo(username, signal);
+                if (signal.aborted) return;
                 if (userInfoData) setUserInfo(userInfoData);
 
                 const githubId = githubConnection.id;
 
-                const reposById = await fetchReposByUserId(githubId);
+                const reposById = await fetchReposByUserId(githubId, 30, signal);
+                if (signal.aborted) return;
                 if (reposById) { setRepos(reposById); setLoading(false); return; }
 
-                const reposByUsername = await fetchReposByUsername(username);
+                const reposByUsername = await fetchReposByUsername(username, 30, signal);
+                if (signal.aborted) return;
                 setRepos(reposByUsername);
                 setLoading(false);
             } catch (error) {
+                if (signal.aborted) return;
                 setError(error instanceof Error ? error.message : "Failed to fetch repositories");
                 setLoading(false);
             }
         };
 
-        fetchData();
+        void fetchData();
+        return () => controller.abort();
     }, [id]);
 
     if (loading || error || !repos.length) return null;

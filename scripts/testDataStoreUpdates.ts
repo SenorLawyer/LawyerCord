@@ -192,3 +192,28 @@ test("DataStore bulk reads preserve key/value pairing in one transaction and rej
         }
     }
 });
+
+test("DataStore filtered entries never read excluded large values and keep one transaction", async () => {
+    const stored = new Map<string, unknown>([["large-local-model", new Uint8Array(1024 * 1024)], ["public", { saved: true }]]);
+    let transactions = 0;
+    let bulkReads = 0;
+    const valueReads: string[] = [];
+    const request = (result: unknown) => {
+        const value: { result: unknown; onsuccess?: () => void; } = { result };
+        queueMicrotask(() => value.onsuccess?.());
+        return value;
+    };
+    const result = await entries(async (_mode: string, callback: (store: object) => unknown) => {
+        transactions++;
+        return callback({
+            getAllKeys: () => request([...stored.keys()]),
+            getAll() { bulkReads++; return request([...stored.values()]); },
+            get(key: string) { valueReads.push(key); return request(stored.get(key)); }
+        });
+    }, (key: unknown) => key === "public");
+    assert.deepEqual(Array.from(result, ([key]: [string, unknown]) => key), ["public"]);
+    assert.deepEqual(structuredClone(result[0][1]), { saved: true });
+    assert.equal(bulkReads, 0);
+    assert.deepEqual(valueReads, ["public"]);
+    assert.equal(transactions, 1);
+});

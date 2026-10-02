@@ -12,8 +12,18 @@ const queue = new Queue();
 const CHUNK_BYTES = 64 * 1024;
 
 export function createZipFile(name: string, files: Record<string, Uint8Array>, signal: AbortSignal): Promise<File> {
+    if (signal.aborted) return Promise.reject(new DOMException("Upload cancelled.", "AbortError"));
+    if (queue.size >= 4) return Promise.reject(new Error("Too many ZIP uploads are waiting. Try again when one finishes."));
     return new Promise((resolve, reject) => {
-        queue.push(() => compressFiles(name, files, signal).then(resolve, reject));
+        const task = () => compressFiles(name, files, signal).then(resolve, reject)
+            .finally(() => signal.removeEventListener("abort", cancel));
+        const cancel = () => {
+            if (!queue.remove(task)) return;
+            signal.removeEventListener("abort", cancel);
+            reject(new DOMException("Upload cancelled.", "AbortError"));
+        };
+        signal.addEventListener("abort", cancel, { once: true });
+        queue.push(task);
     });
 }
 

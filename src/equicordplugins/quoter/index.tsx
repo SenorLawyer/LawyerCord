@@ -16,6 +16,8 @@ import { QuoteIcon } from "./components/QuoteIcon";
 import { QuoteFont } from "./types";
 import { createQuoteImage, ensureFontLoaded, generateFileNamePreview, getFileExtension, getMimeType, resetFontLoading } from "./utils";
 
+const quoteRequests = new Set<AbortController>();
+
 const settings = definePluginSettings({
     quoteFont: {
         type: OptionType.SELECT,
@@ -65,6 +67,8 @@ export default definePlugin({
     },
 
     stop() {
+        for (const request of quoteRequests) request.abort();
+        quoteRequests.clear();
         const style = document.getElementById("quoter-font-style");
         if (style) style.remove();
         resetFontLoading();
@@ -103,7 +107,9 @@ function QuoteModal({ message, ...props }: RenderModalProps & { message: Message
     }, [gray, showWatermark, saveAsGif]);
 
     useEffect(() => {
-        let cancelled = false;
+        const controller = new AbortController();
+        quoteRequests.add(controller);
+        const timeout = setTimeout(() => controller.abort(), 30_000);
         let url: string | undefined;
         setQuoteImage(null);
         setPreviewUrl(null);
@@ -116,18 +122,24 @@ function QuoteModal({ message, ...props }: RenderModalProps & { message: Message
             watermark: watermarkText,
             showWatermark,
             saveAsGif,
-            quoteFont
+            quoteFont,
+            signal: controller.signal
         }).then(image => {
-            if (cancelled) return;
+            if (controller.signal.aborted) return;
             url = URL.createObjectURL(image);
             setQuoteImage(image);
             setPreviewUrl(url);
         }).catch(() => {
-            if (!cancelled) showToast("Could not create the quote image.", Toasts.Type.FAILURE);
+            if (!controller.signal.aborted) showToast("Could not create the quote image.", Toasts.Type.FAILURE);
+        }).finally(() => {
+            clearTimeout(timeout);
+            quoteRequests.delete(controller);
         });
 
         return () => {
-            cancelled = true;
+            controller.abort();
+            clearTimeout(timeout);
+            quoteRequests.delete(controller);
             if (url) URL.revokeObjectURL(url);
         };
     }, [message.author, message.content, gray, showWatermark, saveAsGif, watermarkText, quoteFont]);

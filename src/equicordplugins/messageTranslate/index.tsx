@@ -13,7 +13,7 @@ import { ChannelStore, FluxDispatcher, MessageStore, UserStore } from "@webpack/
 
 import { getIgnoredChannels, getIgnoredGuilds, getIgnoredUsers, refreshIgnoredIdCaches, settings } from "./settings";
 import { MessageWithContent } from "./types";
-import { clearCache, getCached, hasFailed, isInProgress, translate } from "./utils/translate";
+import { clearCache, getCached, hasFailed, isInProgress, resetTranslations, translate } from "./utils/translate";
 
 const cl = classNameFactory("mt-");
 const translatedMessages = new Map<string, string>();
@@ -84,7 +84,12 @@ export default definePlugin({
                 translatedMessages.delete(message.id);
                 return message;
             }
+            translatedMessages.delete(message.id);
             translatedMessages.set(message.id, cached.sourceLang);
+            if (translatedMessages.size > 1000) {
+                const oldest = translatedMessages.keys().next();
+                if (!oldest.done) translatedMessages.delete(oldest.value);
+            }
             return Object.assign(Object.create(Object.getPrototypeOf(message)), message, {
                 content: cached.translated,
             }) as MessageWithContent;
@@ -117,7 +122,15 @@ export default definePlugin({
         refreshIgnoredIdCaches();
     },
 
+    flux: {
+        CONNECTION_OPEN() {
+            resetTranslations();
+            translatedMessages.clear();
+        }
+    },
+
     stop() {
+        resetTranslations();
         translatedMessages.clear();
     },
 });

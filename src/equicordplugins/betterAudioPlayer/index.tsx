@@ -9,15 +9,19 @@ import "./styles.css";
 import { definePluginSettings } from "@api/Settings";
 import { EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
+import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 import { ColorUtils, React, showToast, Toasts } from "@webpack/common";
 
+const logger = new Logger("BetterAudioPlayer");
 const cl = classNameFactory("vc-better-audio-player-");
 const MAX_FILE_SIZE = 12e6;
 const MAX_AUDIO_BLOB_CACHE_SIZE = 12;
 const MAX_COLOR_CACHE_SIZE = 16;
 
-const audioBlobCache = new Map<string, Promise<Blob | null>>();
+const audioBlobCache = new Map<string, Blob>();
+const audioDownloads = new Map<string, { controller: AbortController; promise: Promise<Blob | null>; consumers: number; }>();
+let audioCacheBytes = 0;
 const colorCache = new Map<string, readonly [number, number, number]>();
 
 interface PlayerInstance {
@@ -125,34 +129,86 @@ function drawSpectrograph(ctx: CanvasRenderingContext2D, w: number, h: number, f
     }
 }
 
-async function fetchAudioBlobData(src: string): Promise<Blob | null> {
-    const response = await fetch(src);
-    if (!response.ok) return null;
-
-    const contentLength = response.headers.get("content-length");
-    if (contentLength && Number(contentLength) > MAX_FILE_SIZE) return null;
-
-    const blob = await response.blob();
-    if (blob.size > MAX_FILE_SIZE) return null;
-    return blob;
+async function fetchAudioBlobData(src: string, signal: AbortSignal): Promise<Blob | null> {
+    const response = await fetch(src, { signal });
+    if (!response.ok || Number(response.headers.get("content-length")) > MAX_FILE_SIZE) {
+        await response.body?.cancel();
+        return null;
+    }
+    if (!response.body) return null;
+    const reader = response.body.getReader();
+    const chunks: Uint8Array<ArrayBuffer>[] = [];
+    let size = 0;
+    const abort = () => { void reader.cancel().catch(() => undefined); };
+    signal.addEventListener("abort", abort, { once: true });
+    try {
+        if (signal.aborted) throw new DOMException("Audio download canceled.", "AbortError");
+        while (true) {
+            const { done, value } = await reader.read();
+            if (signal.aborted) throw new DOMException("Audio download canceled.", "AbortError");
+            if (done) break;
+            size += value.byteLength;
+            if (size > MAX_FILE_SIZE) return null;
+            chunks.push(new Uint8Array(value));
+        }
+        return new Blob(chunks, { type: response.headers.get("content-type") || "audio/mpeg" });
+    } finally {
+        signal.removeEventListener("abort", abort);
+        try { await reader.cancel(); } finally { reader.releaseLock(); }
+    }
 }
 
-async function getAudioBlob(src: string): Promise<Blob | null> {
+function getAudioBlob(src: string, signal: AbortSignal): Promise<Blob | null> {
+    if (signal.aborted) return Promise.resolve(null);
     const cachedBlob = audioBlobCache.get(src);
-    if (cachedBlob) return cachedBlob;
-
-    const blobPromise = fetchAudioBlobData(src).catch(error => {
-        audioBlobCache.delete(src);
-        throw error;
-    });
-
-    audioBlobCache.set(src, blobPromise);
-    if (audioBlobCache.size > MAX_AUDIO_BLOB_CACHE_SIZE) {
-        const oldestKey = audioBlobCache.keys().next().value;
-        if (oldestKey) audioBlobCache.delete(oldestKey);
+    if (cachedBlob) return Promise.resolve(cachedBlob);
+    let download = audioDownloads.get(src);
+    if (download?.controller.signal.aborted) return Promise.resolve(null);
+    if (!download) {
+        if (audioDownloads.size >= 4) {
+            logger.warn("Too many audio visualizers are loading. Play the audio again to retry.");
+            return Promise.resolve(null);
+        }
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30_000);
+        const promise = fetchAudioBlobData(src, controller.signal).then(blob => {
+            if (!blob || controller.signal.aborted) return null;
+            audioBlobCache.set(src, blob);
+            audioCacheBytes += blob.size;
+            while (audioBlobCache.size > MAX_AUDIO_BLOB_CACHE_SIZE || audioCacheBytes > 2 * MAX_FILE_SIZE) {
+                const oldest = audioBlobCache.entries().next();
+                if (oldest.done) break;
+                audioCacheBytes -= oldest.value[1].size;
+                audioBlobCache.delete(oldest.value[0]);
+            }
+            return blob;
+        }).catch(error => {
+            if (!controller.signal.aborted) logger.error("Could not load audio for the visualizer.", error);
+            return null;
+        }).finally(() => {
+            clearTimeout(timeout);
+            if (audioDownloads.get(src)?.controller === controller) audioDownloads.delete(src);
+        });
+        download = { controller, promise, consumers: 0 };
+        audioDownloads.set(src, download);
     }
-
-    return blobPromise;
+    const entry = download;
+    entry.consumers++;
+    return new Promise(resolve => {
+        let finished = false;
+        const finish = (blob: Blob | null) => {
+            if (finished) return;
+            finished = true;
+            signal.removeEventListener("abort", abort);
+            if (--entry.consumers === 0 && audioDownloads.get(src) === entry) {
+                entry.controller.abort();
+            }
+            resolve(blob);
+        };
+        const abort = () => finish(null);
+        signal.addEventListener("abort", abort, { once: true });
+        void entry.promise.then(finish);
+    });
 }
 
 function Visualizer({ playerRef, src }: { playerRef: React.RefObject<HTMLAudioElement>; src: string; }) {
@@ -170,9 +226,11 @@ function Visualizer({ playerRef, src }: { playerRef: React.RefObject<HTMLAudioEl
         if (!audio || !canvas) return () => { };
 
         let cancelled = false;
+        const controller = new AbortController();
+        let initializing = false;
 
         const init = async () => {
-            const blob = await getAudioBlob(src).catch(() => null);
+            const blob = await getAudioBlob(src, controller.signal);
             if (cancelled || !blob) return;
 
             const blobUrl = URL.createObjectURL(blob);
@@ -184,12 +242,12 @@ function Visualizer({ playerRef, src }: { playerRef: React.RefObject<HTMLAudioEl
             audio.currentTime = currentTime;
 
             const audioCtx = new AudioContext();
+            audioCtxRef.current = audioCtx;
             const analyser = audioCtx.createAnalyser();
             analyser.fftSize = 2048;
             const source = audioCtx.createMediaElementSource(audio);
             source.connect(analyser);
             analyser.connect(audioCtx.destination);
-            audioCtxRef.current = audioCtx;
             analyserRef.current = analyser;
             setupDoneRef.current = true;
 
@@ -234,7 +292,16 @@ function Visualizer({ playerRef, src }: { playerRef: React.RefObject<HTMLAudioEl
         };
 
         const onPlay = () => {
-            if (!setupDoneRef.current) return;
+            if (!setupDoneRef.current) {
+                if (initializing) return;
+                initializing = true;
+                void init().then(() => {
+                    if (!cancelled && setupDoneRef.current) onPlay();
+                }).catch(error => {
+                    if (!cancelled) logger.error("Could not initialize the audio visualizer.", error);
+                }).finally(() => { initializing = false; });
+                return;
+            }
             if (audioCtxRef.current?.state === "suspended") {
                 audioCtxRef.current.resume();
             }
@@ -249,10 +316,11 @@ function Visualizer({ playerRef, src }: { playerRef: React.RefObject<HTMLAudioEl
 
         audio.addEventListener("play", onPlay);
         audio.addEventListener("pause", onPause);
-        init();
+        if (!audio.paused) onPlay();
 
         return () => {
             cancelled = true;
+            controller.abort();
             audio.removeEventListener("play", onPlay);
             audio.removeEventListener("pause", onPause);
             cancelAnimationFrame(animFrameRef.current);
@@ -350,8 +418,14 @@ export default definePlugin({
         },
     ],
 
+    stop() {
+        for (const entry of audioDownloads.values()) entry.controller.abort();
+        audioBlobCache.clear();
+        audioCacheBytes = 0;
+    },
+
     renderVisualizer(player: PlayerInstance) {
-        if (player.props.type !== "AUDIO") return null;
+        if (player.props.type !== "AUDIO" || !settings.store.oscilloscope && !settings.store.spectrograph) return null;
         return <Visualizer playerRef={player.mediaRef} src={player.props.src} key={player.props.src} />;
     },
 });

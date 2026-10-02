@@ -15,8 +15,13 @@ const CspErrorListeners = new Set<() => void>();
 
 document.addEventListener("securitypolicyviolation", ({ effectiveDirective, blockedURI }) => {
     if (!blockedURI || !cssRelevantDirectives.includes(effectiveDirective as any)) return;
+    if (CspBlockedUrls.has(blockedURI)) return;
 
     CspBlockedUrls.add(blockedURI);
+    if (CspBlockedUrls.size > 256) {
+        const oldest = CspBlockedUrls.values().next().value;
+        if (oldest !== undefined) CspBlockedUrls.delete(oldest);
+    }
 
     CspErrorListeners.forEach(listener => listener());
 });

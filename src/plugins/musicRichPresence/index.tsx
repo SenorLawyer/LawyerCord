@@ -47,7 +47,7 @@ export interface ScrobblerBackend {
     name: string,
     id: string,
 
-    fetchTrackData(username: string, apiKey?: string): Promise<TrackData | null>;
+    fetchTrackData(username: string, apiKey?: string, signal?: AbortSignal): Promise<TrackData | null>;
     getUserURL(username: string): string;
 }
 
@@ -69,8 +69,10 @@ const LASTFM_PLACEHOLDER_IMAGE_HASH = "2a96cbd8b46e442fc41c2b86b821562f";
 const logger = new Logger("MusicRichPresence");
 let active = false;
 let updateGeneration = 0;
+let updateController: AbortController | undefined;
 
-async function getApplicationAsset(key: string): Promise<string> {
+async function getApplicationAsset(key: string, signal?: AbortSignal): Promise<string> {
+    if (signal?.aborted) throw new DOMException("Music presence update canceled.", "AbortError");
     return (await ApplicationAssetUtils.fetchAssetIds(DISCORD_APP_ID, [key]))[0];
 }
 
@@ -242,6 +244,7 @@ export default definePlugin({
     },
 
     start() {
+        if (active) return;
         active = true;
         this.updatePresence();
         this.updateInterval = setInterval(() => { this.updatePresence(); }, 16000);
@@ -250,21 +253,40 @@ export default definePlugin({
     stop() {
         active = false;
         updateGeneration++;
+        updateController?.abort();
         clearInterval(this.updateInterval);
         clearListenBrainzCache();
         setActivity(null);
     },
 
     async updatePresence() {
-        if (!active) return;
+        if (!active || updateController) return;
+        const controller = updateController = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30_000);
         const generation = ++updateGeneration;
         const userId = AuthenticationStore.getId();
         try {
-            const activity = await this.getActivity();
-            if (active && generation === updateGeneration && userId === AuthenticationStore.getId())
+            const activity = await this.getActivity(controller.signal);
+            if (!controller.signal.aborted && active && generation === updateGeneration && userId === AuthenticationStore.getId())
                 setActivity(activity);
         } catch (error) {
-            logger.error("Failed to update music presence", error);
+            if (!controller.signal.aborted) logger.error("Failed to update music presence", error);
+        } finally {
+            clearTimeout(timeout);
+            updateController = undefined;
+        }
+    },
+
+    flux: {
+        LOGOUT() {
+            updateGeneration++;
+            updateController?.abort();
+            clearListenBrainzCache();
+            setActivity(null);
+        },
+        CONNECTION_OPEN() {
+            updateGeneration++;
+            updateController?.abort();
         }
     },
 
@@ -276,7 +298,7 @@ export default definePlugin({
             return "placeholder";
     },
 
-    async getActivity(): Promise<Activity | null> {
+    async getActivity(signal?: AbortSignal): Promise<Activity | null> {
         if (!settings.store.username)
             return null;
 
@@ -295,20 +317,20 @@ export default definePlugin({
 
         const scrobbler = settings.store.scrobblerBackend === "lastfm" ? LastFMScrobbler : ListenBrainzScrobbler;
 
-        const trackData = await scrobbler.fetchTrackData(settings.store.username, settings.store.apiKey || LASTFM_API_KEY);
-        if (!trackData) return null;
+        const trackData = await scrobbler.fetchTrackData(settings.store.username, settings.store.apiKey || LASTFM_API_KEY, signal);
+        if (!trackData || signal?.aborted) return null;
 
         const largeImage = this.getLargeImage(trackData);
         const assets: ActivityAssets = largeImage ?
             {
-                large_image: await getApplicationAsset(largeImage),
+                large_image: await getApplicationAsset(largeImage, signal),
                 large_text: trackData.album || undefined,
                 ...(settings.store.showLogo && {
-                    small_image: await getApplicationAsset(`${scrobbler.id}-small`),
+                    small_image: await getApplicationAsset(`${scrobbler.id}-small`, signal),
                     small_text: scrobbler.id
                 }),
             } : {
-                large_image: await getApplicationAsset(`${scrobbler.id}-large`),
+                large_image: await getApplicationAsset(`${scrobbler.id}-large`, signal),
                 large_text: trackData.album || undefined,
             };
 

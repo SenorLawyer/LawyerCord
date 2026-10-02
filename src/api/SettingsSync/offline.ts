@@ -150,7 +150,7 @@ function validateSettingTypes(settings: object, defaults: object) {
 export async function captureCloudImportState(syncDataStore = true) {
     const settings = JSON.stringify(VencordNative.settings.get());
     const quickCss = await VencordNative.quickCss.get();
-    const entries = syncDataStore ? await DataStore.entries<IDBValidKey, unknown>() : [];
+    const entries = syncDataStore ? await DataStore.entries<IDBValidKey, unknown>(undefined, key => !isLocalDataStoreKey(key)) : [];
     return {
         settings,
         quickCss,
@@ -250,7 +250,8 @@ export async function exportSettings({ syncDataStore = true, type = "all", minif
     let settings: object | undefined = type === "all" || type === "plugins" ? VencordNative.settings.get() : undefined;
     if (cloud && settings) settings = omitCloudSettings(settings);
     const quickCss = type === "all" || type === "css" ? await VencordNative.quickCss.get() : undefined;
-    let dataStore = syncDataStore && (type === "all" || type === "datastore") ? await DataStore.entries() : undefined;
+    let dataStore = syncDataStore && (type === "all" || type === "datastore")
+        ? await DataStore.entries(undefined, cloud ? key => !isLocalDataStoreKey(key) : undefined) : undefined;
     if (cloud && dataStore) dataStore = getCloudDataStoreEntries(dataStore);
     const serializedDataStore: unknown = dataStore ? JSON.parse(serializeDataStore(dataStore)) : undefined;
 

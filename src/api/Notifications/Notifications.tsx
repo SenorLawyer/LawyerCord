@@ -25,7 +25,7 @@ import type { Root } from "react-dom/client";
 import NotificationComponent from "./NotificationComponent";
 import { openNotificationLogModal, persistNotification } from "./notificationLog";
 
-const NotificationQueue = new Queue();
+const NotificationQueue = new Queue(100);
 
 let reactRoot: Root;
 let id = 42;

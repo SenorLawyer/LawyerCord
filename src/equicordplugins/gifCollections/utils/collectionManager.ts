@@ -140,18 +140,24 @@ export async function moveGifToCollection(gifId: string, fromName: string, toNam
     await saveCollections(collections);
 }
 
-export async function updateGif(gifId: string, updatedGif: Gif): Promise<void> {
-    const collections = [...cache_collections];
-    const collection = collections.find(c => c.gifs.some(g => g.id === gifId));
-    if (!collection) return void logger.warn("Collection not found");
-
-    const gifIndex = collection.gifs.findIndex(g => g.id === gifId);
-    if (gifIndex === -1) return void logger.warn("Gif not found");
-
-    collection.gifs = collection.gifs.map((g, i) => i === gifIndex ? updatedGif : g);
-    collection.lastUpdated = Date.now();
-
-    await saveCollections(collections);
+export async function updateGifUrls(ids: Set<string>, urls: Record<string, string>): Promise<boolean> {
+    let changed = false;
+    const collections = cache_collections.map(collection => {
+        let updated = false;
+        const gifs = collection.gifs.map(gif => {
+            if (!ids.has(gif.id)) return gif;
+            const src = urls[gif.src] ?? gif.src;
+            const url = urls[gif.url] ?? gif.url;
+            if (src === gif.src && url === gif.url) return gif;
+            updated = true;
+            return { ...gif, src, url };
+        });
+        if (!updated) return collection;
+        changed = true;
+        return { ...collection, gifs, lastUpdated: Date.now() };
+    });
+    if (changed) await saveCollections(collections);
+    return changed;
 }
 
 export function getItemCollectionNameFromId(id: string): string | undefined {

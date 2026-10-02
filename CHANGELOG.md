@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Changed
 
+- Remove full permission-table expansion from displayed user tags and skip permission computation for webhook and owner tags.
+
 - Stream bounded MessageLogger attachment downloads into contained temporary files, validate native URLs and extensions, and remove the directory existence race.
 
 - Remove unlimited serialized-message and search-query caches from MessageLoggerEnhanced, retain conversion only for the mounted log row and use the native array search.

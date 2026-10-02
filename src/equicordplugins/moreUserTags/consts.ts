@@ -11,7 +11,7 @@ import { GuildStore } from "@webpack/common";
 import { settings } from "./settings";
 import type { ITag } from "./types";
 
-export const isWebhook = (message: Message, user: User) => {
+export const isWebhook = (message: Message | undefined, user: User) => {
     const isFollowed = message?.type === 0 && !!message?.messageReference && !settings.store.showWebhookTagFully;
     return !!message?.webhookId && user.isNonUserBot() && !isFollowed;
 };

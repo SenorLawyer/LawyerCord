@@ -49,7 +49,6 @@ export const VALUE_BLOCKS = new Set(["create-object", "parse-json", "stringify-j
 export function executeValue(block: AutomationBlock, variables: Record<string, unknown>, now: number, random: () => number): unknown {
     const c = block.config;
     const input = resolveInput(c.input, variables, c.sourceVariable);
-    const text = template(c.value ?? "", variables);
     const list = () => { if (!Array.isArray(input)) throw new Error("Choose a list as the input."); return input as unknown[]; };
     const field = (value: unknown) => c.fieldPath ? readPath(value, c.fieldPath) : value;
     switch (block.type) {
@@ -81,7 +80,7 @@ export function executeValue(block: AutomationBlock, variables: Record<string, u
             if (!Array.isArray(second)) throw new Error("Choose a second list.");
             return [...list(), ...second];
         }
-        case "set-variable": return c.input ? input : text;
+        case "set-variable": return c.input ? input : template(c.value ?? "", variables);
         case "delete-variable": delete variables[c.sourceVariable ?? ""]; return undefined;
         case "math-variable": {
             const a = Number(input ?? 0), b = c.amount ?? 1;
@@ -99,8 +98,8 @@ export function executeValue(block: AutomationBlock, variables: Record<string, u
             switch (c.operation) {
                 case "uppercase": return value.toUpperCase();
                 case "lowercase": return value.toLowerCase();
-                case "append": return value + text;
-                case "prepend": return text + value;
+                case "append": return value + template(c.value ?? "", variables);
+                case "prepend": return template(c.value ?? "", variables) + value;
                 case "replace": return value.replaceAll(template(c.needle ?? "", variables), template(c.replacement ?? "", variables));
                 default: return value.trim();
             }
@@ -110,7 +109,16 @@ export function executeValue(block: AutomationBlock, variables: Record<string, u
         case "array-length": return Array.isArray(input) ? input.length : textValue(input).length;
         case "join-array": return list().map(item => textValue(field(item))).join(c.separator ?? "\n");
         case "json-value": return readPath(input, c.fieldPath ?? "");
-        case "filter-array": return list().filter(item => compare(field(item), template(c.compareValue ?? "", variables), c.operator));
+        case "filter-array": {
+            const items = list();
+            if (!items.length) return [];
+            const right = template(c.compareValue ?? "", variables);
+            if (c.operator === "regex") {
+                const pattern = new RegExp(right, "i");
+                return items.filter(item => pattern.test(textValue(field(item))));
+            }
+            return items.filter(item => compare(field(item), right, c.operator));
+        }
         case "split-text": return textValue(input).split(c.separator ?? "\n");
         case "regex-extract": {
             const match = new RegExp(template(c.matchText ?? "", variables), "i").exec(textValue(input));

@@ -30,7 +30,12 @@ if (!IS_VANILLA && !IS_EXTENSION) {
     app.whenReady().then(() => {
         const handleClientProtocol = (scheme: string) => {
             protocol.handle(scheme, ({ url: unsafeUrl }) => {
-                let url = decodeURI(unsafeUrl).slice(`${scheme}://`.length).replace(/\?v=\d+$/, "");
+                let url: string;
+                try {
+                    url = decodeURI(unsafeUrl).slice(`${scheme}://`.length).replace(/\?v=\d+$/, "");
+                } catch {
+                    return new Response(null, { status: 404 });
+                }
 
                 if (url.endsWith("/")) url = url.slice(0, -1);
 

@@ -14,9 +14,9 @@ import { Devs, EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
 import { Channel } from "@vencord/discord-types";
-import { Menu, openModal, Tooltip, useEffect, useState } from "@webpack/common";
+import { ChannelStore, lodash, Menu, MessageStore, openModal, Tooltip, UserStore, useStateFromStores } from "@webpack/common";
 
-import { Boo, clearChannelFromGhost, getBooCount, getGhostedChannels, loadClearedChannels, onBooCountChange } from "./Boo";
+import { Boo, clearChannelFromGhost, getGhostedChannels, GHOST_SETTINGS } from "./Boo";
 import { getChannelDisplayName, GhostedUsersModal } from "./GhostedUsersModal";
 import { IconGhost } from "./IconGhost";
 
@@ -67,22 +67,13 @@ export const settings = definePluginSettings({
 }).withPrivateSettings<{ clearedChannels?: Record<string, string>; }>();
 
 function BooIndicator() {
-    const [count, setCount] = useState(getBooCount());
-
-    useEffect(() => {
-        const unsubscribe = onBooCountChange(newCount => {
-            setCount(newCount);
-        });
-
-        return () => {
-            unsubscribe();
-        };
-    }, []);
-
-    if (!settings.store.showIndicator) return null;
+    const values = settings.use(GHOST_SETTINGS);
+    const ghostedChannels = useStateFromStores([ChannelStore, MessageStore, UserStore], () => values.showIndicator ? getGhostedChannels() : null,
+        GHOST_SETTINGS.map(key => values[key]), lodash.isEqual);
+    if (!ghostedChannels?.length) return null;
+    const count = ghostedChannels.length;
 
     const handleClick = () => {
-        const ghostedChannels = getGhostedChannels();
         openModal(modalProps => (
             <ErrorBoundary>
                 <GhostedUsersModal
@@ -95,10 +86,6 @@ function BooIndicator() {
     };
 
     const getTooltipText = () => {
-        const ghostedChannels = getGhostedChannels();
-        if (ghostedChannels.length === 0) {
-            return "No Ghosted Users";
-        }
         if (ghostedChannels.length <= 5) {
             return ghostedChannels
                 .map(id => getChannelDisplayName(id))
@@ -108,25 +95,20 @@ function BooIndicator() {
     };
 
     return (
-        <>
-            {settings.store.showIndicator && getGhostedChannels().length > 0 && (
-                <div id={cl("container")}>
-                    <Tooltip text={getTooltipText()} position="right">
-                        {({ onMouseEnter, onMouseLeave }) => (
-                            <div
-                                id={cl("container")}
-                                className={cl("clickable")}
-                                onMouseEnter={onMouseEnter}
-                                onMouseLeave={onMouseLeave}
-                                onClick={handleClick}
-                            >
-                                {count} <IconGhost fill="currentColor" />
-                            </div>
-                        )}
-                    </Tooltip>
-                </div>
-            )}
-        </>
+        <div id={cl("container")}>
+            <Tooltip text={getTooltipText()} position="right">
+                {({ onMouseEnter, onMouseLeave }) => (
+                    <div
+                        className={cl("clickable")}
+                        onMouseEnter={onMouseEnter}
+                        onMouseLeave={onMouseLeave}
+                        onClick={handleClick}
+                    >
+                        {count} <IconGhost fill="currentColor" />
+                    </div>
+                )}
+            </Tooltip>
+        </div>
     );
 }
 
@@ -186,7 +168,6 @@ export default definePlugin({
     },
 
     start() {
-        loadClearedChannels();
         addServerListElement(ServerListRenderPosition.Above, this.renderIndicator);
     },
 

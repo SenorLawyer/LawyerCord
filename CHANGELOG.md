@@ -2,9 +2,11 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
-## 3.1.2.0 - 2026-10-01 (Nightly)
+## 3.1.2.0 - 2026-10-02 (Nightly)
 
 ### Changed
+
+- Derive Ghosted icons and counters from current stores, include offscreen DMs, skip hidden counters and delete duplicated state and listeners.
 
 - Apply FullVCPFP avatar styles to the rendered call tile without mutating Discord props, and preserve USRBG styles in either patch order.
 - Preserve reply sends and prevent overlapping MessageBurst edits from overwriting each other's text.

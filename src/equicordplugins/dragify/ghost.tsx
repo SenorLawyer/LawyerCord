@@ -7,7 +7,7 @@
 import ErrorBoundary from "@components/ErrorBoundary";
 import { classNameFactory } from "@utils/css";
 import { classes } from "@utils/misc";
-import { createRoot, React, useEffect, useState, useStateFromStores, VoiceStateStore } from "@webpack/common";
+import { createRoot, React, useStateFromStores, VoiceStateStore } from "@webpack/common";
 
 export type GhostState = {
     visible: boolean;
@@ -46,6 +46,11 @@ function notifyGhost() {
     ghostListeners.forEach(listener => listener());
 }
 
+function subscribeGhost(listener: () => void) {
+    ghostListeners.add(listener);
+    return () => { ghostListeners.delete(listener); };
+}
+
 function setGhostState(next: Partial<GhostState>) {
     ghostState = { ...ghostState, ...next };
     notifyGhost();
@@ -58,9 +63,9 @@ export function isGhostVisible(): boolean {
 export function scheduleGhostPosition(x: number, y: number) {
     ghostPendingPos = { x, y };
     if (ghostRaf !== null) return;
-    setGhostState({ x, y });
     ghostRaf = requestAnimationFrame(() => {
-        if (ghostPendingPos) setGhostState({ x: ghostPendingPos.x, y: ghostPendingPos.y });
+        if (ghostPendingPos && (ghostPendingPos.x !== ghostState.x || ghostPendingPos.y !== ghostState.y))
+            setGhostState(ghostPendingPos);
         ghostPendingPos = null;
         ghostRaf = null;
     });
@@ -84,8 +89,8 @@ export function showGhost(next: Omit<GhostState, "visible" | "x" | "y">, positio
         clearTimeout(ghostHideTimer);
         ghostHideTimer = null;
     }
-    if (position) scheduleGhostPosition(position.x, position.y);
-    setGhostState({ ...next, visible: true, exiting: false });
+    ghostPendingPos = position ?? null;
+    setGhostState({ ...next, ...position, visible: true, exiting: false });
 }
 
 export function mountGhost() {
@@ -132,20 +137,14 @@ export function unmountGhost() {
 }
 
 const DragGhost = () => {
-    const [state, setState] = useState(ghostState);
-    useEffect(() => {
-        const listener = () => setState({ ...ghostState });
-        ghostListeners.add(listener);
-        return () => {
-            ghostListeners.delete(listener);
-        };
-    }, []);
+    const state = React.useSyncExternalStore(subscribeGhost, () => ghostState);
 
     const voiceState = useStateFromStores(
         [VoiceStateStore],
-        () => (state.kind === "user" && state.entityId
+        () => (state.visible && state.kind === "user" && state.entityId
             ? VoiceStateStore.getVoiceStateForUser(state.entityId)
-            : null)
+            : null),
+        [state.visible, state.kind, state.entityId]
     );
     const inVoice = voiceState?.channelId;
     const isMuted = voiceState && (voiceState.selfMute || voiceState.mute || voiceState.selfDeaf || voiceState.deaf);

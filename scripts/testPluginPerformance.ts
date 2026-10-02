@@ -20164,3 +20164,65 @@ test("translation helpers forward cancellation to their native request", async (
         assert.equal(cancellations, 1);
     }
 });
+
+
+test("SekaiStickers loads its editor on selection and discards stopped pending opens", async () => {
+    let imports = 0;
+    let fontLoads = 0;
+    let userId = "account";
+    let finish: () => void = () => {};
+    let render: (props: object) => { type: unknown; } | null = () => assert.fail("No pending modal factory.");
+    let opened: () => Promise<void> = async () => {};
+    const Modal = Symbol("Editor");
+    const React = { createElement: (type: unknown, props: object) => ({ type, props }) };
+    const { default: plugin } = loadSource("src/equicordplugins/sekaiStickers/index.tsx", {
+        "@api/ChatButtons": { ChatBarButton: "button" },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@utils/constants": { Devs: {} }, "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": { React, UserStore: { getCurrentUser: () => ({ id: userId }) },
+            openModalLazy: async (factory: () => Promise<typeof render>) => { await new Promise<void>(resolve => { finish = resolve; }); render = await factory(); },
+            openModal: () => assert.fail("Expected lazy editor loading.") },
+        "./Components/SekaiStickersModal": { get __esModule() { imports++; return true; }, default: Modal },
+        "./kanade.svg": { kanadeSvg: () => null },
+    }, { React, FontFace: class { load() { fontLoads++; return Promise.resolve(this); } }, document: { fonts: { add() {} } } });
+    await plugin.start();
+    assert.equal(imports, 0); assert.equal(fontLoads, 0);
+    const button = plugin.chatBarButton.render().type();
+    opened = button.props.onClick;
+    const pending = opened(); plugin.stop(); finish(); await pending;
+    assert.equal(render({}), null);
+    await plugin.start(); const live = opened(); finish(); await live;
+    const liveModal = render({}); assert.ok(liveModal); assert.equal(liveModal.type, Modal); assert.equal(imports, 1);
+    const replaced = opened(); userId = "other"; finish(); await replaced;
+    assert.equal(render({}), null);
+});
+
+test("SekaiStickers font loads belong to the open editor and cannot revive after close", async () => {
+    for (const closeEarly of [false, true]) {
+        const effects: Array<() => (() => void) | void> = [];
+        const faces: object[] = [];
+        const finishes: Array<() => void> = [];
+        const added = new Set<object>();
+        const updates: unknown[] = [];
+        class FontFaceFixture {
+            constructor() { faces.push(this); }
+            load() { return new Promise<this>(resolve => finishes.push(() => resolve(this))); }
+        }
+        const React = { createElement: () => null, useRef: () => ({ current: null }),
+            useState: (value: unknown) => [value, (next: unknown) => updates.push(next)], useEffect: (effect: typeof effects[number]) => effects.push(effect) };
+        const { default: Editor } = loadSource("src/equicordplugins/sekaiStickers/Components/SekaiStickersModal.tsx", {
+            "@components/Flex": {}, "@components/FormSwitch": {}, "@components/Heading": {},
+            "@equicordplugins/sekaiStickers/characters.json": { characters: Array.from({ length: 50 }, () => ({ defaultText: { x: 0, y: 0, r: 0, s: 47 } })) },
+            "@utils/Logger": { Logger: class { warn() {} } }, "@webpack/common": { React }, "./Canvas": {}, "./Picker": {},
+        }, { Image: class {}, FontFace: FontFaceFixture, document: { fonts: { add: (face: object) => added.add(face), delete: (face: object) => added.delete(face) } } });
+        Editor({ modalProps: {}, settings: { store: {} } });
+        const cleanup = effects[0](); assert.ok(typeof cleanup === "function"); assert.equal(faces.length, 2);
+        const initialUpdates = updates.length;
+        if (closeEarly) cleanup();
+        for (const finish of finishes) finish(); await setImmediate();
+        assert.equal(added.size, closeEarly ? 0 : 2);
+        assert.equal(updates.length, initialUpdates + (closeEarly ? 0 : 1));
+        if (!closeEarly) cleanup(); assert.equal(added.size, 0);
+    }
+});

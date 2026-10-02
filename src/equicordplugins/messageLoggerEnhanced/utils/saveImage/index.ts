@@ -20,7 +20,7 @@ import { MessageAttachment } from "@vencord/discord-types";
 
 import { Flogger, settings } from "../..";
 import { LoggedAttachment, LoggedMessage, LoggedMessageJSON } from "../../types";
-import { deleteImage, downloadAttachment, getImage, } from "./ImageManager";
+import { deleteImage, downloadAttachment, downloadLifetime, getImage, } from "./ImageManager";
 
 const MAX_ATTACHMENT_BLOB_URLS = 100;
 const ATTACHMENT_BLOB_URL_TTL = 10 * 60 * 1000;
@@ -106,8 +106,10 @@ export function isAttachmentGoodToCache(attachment: MessageAttachment, fileExten
 }
 
 export async function cacheMessageImages(message: LoggedMessage | LoggedMessageJSON) {
+    const { signal } = downloadLifetime;
     try {
         for (const attachment of message.attachments) {
+            if (signal.aborted) return;
             const fileExtension = getFileExtension(attachment.filename ?? attachment.url) ?? attachment?.content_type?.split("/")?.[1] ?? ".png";
 
             if (!isAttachmentGoodToCache(attachment, fileExtension)) {
@@ -129,6 +131,7 @@ export async function cacheMessageImages(message: LoggedMessage | LoggedMessageJ
             attachment.fileExtension = fileExtension;
 
             const path = await downloadAttachment(attachment);
+            if (signal.aborted) return;
 
             if (!path) {
                 Flogger.error("Failed to cache attachment", attachment);

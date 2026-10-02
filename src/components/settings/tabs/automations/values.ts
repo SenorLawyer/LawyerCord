@@ -5,6 +5,7 @@
  */
 
 import { type AutomationBlock, isRecord, type ValueInput } from "./model";
+import { evaluateRegex } from "./regex";
 
 export function readPath(value: unknown, path: string): unknown {
     if (!path) return value;
@@ -33,20 +34,20 @@ export function resolveInput(input: ValueInput | undefined, variables: Record<st
     return result;
 }
 
-export function compare(left: unknown, right: unknown, operator = "equals"): boolean {
+export function compare(left: unknown, right: unknown, operator = "equals", signal?: AbortSignal): boolean | Promise<boolean> {
     switch (operator) {
         case "not-equals": return textValue(left) !== textValue(right);
         case "contains": return textValue(left).includes(textValue(right));
         case "greater": return Number(left) > Number(right);
         case "less": return Number(left) < Number(right);
-        case "regex": return new RegExp(textValue(right), "i").test(textValue(left));
+        case "regex": return evaluateRegex(textValue(right), [textValue(left)], false, signal).then(result => result.matches[0]);
         default: return textValue(left) === textValue(right);
     }
 }
 
 export const VALUE_BLOCKS = new Set(["create-object", "parse-json", "stringify-json", "map-fields", "sort-array", "unique-array", "slice-array", "combine-arrays", "set-variable", "delete-variable", "math-variable", "text-variable", "random-number", "current-time", "array-length", "join-array", "json-value", "filter-array", "split-text", "regex-extract", "random-item"]);
 
-export function executeValue(block: AutomationBlock, variables: Record<string, unknown>, now: number, random: () => number): unknown {
+export function executeValue(block: AutomationBlock, variables: Record<string, unknown>, now: number, random: () => number, signal?: AbortSignal): unknown {
     const c = block.config;
     const input = resolveInput(c.input, variables, c.sourceVariable);
     const list = () => { if (!Array.isArray(input)) throw new Error("Choose a list as the input."); return input as unknown[]; };
@@ -114,15 +115,13 @@ export function executeValue(block: AutomationBlock, variables: Record<string, u
             if (!items.length) return [];
             const right = template(c.compareValue ?? "", variables);
             if (c.operator === "regex") {
-                const pattern = new RegExp(right, "i");
-                return items.filter(item => pattern.test(textValue(field(item))));
+                return evaluateRegex(right, items.map(item => textValue(field(item))), false, signal).then(result => items.filter((_item, index) => result.matches[index]));
             }
             return items.filter(item => compare(field(item), right, c.operator));
         }
         case "split-text": return textValue(input).split(c.separator ?? "\n");
         case "regex-extract": {
-            const match = new RegExp(template(c.matchText ?? "", variables), "i").exec(textValue(input));
-            return match ? match[1] ?? match[0] : "";
+            return evaluateRegex(template(c.matchText ?? "", variables), [textValue(input)], true, signal).then(result => result.text);
         }
         case "random-item": { const items = list(); return items[Math.floor(random() * items.length)]; }
         default: throw new Error("This block does not produce a local value.");

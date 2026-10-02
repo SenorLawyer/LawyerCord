@@ -22,13 +22,13 @@ async function load(before) {
 }
 const workflows = Array.from({ length: 2000 }, (_, i) => ({ id: `workflow-${i}`, enabled: true, trigger: { type: "message", authorId: `person-${i}` } }));
 const events = Array.from({ length: 5000 }, (_, i) => ({ type: "MESSAGE_CREATE", channelId: "channel", guildId: "server", authorId: `person-${i % workflows.length}`, content: "A message", self: false, bot: false, mention: false, fromEngine: false }));
-function measure(api) {
+async function measure(api) {
     const index = api.compileTriggers(workflows);
     const timings = [];
     for (let pass = 0; pass < 8; pass++) {
         let matches = 0;
         const start = performance.now();
-        for (const event of events) matches += api.matchTriggers(index, event).length;
+        for (const event of events) matches += (await api.matchTriggers(index, event)).length;
         const elapsed = performance.now() - start;
         assert.equal(matches, events.length);
         if (pass) timings.push(elapsed);
@@ -36,8 +36,8 @@ function measure(api) {
     timings.sort((a, b) => a - b);
     return { medianMs: timings[3], slowestMs: timings[6], matched: events.length };
 }
-const before = measure(await load(true));
-const after = measure(await load(false));
+const before = await measure(await load(true));
+const after = await measure(await load(false));
 const result = { baseline, workflows: workflows.length, events: events.length, before, after, speedup: before.medianMs / after.medianMs, scope: "Synthetic user-filtered trigger dispatch. Not Discord FPS or total CPU." };
 await mkdir("dist/automation-review", { recursive: true });
 await writeFile("dist/automation-review/trigger-performance.json", JSON.stringify(result, null, 2));

@@ -113,7 +113,9 @@ export async function uploadToS3(
     fileBlob: Blob,
     filename: string,
     native: PluginNative<typeof import("../native")> | null,
-    uploadRequest: UploadRequest
+    uploadRequest: UploadRequest,
+    readFile: () => Promise<ArrayBuffer> = () => fileBlob.arrayBuffer(),
+    check?: () => void
 ): Promise<string> {
     const {
         s3Endpoint,
@@ -132,8 +134,8 @@ export async function uploadToS3(
     }
 
     const endpoint = new URL(s3Endpoint);
-    if (!/^https?:$/.test(endpoint.protocol)) {
-        throw new Error("S3 endpoint must be a valid HTTP(S) URL");
+    if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password) {
+        throw new Error("S3 endpoint must be a valid HTTPS URL");
     }
 
     const extension = filename.includes(".") ? filename.slice(filename.lastIndexOf(".")) : "";
@@ -163,7 +165,8 @@ export async function uploadToS3(
 
     const now = new Date();
     const { amzDate, dateStamp } = getTimestampParts(now);
-    const payloadHash = await sha256Hex(await fileBlob.arrayBuffer());
+    const fileBuffer = await readFile();
+    const payloadHash = await sha256Hex(fileBuffer);
 
     const canonicalHeadersMap: Record<string, string> = {
         "content-type": fileBlob.type || "application/octet-stream",
@@ -220,8 +223,8 @@ export async function uploadToS3(
     }
 
     if (native) {
-        const arrayBuffer = await fileBlob.arrayBuffer();
-        const result = await native.uploadToS3(arrayBuffer, uploadUrl.toString(), requestHeaders);
+        check?.();
+        const result = await native.uploadToS3(fileBuffer, uploadUrl.toString(), requestHeaders);
         if (!result.success) {
             throw new Error(result.error || "Upload failed");
         }

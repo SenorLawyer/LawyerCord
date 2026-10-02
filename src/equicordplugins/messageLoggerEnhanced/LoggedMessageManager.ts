@@ -24,6 +24,9 @@ import { cacheMessageImages } from "./utils/saveImage";
 
 let lastCleanupTime = 0;
 const CLEANUP_COOLDOWN = 60 * 1000;
+let cleanupPromise: Promise<void> | undefined;
+let cleanupPending = false;
+let cleanupChannelId: string | undefined;
 
 export const addMessage = async (message: LoggedMessage | LoggedMessageJSON, status: DBMessageStatus, currentChannelId?: string) => {
     if (settings.store.saveImages && status === DBMessageStatus.DELETED)
@@ -32,28 +35,41 @@ export const addMessage = async (message: LoggedMessage | LoggedMessageJSON, sta
 
     await addMessageIDB(finalMessage, status);
 
-    if (settings.store.timeBasedCleanupMinutes > 0) {
-        const now = Date.now();
-        if (now - lastCleanupTime > CLEANUP_COOLDOWN) {
-            lastCleanupTime = now;
-            const cutoffTime = new Date(now - settings.store.timeBasedCleanupMinutes * 60 * 1000).toISOString();
-            const oldGuildMessages = await getOlderThanTimestampForGuildsIDB(cutoffTime, currentChannelId, settings.store.preserveCurrentChannel);
-
-            if (oldGuildMessages.length > 0) {
-                await deleteMessagesBulkIDB(oldGuildMessages.map(m => m.message_id));
-            }
-        }
-    }
-
-    if (settings.store.messageLimit > 0) {
-        const currentMessageCount = await db.count("messages");
-        if (currentMessageCount > settings.store.messageLimit) {
-            const messagesToDelete = currentMessageCount - settings.store.messageLimit;
-            if (messagesToDelete <= 0 || messagesToDelete >= settings.store.messageLimit) return;
-
-            const oldestMessages = await getOldestMessagesIDB(messagesToDelete);
-
-            await deleteMessagesBulkIDB(oldestMessages.map(m => m.message_id));
-        }
-    }
+    await cleanupMessages(currentChannelId);
 };
+
+export function cleanupMessages(currentChannelId?: string): Promise<void> {
+    cleanupPending = true;
+    cleanupChannelId = currentChannelId;
+    return cleanupPromise ??= (async () => {
+        await Promise.resolve();
+        try {
+            do {
+                cleanupPending = false;
+                const { timeBasedCleanupMinutes, preserveCurrentChannel, messageLimit } = settings.store;
+                if (timeBasedCleanupMinutes > 0) {
+                    const now = Date.now();
+                    if (now - lastCleanupTime > CLEANUP_COOLDOWN) {
+                        lastCleanupTime = now;
+                        const cutoffTime = new Date(now - timeBasedCleanupMinutes * 60 * 1000).toISOString();
+                        const oldGuildMessages = await getOlderThanTimestampForGuildsIDB(cutoffTime, cleanupChannelId, preserveCurrentChannel);
+
+                        if (oldGuildMessages.length > 0) {
+                            await deleteMessagesBulkIDB(oldGuildMessages.map(m => m.message_id));
+                        }
+                    }
+                }
+
+                if (messageLimit > 0) {
+                    const currentMessageCount = await db.count("messages");
+                    if (currentMessageCount > messageLimit) {
+                        const oldestMessages = await getOldestMessagesIDB(currentMessageCount - messageLimit);
+                        await deleteMessagesBulkIDB(oldestMessages.map(m => m.message_id));
+                    }
+                }
+            } while (cleanupPending);
+        } finally {
+            cleanupPromise = undefined;
+        }
+    })();
+}

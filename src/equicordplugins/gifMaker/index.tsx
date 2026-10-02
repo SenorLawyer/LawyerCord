@@ -27,6 +27,8 @@ import { collectCandidateUrls, ensureGifUrl, isLikelyVideoUrl, normalizeUrl, ord
 
 const cl = classNameFactory("vc-gifmaker-");
 const logger = new Logger("gifMaker");
+const jobs = new Set<AbortController>();
+let stopped = false;
 
 const settings = definePluginSettings({
     lastWidth: {
@@ -210,9 +212,6 @@ function GifMakerModal({ url, isVideo, sourceWidth, sourceHeight, ...props }: Re
     const [generating, setGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const previewRef = useRef<HTMLImageElement>(null);
-    const optionsRef = useRef(options);
-    const generationRef = useRef(0);
-    optionsRef.current = options;
 
     const patch = (partial: Partial<GifMakerOptions>) => {
         setOptions(prev => {
@@ -229,55 +228,62 @@ function GifMakerModal({ url, isVideo, sourceWidth, sourceHeight, ...props }: Re
     };
 
     useEffect(() => {
+        if (stopped) return;
         if (sourceWidth && sourceHeight) {
             const [w, h] = resolveInitialSize(sourceWidth, sourceHeight);
             setOptions(prev => ({ ...prev, width: w, height: h }));
             return;
         }
-        if (isVideo) {
-            loadVideo(url).then(v => {
-                const [w, h] = resolveInitialSize(v.videoWidth, v.videoHeight);
+        const controller = new AbortController();
+        jobs.add(controller);
+        const { signal } = controller;
+        const media = isVideo ? loadVideo(url, signal) : loadImage(url, signal);
+        media.then(element => {
+            if (!signal.aborted) {
+                const [w, h] = "videoWidth" in element
+                    ? resolveInitialSize(element.videoWidth, element.videoHeight)
+                    : resolveInitialSize(element.naturalWidth, element.naturalHeight);
                 setOptions(prev => ({ ...prev, width: w, height: h }));
-                cleanupBlobUrl(v);
-                v.remove();
-            }).catch(err => logger.error("auto-detect video failed", err));
-            return;
-        }
-        loadImage(url).then(img => {
-            const [w, h] = resolveInitialSize(img.naturalWidth, img.naturalHeight);
-            setOptions(prev => ({ ...prev, width: w, height: h }));
-            cleanupBlobUrl(img);
-        }).catch(err => logger.error("auto-detect image failed", err));
-    }, [sourceWidth, sourceHeight]);
+            }
+            cleanupBlobUrl(element);
+        }).catch(err => {
+            if (!signal.aborted) logger.error("Could not detect media dimensions.", err);
+        });
+        return () => { jobs.delete(controller); controller.abort(); };
+    }, [url, isVideo, sourceWidth, sourceHeight]);
 
     useEffect(() => {
+        if (stopped) return;
+        const controller = new AbortController();
+        jobs.add(controller);
+        const { signal } = controller;
+        setGifBlob(null);
+        setGenerating(true);
         const timer = setTimeout(() => {
-            const gen = ++generationRef.current;
             setGenerating(true);
-
-            const { current } = optionsRef;
-            createGif(url, isVideo, current).then(blob => {
-                if (gen !== generationRef.current) {
-                    URL.revokeObjectURL(URL.createObjectURL(blob));
-                    return;
-                }
+            createGif(url, isVideo, options, signal).then(blob => {
+                if (signal.aborted) return;
                 setError(null);
                 setGifBlob(blob);
-                setPreviewUrl(prev => {
-                    if (prev) URL.revokeObjectURL(prev);
-                    return URL.createObjectURL(blob);
-                });
+                setPreviewUrl(URL.createObjectURL(blob));
                 setGenerating(false);
             }).catch((err: unknown) => {
-                if (gen !== generationRef.current) return;
+                if (signal.aborted) return;
                 logger.error("GIF generation failed", err);
                 setError(err instanceof Error ? err.message : String(err));
                 setGenerating(false);
             });
         }, 300);
+        return () => {
+            clearTimeout(timer);
+            jobs.delete(controller);
+            controller.abort();
+        };
+    }, [url, isVideo, options.captionMode, options.captionText, options.captionSize, options.fontFamily, options.bubbleTipX, options.bubbleTipY, options.bubbleTipBase, options.width, options.height]);
 
-        return () => clearTimeout(timer);
-    }, [JSON.stringify(options.captionMode), options.captionText, options.captionSize, options.fontFamily, options.bubbleTipX, options.bubbleTipY, options.bubbleTipBase, options.width, options.height]);
+    useEffect(() => () => {
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+    }, [previewUrl]);
 
     const handlePreviewClick = (e: React.MouseEvent<HTMLImageElement>) => {
         if (options.captionMode !== "speechbubble") return;
@@ -291,12 +297,12 @@ function GifMakerModal({ url, isVideo, sourceWidth, sourceHeight, ...props }: Re
     };
 
     const handleExport = () => {
-        if (!gifBlob) return;
+        if (!gifBlob || stopped) return;
         saveFile(new File([gifBlob], "export.gif", { type: "image/gif" }));
     };
 
     const handleSend = () => {
-        if (!gifBlob) return;
+        if (!gifBlob || stopped) return;
 
         const channel = getCurrentChannel();
         if (!channel) return;
@@ -489,7 +495,14 @@ export default definePlugin({
     },
 
     start() {
+        stopped = false;
         void fetchAllGoogleFonts();
+    },
+
+    stop() {
+        stopped = true;
+        for (const job of jobs) job.abort();
+        jobs.clear();
     },
 
     gifPickerContextMenu(instance, _e: React.MouseEvent) {

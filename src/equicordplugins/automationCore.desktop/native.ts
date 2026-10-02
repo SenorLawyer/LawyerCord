@@ -9,7 +9,7 @@ import { DATA_DIR } from "@main/utils/constants";
 import { spawn } from "child_process";
 import { randomUUID } from "crypto";
 import { type IpcMainInvokeEvent, safeStorage, shell } from "electron";
-import { mkdir, open, readdir, readFile, rename, stat, unlink, writeFile } from "fs/promises";
+import { mkdir, open, readdir, readFile, realpath, rename, stat, unlink, writeFile } from "fs/promises";
 import { homedir } from "os";
 import { join, resolve, sep } from "path";
 
@@ -165,7 +165,7 @@ export async function listOpenRouterModels(_event: IpcMainInvokeEvent, refresh?:
         return { success: true, models: modelCache.models };
     }
     try {
-        const response = await fetch(OPENROUTER_MODELS_URL, { headers: { Accept: "application/json" } });
+        const response = await fetch(OPENROUTER_MODELS_URL, { headers: { Accept: "application/json" }, redirect: "error", signal: AbortSignal.timeout(10_000) });
         if (!response.ok) return { success: false, error: `OpenRouter returned ${response.status} for its model list.` };
         const parsed: unknown = JSON.parse(await responseText(response));
         const data = typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>).data : null;
@@ -327,10 +327,10 @@ interface TrackedFile {
     offset: number;
     discarding?: boolean;
     session?: CodexSessionHeader;
+    turn?: CodexTurn;
 }
 
 const system = {
-    busy: false,
     lastError: "",
     events: [] as SystemEvent[],
     nextId: 1,
@@ -347,11 +347,10 @@ const system = {
     },
     codex: {
         files: new Map<string, TrackedFile>(),
-        turns: new Map<string, CodexTurn>(),
         last: null as CodexTurn | null,
         primed: false,
     },
-    gameCache: new Map<string, { game: RobloxGame; at: number; }>(),
+    gameCache: null as { game: RobloxGame; at: number; } | null,
 };
 
 function pushEvent(event: DistributiveOmit<SystemEvent, "id" | "at">): void {
@@ -454,8 +453,8 @@ async function fetchJson(url: string): Promise<unknown> {
 }
 
 async function fetchRobloxGame(universeId: string, placeId: string, jobId: string): Promise<RobloxGame> {
-    const cached = system.gameCache.get(universeId);
-    if (cached && Date.now() - cached.at < 10 * 60_000) return { ...cached.game, jobId };
+    const cached = system.gameCache;
+    if (cached?.game.universeId === universeId && Date.now() - cached.at < 10 * 60_000) return { ...cached.game, jobId };
     const fallback: RobloxGame = { placeId, universeId, jobId, name: `Place ${placeId}`, description: "", playing: 0, visits: 0, maxPlayers: 0, creator: "", genre: "", icon: "", url: `https://www.roblox.com/games/${placeId}` };
     try {
         const [games, icons] = await Promise.all([fetchJson(ROBLOX_GAMES_URL + universeId), fetchJson(ROBLOX_ICONS_URL + universeId).catch(() => null)]);
@@ -476,7 +475,7 @@ async function fetchRobloxGame(universeId: string, placeId: string, jobId: strin
             icon: str(record(first(record(icons).data)).imageUrl),
             url: `https://www.roblox.com/games/${rootPlace}`,
         };
-        system.gameCache.set(universeId, { game, at: Date.now() });
+        system.gameCache = { game, at: Date.now() };
         return game;
     } catch {
         return fallback;
@@ -599,12 +598,12 @@ async function scanCodex(): Promise<void> {
             if (parsed.kind === "session") { tracked.session = parsed; continue; }
             if (parsed.kind === "started") {
                 const turn = turnFor(parsed.turnId, tracked.session, parsed.startedAt);
-                system.codex.turns.set(parsed.turnId, turn);
+                tracked.turn = turn;
                 pushEvent({ type: "codex-start", codex: turn });
                 continue;
             }
-            const turn = system.codex.turns.get(parsed.turnId) ?? turnFor(parsed.turnId, tracked.session, Date.now());
-            system.codex.turns.delete(parsed.turnId);
+            const turn = tracked.turn?.turnId === parsed.turnId ? { ...tracked.turn } : turnFor(parsed.turnId, tracked.session, Date.now());
+            if (tracked.turn?.turnId === parsed.turnId) tracked.turn = undefined;
             turn.finishedAt = Date.now();
             turn.durationMs = parsed.kind === "aborted" ? parsed.durationMs : turn.finishedAt - turn.startedAt;
             turn.duration = formatDuration(turn.durationMs);
@@ -620,13 +619,15 @@ async function scanCodex(): Promise<void> {
         }
     }
     system.codex.primed = true;
-    for (const key of system.codex.files.keys()) if (!files.includes(key)) system.codex.files.delete(key);
+    const currentFiles = new Set(files);
+    for (const key of system.codex.files.keys()) if (!currentFiles.has(key)) system.codex.files.delete(key);
 }
 
+let systemScan: Promise<void> | undefined;
+
 async function scanSystem(types: string[]): Promise<void> {
-    if (system.busy) return;
-    system.busy = true;
-    try {
+    while (systemScan) await systemScan;
+    systemScan = (async () => {
         const scans = [
             ...(types.some(type => type.startsWith("roblox-")) ? [scanRoblox] : []),
             ...(types.some(type => type.startsWith("codex-")) ? [scanCodex] : []),
@@ -636,7 +637,8 @@ async function scanSystem(types: string[]): Promise<void> {
             try { await scan(); }
             catch (error) { system.lastError = error instanceof Error ? error.message : String(error); }
         }
-    } finally { system.busy = false; }
+    })();
+    try { await systemScan; } finally { systemScan = undefined; }
 }
 
 export async function pollSystemEvents(_event: IpcMainInvokeEvent, after: unknown, requested: unknown): Promise<{ events: SystemEvent[]; cursor: number; }> {
@@ -722,20 +724,20 @@ export async function readTextFile(_event: IpcMainInvokeEvent, input: unknown): 
     const value = record(input);
     const requested = str(value.path).trim();
     if (!requested) return { success: false, error: "Choose a file to read." };
-    const target = resolve(requested);
-    const root = resolve(HOME);
-    const inside = process.platform === "win32" ? target.toLowerCase() === root.toLowerCase() || target.toLowerCase().startsWith(root.toLowerCase() + sep) : target === root || target.startsWith(root + sep);
-    if (!inside) return { success: false, error: "Only files inside your user folder can be read." };
     const maxBytes = Math.min(2_000_000, Math.max(1, Math.trunc(num(value.maxBytes) || 200_000)));
     try {
+        const target = await realpath(resolve(requested));
+        const root = await realpath(HOME);
+        const inside = process.platform === "win32" ? target.toLowerCase() === root.toLowerCase() || target.toLowerCase().startsWith(root.toLowerCase() + sep) : target === root || target.startsWith(root + sep);
+        if (!inside) return { success: false, error: "Only files inside your user folder can be read." };
         const info = await stat(target);
         if (!info.isFile()) return { success: false, error: "That path is not a file." };
         const handle = await open(target, "r");
         try {
             const length = Math.min(info.size, maxBytes);
             const buffer = Buffer.alloc(length);
-            await handle.read(buffer, 0, length, 0);
-            return { success: true, text: buffer.toString("utf8") };
+            const { bytesRead } = await handle.read(buffer, 0, length, 0);
+            return { success: true, text: buffer.subarray(0, bytesRead).toString("utf8") };
         } finally {
             await handle.close();
         }

@@ -6,6 +6,7 @@
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -18,9 +19,15 @@ interface DownloadResult { error: string | null; path: string | null; }
 interface NativeApi {
     downloadAttachment(event: object, attachment: unknown): Promise<DownloadResult>;
     updateAllowedExtensions(event: object, extensions: unknown): Promise<void>;
+    cancelNativeAttachmentDownloads(event: object): void;
+    init(event: object): Promise<void>;
+    initDirs(): Promise<void>;
+    getImageNative(event: object, id: string): Promise<Uint8Array | null>;
+    deleteFileNative(event: object, id: string): Promise<void>;
 }
 
 async function fixture(t: { after(callback: () => Promise<void>): void; }) {
+    const event = { sender: Object.assign(new EventEmitter(), { id: 1 }) };
     const root = await fs.mkdtemp(path.join(tmpdir(), "lawyercord-attachment-test-"));
     t.after(() => fs.rm(root, { recursive: true, force: true }));
     const settings = { imageCacheDir: root, attachmentFileExtensions: "png" };
@@ -42,7 +49,7 @@ async function fixture(t: { after(callback: () => Promise<void>): void; }) {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
     });
     const api: NativeApi = runInNewContext(`${outputText}\nexports;`, {
-        exports: {}, URL, AbortSignal, Buffer, console: { error() {} },
+        exports: {}, URL, AbortController, AbortSignal, Buffer, console: { error() {} },
         require: (name: string) => { assert.ok(name in mocks, name); return mocks[name]; },
         fetch: async (url: URL | string, options: RequestInit = {}) => {
             requests.push({ url: String(url), options });
@@ -54,9 +61,9 @@ async function fixture(t: { after(callback: () => Promise<void>): void; }) {
     });
     const attachment = { id: "123456789012345678", fileExtension: ".png",
         url: "https://media.discordapp.net/attachments/1/image.png", oldUrl: "https://cdn.discordapp.com/attachments/1/image.png" };
-    return { root, api, attachment, settings, requests, fullReads: () => fullReads,
+    return { root, api, attachment, settings, requests, event, fullReads: () => fullReads,
         respond: (callback: () => Response) => { responder = callback; },
-        download: (overrides = {}) => api.downloadAttachment({}, { ...attachment, ...overrides }) };
+        download: (overrides = {}) => api.downloadAttachment(event, { ...attachment, ...overrides }) };
 }
 
 test("native log attachments stream to a contained canonical filename without whole-body buffers", async t => {
@@ -72,6 +79,77 @@ test("native log attachments stream to a contained canonical filename without wh
     assert.equal(f.requests[0].options.redirect, "error");
     assert.ok(f.requests[0].options.signal instanceof AbortSignal);
     assert.equal((await fs.readdir(f.root)).filter(name => name.endsWith(".tmp")).length, 0);
+});
+
+test("Native attachment requests coalesce and cancellation prevents late publication", async t => {
+    const f = await fixture(t);
+    let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
+    f.respond(() => new Response(new ReadableStream<Uint8Array>({ start(controller) { stream = controller; } })));
+    const first = f.download();
+    const second = f.download();
+    assert.equal(first, second);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    f.api.cancelNativeAttachmentDownloads(f.event);
+    assert.ok(stream);
+    stream.enqueue(new Uint8Array([1, 2, 3]));
+    stream.close();
+    assert.ok((await first).error);
+    assert.equal(f.requests.length, 1);
+    assert.deepEqual(await fs.readdir(f.root), []);
+    assert.equal(f.event.sender.listenerCount("destroyed"), 0);
+});
+
+test("Native cache rescans replace directory entries and deletion removes cached IDs", async t => {
+    const f = await fixture(t);
+    const old = path.join(f.root, "old");
+    const next = path.join(f.root, "next");
+    await fs.mkdir(old);
+    await fs.mkdir(next);
+    await fs.writeFile(path.join(old, "1.png"), "old");
+    await fs.writeFile(path.join(next, "2.png"), "new");
+    f.settings.imageCacheDir = old;
+    await f.api.initDirs();
+    await f.api.init(f.event);
+    assert.ok(await f.api.getImageNative(f.event, "1"));
+    f.settings.imageCacheDir = next;
+    await f.api.initDirs();
+    await f.api.init(f.event);
+    assert.equal(await f.api.getImageNative(f.event, "1"), null);
+    await f.api.deleteFileNative(f.event, "2");
+    await f.api.deleteFileNative(f.event, "2");
+    assert.equal(await f.api.getImageNative(f.event, "2"), null);
+});
+
+test("Native cached attachment reads reject oversized disk files and nonfiles", async t => {
+    const f = await fixture(t);
+    await fs.writeFile(path.join(f.root, "1.png"), new Uint8Array(101));
+    await fs.mkdir(path.join(f.root, "2.png"));
+    await fs.writeFile(path.join(f.root, "3.png"), new Uint8Array([1, 2, 3]));
+    await f.api.init(f.event);
+    assert.equal(await f.api.getImageNative(f.event, "1"), null);
+    assert.equal(await f.api.getImageNative(f.event, "2"), null);
+    assert.deepEqual(await f.api.getImageNative(f.event, "3"), Buffer.from([1, 2, 3]));
+});
+
+test("Native cached attachment scans reject symbolic links outside the cache", async t => {
+    const f = await fixture(t);
+    const cache = path.join(f.root, "cache");
+    const outside = path.join(f.root, "outside.png");
+    await fs.mkdir(cache);
+    await fs.writeFile(outside, "outside");
+    try {
+        await fs.symlink(outside, path.join(cache, "1.png"), "file");
+    } catch (error) {
+        if (error && typeof error === "object" && "code" in error && error.code === "EPERM") {
+            t.skip("Creating file symlinks requires Windows developer mode or administrator privileges.");
+            return;
+        }
+        throw error;
+    }
+    f.settings.imageCacheDir = cache;
+    await f.api.initDirs();
+    await f.api.init(f.event);
+    assert.equal(await f.api.getImageNative(f.event, "1"), null);
 });
 
 test("native log attachments reject path tokens and untrusted destinations before downloading", async t => {

@@ -23,6 +23,7 @@ export interface BlockResult {
 }
 
 export interface RunEvent {
+    automationName?: string;
     usage?: string;
     inputPreview?: string;
     blockLabel?: string;
@@ -43,6 +44,7 @@ export interface RuntimeEnvironment {
     external(block: AutomationBlock, context: RunContext): Promise<BlockResult>;
     persistent(workflowId: string, operation: string, key: string, value: unknown, signal: AbortSignal): Promise<unknown>;
     workflows(): Automation[];
+    snapshot?(workflow: Automation): Automation;
     trace(event: RunEvent): void;
 }
 
@@ -117,7 +119,7 @@ async function run(workflow: Automation, variables: Record<string, unknown>, env
         if (!block) throw new Error("A connection points to a missing block.");
         const started = env.now();
         if (isRecord(variables.blocks)) delete variables.blocks[block.id];
-        const emit = (event: Omit<RunEvent, "runId" | "workflowId" | "blockId">) => env.trace({ ...event, runId: context.runId, workflowId: workflow.id, blockId: block.id, blockLabel: block.type });
+        const emit = (event: Omit<RunEvent, "runId" | "workflowId" | "blockId">) => env.trace({ ...event, runId: context.runId, workflowId: workflow.id, automationName: workflow.name, blockId: block.id, blockLabel: block.type });
         let port: AutomationPort = "next";
         let targets: string[] | undefined;
         let value: unknown;
@@ -126,10 +128,13 @@ async function run(workflow: Automation, variables: Record<string, unknown>, env
             const c = block.config;
             const input = () => resolveInput(c.input, variables, c.sourceVariable);
             emit({ status: "running", message: "Block started.", inputPreview: textValue(input()).slice(0, 2000) });
-            if (VALUE_BLOCKS.has(block.type)) value = executeValue(block, variables, env.now(), env.random);
+            if (VALUE_BLOCKS.has(block.type)) {
+                value = executeValue(block, variables, env.now(), env.random, context.signal);
+                if (block.type === "regex-extract" || block.type === "filter-array" && c.operator === "regex") value = await value;
+            }
             else if (block.type === "condition") {
                 const left = c.input ? input() : c.sourceVariable ? (c.sourceVariable.includes("{{") ? template(c.sourceVariable, variables) : resolveInput({ kind: "reference", value: c.sourceVariable }, variables)) : c.value ? template(c.value, variables) : variables.lastMessage;
-                port = compare(!c.input && !c.sourceVariable && isRecord(left) ? left.content : left, template(c.compareValue ?? "", variables), c.operator) ? "next" : "alternate";
+                port = await compare(!c.input && !c.sourceVariable && isRecord(left) ? left.content : left, template(c.compareValue ?? "", variables), c.operator, context.signal) ? "next" : "alternate";
             } else if (block.type === "chance") port = env.random() * 100 < (c.chancePercent ?? 50) ? "next" : "alternate";
             else if (block.type === "switch") {
                 const match = c.cases?.find(item => template(item.value, variables) === textValue(input()));
@@ -161,7 +166,7 @@ async function run(workflow: Automation, variables: Record<string, unknown>, env
             } else if (block.type === "call-workflow") {
                 const child = env.workflows().find(item => item.id === c.workflowId);
                 if (!child) throw new Error("The called workflow no longer exists.");
-                value = await run(structuredClone(child), { input: input() }, env, options, budget, [...callers, workflow.id], dryValues);
+                value = await run(env.snapshot ? env.snapshot(child) : Object.freeze(structuredClone(child)), { input: input() }, env, options, budget, [...callers, workflow.id], dryValues);
             } else if (block.type === "delay" || block.type === "wait-until") {
                 const when = template(c.value ?? "", variables);
                 const duration = block.type === "delay" ? (c.durationSeconds ?? 1) * 1000 : (/^\d+$/.test(when) ? Number(when) : Date.parse(when)) - env.now();

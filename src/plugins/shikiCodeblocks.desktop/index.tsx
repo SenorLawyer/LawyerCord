@@ -18,8 +18,9 @@
 
 import "./shiki.css";
 
-import { enableStyle } from "@api/Styles";
+import { disableStyle, enableStyle } from "@api/Styles";
 import { Devs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import definePlugin, { ReporterTestable } from "@utils/types";
 import previewExampleText from "file://previewExample.tsx";
 
@@ -28,6 +29,8 @@ import { HighlighterContainer } from "./components/Highlighter";
 import deviconStyle from "./devicon.css?managed";
 import { settings } from "./settings";
 import { DeviconSetting } from "./types";
+
+const logger = new Logger("ShikiCodeblocks");
 
 export default definePlugin({
     name: "ShikiCodeblocks",
@@ -58,10 +61,13 @@ export default definePlugin({
         if (settings.store.useDevIcon !== DeviconSetting.Disabled)
             enableStyle(deviconStyle);
 
-        await shiki.init(settings.store.customTheme || settings.store.theme);
+        await shiki.init(settings.store.customTheme || settings.store.theme).catch(error => {
+            logger.error("Could not start the code highlighter.", error);
+        });
     },
     stop: () => {
         shiki.destroy();
+        disableStyle(deviconStyle);
     },
 
     settingsAboutComponent: () => <HighlighterContainer lang="tsx" content={previewExampleText} isPreview />,

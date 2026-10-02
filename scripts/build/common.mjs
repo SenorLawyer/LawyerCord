@@ -290,6 +290,7 @@ export const fileUrlPlugin = {
                 } else if (/[mc]?[jt]sx?$/.test(path)) {
                     const res = await esbuild.build({
                         entryPoints: [path],
+                        bundle: searchParams.has("bundle"),
                         write: false,
                         minify: true
                     });

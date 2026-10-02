@@ -103,7 +103,7 @@ if (storageTest) {
     assert.equal(globals.data.get("LawyerCord_automations_v2").systemEnabled, false);
     await api.replaceAutomations([]);
     await api.setAutomationSystemEnabled(true);
-    assert.equal(globals.handlers.size, 0);
+    assert.deepEqual([...globals.handlers.keys()].sort(), ["CONNECTION_OPEN", "LOGOUT"]);
     await api.replaceAutomations([legacy]);
     assert.equal(globals.handlers.get("MESSAGE_CREATE").size, 1);
     const waiting = fixture(2, "wait-reply");

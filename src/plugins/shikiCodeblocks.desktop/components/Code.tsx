@@ -18,7 +18,8 @@
 
 import { cl, hljs } from "@plugins/shikiCodeblocks.desktop/utils/misc";
 import type { IThemedToken } from "@vap/shiki";
-import { JSX } from "react";
+import { useMemo } from "@webpack/common";
+import type { JSX } from "react";
 
 import { ThemeBase } from "./Highlighter";
 
@@ -37,17 +38,20 @@ export const Code = ({
     content,
     tokens,
 }: CodeProps) => {
-    let lines!: JSX.Element[];
+    const highlighted = useMemo(() => {
+        if (!useHljs || !lang || !hljs.getLanguage(lang)) return null;
+        try {
+            return hljs.highlight(content, { language: lang, ignoreIllegals: true }).value;
+        } catch {
+            return null;
+        }
+    }, [useHljs, lang, content]);
+    let lines: JSX.Element[];
 
     if (useHljs) {
-        try {
-            const { value: hljsHtml } = hljs.highlight(content, { language: lang!, ignoreIllegals: true });
-            lines = hljsHtml
-                .split("\n")
-                .map((line, i) => <span key={i} dangerouslySetInnerHTML={{ __html: line }} />);
-        } catch {
-            lines = content.split("\n").map((line, idx) => <span key={idx}>{line}</span>);
-        }
+        lines = highlighted === null
+            ? content.split("\n").map((line, idx) => <span key={idx}>{line}</span>)
+            : highlighted.split("\n").map((line, i) => <span key={i} dangerouslySetInnerHTML={{ __html: line }} />);
     } else {
         const renderTokens =
             tokens ??

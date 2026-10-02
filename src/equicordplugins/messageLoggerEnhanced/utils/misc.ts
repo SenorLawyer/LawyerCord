@@ -110,17 +110,21 @@ export function getNative(): PluginNative<typeof import("../native")> {
             getSettings: async () => ({ imageCacheDir: DEFAULT_IMAGE_CACHE_DIR, logsDir: "", attachmentFileExtensions: DEFAULT_ATTACHMENT_FILE_EXTENSIONS }),
             init: async () => { },
             initDirs: async () => { },
-            getImageNative: async (x: string) => new Uint8Array(0),
+            getImageNative: async () => new Uint8Array(0),
             messageLoggerEnhancedUniqueIdThingyIdkMan: async () => { },
             showItemInFolder: async () => { },
             chooseFile: async () => "",
             downloadAttachment: async () => ({ error: "web", path: null }),
+            cancelNativeAttachmentDownloads: async () => { },
             startNativeLogExport: async () => "" as any,
             finishNativeLogExport: async () => { },
+            cancelNativeLogExport: async () => { },
+            cancelNativeLogExports: async () => { },
             writeNativeLogChunk: async () => { },
             startNativeLogImport: async () => "" as any,
             readNativeLogChunk: async () => null,
-            closeNativeLogImport: async () => { }
+            closeNativeLogImport: async () => { },
+            closeNativeLogImports: async () => { }
         } satisfies PluginNative<typeof import("../native")>;
 
         return Native;

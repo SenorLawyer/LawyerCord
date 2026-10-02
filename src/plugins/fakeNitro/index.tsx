@@ -19,7 +19,8 @@
 import { addMessagePreEditListener, addMessagePreSendListener, removeMessagePreEditListener, removeMessagePreSendListener } from "@api/MessageEvents";
 import { definePluginSettings } from "@api/Settings";
 import { Paragraph } from "@components/Paragraph";
-import { ApngBlendOp, ApngDisposeOp, parseAPNG } from "@utils/apng";
+import { readResponseBody } from "@equicordplugins/fileUpload/request";
+import { convertApngToGif } from "@equicordplugins/fileUpload/utils/apngToGif";
 import { Devs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import { isObject } from "@utils/misc";
@@ -27,9 +28,11 @@ import definePlugin, { OptionType } from "@utils/types";
 import type { Emoji, Message, RenderModalProps, Sticker } from "@vencord/discord-types";
 import { StickerFormatType } from "@vencord/discord-types/enums";
 import { findByCodeLazy, findByPropsLazy, proxyLazyWebpack } from "@webpack";
-import { ChannelStore, ConfirmModal, DraftType, EmojiStore, FluxDispatcher, GuildMemberStore, IconUtils, lodash, openModal, OverridePremiumTypeStore, Parser, PermissionsBits, PermissionStore, StickersStore, UploadHandler, UserSettingsActionCreators, UserSettingsProtoStore } from "@webpack/common";
-import { applyPalette, GIFEncoder, quantize } from "gifenc";
+import { ChannelStore, ConfirmModal, DraftType, EmojiStore, FluxDispatcher, GuildMemberStore, IconUtils, lodash, openModal, OverridePremiumTypeStore, Parser, PermissionsBits, PermissionStore, showToast, StickersStore, Toasts, UploadHandler, UserSettingsActionCreators, UserSettingsProtoStore,UserStore } from "@webpack/common";
 import type { ReactElement, ReactNode } from "react";
+
+const stickerJobs = new Set<AbortController>();
+let stopped = false;
 
 const BINARY_READ_OPTIONS = findByPropsLazy("readerFactory");
 
@@ -770,60 +773,42 @@ export default definePlugin({
     },
 
     async sendAnimatedSticker(stickerLink: string, stickerId: string, channelId: string) {
-
-        const { frames, width, height } = await fetch(stickerLink)
-            .then(res => res.arrayBuffer())
-            .then(parseAPNG);
-
-        const gif = GIFEncoder();
-        const resolution = settings.store.stickerSize;
-
-        const canvas = document.createElement("canvas");
-        canvas.width = resolution;
-        canvas.height = resolution;
-
-        const ctx = canvas.getContext("2d", {
-            willReadFrequently: true
-        })!;
-
-        const scale = resolution / Math.max(width, height);
-        ctx.scale(scale, scale);
-
-        let previousFrameData: ImageData;
-
-        for (const frame of frames) {
-            const { left, top, width, height, img, delay, blendOp, disposeOp } = frame;
-
-            previousFrameData = ctx.getImageData(left, top, width, height);
-
-            if (blendOp === ApngBlendOp.SOURCE) {
-                ctx.clearRect(left, top, width, height);
-            }
-
-            ctx.drawImage(img, left, top, width, height);
-
-            const { data } = ctx.getImageData(0, 0, resolution, resolution);
-
-            const palette = quantize(data, 256);
-            const index = applyPalette(data, palette);
-
-            gif.writeFrame(index, resolution, resolution, {
-                transparent: true,
-                palette,
-                delay
-            });
-
-            if (disposeOp === ApngDisposeOp.BACKGROUND) {
-                ctx.clearRect(left, top, width, height);
-            } else if (disposeOp === ApngDisposeOp.PREVIOUS) {
-                ctx.putImageData(previousFrameData, left, top);
-            }
+        if (stopped) return;
+        if (stickerJobs.size) {
+            showToast("A sticker is already being converted. Try again when it finishes.", Toasts.Type.FAILURE);
+            return;
         }
+        const controller = new AbortController();
+        const { signal } = controller;
+        const userId = UserStore.getCurrentUser()?.id;
+        stickerJobs.add(controller);
+        const timeout = setTimeout(() => {
+            showToast("Sticker conversion took too long. Try a smaller sticker.", Toasts.Type.FAILURE);
+            controller.abort();
+        }, 120_000);
+        try {
+            const url = new URL(stickerLink);
+            if (url.protocol !== "https:" || url.hostname !== "media.discordapp.net" || url.port || url.username || url.password)
+                throw new Error("Invalid sticker URL.");
+            const response = await fetch(url, { signal, redirect: "error" });
+            if (!response.ok) throw new Error("Could not download the sticker.");
+            const input = await readResponseBody(response, 50 * 1024 * 1024, signal);
+            const output = await convertApngToGif(input, signal, settings.store.stickerSize);
+            if (signal.aborted || stopped || UserStore.getCurrentUser()?.id !== userId) return;
+            if (!output) throw new Error("Could not convert the sticker. Try a smaller sticker size.");
+            const channel = ChannelStore.getChannel(channelId);
+            if (channel) UploadHandler.promptToUpload([new File([output], `${stickerId}.gif`, { type: "image/gif" })], channel, DraftType.ChannelMessage);
+        } catch (error) {
+            if (!signal.aborted) showToast(error instanceof Error ? error.message : "Could not convert the sticker.", Toasts.Type.FAILURE);
+        } finally {
+            clearTimeout(timeout);
+            stickerJobs.delete(controller);
+        }
+    },
 
-        gif.finish();
-
-        const file = new File([gif.bytesView() as Uint8Array<ArrayBuffer>], `${stickerId}.gif`, { type: "image/gif" });
-        UploadHandler.promptToUpload([file], ChannelStore.getChannel(channelId), DraftType.ChannelMessage);
+    flux: {
+        CONNECTION_OPEN() { for (const job of stickerJobs) job.abort(); },
+        LOGOUT() { for (const job of stickerJobs) job.abort(); }
     },
 
     canUseEmote(e: Emoji, channelId: string) {
@@ -846,6 +831,7 @@ export default definePlugin({
     },
 
     start() {
+        stopped = false;
         const s = settings.store;
 
         if (!s.enableEmojiBypass && !s.enableStickerBypass) {
@@ -976,6 +962,9 @@ export default definePlugin({
     },
 
     stop() {
+        stopped = true;
+        for (const job of stickerJobs) job.abort();
+        stickerJobs.clear();
         removeMessagePreSendListener(this.preSend);
         removeMessagePreEditListener(this.preEdit);
     }

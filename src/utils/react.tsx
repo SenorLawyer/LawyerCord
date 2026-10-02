@@ -51,12 +51,12 @@ export const useIntersection = (intersectOnly = false): [
 
         if (!element) return;
 
-        if (checkIntersecting(element)) {
-            setIntersecting(true);
-            if (intersectOnly) return;
-        }
+        const visible = checkIntersecting(element);
+        setIntersecting(visible);
+        if (visible && intersectOnly) return;
 
-        observerRef.current = new IntersectionObserver(entries => {
+        const observer = new IntersectionObserver(entries => {
+            if (observerRef.current !== observer) return;
             for (const entry of entries) {
                 if (entry.target !== element) continue;
                 if (entry.isIntersecting && intersectOnly) {
@@ -68,7 +68,8 @@ export const useIntersection = (intersectOnly = false): [
                 }
             }
         });
-        observerRef.current.observe(element);
+        observerRef.current = observer;
+        observer.observe(element);
     }, [intersectOnly]);
 
     return [refCallback, isIntersecting];

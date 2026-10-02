@@ -32,10 +32,12 @@ function fixture(sourcePath = process.env.AUDIT_NAME_SOURCE ?? "src/plugins/show
         "@components/Heading": {}, "@plugins/ircColors": { __esModule: true, default: { name: "IRCColors" } },
         "@plugins/mentionAvatars": { __esModule: true, default: { name: "MentionAvatars" } },
         "@utils/constants": { Devs: {}, EquicordDevs: {} }, "@utils/index": { classNameFactory: () => () => "names" },
+        "@utils/lazy": { proxyLazy: (factory: () => unknown) => factory() },
         "@utils/types": { __esModule: true, default: (plugin: unknown) => plugin, OptionType: {} },
         "@webpack": { findStoreLazy: (name: string) => name === "UserStore" ? { getUser: (id: string) => users.get(id) } : { useReducedMotion: false },
             findByCodeLazy: (code: string) => code === "lastIndex;return" ? (name: string) => { wraps++; return name; } : () => ({}) },
-        "@webpack/common": { ChannelStore: { getChannel: () => ({ id: "channel", guild_id: "guild", isDM: () => false, isGroupDM: () => false }) },
+        "@webpack/common": { useStateFromStores: (_stores: unknown[], selector: () => unknown) => selector(),
+            zustandCreate: () => (selector: () => unknown) => selector(), ChannelStore: { getChannel: () => ({ id: "channel", guild_id: "guild", isDM: () => false, isGroupDM: () => false }) },
             GuildMemberStore: { getMember: (_guild: string, id: string) => ({ id, nick: users.get(id)?.nick }) },
             GuildStore: { getGuild: () => ({ premiumFeatures: { features: [] } }) },
             MessageStore: { getMessage: () => null }, RelationshipStore: { getNickname: () => friend }, StreamerModeStore: streamer }

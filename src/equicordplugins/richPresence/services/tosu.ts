@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { Logger } from "@utils/Logger";
 import { Activity } from "@vencord/discord-types";
 import { ActivityType } from "@vencord/discord-types/enums";
 import { FluxDispatcher } from "@webpack/common";
@@ -11,6 +12,7 @@ import { FluxDispatcher } from "@webpack/common";
 import { BanchoStatusEnum, GameState, Modes, TosuApi } from "../types/tosu";
 import { getCachedApplicationAsset } from "./assetCache";
 
+const logger = new Logger("RichPresenceTosu");
 const OSU_APP_ID = "367827983903490050";
 const OSU_STARDARD_SMALL_IMAGE = "373370493127884800";
 const OSU_MANIA_SMALL_IMAGE = "373370588703621136";
@@ -25,9 +27,10 @@ let wsReconnect: ReturnType<typeof setTimeout> | undefined;
 let shouldReconnect = false;
 let connectionGeneration = 0;
 let inMessageThrottle = false;
+let messageController: AbortController | undefined;
 let messageThrottleTimeout: ReturnType<typeof setTimeout> | undefined;
 let clearActivityTimeout: ReturnType<typeof setTimeout> | undefined;
-const beatmapCoverCache = new Map<number, Promise<string | undefined>>();
+const beatmapCoverCache = new Map<number, string>();
 
 function joinStateParts(...parts: string[]): string {
     let state = "";
@@ -63,7 +66,9 @@ function clearRuntimeTimeouts() {
 function throttledOnMessage(data: string, generation: number) {
     if (!shouldReconnect || generation !== connectionGeneration || inMessageThrottle) return;
 
-    void onMessage(data, generation);
+    messageController?.abort();
+    const controller = messageController = new AbortController();
+    void onMessage(data, generation, controller.signal).catch(error => { if (!controller.signal.aborted) logger.warn("Could not update osu presence", error); });
     inMessageThrottle = true;
 
     messageThrottleTimeout = setTimeout(() => {
@@ -74,7 +79,7 @@ function throttledOnMessage(data: string, generation: number) {
     if (clearActivityTimeout) clearTimeout(clearActivityTimeout);
     clearActivityTimeout = setTimeout(() => {
         clearActivityTimeout = undefined;
-        if (shouldReconnect && generation === connectionGeneration) clearActivity();
+        if (shouldReconnect && generation === connectionGeneration) { messageController?.abort(); clearActivity(); }
     }, MESSAGE_THROTTLE_MS * 2);
 }
 
@@ -89,38 +94,26 @@ function pruneOldestBeatmapCover() {
     if (oldestKey !== undefined) beatmapCoverCache.delete(oldestKey);
 }
 
-function getBeatmapCover(setId: number): Promise<string | undefined> {
+async function getBeatmapCover(setId: number, signal: AbortSignal): Promise<string | undefined> {
     const cachedCover = beatmapCoverCache.get(setId);
     if (cachedCover) return cachedCover;
 
-    if (beatmapCoverCache.size >= MAX_BEATMAP_COVER_CACHE_SIZE) pruneOldestBeatmapCover();
-
-    const coverPromise = (async () => {
+    try {
         const mapBg = await getAsset(`https://assets.ppy.sh/beatmaps/${setId}/covers/list@2x.jpg`);
-        if (!mapBg) return undefined;
-
-        const res = await fetch(mapBg.replace(/^mp:/, "https://media.discordapp.net/"), { method: "HEAD" });
-        if (!res.ok) {
-            beatmapCoverCache.delete(setId);
-            return undefined;
-        }
-
+        if (!mapBg || signal.aborted) return undefined;
+        const res = await fetch(mapBg.replace(/^mp:/, "https://media.discordapp.net/"), { method: "HEAD", signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]) });
+        if (!res.ok || signal.aborted) return undefined;
+        if (beatmapCoverCache.size >= MAX_BEATMAP_COVER_CACHE_SIZE) pruneOldestBeatmapCover();
+        beatmapCoverCache.set(setId, mapBg);
         return mapBg;
-    })().catch(() => {
-        beatmapCoverCache.delete(setId);
-        return undefined;
-    });
-
-    beatmapCoverCache.set(setId, coverPromise);
-    return coverPromise;
+    } catch { return undefined; }
 }
 
-async function onMessage(data: string, generation: number) {
+async function onMessage(data: string, generation: number, signal: AbortSignal) {
     if (!shouldReconnect || generation !== connectionGeneration) return;
 
     const json: TosuApi = JSON.parse(data);
-    // @ts-ignore
-    if (json.error) return clearActivity();
+    if ("error" in json && json.error) return clearActivity();
 
     const { state, session, profile, beatmap, play, resultsScreen } = json;
 
@@ -261,13 +254,14 @@ async function onMessage(data: string, generation: number) {
         }
     }
 
+    if (signal.aborted) return;
     if (beatmap.set > 0) {
-        const mapBg = await getBeatmapCover(beatmap.set);
-        if (!shouldReconnect || generation !== connectionGeneration) return;
+        const mapBg = await getBeatmapCover(beatmap.set, signal);
+        if (!shouldReconnect || generation !== connectionGeneration || signal.aborted) return;
         if (mapBg) assets.large_image = mapBg;
     }
 
-    if (shouldReconnect && generation === connectionGeneration) {
+    if (shouldReconnect && generation === connectionGeneration && !signal.aborted) {
         FluxDispatcher.dispatch({ type: "LOCAL_ACTIVITY_UPDATE", activity, socketId: SOCKET_ID });
     }
 }
@@ -296,6 +290,8 @@ export function stop() {
     shouldReconnect = false;
     connectionGeneration++;
     clearRuntimeTimeouts();
+    messageController?.abort();
+    messageController = undefined;
     ws?.close();
     ws = undefined;
     beatmapCoverCache.clear();

@@ -45,62 +45,33 @@ export interface LanguageJson {
 
 export const languages: Record<string, Language> = {};
 
-let loadLanguagesPromise: Promise<void> | undefined;
-const grammarPromises = new Map<string, Promise<NonNullable<ILanguageRegistration["grammar"]>>>();
-
-export const loadLanguages = async () => {
-    if (loadLanguagesPromise) return loadLanguagesPromise;
-
-    loadLanguagesPromise = (async () => {
-        if (Object.keys(languages).length > 0) return;
-
-        const langsJson: LanguageJson[] = await fetch(JSON_URL).then(res => res.ok ? res.json() : []);
-        const loadedLanguages = Object.fromEntries(
-            langsJson.map(lang => {
-                const { name, displayName, ...rest } = lang;
-                return [name, {
-                    ...rest,
-                    id: name,
-                    name: displayName,
-                    grammarUrl: shikiRepoGrammar(name),
-                }];
-            })
-        );
-        Object.assign(languages, loadedLanguages);
-    })().catch(error => {
-        loadLanguagesPromise = undefined;
-        throw error;
-    });
-
-    return loadLanguagesPromise;
+export const loadLanguages = async (signal?: AbortSignal) => {
+    if (Object.keys(languages).length > 0) return;
+    const response = await fetch(JSON_URL, { signal });
+    if (!response.ok) throw new Error("Could not load code languages.");
+    const langsJson: LanguageJson[] = await response.json();
+    signal?.throwIfAborted();
+    Object.assign(languages, Object.fromEntries(langsJson.map(lang => {
+        const { name, displayName, ...rest } = lang;
+        return [name, { ...rest, id: name, name: displayName, grammarUrl: shikiRepoGrammar(name) }];
+    })));
 };
 
-export const getGrammar = (lang: Language): Promise<NonNullable<ILanguageRegistration["grammar"]>> => {
-    if (lang.grammar) return Promise.resolve(lang.grammar);
-
-    const cachedPromise = grammarPromises.get(lang.id);
-    if (cachedPromise) return cachedPromise;
-
-    const grammarPromise = fetch(lang.grammarUrl)
-        .then(res => res.json())
-        .then(grammar => {
-            lang.grammar = grammar;
-            grammarPromises.delete(lang.id);
-            return grammar;
-        })
-        .catch(error => {
-            grammarPromises.delete(lang.id);
-            throw error;
-        });
-
-    grammarPromises.set(lang.id, grammarPromise);
-    return grammarPromise;
+export const getGrammar = async (lang: Language, signal?: AbortSignal): Promise<NonNullable<ILanguageRegistration["grammar"]>> => {
+    if (lang.grammar) return lang.grammar;
+    const response = await fetch(lang.grammarUrl, { signal });
+    if (!response.ok) throw new Error("Could not load the code language.");
+    const grammar: NonNullable<ILanguageRegistration["grammar"]> = await response.json();
+    signal?.throwIfAborted();
+    lang.grammar = grammar;
+    return grammar;
 };
 
 const aliasCache = new Map<string, Language>();
 export function resolveLang(idOrAlias: string) {
     if (Object.prototype.hasOwnProperty.call(languages, idOrAlias)) return languages[idOrAlias];
-    if (aliasCache.has(idOrAlias)) return aliasCache.get(idOrAlias)!;
+    const cached = aliasCache.get(idOrAlias);
+    if (cached) return cached;
 
     const lang = Object.values(languages).find(lang => lang.aliases?.includes(idOrAlias));
 

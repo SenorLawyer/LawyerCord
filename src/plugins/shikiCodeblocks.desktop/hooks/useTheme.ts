@@ -24,7 +24,7 @@ interface ThemeState {
     theme: Shiki["currentTheme"],
 }
 
-const currentTheme: ThemeState = {
+let currentTheme: ThemeState = {
     id: null,
     theme: null,
 };
@@ -32,18 +32,19 @@ const currentTheme: ThemeState = {
 const themeSetters = new Set<React.Dispatch<React.SetStateAction<ThemeState>>>();
 
 export const useTheme = (): ThemeState => {
-    const [, setTheme] = React.useState<ThemeState>(currentTheme);
+    const [theme, setTheme] = React.useState<ThemeState>(currentTheme);
 
     React.useEffect(() => {
         themeSetters.add(setTheme);
+        setTheme(currentTheme);
         return () => void themeSetters.delete(setTheme);
     }, []);
 
-    return currentTheme;
+    return theme;
 };
 
 export function dispatchTheme(state: ThemeState) {
     if (currentTheme.id === state.id) return;
-    Object.assign(currentTheme, state);
+    currentTheme = state;
     themeSetters.forEach(setTheme => setTheme(state));
 }

@@ -184,3 +184,49 @@ test("ClearURLs cancels obsolete downloads and retains its existing cleaning beh
     await stopped;
     assert.equal(plugin.rules.length, 0);
 });
+
+
+test("Tosu drops superseded cover lookups and aborts pending HEAD requests on stop", async () => {
+    const timers = new Map<() => void, number>();
+    const activities: { activity: { name: string; } | null; }[] = [];
+    const assets: ((value: string) => void)[] = [];
+    const requests: { signal: AbortSignal; resolve(value: { ok: boolean; }): void; }[] = [];
+    let receive: ((event: { data: string; }) => void) | undefined;
+    class Socket {
+        addEventListener(type: string, callback: (event: { data: string; }) => void) { if (type === "message") receive = callback; }
+        close() {}
+    }
+    const api = load("src/equicordplugins/richPresence/services/tosu.ts", {
+        "@utils/Logger": logger,
+        "@vencord/discord-types/enums": { ActivityType: { PLAYING: 0, LISTENING: 2, WATCHING: 3 } },
+        "@webpack/common": { FluxDispatcher: { dispatch: (value: { activity: { name: string; } | null; }) => activities.push(value) } },
+        "../types/tosu": { Modes: { Osu: 0 }, GameState: { Menu: 0 }, BanchoStatusEnum: { Idle: 0 } },
+        "./assetCache": { getCachedApplicationAsset: () => new Promise<string>(resolve => assets.push(resolve)) }
+    }, {
+        WebSocket: Socket, AbortController, AbortSignal,
+        setTimeout: (callback: () => void, ms: number) => { timers.set(callback, ms); return callback; },
+        clearTimeout: (callback: () => void) => timers.delete(callback),
+        fetch: (_url: string, { signal }: { signal: AbortSignal; }) => new Promise(resolve => requests.push({ signal, resolve }))
+    });
+    const message = (title: string, set: number) => JSON.stringify({ state: { number: 0 }, session: { playTime: 0 }, profile: { mode: { number: 0 }, banchoStatus: { number: 0 } }, beatmap: { set, title, artist: "Artist", version: "Map", mapper: "Mapper", stats: { stars: { total: 1 } } }, play: { mods: { name: "" } }, resultsScreen: {} });
+    api.start();
+    receive?.({ data: message("old", 1) });
+    for (const [callback, ms] of [...timers]) if (ms === 3000) { timers.delete(callback); callback(); }
+    receive?.({ data: message("new", 0) });
+    await setImmediate();
+    assets.shift()?.("mp:old");
+    await setImmediate();
+    assert.ok(activities.at(-1)?.activity?.name.includes("new"));
+    assert.equal(requests.length, 0);
+    for (const [callback, ms] of [...timers]) if (ms === 3000) { timers.delete(callback); callback(); }
+    receive?.({ data: message("pending", 2) });
+    assets.shift()?.("mp:pending");
+    await setImmediate();
+    assert.equal(requests.length, 1);
+    api.stop();
+    assert.equal(requests[0].signal.aborted, true);
+    requests[0].resolve({ ok: true });
+    await setImmediate();
+    assert.equal(activities.at(-1)?.activity, null);
+    assert.equal(timers.size, 0);
+});

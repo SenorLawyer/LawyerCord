@@ -38,8 +38,20 @@ export const cacheSentMessages = new LimitedMap<string, LoggedMessageJSON>();
 export const cl = classNameFactory("vc-msg-logger-enhanced-");
 
 let didClearLogsOnStartup = false;
+let generation = 0;
+let connectionGeneration = 0;
+let messageStoreOverride: typeof MessageStore.getMessage | undefined;
 
 const cacheThing = findByPropsLazy("commit", "getOrCreate");
+
+function clearSession() {
+    connectionGeneration++;
+    cacheSentMessages.clear();
+    idb.clearMessageCache();
+    ImageManager.stopDownloads();
+    void Promise.all([Native.cancelNativeLogExports(), Native.closeNativeLogImports(), Native.cancelNativeAttachmentDownloads()])
+        .catch(error => Flogger.error("Failed to close message log files", error));
+}
 
 export async function clearLogs(showToast = true) {
     await idb.clearMessagesIDB(showToast);
@@ -120,15 +132,7 @@ async function messageDeleteBulkHandler({ channelId, guildId, ids }: MessageDele
     await idb.addMessagesBulkIDB(messages);
     for (const message of messages) cacheSentMessages.delete(`${message.channel_id},${message.id}`);
 
-    if (messages.length > 0 && settings.store.timeBasedCleanupMinutes > 0) {
-        const currentChannelId = SelectedChannelStore.getChannelId();
-        const cutoffTime = new Date(Date.now() - settings.store.timeBasedCleanupMinutes * 60 * 1000).toISOString();
-        const oldGuildMessages = await idb.getOlderThanTimestampForGuildsIDB(cutoffTime, currentChannelId, settings.store.preserveCurrentChannel);
-
-        if (oldGuildMessages.length > 0) {
-            await idb.deleteMessagesBulkIDB(oldGuildMessages.map(m => m.message_id));
-        }
-    }
+    if (messages.length > 0) await LoggedMessageManager.cleanupMessages(SelectedChannelStore.getChannelId());
 }
 
 async function messageUpdateHandler(payload: MessageUpdatePayload) {
@@ -192,14 +196,16 @@ function messageCreateHandler(payload: MessageCreatePayload) {
 }
 
 async function processMessageFetch(response: FetchMessagesResponse) {
+    const owner = generation;
+    const connection = connectionGeneration;
     try {
         if (!response.ok) {
-            Flogger.error("Failed to fetch messages", response);
+            Flogger.error("Failed to fetch messages");
             return;
         }
 
         if (!Array.isArray(response.body)) {
-            Flogger.error("Failed to fetch messages: response body is not an array", response);
+            Flogger.error("Failed to fetch messages: response body is not an array");
             return;
         }
 
@@ -207,6 +213,7 @@ async function processMessageFetch(response: FetchMessagesResponse) {
 
         const firstMessage = response.body[response.body.length - 1];
         const messages = await idb.getMessagesByChannelAndAfterTimestampIDB(firstMessage.channel_id, firstMessage.timestamp);
+        if (owner !== generation || connection !== connectionGeneration) return;
 
         if (!messages.length) return;
 
@@ -382,32 +389,45 @@ export default definePlugin({
         "MESSAGE_DELETE": messageDeleteHandler as any,
         "MESSAGE_DELETE_BULK": messageDeleteBulkHandler,
         "MESSAGE_UPDATE": messageUpdateHandler,
-        "MESSAGE_CREATE": messageCreateHandler
+        "MESSAGE_CREATE": messageCreateHandler,
+        "CONNECTION_OPEN"() {
+            clearSession();
+        },
+        "LOGOUT"() {
+            clearSession();
+        }
     },
 
     async start() {
+        const owner = ++generation;
         this.oldGetMessage = oldGetMessage = MessageStore.getMessage;
+        const originalGetMessage = oldGetMessage;
 
         // we have to do this because the original message logger fetches the message from the store now
-        MessageStore.getMessage = (channelId: string, messageId: string) => {
+        MessageStore.getMessage = messageStoreOverride = (channelId: string, messageId: string) => {
+            if (owner !== generation) return originalGetMessage(channelId, messageId);
             const MLMessage = idb.cachedMessages.get(messageId);
-            if (!MLMessage)
-                return this.oldGetMessage(channelId, messageId);
+            if (!MLMessage || MLMessage.channel_id !== channelId)
+                return originalGetMessage(channelId, messageId);
 
             if (MLMessage.deleted)
                 return messageJsonToMessageClass({ message: MLMessage });
 
             // update the edited message with the latest data
-            const latestMessage = this.oldGetMessage(channelId, messageId);
+            const latestMessage = originalGetMessage(channelId, messageId);
             return messageJsonToMessageClass({
                 message: {
                     ...MLMessage,
                     ...(latestMessage ?? {}),
+                    timestamp: MLMessage.timestamp,
                 }
             });
         };
 
-        Native.init();
+        await idb.initIDB();
+        if (owner !== generation) return;
+        await Native.init();
+        if (owner !== generation) return;
 
         if (settings.store.clearLogsOnRestart && !didClearLogsOnStartup) {
             try {
@@ -417,15 +437,19 @@ export default definePlugin({
                 Flogger.error("Failed to clear logs on restart", e);
             }
         }
+        if (owner !== generation) return;
 
         const { imageCacheDir, logsDir, attachmentFileExtensions } = await Native.getSettings();
+        if (owner !== generation) return;
         settings.store.imageCacheDir = imageCacheDir;
         settings.store.logsDir = logsDir;
         settings.store.attachmentFileExtensions = attachmentFileExtensions ?? "none";
     },
 
     stop() {
-        MessageStore.getMessage = this.oldGetMessage;
-        imageUtils.clearAttachmentBlobUrlCache();
+        generation++;
+        if (MessageStore.getMessage === messageStoreOverride) MessageStore.getMessage = this.oldGetMessage;
+        messageStoreOverride = undefined;
+        clearSession();
     }
 });

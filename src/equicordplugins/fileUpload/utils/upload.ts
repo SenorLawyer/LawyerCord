@@ -12,8 +12,9 @@ import { insertTextIntoChatInputBox } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import { PluginNative } from "@utils/types";
 import { chooseFile } from "@utils/web";
-import { showToast, Toasts } from "@webpack/common";
+import { SelectedChannelStore, showToast, Toasts, UserStore } from "@webpack/common";
 
+import { isUploadUrl, MAX_FILE_BYTES, MAX_RESPONSE_BYTES, readResponseBody } from "../request";
 import { convertApngToGif } from "./apngToGif";
 import { getExtensionFromBytes, getExtensionFromMime, getMimeFromExtension, getUrlExtension } from "./getMediaUrl";
 import { isS3Configured, uploadToS3 } from "./s3";
@@ -77,6 +78,42 @@ const uploadStateListeners = new Set<() => void>();
 let activeAbortController: AbortController | null = null;
 let activeXhr: XMLHttpRequest | null = null;
 let cancelRequested = false;
+let uploadController: AbortController | undefined;
+let resetTimer: ReturnType<typeof setTimeout> | undefined;
+let uploadOwner: { userId: string | undefined; channelId: string; } | undefined;
+let nativeFile: { blob: Blob; buffer: Promise<ArrayBuffer>; } | undefined;
+
+async function readNativeFile(blob: Blob): Promise<ArrayBuffer> {
+    checkUploadOwner();
+    if (blob.size > MAX_FILE_BYTES) throw new Error("The file exceeds the size limit.");
+    if (nativeFile?.blob !== blob) nativeFile = { blob, buffer: blob.arrayBuffer() };
+    const buffer = await nativeFile.buffer;
+    checkUploadOwner();
+    return buffer;
+}
+
+function beginUpload() {
+    clearTimeout(resetTimer);
+    resetTimer = undefined;
+    isUploading = true;
+    cancelRequested = false;
+    uploadController = new AbortController();
+    uploadOwner = { userId: UserStore.getCurrentUser()?.id, channelId: SelectedChannelStore.getChannelId() };
+}
+
+function checkUploadOwner() {
+    if (cancelRequested || uploadOwner?.userId !== UserStore.getCurrentUser()?.id) throw new Error("Upload cancelled by user");
+}
+
+function finishUpload() {
+    isUploading = false;
+    nativeFile = undefined;
+    uploadOwner = undefined;
+    uploadController = undefined;
+    activeAbortController = null;
+    activeXhr = null;
+    resetTimer = setTimeout(() => { resetTimer = undefined; resetUploadState(); }, 1800);
+}
 
 function isUploadCancelledError(error: unknown): boolean {
     if (cancelRequested) return true;
@@ -112,13 +149,18 @@ export function getUploadState(): UploadProgressState {
 }
 
 export function cancelCurrentUpload() {
+    clearTimeout(resetTimer);
+    resetTimer = undefined;
     if (!isUploading) {
+        resetUploadState();
         return;
     }
 
     cancelRequested = true;
+    uploadController?.abort();
     activeAbortController?.abort();
     activeXhr?.abort();
+    void Native?.cancelUploads();
     setUploadState({
         phase: "cancelled",
         status: "Upload cancelled.",
@@ -136,17 +178,24 @@ function getUploadTimeoutMs(): number {
     return Math.max(5000, value);
 }
 
-async function fetchWithTimeout(url: string, options: RequestInit): Promise<Response> {
+async function fetchWithTimeout(url: string, options: RequestInit): Promise<Blob> {
+    checkUploadOwner();
+    if (!isUploadUrl(url)) throw new Error("A valid HTTPS URL is required.");
     const controller = new AbortController();
     activeAbortController = controller;
     const timeout = setTimeout(() => controller.abort(), getUploadTimeoutMs());
     const requestUrl = toProxyUrl(url);
 
     try {
-        return await fetch(requestUrl, {
+        const response = await fetch(requestUrl, {
             ...options,
             signal: controller.signal
         });
+        if (!response.ok) {
+            await response.body?.cancel();
+            throw new Error(`Failed to fetch file: ${response.status}`);
+        }
+        return await readResponseBody(response, MAX_FILE_BYTES, controller.signal);
     } catch (error) {
         if (cancelRequested || controller.signal.aborted) {
             throw new Error(cancelRequested ? "Upload cancelled by user" : "Upload timed out");
@@ -228,12 +277,14 @@ function setXhrUploadProgress(event: ProgressEvent) {
 }
 
 async function uploadRequestWithTimeout(url: string, options: RequestInit): Promise<XhrResponse> {
+    checkUploadOwner();
+    if (!isUploadUrl(url)) throw new Error("A valid HTTPS URL is required.");
     const requestUrl = toProxyUrl(url);
 
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         activeXhr = xhr;
-        const timeout = setTimeout(() => xhr.abort(), getUploadTimeoutMs());
+        xhr.timeout = getUploadTimeoutMs();
 
         xhr.open(options.method || "GET", requestUrl);
 
@@ -242,11 +293,17 @@ async function uploadRequestWithTimeout(url: string, options: RequestInit): Prom
         }
 
         xhr.upload.onprogress = setXhrUploadProgress;
+        xhr.onprogress = event => {
+            if (event.loaded > MAX_RESPONSE_BYTES) {
+                reject(new Error("The upload response exceeds the size limit."));
+                xhr.abort();
+            }
+        };
         xhr.onload = () => resolve(new XhrResponse(xhr));
         xhr.onerror = () => reject(new Error("Upload failed"));
-        xhr.onabort = () => reject(new Error(cancelRequested ? "Upload cancelled by user" : "Upload timed out"));
+        xhr.onabort = () => reject(new Error("Upload cancelled by user"));
+        xhr.ontimeout = () => reject(new Error("Upload timed out"));
         xhr.onloadend = () => {
-            clearTimeout(timeout);
             xhr.upload.onprogress = null;
             if (activeXhr === xhr) {
                 activeXhr = null;
@@ -401,7 +458,7 @@ async function uploadToNest(fileBlob: Blob, filename: string): Promise<string> {
     }
 
     if (Native) {
-        const arrayBuffer = await fileBlob.arrayBuffer();
+        const arrayBuffer = await readNativeFile(fileBlob);
         const result = await Native.uploadToNest(arrayBuffer, filename, nestToken);
 
         if (!result.success) {
@@ -607,7 +664,7 @@ async function uploadToEzHost(fileBlob: Blob, filename: string): Promise<string>
     if (!ezHostKey) throw new Error("E-Z Host API key is required");
 
     if (Native) {
-        const arrayBuffer = await fileBlob.arrayBuffer();
+        const arrayBuffer = await readNativeFile(fileBlob);
         const result = await Native.uploadToEzHost(arrayBuffer, filename, ezHostKey);
 
         if (!result.success) {
@@ -651,7 +708,7 @@ async function uploadToCatbox(fileBlob: Blob, filename: string): Promise<string>
     const { catboxUserhash } = settings.store;
 
     if (Native) {
-        const result = await Native.uploadToCatbox(await fileBlob.arrayBuffer(), filename, catboxUserhash || undefined);
+        const result = await Native.uploadToCatbox(await readNativeFile(fileBlob), filename, catboxUserhash || undefined);
         if (!result.success || !result.url) throw new Error(result.error || "No URL returned from upload");
         return result.url;
     }
@@ -677,7 +734,7 @@ async function uploadTo0x0(fileBlob: Blob, filename: string): Promise<string> {
         throw new Error("0x0.st uploads are only supported on the desktop client");
     }
 
-    const arrayBuffer = await fileBlob.arrayBuffer();
+    const arrayBuffer = await readNativeFile(fileBlob);
     const result = await Native.uploadTo0x0(arrayBuffer, filename);
 
     if (!result.success) {
@@ -695,7 +752,7 @@ async function uploadToLitterbox(fileBlob: Blob, filename: string): Promise<stri
     const expiry = settings.store.litterboxExpiry || "24h";
 
     if (Native) {
-        const result = await Native.uploadToLitterbox(await fileBlob.arrayBuffer(), filename, expiry);
+        const result = await Native.uploadToLitterbox(await readNativeFile(fileBlob), filename, expiry);
         if (!result.success || !result.url) throw new Error(result.error || "No URL returned from upload");
         return result.url;
     }
@@ -720,7 +777,7 @@ async function uploadToGofile(fileBlob: Blob, filename: string): Promise<string>
     const { gofileToken } = settings.store as { gofileToken?: string; };
 
     if (Native) {
-        const result = await Native.uploadToGofile(await fileBlob.arrayBuffer(), filename, gofileToken || undefined);
+        const result = await Native.uploadToGofile(await readNativeFile(fileBlob), filename, gofileToken || undefined);
         if (!result.success || !result.url) throw new Error(result.error || "No URL returned from upload");
         return result.url;
     }
@@ -758,7 +815,7 @@ async function uploadToGofile(fileBlob: Blob, filename: string): Promise<string>
 
 async function uploadToTmpfiles(fileBlob: Blob, filename: string): Promise<string> {
     if (Native) {
-        const result = await Native.uploadToTmpfiles(await fileBlob.arrayBuffer(), filename);
+        const result = await Native.uploadToTmpfiles(await readNativeFile(fileBlob), filename);
         if (!result.success || !result.url) throw new Error(result.error || "No URL returned from upload");
         return result.url;
     }
@@ -789,7 +846,7 @@ async function uploadToTmpfiles(fileBlob: Blob, filename: string): Promise<strin
 
 async function uploadToBuzzheavier(fileBlob: Blob, filename: string): Promise<string> {
     if (Native) {
-        const result = await Native.uploadToBuzzheavier(await fileBlob.arrayBuffer(), filename);
+        const result = await Native.uploadToBuzzheavier(await readNativeFile(fileBlob), filename);
         if (!result.success || !result.url) throw new Error(result.error || "No URL returned from upload");
         return result.url;
     }
@@ -821,7 +878,7 @@ async function uploadToBuzzheavier(fileBlob: Blob, filename: string): Promise<st
 
 async function uploadToTempSh(fileBlob: Blob, filename: string): Promise<string> {
     if (Native) {
-        const result = await Native.uploadToTempSh(await fileBlob.arrayBuffer(), filename);
+        const result = await Native.uploadToTempSh(await readNativeFile(fileBlob), filename);
         if (!result.success || !result.url) throw new Error(result.error || "No URL returned from upload");
         return result.url;
     }
@@ -852,7 +909,7 @@ function makeRandomHex(length = 12): string {
 
 async function uploadToFilebin(fileBlob: Blob, filename: string): Promise<string> {
     if (Native) {
-        const result = await Native.uploadToFilebin(await fileBlob.arrayBuffer(), filename);
+        const result = await Native.uploadToFilebin(await readNativeFile(fileBlob), filename);
         if (!result.success || !result.url) throw new Error(result.error || "No URL returned from upload");
         return result.url;
     }
@@ -882,7 +939,7 @@ async function uploadToPixelVault(fileBlob: Blob, filename: string): Promise<str
     }
 
     if (Native) {
-        const result = await Native.uploadToPixelVault(await fileBlob.arrayBuffer(), filename, pixelVaultKey.trim());
+        const result = await Native.uploadToPixelVault(await readNativeFile(fileBlob), filename, pixelVaultKey.trim());
 
         if (!result.success) {
             throw new Error(result.error || "Upload failed");
@@ -931,7 +988,7 @@ async function uploadToPixelDrain(fileBlob: Blob, filename: string): Promise<str
     const { pixelDrainKey } = settings.store as { pixelDrainKey?: string; };
 
     if (Native) {
-        const result = await Native.uploadToPixelDrain(await fileBlob.arrayBuffer(), filename, pixelDrainKey?.trim() || undefined);
+        const result = await Native.uploadToPixelDrain(await readNativeFile(fileBlob), filename, pixelDrainKey?.trim() || undefined);
         if (!result.success || !result.url) throw new Error(result.error || "No URL returned from upload");
         return result.url;
     }
@@ -1089,7 +1146,7 @@ async function uploadToWebdav(fileBlob: Blob, filename: string): Promise<string>
     }
 
     if (Native) {
-        const arrayBuffer = await fileBlob.arrayBuffer();
+        const arrayBuffer = await readNativeFile(fileBlob);
         const result = await Native.uploadToWebdav(arrayBuffer, uploadUrl, requestHeaders);
         if (!result.success) {
             throw new Error(result.error || "Upload failed");
@@ -1131,7 +1188,7 @@ async function uploadToService(serviceType: ServiceType, fileBlob: Blob, filenam
         case ServiceType.ENCRYPTINGHOST:
             return uploadToEncryptingHost(fileBlob, filename);
         case ServiceType.S3:
-            return uploadToS3(fileBlob, filename, Native, uploadRequestWithTimeout);
+            return uploadToS3(fileBlob, filename, Native, uploadRequestWithTimeout, () => readNativeFile(fileBlob), checkUploadOwner);
         case ServiceType.CATBOX:
             return uploadToCatbox(fileBlob, filename);
         case ServiceType.ZEROX0:
@@ -1272,6 +1329,7 @@ function getFilenameExtension(filename: string): string | undefined {
 }
 
 async function notifyUploadSuccess(finalUrl: string, forceSend?: boolean): Promise<void> {
+    checkUploadOwner();
     if (settings.store.autoCopy) {
         if (!finalUrl || !finalUrl.trim()) {
             showToast("Upload successful, but no URL was available to copy", Toasts.Type.MESSAGE);
@@ -1291,7 +1349,8 @@ async function notifyUploadSuccess(finalUrl: string, forceSend?: boolean): Promi
 
     const autoSend = forceSend || Boolean((settings.store as { autoSend?: boolean; }).autoSend);
     const autoFormat = Boolean((settings.store as { autoFormat?: boolean; }).autoFormat);
-    if (autoSend) {
+    if (autoSend && uploadOwner?.channelId === SelectedChannelStore.getChannelId()) {
+        checkUploadOwner();
         insertTextIntoChatInputBox(autoFormat ? `<${finalUrl}>` : finalUrl);
     }
 }
@@ -1316,7 +1375,7 @@ async function uploadWithFallbacks(fileBlob: Blob, filename: string, primary: Se
     });
 
     for (const service of uploadOrder) {
-        if (cancelRequested) throw new Error("Upload cancelled by user");
+        checkUploadOwner();
 
         const attempt = attempted.length + 1;
 
@@ -1335,7 +1394,7 @@ async function uploadWithFallbacks(fileBlob: Blob, filename: string, primary: Se
 
         try {
             const uploadedUrl = await uploadToService(service, fileBlob, filename);
-            if (cancelRequested) throw new Error("Upload cancelled by user");
+            checkUploadOwner();
             if (attempted.length) {
                 showToast(`Upload succeeded with ${serviceLabels[service]} after fallback`, Toasts.Type.SUCCESS);
             }
@@ -1399,7 +1458,7 @@ async function normalizeUploadBlob(blob: Blob, sourceUrl?: string): Promise<{ bl
         || "bin";
 
     if (ext === "apng" && settings.store.apngToGif) {
-        const gifBlob = await convertApngToGif(blob);
+        const gifBlob = await convertApngToGif(blob, uploadController?.signal);
         if (gifBlob) {
             blob = gifBlob;
             ext = "gif";
@@ -1424,12 +1483,18 @@ async function normalizeUploadBlob(blob: Blob, sourceUrl?: string): Promise<{ bl
 
 async function uploadPreparedBlob(blob: Blob, sourceUrl?: string, forceSend?: boolean): Promise<string> {
     const primary = settings.store.serviceType as ServiceType;
+    if (blob.size > MAX_FILE_BYTES) throw new Error("The file exceeds the size limit.");
+    checkUploadOwner();
     const { blob: normalizedBlob, filename } = await normalizeUploadBlob(blob, sourceUrl);
     setUploadState({ fileName: filename, status: "File ready, starting upload...", percent: 4 });
-    const uploadedUrl = await uploadWithFallbacks(normalizedBlob, filename, primary);
-    const finalUrl = applyEmbedProxy(finalizeUploadedUrl(uploadedUrl));
-    await notifyUploadSuccess(finalUrl, forceSend);
-    return finalUrl;
+    try {
+        const uploadedUrl = await uploadWithFallbacks(normalizedBlob, filename, primary);
+        const finalUrl = applyEmbedProxy(finalizeUploadedUrl(uploadedUrl));
+        await notifyUploadSuccess(finalUrl, forceSend);
+        return finalUrl;
+    } finally {
+        nativeFile = undefined;
+    }
 }
 
 export async function uploadFile(url: string): Promise<void> {
@@ -1443,8 +1508,7 @@ export async function uploadFile(url: string): Promise<void> {
         return;
     }
 
-    isUploading = true;
-    cancelRequested = false;
+    beginUpload();
     setUploadState({
         phase: "preparing",
         fileName: "",
@@ -1464,34 +1528,13 @@ export async function uploadFile(url: string): Promise<void> {
         }
 
         let blob: Blob;
-        let contentType = "";
-
         if (Native) {
             const res = await Native.fetchFile(fetchUrl);
-            if (res.success && res.data) {
-                contentType = res.contentType || "";
-                blob = new Blob([res.data], { type: contentType });
-            } else {
-                const response = await fetch(fetchUrl);
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch file: ${response.status}`);
-                }
-                contentType = response.headers.get("content-type") || "";
-                blob = await response.blob();
-            }
+            checkUploadOwner();
+            if (!res.success || !res.data) throw new Error(res.error || "Failed to fetch file.");
+            blob = new Blob([res.data], { type: res.contentType || "" });
         } else {
-            const response = await fetchWithTimeout(fetchUrl, {
-                method: "GET"
-            });
-            if (!response.ok) {
-                throw new Error(`Failed to fetch file: ${response.status}`);
-            }
-            contentType = response.headers.get("content-type") || "";
-            blob = await response.blob();
-        }
-
-        if (contentType && !blob.type) {
-            blob = new Blob([blob], { type: contentType });
+            blob = await fetchWithTimeout(fetchUrl, { method: "GET" });
         }
 
         await uploadPreparedBlob(blob, url);
@@ -1506,10 +1549,7 @@ export async function uploadFile(url: string): Promise<void> {
             setUploadState({ phase: "failed", status: `Upload failed: ${message}`, canCancel: false, percent: 0 });
         }
     } finally {
-        isUploading = false;
-        activeAbortController = null;
-        activeXhr = null;
-        setTimeout(() => resetUploadState(), 1800);
+        finishUpload();
     }
 }
 
@@ -1525,7 +1565,7 @@ export async function uploadPickedFile(): Promise<void> {
     await uploadProvidedFiles([file]);
 }
 
-export async function uploadProvidedFiles(files: readonly File[], forceSend?: boolean): Promise<boolean> {
+export async function uploadProvidedFiles(files: readonly File[], forceSend?: boolean, onFailure?: (files: readonly File[]) => void): Promise<boolean> {
     if (isUploading) {
         showToast("Upload already in progress", Toasts.Type.MESSAGE);
         return false;
@@ -1541,8 +1581,8 @@ export async function uploadProvidedFiles(files: readonly File[], forceSend?: bo
     const uploadFiles = files.filter(file => Boolean(file) && isFileTypeAllowed(file));
     if (!uploadFiles.length) return false;
 
-    isUploading = true;
-    cancelRequested = false;
+    beginUpload();
+    let completed = 0;
 
     try {
         for (let i = 0; i < uploadFiles.length; i++) {
@@ -1562,7 +1602,9 @@ export async function uploadProvidedFiles(files: readonly File[], forceSend?: bo
                 canCancel: true
             });
 
+            checkUploadOwner();
             await uploadPreparedBlob(file, undefined, forceSend);
+            completed++;
         }
         return true;
     } catch (error) {
@@ -1575,11 +1617,9 @@ export async function uploadProvidedFiles(files: readonly File[], forceSend?: bo
             logger.error("Manual upload error", error);
             setUploadState({ phase: "failed", status: `Upload failed: ${message}`, canCancel: false, percent: 0 });
         }
+        onFailure?.(uploadFiles.slice(completed));
         return false;
     } finally {
-        isUploading = false;
-        activeAbortController = null;
-        activeXhr = null;
-        setTimeout(() => resetUploadState(), 1800);
+        finishUpload();
     }
 }

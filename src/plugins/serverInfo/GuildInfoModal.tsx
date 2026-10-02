@@ -42,12 +42,6 @@ interface RelationshipProps extends GuildProps {
     setCount(count: number): void;
 }
 
-const fetched = {
-    friends: false,
-    blocked: false,
-    ignored: false
-};
-
 function renderTimestamp(timestamp: number) {
     return (
         <Timestamp timestamp={new Date(timestamp)} />
@@ -59,12 +53,6 @@ function GuildInfoModal({ guild, modalProps }: GuildProps & { modalProps: Render
     const [blockedCount, setBlockedCount] = useState<number>();
     const [ignoredCount, setIgnoredCount] = useState<number>();
     const [mutualMembersCount, setMutualMembersCount] = useState<number>();
-
-    useEffect(() => {
-        fetched.friends = false;
-        fetched.blocked = false;
-        fetched.ignored = false;
-    }, []);
 
     const [currentTab, setCurrentTab] = useState(Tabs.ServerInfo);
 
@@ -283,8 +271,7 @@ function UserList(type: "friends" | "blocked" | "ignored", guild: Guild, ids: st
     );
 
     useEffect(() => {
-        if (!fetched[type] && missing.length) {
-            fetched[type] = true;
+        if (missing.length) {
             FluxDispatcher.dispatch({
                 type: "GUILD_MEMBERS_REQUEST",
                 guildIds: [guild.id],
@@ -332,14 +319,18 @@ interface MemberWithMutuals {
     mutualGuilds: Array<{
         guild: Guild;
         iconUrl: string | null;
+        name: string;
     }>;
 }
 
-function getMutualGuilds(id: string): MemberWithMutuals {
-    const mutualGuilds: Array<{ guild: Guild; iconUrl: string | null; }> = [];
+function getMutualGuilds(id: string, guilds: Guild[]): MemberWithMutuals {
+    const mutualGuilds: MemberWithMutuals["mutualGuilds"] = [];
+    let mutualCount = 0;
 
-    for (const guild of Object.values(GuildStore.getGuilds())) {
+    for (const guild of guilds) {
         if (GuildMemberStore.isMember(guild.id, id)) {
+            mutualCount++;
+            if (mutualGuilds.length === 3) continue;
             const iconUrl = guild.icon
                 ? IconUtils.getGuildIconURL({
                     id: guild.id,
@@ -349,13 +340,13 @@ function getMutualGuilds(id: string): MemberWithMutuals {
                 }) ?? null
                 : null;
 
-            mutualGuilds.push({ guild, iconUrl });
+            mutualGuilds.push({ guild, iconUrl, name: guild.name });
         }
     }
 
     return {
         id,
-        mutualCount: mutualGuilds.length,
+        mutualCount,
         mutualGuilds
     };
 }
@@ -385,28 +376,30 @@ function MutualServerIcons({ member }: { member: MemberWithMutuals; }) {
 }
 
 function MutualMembersTab({ guild, setCount }: RelationshipProps) {
-    const [members, setMembers] = useState<MemberWithMutuals[]>([]);
-    const currentUserId = UserStore.getCurrentUser()?.id;
+    const currentUserId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
 
-    useEffect(() => {
-        if (!currentUserId) {
-            setMembers([]);
-            setCount(0);
-            return;
-        }
-
+    const members = useStateFromStores([GuildMemberStore, GuildStore], () => {
+        if (!currentUserId) return [];
         const guildMembers = GuildMemberStore.getMemberIds(guild.id);
+        const guilds = Object.values(GuildStore.getGuilds());
         const membersWithMutuals = guildMembers
-            .map(id => getMutualGuilds(id))
+            .filter(id => id !== currentUserId)
+            .map(id => getMutualGuilds(id, guilds))
             // dont show yourself and members that are only in this server
-            .filter(member => member.mutualCount > 1 && member.id !== currentUserId);
+            .filter(member => member.mutualCount > 1);
 
         // sort by mutual server count (descending)
         membersWithMutuals.sort((a, b) => b.mutualCount - a.mutualCount);
 
-        setMembers(membersWithMutuals);
-        setCount(membersWithMutuals.length);
-    }, [currentUserId, guild.id]);
+        return membersWithMutuals;
+    }, [currentUserId, guild.id], (previous, next) => previous.length === next.length && previous.every((member, index) => {
+        const other = next[index];
+        return member.id === other.id && member.mutualCount === other.mutualCount
+            && member.mutualGuilds.length === other.mutualGuilds.length
+            && member.mutualGuilds.every((mutual, guildIndex) => mutual.guild.id === other.mutualGuilds[guildIndex].guild.id
+                && mutual.iconUrl === other.mutualGuilds[guildIndex].iconUrl && mutual.name === other.mutualGuilds[guildIndex].name);
+    }));
+    useEffect(() => setCount(members.length), [members.length, setCount]);
 
     const renderedMembers: Array<MemberWithMutuals & { user: User & { globalName?: string; }; }> = [];
     for (const member of members) {

@@ -40,7 +40,12 @@ function toggle(values: string[] | undefined, value: string) {
 
 function flushBuckets() {
     if (!Object.keys(pendingBuckets).length) return;
-    settings.store.buckets = { ...settings.store.buckets, ...pendingBuckets };
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 27);
+    const firstDay = cutoff.toISOString().slice(0, 10);
+    const lastDay = new Date().toISOString().slice(0, 10);
+    settings.store.buckets = Object.fromEntries(Object.entries({ ...settings.store.buckets, ...pendingBuckets })
+        .filter(([key]) => key.slice(0, 10) >= firstDay && key.slice(0, 10) <= lastDay));
     pendingBuckets = {};
     if (saveTimer !== undefined) {
         clearTimeout(saveTimer);
@@ -56,20 +61,21 @@ function trackMessage({ optimistic, message }: MessageCreateEvent) {
     if (!matchesGuild && !matchesChannel && !matchesUser) return;
 
     const date = new Date(message.timestamp ?? Date.now());
+    if (!Number.isFinite(date.getTime())) return;
     const key = `${date.toISOString().slice(0, 10)}:${date.getHours()}`;
     pendingBuckets[key] = (pendingBuckets[key] ?? settings.store.buckets?.[key] ?? 0) + 1;
     if (saveTimer === undefined) saveTimer = setTimeout(flushBuckets, 5_000);
 }
 
 function HeatmapModal(props: RenderModalProps) {
-    flushBuckets();
     const buckets = settings.store.buckets ?? {};
     const days = Array.from({ length: 28 }, (_, index) => {
         const date = new Date();
         date.setDate(date.getDate() - 27 + index);
         return date.toISOString().slice(0, 10);
     });
-    const max = Math.max(1, ...Object.values(buckets));
+    let max = 1;
+    for (const day of days) for (let hour = 0; hour < 24; hour++) max = Math.max(max, buckets[`${day}:${hour}`] ?? 0);
 
     return <Modal {...props} size="large" title="Activity heatmap">
         <Text variant="text-sm/normal">Tracks new messages only. Add servers, channels, or people from their context menus.</Text>
@@ -94,7 +100,10 @@ export default definePlugin({
     tags: ["Utility"],
     settings,
     toolboxActions: {
-        "Open Activity Heatmap": () => openModal(props => <HeatmapModal {...props} />),
+        "Open Activity Heatmap"() {
+            flushBuckets();
+            openModal(props => <HeatmapModal {...props} />);
+        },
     },
     flux: {
         MESSAGE_CREATE: trackMessage,

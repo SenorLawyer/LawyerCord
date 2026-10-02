@@ -337,10 +337,7 @@ function VoiceMessageTranscriptionAccessory({ userId, duration, cacheKey, needsP
 
         void (async () => {
             try {
-                const prepared = await prepareAudio(src);
                 if (!isCurrentJob(jobId, generation)) return;
-                setStatus("processing_audio");
-                const audio = new Float32Array(prepared.samples);
 
                 workerRef.current = new TranscriptionWorker(
                     nextStatus => {
@@ -385,7 +382,12 @@ function VoiceMessageTranscriptionAccessory({ userId, duration, cacheKey, needsP
                 activeWorkers.add(workerRef.current);
                 const { audioLanguage, quantized, selectedModel } = settings.store;
                 workerRef.current.run(
-                    audio,
+                    async () => {
+                        const prepared = await prepareAudio(src);
+                        if (!isCurrentJob(jobId, generation)) throw new Error("Transcription cancelled.");
+                        setStatus("processing_audio");
+                        return prepared.samples;
+                    },
                     selectedModel,
                     quantized,
                     audioLanguage === "auto" ? undefined : audioLanguage

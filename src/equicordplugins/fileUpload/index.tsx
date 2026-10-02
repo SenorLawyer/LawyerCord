@@ -14,7 +14,7 @@ import { classNameFactory } from "@utils/css";
 import definePlugin from "@utils/types";
 import { CloudUpload } from "@vencord/discord-types";
 import { findByPropsLazy } from "@webpack";
-import { DraftType, FluxDispatcher, Menu, PermissionsBits, PermissionStore, React, showToast, Toasts, UploadAttachmentStore, useEffect, UserStore, useState } from "@webpack/common";
+import { DraftType, FluxDispatcher, Menu, PermissionsBits, PermissionStore, React, SelectedChannelStore, showToast, Toasts, UploadAttachmentStore, useEffect, UserStore, useState } from "@webpack/common";
 
 import { settings } from "./settings";
 import { serviceLabels, ServiceType } from "./types";
@@ -23,6 +23,7 @@ import { cancelCurrentUpload, getUploadState, isConfigured, isFileTypeAllowed, i
 const cl = classNameFactory("vc-file-upload-");
 const { getUserMaxFileSize } = findByPropsLazy("getUserMaxFileSize");
 let uploadAddFilesInterceptor: ((event: unknown) => void) | null = null;
+let restoringFiles = false;
 let pasteEventListener: ((event: ClipboardEvent) => void) | null = null;
 
 type UploadAddFilesEvent = {
@@ -31,6 +32,7 @@ type UploadAddFilesEvent = {
     uploads?: unknown;
     items?: unknown;
     draftType?: unknown;
+    channelId?: unknown;
     maxFileSize?: unknown;
     fileSizeLimit?: unknown;
     limits?: {
@@ -68,7 +70,7 @@ function extractFilesFromValue(value: unknown): File[] {
 }
 
 function interceptUploadAddFiles(event: unknown): void {
-    if (!event || typeof event !== "object" || !("type" in event)) return;
+    if (restoringFiles || !event || typeof event !== "object" || !("type" in event)) return;
 
     const payload = event as UploadAddFilesEvent;
     if (payload.type !== "UPLOAD_ATTACHMENT_ADD_FILES") return;
@@ -87,6 +89,8 @@ function interceptUploadAddFiles(event: unknown): void {
     if (!uniqueFiles.length) return;
     if (!shouldInterceptUploadFiles(uniqueFiles, payload)) return;
 
+    const original = { ...payload };
+    const userId = UserStore.getCurrentUser()?.id;
     const intercepted = new Set(uniqueFiles);
     for (const key of ["files", "uploads", "items"] as const) {
         const value = payload[key];
@@ -96,7 +100,25 @@ function interceptUploadAddFiles(event: unknown): void {
             payload[key] = value.filter(entry => !extractFilesFromValue([entry]).some(file => intercepted.has(file)));
         }
     }
-    void uploadProvidedFiles(uniqueFiles);
+    void uploadProvidedFiles(uniqueFiles, undefined, failed => restoreFiles(original, failed, userId));
+}
+
+function restoreFiles(payload: UploadAddFilesEvent, failed: readonly File[], userId: string | undefined) {
+    if (UserStore.getCurrentUser()?.id !== userId) return;
+    const files = new Set(failed);
+    const restored = { ...payload };
+    for (const key of ["files", "uploads", "items"] as const) {
+        const value = payload[key];
+        restored[key] = Array.isArray(value)
+            ? value.filter(entry => extractFilesFromValue([entry]).some(file => files.has(file)))
+            : value instanceof File && files.has(value) ? value : [];
+    }
+    restoringFiles = true;
+    try {
+        FluxDispatcher.dispatch(restored);
+    } finally {
+        restoringFiles = false;
+    }
 }
 
 function handlePaste(event: ClipboardEvent) {
@@ -111,7 +133,9 @@ function handlePaste(event: ClipboardEvent) {
     event.preventDefault();
     event.stopPropagation();
 
-    void uploadProvidedFiles(allowed);
+    const channelId = SelectedChannelStore.getChannelId();
+    const userId = UserStore.getCurrentUser()?.id;
+    void uploadProvidedFiles(allowed, undefined, failed => restoreFiles({ type: "UPLOAD_ATTACHMENT_ADD_FILES", channelId, draftType: DraftType.ChannelMessage, files: allowed }, failed, userId));
 }
 
 function formatBytes(bytes: number): string {

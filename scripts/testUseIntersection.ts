@@ -122,3 +122,21 @@ test("one-shot intersection refs skip observation for already visible elements",
     unmount();
     assert.deepEqual(metrics, { observers: 0, disconnects: 0, layoutReads: 1 });
 });
+
+test("Replacing a visible element with an offscreen one resets visibility immediately", () => {
+    const f = fixture();
+    assert.equal(f.render({ visible: true }), true);
+    assert.equal(f.render({ visible: false }), false);
+    f.unmount();
+});
+
+test("Queued callbacks from replaced intersection observers cannot update the new element", () => {
+    const f = fixture();
+    const old = { visible: false };
+    f.render(old);
+    const replacement = { visible: true };
+    f.render(replacement);
+    f.instances[0].callback([{ target: old, isIntersecting: false }]);
+    assert.equal(f.render(replacement), true);
+    f.unmount();
+});

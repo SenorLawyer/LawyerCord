@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Changed
 
+- Stream bounded MessageLogger attachment downloads into contained temporary files, validate native URLs and extensions, and remove the directory existence race.
+
 - Remove unlimited serialized-message and search-query caches from MessageLoggerEnhanced, retain conversion only for the mounted log row and use the native array search.
 
 - Encode GIFs from one shared output-pixel buffer and retain only two source-frame snapshots instead of one canvas per frame.

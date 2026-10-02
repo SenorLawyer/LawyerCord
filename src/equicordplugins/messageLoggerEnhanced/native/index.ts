@@ -4,10 +4,12 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { readdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { open, readdir, readFile, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 
 import { DATA_DIR } from "@main/utils/constants";
+import { Logger } from "@utils/Logger";
 import { dialog, IpcMainInvokeEvent, shell } from "electron";
 
 import { getSettings, saveSettings } from "./settings";
@@ -15,7 +17,6 @@ export * from "./export";
 export * from "./import";
 
 import { blockedExts } from "../list";
-import { LoggedAttachment } from "../types";
 import { DEFAULT_ATTACHMENT_FILE_EXTENSIONS } from "../utils/constants";
 import { ensureDirectoryExists, getAttachmentIdFromFilename, sleep } from "./utils";
 
@@ -23,6 +24,7 @@ export { getSettings };
 export function messageLoggerEnhancedUniqueIdThingyIdkMan() { }
 
 const nativeSavedImages = new Map<string, string>();
+const logger = new Logger("MessageLoggerEnhanced");
 
 let imageCacheDir: string;
 
@@ -111,14 +113,23 @@ export async function chooseFile(_event: IpcMainInvokeEvent, title: string, filt
     return await readFile(path, "utf-8");
 }
 
-export async function downloadAttachment(_event: IpcMainInvokeEvent, attachment: LoggedAttachment, attempts = 0, useOldUrl = false): Promise<{ error: string | null; path: string | null; }> {
+export async function downloadAttachment(_event: IpcMainInvokeEvent, attachment: unknown): Promise<{ error: string | null; path: string | null; }> {
+    let temporaryPath: string | undefined;
     try {
-        if (!attachment?.url || !attachment.oldUrl || !attachment?.id)
-            return { error: "Invalid Attachment", path: null };
+        if (!attachment || typeof attachment !== "object"
+            || !("id" in attachment) || typeof attachment.id !== "string" || !/^\d{1,20}$/.test(attachment.id)
+            || !("fileExtension" in attachment) || typeof attachment.fileExtension !== "string" || !/^\.?[a-z0-9]{1,16}$/i.test(attachment.fileExtension)
+            || !("url" in attachment) || !("oldUrl" in attachment))
+            return { error: "Invalid attachment.", path: null };
 
-        if (attachment.id.match(/[\\/.]/)) {
-            return { error: "Invalid Attachment ID", path: null };
-        }
+        const urls = [attachment.url, attachment.oldUrl].map(value => {
+            if (typeof value !== "string" || value.length > 8192) return null;
+            const url = URL.parse(value);
+            return url?.protocol === "https:" && !url.port && !url.username && !url.password
+                && ["cdn.discordapp.com", "media.discordapp.net", "images-ext-1.discordapp.net", "images-ext-2.discordapp.net"].includes(url.hostname) ? url : null;
+        });
+        const [url, oldUrl] = urls;
+        if (!url || !oldUrl) return { error: "Invalid attachment URL.", path: null };
 
         const settings = await getSettings();
         const allowedExtensionsStr = settings.attachmentFileExtensions?.trim() || "";
@@ -127,9 +138,9 @@ export async function downloadAttachment(_event: IpcMainInvokeEvent, attachment:
         }
 
         const allowedList = allowedExtensionsStr.split(",").map((ext: string) => ext.trim().toLowerCase());
-        const cleanExt = attachment.fileExtension?.replace(".", "").toLowerCase();
+        const cleanExt = attachment.fileExtension.replace(/^\./, "").toLowerCase();
 
-        if (!cleanExt || !allowedList.includes(cleanExt)) {
+        if (blockedExts.includes(cleanExt) || !allowedList.includes(cleanExt)) {
             return { error: `File type .${cleanExt} is blocked by settings configurations.`, path: null };
         }
 
@@ -140,45 +151,63 @@ export async function downloadAttachment(_event: IpcMainInvokeEvent, attachment:
                 path: existingImage
             };
 
-        const res = await fetch(useOldUrl ? attachment.oldUrl : attachment.url);
-
-        if (res.status !== 200) {
-            if (res.status === 404 || res.status === 403 || res.status === 415)
-                useOldUrl = true;
-
-            attempts++;
-            if (attempts > 3) {
-                return {
-                    error: `Failed to get attachment ${attachment.id} for caching. too many attempts, error code ${res.status}`,
-                    path: null,
-                };
+        const signal = AbortSignal.timeout(120_000);
+        const maxBytes = 500 * 1024 * 1024;
+        let downloadUrl = url;
+        for (let attempt = 0; attempt < 4; attempt++) {
+            const res = await fetch(downloadUrl, { redirect: "error", signal });
+            if (res.status !== 200) {
+                await res.body?.cancel();
+                if (attempt === 3) return { error: "Could not download this attachment.", path: null };
+                if ([403, 404, 415].includes(res.status)) downloadUrl = oldUrl;
+                await sleep(1000);
+                continue;
+            }
+            if (!res.body || Number(res.headers.get("content-length")) > maxBytes) {
+                await res.body?.cancel();
+                return { error: "Attachment exceeds the download limit.", path: null };
             }
 
-            await sleep(1000);
-            return downloadAttachment(_event, attachment, attempts, useOldUrl);
+            const root = path.resolve(await getImageCacheDir());
+            const finalPath = path.resolve(root, `${attachment.id}.${cleanExt}`);
+            if (!finalPath.startsWith(path.join(root, path.sep))) return { error: "Invalid attachment path.", path: null };
+            await ensureDirectoryExists(root);
+            temporaryPath = path.join(root, `${randomUUID()}.tmp`);
+            const file = await open(temporaryPath, "wx");
+            const reader = res.body.getReader();
+            let bytes = 0;
+            try {
+                for (;;) {
+                    signal.throwIfAborted();
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    bytes += value.byteLength;
+                    if (bytes > maxBytes) throw new Error("Attachment exceeds the download limit.");
+                    await file.writeFile(value);
+                }
+            } finally {
+                try { await file.close(); }
+                finally {
+                    try { await reader.cancel(); }
+                    finally { reader.releaseLock(); }
+                }
+            }
+            signal.throwIfAborted();
+            await rename(temporaryPath, finalPath);
+            temporaryPath = undefined;
+            nativeSavedImages.set(attachment.id, finalPath);
+            return { error: null, path: finalPath };
         }
-
-        const ab = await res.arrayBuffer();
-        const imageCacheDir = await getImageCacheDir();
-        await ensureDirectoryExists(imageCacheDir);
-
-        const finalPath = path.join(imageCacheDir, `${attachment.id}${attachment.fileExtension}`);
-        await writeFile(finalPath, Buffer.from(ab));
-
-        nativeSavedImages.set(attachment.id, finalPath);
-
-        return {
-            error: null,
-            path: finalPath
-        };
-
-    } catch (error: any) {
-        console.error(error);
-        return { error: error.message, path: null };
+        return { error: "Could not download this attachment.", path: null };
+    } catch {
+        return { error: "Could not download this attachment.", path: null };
+    } finally {
+        if (temporaryPath) await unlink(temporaryPath).catch(() => logger.warn("Could not remove an incomplete attachment."));
     }
 }
 
-export async function updateAllowedExtensions(_event: IpcMainInvokeEvent, cleanExtensionsString: string | undefined) {
+export async function updateAllowedExtensions(_event: IpcMainInvokeEvent, cleanExtensionsString: unknown) {
+    if (cleanExtensionsString !== undefined && (typeof cleanExtensionsString !== "string" || cleanExtensionsString.length > 4096)) return;
     const settings = await getSettings();
     const incomingRaw = cleanExtensionsString?.trim() || "";
 
@@ -191,7 +220,7 @@ export async function updateAllowedExtensions(_event: IpcMainInvokeEvent, cleanE
     const validatedExtensions = incomingRaw
         .split(",")
         .map(ext => ext.trim().toLowerCase())
-        .filter(ext => ext.length > 0 && !blockedExts.includes(ext));
+        .filter(ext => /^[a-z0-9]{1,16}$/.test(ext) && !blockedExts.includes(ext));
 
     if (validatedExtensions.length === 0) {
         settings.attachmentFileExtensions = "none";

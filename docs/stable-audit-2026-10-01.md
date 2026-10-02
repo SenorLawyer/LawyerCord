@@ -150,3 +150,5 @@ Signed-in Discord behavior and provider-dependent integrations require separate 
 - ThemeLibrary declarations: delete the unused TabItem enum and LikesComponentProps/Contributor interfaces. An exhaustive repository caller search finds no imports or references. Keep the active search values, settings and button-grid styles. No behavior test is needed for these unused internal declarations.
 
 - Timezones modal cleanup: delete the unused header, heading, content and footer selectors. The modal uses the shared Discord Modal component; repository-wide searches find no literal or generated callers. Keep active timestamp/tooltip styles. Stylesheet lint passes; no layout behavior test needed for orphaned rules.
+
+- TIDAL player loading: opt into native iframe lazy loading so offscreen overscan/accessory rows do not eagerly initialize their remote players. Preserve IDs, titles, sandbox and playback permissions. This reversible attribute uses Chromium scheduling; source lint passes. No mocked timing or affected-device FPS claim follows from it.

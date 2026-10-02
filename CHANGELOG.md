@@ -6,6 +6,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 ### Changed
 
+- Let Chromium defer offscreen TIDAL player frames until they approach the viewport.
+
 - Remove Timezones stylesheet rules for modal layouts that no longer exist.
 
 - Delete unused ThemeLibrary tab, like-button and contributor declarations.

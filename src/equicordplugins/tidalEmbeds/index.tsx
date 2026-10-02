@@ -47,6 +47,7 @@ export default definePlugin({
                 <div key={embedId} className="tidal-embed">
                     <iframe
                         src={src}
+                        loading="lazy"
                         width={width}
                         height={height}
                         allow="encrypted-media"

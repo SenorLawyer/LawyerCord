@@ -54,6 +54,10 @@ const settings = definePluginSettings({
 migratePluginSettings("SortFriends", "SortFriendRequests");
 export default definePlugin({
     name: "SortFriends",
+    performance: {
+        impact: "low",
+        description: "Sorts incoming requests and adds timestamps when the friend request list renders."
+    },
     authors: [Devs.Megu, EquicordDevs.CallMeGii],
     description: "Sorts friend requests by date of receipt",
     tags: ["Friends", "Organisation"],

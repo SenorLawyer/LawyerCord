@@ -7881,7 +7881,7 @@ test("Roblox activity discards process checks after stop, restart or account cha
         await setImmediate();
         assert.equal(sent.length, 0, interruption);
         if (interruption === "stop") plugin.start();
-        plugin.flux.PRESENCE_UPDATE();
+        plugin.flux.PRESENCE_UPDATE({ user: { id: userId } });
         assert.equal(pending.length, 2);
         pending[1].resolve(true);
         await setImmediate();
@@ -8733,6 +8733,7 @@ test("MusicControls reconnects cached Tidal stores without initializing unused s
         "@utils/lazy": { SYM_LAZY_CACHED: cached },
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
         "./settings": { settings: { store: {} }, toggleHoverControls() {} },
+        "./lyricsRequest": { startLyricsRequests() {}, stopLyricsRequests() {} },
         "./spotify/lyrics/api": { migrateOldLyrics: async () => {} },
         "./spotify/lyrics/providers/store": { SpotifyLrcStore: {} },
         "./spotify/lyrics/components/lyrics": {},
@@ -8794,7 +8795,8 @@ test("lyrics fetching respects disabled fallback for either selected provider", 
         for (const fallbackProvider of [false, true]) {
             const calls: string[] = [];
             const module = loadSource("src/equicordplugins/musicControls/spotify/lyrics/api.tsx", {
-                "@api/index": { DataStore: { get: async () => ({}), set: async () => {} } },
+                "@equicordplugins/musicControls/lyricsRequest": { lyricsRequestGeneration: 0 },
+                "@api/index": { DataStore: { get: async (key: string) => key === "MusicControls_lyricsMigrated" ? true : undefined, set: async () => {} } },
                 "@equicordplugins/musicControls/settings": { settings: { store: { lyricsProvider, fallbackProvider } } },
                 "./providers/types": { Provider: { Spotify: "Spotify", Lrclib: "LRCLIB" } },
                 "./providers/SpotifyAPI": { getLyricsSpotify: async () => { calls.push("Spotify"); return null; } },
@@ -8808,10 +8810,11 @@ test("lyrics fetching respects disabled fallback for either selected provider", 
 
 test("LRCLIB preserves timestamp precision and bracketed lyric text", async () => {
     const module = loadSource("src/equicordplugins/musicControls/spotify/lyrics/providers/lrclibAPI/index.ts", {
-        "@equicordplugins/musicControls/spotify/lyrics/providers/types": { Provider: { Lrclib: "LRCLIB" } }
-    }, { URLSearchParams, fetch: async () => ({ ok: true, json: async () => ({
-        syncedLyrics: "[ar:Artist]\n[00:24]First [echo]\n[01:02.345]Second\n[02:03.5]♪\ninvalid\n[00:99]invalid seconds"
-    }) }) });
+        "@equicordplugins/musicControls/spotify/lyrics/providers/types": { Provider: { Lrclib: "LRCLIB" } },
+        "@equicordplugins/musicControls/lyricsRequest": { requestLyrics: async () => ({
+            syncedLyrics: "[ar:Artist]\n[00:24]First [echo]\n[01:02.345]Second\n[02:03.5]♪\ninvalid\n[00:99]invalid seconds"
+        }) }
+    }, { URLSearchParams });
     const result = await module.getLyricsLrclib({ name: "Song", artists: [{ name: "Artist" }], album: { name: "Album" }, duration: 200000 });
     assert.equal(JSON.stringify(result.lyricsVersions.LRCLIB), JSON.stringify([
         { time: 24, text: "First [echo]" }, { time: 62.345, text: "Second" }, { time: 123.5, text: null }
@@ -8822,11 +8825,12 @@ test("music lyrics translation uses the selected target language", async () => {
     const requests: URL[] = [];
     const module = loadSource("src/equicordplugins/musicControls/spotify/lyrics/providers/translator/index.ts", {
         "@equicordplugins/musicControls/settings": { settings: { store: { translateTo: "nl" } } },
-        "@equicordplugins/musicControls/spotify/lyrics/providers/types": { Provider: { Translated: "Translated", Romanized: "Romanized" } }
-    }, { URLSearchParams, fetch: async (url: string) => {
-        requests.push(new URL(url));
-        return { ok: true, json: async () => ({ sentences: [{ trans: "Hallo" }] }) };
-    } });
+        "@equicordplugins/musicControls/spotify/lyrics/providers/types": { Provider: { Translated: "Translated", Romanized: "Romanized" } },
+        "@equicordplugins/musicControls/lyricsRequest": { lyricsRequestGeneration: 0, requestLyrics: async (url: string) => {
+            requests.push(new URL(url));
+            return { sentences: [{ trans: "Hallo" }] };
+        } }
+    }, { URLSearchParams });
     const lyrics = await module.lyricsAlternativeFetchers.Translated([{ time: 1, text: "Hello" }]);
     assert.equal(requests[0].searchParams.get("tl"), "nl");
     assert.equal(lyrics[0].text, "Hallo");
@@ -17405,29 +17409,38 @@ test("Petpet bounds allocations before loading frames and ignores frames complet
     assert.equal(canvases, 0);
 });
 
-test("stale transcription audio failures preserve a newer cached request", async () => {
+test("transcription audio failures release their admission and preserve other cached results", async () => {
     const source = readFileSync("src/equicordplugins/voiceMessageTranscriber.desktop/index.tsx", "utf8");
-    const start = source.indexOf("function prepareAudio(");
+    const start = source.indexOf("const preparedAudioCache =");
     const end = source.indexOf("function cacheResult(", start);
     assert.ok(start >= 0 && end > start);
     const code = transpileModule(source.slice(start, end), { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
-    const cache = new Map<string, Promise<unknown>>();
     const requests: Array<{ resolve: (value: Uint8Array) => void; reject: (error: Error) => void; }> = [];
-    const prepareAudio = runInNewContext(code + ";prepareAudio", {
-        preparedAudioCache: cache, MAX_PREPARED_AUDIO_CACHE_ENTRIES: 3,
+    const { Queue } = loadSource("src/utils/Queue.ts", { "./Logger": { Logger: class { error() {} } } });
+    const f = runInNewContext(code + ";({ prepareAudio, preparedAudioCache, pendingPreparations })", {
+        cacheGeneration: 0, Queue, MAX_PREPARED_AUDIO_CACHE_ENTRIES: 3,
         Native: { fetchAudio: () => new Promise<Uint8Array>((resolve, reject) => requests.push({ resolve, reject })) },
-        Blob, detectAudioMimeType: () => "audio/ogg", decodeAudio: async () => new Float32Array([0]), generateWaveform: () => "AA=="
+        Blob, Error, detectAudioMimeType: () => "audio/ogg", decodeAudio: async () => new Float32Array([0]), generateWaveform: () => "AA=="
     });
-    const old = prepareAudio("a");
+    const old = f.prepareAudio("a");
     const failed = assert.rejects(old, /old request failed/);
-    prepareAudio("b"); prepareAudio("c"); prepareAudio("d");
-    const current = prepareAudio("a");
+    const other = f.prepareAudio("b");
+    assert.equal(f.prepareAudio("a"), old);
+    await setImmediate();
     requests[0].reject(new Error("old request failed"));
     await failed;
-    assert.equal(cache.get("a"), current);
-    assert.equal(prepareAudio("a"), current);
-    requests.slice(1).forEach(request => request.resolve(new Uint8Array([1])));
+    await setImmediate();
+    const current = f.prepareAudio("a");
+    assert.notEqual(current, old);
+    assert.equal(f.prepareAudio("a"), current);
+    requests[1].resolve(new Uint8Array([1]));
+    const cached = await other;
+    await setImmediate();
+    requests[2].resolve(new Uint8Array([1]));
     await current;
+    assert.equal(f.preparedAudioCache.get("b"), cached);
+    assert.equal(await f.prepareAudio("b"), cached);
+    assert.equal(f.pendingPreparations.size, 0);
 });
 
 test("transcription clipboard feedback waits for success and handles rejection", async () => {
@@ -17626,6 +17639,7 @@ test("transcription plugin stop terminates every active worker and clears caches
     let terminated = 0;
     const context = {
         cacheGeneration: 0,
+        cancelQueuedPreparations() {},
         activeTranslations: new Set([new AbortController(), new AbortController()]),
         activeWorkers: new Set([{ terminate: () => terminated++ }, { terminate: () => terminated++ }]),
         preparedAudioCache: new Map([["audio", 1]]), resultCache: new Map([["result", 1]])

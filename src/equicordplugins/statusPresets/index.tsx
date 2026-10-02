@@ -132,6 +132,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "StatusPresets",
+    performance: {
+        impact: "low",
+        description: "Renders saved statuses when opening your status menu."
+    },
     description: "Allows you to remember your statuses and set them later",
     tags: ["Activity", "Utility"],
     authors: [EquicordDevs.iamme],

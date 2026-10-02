@@ -71,8 +71,9 @@ export function createRunQueue(onChange: () => void, now: () => number = Date.no
         enqueue(workflow: Automation, execute: Job["execute"]): Promise<unknown> {
             const queued = pending.filter(job => job.workflow.id === workflow.id).length;
             const running = [...active.values()].some(job => job.workflow.id === workflow.id);
+            const cooling = (lastStarted.get(workflow.id) ?? -Infinity) + (workflow.cooldownSeconds ?? 0) * 1000 > now();
             if ((workflow.runMode ?? "skip") === "skip" && (running || queued > 0)) return Promise.reject(new Error("Trigger skipped because this workflow is already running."));
-            if (queued >= (workflow.queueLimit ?? 50) && (running || active.size >= limit) || pending.length >= 200) return Promise.reject(new Error("Run queue is full. The newest trigger was rejected."));
+            if (queued >= (workflow.queueLimit ?? 50) && (running || cooling || active.size >= limit) || pending.length >= 200) return Promise.reject(new Error("Run queue is full. The newest trigger was rejected."));
             return new Promise((resolve, reject) => {
                 pending.push({ id: crypto.randomUUID(), workflow: { id: workflow.id, runMode: workflow.runMode, concurrency: workflow.concurrency, cooldownSeconds: workflow.cooldownSeconds }, controller: new AbortController(), execute, resolve, reject });
                 pump();

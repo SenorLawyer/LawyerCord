@@ -110,6 +110,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "IgnoreCalls",
+    performance: { impact: "low", description: "Checks call events against saved ignored channels." },
     description: "Allows you to ignore calls from specific users or dm groups.",
     tags: ["Voice"],
     authors: [EquicordDevs.TheArmagan, Devs.thororen],

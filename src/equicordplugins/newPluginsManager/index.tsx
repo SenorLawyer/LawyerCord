@@ -16,6 +16,7 @@ export default definePlugin({
     description: "Utility that notifies you when new plugins are added to LawyerCord",
     tags: ["Utility"],
     authors: [Devs.Sqaaakoi],
+    performance: { impact: "low", description: "Checks for new plugins and settings when Discord connects." },
     enabledByDefault: true,
     flux: {
         POST_CONNECTION_OPEN() {

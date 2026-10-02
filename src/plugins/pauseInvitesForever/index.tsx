@@ -40,6 +40,10 @@ function showDisableInvites(guildId: string) {
 
 export default definePlugin({
     name: "PauseInvitesForever",
+    performance: {
+        impact: "low",
+        description: "Changes server invite pause settings when the menu action is selected."
+    },
     searchTerms: ["DisableInvitesForever"],
     description: "Brings back the option to pause invites indefinitely that Discord removed.",
     tags: ["Servers"],

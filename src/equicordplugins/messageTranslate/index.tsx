@@ -50,6 +50,7 @@ function triggerReRender(message: MessageWithContent) {
 
 export default definePlugin({
     name: "MessageTranslate",
+    performance: { impact: "medium", description: "Requests translations for rendered messages and rerenders them when results arrive." },
     description: "Auto translate messages to your language with caching, per-channel toggles, and more options.",
     tags: ["Chat", "Utility"],
     authors: [EquicordDevs.creations],

@@ -27,6 +27,7 @@ export const reverseExtensionMap = Object.entries(extensionMap).reduce((acc, [ta
 
 export default definePlugin({
     name: "FixFileExtensions",
+    performance: { impact: "low", description: "Renames attachment extensions when uploading files." },
     authors: [Devs.thororen],
     description: "Fixes file extensions by renaming them to a compatible supported format if possible",
     tags: ["Media", "Utility"],

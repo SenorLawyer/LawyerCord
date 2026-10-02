@@ -148,6 +148,10 @@ function getMatchingPattern(url: string): PatternEntry | null {
 
 export default definePlugin({
     name: "UrlHighlighter",
+    performance: {
+        impact: "low",
+        description: "Checks rendered links against your configured highlight patterns."
+    },
     description: "Highlights URLs in messages that match your patterns.",
     tags: ["Appearance", "Customisation"],
     authors: [Devs.prism],

@@ -82,6 +82,7 @@ const TemplateButton: ChatBarButtonFactory = ({ isAnyChat }) => isAnyChat ? <Cha
 
 export default definePlugin({
     name: "MessageTemplates",
+    performance: { impact: "low", description: "Loads saved snippets when template dialogs open." },
     description: "Save reusable message snippets and insert them from the chat bar.",
     authors: [EquicordDevs.SenorLawyer],
     tags: ["Chat", "Utility"],

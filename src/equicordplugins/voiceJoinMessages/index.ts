@@ -6,6 +6,7 @@
 
 import { definePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import { humanFriendlyJoin } from "@utils/text";
 import definePlugin, { OptionType } from "@utils/types";
 import { Message, User } from "@vencord/discord-types";
@@ -14,6 +15,9 @@ import { ChannelStore, FluxDispatcher, MessageActions, MessageStore, Permissions
 
 const createBotMessage = findByCodeLazy('username:"Clyde"');
 const USER_ID_REGEX = /^\d{17,20}$/;
+
+const logger = new Logger("VoiceJoinMessages");
+let generation = 0;
 
 let allowedFriendIds = new Set<string>();
 let ignoredFriendIds = new Set<string>();
@@ -85,7 +89,10 @@ function sendVoiceStatusMessage(channelId: string, content: string, userId: stri
     // If we try to send a message into an unloaded channel, the client-sided messages get overwritten when the channel gets loaded
     // This might be messy but It Works:tm:
     const messagesLoaded: Promise<any> = MessageStore.hasPresent(channelId) ? new Promise<void>(r => r()) : MessageActions.fetchMessages({ channelId });
+    const current = generation;
+    const accountId = UserStore.getCurrentUser()?.id;
     messagesLoaded.then(() => {
+        if (current !== generation || UserStore.getCurrentUser()?.id !== accountId) return;
         FluxDispatcher.dispatch({
             type: "MESSAGE_CREATE",
             channelId,
@@ -94,7 +101,7 @@ function sendVoiceStatusMessage(channelId: string, content: string, userId: stri
             sendMessageOptions: {},
             isPushNotification: false
         });
-    });
+    }).catch(error => logger.warn("Could not load the channel for a voice join message.", error));
     return message;
 }
 
@@ -116,11 +123,17 @@ function isFriendAllowlisted(friendId: string) {
 
 export default definePlugin({
     name: "VoiceJoinMessages",
+    performance: {
+        impact: "low",
+        description: "Checks voice changes and loads DM history when adding a local join message."
+    },
     description: "Receive client-side ephemeral messages when your friends join voice channels",
     tags: ["Servers", "Utility", "Voice"],
     authors: [Devs.Sqaaakoi, Devs.thororen],
     settings,
     flux: {
+        LOGOUT() { generation++; },
+        CONNECTION_OPEN() { generation++; },
         VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceState[]; }) {
             const clientUserId = UserStore.getCurrentUser()?.id;
             if (!clientUserId) return;
@@ -175,6 +188,7 @@ export default definePlugin({
     },
 
     stop() {
+        generation++;
         allowedFriendIds = new Set();
         ignoredFriendIds = new Set();
     },

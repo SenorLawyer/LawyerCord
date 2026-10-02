@@ -9,6 +9,7 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "NoRPC",
+    performance: { impact: "low", description: "Prevents the local RPC server from starting." },
     description: "Disables Discord's RPC server.",
     tags: ["Privacy", "Servers"],
     authors: [Devs.Cyn],

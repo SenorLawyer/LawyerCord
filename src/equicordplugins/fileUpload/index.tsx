@@ -340,6 +340,10 @@ const channelAttachMenuPatch: NavContextMenuPatchCallback = (children, props) =>
 
 export default definePlugin({
     name: "FileUpload",
+    performance: {
+        impact: "low",
+        description: "Handles selected or pasted uploads and optional animation conversion when requested."
+    },
     description: "Upload files to hosting services like Zipline, Nest, S3, and WebDAV",
     tags: ["Media"],
     authors: [EquicordDevs.creations, EquicordDevs.keircn, Devs.ScattrdBlade],

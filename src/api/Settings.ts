@@ -195,12 +195,102 @@ export const SettingsStore = new SettingsStoreClass(settings, {
     }
 });
 
+const batchSettings = !IS_REPORTER && !IS_WEB && typeof VencordNative.settings.setSync === "function";
+let settingsSave: Promise<void> | undefined;
+let savingPaths: string[] = [];
+const pendingSettingsPaths = new Set<string>();
+let settingsRevision = 0;
+let saveRevision = 0;
+
+function retainSettingsPaths(paths: string[]) {
+    for (const path of paths) {
+        if (pendingSettingsPaths.has("")) return;
+        if (!path || pendingSettingsPaths.size >= 256) {
+            pendingSettingsPaths.clear();
+            pendingSettingsPaths.add("");
+            return;
+        }
+        pendingSettingsPaths.add(path);
+    }
+}
+
+function savePendingSettings() {
+    if (settingsSave || !pendingSettingsPaths.size) return;
+    const paths = [...pendingSettingsPaths];
+    pendingSettingsPaths.clear();
+    savingPaths = paths;
+    const revision = ++saveRevision;
+    const pending = VencordNative.settings.set(SettingsStore.plain, paths, undefined, revision);
+    settingsSave = pending;
+    void pending.then(() => {
+        if (settingsSave !== pending) return;
+        settingsSave = undefined;
+        savingPaths = [];
+        savePendingSettings();
+    }, (error: unknown) => {
+        if (settingsSave !== pending) return;
+        settingsSave = undefined;
+        savingPaths = [];
+        const changedWhileSaving = pendingSettingsPaths.size > 0;
+        if (revision === saveRevision) retainSettingsPaths(paths);
+        if (changedWhileSaving) savePendingSettings();
+        logger.error("Failed to save settings", error);
+    });
+}
+
+export async function flushSettings(): Promise<void> {
+    do {
+        savePendingSettings();
+        await settingsSave;
+    } while (settingsSave || pendingSettingsPaths.size);
+}
+
+export async function persistSettings(data: Settings, expected?: string, onSaved?: () => void): Promise<void> {
+    const revision = settingsRevision;
+    await flushSettings();
+    while (settingsSave) await flushSettings();
+    if (settingsRevision !== revision) throw new Error("Settings changed while saving. Try again to include your latest changes.");
+    const pending = VencordNative.settings.set(data, undefined, expected, batchSettings ? ++saveRevision : undefined);
+    settingsSave = pending;
+    try {
+        await pending;
+        if (settingsRevision !== revision) throw new Error("Settings changed while saving. Try again to include your latest changes.");
+        onSaved?.();
+    } finally {
+        if (settingsSave === pending) settingsSave = undefined;
+        savePendingSettings();
+    }
+}
+
+function flushSettingsBeforeUnload() {
+    if (!savingPaths.length && !pendingSettingsPaths.size) return;
+    retainSettingsPaths(savingPaths);
+    try {
+        VencordNative.settings.setSync(SettingsStore.plain, [...pendingSettingsPaths], ++saveRevision);
+        pendingSettingsPaths.clear();
+    } catch (error) {
+        logger.error("Failed to save settings before closing", error);
+    }
+}
+
 if (!IS_REPORTER) {
     SettingsStore.addGlobalChangeListener((_, path) => {
+        settingsRevision++;
         if (path !== "cloud" && !path.startsWith("cloud."))
             SettingsStore.plain.cloud.settingsSyncVersion = Date.now();
-        VencordNative.settings.set(SettingsStore.plain, path).catch((error: unknown) => logger.error("Failed to save settings", error));
+        if (!batchSettings) {
+            const pending = VencordNative.settings.set(SettingsStore.plain, path);
+            settingsSave = pending;
+            void pending.then(() => { if (settingsSave === pending) settingsSave = undefined; }, (error: unknown) => {
+                if (settingsSave === pending) settingsSave = undefined;
+                logger.error("Failed to save settings", error);
+            });
+        } else {
+            retainSettingsPaths([path]);
+            savePendingSettings();
+        }
     });
+    if (batchSettings) window.addEventListener("beforeunload", flushSettingsBeforeUnload);
 }
 
 /**
@@ -227,7 +317,7 @@ export const Settings = SettingsStore.store;
  * @returns Settings
  */
 // TODO: Representing paths as essentially "string[].join('.')" wont allow dots in paths, change to "paths?: string[][]" later
-export function useSettings(paths?: UseSettings<Settings>[]) {
+export function useSettings(paths?: readonly UseSettings<Settings>[]) {
     const [, forceUpdate] = React.useReducer(() => ({}), {});
 
     const pathsKey = JSON.stringify(paths);
@@ -387,6 +477,6 @@ export function definePluginSettings<
 
 type UseSettings<T extends object> = string extends keyof T ? string : {
     [Key in keyof T & string]: T[Key] extends Record<string, unknown>
-        ? `${Key}.*` | `${Key}.${UseSettings<T[Key]>}`
+        ? Key | `${Key}.*` | `${Key}.${UseSettings<T[Key]>}`
         : Key;
 }[keyof T & string];

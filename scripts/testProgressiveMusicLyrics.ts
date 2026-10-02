@@ -13,14 +13,16 @@ import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
 function fixture() {
     let reads = 0;
     let emissions = 0;
+    let writes = 0;
+    let finishTranslation: (value: unknown) => void = () => {};
     let enabled = true;
     const pending: (() => void)[] = [];
     let paused = false;
     const player = { track: { id: "one" } as { id: string; } | null };
-    const api = { lyricsCacheGeneration: 0, async getLyrics() {
+    const api = { lyricsCacheGeneration: 0, async updateLyrics() { writes++; }, providers: ["LRCLIB"], async getLyrics() {
         reads++;
         if (paused) await new Promise<void>(resolve => { pending.push(resolve); });
-        return { useLyric: "LRCLIB", lyricsVersions: {} };
+        return { useLyric: "LRCLIB", lyricsVersions: { LRCLIB: [{ time: 0, text: "Words" }] } };
     } };
     let handlers: Record<string, (event: unknown) => Promise<void>> = {};
     class Store {
@@ -37,10 +39,11 @@ function fixture() {
         if (name.endsWith("/settings")) return { settings: { store: settings } };
         if (name.endsWith("/lyrics/api")) return api;
         if (name.endsWith("/SpotifyStore")) return { SpotifyStore: player };
+        if (name === "./translator") return { lyricsAlternativeFetchers: { Translated: () => new Promise(resolve => { finishTranslation = resolve; }) } };
         if (name === "./types") return { Provider: { None: "None", Translated: "Translated", Romanized: "Romanized" } };
         return {};
     } });
-    return { store, player, api, settings, reads: () => reads, emissions: () => emissions, state: () => handlers.SPOTIFY_PLAYER_STATE({ track: player.track }), pause() { paused = true; }, release() { paused = false; pending.shift()?.(); }, disable() { enabled = false; store.destroy?.(); }, enable() { enabled = true; store.init(); } };
+    return { store, player, api, settings, writes: () => writes, translate: () => handlers.SPOTIFY_LYRICS_PROVIDER_CHANGE({ provider: "Translated" }), finishTranslation: () => finishTranslation([{ time: 0, text: "Old translation" }]), reads: () => reads, emissions: () => emissions, state: () => handlers.SPOTIFY_PLAYER_STATE({ track: player.track }), pause() { paused = true; }, release() { paused = false; pending.shift()?.(); }, disable() { enabled = false; store.destroy?.(); }, enable() { enabled = true; store.init(); } };
 }
 
 test("Settled Spotify state updates do not repeatedly read and deserialize the entire lyric history", async () => {
@@ -84,4 +87,16 @@ test("Old lyric completions cannot clear a restarted session's pending request",
     f.release();
     await current;
     assert.equal(f.emissions(), 1);
+});
+
+
+test("Clearing saved lyrics while translating prevents stale translations being saved", async () => {
+    const f = fixture();
+    const work = f.translate();
+    for (let tick = 0; tick < 10; tick++) await Promise.resolve();
+    f.api.lyricsCacheGeneration++;
+    f.finishTranslation();
+    await work;
+    assert.equal(f.writes(), 0);
+    assert.equal(f.emissions(), 0);
 });

@@ -125,6 +125,7 @@ async function checkProcess() {
 export default definePlugin({
     name: "RobloxActivity",
     description: "Posts Roblox session start and end updates to a Discord channel.",
+    performance: { impact: "medium", description: "Checks local game processes while active." },
     authors: [EquicordDevs.nobody],
     enabledByDefault: true,
     settings,
@@ -144,8 +145,8 @@ export default definePlugin({
         sessionStartedAt.value = 0;
     },
     flux: {
-        PRESENCE_UPDATE() {
-            void checkProcess();
+        PRESENCE_UPDATE({ user }) {
+            if (user.id === UserStore.getCurrentUser()?.id) void checkProcess();
         }
     },
 });

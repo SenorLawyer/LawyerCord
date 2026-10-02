@@ -451,6 +451,7 @@ function KeywordMenu({ plugin, onJump }: KeywordMenuProps) {
 
 export default definePlugin({
     name: "KeywordNotify",
+    performance: { impact: "medium", description: "Matches message events against configured expressions and saves matching notifications." },
     authors: [EquicordDevs.camila314, EquicordDevs.x3rt],
     description: "Sends a notification if a given message matches certain keywords or regexes",
     tags: ["Chat", "Notifications"],

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { requestLyrics } from "@equicordplugins/musicControls/lyricsRequest";
 import { LyricsData, Provider } from "@equicordplugins/musicControls/spotify/lyrics/providers/types";
 
 interface LyricsAPIResp {
@@ -29,17 +30,8 @@ function makeSpotifyLyricsApiUrl(trackId: string, customBaseUrl?: string): strin
 }
 
 export async function getLyricsSpotify(trackId: string, customBaseUrl?: string): Promise<LyricsData | null> {
-    const resp = await fetch(makeSpotifyLyricsApiUrl(trackId, customBaseUrl));
-    if (!resp.ok) return null;
-
-    let data: LyricsAPIResp;
-    try {
-        data = await resp.json() as LyricsAPIResp;
-    } catch (e) {
-        return null;
-    }
-
-    if (data.error || !Array.isArray(data.lines) || data.lines.length < 2) return null;
+    const data = await requestLyrics(makeSpotifyLyricsApiUrl(trackId, customBaseUrl)) as LyricsAPIResp | null;
+    if (!data || data.error || !Array.isArray(data.lines) || data.lines.length < 2) return null;
 
     const lyrics = data.lines;
     if (lyrics[0].startTimeMs === "0" && lyrics[lyrics.length - 1].startTimeMs === "0") return null;

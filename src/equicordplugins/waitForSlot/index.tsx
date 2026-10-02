@@ -80,6 +80,7 @@ function promptVoiceChannel(channel: Channel | null | undefined): boolean {
 
 export default definePlugin({
     name: "WaitForSlot",
+    performance: { impact: "medium", description: "Counts voice participants on voice updates while waiting for a slot." },
     description: "Automatically join a full voice channel when a slot opens.",
     tags: ["Servers", "Utility", "Voice"],
     authors: [EquicordDevs.omaw, Devs.prism],

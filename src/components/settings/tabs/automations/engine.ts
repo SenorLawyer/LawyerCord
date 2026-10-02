@@ -1702,13 +1702,20 @@ async function executeBlock(block: AutomationBlock, context: ExecutionContext): 
             break;
         }
         case "run-program": {
-            const result = await native().runProgram({
-                command: resolveTemplate(config.value, context.variables).trim(),
-                args: resolveTemplate(config.content, context.variables).split("\n").map(line => line.trim()).filter(Boolean),
-                timeoutSeconds: config.timeoutSeconds ?? 60,
-            });
-            if (!result.success) throw new Error(result.error || "The program could not be run.");
-            value = { code: result.code, stdout: result.stdout, stderr: result.stderr };
+            if (context.signal.aborted) throw new Error("Run cancelled.");
+            const requestId = crypto.randomUUID();
+            const cancel = () => { void native().cancelProgram(requestId).catch(error => logger.warn("The program could not be stopped.", error)); };
+            context.signal.addEventListener("abort", cancel, { once: true });
+            try {
+                const result = await native().runProgram({
+                    requestId,
+                    command: resolveTemplate(config.value, context.variables).trim(),
+                    args: resolveTemplate(config.content, context.variables).split("\n").map(line => line.trim()).filter(Boolean),
+                    timeoutSeconds: config.timeoutSeconds ?? 60,
+                });
+                if (!result.success) throw new Error(result.error || "The program could not be run.");
+                value = { code: result.code, stdout: result.stdout, stderr: result.stderr };
+            } finally { context.signal.removeEventListener("abort", cancel); }
             break;
         }
         case "read-file": {
@@ -1840,7 +1847,9 @@ async function executeRun(workflow: Automation, variables: Record<string, unknow
 }
 
 async function runAutomationWithVariables(id: string, variables: Record<string, unknown>): Promise<AutomationRunResult> {
+    const { signal: owner } = triggerController;
     await loadAutomationState();
+    if (owner.aborted) return { success: false, error: "Automation stopped." };
     if (!engineRunning) return { success: false, error: "Enable the automation system before running a workflow." };
     const workflow = automations.find(a => a.id === id);
     if (!workflow) return { success: false, error: "Workflow was not found." };

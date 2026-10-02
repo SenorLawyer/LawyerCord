@@ -18,6 +18,7 @@ import { DEFAULT_WAVEFORM, VoiceMessage } from "@plugins/voiceMessages";
 import { generateWaveform } from "@plugins/voiceMessages/waveform";
 import { Devs } from "@utils/constants";
 import { copyWithToast } from "@utils/discord";
+import { Queue } from "@utils/Queue";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
 import { Message, RenderModalProps } from "@vencord/discord-types";
 import { lodash, Modal, openModal, ScrollerAuto, SearchableSelect, showToast, Toasts, useCallback, useEffect, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
@@ -50,34 +51,59 @@ interface PreparedAudio {
     waveform: string;
 }
 
-const preparedAudioCache = new Map<string, Promise<PreparedAudio>>();
+const preparedAudioCache = new Map<string, PreparedAudio>();
+const preparationQueue = new Queue();
+const pendingPreparations = new Map<string, { promise: Promise<PreparedAudio>; run: () => Promise<void>; reject: (error: Error) => void; started: boolean; }>();
+
+function cancelQueuedPreparations() {
+    for (const [src, task] of pendingPreparations) {
+        if (task.started) continue;
+        preparationQueue.remove(task.run);
+        pendingPreparations.delete(src);
+        task.reject(new Error("Audio preparation cancelled."));
+    }
+}
 
 function prepareAudio(src: string): Promise<PreparedAudio> {
     const cached = preparedAudioCache.get(src);
-    if (cached) return cached;
+    if (cached) return Promise.resolve(cached);
+    const existing = pendingPreparations.get(src);
+    if (existing) return existing.promise;
+    if (pendingPreparations.size >= MAX_PREPARED_AUDIO_CACHE_ENTRIES)
+        return Promise.reject(new Error("Audio preparation is busy. Try again shortly."));
 
-    const pending = Native.fetchAudio(src)
-        .then(async bytes => {
+    const generation = cacheGeneration;
+    let resolvePreparation: (value: PreparedAudio) => void = () => {};
+    let rejectPreparation: (error: Error) => void = () => {};
+    const promise = new Promise<PreparedAudio>((resolve, reject) => {
+        resolvePreparation = resolve;
+        rejectPreparation = reject;
+    });
+    const task = { promise, reject: rejectPreparation, started: false, run: async () => {
+        task.started = true;
+        try {
+            if (generation !== cacheGeneration) throw new Error("Audio preparation cancelled.");
+            const bytes = await Native.fetchAudio(src);
+            if (generation !== cacheGeneration) throw new Error("Audio preparation cancelled.");
             const blob = new Blob([bytes], { type: detectAudioMimeType(bytes) ?? "application/octet-stream" });
             const samples = await decodeAudio(blob);
-            return {
-                blob,
-                samples,
-                waveform: generateWaveform(samples, 16_000)
-            };
-        })
-        .catch(error => {
-            if (preparedAudioCache.get(src) === pending) preparedAudioCache.delete(src);
-            throw error;
-        });
-
-    preparedAudioCache.set(src, pending);
-    if (preparedAudioCache.size > MAX_PREPARED_AUDIO_CACHE_ENTRIES) {
-        const oldest = preparedAudioCache.keys().next().value;
-        if (oldest) preparedAudioCache.delete(oldest);
-    }
-
-    return pending;
+            if (generation !== cacheGeneration) throw new Error("Audio preparation cancelled.");
+            const prepared = { blob, samples, waveform: generateWaveform(samples, 16_000) };
+            preparedAudioCache.set(src, prepared);
+            if (preparedAudioCache.size > MAX_PREPARED_AUDIO_CACHE_ENTRIES) {
+                const oldest = preparedAudioCache.keys().next().value;
+                if (oldest) preparedAudioCache.delete(oldest);
+            }
+            resolvePreparation(prepared);
+        } catch (error) {
+            rejectPreparation(error instanceof Error ? error : new Error("Could not prepare audio."));
+        } finally {
+            if (pendingPreparations.get(src) === task) pendingPreparations.delete(src);
+        }
+    } };
+    pendingPreparations.set(src, task);
+    preparationQueue.push(task.run);
+    return promise;
 }
 
 function cacheResult(cacheKey: string, result: CachedResult): void {
@@ -273,6 +299,8 @@ function VoiceMessageTranscriptionAccessory({ userId, duration, cacheKey, needsP
     const [error, setError] = useState<string | null>(null);
     const [progress, setProgress] = useState<TranscriptionProgress | null>(null);
     const [playbackSrc, setPlaybackSrc] = useState(src);
+    const [playbackError, setPlaybackError] = useState(false);
+    const [playbackAttempt, setPlaybackAttempt] = useState(0);
     const [resolvedWaveform, setResolvedWaveform] = useState(waveform || DEFAULT_WAVEFORM);
     const workerRef = useRef<TranscriptionWorker | null>(null);
     const translationRef = useRef<AbortController | null>(null);
@@ -435,19 +463,20 @@ function VoiceMessageTranscriptionAccessory({ userId, duration, cacheKey, needsP
         if (!needsPlaybackFallback || waveform) return;
 
         let active = true;
+        setPlaybackError(false);
         let objectUrl: string | undefined;
         void prepareAudio(src).then(prepared => {
             if (!active) return;
             objectUrl = URL.createObjectURL(prepared.blob);
             setPlaybackSrc(objectUrl);
             setResolvedWaveform(prepared.waveform);
-        }).catch(() => { });
+        }).catch(() => { if (active) setPlaybackError(true); });
 
         return () => {
             active = false;
             if (objectUrl) URL.revokeObjectURL(objectUrl);
         };
-    }, [needsPlaybackFallback, src, waveform]);
+    }, [needsPlaybackFallback, playbackAttempt, src, waveform]);
 
     useEffect(() => {
         if (!settings.store.autoTranscribe || transcript || autoStartedRef.current) return;
@@ -466,6 +495,7 @@ function VoiceMessageTranscriptionAccessory({ userId, duration, cacheKey, needsP
                 {needsPlaybackFallback && (
                     <div className={cl("playback-fallback")}>
                         <VoiceMessage key={playbackSrc} duration={duration} src={playbackSrc} waveform={resolvedWaveform} />
+                        {playbackError && <TextButton variant="secondary" onClick={() => setPlaybackAttempt(value => value + 1)}>Retry playback preparation</TextButton>}
                     </div>
                 )}
                 <Flex gap={8} alignItems="center" flexWrap="wrap">
@@ -483,6 +513,7 @@ function VoiceMessageTranscriptionAccessory({ userId, duration, cacheKey, needsP
             {needsPlaybackFallback && (
                 <div className={cl("playback-fallback")}>
                     <VoiceMessage key={playbackSrc} duration={duration} src={playbackSrc} waveform={resolvedWaveform} />
+                        {playbackError && <TextButton variant="secondary" onClick={() => setPlaybackAttempt(value => value + 1)}>Retry playback preparation</TextButton>}
                 </div>
             )}
             {busy && (
@@ -579,6 +610,7 @@ function VoiceMessageAccessory({ message }: { message: Message; }) {
 
 export default definePlugin({
     name: "VoiceMessageTranscriber",
+    performance: { impact: "high", description: "Downloads speech models and transcribes voice messages on your device." },
     authors: [Devs.TheSun],
     description: "Transcribes voice messages on-device after downloading a pinned runtime from jsDelivr and speech models from Hugging Face.",
     tags: ["Chat", "Media", "Utility", "Voice"],
@@ -590,6 +622,7 @@ export default definePlugin({
     },
     stop() {
         cacheGeneration++;
+        cancelQueuedPreparations();
         for (const worker of activeWorkers) worker.terminate();
         activeWorkers.clear();
         for (const controller of activeTranslations) controller.abort();

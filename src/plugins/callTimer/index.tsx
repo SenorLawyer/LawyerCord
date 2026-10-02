@@ -119,6 +119,10 @@ function resetJoinTimes() {
 
 export default definePlugin({
     name: "CallTimer",
+    performance: {
+        impact: "medium",
+        description: "Tracks voice membership and refreshes visible call durations on a shared timer."
+    },
     description: "Add call timers for all users in voice channels and in the connection status.",
     tags: ["Voice", "Utility"],
     authors: [Devs.Ven, EquicordDevs.MaxHerbold, Devs.D3SOX],

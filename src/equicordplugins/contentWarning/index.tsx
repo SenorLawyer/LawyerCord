@@ -201,6 +201,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "ContentWarning",
+    performance: { impact: "medium", description: "Checks rendered messages for trigger words and blurs matching content." },
     authors: [EquicordDevs.camila314],
     description: "Allows you to specify certain trigger words that will be blurred by default. Hovering/Clicking on the blurred content will reveal it.",
     tags: ["Appearance", "Utility"],

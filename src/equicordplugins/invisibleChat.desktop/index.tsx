@@ -120,6 +120,7 @@ export async function buildEmbed(message: any, revealed: string): Promise<void> 
 
 export default definePlugin({
     name: "InvisibleChat",
+    performance: { impact: "medium", description: "Checks rendered messages for hidden text and decrypts it when requested." },
     description: "Encrypt your Messages in a non-suspicious way!",
     tags: ["Chat"],
     authors: [Devs.SammCheese],

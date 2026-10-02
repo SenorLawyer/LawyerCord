@@ -79,6 +79,7 @@ function updateStatusForCurrentVoiceState() {
 
 export default definePlugin({
     name: "StatusWhileActive",
+    performance: { impact: "low", description: "Checks voice state events and updates status on voice transitions." },
     description: "Automatically updates your online status when in a voice channel.",
     tags: ["Activity", "Customisation", "Voice"],
     authors: [EquicordDevs.smuki],

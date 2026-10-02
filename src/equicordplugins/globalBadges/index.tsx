@@ -21,6 +21,7 @@ let intervalId: ReturnType<typeof setInterval> | undefined;
 
 export default definePlugin({
     name: "GlobalBadges",
+    performance: { impact: "medium", description: "Refreshes badge data every thirty minutes and adds profile badges." },
     description: "Adds global badges from other client mods",
     tags: ["Appearance"],
     authors: [Devs.HypedDomi, EquicordDevs.Wolfie, Devs.thororen],

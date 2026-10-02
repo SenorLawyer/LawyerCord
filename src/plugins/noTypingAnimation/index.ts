@@ -9,6 +9,10 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "NoTypingAnimation",
+    performance: {
+        impact: "low",
+        description: "Disables Discord typing dot animation through a static patch."
+    },
     authors: [Devs.AutumnVN],
     description: "Disables the CPU-intensive typing dots animation",
     tags: ["Appearance"],

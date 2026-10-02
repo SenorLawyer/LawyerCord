@@ -23,6 +23,10 @@ import managedStyle from "./style.css?managed";
 
 export default definePlugin({
     name: "MemberListDecoratorsAPI",
+    performance: {
+        impact: "low",
+        description: "Routes visible member row decorations to enabled plugin callbacks."
+    },
     description: "API to add decorators to member list (both in servers and DMs)",
     authors: [Devs.TheSun, Devs.Ven],
 

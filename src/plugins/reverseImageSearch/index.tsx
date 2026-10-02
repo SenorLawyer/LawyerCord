@@ -111,6 +111,10 @@ const imageContextMenuPatch: NavContextMenuPatchCallback = (children, props) => 
 
 export default definePlugin({
     name: "ReverseImageSearch",
+    performance: {
+        impact: "low",
+        description: "Builds reverse image search links when an image context menu opens."
+    },
     description: "Adds ImageSearch to image context menus",
     tags: ["Media", "Utility"],
     authors: [Devs.Ven, Devs.Nuckyz],

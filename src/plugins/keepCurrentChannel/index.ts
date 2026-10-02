@@ -70,6 +70,10 @@ export function clearPreviousChannel() {
 
 export default definePlugin({
     name: "KeepCurrentChannel",
+    performance: {
+        impact: "low",
+        description: "Saves channel selection changes and restores the last channel when connecting."
+    },
     description: "Attempt to navigate to the channel you were in before switching accounts or loading Discord.",
     tags: ["Utility", "Organisation"],
     authors: [Devs.Nuckyz],

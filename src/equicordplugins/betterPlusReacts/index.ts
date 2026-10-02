@@ -10,6 +10,7 @@ import { MessageStore } from "@webpack/common";
 
 export default definePlugin({
     name: "BetterPlusReacts",
+    performance: { impact: "low", description: "Looks up a message while entering a reaction shortcut." },
     authors: [Devs.Joona],
     description: "The amount of plus before :emoji: is the message to add it to",
     tags: ["Chat", "Emotes"],

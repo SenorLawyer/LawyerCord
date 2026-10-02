@@ -104,6 +104,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "FastDeleteChannels",
+    performance: { impact: "medium", description: "Adds channel controls and updates them when the delete shortcut changes." },
     description: "Adds a trash icon to delete channels",
     tags: ["Servers", "Utility"],
     authors: [Devs.thororen],

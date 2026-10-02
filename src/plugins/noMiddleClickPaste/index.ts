@@ -15,6 +15,10 @@ function preventMiddleClick(e: MouseEvent) {
 
 export default definePlugin({
     name: "NoMiddleClickPaste",
+    performance: {
+        impact: "low",
+        description: "Checks mouse release events to block middle click paste."
+    },
     description: "Disable Linux middle-click paste - Linux only",
     authors: [Devs.Darxoon],
     tags: ["Accessibility"],

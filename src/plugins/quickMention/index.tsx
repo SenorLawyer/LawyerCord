@@ -39,6 +39,10 @@ function Icon({ height = 24, width = 24, className = "icon" }: { height?: number
 
 export default definePlugin({
     name: "QuickMention",
+    performance: {
+        impact: "low",
+        description: "Adds a mention action to message toolbars and inserts text on click."
+    },
     authors: [Devs.kemo],
     description: "Adds a quick mention button to the message actions bar",
     dependencies: ["MessagePopoverAPI"],

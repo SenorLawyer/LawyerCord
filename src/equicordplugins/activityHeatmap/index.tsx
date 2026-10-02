@@ -95,6 +95,7 @@ function toggleItem(label: string, checked: boolean, action: () => void) {
 
 export default definePlugin({
     name: "ActivityHeatmap",
+    performance: { impact: "medium", description: "Counts selected message activity and saves hourly totals in batches." },
     description: "Shows a local hourly heatmap for selected servers, channels, and people.",
     authors: [EquicordDevs.SenorLawyer],
     tags: ["Utility"],

@@ -32,6 +32,7 @@ export const settings = definePluginSettings({
 
 export default definePlugin({
     name: "MoreStickers",
+    performance: { impact: "medium", description: "Builds sticker grids while the picker is open and converts animated stickers on send." },
     description: "Adds sticker packs from other social media platforms. (e.g. LINE)",
     tags: ["Chat", "Emotes", "Media"],
     authors: [EquicordDevs.Leko, Devs.Arjix],

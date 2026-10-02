@@ -6,7 +6,7 @@
 
 import * as DataStore from "@api/DataStore";
 import { showNotification } from "@api/Notifications";
-import { PlainSettings, Settings } from "@api/Settings";
+import { flushSettings, persistSettings, PlainSettings, Settings } from "@api/Settings";
 import { readResponseText } from "@shared/readResponseText";
 import { localStorage } from "@utils/localStorage";
 import { Logger } from "@utils/Logger";
@@ -119,14 +119,20 @@ async function saveLocalManifest(context: Awaited<ReturnType<typeof getCloudSync
 }
 
 async function saveSyncVersion(context: Awaited<ReturnType<typeof getCloudSyncContext>>, version: number) {
+    await flushSettings();
+    context.assertCurrent();
     const next = VencordNative.settings.get();
     next.cloud = { ...next.cloud, settingsSyncVersion: version };
-    await VencordNative.settings.set(next, undefined, context.expected?.settings);
+    await persistSettings(next, context.expected?.settings, () => {
+        context.assertCurrent();
+        PlainSettings.cloud.settingsSyncVersion = version;
+    });
     context.assertCurrent();
-    PlainSettings.cloud.settingsSyncVersion = version;
 }
 
 async function buildLocalData(checkCurrent: () => void): Promise<Map<string, Uint8Array>> {
+    await flushSettings();
+    checkCurrent();
     const encoder = new TextEncoder();
     const data = new Map<string, Uint8Array>();
 

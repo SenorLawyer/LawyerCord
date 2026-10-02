@@ -141,6 +141,7 @@ function getBadgesToApply() {
 
 export default definePlugin({
     name: "FriendshipRanks",
+    performance: { impact: "low", description: "Checks friendship age when profile badges render." },
     description: "Adds badges showcasing how long you have been friends with a user for",
     tags: ["Friends"],
     authors: [Devs.Samwich],

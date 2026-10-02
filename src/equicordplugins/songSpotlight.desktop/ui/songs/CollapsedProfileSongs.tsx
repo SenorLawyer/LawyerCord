@@ -42,6 +42,7 @@ export default function CollapsedProfileSongs({ data, user, isSideBar }: Collaps
     const userId = user?.id;
 
     useEffect(() => {
+        let active = true;
         setRenders(new Map());
         if (!previews) return;
 
@@ -49,10 +50,11 @@ export default function CollapsedProfileSongs({ data, user, isSideBar }: Collaps
             Native.renderSong(song)
                 .catch(() => null)
                 .then(info => {
-                    if (!info) return;
+                    if (!active || !info) return;
                     setRenders(renders => new Map(renders).set(sid(song), info));
                 });
         }
+        return () => { active = false; };
     }, [previews]);
 
     const songsSection = (

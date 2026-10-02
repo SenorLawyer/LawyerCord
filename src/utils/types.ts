@@ -136,6 +136,10 @@ export interface PluginDef {
     /** Additional search terms that will bring up your plugin */
     searchTerms?: string[];
     tags?: PluginTag[];
+    performance?: {
+        impact: "low" | "medium" | "high";
+        description: string;
+    };
     authors: PluginAuthor[];
     start?(): void;
     stop?(): void;

@@ -85,6 +85,7 @@ export const settings = definePluginSettings({
 
 export default definePlugin({
     name: "SteamStatusSync",
+    performance: { impact: "low", description: "Updates Steam status when Discord status settings change." },
     description: "Sync your status to Steam! (Online, Away, Invisible, or Offline.)",
     tags: ["Activity", "Appearance", "Customisation"],
     authors: [EquicordDevs.niko],

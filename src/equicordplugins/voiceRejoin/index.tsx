@@ -156,6 +156,10 @@ function hasOtherUsersInChannel(channelId: string, myUserId: string) {
 
 export default definePlugin({
     name: "VoiceRejoin",
+    performance: {
+        impact: "low",
+        description: "Stores your voice session and checks it once when reconnecting."
+    },
     description: "Rejoins DM/Server call automatically when restarting Discord.",
     tags: ["Servers", "Utility", "Voice"],
     authors: [EquicordDevs.omaw, EquicordDevs.keircn],

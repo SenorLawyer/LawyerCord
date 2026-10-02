@@ -138,6 +138,10 @@ const blurListener = () => {
 migratePluginSettings("RepeatMessages", "RepeatMessage");
 export default definePlugin({
     name: "RepeatMessages",
+    performance: {
+        impact: "low",
+        description: "Adds message actions and copies content only when you choose Repeat."
+    },
     description: "Allows you to repeat messages quickly. If you hold shift while clicking the Repeat option, it will reply to the message.",
     dependencies: ["MessagePopoverAPI"],
     tags: ["Chat"],

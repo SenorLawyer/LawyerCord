@@ -862,6 +862,7 @@ function AudioKeeper({ kind, mediaRef, renderNativePlayer, src, waveform }: Audi
 
 export default definePlugin({
     name: "PersistentAudioPlayback",
+    performance: { impact: "medium", description: "Keeps audio players and their controls active while playback continues in other channels." },
     description: "Keeps voice messages and audio attachments playing after you navigate away.",
     tags: ["Media", "Voice"],
     authors: [EquicordDevs.nobody],

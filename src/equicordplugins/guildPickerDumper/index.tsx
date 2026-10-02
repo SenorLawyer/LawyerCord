@@ -133,6 +133,7 @@ function cancelExport() {
 
 export default definePlugin({
     name: "GuildPickerDumper",
+    performance: { impact: "low", description: "Downloads and archives server assets only when export is requested." },
     description: "Context menu to dump and download a server's emojis and stickers.",
     tags: ["Emotes", "Servers", "Utility"],
     authors: [EquicordDevs.Cortex, Devs.Samwich, EquicordDevs.Synth, Devs.thororen],

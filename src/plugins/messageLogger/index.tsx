@@ -22,7 +22,7 @@ import { classes } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import { Message, MessageAttachment } from "@vencord/discord-types";
 import { findCssClassesLazy } from "@webpack";
-import { AuthenticationStore, ChannelStore, FluxDispatcher, Menu, MessageStore, Parser, SelectedChannelStore, Timestamp, UserStore, useStateFromStores } from "@webpack/common";
+import { AuthenticationStore, ChannelStore, FluxDispatcher, Menu, MessageStore, Parser, SelectedChannelStore, Timestamp, useMemo, UserStore, useStateFromStores } from "@webpack/common";
 
 import overlayStyle from "./deleteStyleOverlay.css?managed";
 import textStyle from "./deleteStyleText.css?managed";
@@ -305,14 +305,23 @@ function buildViewSegments(diffParts: DiffPart[], view: "original" | "updated"):
     return segments;
 }
 
-export function parseEditContent(content: string, message: Message, previousContent?: string) {
+interface EditContentProps {
+    content: string;
+    message: Message;
+    previousContent?: string;
+}
+
+export function EditContent({ content, message, previousContent }: EditContentProps) {
     const perMessageDiffEnabled = !disabledDiffMessages.has(message.id);
+    const { showEditDiffs } = settings.store;
+    const diffParts = useMemo(() => previousContent && content !== previousContent && showEditDiffs && perMessageDiffEnabled
+        ? createMessageDiff(content, previousContent)
+        : null, [content, previousContent, showEditDiffs, perMessageDiffEnabled]);
     const aggregatedState = (message as any).__messageloggerAggregated as undefined | {
         key: string;
         aggregatedNodes: React.ReactNode;
     };
-    if (previousContent && content !== previousContent && settings.store.showEditDiffs && perMessageDiffEnabled) {
-        const diffParts = createMessageDiff(content, previousContent);
+    if (diffParts) {
         const originalSegments = buildViewSegments(diffParts, "original");
         const updatedSegments = buildViewSegments(diffParts, "updated");
         const useSeparatedDiffs = settings.store.separatedDiffs;
@@ -464,6 +473,10 @@ export const settings = definePluginSettings({
 
 export default definePlugin({
     name: "MessageLogger",
+    performance: {
+        impact: "medium",
+        description: "Retains deleted and edited message versions and computes visible edit history differences."
+    },
     description: "Temporarily logs deleted and edited messages.",
     tags: ["Chat", "Utility"],
     authors: [Devs.rushii, Devs.Ven, Devs.AutumnVN, Devs.Nickyux, Devs.Kyuuhachi, Devs.sadan, EquicordDevs.justjxke],
@@ -576,7 +589,7 @@ export default definePlugin({
 
                         return (
                             <div key={idx} className="messagelogger-edited">
-                                {parseEditContent(edit.content, message, nextContent)}
+                                <EditContent content={edit.content} message={message} previousContent={nextContent} />
                                 <Timestamp
                                     timestamp={edit.timestamp}
                                     isEdited={true}

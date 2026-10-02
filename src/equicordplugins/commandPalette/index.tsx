@@ -72,6 +72,7 @@ function handleGlobalKey(e: KeyboardEvent): boolean {
 
 export default definePlugin({
     name: "CommandPalette",
+    performance: { impact: "low", description: "Checks keyboard shortcuts and searches commands while the palette is open." },
     description: "Raycast style command palette for running actions anywhere in Discord",
     authors: [EquicordDevs.justjxke],
     tags: ["Customisation", "Commands", "Shortcuts"],

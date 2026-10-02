@@ -112,6 +112,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "FindReply",
+    performance: { impact: "medium", description: "Scans loaded messages for replies when a message toolbar is shown." },
     description: "Jumps to the earliest reply to a message in a channel (lets you follow past conversations more easily).",
     dependencies: ["MessagePopoverAPI"],
     tags: ["Chat", "Shortcuts"],

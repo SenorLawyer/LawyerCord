@@ -131,3 +131,64 @@ test("Cancelled audio preparation releases the queue and its late completion can
     assert.equal(f.workers.length, 1);
     second.terminate();
 });
+
+function preparationFixture() {
+    let active = 0;
+    let maximum = 0;
+    let decodes = 0;
+    const responses: Array<() => void> = [];
+    const source = readFileSync("src/equicordplugins/voiceMessageTranscriber.desktop/index.tsx", "utf8");
+    const queue = transpileModule(readFileSync("src/utils/Queue.ts", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;
+    const queueExports = runInNewContext(queue + "\nexports;", { exports: {}, require: () => ({ Logger: class { error() {} } }) });
+    const start = source.indexOf("const MAX_RESULT_CACHE_ENTRIES");
+    const end = source.indexOf("function cacheResult");
+    const code = transpileModule(source.slice(start, end), { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText;
+    return runInNewContext(code + "\n({ prepareAudio, stop: () => { cacheGeneration++; cancelQueuedPreparations(); preparedAudioCache.clear(); }, maximum: () => maximum(), decodes: () => decodes(), pendingSize: () => pendingPreparations.size, responses });", {
+        Queue: queueExports.Queue, Blob,
+        maximum: () => maximum, decodes: () => decodes, responses,
+        Native: { fetchAudio: () => { active++; maximum = Math.max(maximum, active); return new Promise<Uint8Array>(resolve => responses.push(() => { active--; resolve(new Uint8Array([1])); })); } },
+        detectAudioMimeType: () => "audio/ogg", decodeAudio: async () => { decodes++; return new Float32Array([1]); }, generateWaveform: () => "AQ=="
+    });
+}
+
+test("Playback fallback preparation serializes native downloads and skips stale queued work after stop", async () => {
+    const f = preparationFixture();
+    const pending = Array.from({ length: 20 }, (_, i) => f.prepareAudio(String(i)));
+    const settled = Promise.allSettled(pending);
+    assert.equal(f.prepareAudio("0"), pending[0]);
+    assert.equal(f.pendingSize(), 3);
+    const rejected = await Promise.allSettled(pending.slice(3));
+    assert.ok(rejected.every(result => result.status === "rejected"));
+    await flush();
+    assert.equal(f.maximum(), 1);
+    assert.equal(f.responses.length, 1);
+    f.stop();
+    const cancelled = await Promise.allSettled(pending.slice(1, 3));
+    assert.ok(cancelled.every(result => result.status === "rejected"));
+    assert.equal(f.responses.length, 1);
+    f.responses[0]();
+    await settled;
+    assert.equal(f.decodes(), 0);
+    assert.equal(f.responses.length, 1);
+    const next = f.prepareAudio("new");
+    await flush();
+    f.responses[1]();
+    await next;
+    assert.equal(f.decodes(), 1);
+    assert.equal(f.maximum(), 1);
+});
+test("Same-tick playback stop cannot delete replacement preparation ownership", async () => {
+    const f = preparationFixture();
+    const stale = f.prepareAudio("same");
+    const oldResult = Promise.allSettled([stale]);
+    f.stop();
+    const replacement = f.prepareAudio("same");
+    await flush();
+    assert.equal(f.pendingSize(), 1);
+    assert.equal(f.prepareAudio("same"), replacement);
+    assert.equal(f.responses.length, 1);
+    f.responses.shift()();
+    await replacement;
+    await oldResult;
+    assert.equal(f.pendingSize(), 0);
+});

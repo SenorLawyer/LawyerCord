@@ -20,6 +20,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "SedEnhanced",
+    performance: { impact: "low", description: "Applies a text replacement when a substitution command is sent." },
     description: "Expands on Discord's rudimentary `sed` support.",
     authors: [EquicordDevs.dawn, EquicordDevs.Willow, EquicordDevs.kat],
     tags: ["Chat"],

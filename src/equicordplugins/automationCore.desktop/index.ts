@@ -9,6 +9,7 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "AutomationCore",
+    performance: { impact: "medium", description: "Runs native requests and system scans when automations ask for them." },
     description: "Stores automation credentials in the operating system vault and runs approved AI requests.",
     authors: [EquicordDevs.SenorLawyer],
     required: true,

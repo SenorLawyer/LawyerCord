@@ -109,6 +109,10 @@ function ensureOverrideUserCache() {
 
 export default definePlugin({
     name: "NoBlockedMessages",
+    performance: {
+        impact: "low",
+        description: "Checks cached user rules while messages and unread state are processed."
+    },
     description: "Hide all blocked/ignored messages from chat completely.",
     authors: [Devs.rushii, Devs.Samu, Devs.jamesbt365, Devs.Elvyra, EquicordDevs.Etorix],
     tags: ["Accessibility", "Chat"],

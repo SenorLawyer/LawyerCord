@@ -60,9 +60,11 @@ import { prepareEncryptedAttachments } from "./attachmentUploads";
 import { availableSelectedRecipientIds } from "./conversationSelection";
 import {
     clearEncryptedEmbedCache,
+    encryptedEmbedFailed,
     patchEncryptedMessageEmbeds,
     patchEncryptedMessageStickers,
     prefetchEncryptedMessageEmbeds,
+    retryEncryptedEmbeds,
 } from "./embedCache";
 import { KeyReviewGate } from "./keyReviewGate";
 import { discordEditedTimestamp } from "./messageMetadata";
@@ -108,6 +110,16 @@ let screenCaptureProtectionGeneration = 0;
 let secureMessageListenersInstalled = false;
 const screenCaptureProtectionListeners = new Set<(status: ScreenCaptureProtectionStatus) => void>();
 const pendingEncryptedRenderOwners = new Set<{ forceUpdate(): void; }>();
+const encryptedRenderCallbacks = new WeakMap<{ forceUpdate(): void; }, () => void>();
+
+function encryptedRenderCallback(owner: { forceUpdate(): void; }): () => void {
+    let callback = encryptedRenderCallbacks.get(owner);
+    if (!callback) {
+        callback = () => owner.forceUpdate();
+        encryptedRenderCallbacks.set(owner, callback);
+    }
+    return callback;
+}
 
 function setScreenCaptureProtectionStatus(status: ScreenCaptureProtectionStatus): void {
     screenCaptureProtectionStatus = status;
@@ -344,6 +356,7 @@ function failureMessage(failure: NativeFailure): string {
         if (failure.reason === "vault_unreadable") return "The encrypted Secure Messaging vault could not be read. It was not reset.";
         return "Secure key storage is unavailable.";
     }
+    if (failure.error === "busy") return "Secure Messaging is busy. Try again shortly.";
     if (failure.error === "attachment_download_failed") return "The encrypted attachment could not be downloaded from Discord.";
     if (failure.error === "attachment_too_large") return "The encrypted attachment exceeds Secure Messaging's safety limit.";
     if (failure.error === "message_too_long") return "The encrypted envelope would exceed Discord's 2,000 character limit. Shorten the message or select fewer recipients.";
@@ -1102,6 +1115,7 @@ function EncryptedAttachmentStatus({ expectedCount, message }: { expectedCount: 
 }
 
 function EncryptedMessageAccessory({ message }: { message: Message; }) {
+    const [attempt, setAttempt] = useState(0);
     const [result, setResult] = useState<DecryptIncomingResult | null>(null);
     const localUserId = UserStore.getCurrentUser()?.id;
     const captureProtection = useScreenCaptureProtectionStatus();
@@ -1120,7 +1134,7 @@ function EncryptedMessageAccessory({ message }: { message: Message; }) {
             if (active) setResult({ status: "failed", error: "cryptographic_operation_failed" });
         });
         return () => { active = false; };
-    }, [captureProtection, localUserId, message.channel_id, message.id, message.content, message.author?.id]);
+    }, [attempt, captureProtection, localUserId, message.channel_id, message.id, message.content, message.author?.id]);
 
     if (captureProtection !== "ready") {
         const screenshotMode = captureProtection === "screenshot";
@@ -1150,6 +1164,14 @@ function EncryptedMessageAccessory({ message }: { message: Message; }) {
                 <div className="pc-secure-card-header"><LockIcon color="var(--status-positive)" /> Verified encrypted message · v1</div>
                 {result.plaintext && <div className="pc-secure-card-plaintext">{Parser.parse(result.plaintext)}</div>}
                 <EncryptedAttachmentStatus expectedCount={result.attachmentBundle?.count ?? 0} message={message} />
+                {encryptedEmbedFailed(message) && <BaseText size="xs">
+                    Encrypted previews could not be loaded.
+                    <Button size="small" onClick={() => {
+                        retryEncryptedEmbeds(message);
+                        updateMessage(message.channel_id, message.id);
+                        setAttempt(value => value + 1);
+                    }}>Retry previews</Button>
+                </BaseText>}
             </div>
         );
     }
@@ -1158,6 +1180,7 @@ function EncryptedMessageAccessory({ message }: { message: Message; }) {
         <div className="pc-secure-card pc-secure-card-danger pc-secure-replaces-content">
             <div className="pc-secure-card-header"><LockIcon color="var(--status-danger)" /> Encrypted message blocked</div>
             <BaseText size="sm">{encryptedStatusText(result)}</BaseText>
+            {result.status === "failed" && result.error === "busy" && <Button size="small" onClick={() => setAttempt(value => value + 1)}>Try again</Button>}
         </div>
     );
 }
@@ -1292,6 +1315,7 @@ function openKeyReviewModal(message: Message, review: AnnouncementReviewResult, 
 }
 
 function KeyAnnouncementAccessory({ message }: { message: Message; }) {
+    const [attempt, setAttempt] = useState(0);
     const localUserId = UserStore.getCurrentUser()?.id;
     const [review, setReview] = useState<AnnouncementReviewResult | null>(null);
 
@@ -1309,7 +1333,7 @@ function KeyAnnouncementAccessory({ message }: { message: Message; }) {
             .then(result => { if (active) setReview(result); })
             .catch(() => { if (active) setReview({ status: "failed", error: "cryptographic_operation_failed" }); });
         return () => { active = false; };
-    }, [localUserId, message.author?.id, message.content]);
+    }, [attempt, localUserId, message.author?.id, message.content]);
 
     if (message.author?.id === localUserId) {
         return (
@@ -1331,6 +1355,10 @@ function KeyAnnouncementAccessory({ message }: { message: Message; }) {
             <div className="pc-secure-card pc-secure-card-danger pc-secure-replaces-content">
                 <div className="pc-secure-card-header">🔑 Invalid Secure Messaging key announcement</div>
                 {isNativeFailure(review) && <BaseText size="xs">{failureMessage(review)}</BaseText>}
+                {review.status === "failed" && review.error === "busy" && <Button size="small" onClick={() => {
+                    reviewKeyAnnouncementInBackground(message);
+                    setAttempt(value => value + 1);
+                }}>Try again</Button>}
             </div>
         );
     }
@@ -1372,6 +1400,7 @@ function SecureMessageAccessory({ message }: { message: Message; }) {
 
 export default definePlugin({
     name: "SecureMessaging",
+    performance: { impact: "medium", description: "Authenticates encrypted messages and downloads encrypted attachments for display." },
     description: "Non-ratcheting end-to-end encrypted messages, stickers, GIF links, and file attachments for explicitly verified people in DMs and group DMs.",
     tags: ["Chat", "Privacy", "Utility"],
     authors: [EquicordDevs.creations],
@@ -1487,19 +1516,19 @@ export default definePlugin({
     patchEncryptedAttachments(message: Message, owner: { forceUpdate(): void; }) {
         const ready = screenCaptureProtectionStatus === "ready";
         if (screenCaptureProtectionStatus === "pending") pendingEncryptedRenderOwners.add(owner);
-        return patchEncryptedMessageAttachments(message, () => owner.forceUpdate(), ready);
+        return patchEncryptedMessageAttachments(message, encryptedRenderCallback(owner), ready);
     },
 
     patchEncryptedEmbeds(message: Message, owner: { forceUpdate(): void; }) {
         const ready = screenCaptureProtectionStatus === "ready";
         if (screenCaptureProtectionStatus === "pending") pendingEncryptedRenderOwners.add(owner);
-        return patchEncryptedMessageEmbeds(message, () => owner.forceUpdate(), ready);
+        return patchEncryptedMessageEmbeds(message, encryptedRenderCallback(owner), ready);
     },
 
     patchEncryptedStickers(message: Message, owner: { forceUpdate(): void; }) {
         const ready = screenCaptureProtectionStatus === "ready";
         if (screenCaptureProtectionStatus === "pending") pendingEncryptedRenderOwners.add(owner);
-        return patchEncryptedMessageStickers(message, () => owner.forceUpdate(), ready);
+        return patchEncryptedMessageStickers(message, encryptedRenderCallback(owner), ready);
     },
 
     useSecureReplyPreview,

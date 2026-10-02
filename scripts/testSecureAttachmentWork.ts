@@ -56,3 +56,29 @@ test("Secure Messaging releases the exact encryption input on success and failur
         assert.deepEqual(data, new Uint8Array([1, 2, 3]));
     }
 });
+
+test("Secure Messaging reuses each pending renderer notification across repeated renders", () => {
+    const source = readFileSync("src/equicordplugins/secureMessaging.desktop/index.tsx", "utf8");
+    const state = source.slice(source.indexOf("const pendingEncryptedRenderOwners"), source.indexOf("function setScreenCaptureProtectionStatus"));
+    const methods = source.slice(source.indexOf("    patchEncryptedAttachments(message:"), source.indexOf("    useSecureReplyPreview,", source.indexOf("    patchEncryptedAttachments(message:")));
+    const listeners = new Set<() => void>();
+    const patch = (_message: unknown, onReady: () => void) => listeners.add(onReady);
+    const context = { plugin: null as null | Record<string, (message: unknown, owner: { forceUpdate(): void; }) => void>, screenCaptureProtectionStatus: "ready",
+        patchEncryptedMessageAttachments: patch, patchEncryptedMessageEmbeds: patch, patchEncryptedMessageStickers: patch };
+    const { outputText } = transpileModule(`${state}\nglobalThis.plugin = {${methods}};`, { compilerOptions: { target: ScriptTarget.ES2022 } });
+    runInNewContext(outputText, context);
+    const { plugin } = context;
+    assert.ok(plugin);
+    let updates = 0;
+    const owner = { forceUpdate() { assert.equal(this, owner); updates++; } };
+    for (let index = 0; index < 1_000; index++) {
+        plugin.patchEncryptedAttachments({}, owner);
+        plugin.patchEncryptedEmbeds({}, owner);
+        plugin.patchEncryptedStickers({}, owner);
+    }
+    assert.equal(listeners.size, 1);
+    for (const listener of listeners) listener();
+    assert.equal(updates, 1);
+    plugin.patchEncryptedEmbeds({}, { forceUpdate() { updates++; } });
+    assert.equal(listeners.size, 2);
+});

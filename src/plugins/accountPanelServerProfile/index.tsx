@@ -72,6 +72,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "AccountPanelServerProfile",
+    performance: {
+        impact: "low",
+        description: "Loads the selected server profile when the account panel is opened."
+    },
     description: "Right click your account panel in the bottom left to view your profile in the current server",
     tags: ["Appearance", "Servers"],
     authors: [Devs.Nuckyz, Devs.relitrix],

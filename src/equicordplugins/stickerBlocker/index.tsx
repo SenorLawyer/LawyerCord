@@ -125,6 +125,10 @@ function toggleBlock(name) {
 
 export default definePlugin({
     name: "StickerBlocker",
+    performance: {
+        impact: "medium",
+        description: "Checks rendered stickers and can display animated replacement images."
+    },
     description: "Allows you to block stickers from being displayed.",
     tags: ["Chat", "Emotes", "Utility"],
     authors: [Devs.Samwich],

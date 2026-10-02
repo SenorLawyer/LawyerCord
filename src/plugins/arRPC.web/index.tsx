@@ -117,6 +117,10 @@ let connectionGeneration = 0;
 migratePluginSettings("WebRichPresence", "WebRichPresence (arRPC)");
 export default definePlugin({
     name: "WebRichPresence",
+    performance: {
+        impact: "medium",
+        description: "Maintains a local RPC connection and resolves application assets for incoming activity updates."
+    },
     description: "Client plugin for arRPC to enable RPC on Discord Web (experimental)",
     tags: ["Activity", "Utility"],
     authors: [Devs.Ducko],

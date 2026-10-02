@@ -17,6 +17,10 @@ import { cancelAttachmentSends, getThumbnailUrl } from "./utils";
 
 export default definePlugin({
     name: "FavouriteAnything",
+    performance: {
+        impact: "medium",
+        description: "Adds attachment controls and refreshes signed links for visible favourite files."
+    },
     description: "Favourite any image, video, or file attachment",
     tags: ["Chat", "Media"],
     authors: [Devs.nin0dev, EquicordDevs.davri],

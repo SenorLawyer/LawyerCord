@@ -111,6 +111,10 @@ const updateStyles = () => {
 
 export default definePlugin({
     name: "WigglyText",
+    performance: {
+        impact: "high",
+        description: "Animates individual characters continuously in messages using wiggly formatting."
+    },
     description: "Adds a new markdown formatting that makes text wiggly.",
     tags: ["Appearance", "Customisation", "Fun"],
     authors: [EquicordDevs.nexpid],

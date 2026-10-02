@@ -21,6 +21,10 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "MessageAccessoriesAPI",
+    performance: {
+        impact: "low",
+        description: "Routes message accessory rendering to enabled plugin callbacks."
+    },
     description: "API to add message accessories.",
     authors: [Devs.Cyn],
     patches: [

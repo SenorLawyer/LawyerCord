@@ -20,6 +20,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "NotificationVolume",
+    performance: {
+        impact: "low",
+        description: "Applies the configured volume when notification audio is initialized."
+    },
     description: "Save your ears and set a separate volume for notifications and in-app sounds",
     tags: ["Notifications", "Voice"],
     authors: [Devs.philipbry],

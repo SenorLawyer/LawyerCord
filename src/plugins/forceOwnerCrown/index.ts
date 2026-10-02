@@ -23,6 +23,10 @@ import { GuildStore } from "@webpack/common";
 
 export default definePlugin({
     name: "ForceOwnerCrown",
+    performance: {
+        impact: "low",
+        description: "Changes the owner crown visibility check when member rows render."
+    },
     description: "Force the owner crown next to usernames even if the server is large.",
     authors: [Devs.D3SOX, Devs.Nickyux],
     tags: ["Roles", "Appearance", "Servers"],

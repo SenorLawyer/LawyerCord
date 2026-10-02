@@ -41,13 +41,18 @@ async function toggle(isEnabled: boolean) {
     if (!style) {
         if (isEnabled) {
             style = createAndAppendStyle("vencord-custom-css", userStyleRootNode);
+            let updated = false;
             VencordNative.quickCss.addChangeListener(css => {
+                updated = true;
                 style.textContent = css;
                 // At the time of writing this, changing textContent resets the disabled state
                 style.disabled = !Settings.useQuickCss;
                 updatePopoutWindows();
             });
-            style.textContent = await VencordNative.quickCss.get();
+            const initialCss = await VencordNative.quickCss.get();
+            if (!updated) style.textContent = initialCss;
+            style.disabled = !Settings.useQuickCss;
+            updatePopoutWindows();
         }
     } else
         style.disabled = !isEnabled;

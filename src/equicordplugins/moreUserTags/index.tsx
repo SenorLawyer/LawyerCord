@@ -36,6 +36,7 @@ migratePluginToSettings(true, "MoreUserTags", "NoAppsAllowed", "noAppsAllowed");
 
 export default definePlugin({
     name: "MoreUserTags",
+    performance: { impact: "medium", description: "Computes role permissions and adds tags to message and member rows." },
     description: "Adds tags for webhooks and moderative roles (owner, admin, etc.)",
     dependencies: ["MemberListDecoratorsAPI", "MessageDecorationsAPI", "NicknameIconsAPI"],
     tags: ["Appearance", "Chat"],

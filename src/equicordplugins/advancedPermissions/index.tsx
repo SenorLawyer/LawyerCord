@@ -91,6 +91,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "AdvancedPermissions",
+    performance: { impact: "low", description: "Changes the permissions layout when channel settings open." },
     description: "Show advanced permissions card by default.",
     authors: [EquicordDevs.bastih18],
     tags: ["Utility"],

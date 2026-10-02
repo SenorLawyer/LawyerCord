@@ -9,6 +9,10 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "ChatInputButtonAPI",
+    performance: {
+        impact: "low",
+        description: "Routes chat input button rendering to enabled plugin callbacks."
+    },
     description: "API to add buttons to the chat input",
     authors: [Devs.Ven],
 

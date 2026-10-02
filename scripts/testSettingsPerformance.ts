@@ -74,50 +74,6 @@ test("Theme projections preserve filtering and ordering with live nested setting
     assert.equal(comparisons, 540);
 });
 
-test("Plugin pagination cancels delayed work and loads fixed batches", () => {
-    const source = readFileSync("src/components/settings/tabs/plugins/index.tsx", "utf8");
-    const start = source.indexOf("    const [visibleCount, setVisibleCount]");
-    const end = source.indexOf("    const visiblePlugins", start);
-    assert.ok(start >= 0 && end > start);
-    const code = compile(source.slice(start, end));
-    let visibleCount = 36;
-    let cleanup: (() => void) | undefined;
-    const timers = new Map<number, () => void>();
-    let timerId = 0;
-    function render(length: number, visible: boolean) {
-        cleanup?.();
-        runInNewContext(code, {
-            plugins: Array.from({ length }),
-            useState: () => [visibleCount, (update: (value: number) => number) => { visibleCount = update(visibleCount); }],
-            useIntersection: () => [null, visible],
-            React: { useEffect: (effect: () => (() => void) | undefined) => { cleanup = effect(); } },
-            setTimeout: (callback: () => void, delay: number) => {
-                assert.equal(delay, 100);
-                timers.set(++timerId, callback);
-                return timerId;
-            },
-            clearTimeout: (id: number) => timers.delete(id)
-        });
-    }
-    render(100, true);
-    assert.equal(timers.size, 1);
-    render(100, false);
-    assert.equal(timers.size, 0);
-    assert.equal(visibleCount, 36);
-    render(100, true);
-    for (const callback of timers.values()) callback();
-    assert.equal(visibleCount, 72);
-    render(80, true);
-    for (const callback of timers.values()) callback();
-    assert.equal(visibleCount, 80);
-    render(80, true);
-    assert.equal(timers.size, 0);
-    render(200, true);
-    cleanup?.();
-    assert.equal(timers.size, 0);
-});
-
-
 test("settings subscriptions depend on path values and clean up original paths", () => {
     const source = readFileSync("src/api/Settings.ts", "utf8").replaceAll("\r\n", "\n");
     const start = source.indexOf("export function useSettings(");

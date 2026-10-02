@@ -59,6 +59,10 @@ let shouldAttemptRecover = true;
 
 export default definePlugin({
     name: "CrashHandler",
+    performance: {
+        impact: "low",
+        description: "Attempts recovery only when Discord reports a client crash."
+    },
     description: "Utility plugin for handling and possibly recovering from crashes without a restart",
     authors: [Devs.Nuckyz],
     tags: ["Utility", "Developers"],

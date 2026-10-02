@@ -18,6 +18,7 @@ import DataUI from "./components/ui";
 
 export default definePlugin({
     name: "IRememberYou",
+    performance: { impact: "medium", description: "Collects contacted users and saves changes every three minutes." },
     description: "Locally saves everyone you've been communicating with (including servers), in case of lose",
     tags: ["Chat", "Servers"],
     authors: [EquicordDevs.zoodogood, EquicordDevs.keircn],

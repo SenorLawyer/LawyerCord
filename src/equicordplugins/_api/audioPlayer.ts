@@ -12,6 +12,7 @@ export default definePlugin({
     name: "AudioPlayerAPI",
     description: "API to play internal Discord audio files or external audio links.",
     authors: [EquicordDevs.Etorix],
+    performance: { impact: "low", description: "Processes audio when it is played and when playback options change." },
     AudioType,
     playAudio,
 

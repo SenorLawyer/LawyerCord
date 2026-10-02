@@ -70,6 +70,7 @@ const UserContextMenuPatch: NavContextMenuPatchCallback = (children, { user }: U
 
 export default definePlugin({
     name: "FollowVoiceUser",
+    performance: { impact: "low", description: "Checks voice updates for the friend currently being followed." },
     description: "Follow a friend in voice chat.",
     tags: ["Voice"],
     authors: [EquicordDevs.TheArmagan],

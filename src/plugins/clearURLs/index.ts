@@ -54,6 +54,10 @@ interface RuleSet {
 
 export default definePlugin({
     name: "ClearURLs",
+    performance: {
+        impact: "low",
+        description: "Loads tracking rules at startup and checks URLs when sending messages."
+    },
     description: "Automatically removes tracking elements from URLs you send",
     dependencies: ["MessageEventsAPI"],
     tags: ["Privacy", "Utility"],

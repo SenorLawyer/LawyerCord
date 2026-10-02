@@ -167,6 +167,7 @@ function renderTimestamp(date: Date, type: "cozy" | "compact" | "tooltip" | "ari
 
 export default definePlugin({
     name: "CustomTimestamps",
+    performance: { impact: "medium", description: "Formats message timestamps and refreshes relative times once a minute." },
     description: "Custom timestamps on messages and tooltips",
     tags: ["Appearance", "Customisation"],
     authors: [Devs.Rini, EquicordDevs.nvhhr, EquicordDevs.Suffocate, Devs.Obsidian],

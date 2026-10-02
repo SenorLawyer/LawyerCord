@@ -92,6 +92,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "AnonymiseFileNames",
+    performance: {
+        impact: "low",
+        description: "Renames attachments when uploading and adds upload menu controls."
+    },
     authors: [Devs.fawn],
     description: "Anonymise uploaded file names",
     dependencies: ["CommandsAPI"],

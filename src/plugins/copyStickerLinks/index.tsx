@@ -86,6 +86,10 @@ const expressionPickerPatch: NavContextMenuPatchCallback = (children, props: { t
 
 export default definePlugin({
     name: "CopyStickerLinks",
+    performance: {
+        impact: "low",
+        description: "Builds sticker link actions when a context menu opens."
+    },
     description: "Adds the ability to copy & open Sticker links",
     tags: ["Emotes", "Utility"],
     authors: [Devs.Ven, Devs.Byeoon],

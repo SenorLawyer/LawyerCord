@@ -50,6 +50,10 @@ interface IVoiceChannelEffectSendEvent {
     animationId: number;
 }
 
+let generation = 0;
+const bursts = new Set<symbol>();
+const activeAudio = new Set<HTMLAudioElement>();
+
 const MOYAI = "🗿";
 const MOYAI_URL = "https://github.com/Equicord/Equibored/raw/main/sounds/moyai/moyai.mp3";
 const MOYAI_URL_HD = "https://github.com/Equicord/Equibored/raw/main/sounds/moyai/moyai.wav";
@@ -90,10 +94,20 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "Moyai",
+    performance: {
+        impact: "medium",
+        description: "Plays sound effects for matching messages, reactions and voice effects."
+    },
     authors: [Devs.Megu, Devs.Nuckyz],
     description: "Plays a 🗿 sound effect whenever a moyai emoji is sent, reacted, or used as a voice effect in your current channel.",
     tags: ["Fun"],
     settings,
+
+    stop() {
+        generation++;
+        bursts.clear();
+        for (const audio of activeAudio) releaseAudio(audio);
+    },
 
     flux: {
         async MESSAGE_CREATE({ optimistic, type, message, channelId }: IMessageCreate) {
@@ -110,9 +124,17 @@ export default definePlugin({
 
             const moyaiCount = getMoyaiCount(content);
 
-            for (let i = 0; i < moyaiCount; i++) {
-                boom();
-                await sleep(300);
+            if (!moyaiCount || bursts.size >= 4) return;
+            const burst = Symbol();
+            const current = generation;
+            bursts.add(burst);
+            try {
+                for (let i = 0; i < moyaiCount && current === generation; i++) {
+                    boom();
+                    await sleep(300);
+                }
+            } finally {
+                bursts.delete(burst);
             }
         },
 
@@ -168,7 +190,17 @@ function getMoyaiCount(message: string) {
     return Math.min(count, 10);
 }
 
+function releaseAudio(audio: HTMLAudioElement) {
+    activeAudio.delete(audio);
+    audio.onended = null;
+    audio.onerror = null;
+    audio.pause();
+    audio.removeAttribute("src");
+    audio.load();
+}
+
 function boom() {
+    if (activeAudio.size >= 4) return;
     if (!settings.store.triggerWhenUnfocused && !document.hasFocus()) return;
     const audioElement = document.createElement("audio");
 
@@ -177,5 +209,7 @@ function boom() {
         : MOYAI_URL;
 
     audioElement.volume = settings.store.volume;
-    void audioElement.play();
+    activeAudio.add(audioElement);
+    audioElement.onended = audioElement.onerror = () => releaseAudio(audioElement);
+    void audioElement.play().catch(() => releaseAudio(audioElement));
 }

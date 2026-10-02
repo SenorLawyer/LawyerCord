@@ -52,6 +52,10 @@ function clearPendingMemberRequest() {
 
 export default definePlugin({
     name: "ImplicitRelationships",
+    performance: {
+        impact: "medium",
+        description: "Sorts implicit relationships and requests member details when the frequent friends view is opened."
+    },
     description: "Shows your implicit relationships in the Friends tab.",
     tags: ["Friends", "Servers"],
     authors: [Devs.Dolfies],

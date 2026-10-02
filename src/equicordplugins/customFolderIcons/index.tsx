@@ -23,6 +23,7 @@ const SETTINGS: ("folderIcons" | "solidIcon")[] = ["folderIcons", "solidIcon"];
 
 export default definePlugin({
     name: "CustomFolderIcons",
+    performance: { impact: "low", description: "Substitutes configured folder images when folder icons render." },
     description: "Customize folder icons with any png",
     tags: ["Appearance", "Customisation", "Organisation"],
     authors: [EquicordDevs.sadan],

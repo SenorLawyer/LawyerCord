@@ -65,6 +65,7 @@ function stopPerAccountTasks(source: string): void {
 
 export default definePlugin({
     name: "Questify",
+    performance: { impact: "medium", description: "Sorts quest tiles and periodically checks for new quests." },
     description: "Enhance specific Quest features, disable annoyances, or completely remove Quests.",
     tags: ["Appearance", "Customisation", "Privacy", "Utility"],
     authors: [EquicordDevs.Etorix],

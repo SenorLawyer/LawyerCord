@@ -183,6 +183,7 @@ function filterActiveNowCards<T extends NowPlayingCard>(cards: T[]): T[] {
 
 export default definePlugin({
     name: "ClientSideBlock",
+    performance: { impact: "medium", description: "Filters user content and checks member groups while rendering." },
     description: "Allows you to locally hide almost all content from any user",
     tags: ["Utility"],
     searchTerms: ["blocked", "block", "hide", "hidden", "noblockedmessages"],

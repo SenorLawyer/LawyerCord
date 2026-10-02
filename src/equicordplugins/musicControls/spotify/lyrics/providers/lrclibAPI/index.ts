@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { requestLyrics } from "@equicordplugins/musicControls/lyricsRequest";
 import { LyricsData, Provider, type SyncedLyric } from "@equicordplugins/musicControls/spotify/lyrics/providers/types";
 import { Track } from "@equicordplugins/musicControls/spotify/SpotifyStore";
 
@@ -31,16 +32,13 @@ export async function getLyricsLrclib(track: Track): Promise<LyricsData | null> 
 
     const params = new URLSearchParams(info);
     const url = `${baseUrlLrclib}?${params.toString()}`;
-    const response = await fetch(url, {
+    const data = await requestLyrics(url, {
         headers: {
             "User-Agent": "SpotifyLyrics for LawyerCord (https://github.com/Masterjoona/vc-spotifylyrics)"
         }
-    });
+    }) as LrcLibResponse | null;
 
-    if (!response.ok) return null;
-
-    const data = await response.json() as LrcLibResponse;
-    if (!data.syncedLyrics) return null;
+    if (!data?.syncedLyrics) return null;
 
     const lines: SyncedLyric[] = [];
     for (const line of data.syncedLyrics.split("\n")) {

@@ -614,6 +614,10 @@ async function executeAction(
 
 export default definePlugin({
     name: "MessageClickActions",
+    performance: {
+        impact: "low",
+        description: "Tracks click modifiers and executes configured message actions after clicks."
+    },
     description: "Customize click actions on messages.",
     tags: ["Chat", "Shortcuts"],
     authors: [Devs.Ven, EquicordDevs.keircn, EquicordDevs.ZcraftElite, EquicordDevs.omaw],

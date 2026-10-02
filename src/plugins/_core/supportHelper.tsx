@@ -308,6 +308,10 @@ function DevBuildConfirmModal(props: RenderModalProps) {
 
 export default definePlugin({
     name: "SupportHelper",
+    performance: {
+        impact: "low",
+        description: "Checks support channel messages and builds diagnostic information when requested."
+    },
     required: true,
     description: "Helps us provide support to you",
     authors: [Devs.Ven],

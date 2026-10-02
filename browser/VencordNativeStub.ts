@@ -132,7 +132,7 @@ window.VencordNative = {
                 return {};
             }
         },
-        set: async (s: Settings, _pathToNotify?: string, expected?: string) => {
+        set: async (s: Settings, _pathToNotify?: string | string[], expected?: string) => {
             const serialized = JSON.stringify(s);
             const save = () => {
                 if (expected !== undefined) {
@@ -148,6 +148,7 @@ window.VencordNative = {
             }
             await navigator.locks.request("LawyerCordSettings", save);
         },
+        setSync: () => { throw new Error("Synchronous settings persistence is not supported on web."); },
         getSettingsDir: async () => "LocalStorage",
         openFolder: async () => Promise.reject("settings:openFolder is not supported on web"),
     },

@@ -8,13 +8,19 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
-import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
+import { createSourceFile, forEachChild, isPropertyAssignment, JsxEmit, Node, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 test("Speech model settings read only model values one at a time and stop scanning on unmount", async () => {
     const source = readFileSync("src/equicordplugins/voiceMessageTranscriber.desktop/index.tsx", "utf8");
-    const start = source.indexOf("component: () => {") + "component: ".length;
-    const end = source.indexOf("\n    }\n});", start);
-    const code = transpileModule(`const Component = ${source.slice(start, end)}; Component`, {
+    const ast = createSourceFile("index.tsx", source, ScriptTarget.Latest, true);
+    let componentSource = "";
+    function visit(node: Node) {
+        if (isPropertyAssignment(node) && node.name.getText(ast) === "component") componentSource = node.initializer.getText(ast);
+        forEachChild(node, visit);
+    }
+    visit(ast);
+    assert.ok(componentSource);
+    const code = transpileModule(`const Component = ${componentSource}; Component`, {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022, jsx: JsxEmit.React }
     }).outputText;
     let cleanup: (() => void) | undefined;

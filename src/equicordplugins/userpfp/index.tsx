@@ -80,6 +80,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "UserPFP",
+    performance: { impact: "medium", description: "Loads a custom avatar database and can display animated avatars throughout Discord." },
     description: "Allows you to use an animated avatar without Nitro",
     tags: ["Appearance", "Customisation", "Servers"],
     authors: [EquicordDevs.nexpid, Devs.thororen, EquicordDevs.soapphia, EquicordDevs.sketchmyname],

@@ -34,6 +34,10 @@ function clearVoiceClickTimers() {
 
 export default definePlugin({
     name: "VoiceChatDoubleClick",
+    performance: {
+        impact: "low",
+        description: "Tracks short click timers to distinguish single and double voice channel clicks."
+    },
     description: "Join voice chats via double click instead of single click",
     tags: ["Voice"],
     authors: [Devs.Ven, Devs.D3SOX, Devs.sadan],

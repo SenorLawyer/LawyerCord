@@ -137,6 +137,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "LawyerCordHelper",
+    performance: { impact: "medium", description: "Checks messages for support controls and adds optional interface helpers." },
     description: "Used to provide support, fix discord caused crashes, and other misc features.",
     tags: ["Appearance", "Commands", "Utility"],
     dependencies: ["CommandsAPI", "HeaderBarAPI", "MessageAccessoriesAPI"],

@@ -135,6 +135,8 @@ export const CropTool: ToolDefinition = {
         Mouse.event.on("up", this.onMouseUpCallback);
     },
     unselected() {
+        Mouse.event.off("move", this.onMouseMoveCallback);
+        Mouse.event.off("up", this.onMouseUpCallback);
         if (!canvas) return;
 
         cropCanvas.clearRect(0, 0, canvas.width, canvas.height);
@@ -145,7 +147,5 @@ export const CropTool: ToolDefinition = {
 
         render();
 
-        Mouse.event.off("move", this.onMouseMoveCallback);
-        Mouse.event.off("up", this.onMouseUpCallback);
     },
 };

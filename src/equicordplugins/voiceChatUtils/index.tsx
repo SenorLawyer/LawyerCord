@@ -186,6 +186,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "VoiceChatUtilities",
+    performance: {
+        impact: "low",
+        description: "Builds voice context menus and runs member actions only when requested."
+    },
     description: "This plugin allows you to perform multiple actions on an entire channel (move, mute, disconnect, etc.) (originally by dutake)",
     tags: ["Chat", "Servers", "Voice"],
     authors: [Devs.D3SOX, EquicordDevs.nickwoah],

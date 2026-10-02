@@ -21,6 +21,10 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "NoticesAPI",
+    performance: {
+        impact: "low",
+        description: "Keeps plugin notices visible until explicitly dismissed."
+    },
     description: "Fixes notices being automatically dismissed",
     authors: [Devs.Ven],
     required: true,

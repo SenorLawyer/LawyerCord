@@ -11,6 +11,10 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "VoiceDownload",
+    performance: {
+        impact: "low",
+        description: "Adds a download action for voice message attachments."
+    },
     description: "Adds a download to voice messages. (Opens a new browser tab)",
     tags: ["Voice", "Media"],
     authors: [Devs.puv],

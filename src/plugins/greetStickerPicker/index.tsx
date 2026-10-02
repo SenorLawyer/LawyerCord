@@ -150,6 +150,10 @@ function GreetMenu({ channel, message }: { message: Message, channel: Channel; }
 
 export default definePlugin({
     name: "GreetStickerPicker",
+    performance: {
+        impact: "low",
+        description: "Opens sticker choices and sends the selected greeting when requested."
+    },
     description: "Allows you to use any greet sticker instead of only the random one by right-clicking the 'Wave to say hi!' button",
     tags: ["Emotes", "Customisation"],
     authors: [Devs.Ven],

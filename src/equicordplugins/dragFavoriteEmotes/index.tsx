@@ -43,6 +43,7 @@ type EmojiDescriptor = {
 
 export default definePlugin({
     name: "DragFavoriteEmotes",
+    performance: { impact: "medium", description: "Adds drag and drop hooks to emoji picker items." },
     authors: [EquicordDevs.PWall],
     description: "Adds the ability to change the order of your favourite emotes",
     tags: ["Customisation", "Chat", "Emotes"],

@@ -167,6 +167,10 @@ function onAccountChange() {
 
 export default definePlugin({
     name: "OrbolayBridge",
+    performance: {
+        impact: "medium",
+        description: "Maintains a local connection and forwards voice activity to Orbolay."
+    },
     description: "Bridge plugin to connect Orbolay to Discord.",
     tags: ["Utility", "Voice"],
     authors: [EquicordDevs.SpikeHD],

@@ -10,6 +10,10 @@ import { setColorPicker, setCreateScroller, setNewCustomizationSection } from "@
 
 export default definePlugin({
     name: "ConcatenatedComponentExtractor",
+    performance: {
+        impact: "low",
+        description: "Exposes existing Discord components through module patches."
+    },
     description: "Extract components that have been concatenated by the bundler",
     authors: [Devs.sadan],
     tags: ["Developers", "Utility"],

@@ -9,6 +9,7 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "BlockKrisp",
+    performance: { impact: "low", description: "Prevents noise suppression modules from loading." },
     description: "Prevent Krisp from loading",
     tags: ["Privacy", "Utility", "Voice"],
     authors: [Devs.D3SOX],

@@ -58,6 +58,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "CopyEmojiMarkdown",
+    performance: {
+        impact: "low",
+        description: "Builds emoji copy actions when a context menu opens."
+    },
     description: "Allows you to copy emojis as formatted string (<:blobcatcozy:1026533070955872337>)",
     tags: ["Emotes", "Utility"],
     authors: [Devs.HappyEnderman, Devs.Vishnya],

@@ -410,6 +410,7 @@ function resolveLanguage(currentLanguage: string | undefined, content: string) {
 
 export default definePlugin({
     name: "AutoCodeblockLanguage",
+    performance: { impact: "high", description: "Detects untagged code languages synchronously across multiple syntax grammars." },
     description: "Detects languages for fenced code blocks that were sent without a language tag.",
     authors: [EquicordDevs.nobody],
     tags: ["Chat", "Utility", "Developers"],

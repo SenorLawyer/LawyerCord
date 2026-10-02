@@ -125,6 +125,7 @@ function onActivity() {
 
 export default definePlugin({
     name: "IdleAutoRestart",
+    performance: { impact: "low", description: "Tracks input activity and schedules a single idle restart timer." },
     description: "Automatically restarts the client after being idle for a configurable amount of time, but avoids restarting while you are in VC.",
     tags: ["Utility"],
     authors: [EquicordDevs.SteelTech],

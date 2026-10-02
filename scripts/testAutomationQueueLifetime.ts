@@ -11,7 +11,22 @@ import { runInNewContext } from "node:vm";
 import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import { createAutomation } from "../src/components/settings/tabs/automations/model";
-import type { createRunQueue } from "../src/components/settings/tabs/automations/runQueue";
+import { createRunQueue } from "../src/components/settings/tabs/automations/runQueue";
+
+test("Cooldown waiting starts respect the workflow's queue limit", async () => {
+    const workflow = { ...createAutomation(), runMode: "queue" as const, cooldownSeconds: 60, queueLimit: 2 };
+    const queue = createRunQueue(() => {}, () => 1000);
+    queue.retainWorkflows([workflow.id]);
+    await queue.enqueue(workflow, async () => {});
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+    const waiting = Array.from({ length: 20 }, () => queue.enqueue(workflow, async () => {}).catch(error => error));
+    try {
+        assert.equal(queue.snapshot().filter(run => run.status === "queued").length, 2);
+    } finally {
+        queue.cancel();
+        await Promise.all(waiting);
+    }
+});
 
 test("Queue cooldown history belongs to saved workflows and outstanding jobs", async () => {
     let history: Map<string, number> | undefined;

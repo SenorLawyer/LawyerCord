@@ -385,6 +385,10 @@ const TEXT_REPLACE_RULES_EXEMPT_CHANNEL_IDS = [
 
 export default definePlugin({
     name: "TextReplace",
+    performance: {
+        impact: "medium",
+        description: "Runs configured string and regular expression replacements on matching sent or received messages."
+    },
     description: "Replace text in your messages. You can find pre-made rules in the #textreplace-rules channel in Vencord's Server",
     tags: ["Chat", "Customisation", "Utility"],
     authors: [Devs.AutumnVN, Devs.TheKodeToad, EquicordDevs.Etorix, EquicordDevs.Ape],

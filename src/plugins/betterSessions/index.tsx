@@ -59,6 +59,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "BetterSessions",
+    performance: {
+        impact: "medium",
+        description: "Optionally polls account sessions in the background and renders custom device details."
+    },
     description: "Enhances the sessions (devices) menu. Allows you to view exact timestamps, give each session a custom name, and receive notifications about new sessions.",
     authors: [Devs.amia],
     tags: ["Notifications", "Customisation", "Utility"],

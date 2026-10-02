@@ -357,6 +357,7 @@ function showCycleToast() {
 
 export default definePlugin({
     name: "RecentDMSwitcher",
+    performance: { impact: "low", description: "Keeps a short recent DM list and renders an overlay while you switch conversations." },
     description: "Ctrl+Tab between most recently used DMs (Ctrl+Shift+Tab reverse)",
     tags: ["Chat", "Utility"],
     authors: [EquicordDevs.mmeta],

@@ -91,6 +91,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "Settings",
+    performance: {
+        impact: "low",
+        description: "Adds settings navigation and version information with work mainly when settings open."
+    },
     description: "Adds Settings UI and debug info",
     authors: [Devs.Ven, Devs.Megu],
     tags: ["Utility"],

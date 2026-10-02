@@ -37,7 +37,7 @@ import { useForceUpdater } from "@utils/react";
 import { OptionType, Plugin, PluginTag } from "@utils/types";
 import { RenderModalProps, User } from "@vencord/discord-types";
 import { findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
-import { Clickable, FluxDispatcher, lodash, Modal, openModal, React, Text, Toasts, Tooltip, useEffect, useMemo, useRef, UserStore, UserSummaryItem, UserUtils, useState } from "@webpack/common";
+import { Clickable, ConfirmModal, FluxDispatcher, lodash, Modal, openModal, React, Text, Toasts, Tooltip, useEffect, useMemo, useRef, UserStore, UserSummaryItem, UserUtils, useState } from "@webpack/common";
 import { Constructor } from "type-fest";
 
 import { PluginMeta } from "~plugins";
@@ -50,7 +50,6 @@ const cl = classNameFactory("vc-plugin-modal-");
 const logger = new Logger("PluginModal");
 
 const AvatarStyles = findCssClassesLazy("moreUsers", "avatar", "clickableAvatar");
-const ConfirmModal = findComponentByCodeLazy('parentComponent:"ConfirmModal"');
 const WarningIcon = findComponentByCodeLazy("3.15H3.29c-1.74");
 const UserRecord: Constructor<Partial<User>> = proxyLazy(() => UserStore.getCurrentUser().constructor) as any;
 const fallbackAuthorIds = new WeakMap<Plugin["authors"][number], string>();
@@ -103,7 +102,7 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
     ), [plugin, onRestartNeeded]);
 
     // avoid layout shift by showing dummy users while loading users
-    const fallbackAuthors = useMemo(() => [makeDummyUser({ username: "Loading...", id: "-1465912127305809920" })], []);
+    const fallbackAuthors = useMemo(() => [new UserRecord({ username: "Loading...", id: "-1465912127305809920", bot: true })], []);
     const [authors, setAuthors] = useState<Partial<User>[]>([]);
 
     useEffect(() => {
@@ -345,8 +344,7 @@ export function openWarningModal(plugin?: Plugin | null, onRestartNeeded?: (plug
     openModal(props => (
         <ConfirmModal
             {...props}
-            className={cl("confirm")}
-            header={isPlugin ? "Reset Settings" : "Disable Plugins"}
+            title={isPlugin ? "Reset Settings" : "Disable Plugins"}
             confirmText={isPlugin ? "Reset" : "Disable All"}
             cancelText="Cancel"
             onConfirm={() => {
@@ -355,7 +353,6 @@ export function openWarningModal(plugin?: Plugin | null, onRestartNeeded?: (plug
                 }
                 reset?.();
             }}
-            onCancel={props.onClose}
         >
             <Paragraph>
                 {isPlugin

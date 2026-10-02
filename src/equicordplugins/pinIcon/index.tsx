@@ -24,6 +24,7 @@ import { findComponentByCodeLazy } from "@webpack";
 const PinIcon = findComponentByCodeLazy("1-.06-.63L6.16");
 export default definePlugin({
     name: "PinIcon",
+    performance: { impact: "medium", description: "Adds an icon check to each rendered message." },
     description: "Adds a pin icon to pinned messages",
     tags: ["Appearance", "Chat"],
     authors: [EquicordDevs.iamme],

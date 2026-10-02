@@ -9,6 +9,7 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "NoRoleHeaders",
+    performance: { impact: "low", description: "Skips role header rendering in the member list." },
     description: "We are all equal!! Removes the role headers in the member list.",
     tags: ["Appearance", "Fun", "Roles"],
     authors: [Devs.Samwich],

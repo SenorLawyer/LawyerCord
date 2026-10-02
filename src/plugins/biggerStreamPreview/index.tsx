@@ -69,6 +69,10 @@ const userContextPatch: NavContextMenuPatchCallback = (children, { user }: UserC
 
 export default definePlugin({
     name: "BiggerStreamPreview",
+    performance: {
+        impact: "low",
+        description: "Opens an enlarged stream preview when requested."
+    },
     description: "This plugin allows you to enlarge stream previews",
     tags: ["Media", "Appearance"],
     authors: [Devs.phil],

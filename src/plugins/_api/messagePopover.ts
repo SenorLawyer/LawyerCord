@@ -21,6 +21,10 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "MessagePopoverAPI",
+    performance: {
+        impact: "low",
+        description: "Builds registered plugin buttons when a message toolbar appears."
+    },
     description: "API to add buttons to message popovers.",
     authors: [Devs.KingFish, Devs.Ven, Devs.Nuckyz],
     patches: [

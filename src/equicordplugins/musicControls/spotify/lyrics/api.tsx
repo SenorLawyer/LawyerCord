@@ -5,6 +5,7 @@
  */
 
 import { DataStore } from "@api/index";
+import { lyricsRequestGeneration } from "@equicordplugins/musicControls/lyricsRequest";
 import { settings } from "@equicordplugins/musicControls/settings";
 import { Track } from "@equicordplugins/musicControls/spotify/SpotifyStore";
 
@@ -15,6 +16,36 @@ import { LyricsData, Provider, SyncedLyric } from "./providers/types";
 export let lyricsCacheGeneration = 0;
 
 const LyricsCacheKey = "SpotifyLyricsCacheNew";
+const LyricsPrefix = "MusicControls_lyrics_";
+const LyricsMigrationKey = "MusicControls_lyricsMigrated";
+let cacheReady: Promise<void> | undefined;
+
+function ensureLyricsCache(): Promise<void> {
+    if (cacheReady) return cacheReady;
+    const pending = (async () => {
+        if (await DataStore.get<boolean>(LyricsMigrationKey)) return;
+        const [legacy, old] = await Promise.all([
+            DataStore.get<Record<string, LyricsData | null>>(LyricsCacheKey),
+            DataStore.get<Record<string, SyncedLyric[] | null>>("SpotifyLyricsCache")
+        ]);
+        const migrated: Record<string, LyricsData | null> = { ...legacy };
+        for (const [id, lyrics] of Object.entries(old ?? {})) {
+            if (lyrics && !migrated[id]) migrated[id] = { useLyric: Provider.Lrclib, lyricsVersions: { [Provider.Lrclib]: lyrics } };
+        }
+        const entries: [IDBValidKey, unknown][] = Object.entries(migrated)
+            .filter(([, lyrics]) => lyrics !== null)
+            .map(([id, lyrics]) => [LyricsPrefix + id, lyrics]);
+        entries.push([LyricsMigrationKey, true]);
+        await DataStore.setMany(entries);
+    })();
+    cacheReady = pending;
+    void pending.catch(() => { if (cacheReady === pending) cacheReady = undefined; });
+    return pending;
+}
+
+async function lyricKeys(): Promise<string[]> {
+    return (await DataStore.keys()).filter((key): key is string => typeof key === "string" && key.startsWith(LyricsPrefix));
+}
 
 interface NullLyricCacheEntry {
     [Provider.Lrclib]?: boolean;
@@ -33,12 +64,14 @@ export const providers = Object.keys(lyricFetchers) as Provider[];
 export async function getLyrics(track: Track | null): Promise<LyricsData | null> {
     if (!track || !track.id) return null;
 
+    const generation = lyricsRequestGeneration;
+    const cacheGeneration = lyricsCacheGeneration;
     const cacheKey = track.id;
-    const cached = await DataStore.get(LyricsCacheKey) as Record<string, LyricsData | null>;
+    await ensureLyricsCache();
+    const cached = await DataStore.get<LyricsData>(LyricsPrefix + cacheKey);
 
-    if (cached?.[cacheKey]) {
-        return cached[cacheKey];
-    }
+    if (generation !== lyricsRequestGeneration || cacheGeneration !== lyricsCacheGeneration) return null;
+    if (cached) return cached;
 
     const nullCacheEntry = nullLyricCache.get(cacheKey);
 
@@ -58,82 +91,89 @@ export async function getLyrics(track: Track | null): Promise<LyricsData | null>
         : [settings.store.lyricsProvider];
 
     for (const provider of providersToTry) {
-        const lyricsInfo = await lyricFetchers[provider](track);
+        let lyricsInfo: LyricsData | null;
+        try {
+            lyricsInfo = await lyricFetchers[provider](track);
+        } catch {
+            if (generation !== lyricsRequestGeneration || cacheGeneration !== lyricsCacheGeneration) return null;
+            continue;
+        }
 
+        if (generation !== lyricsRequestGeneration || cacheGeneration !== lyricsCacheGeneration) return null;
         if (lyricsInfo) {
-            await DataStore.set(LyricsCacheKey, { ...cached, [cacheKey]: lyricsInfo });
+            await DataStore.set(LyricsPrefix + cacheKey, lyricsInfo);
             return lyricsInfo;
         }
 
         const updatedNullCacheEntry = nullLyricCache.get(cacheKey) || {};
         nullLyricCache.set(cacheKey, { ...updatedNullCacheEntry, [provider]: true });
+        if (nullLyricCache.size > 500) nullLyricCache.delete(nullLyricCache.keys().next().value ?? cacheKey);
     }
 
     return null;
 }
 
 export async function clearLyricsCache() {
-    nullLyricCache.clear();
-    await DataStore.set(LyricsCacheKey, {});
     lyricsCacheGeneration++;
+    nullLyricCache.clear();
+    const ready = ensureLyricsCache();
+    const pending = ready.then(async () => {
+        await DataStore.delMany(await lyricKeys());
+        await DataStore.setMany([[LyricsCacheKey, {}], ["SpotifyLyricsCache", {}]]);
+    });
+    cacheReady = pending;
+    try {
+        await pending;
+    } finally {
+        if (cacheReady === pending) cacheReady = undefined;
+    }
 }
 
 export async function getLyricsCount(): Promise<number> {
-    const cache = await DataStore.get(LyricsCacheKey) as Record<string, LyricsData | null>;
-    return Object.keys(cache ?? {}).length;
+    await ensureLyricsCache();
+    return (await lyricKeys()).length;
 }
 
 export async function updateLyrics(trackId: string, newLyrics: SyncedLyric[], provider: Provider) {
-    const cache = await DataStore.get(LyricsCacheKey) as Record<string, LyricsData | null>;
-    const current = cache[trackId];
-
-    await DataStore.set(LyricsCacheKey,
-        {
-            ...cache, [trackId]: {
-                ...current,
-                useLyric: provider,
-                lyricsVersions: {
-                    ...current?.lyricsVersions,
-                    [provider]: newLyrics
-                }
-            }
-        }
-    );
+    const generation = lyricsCacheGeneration;
+    await ensureLyricsCache();
+    if (generation !== lyricsCacheGeneration) return;
+    await DataStore.update<LyricsData>(LyricsPrefix + trackId, current => ({
+        useLyric: provider,
+        lyricsVersions: { ...current?.lyricsVersions, [provider]: newLyrics }
+    }));
 }
 
 export async function removeTranslations() {
-    const cache = await DataStore.get(LyricsCacheKey) as Record<string, LyricsData | null>;
-    const newCache = {} as Record<string, LyricsData | null>;
-
-    for (const [trackId, trackData] of Object.entries(cache)) {
-        const { Translated, ...lyricsVersions } = trackData?.lyricsVersions || {};
-        const newUseLyric = !!lyricsVersions[Provider.Spotify] ? Provider.Spotify : Provider.Lrclib;
-
-        newCache[trackId] = { lyricsVersions, useLyric: newUseLyric };
-    }
-
-    await DataStore.set(LyricsCacheKey, newCache);
     lyricsCacheGeneration++;
+    const ready = ensureLyricsCache();
+    const pending = ready.then(async () => {
+        const keys = await lyricKeys();
+        for (let offset = 0; offset < keys.length; offset += 100) {
+            const batch = keys.slice(offset, offset + 100);
+            const entries = await DataStore.getMany<LyricsData>(batch);
+            await DataStore.setMany(entries.map((entry, index) => {
+                const { Translated, ...lyricsVersions } = entry.lyricsVersions;
+                return [batch[index], { lyricsVersions, useLyric: lyricsVersions[Provider.Spotify] ? Provider.Spotify : Provider.Lrclib }];
+            }));
+        }
+        const legacy = await DataStore.get<Record<string, LyricsData | null>>(LyricsCacheKey);
+        const updated: Record<string, LyricsData> = {};
+        for (const [id, entry] of Object.entries(legacy ?? {})) {
+            if (!entry) continue;
+            const { Translated, ...lyricsVersions } = entry.lyricsVersions;
+            updated[id] = { lyricsVersions, useLyric: lyricsVersions[Provider.Spotify] ? Provider.Spotify : Provider.Lrclib };
+        }
+        await DataStore.set(LyricsCacheKey, updated);
+    });
+    cacheReady = pending;
+    try {
+        await pending;
+    } finally {
+        if (cacheReady === pending) cacheReady = undefined;
+    }
 }
 
 export async function migrateOldLyrics() {
-    const oldCache = await DataStore.get("SpotifyLyricsCache");
-    if (!oldCache || !Object.entries(oldCache).length) return;
-
-    const filteredCache = Object.entries(oldCache).filter(lrc => lrc[1]);
-    const result = {};
-
-    filteredCache.forEach(([trackId, lyrics]) => {
-        result[trackId] = {
-            lyricsVersions: {
-                // @ts-ignore
-                LRCLIB: lyrics.map(({ time, text }) => ({ time, text }))
-            },
-            useLyric: "LRCLIB"
-        };
-    });
-
-    await DataStore.set(LyricsCacheKey, result);
-    await DataStore.set("SpotifyLyricsCache", {});
-    lyricsCacheGeneration++;
+    await ensureLyricsCache();
 }

@@ -235,6 +235,7 @@ function load() {
 migratePluginSettings("CursorBuddy", "Oneko", "oneko");
 export default definePlugin({
     name: "CursorBuddy",
+    performance: { impact: "high", description: "Continuously animates a cursor sprite and can shake the entire window." },
     description: "Adds a sprite that follows your cursor.",
     tags: ["Appearance", "Customisation", "Fun"],
     authors: [Devs.Ven, Devs.adryd, EquicordDevs.nexpid, EquicordDevs.ZcraftElite],

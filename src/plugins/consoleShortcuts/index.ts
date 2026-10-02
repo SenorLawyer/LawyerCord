@@ -180,6 +180,10 @@ function makeShortcuts() {
 
 export default definePlugin({
     name: "ConsoleShortcuts",
+    performance: {
+        impact: "low",
+        description: "Installs console shortcuts and performs inspections only when invoked."
+    },
     description: "Adds shorter Aliases for many things on the window. Run `shortcutList` for a list.",
     authors: [Devs.Ven],
     tags: ["Developers", "Console", "Shortcuts", "Utility"],

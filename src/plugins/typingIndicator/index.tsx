@@ -180,6 +180,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "TypingIndicator",
+    performance: {
+        impact: "medium",
+        description: "Subscribes channel rows to typing activity and renders active dots or avatars."
+    },
     description: "Adds an indicator if someone is typing on a channel.",
     tags: ["Notifications", "Appearance", "Servers"],
     authors: [Devs.Nuckyz, Devs.fawn, Devs.Sqaaakoi],

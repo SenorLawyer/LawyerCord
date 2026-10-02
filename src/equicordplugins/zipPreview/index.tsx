@@ -14,6 +14,7 @@ import { clearZipPreviewCache, getAttachmentFileName, isZipFile, ZipPreviewAttac
 
 export default definePlugin({
     name: "ZipPreview",
+    performance: { impact: "high", description: "Downloads archives and decompresses entries when you expand a ZIP preview." },
     description: "Previews ZIP contents inside file attachments.",
     tags: ["Chat", "Utility"],
     authors: [EquicordDevs.justjxke],

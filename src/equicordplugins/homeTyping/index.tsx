@@ -19,6 +19,7 @@ const PrivateChannelSortStore = findStoreLazy("PrivateChannelSortStore") as { ge
 
 export default definePlugin({
     name: "HomeTyping",
+    performance: { impact: "medium", description: "Scans direct message typing state when stores update." },
     description: "Changes the home button to a typing indicator if someone in your dms is typing",
     tags: ["Chat"],
     authors: [Devs.Samwich],

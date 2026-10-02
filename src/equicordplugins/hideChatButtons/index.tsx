@@ -82,6 +82,7 @@ migratePluginSetting("HideChatButtons", "open", "Open");
 migratePluginSetting("HideChatButtons", "color", "Color");
 export default definePlugin({
     name: "HideChatButtons",
+    performance: { impact: "low", description: "Groups chat input buttons behind a toggle." },
     description: "Able to hide the chat buttons",
     tags: ["Chat", "Utility"],
     authors: [EquicordDevs.iamme],

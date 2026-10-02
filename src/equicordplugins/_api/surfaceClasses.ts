@@ -11,6 +11,7 @@ export default definePlugin({
     name: "SurfaceClassesAPI",
     description: "API to add plugin-owned semantic data attributes and limited props to stable Discord layout surfaces.",
     authors: [EquicordDevs.benjii],
+    performance: { impact: "low", description: "Adds registered surface props during Discord layout renders." },
 
     patches: [
         {

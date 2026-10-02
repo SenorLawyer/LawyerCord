@@ -297,6 +297,10 @@ function isActivityTypeIgnored(type: number, id?: string) {
 
 export default definePlugin({
     name: "IgnoreActivities",
+    performance: {
+        impact: "low",
+        description: "Filters presence updates against cached activity rules when activities change."
+    },
     authors: [Devs.Nuckyz, Devs.Kylie],
     description: "Ignore activities from showing up on your status ONLY. You can configure which ones are specifically ignored from the Registered Games and Activities tabs, or use the general settings below",
     tags: ["Activity", "Privacy", "Customisation"],

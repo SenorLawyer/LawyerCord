@@ -39,6 +39,7 @@ export interface PluginData {
     description: string;
     tags: string[];
     searchTerms: string[];
+    performance?: { impact: "low" | "medium" | "high"; description: string; };
     authors: Dev[];
     dependencies: string[];
     hasPatches: boolean;
@@ -170,6 +171,16 @@ export async function parseFile(fileName: string) {
                 case "patches":
                     data.hasPatches = true;
                     break;
+                case "performance": {
+                    if (!isObjectLiteralExpression(value)) throw fail("performance is not an object literal");
+                    const fields = new Map(value.properties.filter(isPropertyAssignment).map(field => [getName(field), field.initializer]));
+                    const impact = fields.get("impact");
+                    const description = fields.get("description");
+                    if (!impact || !isStringLiteral(impact) || !["low", "medium", "high"].includes(impact.text)) throw fail("performance impact is invalid");
+                    if (!description || !isStringLiteral(description) || !description.text.trim()) throw fail("performance description is missing");
+                    data.performance = { impact: impact.text as "low" | "medium" | "high", description: description.text };
+                    break;
+                }
                 case "commands":
                     data.hasCommands = true;
                     if (isArrayLiteralExpression(value)) {

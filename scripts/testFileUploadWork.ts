@@ -18,11 +18,14 @@ function fixture() {
     let channel = "original";
     let user = "account";
     let resolveUpload: (result: object) => void = () => {};
+    let shares = 0;
     const natives = {
         uploadToCatbox: async (data: ArrayBuffer) => { buffers.push(data); return { success: false, error: "First service failed" }; },
         uploadToTempSh: async (data: ArrayBuffer) => { buffers.push(data); return { success: true, url: "https://example.com/file" }; },
         cancelUploads: async () => {},
-        uploadToNest: () => new Promise(resolve => resolveUpload = resolve)
+        uploadToNest: () => new Promise(resolve => resolveUpload = resolve),
+        uploadToWebdav: () => new Promise(resolve => resolveUpload = resolve),
+        createWebdavShare: async () => { shares++; return { success: true, url: "share" }; }
     };
     const types = transpileModule(readFileSync("src/equicordplugins/fileUpload/types.ts", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;
     const typeApi = runInNewContext(types + "\nexports;", { exports: {} });
@@ -40,10 +43,10 @@ function fixture() {
     const { outputText } = transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } });
     const api = runInNewContext(outputText + "\n({ ...exports, uploadToCatbox, uploadToTempSh, notifyUploadSuccess, beginUpload });", {
         exports: {}, require: (name: string) => { assert.ok(name in modules, name); return modules[name]; }, IS_DISCORD_DESKTOP: true,
-        VencordNative: { pluginHelpers: { FileUpload: natives } }, Blob, File, URL, Headers, FormData, AbortController,
+        VencordNative: { pluginHelpers: { FileUpload: natives } }, Blob, File, URL, URLSearchParams, Headers, FormData, AbortController,
         setTimeout: (fn: () => void) => { timers.push(fn); return timers.length; }, clearTimeout() {}
     }) as { beginUpload(): void; cancelCurrentUpload(): void; uploadToCatbox(blob: Blob, filename: string): Promise<string>; uploadToTempSh(blob: Blob, filename: string): Promise<string>; uploadProvidedFiles(files: File[], forceSend?: boolean): Promise<boolean>; notifyUploadSuccess(url: string, force?: boolean): Promise<void>; getUploadState(): { phase: string; }; };
-    return { api, store, natives, buffers, inserted, timers, channel: (value: string) => channel = value, user: (value: string) => user = value, finish: () => resolveUpload({ success: true, url: "https://example.com/file" }) };
+    return { api, store, natives, buffers, inserted, timers, shares: () => shares, channel: (value: string) => channel = value, user: (value: string) => user = value, finish: () => resolveUpload({ success: true, url: "https://example.com/file" }) };
 }
 
 test("Native fallback uploads reuse one full file read", async () => {
@@ -83,4 +86,27 @@ test("Cancelling or switching accounts during a file read cannot start a native 
         await assert.rejects(pending, /cancelled/);
         assert.equal(f.buffers.length, 0);
     }
+});
+
+
+test("Cancelled WebDAV uploads cannot create a public share after the upload settles", async () => {
+    const f = fixture();
+    Object.assign(f.store, { serviceType: "webdav", webdavUrl: "https://example.com/dav", webdavServerType: "nextcloud" });
+    const pending = f.api.uploadProvidedFiles([new File(["data"], "a.png")]);
+    await new Promise(resolve => setImmediate(resolve));
+    f.api.cancelCurrentUpload();
+    f.finish();
+    assert.equal(await pending, false);
+    assert.equal(f.shares(), 0);
+});
+
+
+test("An active WebDAV upload still creates its requested public share", async () => {
+    const f = fixture();
+    Object.assign(f.store, { serviceType: "webdav", webdavUrl: "https://example.com/dav", webdavServerType: "nextcloud" });
+    const pending = f.api.uploadProvidedFiles([new File(["data"], "a.png")]);
+    await new Promise(resolve => setImmediate(resolve));
+    f.finish();
+    assert.equal(await pending, true);
+    assert.equal(f.shares(), 1);
 });

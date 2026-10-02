@@ -144,6 +144,7 @@ function disabledIcon() {
 
 export default definePlugin({
     name: "Ingtoninator",
+    performance: { impact: "low", description: "Rewrites one word when sending a message." },
     description: "Suffixes 'ington' to a random word in your message",
     dependencies: ["ChatInputButtonAPI"],
     tags: ["Fun"],

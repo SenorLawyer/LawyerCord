@@ -154,6 +154,10 @@ const SendTimestampButton: ChatBarButtonFactory = ({ isAnyChat }) => {
 
 export default definePlugin({
     name: "SendTimestamps",
+    performance: {
+        impact: "low",
+        description: "Formats a timestamp when the picker or command is used."
+    },
     description: "Send timestamps easily via chat box button & text shortcuts. Read the extended description!",
     dependencies: ["ChatInputButtonAPI"],
     tags: ["Chat", "Commands"],

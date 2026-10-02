@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { lyricsRequestGeneration, requestLyrics } from "@equicordplugins/musicControls/lyricsRequest";
 import { settings } from "@equicordplugins/musicControls/settings";
 import { Provider, SyncedLyric } from "@equicordplugins/musicControls/spotify/lyrics/providers/types";
 
@@ -37,11 +38,7 @@ async function googleTranslate(text: string, targetLang: string, romanize: boole
         q: text
     });
 
-    const res = await fetch(url);
-    if (!res.ok)
-        return null;
-
-    return await res.json();
+    return await requestLyrics(url).catch(() => null) as GoogleData | null;
 }
 
 async function processLyrics(
@@ -51,28 +48,21 @@ async function processLyrics(
 ): Promise<SyncedLyric[] | null> {
     if (!lyrics) return null;
 
-    const nonDuplicatedLyrics = lyrics.filter((lyric, index, self) =>
-        self.findIndex(l => l.text === lyric.text) === index
-    );
-
-    const processedLyricsResp = await Promise.all(
-        nonDuplicatedLyrics.map(async lyric => {
-            if (!lyric.text) return [lyric.text, null];
-
-            const translation = await googleTranslate(lyric.text, targetLang, romanize);
-
-            if (!translation || !translation.sentences || translation.sentences.length === 0) return [lyric.text, null];
-
-            return [lyric.text, romanize ? translation.sentences[0].src_translit : translation.sentences[0].trans];
-        })
-    );
-
-    if (processedLyricsResp.every(mapping => mapping[1] === null)) return null;
-
-    return lyrics.map(lyric => ({
-        ...lyric,
-        text: processedLyricsResp.find(mapping => mapping[0] === lyric.text)?.[1] ?? lyric.text
+    const generation = lyricsRequestGeneration;
+    const texts = [...new Set(lyrics.map(lyric => lyric.text).filter((text): text is string => !!text))];
+    const translated = new Map<string, string>();
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(4, texts.length) }, async () => {
+        while (next < texts.length && generation === lyricsRequestGeneration) {
+            const text = texts[next++];
+            const translation = await googleTranslate(text, targetLang, romanize);
+            const sentence = translation?.sentences?.[0];
+            const result = romanize ? sentence?.src_translit : sentence?.trans;
+            if (result) translated.set(text, result);
+        }
     }));
+    if (generation !== lyricsRequestGeneration || !translated.size) return null;
+    return lyrics.map(lyric => ({ ...lyric, text: lyric.text ? translated.get(lyric.text) ?? lyric.text : lyric.text }));
 }
 
 async function translateLyrics(lyrics: SyncedLyric[]) {

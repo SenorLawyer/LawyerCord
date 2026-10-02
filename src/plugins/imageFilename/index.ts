@@ -21,6 +21,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "ImageFilename",
+    performance: {
+        impact: "low",
+        description: "Adds attachment filenames when images render."
+    },
     authors: [Devs.Ven],
     description: "Display the file name of images & GIFs as a tooltip when hovering over them",
     tags: ["Media", "Utility"],

@@ -127,6 +127,10 @@ async function fetchCategories(): Promise<TrendingCategories | null> {
 
 export default definePlugin({
     name: "TenorGifSearch",
+    performance: {
+        impact: "low",
+        description: "Fetches GIF categories and search results when the GIF picker is used."
+    },
     description: "Restore Tenor GIF search",
     authors: [Devs.Lunascape],
 

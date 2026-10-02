@@ -159,6 +159,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "WhoReacted",
+    performance: {
+        impact: "medium",
+        description: "Loads reaction users through a queue and renders avatars beside displayed reactions."
+    },
     description: "Renders the avatars of users who reacted to a message",
     tags: ["Reactions", "Chat", "Appearance"],
     authors: [Devs.Ven, Devs.KannaDev, Devs.newwares],

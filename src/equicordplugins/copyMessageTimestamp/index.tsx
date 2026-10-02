@@ -66,6 +66,7 @@ const messageContextPatch: NavContextMenuPatchCallback = (children, { message }:
 
 export default definePlugin({
     name: "CopyMessageTimestamp",
+    performance: { impact: "low", description: "Builds timestamp copy actions when a message menu opens." },
     description: "Adds message context menu items to copy Discord timestamp markdown.",
     tags: ["Chat", "Utility"],
     authors: [EquicordDevs.nobody],

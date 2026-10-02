@@ -262,6 +262,7 @@ async function loadAccountTotals() {
 
 export default definePlugin({
     name: "VoiceStats",
+    performance: { impact: "medium", description: "Tracks voice events, saves active sessions every thirty seconds and updates open profiles." },
     description: "Shows how long you've spent in voice with each user in their profile",
     tags: ["Voice", "Friends"],
     authors: [EquicordDevs.Moowi],

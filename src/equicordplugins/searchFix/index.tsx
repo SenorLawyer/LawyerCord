@@ -38,6 +38,7 @@ function settingsComponent() {
 
 export default definePlugin({
     name: "SearchFix",
+    performance: { impact: "low", description: "Adjusts search offsets when a query is submitted." },
     description: 'Fixes the annoying "We dropped the magnifying glass!" error.',
     tags: ["Utility"],
     settingsAboutComponent: settingsComponent,

@@ -5,9 +5,11 @@
  */
 
 import * as DataStore from "@api/DataStore";
+import { Logger } from "@utils/Logger";
 import type { PluginNative } from "@utils/types";
 
 const Native = VencordNative.pluginHelpers.AutomationCore as PluginNative<typeof import("@equicordplugins/automationCore.desktop/native")>;
+const logger = new Logger("Automations");
 const SETTINGS_KEY = "LawyerCord_automationAISettings";
 
 export interface OpenRouterModel {
@@ -102,7 +104,7 @@ export async function completeOpenRouter(value: { model: string; systemPrompt: s
     if (!IS_DISCORD_DESKTOP) return { success: false, error: "OpenRouter blocks require Discord Desktop." };
     if (signal.aborted) throw new Error("Run cancelled.");
     const requestId = crypto.randomUUID();
-    const cancel = () => { void Native.cancelOpenRouter(requestId); };
+    const cancel = () => { void Native.cancelOpenRouter(requestId).catch(error => logger.warn("The AI request could not be cancelled.", error)); };
     signal.addEventListener("abort", cancel, { once: true });
     try { return await Native.completeOpenRouter({ ...value, requestId }); }
     finally { signal.removeEventListener("abort", cancel); }

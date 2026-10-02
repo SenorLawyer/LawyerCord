@@ -64,6 +64,10 @@ const BANNER_SETTINGS: "nitroFirst"[] = ["nitroFirst"];
 
 export default definePlugin({
     name: "USRBG",
+    performance: {
+        impact: "medium",
+        description: "Downloads the custom background directory at startup and changes background rendering for matching profiles."
+    },
     description: "Displays user banners from USRBG, allowing anyone to get a banner without Nitro",
     tags: ["Appearance", "Customisation"],
     authors: [Devs.AutumnVN, Devs.katlyn, Devs.pylix, Devs.TheKodeToad],

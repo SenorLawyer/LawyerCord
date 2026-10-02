@@ -69,6 +69,7 @@ function clearTimings() {
 
 export default definePlugin({
     name: "MessageFetchTimer",
+    performance: { impact: "low", description: "Records message fetch durations and retains the latest fifty channels." },
     description: "Shows how long it took to fetch messages for the current channel.",
     tags: ["Chat", "Utility"],
     authors: [EquicordDevs.GroupXyz],

@@ -32,6 +32,7 @@ function fetchIndex(target: object) {
 
 export default definePlugin({
     name: "BetterCommands",
+    performance: { impact: "low", description: "Changes command input behavior and refreshes commands on request." },
     description: "Enhances the command system with miscellaneous improvements.",
     dependencies: ["CommandsAPI"],
     tags: ["Appearance", "Commands", "Shortcuts"],

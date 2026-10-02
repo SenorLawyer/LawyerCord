@@ -360,6 +360,7 @@ function installTableRuleForParser(parser: { defaultRules?: MarkdownRules; }) {
 
 export default definePlugin({
     name: "MarkdownTables",
+    performance: { impact: "medium", description: "Scans message text for tables and observes rendered table sizes." },
     description: "Render GitHub-style markdown tables in Discord messages.",
     tags: ["Chat", "Appearance"],
     authors: [EquicordDevs.yafyx],

@@ -21,6 +21,10 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "NoSystemBadge",
+    performance: {
+        impact: "low",
+        description: "Suppresses taskbar and tray badge updates."
+    },
     description: "Disables the taskbar and system tray unread count badge.",
     tags: ["Notifications", "Appearance"],
     authors: [Devs.rushii],

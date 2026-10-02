@@ -76,6 +76,7 @@ function VencordPopoutButton() {
 migratePluginSettings("LawyerCordToolbox", "EquicordToolbox", "VencordToolbox");
 export default definePlugin({
     name: "LawyerCordToolbox",
+    performance: { impact: "low", description: "Builds plugin and theme controls when opening the toolbox menu." },
     description: "Adds a button next to the inbox button in the channel header that houses LawyerCord quick actions",
     tags: ["Voice", "Accessibility"],
     authors: [Devs.Ven, Devs.AutumnVN],

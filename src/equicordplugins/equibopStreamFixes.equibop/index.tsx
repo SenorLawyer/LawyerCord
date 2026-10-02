@@ -88,6 +88,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "EquibopStreamFixes",
+    performance: { impact: "high", description: "Raises stream encoding quality and can prevent automatic frame rate reduction." },
     description: "Tries to fix stream quality on Equibop by patching Discord's encoder and quality restrictions.",
     tags: ["Voice"],
     authors: [EquicordDevs.creations],

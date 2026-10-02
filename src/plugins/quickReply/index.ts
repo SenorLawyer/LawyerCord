@@ -58,6 +58,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "QuickReply",
+    performance: {
+        impact: "low",
+        description: "Scans displayed messages when reply or edit keyboard shortcuts are used."
+    },
     authors: [Devs.fawn, Devs.Ven, Devs.pylix],
     description: "Reply to (ctrl + up/down) and edit (ctrl + shift + up/down) messages via keybinds",
     tags: ["Chat", "Shortcuts"],

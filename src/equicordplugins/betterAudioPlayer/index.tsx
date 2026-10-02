@@ -403,6 +403,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "BetterAudioPlayer",
+    performance: { impact: "high", description: "Draws audio spectrum and waveform animations while attachments play." },
     description: "Adds a spectrograph and oscilloscope visualizer to audio attachment players.",
     tags: ["Appearance", "Media", "Voice"],
     authors: [EquicordDevs.creations],

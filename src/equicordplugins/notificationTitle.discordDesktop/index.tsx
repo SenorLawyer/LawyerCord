@@ -19,6 +19,7 @@ const MessageTypes = findByPropsLazy("REPLY", "STAGE_RAISE_HAND", "CHANNEL_NAME_
 
 export default definePlugin({
     name: "NotificationTitle",
+    performance: { impact: "low", description: "Reads channel and author details when building notifications." },
     description: "Makes desktop notifications more informative",
     tags: ["Appearance", "Notifications"],
     authors: [Devs.Kyuuhachi],

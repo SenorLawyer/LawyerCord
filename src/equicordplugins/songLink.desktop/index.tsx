@@ -132,6 +132,7 @@ function SongLinkerList({ urls }: { urls: string[]; }) {
 
 export default definePlugin({
     name: "SongLink",
+    performance: { impact: "medium", description: "Looks up streaming alternatives for visible song links and renders service buttons." },
     description: "Adds streaming service buttons below song links",
     dependencies: ["MessageAccessoriesAPI"],
     tags: ["Media", "Utility"],

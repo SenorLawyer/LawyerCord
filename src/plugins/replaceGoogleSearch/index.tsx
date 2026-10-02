@@ -162,6 +162,10 @@ const messageContextMenuPatch: NavContextMenuPatchCallback = (children, _props) 
 migratePluginSettings("ReplaceGoogleSearch", "Search");
 export default definePlugin({
     name: "ReplaceGoogleSearch",
+    performance: {
+        impact: "low",
+        description: "Builds search engine choices when a text context menu opens."
+    },
     description: "Replaces the Google search with different Engine(s)",
     tags: ["Utility", "Customisation"],
     authors: [Devs.Moxxie, Devs.Ethan],

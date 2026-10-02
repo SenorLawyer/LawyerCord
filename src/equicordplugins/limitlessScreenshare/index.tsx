@@ -42,6 +42,7 @@ const CustomPresetList = ({ onChange, initialValue, group, id, list }: CustomPre
 
 export default definePlugin({
     name: "LimitlessScreenshare",
+    performance: { impact: "low", description: "Adds stream quality controls whose selected values affect encoding load." },
     description: "Adds a slider for screenshare resolution and fps.",
     authors: [EquicordDevs.KawaiianPizza],
     tags: ["Utility", "Voice"],

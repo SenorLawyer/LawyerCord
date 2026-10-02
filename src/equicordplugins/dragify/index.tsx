@@ -156,6 +156,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "Dragify",
+    performance: { impact: "medium", description: "Inspects drag targets and updates a floating preview while dragging." },
     description: "Drop users, channels, or servers into chat to insert mentions or invites.",
     tags: ["Chat", "Servers", "Utility", "Voice"],
     authors: [EquicordDevs.justjxke],

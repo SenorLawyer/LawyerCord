@@ -27,6 +27,10 @@ export const settings = definePluginSettings({
 
 export default definePlugin({
     name: "ClientTheme",
+    performance: {
+        impact: "low",
+        description: "Applies theme colors when the selected client theme changes."
+    },
     authors: [Devs.Nuckyz],
     description: "Recreation of the old client theme experiment. Add a color to your Discord client theme",
     tags: ["Appearance", "Customisation"],

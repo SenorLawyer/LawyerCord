@@ -110,6 +110,7 @@ const userContextPatch: NavContextMenuPatchCallback = (children, { guildId, user
 
 export default definePlugin({
     name: "CopyUserMediaUrls",
+    performance: { impact: "low", description: "Reads avatar and banner URLs when user menus open." },
     description: "Adds user context menu items to copy avatar and profile banner URLs.",
     tags: ["Utility"],
     authors: [EquicordDevs.nobody],

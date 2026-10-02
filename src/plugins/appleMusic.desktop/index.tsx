@@ -209,6 +209,10 @@ function getImageAsset(type: AssetImageType, data: TrackData) {
 
 export default definePlugin({
     name: "AppleMusicRichPresence",
+    performance: {
+        impact: "medium",
+        description: "Polls Apple Music playback and refreshes rich presence at the configured interval."
+    },
     description: "Discord rich presence for your Apple Music!",
     tags: ["Activity", "Media"],
     authors: [Devs.RyanCaoDev],

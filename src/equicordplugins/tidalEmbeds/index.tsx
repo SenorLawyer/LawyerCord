@@ -10,6 +10,7 @@ import { Message } from "@vencord/discord-types";
 
 export default definePlugin({
     name: "TidalEmbeds",
+    performance: { impact: "medium", description: "Creates embedded players for TIDAL links in rendered messages." },
     description: "Embeds TIDAL songs to make them playable in Discord.",
     tags: ["Appearance", "Chat", "Media"],
     authors: [EquicordDevs.vmohammad],

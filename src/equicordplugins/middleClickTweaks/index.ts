@@ -66,6 +66,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "MiddleClickTweaks",
+    performance: { impact: "low", description: "Checks middle click and paste events without a polling timer." },
     description: "Various middle click tweaks, such as with pasting and link opening.",
     authors: [EquicordDevs.Etorix, EquicordDevs.korzi],
     settings,

@@ -21,6 +21,10 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "BetterUploadButton",
+    performance: {
+        impact: "low",
+        description: "Changes upload button click handling without background work."
+    },
     authors: [Devs.fawn, Devs.Ven],
     description: "Upload with a single click, open menu with right click",
     tags: ["Utility", "Shortcuts"],

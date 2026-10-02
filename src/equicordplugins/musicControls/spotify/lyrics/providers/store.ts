@@ -100,16 +100,17 @@ export const SpotifyLrcStore = proxyLazyWebpack(() => {
             if (!track?.id) return;
 
             const generation = ++lyricsRequestGeneration;
+            const cacheGeneration = lyricsCacheGeneration;
             const requestTrackId = track.id;
             const currentInfo = await getLyrics(track);
-            if (generation !== lyricsRequestGeneration || SpotifyStore.track?.id !== requestTrackId) return;
+            if (generation !== lyricsRequestGeneration || cacheGeneration !== lyricsCacheGeneration || SpotifyStore.track?.id !== requestTrackId) return;
 
             const { provider } = e;
             if (currentInfo?.useLyric === provider) return;
 
             if (currentInfo?.lyricsVersions[provider]) {
                 await updateLyrics(track.id, currentInfo.lyricsVersions[provider]!, provider);
-                if (generation !== lyricsRequestGeneration || SpotifyStore.track?.id !== requestTrackId) return;
+                if (generation !== lyricsRequestGeneration || cacheGeneration !== lyricsCacheGeneration || SpotifyStore.track?.id !== requestTrackId) return;
 
                 lyricsInfo = { ...currentInfo, useLyric: provider };
                 store.emitChange();
@@ -144,7 +145,7 @@ export const SpotifyLrcStore = proxyLazyWebpack(() => {
                 }
 
                 const fetchResult = await lyricsAlternativeFetchers[provider](originalLyrics);
-                if (generation !== lyricsRequestGeneration || SpotifyStore.track?.id !== requestTrackId) return;
+                if (generation !== lyricsRequestGeneration || cacheGeneration !== lyricsCacheGeneration || SpotifyStore.track?.id !== requestTrackId) return;
 
                 if (!fetchResult) {
                     showNotif("Lyrics fetch failed", `Failed to fetch ${provider === Provider.Translated ? "translation" : "romanization"}`);
@@ -152,7 +153,7 @@ export const SpotifyLrcStore = proxyLazyWebpack(() => {
                 }
 
                 await updateLyrics(track.id, fetchResult, provider);
-                if (generation !== lyricsRequestGeneration || SpotifyStore.track?.id !== requestTrackId) return;
+                if (generation !== lyricsRequestGeneration || cacheGeneration !== lyricsCacheGeneration || SpotifyStore.track?.id !== requestTrackId) return;
 
                 lyricsInfo = {
                     ...currentInfo,
@@ -167,8 +168,8 @@ export const SpotifyLrcStore = proxyLazyWebpack(() => {
                 return;
             }
 
-            const newLyricsInfo = await lyricFetchers[e.provider](track);
-            if (generation !== lyricsRequestGeneration || SpotifyStore.track?.id !== requestTrackId) return;
+            const newLyricsInfo = await lyricFetchers[e.provider](track).catch(() => null);
+            if (generation !== lyricsRequestGeneration || cacheGeneration !== lyricsCacheGeneration || SpotifyStore.track?.id !== requestTrackId) return;
 
             if (!newLyricsInfo) {
                 showNotif("Lyrics fetch failed", `Failed to fetch ${e.provider} lyrics`);

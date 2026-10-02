@@ -74,6 +74,7 @@ function interceptor(event: any) {
 
 export default definePlugin({
     name: "SilenceUsers",
+    performance: { impact: "low", description: "Checks author IDs when processing message and notification events." },
     description: "Silences @mention pings and server badge counts from specific users. Regular messages and DMs are untouched.",
     authors: [EquicordDevs.dka],
     tags: ["Chat", "Notifications", "Privacy"],

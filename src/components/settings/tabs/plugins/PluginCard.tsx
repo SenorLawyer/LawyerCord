@@ -17,6 +17,7 @@ import { React, showToast, Toasts } from "@webpack/common";
 
 import { PluginMeta } from "~plugins";
 
+import { IMPACT_LABELS } from "./catalog";
 import { openPluginModal } from "./PluginModal";
 
 const logger = new Logger("PluginCard");
@@ -135,6 +136,9 @@ export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, on
             sourceBadge={sourceBadge}
             tooltip={tooltip}
             description={plugin.description}
+            footer={<span className={cl("impact")} title={plugin.performance?.description ?? "This plugin has not been reviewed for background work."}>
+                Expected impact: {IMPACT_LABELS[plugin.performance?.impact ?? "unknown"]}
+            </span>}
             isNew={isNew}
             enabled={isEnabled()}
             setEnabled={toggleEnabled}

@@ -21,6 +21,10 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "NoF1",
+    performance: {
+        impact: "low",
+        description: "Removes the existing F1 help shortcut binding."
+    },
     description: "Disables F1 help bind.",
     tags: ["Utility"],
     authors: [Devs.Cyn],

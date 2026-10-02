@@ -34,6 +34,10 @@ const logger = new Logger("ShikiCodeblocks");
 
 export default definePlugin({
     name: "ShikiCodeblocks",
+    performance: {
+        impact: "medium",
+        description: "Loads syntax grammars and tokenizes visible codeblocks in a worker."
+    },
     description: "Brings vscode-style codeblocks into Discord, powered by Shiki",
     tags: ["Appearance", "Chat", "Customisation"],
     authors: [Devs.Vap],

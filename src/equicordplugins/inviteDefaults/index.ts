@@ -44,6 +44,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "InviteDefaults",
+    performance: { impact: "low", description: "Reads default values when creating an invite." },
     description: "Allows you to edit the default values when creating server invites.",
     tags: ["Servers"],
     authors: [EquicordDevs.VillainsRule],

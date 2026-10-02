@@ -107,3 +107,22 @@ test("failed theme reads retain the active style and do not leak partial results
     assert.equal(await [...blobs.values()][0].text(), "initial {}");
     assert.equal(errors.length, 1);
 });
+
+test("initial QuickCSS read respects disabling while pending", async () => {
+    const { api, settings, styles, quickCss } = fixture();
+    const pending = api.toggle(true);
+    settings.useQuickCss = false;
+    await api.toggle(false);
+    quickCss.resolve("initial {}");
+    await pending;
+    assert.equal(styles.get("vencord-custom-css")?.disabled, true);
+});
+
+test("initial QuickCSS read cannot overwrite a newer change event", async () => {
+    const { api, styles, quickCss, listeners } = fixture();
+    const pending = api.toggle(true);
+    listeners[0]("latest {}");
+    quickCss.resolve("obsolete {}");
+    await pending;
+    assert.equal(styles.get("vencord-custom-css")?.textContent, "latest {}");
+});

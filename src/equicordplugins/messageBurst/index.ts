@@ -31,6 +31,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "MessageBurst",
+    performance: { impact: "low", description: "Checks the previous message when sending a new message." },
     description: "Merges messages sent within a time period with your previous sent message if no one else sends a message before you.",
     tags: ["Chat"],
     authors: [EquicordDevs.port22exposed],

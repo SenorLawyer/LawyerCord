@@ -49,7 +49,7 @@ test("Model refresh bursts share one request and permit a fresh request after se
     let resolve: (value: object) => void = () => {};
     let notifications = 0;
     const api = evaluate<{ loadOpenRouterModels(refresh?: boolean): Promise<unknown>; subscribeModels(listener: () => void): () => void; }>(readFileSync(root + "openRouter.ts", "utf8"), {
-        require: () => ({}), IS_DISCORD_DESKTOP: true,
+        require: (name: string) => name === "@utils/Logger" ? { Logger: class { warn() {} } } : {}, IS_DISCORD_DESKTOP: true,
         VencordNative: { pluginHelpers: { AutomationCore: { listOpenRouterModels() { calls++; return new Promise(done => { resolve = done; }); } } } }
     });
     const unsubscribe = api.subscribeModels(() => notifications++);

@@ -27,6 +27,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "UniversalMention",
+    performance: { impact: "high", description: "Can scan all cached users while generating mention suggestions." },
     authors: [EquicordDevs.justjxke],
     description: "Mention any user, regardless of channel access.",
     tags: ["Chat", "Servers", "Utility"],

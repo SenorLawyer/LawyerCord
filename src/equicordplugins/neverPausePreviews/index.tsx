@@ -22,6 +22,7 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "NeverPausePreviews",
+    performance: { impact: "high", description: "Keeps video previews playing while Discord is unfocused." },
     description: "Prevents in-call/PiP previews (screenshare, streams, etc) from pausing even if the client loses focus",
     tags: ["Media"],
     authors: [EquicordDevs.vappstar],

@@ -419,6 +419,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "WhitelistedEmojis",
+    performance: { impact: "low", description: "Filters emoji autocomplete results against your saved whitelist." },
     description: "Adds the ability to disable all message emojis except for a whitelisted set.",
     tags: ["Chat", "Emotes"],
     authors: [EquicordDevs.creations],

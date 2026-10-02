@@ -57,6 +57,7 @@ const devContextPatch: NavContextMenuPatchCallback = (children, { id }: DevConte
 
 export default definePlugin({
     name: "CopyRoleMention",
+    performance: { impact: "low", description: "Adds a copy action when role menus open." },
     description: "Adds context menu items to copy role mentions.",
     tags: ["Chat", "Roles", "Utility"],
     authors: [EquicordDevs.nobody],

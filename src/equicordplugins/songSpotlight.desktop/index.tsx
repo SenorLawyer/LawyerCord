@@ -22,6 +22,7 @@ export default definePlugin({
     dependencies: ["ProfileCollectionsAPI"],
     tags: ["Appearance", "Media"],
     authors: [EquicordDevs.nexpid],
+    performance: { impact: "medium", description: "Loads song details when profiles open and previews audio on demand." },
     settings,
     patches: [
         // Full profile modal sections (lazy loaded)

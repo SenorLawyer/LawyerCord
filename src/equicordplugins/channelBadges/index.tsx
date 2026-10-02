@@ -31,6 +31,7 @@ function renderBadge(id: number, title: string) {
 
 export default definePlugin({
     name: "ChannelBadges",
+    performance: { impact: "medium", description: "Builds type and status badges for rendered channel rows." },
     description: "Adds badges to channels based on their type",
     tags: ["Appearance", "Customisation", "Servers"],
     authors: [EquicordDevs.creations, Devs.thororen],

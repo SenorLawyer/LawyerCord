@@ -56,6 +56,7 @@ export const settings = definePluginSettings({
 
 export default definePlugin({
     name: "UserpluginInstaller",
+    performance: { impact: "medium", description: "Checks installed plugin repositories at startup and builds requested plugin changes." },
     description: "Install userplugins with a simple button click",
     tags: ["Developers"],
     settingsAboutComponent: () => (

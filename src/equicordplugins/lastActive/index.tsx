@@ -6,71 +6,46 @@
 
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { EquicordDevs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
-import { Menu, NavigationRouter, RestAPI, Toasts, UserStore } from "@webpack/common";
+import { Channel, Message } from "@vencord/discord-types";
+import { Constants, Menu, NavigationRouter, RestAPI, SelectedChannelStore, Toasts, UserStore } from "@webpack/common";
 
-async function findLastMessageFromUser(guildId: string, channelId: string, userId: string) {
-    try {
-        const res = await RestAPI.get({
-            url: `/guilds/${guildId}/messages/search?author_id=${userId}&channel_id=${channelId}&sort_by=timestamp&sort_order=desc&offset=0`
-        });
+const logger = new Logger("LastActive");
+let generation = 0;
+let started = false;
 
-        const allMessages = res.body.messages?.flat() || [];
-        const newestMessage = allMessages.find(msg => msg && msg.id);
-
-        if (newestMessage) return newestMessage.id;
-
-        Toasts.show({
-            type: Toasts.Type.FAILURE,
-            message: "Couldn't find any recent messages from this user.",
-            id: Toasts.genId()
-        });
-        return null;
-    } catch (error) {
-        console.error("Error finding last message:", error);
-        Toasts.show({
-            type: Toasts.Type.FAILURE,
-            message: "Failed to find messages. Check console for details.",
-            id: Toasts.genId()
-        });
-        return null;
-    }
+function invalidateRequests() {
+    generation++;
 }
 
-async function jumpToLastActive(channel: any, targetUserId?: string) {
+async function jumpToLastActive(channel: Channel, targetUserId?: string) {
+    const accountId = UserStore.getCurrentUser()?.id;
+    if (!started || !channel || !accountId) return;
+    const request = ++generation;
+    const selectedChannel = SelectedChannelStore.getChannelId();
+    const userId = targetUserId ?? accountId;
+    const isCurrent = () => request === generation && UserStore.getCurrentUser()?.id === accountId && SelectedChannelStore.getChannelId() === selectedChannel;
     try {
-        if (!channel) {
-            Toasts.show({
-                type: Toasts.Type.FAILURE,
-                message: "Channel information not available.",
-                id: Toasts.genId()
-            });
-            return;
-        }
-        const guildId = channel.guild_id !== null ? channel.guild_id : "@me";
-        const channelId = channel.id;
-        let userId: string;
-        if (targetUserId) {
-
-            userId = targetUserId;
+        const response = await RestAPI.get({
+            url: channel.guild_id ? Constants.Endpoints.SEARCH_GUILD(channel.guild_id) : Constants.Endpoints.SEARCH_CHANNEL(channel.id),
+            query: { author_id: userId, ...(channel.guild_id ? { channel_id: channel.id } : {}), sort_by: "timestamp", sort_order: "desc", offset: 0 }
+        });
+        if (!isCurrent()) return;
+        const messages: Array<Array<Message & { hit?: boolean; }>> = response.body.messages ?? [];
+        const message = messages.flat().find(message => message.hit !== false && message.author.id === userId && message.channel_id === channel.id);
+        if (message) {
+            NavigationRouter.transitionTo(`/channels/${channel.guild_id ?? "@me"}/${channel.id}/${message.id}`);
         } else {
-            const currentUser = UserStore.getCurrentUser();
-            userId = currentUser.id;
+            Toasts.show({ type: Toasts.Type.FAILURE, message: response.status === 202 ? "Discord is indexing this search. Try again shortly." : "Couldn't find any recent messages from this user.", id: Toasts.genId() });
         }
-        const messageId = await findLastMessageFromUser(guildId, channelId, userId);
-        if (messageId) {
-            const url = `/channels/${guildId}/${channelId}/${messageId}`;
-            NavigationRouter.transitionTo(url);
-        }
-    } catch (error) {
-        console.error("Error in jumpToLastActive:", error);
-        Toasts.show({
-            type: Toasts.Type.FAILURE,
-            message: "Failed to jump to message. Check console for details.",
-            id: Toasts.genId()
-        });
+    } catch {
+        if (!isCurrent()) return;
+        logger.error("Message search failed.");
+        Toasts.show({ type: Toasts.Type.FAILURE, message: "Failed to find messages. Try again shortly.", id: Toasts.genId() });
     }
 }
+
 const ChannelContextMenuPatch: NavContextMenuPatchCallback = (children, { channel }) => {
     children.push(
         <Menu.MenuItem
@@ -137,6 +112,12 @@ export default definePlugin({
     description: "A plugin to jump to last active message from yourself or another user in a channel/server.",
     tags: ["Chat", "Utility"],
     authors: [EquicordDevs.Crxa],
+    start() { started = true; },
+    stop() {
+        started = false;
+        invalidateRequests();
+    },
+    flux: { LOGOUT: invalidateRequests, CONNECTION_OPEN: invalidateRequests, CHANNEL_SELECT: invalidateRequests },
     contextMenus: {
         "channel-context": ChannelContextMenuPatch,
         "user-context": UserContextMenuPatch,

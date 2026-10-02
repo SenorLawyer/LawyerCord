@@ -4,21 +4,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { access, mkdir } from "fs/promises";
+import { mkdir } from "fs/promises";
 import path from "path";
 
-export async function exists(filename: string) {
-    try {
-        await access(filename);
-        return true;
-    } catch (error) {
-        return false;
-    }
-}
-
 export async function ensureDirectoryExists(cacheDir: string) {
-    if (!await exists(cacheDir))
-        await mkdir(cacheDir);
+    await mkdir(cacheDir, { recursive: true });
 }
 
 export function getAttachmentIdFromFilename(filename: string) {

@@ -5,48 +5,50 @@
  */
 
 import { RenderInfoEntry } from "@song-spotlight/api/handlers";
-import { useEffect, useMemo, useState } from "@webpack/common";
+import { useEffect, useState } from "@webpack/common";
 import { JSX, RefObject } from "react";
 
 interface ProgressCircleProps extends SvgProps {
     border: number;
     audioRef: RefObject<HTMLAudioElement | undefined>;
-    playingRef: RefObject<RenderInfoEntry | undefined>;
+    playing: RenderInfoEntry | undefined;
 }
 type SvgProps = JSX.IntrinsicElements["svg"];
 
 const SIZE = 50;
+const EVENTS = ["timeupdate", "durationchange", "seeked", "play", "pause", "ended"] as const;
 
-export default function ProgressCircle({ border, audioRef, playingRef, ...props }: ProgressCircleProps) {
-    const { radius, stroke, circumference } = useMemo(() => {
-        const radius = SIZE - border * 2;
-        return {
-            radius,
-            stroke: border * 2,
-            circumference: Math.PI * 2 * radius,
-        };
-    }, [border]);
+export default function ProgressCircle({ border, audioRef, playing, ...props }: ProgressCircleProps) {
+    const radius = SIZE - border * 2;
+    const stroke = border * 2;
+    const circumference = Math.PI * 2 * radius;
     const [progress, setProgress] = useState(0);
 
     useEffect(() => {
-        let handle = requestAnimationFrame(function update() {
-            const audio = audioRef.current, playing = playingRef.current?.audio;
-            if (audio && playing && !Number.isNaN(audio.duration) && !audio.paused) {
+        const audio = audioRef.current, preview = playing?.audio;
+        if (!audio || !preview) {
+            setProgress(0);
+            return;
+        }
+        const update = () => {
+            if (Number.isFinite(audio.duration) && !audio.paused) {
                 let start = 0, slice = audio.duration;
-                if (playing.previewStart !== undefined && playing.previewSlice) {
-                    start = playing.previewStart / 1000;
-                    slice = playing.previewSlice / 1000;
+                if (preview.previewStart !== undefined && preview.previewSlice) {
+                    start = preview.previewStart / 1000;
+                    slice = preview.previewSlice / 1000;
                 }
-                setProgress(Math.min(Math.max((audio.currentTime - start) / slice, 0), 1));
+                setProgress(slice > 0 ? Math.min(Math.max((audio.currentTime - start) / slice, 0), 1) : 0);
             } else {
                 setProgress(0);
             }
 
-            handle = requestAnimationFrame(update);
-        });
-
-        return () => cancelAnimationFrame(handle);
-    }, [audioRef]);
+        };
+        update();
+        for (const event of EVENTS) audio.addEventListener(event, update);
+        return () => {
+            for (const event of EVENTS) audio.removeEventListener(event, update);
+        };
+    }, [audioRef, playing]);
 
     return (
         <svg
@@ -64,7 +66,6 @@ export default function ProgressCircle({ border, audioRef, playingRef, ...props 
                 strokeDashoffset={circumference * (1 - progress)}
                 strokeLinecap="round"
                 transform={`rotate(-90 ${SIZE} ${SIZE})`}
-                data-empty={progress === 0}
             />
         </svg>
     );

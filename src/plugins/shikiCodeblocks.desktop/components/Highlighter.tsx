@@ -19,8 +19,8 @@
 import ErrorBoundary from "@components/ErrorBoundary";
 import { resolveLang } from "@plugins/shikiCodeblocks.desktop/api/languages";
 import { shiki } from "@plugins/shikiCodeblocks.desktop/api/shiki";
-import { useShikiSettings } from "@plugins/shikiCodeblocks.desktop/hooks/useShikiSettings";
 import { useTheme } from "@plugins/shikiCodeblocks.desktop/hooks/useTheme";
+import { settings } from "@plugins/shikiCodeblocks.desktop/settings";
 import { hex2Rgb } from "@plugins/shikiCodeblocks.desktop/utils/color";
 import { cl, hljs, requireHljs, shouldUseHljs } from "@plugins/shikiCodeblocks.desktop/utils/misc";
 import { useAwaiter, useIntersection } from "@utils/react";
@@ -44,6 +44,7 @@ export interface HighlighterProps {
 }
 
 let didLoadHljs = false;
+const SETTINGS_KEYS = ["tryHljs", "useDevIcon", "bgOpacity"] satisfies (keyof typeof settings.store)[];
 export const HighlighterContainer = (props: HighlighterProps) => {
     const [_, _err, isPending] = useAwaiter(requireHljs);
 
@@ -71,7 +72,7 @@ export const Highlighter = ({
         tryHljs,
         useDevIcon,
         bgOpacity,
-    } = useShikiSettings(["tryHljs", "useDevIcon", "bgOpacity"]);
+    } = settings.use(SETTINGS_KEYS);
     const { id: currentThemeId, theme: currentTheme } = useTheme();
 
     const shikiLang = lang ? resolveLang(lang) : null;
@@ -84,7 +85,7 @@ export const Highlighter = ({
         return await shiki.tokenizeCode(content, lang!);
     }, {
         fallbackValue: null,
-        deps: [lang, content, currentThemeId, isIntersecting],
+        deps: [lang, content, currentThemeId, isIntersecting, useHljs],
     });
 
     const themeBase: ThemeBase = {

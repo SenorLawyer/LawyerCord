@@ -156,18 +156,20 @@ export function useTimer({ interval = 1000, deps = [] }: TimerOpts) {
 interface FixedTimerOpts {
     interval?: number;
     initialTime?: number;
+    enabled?: boolean;
 }
 
-export function useFixedTimer({ interval = 1000, initialTime = Date.now() }: FixedTimerOpts) {
+export function useFixedTimer({ interval = 1000, initialTime = Date.now(), enabled = true }: FixedTimerOpts) {
     const [time, setTime] = useState(Date.now() - initialTime);
 
     useEffect(() => {
+        if (!enabled) return;
         const intervalId = setInterval(() => setTime(Date.now() - initialTime), interval);
 
         return () => {
             clearInterval(intervalId);
         };
-    }, [initialTime]);
+    }, [initialTime, interval, enabled]);
 
     return time;
 }

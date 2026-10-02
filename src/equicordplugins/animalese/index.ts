@@ -6,6 +6,7 @@
 
 import { definePluginSettings } from "@api/Settings";
 import { EquicordDevs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 import { SelectedChannelStore, UserStore } from "@webpack/common";
 
@@ -57,7 +58,7 @@ const settings = definePluginSettings({
             }
         ],
         onChange: () => {
-            if (audioContext) void initSoundBuffers(true);
+            if (audioContext) void initSoundBuffers();
             else clearSoundBuffers();
         }
     }
@@ -65,7 +66,8 @@ const settings = definePluginSettings({
 
 let audioContext: AudioContext | null = null;
 let loadedSoundQuality: string | null = null;
-let initSoundBuffersPromise: Promise<void> | null = null;
+let soundLoad: { quality: string; controller: AbortController; promise: Promise<void>; } | undefined;
+const logger = new Logger("Animalese");
 const urlPattern = /https?:\/\/[^\s]+/;
 const LETTER_SLOT_SECONDS = 0.09;
 const MIN_PLAYBACK_SPEED = 0.1;
@@ -91,41 +93,48 @@ function clearSoundBuffers() {
     loadedSoundQuality = null;
 }
 
-async function initSoundBuffers(force = false) {
+async function initSoundBuffers() {
     const context = getAudioContext();
     const quality = settings.store.soundQuality;
-    if (!force && loadedSoundQuality === quality) return;
-    if (initSoundBuffersPromise) return initSoundBuffersPromise;
+    if (soundLoad?.quality === quality) return soundLoad.promise;
+    soundLoad?.controller.abort();
+    soundLoad = undefined;
+    if (loadedSoundQuality === quality) return;
+    const controller = new AbortController();
 
-    initSoundBuffersPromise = Promise.all(
+    const promise = Promise.all(
         highSounds.map(async file => {
             const nameWithoutExt = file.replace(".wav", "");
-            const buffer = await loadSound(context, `${BASE_URL_HIGH}/${quality}/${file}`);
+            const buffer = await loadSound(context, `${BASE_URL_HIGH}/${quality}/${file}`, controller.signal);
             return [nameWithoutExt, buffer] as const;
         })
     ).then(entries => {
-        if (audioContext !== context) return;
+        if (controller.signal.aborted || audioContext !== context) return;
 
         clearSoundBuffers();
         for (const [name, buffer] of entries) {
             soundBuffers[name] = buffer;
         }
         loadedSoundQuality = quality;
+    }).catch(error => {
+        if (!controller.signal.aborted) logger.error("Failed to load sounds", error);
+        controller.abort();
     }).finally(() => {
-        initSoundBuffersPromise = null;
+        if (soundLoad?.promise === promise) soundLoad = undefined;
     });
 
-    return initSoundBuffersPromise;
+    soundLoad = { quality, controller, promise };
+    return promise;
 }
 
-async function loadSound(context: AudioContext, url: string): Promise<AudioBuffer> {
-    const response = await fetch(url);
+async function loadSound(context: AudioContext, url: string, signal: AbortSignal): Promise<AudioBuffer> {
+    const response = await fetch(url, { signal });
     if (!response.ok) throw new Error("Network response was not OK");
     const arrayBuffer = await response.arrayBuffer();
     return context.decodeAudioData(arrayBuffer);
 }
 
-async function generateAnimalese(text: string): Promise<AudioBuffer | null> {
+function generateAnimalese(text: string): AudioBuffer | null {
     const context = getAudioContext();
     const speed = Math.max(settings.store.speed ?? 1, MIN_PLAYBACK_SPEED);
     const pitch = settings.store.pitch ?? 1;
@@ -258,26 +267,23 @@ export default definePlugin({
                 if (!currentUserId || authorId === currentUserId) return;
             }
 
-            try {
-                await initSoundBuffers();
-                const buffer = await generateAnimalese(content);
-                if (buffer) playSound(buffer, settings.store.volume);
-            } catch (err) {
-                console.error("[Animalese]", err);
-            }
+            const context = getAudioContext();
+            await initSoundBuffers();
+            if (audioContext !== context || loadedSoundQuality !== settings.store.soundQuality) return;
+            const buffer = generateAnimalese(content);
+            if (buffer) playSound(buffer, settings.store.volume);
         }
     },
 
-    async start() {
-        if (!audioContext) {
-            getAudioContext();
-            await initSoundBuffers();
-        }
+    start() {
+        void initSoundBuffers();
     },
 
     stop() {
+        soundLoad?.controller.abort();
+        soundLoad = undefined;
         if (audioContext) {
-            audioContext.close();
+            void audioContext.close().catch(error => logger.error("Failed to close audio", error));
             audioContext = null;
         }
         clearSoundBuffers();

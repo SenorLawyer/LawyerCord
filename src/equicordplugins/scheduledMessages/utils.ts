@@ -576,7 +576,10 @@ async function checkAndSendMessages(): Promise<void> {
 
     try {
         const now = Date.now();
-        const dueMessages = scheduledMessages.filter(m => m.attemptedAt === undefined && m.scheduledTime <= now);
+        const userId = UserStore.getCurrentUser()?.id;
+        const dueMessages = userId
+            ? scheduledMessages.filter(m => m.userId === userId && m.attemptedAt === undefined && m.scheduledTime <= now)
+            : [];
 
         for (const msg of dueMessages) {
             if (generation !== schedulerGeneration) return;
@@ -611,7 +614,8 @@ export function scheduleNextCheck(): void {
         checkTimeout = null;
     }
 
-    const nextMessage = scheduledMessages.find(message => message.attemptedAt === undefined);
+    const userId = UserStore.getCurrentUser()?.id;
+    const nextMessage = userId && scheduledMessages.find(message => message.userId === userId && message.attemptedAt === undefined);
     if (!nextMessage) return;
 
     const maxDelay = Math.max(1000, settings.store.checkIntervalSeconds * 1000);

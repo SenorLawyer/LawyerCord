@@ -6,7 +6,11 @@
 
 import "./styles.css";
 
-export { default as AutomationsTab } from "./automations";
+import { LazyComponent } from "@utils/lazyReact";
+
+import { wrapTab } from "./BaseTab";
+
+export const AutomationsTab = wrapTab(LazyComponent(() => (require("./automations") as typeof import("./automations")).default), "Automations");
 export * from "./BaseTab";
 export { default as ChangelogTab } from "./changelog";
 export { default as PatchHelperTab } from "./patchHelper";

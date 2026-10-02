@@ -21,6 +21,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { runInNewContext } from "node:vm";
 
+import { diffArrays } from "diff";
 import moment from "moment";
 import * as typescript from "typescript";
 import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
@@ -28,6 +29,7 @@ import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 import { SettingsStore, SYM_GET_RAW_TARGET } from "../src/shared/SettingsStore";
 import { readResponseText } from "../src/shared/readResponseText";
 import { makeLazy, proxyLazy, SYM_LAZY_GET } from "../src/utils/lazy";
+import { Queue } from "../src/utils/Queue";
 import { canonicalizeMatch } from "../src/utils/patches";
 
 test("PictureInPicture keeps original playback after rejected requests", async () => {
@@ -1153,6 +1155,7 @@ test("Streaks badges only display the current account's conversation", () => {
     const streak = { user_a_id: "first", user_b_id: "target", count: 2 };
     const userStore = { getCurrentUser: () => currentId ? { id: currentId } : undefined };
     let subscriptions = 0;
+    let select: (state: object) => unknown = () => undefined;
     const api = loadSource("src/equicordplugins/streaks/index.tsx", {
         "@equicordplugins/_core/concatenatedModules": {},
         "@utils/constants": { Devs: {}, EquicordDevs: {} },
@@ -1163,7 +1166,7 @@ test("Streaks badges only display the current account's conversation", () => {
                 assert.equal(stores[0], userStore); subscriptions++; return selector();
             } },
         "./settings": { settings: { store: {}, use() {} } }, "./stores/AuthorizationStore": {},
-        "./stores/StreaksStore": { useStreaksStore: (selector: (state: object) => unknown) => selector({ streaks: { target: streak } }) },
+        "./stores/StreaksStore": { useStreaksStore: (selector: (state: object) => unknown) => { select = selector; return selector({ streaks: { target: streak } }); } },
     }, { React: { createElement: () => ({}) } }, "({ StreakBadge })");
     for (const id of ["first", "second", "target", undefined]) {
         currentId = id;
@@ -1173,6 +1176,8 @@ test("Streaks badges only display the current account's conversation", () => {
     [streak.user_a_id, streak.user_b_id] = [streak.user_b_id, streak.user_a_id];
     assert.notEqual(api.StreakBadge({ userId: "target" }), null);
     assert.equal(subscriptions, 5);
+    assert.equal(select({ streaks: { target: streak } }), streak);
+    assert.equal(select({ streaks: { target: streak, other: { count: 99 } } }), streak);
 });
 
 test("Streaks delayed message refresh stops with its account or plugin", async () => {
@@ -1874,6 +1879,7 @@ test("FakeNitro checks emoji and sticker access in the destination guild", async
         "@api/Settings": { definePluginSettings: () => ({ store: { enableStickerBypass: true, enableEmojiBypass: false } }) },
         "@components/Paragraph": {}, "@utils/apng": {}, "@utils/constants": { Devs: {} },
         "@utils/discord": { getCurrentGuild: () => ({ id: "selected" }) }, "@utils/Logger": {},
+        "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" },
         "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
         "@vencord/discord-types/enums": { StickerFormatType: {} }, "gifenc": {},
         "@webpack": { findByPropsLazy: () => ({}), proxyLazyWebpack: () => ({}), findByCodeLazy: () => () => false },
@@ -2042,7 +2048,7 @@ test("NoBlockedMessages preserves notifications for unsuppressed AutoMod message
 });
 
 test("message history diffs keep custom emoji markup atomic", () => {
-    const { createWordDiff } = loadSource("src/plugins/messageLogger/diffUtils.ts", {});
+    const { createWordDiff } = loadSource("src/plugins/messageLogger/diffUtils.ts", { diff: { diffArrays } });
     for (const prefix of ["", "a"]) {
         const before = `<${prefix}:old:123>`;
         const after = `<${prefix}:new:456>`;
@@ -2366,7 +2372,7 @@ test("reaction profile settings drive native popouts and isolate activation", ()
 });
 
 test("reaction avatar selectors stay pure and use their owning scroller", () => {
-    interface Snapshot { userIds: string[]; guildId: string; generation: number; users: { username: string; avatar: string; guildAvatar?: string; }[]; }
+    interface Snapshot { userIds: string[]; guildId: string; generation: number; userVersion: number; }
     const selectors: (() => Snapshot)[] = [];
     const effects: (() => void)[] = [];
     const tasks: unknown[] = [];
@@ -2374,7 +2380,7 @@ test("reaction avatar selectors stay pure and use their owning scroller", () => 
     const reactionStore = {};
     let guildId = "guild";
     let version = 0;
-    const user = { id: "user", username: "Reactor", avatar: "avatar", guildMemberAvatars: { guild: "guild-avatar" } };
+    const user = { id: "user", username: "Reactor" };
     const UserStore = { getCurrentUser: () => ({ id: "account" }), getUser: () => user, getUserStoreVersion: () => version };
     const ChannelStore = { getChannel: () => ({ guild_id: guildId }) };
     const React = { useContext: (context: unknown) => { assert.equal(context, plugin.ScrollerContext); return currentScroller; }, createContext: (value: unknown) => ({ value }), createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props: { ...props, children } }) };
@@ -2408,21 +2414,9 @@ test("reaction avatar selectors stay pure and use their owning scroller", () => 
     const initial = select();
     cache["message:wave::0"].users.set("user", user);
     assert.deepEqual(Array.from(select().userIds), ["user"]);
-    const beforeUnrelated = select();
     version++;
-    assert.deepEqual(select(), beforeUnrelated);
-    user.username = "Renamed";
-    assert.notDeepEqual(select(), beforeUnrelated);
-    assert.equal(beforeUnrelated.users[0].username, "Reactor");
-    const beforeAvatar = select();
-    user.avatar = "replacement-avatar";
-    assert.notDeepEqual(select(), beforeAvatar);
-    assert.equal(beforeAvatar.users[0].avatar, "avatar");
-    const beforeGuildAvatar = select();
-    user.guildMemberAvatars.guild = "replacement-guild-avatar";
-    assert.notDeepEqual(select(), beforeGuildAvatar);
-    assert.equal(beforeGuildAvatar.users[0].guildAvatar, "guild-avatar");
     guildId = "replacement";
+    assert.equal(select().userVersion, version);
     assert.equal(select().guildId, guildId);
     const tree = ReactionUsers(props);
     const summary = tree.props.children[0];
@@ -6127,6 +6121,7 @@ test("quest settings migration removes retired automation state and preserves pr
 test("quest sort settings keep every status exactly once", () => {
     const defaults = ["UNCLAIMED", "CLAIMED", "IGNORED", "EXPIRED"];
     const mocks = {
+        "@webpack/common": {},
         "../settings/access": {},
         "../settings/def": { defaultQuestOrder: defaults },
         "../settings/rerender": {},
@@ -7851,6 +7846,147 @@ test("profile presets wait for custom status updates and propagate failure", asy
 
 });
 
+test("Roblox activity discards process checks after stop, restart or account change", async () => {
+    for (const interruption of ["stop", "restart", "account"]) {
+        let userId = "1045011641940574208";
+        const pending: { resolve(value: boolean): void; promise: Promise<boolean>; }[] = [];
+        const sent: unknown[] = [];
+        const { default: plugin } = loadSource("src/equicordplugins/robloxActivity.desktop/index.ts", {
+            "@api/Settings": { definePluginSettings: () => ({ store: { pollInterval: 60, channelId: "channel", guildId: "guild" } }) },
+            "@utils/constants": { EquicordDevs: {} },
+            "@utils/discord": { sendMessage: async (_channelId: string, value: unknown) => sent.push(value) },
+            "@utils/Logger": { Logger: class { error() {} } },
+            "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
+            "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) }, PresenceStore: { getActivities: () => [] }, ChannelStore: { getChannel: () => ({ guild_id: "guild" }) } }
+        }, {
+            VencordNative: { pluginHelpers: { RobloxActivity: { isRobloxRunning: () => { const read = Promise.withResolvers<boolean>(); pending.push(read); return read.promise; } } } },
+            setInterval: () => 1, clearInterval() {}
+        });
+        plugin.start();
+        assert.equal(pending.length, 1);
+        if (interruption === "account") userId = "519508374581149707";
+        else plugin.stop();
+        if (interruption === "restart") plugin.start();
+        pending[0].resolve(true);
+        await setImmediate();
+        assert.equal(sent.length, 0, interruption);
+        if (interruption === "stop") plugin.start();
+        plugin.flux.PRESENCE_UPDATE();
+        assert.equal(pending.length, 2);
+        pending[1].resolve(true);
+        await setImmediate();
+        assert.equal(sent.length, 1, "current process checks must still report activity");
+        plugin.stop();
+    }
+});
+
+test("automation settings initialize only on first render with a stable tab identity", () => {
+    let loads = 0;
+    const Component = () => null;
+    const { LazyComponent } = loadSource("src/utils/lazyReact.tsx", { "./lazy": { makeLazy } }, {
+        React: { createElement: (type: unknown) => ({ type }) }
+    });
+    const mocks = Object.fromEntries([
+        "./styles.css", "./changelog", "./patchHelper", "./plugins", "./plugins/ContributorModal", "./plugins/PluginModal",
+        "./sync/BackupAndRestoreTab", "./sync/CloudTab", "./themes", "./updater", "./vencord"
+    ].map(name => [name, {}]));
+    const tabs = loadSource("src/components/settings/tabs/index.ts", {
+        ...mocks,
+        "@utils/lazyReact": { LazyComponent },
+        "./BaseTab": { wrapTab: (component: { displayName?: string; }, name: string) => { component.displayName = `${name}SettingsTab`; return component; } },
+        "./automations": { __esModule: true, get default() { loads++; return Component; } }
+    });
+    const Tab = tabs.AutomationsTab;
+    assert.equal(loads, 0, "importing settings must not initialize the automation tab");
+    assert.equal(Tab.displayName, "AutomationsSettingsTab");
+    assert.equal(Tab({}).type, Component);
+    assert.equal(Tab({}).type, Component);
+    assert.equal(loads, 1);
+    assert.equal(tabs.AutomationsTab, Tab);
+});
+
+test("automation builder initializes when opened rather than when the tab is viewed", () => {
+    let loads = 0;
+    const opened: unknown[] = [];
+    const automation = { id: "new" };
+    const current = { loaded: true, systemEnabled: true, automations: [], drafts: [], runs: [], guilds: [], globalLimit: 1 };
+    const mocks = Object.fromEntries([
+        "./builder.css", "./styles.css", "@components/Button", "@components/Divider", "@components/FormSwitch", "@components/Heading",
+        "@components/Icons", "@components/Paragraph", "@components/settings/AddonCard", "@components/settings/QuickAction", "@components/settings/SpecialCard",
+        "@utils/discord", "@utils/web", "./blocks", "./fields", "./openRouter", "./RunHistory", "./workflow"
+    ].map(name => [name, {}]));
+    const modules: Record<string, object> = {
+        ...mocks,
+        "@components/settings/tabs/BaseTab": { wrapTab: (component: unknown) => component },
+        "@utils/margins": { Margins: {} },
+        "@webpack/common": { React: {
+            useSyncExternalStore: () => current, useEffect() {}, useState: (value: unknown) => [value, () => {}],
+            createElement: (type: unknown, props: object | null, ...children: unknown[]) => ({ type, props: { ...props, children } })
+        } },
+        "./engine": {},
+        "./model": { createAutomation: () => automation },
+        "./templates": { TEMPLATE_NAMES: [] },
+        "./BuilderModal": { openAutomationBuilder: (value: unknown) => opened.push(value) }
+    };
+    const { outputText } = transpileModule(readFileSync("src/components/settings/tabs/automations/index.tsx", "utf8"), {
+        compilerOptions: { jsx: JsxEmit.React, module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+    });
+    const { default: Tab } = runInNewContext(outputText + "\nexports;", {
+        exports: {}, require: (name: string) => { assert.ok(name in modules, name); if (name === "./BuilderModal") loads++; return modules[name]; }
+    });
+    assert.equal(loads, 0);
+    const tree = Tab();
+    assert.equal(loads, 0, "viewing the automation tab must not initialize the editor");
+    const create = tree.props.children[1].props.children[0];
+    create.props.onClick();
+    create.props.onClick();
+    assert.deepEqual(opened, [automation, automation]);
+});
+
+test("primary stream audio batches event bursts into one frame and cancels stopped work", () => {
+    const frames = new Map<number, () => void>();
+    let frameId = 0;
+    let scans = 0;
+    let tick: (() => void) | undefined;
+    const logic = loadSource("src/equicordplugins/primaryStreamAudio/logic.ts", {});
+    const { default: plugin } = loadSource("src/equicordplugins/primaryStreamAudio/index.ts", {
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin },
+        "@webpack/common": {}, "./logic": logic
+    }, {
+        document: { querySelectorAll: () => { scans++; return []; } },
+        window: { setInterval: (callback: () => void) => { tick = callback; return 1; }, clearInterval() {} },
+        queueMicrotask,
+        requestAnimationFrame: (callback: () => void) => { frames.set(++frameId, callback); return frameId; },
+        cancelAnimationFrame: (id: number) => frames.delete(id)
+    });
+    plugin.start();
+    const first = { id: "owner-a", _speakingFlags: 2 };
+    const second = { id: "owner-b", _speakingFlags: 2 };
+    plugin.trackStreamAudio(first);
+    assert.equal(frames.size, 1);
+    frames.get(1)?.(); frames.delete(1);
+    tick?.();
+    assert.equal(scans, 0, "a single stream never needs a DOM primary selection");
+    for (let index = 0; index < 30; index++) {
+        plugin.trackStreamAudio(second);
+        plugin.flux.STREAM_UPDATE();
+    }
+    assert.equal(frames.size, 1);
+    assert.equal(scans, 0);
+    frames.get(2)?.(); frames.delete(2);
+    assert.equal(scans, 1);
+    plugin.flux.STREAM_UPDATE();
+    plugin.stop();
+    assert.equal(frames.size, 0);
+    plugin.start();
+    plugin.trackStreamAudio(first);
+    assert.equal(frames.size, 1);
+    frames.get(4)?.(); frames.delete(4);
+    assert.equal(scans, 1);
+    plugin.stop();
+});
+
 test("primary stream audio reads stores initialized after module evaluation", () => {
     const common: Record<string, unknown> = {};
     const logic = loadSource("src/equicordplugins/primaryStreamAudio/logic.ts", {});
@@ -8978,13 +9114,13 @@ test("MessageBurst retains outgoing text until its edit resolves", async () => {
             "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
             "@webpack/common": {
                 ChannelStore: { getChannel: () => ({ isGroupDM: () => false }) },
-                MessageStore: { getMessages: () => ({ last: () => ({ id: "previous", author: { id: "self" }, content: "First", timestamp: new Date() }) }) },
+                MessageStore: { getLastMessage: () => ({ id: "previous", author: { id: "self" }, content: "First", timestamp: new Date(), attachments: [] }) },
                 UserStore: { getCurrentUser: () => ({ id: "self" }) },
                 MessageActions: { editMessage: () => edit }
             }
         }, { document: { querySelector: () => null } }).default;
         const outgoing = { content: "Second" };
-        const pending = plugin.onBeforeMessageSend("channel", outgoing);
+        const pending = plugin.onBeforeMessageSend("channel", outgoing, {});
         assert.equal(outgoing.content, "Second");
         finish();
         if (success) await pending;
@@ -9172,7 +9308,7 @@ test("FontLoader uses the escaped selected family for body and code fonts", asyn
         "@api/Settings": { definePluginSettings: () => ({ store }), migratePluginSetting: () => {} },
         "@components/Card": {}, "@components/Heading": {}, "@components/Paragraph": {},
         "@shared/debounce": {}, "@utils/constants": { EquicordDevs: {} },
-        "@utils/margins": {}, "@utils/misc": {},
+        "@utils/margins": {}, "@utils/misc": {}, "@utils/Logger": { Logger: class { warn() {} error() {} } },
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
         "@webpack/common": {}
     }, {
@@ -10428,9 +10564,11 @@ test("folder zipping drains directory batches and rejects read and size failures
         "@api/Settings": { definePluginSettings: () => ({ store: { extensions: "" } }) },
         "@utils/constants": { EquicordDevs: {} },
         "@utils/Logger": { Logger: class {} },
+        "@utils/misc": {}, "@utils/Queue": { Queue },
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
-        "@webpack/common": {}, fflate: {}
+        "@webpack/common": {}, "@utils/zip": {}
     }, {}, "readDirectoryEntry");
+    const { signal } = new AbortController();
     const directory = (name: string, batches: object[][]) => ({
         name, isDirectory: true,
         createReader: () => ({ readEntries: (resolve: (entries: object[]) => void) => resolve(batches.shift() ?? []) })
@@ -10441,12 +10579,12 @@ test("folder zipping drains directory batches and rejects read and size failures
             ? reject(new Error("Read failed"))
             : resolve({ size, arrayBuffer: async () => new Uint8Array([7]).buffer })
     });
-    const files = await readDirectory(directory("root", [[file("a")], [directory("nested", [[file("b")]])]]));
+    const files = await readDirectory(directory("root", [[file("a")], [directory("nested", [[file("b")]])]]), signal);
     assert.deepEqual(Object.keys(files), ["a", "nested/b"]);
     assert.deepEqual(Array.from(files["nested/b"]), [7]);
-    await assert.rejects(readDirectory(directory("root", [[file("bad", 1, true)]])), /Read failed/);
-    await assert.rejects(readDirectory(directory("root", [[file("large", 100 * 1024 * 1024 + 1)]])), /too large/);
-    await assert.rejects(readDirectory(directory("root", [Array.from({ length: 501 }, (_, i) => file(String(i)))])), /more than 500/);
+    await assert.rejects(readDirectory(directory("root", [[file("bad", 1, true)]]), signal), /Read failed/);
+    await assert.rejects(readDirectory(directory("root", [[file("large", 100 * 1024 * 1024 + 1)]]), signal), /too large/);
+    await assert.rejects(readDirectory(directory("root", [Array.from({ length: 501 }, (_, i) => file(String(i)))]), signal), /more than 500/);
 });
 
 test("random mentions use the destination channel and preserve text when no members are loaded", () => {
@@ -10477,6 +10615,7 @@ test("clip file reads share the size cap and selected files reuse the byte write
     const native = loadComponent("src/equicordplugins/clipUpload.desktop/native.ts", {}, {
         "@main/ipcMain": { ensureSafePath: () => true },
         "@main/utils/constants": { DATA_DIR: "fixture" },
+        "@utils/Logger": { Logger: class { warn() {} } },
         crypto: { randomUUID: () => String(++id) },
         electron: { dialog: { showOpenDialog: async () => ({ filePaths: ["clip.mp4"], canceled: false }) } },
         fs: { createReadStream: (_path: string, options: { end: number; }) => {
@@ -10611,6 +10750,46 @@ test("queued task failures are reported without interrupting ordered work", asyn
     queue.push(() => calls.push("resumed"));
     await setImmediate();
     assert.equal(calls.at(-1), "resumed");
+});
+
+test("audio processing keeps original, current and previous snapshots independent", async () => {
+    const snapshots: { audio: string; volume: number; speed: number; }[] = [];
+    const plugin = loadComponent("src/equicordplugins/_api/audioPlayer.ts", {}, {
+        "@api/AudioPlayer": {
+            audioProcessorFunctions: { custom(data: { audio: string; volume: number; speed: number; }) {
+                snapshots.push(data);
+                data.audio = "custom";
+                data.volume /= 2;
+                data.speed *= 2;
+            } },
+            AudioType: {}, identifyAudioType: () => "url"
+        },
+        "@utils/constants": { EquicordDevs: {} },
+        "@utils/types": { __esModule: true, default: (plugin: object) => plugin }
+    }, { structuredClone }).default;
+    let destroyed = 0;
+    const original = { audio: "original", type: "url", volume: 0.8, speed: 1 };
+    const player = { preprocessDataOriginal: original, destroyAudio() { destroyed++; } };
+    plugin.processAudio(player);
+    assert.deepEqual(original, { audio: "original", type: "url", volume: 0.8, speed: 1 });
+    const element = { volume: 0.4, playbackRate: 2 };
+    Object.assign(player, { _audio: Promise.resolve(element) });
+    original.volume = 0.6;
+    original.speed = 3;
+    plugin.processAudio(player);
+    snapshots[0].volume = 0;
+    snapshots[0].speed = 0;
+    await setImmediate();
+    assert.equal(destroyed, 1);
+    assert.deepEqual(element, { volume: 0.3, playbackRate: 6 });
+    const result = player as typeof player & {
+        preprocessDataPrevious: typeof original;
+        preprocessDataCurrent: typeof original;
+    };
+    assert.equal(result.preprocessDataPrevious.volume, 0.4);
+    assert.equal(result.preprocessDataPrevious.speed, 2);
+    assert.equal(result.preprocessDataCurrent.volume, 0.3);
+    assert.equal(original.volume, 0.6);
 });
 
 test("audio player preserves zero volume and clamps explicit values", () => {
@@ -11824,8 +12003,7 @@ test("sticker picker uses shared async cleanup for pack loading", async () => {
             let notices = 0;
             const React = {
                 createElement: () => null,
-                useState: (initial: unknown) => [initial, (value: { value?: unknown; error?: unknown; }) => { if (!Object.is(initial, value)) updates.push(value); }],
-                useMemo: (factory: () => unknown) => factory(),
+                useState: (initial: unknown) => [initial, (value: { value?: unknown; error?: unknown; }) => updates.push(value)],
                 useEffect: (effect: () => () => void) => effects.push(effect)
             };
             const shared = loadSource("src/utils/react.tsx", {
@@ -11835,10 +12013,7 @@ test("sticker picker uses shared async cleanup for pack loading", async () => {
             const plugin = loadSource("src/equicordplugins/moreStickers/index.tsx", {
                 "@api/Settings": { definePluginSettings: () => ({}) }, "@utils/constants": { Devs: {}, EquicordDevs: {} },
                 "@utils/react": shared, "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
-                "@webpack/common": {
-                    React, showToast: () => notices++, Toasts: { Type: {} },
-                    lodash: { debounce: (callback: (value: string) => void) => Object.assign(callback, { cancel() {} }) }
-                },
+                "@webpack/common": { React, showToast: () => notices++, Toasts: { Type: {} } },
                 "./components": {}, "./utils": { cl: () => "" },
                 "./stickers": {
                     getStickerPackMetas: async () => { if (failure === "metadata") throw new Error("Load failed"); return [{ id: "loaded" }, { id: "missing" }]; },
@@ -11846,9 +12021,9 @@ test("sticker picker uses shared async cleanup for pack loading", async () => {
                 }
             }).default;
             plugin.moreStickersComponent({ channel: { id: "channel" }, closePopout() {} });
-            assert.equal(effects.length, 2);
-            const cleanups = effects.map(effect => effect());
-            if (unmounted) cleanups.forEach(cleanup => cleanup());
+            assert.equal(effects.length, 1);
+            const cleanup = effects[0]();
+            if (unmounted) cleanup();
             await setImmediate();
             assert.equal(updates.length, unmounted ? 0 : 1);
             assert.equal(notices, !unmounted && failure !== "none" ? 1 : 0);
@@ -12274,7 +12449,7 @@ test("scheduled queue serializes reloads and edits across scheduler stops", asyn
     assert.equal(module.getScheduledMessages()[0].id, "stopped");
 });
 
-test("signed-out scheduled messages wait between checks without changing the queue", async () => {
+test("signed-out scheduled messages leave the queue untouched without polling", async () => {
     const delays: number[] = [];
     const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
             "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
@@ -12286,8 +12461,41 @@ test("signed-out scheduled messages wait between checks without changing the que
     await module.loadScheduledMessages();
     module.startScheduler();
     await setImmediate();
-    assert.deepEqual(delays, [10000]);
+    assert.deepEqual(delays, []);
     assert.equal(module.getScheduledMessages()[0].attemptedAt, undefined);
+});
+
+test("scheduled timers ignore ownerless and foreign queues until an owning account connects", async () => {
+    let userId = "account";
+    const timers: number[] = [];
+    const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+        "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+        "@api/DataStore": { get: async () => [scheduledEntry({ id: "legacy", userId: undefined, scheduledTime: 0 }),
+            scheduledEntry({ id: "foreign", userId: "other", scheduledTime: Date.now() + 100_000 })],
+        set: () => assert.fail("No queue writes for another account") },
+        "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: userId }) } },
+        ".": { settings: { store: { checkIntervalSeconds: 10 } } }
+    }, { setTimeout: (_callback: unknown, delay: number) => { timers.push(delay); return timers.length; }, clearTimeout: () => {} });
+    await module.loadScheduledMessages(); module.startScheduler(); await setImmediate();
+    for (let i = 0; i < 100; i++) module.scheduleNextCheck();
+    assert.deepEqual(timers, []); assert.equal(module.getScheduledMessages().length, 2);
+    module.stopScheduler(); userId = "other"; module.startScheduler();
+    assert.deepEqual(timers, [10_000]); module.stopScheduler();
+});
+
+test("scheduled timers use the current account's next message while retaining configured check intervals", async () => {
+    const timers: number[] = [];
+    const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+        "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+        "@api/DataStore": { get: async () => [scheduledEntry({ id: "foreign", userId: "other", scheduledTime: Date.now() + 2_000 }),
+            scheduledEntry({ id: "mine", userId: "account", scheduledTime: Date.now() + 100_000 })] },
+        "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) } },
+        ".": { settings: { store: { checkIntervalSeconds: 10 } } }
+    }, { setTimeout: (_callback: unknown, delay: number) => { timers.push(delay); return timers.length; }, clearTimeout: () => {} });
+    await module.loadScheduledMessages(); module.startScheduler();
+    assert.deepEqual(timers, [10_000]); module.stopScheduler();
 });
 
 test("scheduled interval changes only replace an active timer", async () => {
@@ -12296,7 +12504,7 @@ test("scheduled interval changes only replace an active timer", async () => {
     const cleared: number[] = [];
     const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
             "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
-        "@api/DataStore": { get: async () => [scheduledEntry({ id: "future", scheduledTime: Date.now() + 100000 })] },
+        "@api/DataStore": { get: async () => [scheduledEntry({ id: "future", userId: "account", scheduledTime: Date.now() + 100000 })] },
         "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
         "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) },}, ".": { settings: { store: { get checkIntervalSeconds() { return delay; } } } }
     }, { setTimeout: (_callback: unknown, ms: number) => { timers.push(ms); return timers.length; },
@@ -12852,23 +13060,26 @@ test("Sekai sticker images survive rerenders and exports keep their original cha
         "@components/Flex": { Flex: "flex" }, "@components/FormSwitch": {}, "@components/Heading": {},
         "@equicordplugins/sekaiStickers/characters.json": { characters: Array.from({ length: 51 }, () => ({ character: "fixture", img: "fixture.png", defaultText: { x: 1, y: 1, r: 0, s: 20 } })) },
         "@webpack/common": { React, Modal: "modal", SelectedChannelStore: { getChannelId: () => selectedChannel }, ChannelStore: { getChannel: (id: string) => id }, UploadHandler: { promptToUpload: (_files: unknown, channel: unknown) => { uploadedChannel = channel; } } },
-        "./Canvas": { __esModule: true, default: "canvas" }, "./Picker": {},
+        "@utils/Logger": { Logger: class { warn() {} } }, "./Picker": {},
     }, { React, Image: TestImage, File, document: { fonts: { check: () => true } } });
     const render = () => {
         stateIndex = 0;
+        effects.length = 0;
         return Editor({ modalProps: { onClose: () => closed++ }, settings: { store: { AutoCloseModal: true } } });
     };
     let tree = render();
-    const cleanup = effects[0]();
+    const cleanup = effects[1]();
     assert.equal(tree.props.actions[1].disabled, true);
     images[0].onload?.();
+    states[0] = true;
     tree = render();
     assert.equal(images.length, 1, "a render reuses the loaded image");
     const callbacks: Array<(blob: Blob | null) => void> = [];
     const canvas = { toBlob: (callback: (blob: Blob | null) => void) => callbacks.push(callback) };
     let drawnImage: unknown;
     const context = { canvas, clearRect() {}, drawImage: (image: unknown) => { drawnImage = image; }, save() {}, restore() {}, translate() {}, rotate() {}, strokeText() {}, fillText() {} };
-    tree.props.children[0].props.children[0].props.children[0].props.draw(context);
+    ref.current = { ...canvas, getContext: () => context };
+    effects[2]();
     assert.equal(drawnImage, images[0]);
     tree.props.actions[1].onClick();
     callbacks[0](null);
@@ -12880,7 +13091,7 @@ test("Sekai sticker images survive rerenders and exports keep their original cha
     assert.equal(closed, 1);
     cleanup();
     assert.equal(images[0].onload, null, "cleanup detaches the obsolete load handler");
-    states[1] = 50;
+    states[2] = 50;
     tree = render();
     assert.equal(tree.props.actions[1].disabled, true, "a new character cannot export the previous image");
 });
@@ -12936,6 +13147,50 @@ test("failed embed requests report once without updating the message", async () 
     assert.deepEqual(toasts, ["Failed to get embed"]);
 });
 
+
+test("sidebar popout restoration reacts to stores without polling and releases pending listeners", () => {
+    for (const scenario of ["complete", "stop", "account", "setting"]) {
+        let userId = "account";
+        const settings = { store: { persistPopoutWindows: true, popoutAlwaysOnTop: true } };
+        const listeners = new Set<() => void>();
+        const userListeners = new Set<() => void>();
+        const opened: string[] = [];
+        const channels = new Map<string, object>();
+        const channel = (id: string) => ({ id, name: id, isPrivate: () => true });
+        channels.set("ready", channel("ready"));
+        channels.set("already", channel("already"));
+        let polls = 0;
+        let persisted = 0;
+        const source = loadSource("src/equicordplugins/sidebarChat/index.tsx", {
+            "@api/ContextMenu": {}, "@api/HeaderBar": {},
+            "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+            "@utils/constants": { Devs: {}, EquicordDevs: {} }, "@utils/css": { classNameFactory: () => () => "" },
+            "@utils/discord": {}, "@utils/types": { __esModule: true, default: (value: unknown) => value },
+            "@vencord/discord-types/enums": { ChannelType: {} },
+            "@webpack": { findComponentByCodeLazy: () => ({}), findByPropsLazy: () => ({}), findCssClassesLazy: () => ({}), findStoreLazy: () => ({}), extractAndLoadChunksLazy: () => () => Promise.resolve() },
+            "@webpack/common": {
+                ChannelStore: { getChannel: (id: string) => channels.get(id), addChangeListener: (fn: () => void) => listeners.add(fn), removeChangeListener: (fn: () => void) => listeners.delete(fn) },
+                UserStore: { getCurrentUser: () => ({ id: userId }), addChangeListener: (fn: () => void) => userListeners.add(fn), removeChangeListener: (fn: () => void) => userListeners.delete(fn) },
+                PopoutActions: { open: (key: string) => opened.push(key), setAlwaysOnTop() {}, close: () => assert.fail("Restoring must not close an already-open popout.") }
+            },
+            "./store": { settings, getPersistedPopoutChannelIds: () => ["already", "ready", "pending"], getPopoutWindowKey: (id: string) => id,
+                isPopoutWindowOpen: (id: string) => id === "already" || opened.includes(id), syncPersistedPopoutWindows: () => persisted++ },
+            "./styles.css?managed": {}
+        }, { window: { setInterval: () => { polls++; return 1; }, clearInterval() {} } }, "({ restorePersistedPopouts, clearPersistedPopoutRestore })");
+        source.restorePersistedPopouts();
+        assert.deepEqual(opened, ["ready"]);
+        assert.equal(polls, 0);
+        assert.equal(listeners.size, 1); assert.equal(userListeners.size, 1);
+        if (scenario === "stop") source.clearPersistedPopoutRestore();
+        if (scenario === "account") { userId = "other"; for (const fn of [...userListeners]) fn(); }
+        if (scenario === "setting") settings.store.persistPopoutWindows = false;
+        channels.set("pending", channel("pending"));
+        for (const fn of [...listeners]) fn();
+        assert.deepEqual(opened, scenario === "complete" ? ["ready", "pending"] : ["ready"]);
+        assert.equal(listeners.size, 0); assert.equal(userListeners.size, 0);
+        assert.equal(persisted, scenario === "complete" ? 1 : 0);
+    }
+});
 
 test("sidebar DM lookups cannot override newer navigation or a closed sidebar", async () => {
     const pending: Array<(id: string) => void> = [];
@@ -19916,5 +20171,121 @@ test("translation helpers forward cancellation to their native request", async (
         await rejected;
         assert.equal(signal?.aborted, true);
         assert.equal(cancellations, 1);
+    }
+});
+
+
+test("SekaiStickers loads its editor on selection and discards stopped pending opens", async () => {
+    let imports = 0;
+    let fontLoads = 0;
+    let userId = "account";
+    let finish: () => void = () => {};
+    let render: (props: object) => { type: unknown; } | null = () => assert.fail("No pending modal factory.");
+    let opened: () => Promise<void> = async () => {};
+    const Modal = Symbol("Editor");
+    const React = { createElement: (type: unknown, props: object) => ({ type, props }) };
+    const { default: plugin } = loadSource("src/equicordplugins/sekaiStickers/index.tsx", {
+        "@api/ChatButtons": { ChatBarButton: "button" },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (value: unknown) => value } },
+        "@api/Settings": { definePluginSettings: () => ({ store: {} }) },
+        "@utils/constants": { Devs: {} }, "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
+        "@webpack/common": { React, UserStore: { getCurrentUser: () => ({ id: userId }) },
+            openModalLazy: async (factory: () => Promise<typeof render>) => { await new Promise<void>(resolve => { finish = resolve; }); render = await factory(); },
+            openModal: () => assert.fail("Expected lazy editor loading.") },
+        "./Components/SekaiStickersModal": { get __esModule() { imports++; return true; }, default: Modal },
+        "./kanade.svg": { kanadeSvg: () => null },
+    }, { React, FontFace: class { load() { fontLoads++; return Promise.resolve(this); } }, document: { fonts: { add() {} } } });
+    await plugin.start();
+    assert.equal(imports, 0); assert.equal(fontLoads, 0);
+    const button = plugin.chatBarButton.render().type();
+    opened = button.props.onClick;
+    const pending = opened(); plugin.stop(); finish(); await pending;
+    assert.equal(render({}), null);
+    await plugin.start(); const live = opened(); finish(); await live;
+    const liveModal = render({}); assert.ok(liveModal); assert.equal(liveModal.type, Modal); assert.equal(imports, 1);
+    const replaced = opened(); userId = "other"; finish(); await replaced;
+    assert.equal(render({}), null);
+});
+
+test("SekaiStickers font loads belong to the open editor and cannot revive after close", async () => {
+    for (const closeEarly of [false, true]) {
+        const effects: Array<() => (() => void) | void> = [];
+        const faces: object[] = [];
+        const finishes: Array<() => void> = [];
+        const added = new Set<object>();
+        const updates: unknown[] = [];
+        class FontFaceFixture {
+            constructor() { faces.push(this); }
+            load() { return new Promise<this>(resolve => finishes.push(() => resolve(this))); }
+        }
+        const React = { createElement: () => null, useRef: () => ({ current: null }),
+            useState: (value: unknown) => [value, (next: unknown) => updates.push(next)], useEffect: (effect: typeof effects[number]) => effects.push(effect) };
+        const { default: Editor } = loadSource("src/equicordplugins/sekaiStickers/Components/SekaiStickersModal.tsx", {
+            "@components/Flex": {}, "@components/FormSwitch": {}, "@components/Heading": {},
+            "@equicordplugins/sekaiStickers/characters.json": { characters: Array.from({ length: 50 }, () => ({ defaultText: { x: 0, y: 0, r: 0, s: 47 } })) },
+            "@utils/Logger": { Logger: class { warn() {} } }, "@webpack/common": { React }, "./Canvas": {}, "./Picker": {},
+        }, { Image: class {}, FontFace: FontFaceFixture, document: { fonts: { add: (face: object) => added.add(face), delete: (face: object) => added.delete(face) } } });
+        Editor({ modalProps: {}, settings: { store: {} } });
+        const cleanup = effects[0](); assert.ok(typeof cleanup === "function"); assert.equal(faces.length, 2);
+        const initialUpdates = updates.length;
+        if (closeEarly) cleanup();
+        for (const finish of finishes) finish(); await setImmediate();
+        assert.equal(added.size, closeEarly ? 0 : 2);
+        assert.equal(updates.length, initialUpdates + (closeEarly ? 0 : 1));
+        if (!closeEarly) cleanup(); assert.equal(added.size, 0);
+    }
+});
+
+
+test("Streaks coalesces incoming message bursts through refresh and clears reconnect work", async () => {
+    for (const change of ["finish", "changed", "stop", "reconnect"]) {
+        const timers = new Map<number, () => Promise<void>>();
+        let nextId = 0;
+        let refreshes = 0;
+        let updates = 0;
+        let resolve: () => void = () => {};
+        const state = { streaks: {} as Record<string, { count: number; }>,
+            clear() { state.streaks = {}; }, fetch() {},
+            refresh: () => { refreshes++; return new Promise<void>(done => { resolve = done; }); },
+            update: () => { updates++; }
+        };
+        const { default: plugin } = loadSource("src/equicordplugins/streaks/index.tsx", {
+            "@equicordplugins/_core/concatenatedModules": {}, "@utils/constants": { Devs: {}, EquicordDevs: {} },
+            "@utils/css": { classNameFactory: () => () => "fixture" },
+            "@utils/types": { __esModule: true, default: (value: unknown) => value },
+            "@webpack/common": {
+                UserStore: { getCurrentUser: () => ({ id: "me" }) },
+                ChannelStore: { getChannel: (id: string) => ({ isDM: () => true, recipients: [id] }) },
+                moment: () => ({ format: () => "2026-10-02" }),
+            },
+            "./settings": { settings: { store: {} } },
+            "./stores/AuthorizationStore": { useAuthorizationStore: { getState: () => ({ isAuthorized: () => true }) } },
+            "./stores/StreaksStore": { useStreaksStore: { getState: () => state } },
+        }, {
+            setTimeout: (callback: () => Promise<void>) => { const id = ++nextId; timers.set(id, callback); return id; },
+            clearTimeout: (id: number) => timers.delete(id),
+        });
+        const message = (peer: string) => plugin.flux.MESSAGE_CREATE({ type: "MESSAGE_CREATE", message: { author: { id: peer } }, channelId: peer });
+        for (let i = 0; i < 100; i++) await message("peer");
+        assert.equal(timers.size, 1, "one timer per peer before its flags arrive");
+        await message("other"); assert.equal(timers.size, 2, "independent peers retain independent refreshes");
+        const callback = timers.get(1); assert.ok(callback); timers.delete(1);
+        const pending = callback(); assert.equal(refreshes, 1);
+        for (let i = 0; i < 100; i++) await message("peer");
+        assert.equal(nextId, 2, "active refresh retains burst ownership");
+        if (change === "stop") plugin.stop();
+        if (change === "reconnect") await plugin.flux.CONNECTION_OPEN();
+        if (change === "stop" || change === "reconnect") assert.equal(timers.size, 0);
+        if (change === "reconnect") { await message("peer"); assert.equal(timers.size, 1); }
+        if (change === "changed") state.streaks.peer = { count: 2 };
+        resolve(); await pending;
+        assert.equal(updates, change === "finish" ? 1 : 0);
+        if (change === "finish") { await message("peer"); assert.equal(nextId, 3, "later messages can refresh again"); }
+        if (change === "reconnect") {
+            await message("peer");
+            assert.equal(nextId, 3, "old completion cannot release the new connection refresh");
+            assert.equal(timers.size, 1);
+        }
+        plugin.stop(); assert.equal(timers.size, 0);
     }
 });

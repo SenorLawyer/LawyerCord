@@ -22,7 +22,7 @@ import { ChannelStore, SelectedChannelStore, UserStore } from "@webpack/common";
 
 import { settings } from "../index";
 import { LoggedMessageJSON } from "../types";
-import { findLastIndex, getGuildIdByChannel } from "./misc";
+import { getGuildIdByChannel } from "./misc";
 
 export * from "./cleanUp";
 export * from "./misc";
@@ -52,7 +52,7 @@ export function reAddDeletedMessages(messages: LoggedMessageJSON[], deletedMessa
     const [{ time: highestTime }] = IDs;
     const lowestIDX = channelEnd ? 0 : savedIDs.findIndex(e => e.time > lowestTime);
     if (lowestIDX === -1) return;
-    const highestIDX = channelStart ? savedIDs.length - 1 : findLastIndex(savedIDs, e => e.time < highestTime);
+    const highestIDX = channelStart ? savedIDs.length - 1 : savedIDs.findLastIndex(e => e.time < highestTime);
     if (highestIDX === -1) return;
     const reAddIDs = savedIDs.slice(lowestIDX, highestIDX + 1);
     reAddIDs.push(...IDs);

@@ -23,30 +23,35 @@ import { React, TextInput, useState } from "@webpack/common";
 import { resolveError, SettingProps, SettingsSection } from "./Common";
 
 export function NumberSetting({ setting, pluginSettings, definedSettings, id, onChange }: SettingProps<PluginSettingNumberDef | PluginSettingBigIntDef>) {
-    function serialize(value: string) {
-        if (setting.type === OptionType.BIGINT) return BigInt(value);
-        return Number(value);
-    }
-
+    const isBigInt = setting.type === OptionType.BIGINT;
     const [state, setState] = useState(`${pluginSettings[id] ?? setting.default ?? 0}`);
     const [error, setError] = useState<string | null>(null);
 
     function handleChange(newValue: string) {
+        setState(newValue);
+        if (!newValue.trim() || isBigInt && !/^[+-]?\d+$/.test(newValue)) {
+            setError(isBigInt ? "Enter a whole number." : "Enter a number.");
+            return;
+        }
+        const value = isBigInt ? BigInt(newValue) : Number(newValue);
+        if (typeof value === "number" && !Number.isFinite(value)) {
+            setError("Enter a finite number.");
+            return;
+        }
         const isValid = setting.isValid?.call(definedSettings, newValue) ?? true;
 
         setError(resolveError(isValid));
 
         if (isValid === true) {
-            onChange(serialize(newValue));
+            onChange(value);
         }
-
-        setState(newValue);
     }
 
     return (
         <SettingsSection name={setting.displayName} id={id} description={setting.description} error={error}>
             <TextInput
-                type="number"
+                type={isBigInt ? "text" : "number"}
+                inputMode={isBigInt ? "numeric" : undefined}
                 pattern="-?[0-9]+"
                 placeholder={setting.placeholder ?? "Enter a number"}
                 value={state}

@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
+import { ChatBarButton } from "@api/ChatButtons";
 import { definePluginSettings } from "@api/Settings";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { openModal } from "@webpack/common";
+import { openModalLazy, UserStore } from "@webpack/common";
 
-import SekaiStickersModal from "./Components/SekaiStickersModal";
 import { kanadeSvg } from "./kanade.svg";
 
 const settings = definePluginSettings({
@@ -21,15 +21,26 @@ const settings = definePluginSettings({
     }
 });
 
-const SekaiStickerChatButton: ChatBarButtonFactory = () => {
-    return (
-        <ChatBarButton onClick={() => openModal(props => <SekaiStickersModal modalProps={props} settings={settings} />)} tooltip="Sekai Stickers">
-            {kanadeSvg()}
-        </ChatBarButton>
-    );
-};
+let lifetime: object | undefined;
 
-let IS_FONTS_LOADED = false;
+function openEditor() {
+    const owner = lifetime;
+    const userId = UserStore.getCurrentUser()?.id;
+    if (!owner || !userId) return;
+    return openModalLazy(async () => {
+        if (owner !== lifetime || userId !== UserStore.getCurrentUser()?.id) return () => null;
+        const { default: SekaiStickersModal } = await import("./Components/SekaiStickersModal");
+        if (owner !== lifetime || userId !== UserStore.getCurrentUser()?.id) return () => null;
+        return modalProps => <SekaiStickersModal modalProps={modalProps} settings={settings} />;
+    });
+}
+
+const SekaiStickerChatButton = ErrorBoundary.wrap(() => (
+    <ChatBarButton onClick={openEditor} tooltip="Sekai Stickers">
+        {kanadeSvg()}
+    </ChatBarButton>
+), { noop: true });
+
 export default definePlugin({
     name: "SekaiStickers",
     description: "Sekai Stickers built in discord originally from github.com/TheOriginalAyaka",
@@ -39,18 +50,12 @@ export default definePlugin({
     settings,
     chatBarButton: {
         icon: kanadeSvg,
-        render: SekaiStickerChatButton
+        render: () => <SekaiStickerChatButton />
     },
-    async start() {
-        const fonts = [{ name: "YurukaStd", url: "https://raw.githubusercontent.com/TheOriginalAyaka/sekai-stickers/47a2ca33b8cb35f59800e8faad48980e4ce5ea71/src/fonts/YurukaStd.woff2" }, { name: "SSFangTangTi", url: "https://raw.githubusercontent.com/TheOriginalAyaka/sekai-stickers/main/src/fonts/ShangShouFangTangTi.woff2" }];
-        if (!IS_FONTS_LOADED) {
-            fonts.map(n => {
-                new FontFace(n.name, `url(${n.url})`).load().then(
-                    font => { document.fonts.add(font); },
-                    err => { console.log(err); }
-                );
-            });
-            IS_FONTS_LOADED = true;
-        }
+    start() {
+        lifetime = {};
     },
+    stop() {
+        lifetime = undefined;
+    }
 });

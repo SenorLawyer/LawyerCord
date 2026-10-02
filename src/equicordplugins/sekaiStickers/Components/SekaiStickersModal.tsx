@@ -8,13 +8,16 @@ import { Flex } from "@components/Flex";
 import { FormSwitch } from "@components/FormSwitch";
 import { Heading } from "@components/Heading";
 import { characters } from "@equicordplugins/sekaiStickers/characters.json";
+import { Logger } from "@utils/Logger";
 import { RenderModalProps } from "@vencord/discord-types";
 import { ChannelStore, Modal, openModal, React, SelectedChannelStore, Slider, TextArea, UploadHandler } from "@webpack/common";
 
-import Canvas from "./Canvas";
 import CharSelectModal from "./Picker";
 
+const logger = new Logger("SekaiStickers");
+
 export default function SekaiStickersModal({ modalProps, settings }: { modalProps: RenderModalProps; settings: any; }) {
+    const [fontsReady, setFontsReady] = React.useState(false);
     const [text, setText] = React.useState<string>("奏でーかわいい");
     const [character, setChracter] = React.useState<number>(49);
     const [fontSize, setFontSize] = React.useState<number>(characters[character].defaultText.s);
@@ -25,6 +28,23 @@ export default function SekaiStickersModal({ modalProps, settings }: { modalProp
     const [spaceSize, setSpaceSize] = React.useState<number>(36);
     const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
     const img = loadedImage?.character === character ? loadedImage.image : null;
+
+    React.useEffect(() => {
+        let active = true;
+        const faces = [
+            new FontFace("YurukaStd", "url(https://raw.githubusercontent.com/TheOriginalAyaka/sekai-stickers/47a2ca33b8cb35f59800e8faad48980e4ce5ea71/src/fonts/YurukaStd.woff2)"),
+            new FontFace("SSFangTangTi", "url(https://raw.githubusercontent.com/TheOriginalAyaka/sekai-stickers/main/src/fonts/ShangShouFangTangTi.woff2)")
+        ];
+        void Promise.all(faces.map(face => face.load().then(font => {
+            if (active) document.fonts.add(font);
+        }).catch(error => logger.warn("Could not load sticker font", error)))).then(() => {
+            if (active) setFontsReady(true);
+        });
+        return () => {
+            active = false;
+            for (const face of faces) document.fonts.delete(face);
+        };
+    }, []);
 
     React.useEffect(() => {
         setPosition({
@@ -43,12 +63,13 @@ export default function SekaiStickersModal({ modalProps, settings }: { modalProp
 
     const angle = (Math.PI * text.length) / 7;
 
-    const draw = (ctx: CanvasRenderingContext2D) => {
-        canvasRef.current = null;
+    React.useEffect(() => {
+        const ctx = canvasRef.current?.getContext("2d");
+        if (!ctx) return;
         ctx.canvas.width = 296;
         ctx.canvas.height = 256;
 
-        if (img && document.fonts.check("12px YurukaStd")) {
+        if (img && fontsReady) {
             const hRatio = ctx.canvas.width / img.width;
             const vRatio = ctx.canvas.height / img.height;
             const ratio = Math.min(hRatio, vRatio);
@@ -95,9 +116,8 @@ export default function SekaiStickersModal({ modalProps, settings }: { modalProp
                 }
             }
             ctx.restore();
-            canvasRef.current = ctx.canvas;
         }
-    };
+    }, [img, fontsReady, text, fontSize, position, rotate, character, curve, angle, spaceSize]);
     return (
         <Modal
             {...modalProps}
@@ -114,7 +134,7 @@ export default function SekaiStickersModal({ modalProps, settings }: { modalProp
                 {
                     text: "Upload as Attachment",
                     variant: "primary",
-                    disabled: !img,
+                    disabled: !img || !fontsReady,
                     onClick: () => {
                         const canvas = canvasRef.current;
                         const channel = ChannelStore.getChannel(SelectedChannelStore.getChannelId());
@@ -131,7 +151,7 @@ export default function SekaiStickersModal({ modalProps, settings }: { modalProp
         >
             <Flex flexDirection="row" style={{ paddingTop: 12 }}>
                 <div style={{ marginRight: 30 }}>
-                    <Canvas draw={draw} id="SekaiCard_Canvas" />
+                    <canvas ref={canvasRef} id="SekaiCard_Canvas" />
                     <Heading>Text Y Pos</Heading>
                     <Slider minValue={0} maxValue={256} asValueChanges={va => { va = Math.round(va); setPosition({ x: position.x, y: curve ? 256 + fontSize * 3 - va : 256 - va }); }} initialValue={curve ? 256 - position.y + fontSize * 3 : 256 - position.y} orientation={"vertical"} onValueRender={va => String(Math.round(va))} />
                     <Heading>Text XZ Pos</Heading>

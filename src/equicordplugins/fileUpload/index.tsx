@@ -19,7 +19,7 @@ import { DraftType, FluxDispatcher, Menu, PermissionsBits, PermissionStore, Reac
 import { settings } from "./settings";
 import { serviceLabels, ServiceType } from "./types";
 import { getMediaUrl } from "./utils/getMediaUrl";
-import { cancelCurrentUpload, getUploadState, isConfigured, isFileTypeAllowed, logger, subscribeUploadState, uploadFile, uploadPickedFile, uploadProvidedFiles } from "./utils/upload";
+import { cancelCurrentUpload, getUploadState, isConfigured, isFileTypeAllowed, isUploadInProgress, logger, subscribeUploadState, uploadFile, uploadPickedFile, uploadProvidedFiles } from "./utils/upload";
 const cl = classNameFactory("vc-file-upload-");
 const { getUserMaxFileSize } = findByPropsLazy("getUserMaxFileSize");
 let uploadAddFilesInterceptor: ((event: unknown) => void) | null = null;
@@ -75,7 +75,7 @@ function interceptUploadAddFiles(event: unknown): void {
 
     if (payload.draftType !== DraftType.ChannelMessage) return;
 
-    if (!settings.store.bypassDiscordUpload || !isConfigured()) return;
+    if (!settings.store.bypassDiscordUpload || isUploadInProgress() || !isConfigured()) return;
 
     const files = [
         ...extractFilesFromValue(payload.files),
@@ -87,9 +87,15 @@ function interceptUploadAddFiles(event: unknown): void {
     if (!uniqueFiles.length) return;
     if (!shouldInterceptUploadFiles(uniqueFiles, payload)) return;
 
-    payload.files = [];
-    payload.uploads = [];
-    payload.items = [];
+    const intercepted = new Set(uniqueFiles);
+    for (const key of ["files", "uploads", "items"] as const) {
+        const value = payload[key];
+        if (value instanceof File) {
+            if (intercepted.has(value)) payload[key] = [];
+        } else if (Array.isArray(value)) {
+            payload[key] = value.filter(entry => !extractFilesFromValue([entry]).some(file => intercepted.has(file)));
+        }
+    }
     void uploadProvidedFiles(uniqueFiles);
 }
 
@@ -97,10 +103,10 @@ function handlePaste(event: ClipboardEvent) {
     const files = Array.from(event.clipboardData?.files || []);
     if (files.length === 0) return;
 
-    if (!settings.store.autoUploadPastedFiles || !isConfigured()) return;
+    if (!settings.store.autoUploadPastedFiles || isUploadInProgress() || !isConfigured()) return;
 
     const allowed = files.filter(f => isFileTypeAllowed(f));
-    if (allowed.length === 0) return;
+    if (allowed.length !== files.length) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -348,6 +354,7 @@ export default definePlugin({
         document.addEventListener("paste", pasteEventListener, true);
     },
     stop() {
+        cancelCurrentUpload();
         if (!uploadAddFilesInterceptor) {
             return;
         }
@@ -365,7 +372,7 @@ export default definePlugin({
         }
     },
     shouldBypassDiscordUploadSizeCheck(): boolean {
-        return Boolean(settings.store.bypassDiscordUpload) && isConfigured();
+        return Boolean(settings.store.bypassDiscordUpload) && !isUploadInProgress() && isConfigured();
     },
     renderUploadProgress() {
         return <ProgressBar />;

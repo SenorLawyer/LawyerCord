@@ -9,58 +9,67 @@ import { Button, TextButton } from "@components/Button";
 import { images } from "@equicordplugins/loginWithQR/images";
 import { getIntlMessage } from "@utils/discord";
 import { RenderModalProps } from "@vencord/discord-types";
-import { findByPropsLazy } from "@webpack";
 import {
     Modal,
     openModal,
     RestAPI,
     useEffect,
     useRef,
+    UserStore,
     useState } from "@webpack/common";
 
 import { cl } from "..";
 
-const { Controller } = findByPropsLazy("Controller");
-
-enum VerifyState {
-    Verifying,
-    LoggedIn,
-    NotFound,
-}
+type VerifyState = "verifying" | "loggedIn" | "notFound";
 
 function VerifyModal({
     token,
-    onAbort,
+    onComplete,
+    signal,
+    accountId,
     ...props
 }: {
     token: string | null;
-    onAbort: () => void;
+    onComplete: (confirmed: boolean) => void;
+    signal: AbortSignal;
+    accountId: string;
 } & RenderModalProps) {
-    const [state, setState] = useState(
-        !token ? VerifyState.NotFound : VerifyState.Verifying
-    );
-    useEffect(() => () => void (state !== VerifyState.LoggedIn && onAbort()), []);
-
+    const [state, setState] = useState<VerifyState>(token ? "verifying" : "notFound");
     const [inProgress, setInProgress] = useState(false);
-    const buttonRef = useRef<HTMLButtonElement>(null);
-    const controllerRef = useRef(new Controller({ progress: "0%" })).current;
+    const [holding, setHolding] = useState(false);
+    const timeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const active = useRef(true);
+    const submitted = useRef(false);
+    const confirmed = useRef(false);
+    const onClose = useRef(props.onClose);
+    onClose.current = props.onClose;
 
-    const holdDuration = 1000;
-    let timeout: any;
-    const startInput = () => {
-        if (!buttonRef.current) return;
+    const isCurrent = () => active.current && !signal.aborted && UserStore.getCurrentUser()?.id === accountId;
 
-        controllerRef.start({
-            progress: "100%",
-            config: {
-                duration: holdDuration,
-                // https://easings.net/#easeInOutSine
-                easing: (t: number) => -(Math.cos(Math.PI * t) - 1) / 2,
-            },
-        });
-        timeout = setTimeout(() => {
-            if (state !== VerifyState.Verifying) return;
+    useEffect(() => {
+        active.current = true;
+        const abort = () => {
+            active.current = false;
+            clearTimeout(timeout.current);
+            onClose.current();
+        };
+        signal.addEventListener("abort", abort, { once: true });
+        if (signal.aborted) abort();
+        return () => {
+            active.current = false;
+            clearTimeout(timeout.current);
+            signal.removeEventListener("abort", abort);
+            onComplete(confirmed.current);
+        };
+    }, [onComplete, signal]);
 
+    const startHold = () => {
+        if (!isCurrent() || !token || state !== "verifying" || submitted.current || timeout.current !== undefined) return;
+        setHolding(true);
+        timeout.current = setTimeout(() => {
+            timeout.current = undefined;
+            if (!isCurrent()) return;
+            submitted.current = true;
             setInProgress(true);
             RestAPI.post({
                 url: "/users/@me/remote-auth/finish",
@@ -69,46 +78,29 @@ function VerifyModal({
                 },
             })
                 .then(() => {
-                    setState(VerifyState.LoggedIn);
+                    if (!isCurrent()) return;
+                    confirmed.current = true;
+                    setState("loggedIn");
                 })
-                .catch(() => setState(VerifyState.NotFound))
-                .finally(() => setInProgress(false));
-        }, holdDuration + 250);
+                .catch(() => {
+                    if (isCurrent()) setState("notFound");
+                })
+                .finally(() => {
+                    if (isCurrent()) setInProgress(false);
+                });
+        }, 1250);
     };
 
     const endInput = () => {
-        if (!buttonRef.current) return;
-
-        controllerRef.start({
-            progress: "0%",
-            config: {
-                duration: 696,
-                // https://easings.net/#easeOutCubic
-                easing: (t: number) => 1 - Math.pow(1 - t, 3),
-            },
-        });
-        clearTimeout(timeout);
+        clearTimeout(timeout.current);
+        timeout.current = undefined;
+        setHolding(false);
     };
-
-    useEffect(() => {
-        let frame: number;
-        const update = () => {
-            buttonRef.current?.style.setProperty(
-                "--progress",
-                controllerRef.get().progress
-            );
-
-            frame = requestAnimationFrame(update);
-        };
-
-        if (state === VerifyState.Verifying) requestAnimationFrame(update);
-        return () => cancelAnimationFrame(frame);
-    }, [state]);
 
     return (
         <Modal size="sm" {...props} title="Verify Login">
             <div className={cl("device-content")}>
-                {state === VerifyState.LoggedIn ? (
+                {state === "loggedIn" ? (
                     <>
                         <img
                             className={cl("device-image")}
@@ -134,7 +126,7 @@ function VerifyModal({
                             {getIntlMessage("QR_CODE_LOGIN_SUCCESS_FLAVOR")}
                         </BaseText>
                     </>
-                ) : state === VerifyState.NotFound ? (
+                ) : state === "notFound" ? (
                     <>
                         <img
                             className={cl("device-image")}
@@ -183,13 +175,26 @@ function VerifyModal({
                         <Button
                             size="medium"
                             variant="dangerPrimary"
-                            className={cl("device-confirm")}
-                            style={{
-                                ["--progress" as any]: `${holdDuration}ms`,
+                            className={cl("device-confirm", holding && "device-confirm-holding")}
+                            onPointerDown={event => {
+                                if (event.button !== 0 || !event.isPrimary) return;
+                                event.currentTarget.setPointerCapture(event.pointerId);
+                                startHold();
                             }}
-                            onPointerDown={startInput}
                             onPointerUp={endInput}
-                            ref={buttonRef}
+                            onPointerCancel={endInput}
+                            onLostPointerCapture={endInput}
+                            onBlur={endInput}
+                            onKeyDown={event => {
+                                if (event.key !== " " && event.key !== "Enter") return;
+                                event.preventDefault();
+                                if (!event.repeat) startHold();
+                            }}
+                            onKeyUp={event => {
+                                if (event.key !== " " && event.key !== "Enter") return;
+                                event.preventDefault();
+                                endInput();
+                            }}
                             disabled={inProgress}
                         >
                             Hold to confirm login
@@ -198,7 +203,7 @@ function VerifyModal({
                 )}
             </div>
             <div className={cl("device-footer")} style={{ marginTop: "20px", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
-                {state === VerifyState.LoggedIn ? (
+                {state === "loggedIn" ? (
                     <Button onClick={props.onClose}>
                         {getIntlMessage("QR_CODE_LOGIN_FINISH_BUTTON")}
                     </Button>
@@ -207,7 +212,7 @@ function VerifyModal({
                         variant="link"
                         onClick={props.onClose}
                     >
-                        {state === VerifyState.NotFound
+                        {state === "notFound"
                             ? getIntlMessage("CLOSE")
                             : getIntlMessage("CANCEL")}
                     </TextButton>
@@ -219,13 +224,17 @@ function VerifyModal({
 
 export default function openVerifyModal(
     token: string | null,
-    onAbort: () => void,
+    onComplete: (confirmed: boolean) => void,
+    signal: AbortSignal,
+    accountId: string,
 ) {
     return openModal(props => (
         <VerifyModal
             {...props}
             token={token}
-            onAbort={onAbort}
+            onComplete={onComplete}
+            signal={signal}
+            accountId={accountId}
         />
     ));
 }

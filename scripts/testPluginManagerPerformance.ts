@@ -23,6 +23,7 @@ interface TestPlugin {
     renderMessageAccessory?: () => unknown;
     onBeforeMessageSend?: () => void;
     start?(): void;
+    stop?(): void;
     onMessageClick?(this: TestPlugin): void;
     flux?: Record<string, (this: TestPlugin, data: unknown) => void | Promise<void>>;
 }
@@ -31,6 +32,8 @@ function loadManager() {
     const plugins: Record<string, TestPlugin> = {};
     const settings: Record<string, { enabled: boolean; }> = {};
     const errors: unknown[][] = [];
+    const registeredCommands = new Map<string, object>();
+    let commandRegistrations = 0;
     const sendListeners = new Set<() => void>();
     const accessories = new Map<string, () => unknown>();
     const handlers = new Map<string, Set<(data: unknown) => void | Promise<void>>>();
@@ -45,6 +48,10 @@ function loadManager() {
     };
     const mocks: Record<string, object> = {
         "~plugins": { __esModule: true, default: plugins },
+        "@api/Commands": {
+            registerCommand: (command: { name: string; }) => { commandRegistrations++; registeredCommands.set(command.name, command); },
+            unregisterCommand: (name: string) => registeredCommands.delete(name)
+        },
         "@api/MessageEvents": {
             addMessagePreSendListener: (listener: () => void) => sendListeners.add(listener),
             removeMessagePreSendListener: (listener: () => void) => sendListeners.delete(listener),
@@ -82,8 +89,42 @@ function loadManager() {
         settings[plugin.name] = { enabled: false };
         return plugin;
     }
-    return { manager, add, plugins, settings, dispatcher, handlers, errors, accessories, sendListeners };
+    return { manager, add, plugins, settings, dispatcher, handlers, errors, accessories, sendListeners, registeredCommands, get commandRegistrations() { return commandRegistrations; } };
 }
+
+test("plugins without start callbacks register their commands only once", () => {
+    const fixture = loadManager();
+    const plugin = fixture.add({ name: "Fixture", commands: [{ name: "fixture" }] });
+    assert.equal(fixture.manager.startPlugin(plugin), true);
+    assert.equal(fixture.manager.startPlugin(plugin), false);
+    assert.equal(fixture.commandRegistrations, 1);
+    assert.equal(fixture.manager.stopPlugin(plugin), true);
+    assert.equal(fixture.registeredCommands.size, 0);
+    assert.equal(fixture.manager.startPlugin(plugin), true);
+    assert.equal(fixture.commandRegistrations, 2);
+});
+
+test("failed stop callbacks still release declarative commands, hooks and flux handlers", () => {
+    const fixture = loadManager();
+    const plugin = fixture.add({
+        name: "Fixture",
+        commands: [{ name: "fixture" }],
+        onBeforeMessageSend() {},
+        renderMessageAccessory: () => null,
+        flux: { TEST() {} },
+        stop() { throw new Error("Stop failed"); }
+    });
+    fixture.manager.subscribeAllPluginsFluxEvents(fixture.dispatcher);
+    fixture.manager.startPlugin(plugin);
+    assert.equal(fixture.handlers.get("TEST")?.size, 1);
+    assert.equal(fixture.manager.stopPlugin(plugin), false);
+    assert.equal(plugin.started, false);
+    assert.equal(fixture.registeredCommands.size, 0);
+    assert.equal(fixture.sendListeners.size, 0);
+    assert.equal(fixture.accessories.size, 0);
+    assert.equal(fixture.handlers.get("TEST")?.size, 0);
+    assert.equal(fixture.errors.length, 1);
+});
 
 test("declarative message accessories enable their API and follow plugin lifecycle", () => {
     const { manager, add, settings, accessories } = loadManager();

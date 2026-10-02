@@ -325,7 +325,7 @@ interface CodexSessionHeader {
 
 interface TrackedFile {
     offset: number;
-    skipping?: boolean;
+    discarding?: boolean;
     session?: CodexSessionHeader;
 }
 
@@ -340,7 +340,7 @@ const system = {
     roblox: {
         file: "",
         offset: 0,
-        skipping: false,
+        discarding: false,
         silent: true,
         session: null as { game: RobloxGame; joinedAt: number; } | null,
         pendingJoin: null as { jobId: string; placeId: string; } | null,
@@ -422,21 +422,26 @@ async function scanProcesses(): Promise<void> {
 }
 
 /** New bytes since the last read, minus any half-written last line, which is picked up next time. */
-async function readAppended(path: string, offset: number, skipping = false): Promise<{ lines: string[]; offset: number; skipping: boolean; }> {
+async function readAppended(path: string, offset: number, discarding = false): Promise<{ lines: string[]; offset: number; discarding: boolean; }> {
     const handle = await open(path, "r");
     try {
         const { size } = await handle.stat();
         const start = size < offset ? 0 : offset;
-        if (size < offset) skipping = false;
-        if (size === start) return { lines: [], offset: size, skipping };
+        if (size < offset) discarding = false;
+        if (size === start) return { lines: [], offset: size, discarding };
         const length = Math.min(size - start, READ_CAP);
         const buffer = Buffer.alloc(length);
         const { bytesRead } = await handle.read(buffer, 0, length, start);
         const bytes = buffer.subarray(0, bytesRead);
+        let begin = 0;
+        if (discarding) {
+            const newline = bytes.indexOf(0x0A);
+            if (newline < 0) return { lines: [], offset: start + bytesRead, discarding: true };
+            begin = newline + 1;
+        }
         const end = bytes.lastIndexOf(0x0A) + 1;
-        if (!end && (skipping || bytesRead === READ_CAP)) return { lines: [], offset: start + bytesRead, skipping: true };
-        const begin = skipping ? bytes.indexOf(0x0A) + 1 : 0;
-        return { lines: bytes.subarray(begin, end).toString("utf8").split("\n"), offset: start + end, skipping: false };
+        if (end === 0 && bytesRead === READ_CAP) return { lines: [], offset: start + bytesRead, discarding: true };
+        return { lines: bytes.subarray(begin, end).toString("utf8").split("\n"), offset: start + end, discarding: false };
     } finally {
         await handle.close();
     }
@@ -518,12 +523,12 @@ async function scanRoblox(): Promise<void> {
         state.silent = state.file === "";
         state.file = file;
         state.offset = 0;
-        state.skipping = false;
+        state.discarding = false;
         state.pendingJoin = null;
     }
-    const { lines, offset, skipping } = await readAppended(file, state.offset, state.skipping);
+    const { lines, offset, discarding } = await readAppended(file, state.offset, state.discarding);
     state.offset = offset;
-    state.skipping = skipping;
+    state.discarding = discarding;
     for (const line of lines) {
         const parsed = parseRobloxLine(line);
         if (!parsed) continue;
@@ -555,30 +560,10 @@ async function codexFiles(): Promise<string[]> {
 }
 
 async function readCodexHeader(file: string): Promise<CodexSessionHeader | undefined> {
-    const handle = await open(file, "r");
-    try {
-        let length = 0;
-        let lines = 0;
-        let chunks: Buffer[] = [];
-        while (length < READ_CAP) {
-            const buffer = Buffer.alloc(Math.min(16 * 1024, READ_CAP - length));
-            const { bytesRead } = await handle.read(buffer, 0, buffer.length, length);
-            if (!bytesRead) break;
-            length += bytesRead;
-            const bytes = buffer.subarray(0, bytesRead);
-            let start = 0;
-            for (let end = bytes.indexOf(0x0A); end !== -1; end = bytes.indexOf(0x0A, start)) {
-                chunks.push(bytes.subarray(start, end));
-                const parsed = parseCodexLine(Buffer.concat(chunks).toString("utf8"));
-                if (parsed?.kind === "session") return parsed;
-                if (++lines === 3) return undefined;
-                chunks = [];
-                start = end + 1;
-            }
-            if (start < bytesRead) chunks.push(bytes.subarray(start));
-        }
-    } finally {
-        await handle.close();
+    const { lines } = await readAppended(file, 0);
+    for (const line of lines.slice(0, 3)) {
+        const parsed = parseCodexLine(line);
+        if (parsed?.kind === "session") return parsed;
     }
     return undefined;
 }
@@ -605,9 +590,9 @@ async function scanCodex(): Promise<void> {
             }
         }
         let read: Awaited<ReturnType<typeof readAppended>>;
-        try { read = await readAppended(file, tracked.offset, tracked.skipping); } catch { continue; }
+        try { read = await readAppended(file, tracked.offset, tracked.discarding); } catch { continue; }
         tracked.offset = read.offset;
-        tracked.skipping = read.skipping;
+        tracked.discarding = read.discarding;
         for (const line of read.lines) {
             const parsed = parseCodexLine(line);
             if (!parsed) continue;

@@ -21,8 +21,8 @@ import { chooseFile as chooseFileWeb } from "@utils/web";
 import { Toasts } from "@webpack/common";
 import { showSaveFilePicker } from "native-file-system-adapter";
 
-import { clearLogs,Native } from "..";
-import { addMessagesBulkIDB, iterateAllMessagesIDB } from "../db";
+import { Native } from "..";
+import { importMessagesIDB, iterateAllMessagesIDB } from "../db";
 import { LoggedMessageJSON } from "../types";
 
 export async function importLogs() {
@@ -30,14 +30,8 @@ export async function importLogs() {
         let count = 0;
         const batchSize = 50;
         let batch: LoggedMessageJSON[] = [];
-        let cleared = false;
 
         for await (const logItems of iterateLogItems()) {
-            if (!cleared) {
-                await clearLogs(false);
-                cleared = true;
-            }
-
             const items = logItems.flat();
 
             for (const item of items) {
@@ -47,22 +41,20 @@ export async function importLogs() {
                 batch.push(message);
 
                 if (batch.length >= batchSize) {
-                    await addMessagesBulkIDB(batch);
-                    count += batch.length;
+                    count += await importMessagesIDB(batch);
                     batch = [];
                 }
             }
         }
 
         if (batch.length > 0) {
-            await addMessagesBulkIDB(batch);
-            count += batch.length;
+            count += await importMessagesIDB(batch);
         }
 
         if (count === 0) {
             Toasts.show({
                 id: Toasts.genId(),
-                message: "No messages found in log file",
+                message: "No new messages found in log file",
                 type: Toasts.Type.FAILURE
             });
             return;

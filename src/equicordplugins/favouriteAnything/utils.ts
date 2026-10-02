@@ -4,16 +4,16 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { isPluginEnabled } from "@api/PluginManager";
 import { classNameFactory } from "@utils/css";
 import { sendMessage } from "@utils/discord";
 import { proxyLazy } from "@utils/lazy";
-import { Queue } from "@utils/Queue";
 import { useForceUpdater } from "@utils/react";
 import { PluginNative } from "@utils/types";
 import { Channel, MessageAttachment } from "@vencord/discord-types";
 import { findByCodeLazy, findByPropsLazy } from "@webpack";
-import { Constants, DraftType, FluxDispatcher, MessageActions, PendingReplyStore, PermissionStore, RestAPI, Toasts, UploadAttachmentStore, UploadHandler, UploadManager, useCallback, useEffect, useRef, UserSettingsActionCreators, UserSettingsProtoStore, useStateFromStores } from "@webpack/common";
-import { deflateSync, inflateSync } from "fflate";
+import { Constants, DraftType, FluxDispatcher, lodash, MessageActions, PendingReplyStore, PermissionStore, RestAPI, Toasts, UploadAttachmentStore, UploadHandler, UploadManager, useCallback, useEffect, useMemo, useRef, UserSettingsActionCreators, UserSettingsProtoStore, UserStore, useStateFromStores } from "@webpack/common";
+import { deflateSync, Inflate } from "fflate";
 import { Key } from "react";
 import { JsonValue } from "type-fest";
 
@@ -28,7 +28,8 @@ export const useResizeObserver: ResizeObserverHook = findByCodeLazy("borderBoxSi
 export const ImageUtils: ImageUtils_ = findByPropsLazy("isAnimated", "getFormatQuality");
 export const transformAttachment: AttachmentTransformer = findByCodeLazy("return{uniqueId", ".IS_ANIMATED");
 
-const encoder = new TextEncoder(), decoder = new TextDecoder();
+const encoder = new TextEncoder();
+const MAX_METADATA_BYTES = 64 * 1024;
 
 const defineItem = <const A, const B extends JsonValue>(item: CustomItemDef<A, B>) => item;
 function defineItems<T extends Record<CustomItemFormat, CustomItemDef>>(def: ItemsDef<T>) {
@@ -39,22 +40,34 @@ function defineItems<T extends Record<CustomItemFormat, CustomItemDef>>(def: Ite
             try {
                 const obj = [format, def[format].encode(data)];
 
-                const buf = deflateSync(encoder.encode(JSON.stringify(obj)));
-                return uint8ArrayToBase64(buf);
+                const bytes = encoder.encode(JSON.stringify(obj));
+                if (bytes.byteLength > MAX_METADATA_BYTES) return null;
+                const encoded = uint8ArrayToBase64(deflateSync(bytes));
+                return encoded.length <= MAX_METADATA_BYTES ? encoded : null;
             } catch {
                 return null;
             }
         },
         decode: (raw: string) => {
             try {
-                if (!raw) return null;
+                if (!raw || raw.length > MAX_METADATA_BYTES) return null;
 
-                const buf = inflateSync(base64ToUint8Array(raw));
-                const parsed: unknown[] | null = JSON.parse(decoder.decode(buf));
-                if (!Array.isArray(parsed)) return null;
+                const compressed = base64ToUint8Array(raw);
+                const decoder = new TextDecoder();
+                let text = "";
+                let size = 0;
+                const inflater = new Inflate((chunk, final) => {
+                    size += chunk.byteLength;
+                    if (size > MAX_METADATA_BYTES) throw new Error("Favourite metadata is too large.");
+                    text += decoder.decode(chunk, { stream: !final });
+                });
+                for (let offset = 0; offset < compressed.length; offset += 256)
+                    inflater.push(compressed.subarray(offset, offset + 256), offset + 256 >= compressed.length);
+                const parsed: unknown = JSON.parse(text);
+                if (!Array.isArray(parsed) || parsed.length !== 2) return null;
 
                 const [format, data] = parsed as [keyof typeof def, JsonValue];
-                if (!(format in def)) return null;
+                if (typeof format !== "number" || !Object.hasOwn(def, format)) return null;
 
                 return { format, data: def[format].decode(data) } as {
                     [F in CustomItemFormat]: { format: F; data: Type<F>; };
@@ -82,17 +95,29 @@ export const defs = defineItems({
             title ?? null,
             description ?? null
         ],
-        decode: ([id, filename, size, path, content_type, title, description]) => ({
-            id: id ?? "0",
-            filename: filename ?? "UNKNOWN",
-            size: +size! || 0,
-            url: `${new URL(path!, `https://${window.GLOBAL_ENV.CDN_HOST}`)}`,
-            proxy_url: `${new URL(path!, `https://${window.GLOBAL_ENV.MEDIA_PROXY_ENDPOINT}`)}`,
-            content_type: content_type ?? "application/octet-stream",
-            spoiler: filename?.startsWith("SPOILER_") ?? false,
-            title: title ?? undefined,
-            description: description ?? undefined
-        }),
+        decode: data => {
+            if (!Array.isArray(data) || data.length < 4 || data.length > 7) return null;
+            const [id, filename, size, path, content_type, title, description] = data;
+            if ([id, filename, content_type, title, description].some(value => value != null && typeof value !== "string")
+                || (size != null && (typeof size !== "number" || !Number.isFinite(size) || size < 0))
+                || typeof path !== "string" || !path.startsWith("/") || path.startsWith("//")) return null;
+            const cdn = new URL(`https://${window.GLOBAL_ENV.CDN_HOST}`);
+            const media = new URL(`https://${window.GLOBAL_ENV.MEDIA_PROXY_ENDPOINT}`);
+            const url = new URL(path, cdn);
+            const proxy = new URL(path, media);
+            if (url.origin !== cdn.origin || proxy.origin !== media.origin) return null;
+            return {
+                id: id ?? "0",
+                filename: filename ?? "UNKNOWN",
+                size: size ?? 0,
+                url: `${url}`,
+                proxy_url: `${proxy}`,
+                content_type: content_type || "application/octet-stream",
+                spoiler: filename?.startsWith("SPOILER_") ?? false,
+                title: title ?? undefined,
+                description: description ?? undefined
+            };
+        },
         stringify: ({ title, filename }) => title?.trim() || filename
     })
     // This could be expanded in the future with other item types (e.g. voice messages)
@@ -136,57 +161,105 @@ export const isAllowedHost = proxyLazy(() => {
     return (value: string) => allowedHosts.has(value);
 });
 
-async function fetchAttachment(attachment: MessageAttachment): Promise<File> {
+const attachmentRequests = new Set<AbortController>();
+
+export function cancelAttachmentSends() {
+    for (const controller of attachmentRequests) controller.abort();
+    attachmentRequests.clear();
+}
+
+async function fetchAttachment(attachment: MessageAttachment, signal: AbortSignal): Promise<File> {
     if (!IS_WEB) {
         const result = await Native.fetchAttachment(attachment);
+        if (signal.aborted) throw new Error("Attachment download was cancelled.");
         if (!result.success) throw new Error(result.error);
         return new File([result.data], result.filename, { type: result.type });
     }
 
     const { content_type, filename } = attachment;
     const url = URL.parse(attachment.url);
-    if (!url || !isAllowedHost(url.hostname)) throw new Error("Invalid URL");
+    if (!url || url.protocol !== "https:" || url.port || url.username || url.password || !isAllowedHost(url.hostname))
+        throw new Error("Invalid attachment URL.");
 
-    const res = await fetch(url, { headers: { Accept: "*/*" } });
-    if (!res.ok) throw new Error("Server error");
+    const maxBytes = 500 * 1024 * 1024;
+    const res = await fetch(url, { headers: { Accept: "*/*" }, redirect: "error", signal });
+    if (!res.ok || !res.body || Number(res.headers.get("content-length")) > maxBytes) {
+        await res.body?.cancel();
+        throw new Error("Could not download this attachment.");
+    }
 
-    const blob = await res.blob();
-    const type = blob.type || content_type || "application/octet-stream";
-    const data = await blob.arrayBuffer();
+    const reader = res.body.getReader();
+    const chunks: Uint8Array<ArrayBuffer>[] = [];
+    let size = 0;
+    try {
+        for (;;) {
+            if (signal.aborted) throw new Error("Attachment download was cancelled.");
+            const { done, value } = await reader.read();
+            if (done) break;
+            size += value.byteLength;
+            if (size > maxBytes) throw new Error("Attachment exceeds the download size limit.");
+            chunks.push(value);
+        }
+    } finally {
+        try {
+            await reader.cancel();
+        } finally {
+            reader.releaseLock();
+        }
+    }
 
-    return new File([data], filename, { type });
+    if (signal.aborted) throw new Error("Attachment download was cancelled.");
+    return new File(chunks, filename, { type: res.headers.get("content-type") || content_type || "application/octet-stream" });
 }
 
 export async function sendAttachment(attachment: MessageAttachment, channel: Channel) {
+    const accountId = UserStore.getCurrentUser()?.id;
+    if (!accountId || !isPluginEnabled("FavouriteAnything")) return;
+    const controller = new AbortController();
+    attachmentRequests.add(controller);
+    const timeout = setTimeout(() => controller.abort(), 120_000);
+    const isCurrent = () => !controller.signal.aborted && UserStore.getCurrentUser()?.id === accountId && isPluginEnabled("FavouriteAnything");
     const { filename, title, description } = attachment;
-    const file = await fetchAttachment(attachment).catch(() =>
-        Toasts.show({ message: `Couldn't fetch ${filename}`, id: Toasts.genId(), type: Toasts.Type.FAILURE })
-    );
-    if (!file) return;
+    try {
+        const file = await fetchAttachment(attachment, controller.signal).catch(() => {
+            if (isCurrent()) Toasts.show({ message: `Couldn't fetch ${filename}`, id: Toasts.genId(), type: Toasts.Type.FAILURE });
+            return null;
+        });
+        if (!file || !isCurrent()) return;
+        clearTimeout(timeout);
 
-    // Using promptToUpload instead of addFiles directly since it has file size checks with error popups
-    await UploadHandler.promptToUpload([file], channel, DraftType.ChannelMessage).catch(() =>
-        Toasts.show({ message: `Couldn't upload ${filename}`, id: Toasts.genId(), type: Toasts.Type.FAILURE })
-    );
+        // Using promptToUpload instead of addFiles directly since it has file size checks with error popups
+        const uploaded = await UploadHandler.promptToUpload([file], channel, DraftType.ChannelMessage).then(() => true, () => {
+            if (isCurrent()) Toasts.show({ message: `Couldn't upload ${filename}`, id: Toasts.genId(), type: Toasts.Type.FAILURE });
+            return false;
+        });
+        if (!uploaded || !isCurrent()) return;
 
-    const uploads = [...UploadAttachmentStore.getUploads(channel.id, DraftType.ChannelMessage)];
-    const uploadIdx = uploads.findIndex(({ item }) => item.file === file);
-    if (uploadIdx === -1) return;
+        const uploads = [...UploadAttachmentStore.getUploads(channel.id, DraftType.ChannelMessage)];
+        const uploadIdx = uploads.findIndex(({ item }) => item.file === file);
+        if (uploadIdx === -1) return;
 
-    const reply = PendingReplyStore.getPendingReply(channel.id);
+        const reply = PendingReplyStore.getPendingReply(channel.id);
 
-    const [upload] = uploads.splice(uploadIdx);
-    UploadManager.setUploads({ uploads, channelId: channel.id, draftType: DraftType.ChannelMessage });
-    // Empty titles and descriptions are allowed
-    if (title != null) upload.filename = title;
-    if (description != null) upload.description = description;
+        const [upload] = uploads.splice(uploadIdx);
+        UploadManager.setUploads({ uploads, channelId: channel.id, draftType: DraftType.ChannelMessage });
+        // Empty titles and descriptions are allowed
+        if (title != null) upload.filename = title;
+        if (description != null) upload.description = description;
 
-    FluxDispatcher.dispatch({ type: "DELETE_PENDING_REPLY", channelId: channel.id });
+        FluxDispatcher.dispatch({ type: "DELETE_PENDING_REPLY", channelId: channel.id });
 
-    void sendMessage(channel.id, {}, false, {
-        ...MessageActions.getSendMessageOptionsForReply(reply),
-        attachmentsToUpload: [upload]
-    });
+        return await sendMessage(channel.id, {}, false, {
+            ...MessageActions.getSendMessageOptionsForReply(reply),
+            attachmentsToUpload: [upload]
+        }).then(isCurrent, () => {
+            if (isCurrent()) Toasts.show({ message: `Couldn't send ${filename}`, id: Toasts.genId(), type: Toasts.Type.FAILURE });
+            return false;
+        });
+    } finally {
+        clearTimeout(timeout);
+        attachmentRequests.delete(controller);
+    }
 }
 
 export function hasPermission(permission: bigint, channel: Channel | null): boolean {
@@ -222,24 +295,22 @@ function fuzzySearch(searchQuery: string, searchString: string) {
 export function useFavourites(itemFormat: CustomItemFormat, searchQuery?: string) {
     useEffect(() => void UserSettingsActionCreators.FrecencyUserSettingsActionCreators.loadIfNecessary(), []);
 
-    const items = useStateFromStores(
+    const savedItems = useStateFromStores(
         [UserSettingsProtoStore],
         () => {
             const gifs: Record<string, FavouriteItem> | undefined =
                 UserSettingsProtoStore.frecencyWithoutFetchingLatest.favoriteGifs?.gifs;
-            if (!gifs) return null;
-
-            return Object.entries(gifs)
-                .filter(([, { format }]) => format === FavouriteItemFormat.NONE)
-                .map(([url, { src, ...rest }]) => ({
-                    ...rest,
-                    ...defs.decode(URL.parse(src)?.hash.replace("#", "") ?? "")!,
-                    url
-                }))
-                .filter(({ format, data }) => data && format === itemFormat);
+            return gifs ? Object.entries(gifs)
+                .filter(([, item]) => item.format === FavouriteItemFormat.NONE)
+                .map(([url, { src, order, width, height }]) => ({ url, src, order, width, height })) : null;
         },
-        [itemFormat]
+        [],
+        lodash.isEqual
     );
+    const items = useMemo(() => savedItems?.flatMap(({ src, ...item }) => {
+        const decoded = defs.decode(URL.parse(src)?.hash.slice(1) ?? "");
+        return decoded?.data && decoded.format === itemFormat ? [{ ...item, ...decoded }] : [];
+    }) ?? null, [savedItems, itemFormat]);
 
     const { state } = useStateFromStores(
         [UserSettingsProtoStore],
@@ -283,41 +354,4 @@ export function useListScroller() {
     }, []);
 
     return [rowHeights.current, handleResize] as const;
-}
-
-// Wrapper class for Queue which allows batching multiple requests into one.
-// A request is fired immediately if at least `maxCount` items are in this queue,
-// or if enough time (`timeout`) has passed since the last item was added.
-// Subsequent requests are fired in sequence.
-export class BatchedRequestQueue<T> {
-    private items: T[] = [];
-    private timer: NodeJS.Timeout | null = null;
-    private readonly queue: Queue = new Queue();
-
-    constructor(
-        private readonly cb: (items: T[]) => Promise<void>,
-        private readonly options: { maxCount: number; timeout?: number; }
-    ) { }
-
-    public add(item: T) {
-        if (this.items.indexOf(item) !== -1) return;
-        this.items.push(item);
-
-        if (this.items.length >= this.options.maxCount) {
-            this.flush();
-        } else {
-            if (this.timer) clearTimeout(this.timer);
-            this.timer = setTimeout(() => this.flush(), this.options.timeout);
-        }
-    }
-
-    private flush() {
-        if (this.timer) clearTimeout(this.timer);
-        this.timer = null;
-
-        if (this.items.length === 0) return;
-
-        const batch = this.items.splice(0, 50);
-        this.queue.push(() => this.cb(batch).catch(() => this.items.push(...batch)));
-    }
 }

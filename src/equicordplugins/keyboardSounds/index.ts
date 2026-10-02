@@ -22,6 +22,7 @@ const allSounds = {
 };
 
 let chosenPack: typeof packs[keyof typeof packs];
+let started = false;
 let allowedIgnoredKeys = new Set<string>();
 const keysCurrentlyPressed = new Set<string>();
 const arrowKeys = new Set(["ArrowUp", "ArrowRight", "ArrowLeft", "ArrowDown"]);
@@ -118,7 +119,11 @@ const settings = definePluginSettings({
         markers: [0, 25, 50, 75, 100],
         stickToMarkers: false,
         default: 100,
-        onChange: value => { assignSounds(value, settings.store.soundPack); }
+        onChange: value => {
+            for (const sounds of Object.values(allSounds)) {
+                for (const sound of sounds) sound.player.volume = value;
+            }
+        }
     },
     soundPack: {
         description: "Sound pack to use.",
@@ -127,7 +132,9 @@ const settings = definePluginSettings({
             { label: "OperaGX", value: "operagx" as "operagx", default: true },
             { label: "osu!", value: "osu" as "osu" }
         ],
-        onChange: value => { assignSounds(settings.store.volume, value); }
+        onChange: value => {
+            if (started) assignSounds(settings.store.volume, value);
+        }
     }
 });
 
@@ -139,12 +146,14 @@ export default definePlugin({
     dependencies: ["AudioPlayerAPI"],
     settings,
     start() {
+        started = true;
         assignSounds(settings.store.volume, settings.store.soundPack);
         document.addEventListener("keyup", keyup);
         document.addEventListener("keydown", keydown);
         window.addEventListener("blur", blur);
     },
     stop: () => {
+        started = false;
         clearSounds();
         keysCurrentlyPressed.clear();
         document.removeEventListener("keyup", keyup);

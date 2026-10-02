@@ -34,19 +34,6 @@ export function validateSchedule(schedule: Schedule): string | undefined {
     return undefined;
 }
 
-let activeHoursFormatter: { timezone?: string; formatter: Intl.DateTimeFormat; } | undefined;
-
-export function inActiveHours(schedule: Schedule, timestamp: number): boolean {
-    if (!schedule.activeStart || !schedule.activeEnd || schedule.activeStart === schedule.activeEnd) return true;
-    if (!activeHoursFormatter || activeHoursFormatter.timezone !== schedule.timezone) {
-        activeHoursFormatter = { timezone: schedule.timezone, formatter: new Intl.DateTimeFormat("en-GB", { timeZone: schedule.timezone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) };
-    }
-    const time = activeHoursFormatter.formatter.format(timestamp);
-    return schedule.activeStart < schedule.activeEnd
-        ? time >= schedule.activeStart && time < schedule.activeEnd
-        : time >= schedule.activeStart || time < schedule.activeEnd;
-}
-
 export function nextOccurrence(automation: Automation, after: number): number {
     const { schedule } = automation;
     const error = validateSchedule(schedule);
@@ -54,11 +41,17 @@ export function nextOccurrence(automation: Automation, after: number): number {
     const expression = schedule.mode === "calendar" || schedule.mode === "cron"
         ? CronExpressionParser.parse(scheduleExpression(schedule), { currentDate: Math.max(after, schedule.startAt - 1), tz: schedule.timezone })
         : undefined;
+    const { activeStart = "", activeEnd = "" } = schedule;
+    const formatter = activeStart && activeEnd && activeStart !== activeEnd
+        ? new Intl.DateTimeFormat("en-GB", { timeZone: schedule.timezone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+        : undefined;
     let cursor = after;
     for (let attempt = 0; attempt < 10_000; attempt++) {
         const next = expression ? expression.next().getTime()
             : schedule.startAt > cursor ? schedule.startAt : getNextRunAt(schedule, cursor);
-        if (inActiveHours(schedule, next)) return next;
+        if (!formatter) return next;
+        const time = formatter.format(next);
+        if (activeStart < activeEnd ? time >= activeStart && time < activeEnd : time >= activeStart || time < activeEnd) return next;
         cursor = next;
     }
     throw new Error("No occurrence falls within the active hours. Adjust the schedule.");

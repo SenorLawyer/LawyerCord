@@ -178,7 +178,8 @@ async function encodeFrames(
 
     const defaultDelay = Math.round(1000 / INTERNAL_FPS);
 
-    const frameData: Uint8ClampedArray[] = [];
+    const frameLength = canvas.width * canvas.height * 4;
+    const combined = new Uint8ClampedArray(frameLength * frameCount);
     for (let i = 0; i < frameCount; i++) {
         ctx.clearRect(0, 0, width, gifHeight);
 
@@ -194,22 +195,14 @@ async function encodeFrames(
             ctx.restore();
         }
 
-        frameData.push(ctx.getImageData(0, 0, width, gifHeight).data);
-    }
-
-    const totalLength = frameData.reduce((sum, data) => sum + data.length, 0);
-    const combined = new Uint8ClampedArray(totalLength);
-    let offset = 0;
-    for (const data of frameData) {
-        combined.set(data, offset);
-        offset += data.length;
+        combined.set(ctx.getImageData(0, 0, width, gifHeight).data, i * frameLength);
     }
 
     const palette = quantize(combined, PALETTE_COLORS);
     const gif = GIFEncoder();
 
     for (let i = 0; i < frameCount; i++) {
-        const index = applyPalette(frameData[i], palette);
+        const index = applyPalette(combined.subarray(i * frameLength, (i + 1) * frameLength), palette);
         gif.writeFrame(index, width, gifHeight, {
             delay: delays ? delays[i] : defaultDelay,
             palette: i === 0 ? palette : undefined,
@@ -301,19 +294,22 @@ async function createGifFromAnimatedImage(url: string, options: GifMakerOptions)
     const patchCanvas = document.createElement("canvas");
 
     const totalFrames = frames.length;
-    const rendered: HTMLCanvasElement[] = [];
-    const delays: number[] = [];
+    const snapshots = Array.from({ length: 2 }, () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = gifW;
+        canvas.height = gifH;
+        return canvas;
+    });
 
-    for (let i = 0; i < totalFrames; i++) {
+    return await encodeFrames(options.width, options.height, options, totalFrames, async (encodeCtx, i) => {
         const frame = frames[i];
-        delays.push(frame.delay);
 
         if (i > 0) {
             const prev = frames[i - 1];
             if (prev.disposalType === 2) {
                 ctx.clearRect(prev.dims.left, prev.dims.top, prev.dims.width, prev.dims.height);
             } else if (prev.disposalType === 3 && i > 1) {
-                const prevCtx = rendered[i - 2].getContext("2d");
+                const prevCtx = snapshots[i % 2].getContext("2d");
                 if (prevCtx) {
                     const prevState = prevCtx.getImageData(0, 0, gifW, gifH);
                     ctx.putImageData(prevState, 0, 0);
@@ -333,24 +329,15 @@ async function createGifFromAnimatedImage(url: string, options: GifMakerOptions)
         patchCtx.putImageData(patchData, 0, 0);
         ctx.drawImage(patchCanvas, frame.dims.left, frame.dims.top);
 
-        const snap = document.createElement("canvas");
-        snap.width = gifW;
-        snap.height = gifH;
+        const snap = snapshots[i % 2];
         const snapCtx = snap.getContext("2d");
         if (!snapCtx) throw new Error("Failed to get canvas context for frame snapshot.");
+        snapCtx.clearRect(0, 0, gifW, gifH);
         snapCtx.drawImage(composite, 0, 0);
-        rendered.push(snap);
+        encodeCtx.drawImage(composite, 0, 0, options.width, options.height);
 
         if (i % 20 === 19) {
             await sleep(0);
         }
-    }
-
-    return await encodeFrames(
-        options.width, options.height, options, totalFrames,
-        (encodeCtx, i) => {
-            encodeCtx.drawImage(rendered[i], 0, 0, options.width, options.height);
-        },
-        delays
-    );
+    }, frames.map(frame => frame.delay));
 }

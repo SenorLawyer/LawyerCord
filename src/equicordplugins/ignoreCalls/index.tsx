@@ -15,34 +15,49 @@ import { classNameFactory } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
 import { Channel } from "@vencord/discord-types";
 import { findComponentByCodeLazy } from "@webpack";
-import { FluxDispatcher, Menu, React, Tooltip, UserStore } from "@webpack/common";
+import { CallStore, FluxDispatcher, Menu, Tooltip, UserStore } from "@webpack/common";
 
 interface CallUpdate {
-    ringing: string[];
-    ongoingRings: string[];
-    messageId: string;
-    region: string;
+    type: string;
+    channelId?: string;
+    ringing?: string[];
+    ongoingRings?: string[];
 }
 
-const args: CallUpdate = {
-    ringing: [],
-    ongoingRings: [],
-    messageId: "",
-    region: "",
-};
-
 const ignoredChannelIds = new Set<string>();
+let permanentlyIgnoredChannelIds = new Set<string>();
+let started = false;
 const cl = classNameFactory("vc-ignore-calls-");
 const Deafen = findComponentByCodeLazy("0-1.02-.1H3.05a9");
-const filterOngoingRings = (currentUserId: string): CallUpdate["ongoingRings"] =>
-    args.ongoingRings.filter((id: string) => id !== currentUserId);
+
+function shouldIgnore(channelId: string) {
+    return ignoredChannelIds.has(channelId) || permanentlyIgnoredChannelIds.has(channelId);
+}
+
+function filterCall(event: CallUpdate) {
+    if (event.type !== "CALL_CREATE" && event.type !== "CALL_UPDATE") return;
+    if (!event.channelId || !shouldIgnore(event.channelId)) return;
+    const currentUserId = UserStore.getCurrentUser()?.id;
+    if (!currentUserId) return;
+    if (event.ringing?.includes(currentUserId)) event.ringing = event.ringing.filter(id => id !== currentUserId);
+    if (event.ongoingRings?.includes(currentUserId)) event.ongoingRings = event.ongoingRings.filter(id => id !== currentUserId);
+}
+
+function ignoreCall(channelId: string) {
+    const currentUserId = UserStore.getCurrentUser()?.id;
+    const call = CallStore.getCall(channelId);
+    if (!currentUserId || !call?.ringing.includes(currentUserId)) return;
+    FluxDispatcher.dispatch({
+        type: "CALL_UPDATE",
+        channelId,
+        ringing: call.ringing.filter(id => id !== currentUserId),
+        messageId: call.messageId,
+        region: call.region
+    });
+}
 
 const ContextMenuPatch: NavContextMenuPatchCallback = (children, { channel }: { channel: Channel; }) => {
     if (!channel) return;
-    const permanentlyIgnoredUsers = settings.store.permanentlyIgnoredUsers.split(",").map(s => s.trim()).filter(Boolean);
-
-    const [tempChecked, setTempChecked] = React.useState(ignoredChannelIds.has(channel.id));
-    const [permChecked, setPermChecked] = React.useState(permanentlyIgnoredUsers.includes(channel.id));
 
     children.push(
         <>
@@ -50,30 +65,29 @@ const ContextMenuPatch: NavContextMenuPatchCallback = (children, { channel }: { 
             <Menu.MenuCheckboxItem
                 id="vc-ignore-calls-temp"
                 label="Temporarily Ignore Calls"
-                checked={tempChecked}
+                checked={ignoredChannelIds.has(channel.id)}
                 action={() => {
-                    if (tempChecked)
+                    const ignored = ignoredChannelIds.has(channel.id);
+                    if (ignored)
                         ignoredChannelIds.delete(channel.id);
-                    else
+                    else {
                         ignoredChannelIds.add(channel.id);
-
-                    setTempChecked(!tempChecked);
+                        ignoreCall(channel.id);
+                    }
                 }}
             />
             <Menu.MenuCheckboxItem
                 id="vc-ignore-calls-perm"
                 label="Permanently Ignore Calls"
-                checked={permChecked}
+                checked={permanentlyIgnoredChannelIds.has(channel.id)}
                 action={() => {
-                    let updated = permanentlyIgnoredUsers.slice();
-                    if (permChecked) {
+                    let updated = settings.store.permanentlyIgnoredUsers.split(",").map(s => s.trim()).filter(Boolean);
+                    if (updated.includes(channel.id)) {
                         updated = updated.filter(id => id !== channel.id);
                     } else {
                         updated.push(channel.id);
                     }
                     settings.store.permanentlyIgnoredUsers = updated.join(", ");
-
-                    setPermChecked(!permChecked);
                 }}
             />
         </>
@@ -83,8 +97,13 @@ const ContextMenuPatch: NavContextMenuPatchCallback = (children, { channel }: { 
 const settings = definePluginSettings({
     permanentlyIgnoredUsers: {
         type: OptionType.STRING,
-        description: "User IDs (comma + space) who should be permanetly ignored",
-        restartNeeded: true,
+        description: "Comma separated DM channel IDs whose calls should be ignored.",
+        onChange: value => {
+            permanentlyIgnoredChannelIds = new Set(value.split(",").map(id => id.trim()).filter(Boolean));
+            if (started) {
+                for (const channelId of permanentlyIgnoredChannelIds) ignoreCall(channelId);
+            }
+        },
         default: "",
     },
 });
@@ -108,28 +127,28 @@ export default definePlugin({
         "user-context": ContextMenuPatch,
         "gdm-context": ContextMenuPatch,
     },
-    flux: {
-        async CALL_UPDATE({ ringing, ongoingRings, messageId, region }) {
-            args.ringing = ringing || [];
-            args.ongoingRings = Array.isArray(ongoingRings) ? ongoingRings : [];
-            args.messageId = messageId;
-            args.region = region;
+    start() {
+        started = true;
+        permanentlyIgnoredChannelIds = new Set(settings.store.permanentlyIgnoredUsers.split(",").map(id => id.trim()).filter(Boolean));
+        FluxDispatcher.addInterceptor(filterCall);
+        for (const call of CallStore.getCalls()) {
+            if (shouldIgnore(call.channelId)) ignoreCall(call.channelId);
         }
     },
-    renderIgnore(channel) {
-        const currentUserId = UserStore.getCurrentUser().id;
-        const permanentlyIgnoredUsers = settings.store.permanentlyIgnoredUsers.split(",").map(s => s.trim()).filter(Boolean);
-        if (ignoredChannelIds.has(channel.id) || permanentlyIgnoredUsers.includes(channel.id)) {
-            FluxDispatcher.dispatch({
-                type: "CALL_UPDATE",
-                channelId: channel.id,
-                ringing: args.ringing.filter((id: string) => id !== currentUserId),
-                ongoingRings: filterOngoingRings(currentUserId),
-                messageId: args.messageId,
-                region: args.region
-            });
-            return null;
+    stop() {
+        started = false;
+        const index = FluxDispatcher._interceptors.indexOf(filterCall);
+        if (index !== -1) FluxDispatcher._interceptors.splice(index, 1);
+        ignoredChannelIds.clear();
+        permanentlyIgnoredChannelIds.clear();
+    },
+    flux: {
+        CONNECTION_OPEN() {
+            ignoredChannelIds.clear();
         }
+    },
+    renderIgnore(channel: Channel) {
+        if (shouldIgnore(channel.id)) return null;
 
         return (
             <ErrorBoundary>
@@ -140,16 +159,7 @@ export default definePlugin({
                             size="small"
                             onMouseEnter={onMouseEnter}
                             onMouseLeave={onMouseLeave}
-                            onClick={() => {
-                                FluxDispatcher.dispatch({
-                                    type: "CALL_UPDATE",
-                                    channelId: channel.id,
-                                    ringing: args.ringing.filter((id: string) => id !== currentUserId),
-                                    ongoingRings: filterOngoingRings(currentUserId),
-                                    messageId: args.messageId,
-                                    region: args.region
-                                });
-                            }}
+                            onClick={() => ignoreCall(channel.id)}
                         >
                             <Deafen color={"var(--interactive-icon-active)"} />
                         </Button>

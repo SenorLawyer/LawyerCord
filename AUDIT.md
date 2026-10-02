@@ -1,5 +1,7 @@
 # Project audit report
 
+This is the historical PR47 audit report. Its source revisions, local paths, check results and release status describe that review. The current Stable 3.0.1.0 audit is tracked in [docs/stable-audit-2026-10-01.md](docs/stable-audit-2026-10-01.md).
+
 The repository review and planned local validation are complete for PR47. The review covers all 1,661 files in published nightly `nightly-20260905-1918-6e664e03`, the integrated main history through `8fc182ba7`, and the resulting 1,656 tracked files. Fifteen files were added and twenty removed. The release handoff is pending until the PR merges and its nightly workflow succeeds. Audit coverage is not a guarantee that every possible defect has been eliminated.
 
 At source commit `22a222d28`, all 701 broader regressions and timezone checks, TypeScript, repository-wide ESLint, CSS lint, internationalization lint, patch lint, 49 SettingsSync tests, sequential desktop/web builds and release artifact scanning pass. Internationalization and patch lint each report zero errors and zero warnings. The 20 extension installer tests passed at the preceding installer fix; no extension source changed afterward. All four required GitHub checks pass on `22a222d28`. Current inventory checks account for every baseline path, find no missing main commits, and match all 50 source fingerprints across eleven detailed disposition records.

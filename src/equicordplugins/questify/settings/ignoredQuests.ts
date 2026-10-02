@@ -64,13 +64,14 @@ export function questIsIgnored(questId: string): boolean {
 }
 
 export function ignoreAllQuests(): void {
-    const currentlyIgnored = new Set(getIgnoredQuestIDs());
+    const ignoredQuestIds = getIgnoredQuestIDs();
+    const currentlyIgnored = new Set(ignoredQuestIds);
     const ignoredQuests = new Set<string>();
 
     for (const quest of QuestStore.quests.values()) {
         if (
             currentlyIgnored.has(quest.id)
-            || getQuestStatus(quest, Array.from(currentlyIgnored), false) === QuestStatus.Unclaimed
+            || getQuestStatus(quest, ignoredQuestIds, false) === QuestStatus.Unclaimed
         ) {
             ignoredQuests.add(quest.id);
         }

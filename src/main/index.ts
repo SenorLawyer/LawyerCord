@@ -27,14 +27,15 @@ import { IS_VANILLA, THEMES_DIR } from "./utils/constants";
 import { installExt } from "./utils/extensions";
 
 if (!IS_VANILLA && !IS_EXTENSION) {
-    protocol.registerSchemesAsPrivileged([{
-        scheme: "lawyercord",
-        privileges: { standard: true, secure: true, stream: true }
-    }]);
     app.whenReady().then(() => {
         const handleClientProtocol = (scheme: string) => {
             protocol.handle(scheme, ({ url: unsafeUrl }) => {
-                let url = decodeURI(unsafeUrl).slice(`${scheme}://`.length).replace(/\?v=\d+$/, "");
+                let url: string;
+                try {
+                    url = decodeURI(unsafeUrl).slice(`${scheme}://`.length).replace(/\?v=\d+$/, "");
+                } catch {
+                    return new Response(null, { status: 404 });
+                }
 
                 if (url.endsWith("/")) url = url.slice(0, -1);
 
@@ -55,7 +56,6 @@ if (!IS_VANILLA && !IS_EXTENSION) {
                 // from a string I don't think any other form of sourcemaps would work
 
                 switch (url) {
-                    case "presentation.mp4":
                     case "renderer.js.map":
                     case "preload.js.map":
                     case "patcher.js.map":

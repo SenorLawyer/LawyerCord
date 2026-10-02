@@ -15,9 +15,7 @@ export default definePlugin({
     authors: [Devs.thororen],
     flux: {
         CONNECTION_OPEN() {
-            const state = OverridePremiumTypeStore.getState();
-            if (state.premiumTypeActual !== 2 || state.premiumTypeOverride === 2) return;
-            state.premiumTypeOverride = 2;
+            OverridePremiumTypeStore.getState().premiumTypeOverride = 2;
         }
     },
     start() {

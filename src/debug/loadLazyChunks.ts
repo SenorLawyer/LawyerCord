@@ -55,19 +55,10 @@ export async function loadLazyChunks() {
         const chunksSearchPromises = [] as Array<() => boolean>;
 
         // This regex loads all language packs which makes webpack finds testing extremely slow, so for now, we prioritize using the one which doesnt include those
-        const CompleteLazyChunkRegex = canonicalizeMatch(/(?:(?:Promise\.all\(\[)?((?:\i\.e\("?[^)]+?"?\),?)+?)(?:\]\))?)\.then\(\i(?:\.\i)?\.bind\(\i,"?([^)]+?)"?(?:,[^)]+?)?\)\)/g);
         const PartialLazyChunkRegex = canonicalizeMatch(/(?:(?:Promise\.all\(\[)?((?:\i\.e\("?[^)]+?"?\),?)+?)(?:\]\))?)\.then\(\i\.bind\(\i,"?([^)]+?)"?\)\)/g);
 
-        let foundCssDebuggingLoad = false;
-
         async function searchAndLoadLazyChunks(factoryCode: string) {
-            // Workaround to avoid loading the CSS debugging chunk which turns the app pink
-            // const hasCssDebuggingLoad = foundCssDebuggingLoad ? false : (foundCssDebuggingLoad = factoryCode.includes(".cssDebuggingEnabled&&"));
-
-            // Disabled for now since this causes lots of chunks concatenated into the same module get marked as invalid, and thus not loaded.
-            const hasCssDebuggingLoad = foundCssDebuggingLoad = false;
-
-            const lazyChunks = factoryCode.matchAll(hasCssDebuggingLoad ? CompleteLazyChunkRegex : PartialLazyChunkRegex);
+            const lazyChunks = factoryCode.matchAll(PartialLazyChunkRegex);
             const validChunkGroups = new Set<[chunkIds: PropertyKey[], entryPoint: PropertyKey]>();
 
             await Promise.all(Array.from(lazyChunks).map(async ([, rawChunkIds, entryPoint]) => {
@@ -87,16 +78,6 @@ export async function loadLazyChunks() {
                 let invalidChunkGroup = false;
 
                 for (const id of chunkIds) {
-                    if (hasCssDebuggingLoad) {
-                        if (chunkIds.length > 1) {
-                            throw new Error("Found multiple chunks in factory that loads the CSS debugging chunk");
-                        }
-
-                        invalidChunks.add(id);
-                        invalidChunkGroup = true;
-                        break;
-                    }
-
                     if (wreq.u(id) == null || wreq.u(id) === "undefined.js") continue;
 
                     const isWorkerAsset = await queue(() => withTimeout(

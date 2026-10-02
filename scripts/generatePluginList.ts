@@ -17,7 +17,7 @@
 */
 
 import { readdirSync, writeFileSync } from "fs";
-import { getEntryPoint, isPluginFile, parseDevs, parseEquicordDevs, parseFile, PluginData } from "./utils";
+import { getEntryPoint, isPluginFile, parseDevs, parseEquicordDevs, parseFile } from "./utils";
 
 (async () => {
     parseDevs();
@@ -40,18 +40,17 @@ import { getEntryPoint, isPluginFile, parseDevs, parseEquicordDevs, parseFile, P
 
     const outputPath = args.find(a => !a.startsWith("--")) ?? null;
 
-    const plugins = [] as PluginData[];
-
-    await Promise.all(
+    const plugins = await Promise.all(
         dirs.flatMap(dir =>
             readdirSync(dir, { withFileTypes: true })
                 .filter(isPluginFile)
                 .map(async dirent => {
                     const [data] = await parseFile(await getEntryPoint(dir, dirent));
-                    plugins.sort().push(data);
+                    return data;
                 })
         )
     );
+    plugins.sort((a, b) => a.name.localeCompare(b.name));
 
     const data = JSON.stringify(plugins);
 

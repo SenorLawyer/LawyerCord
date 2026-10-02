@@ -196,7 +196,6 @@ export function subscribePluginFluxEvents(p: Plugin, fluxDispatcher: typeof Flux
         for (const [event, handler] of Object.entries(p.flux)) {
             if (!handler) continue;
             const wrappedHandler: FluxHandler = eventData => {
-                if (p.name === "Encryptcord" && event === "MESSAGE_CREATE") return;
                 try {
                     const res = handler.call(p, eventData);
                     return res instanceof Promise
@@ -243,12 +242,13 @@ export const startPlugin = traceFunction("startPlugin", function startPlugin(p: 
         renderProfileSection, gifPickerContextMenu
     } = p;
 
+    if (p.started) {
+        logger.warn(`${name} already started`);
+        return false;
+    }
+
     if (p.start) {
         logger.info("Starting plugin", name);
-        if (p.started) {
-            logger.warn(`${name} already started`);
-            return false;
-        }
         try {
             p.start();
         } catch (e) {
@@ -325,17 +325,19 @@ export const stopPlugin = traceFunction("stopPlugin", function stopPlugin(p: Plu
         renderProfileSection, gifPickerContextMenu
     } = p;
 
+    if (!p.started) {
+        logger.warn(`${name} already stopped`);
+        return false;
+    }
+
+    let success = true;
     if (p.stop) {
         logger.info("Stopping plugin", name);
-        if (!p.started) {
-            logger.warn(`${name} already stopped`);
-            return false;
-        }
         try {
             p.stop();
         } catch (e) {
             logger.error(`Failed to stop ${name}\n`, e);
-            return false;
+            success = false;
         }
     }
 
@@ -348,7 +350,7 @@ export const stopPlugin = traceFunction("stopPlugin", function stopPlugin(p: Plu
                 unregisterCommand(cmd.name);
             } catch (e) {
                 logger.error(`Failed to unregister command ${cmd.name}\n`, e);
-                return false;
+                success = false;
             }
         }
     }
@@ -392,7 +394,7 @@ export const stopPlugin = traceFunction("stopPlugin", function stopPlugin(p: Plu
     if (renderProfileSection) removeProfileSection(name);
     if (gifPickerContextMenu) removeGifPickerContextMenuPatch(name);
 
-    return true;
+    return success;
 }, p => `stopPlugin ${p.name}`);
 
 function bindPluginSettings(p: Plugin) {

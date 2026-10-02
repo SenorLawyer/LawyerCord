@@ -22,6 +22,7 @@ import { Paragraph } from "@components/Paragraph";
 import { ApngBlendOp, ApngDisposeOp, parseAPNG } from "@utils/apng";
 import { Devs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
+import { isObject } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import type { Emoji, Message, RenderModalProps, Sticker } from "@vencord/discord-types";
 import { StickerFormatType } from "@vencord/discord-types/enums";
@@ -518,6 +519,23 @@ export default definePlugin({
     patchFakeNitroEmojisOrRemoveStickersLinks(content: Array<any>, inline: boolean) {
         // If content has more than one child or it's a single ReactElement like a header, list or span
         if ((content.length > 1 || typeof content[0]?.type === "string") && !settings.store.transformCompoundSentence) return content;
+
+        const { transformEmojis, transformStickers } = settings.store;
+        const hasTransformableLink = (node: unknown): boolean => {
+            if (Array.isArray(node)) return node.some(hasTransformableLink);
+            if (!isObject(node) || !("props" in node) || !isObject(node.props)) return false;
+            const { props } = node;
+            if ("trusted" in props && props.trusted != null) {
+                if (!("href" in props) || typeof props.href !== "string") return false;
+                if (transformEmojis && fakeNitroEmojiRegex.test(props.href)) return true;
+                if (!transformStickers) return false;
+                if (fakeNitroStickerRegex.test(props.href)) return true;
+                const gifMatch = props.href.match(fakeNitroGifStickerRegex);
+                return !!gifMatch && !!StickersStore.getStickerById(gifMatch[1]);
+            }
+            return "children" in props && hasTransformableLink(props.children);
+        };
+        if (!hasTransformableLink(content)) return content;
 
         let nextIndex = content.length;
 

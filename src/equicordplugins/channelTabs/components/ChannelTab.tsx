@@ -5,14 +5,14 @@
  */
 
 import { BaseText } from "@components/BaseText";
-import { ChannelTabsProps, closeTab, ensureUnreadFallbackCountsLoaded, getNotificationDotState, getUnreadFallbackCounts, isTabSelected, moveDraggedTabs, moveToTab, openedTabs, settings, updateUnreadFallbackCounts } from "@equicordplugins/channelTabs/util";
+import { ChannelTabsProps, closeTab, ensureUnreadFallbackCountsLoaded, getNotificationDotState, getUnreadFallbackCounts, isTabSelected, logger, moveDraggedTabs, moveToTab, openedTabs, settings, updateUnreadFallbackCounts } from "@equicordplugins/channelTabs/util";
 import { ActivityIcon, CircleQuestionIcon, DiscoveryIcon, EnvelopeIcon, FriendsIcon, ICYMIIcon, NitroIcon, QuestIcon, ShopIcon } from "@equicordplugins/channelTabs/util/icons";
 import { classNameFactory } from "@utils/css";
 import { getGuildAcronym, getIntlMessage, getUniqueUsername } from "@utils/discord";
 import { classes } from "@utils/misc";
 import { Channel, Guild, User } from "@vencord/discord-types";
 import { findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
-import { ActiveJoinedThreadsStore, Avatar, ChannelStore, ContextMenuApi, GuildStore, PresenceStore, ReadStateStore, TypingStore, useDrag, useDrop, useEffect, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
+import { ActiveJoinedThreadsStore, Avatar, ChannelStore, ContextMenuApi, GuildStore, lodash, PresenceStore, ReadStateStore, TypingStore, useDrag, useDrop, useEffect, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
 import { JSX } from "react";
 
 import { TabContextMenu } from "./ContextMenus";
@@ -21,6 +21,9 @@ const ThreeDots = findComponentByCodeLazy("Math.min(1,Math.max(", "dotRadius:");
 const dotStyles = findCssClassesLazy("numberBadge", "baseShapeRound");
 
 const ChannelTypeIcon = findComponentByCodeLazy('"ChannelItemIcon")');
+const UNREAD_SETTINGS = ["persistUnreadCountFallback"] satisfies (keyof typeof settings.def)[];
+const CONTENT_SETTINGS = ["noPomeloNames", "showStatusIndicators"] satisfies (keyof typeof settings.def)[];
+const NUMBER_SETTINGS = ["showTabNumbers", "tabNumberPosition"] satisfies (keyof typeof settings.def)[];
 
 // Custom SVG icons for pages that don't have findable components
 
@@ -90,19 +93,16 @@ function getChannelUnreadState(channelId: string) {
 }
 
 export const NotificationDot = ({ channelIds }: { channelIds: string[]; }) => {
-    const userId = UserStore.getCurrentUser()?.id;
-    const { persistUnreadCountFallback } = settings.use(["persistUnreadCountFallback"]);
-    const [, forceUpdate] = useState(0);
+    const userId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
+    const { persistUnreadCountFallback } = settings.use(UNREAD_SETTINGS);
+    const [fallbackRevision, forceUpdate] = useState(0);
     const channelStateKey = channelIds.join(",");
     const channelStates = useStateFromStores(
-        [ActiveJoinedThreadsStore, ReadStateStore],
-        () => channelIds.map(getChannelUnreadState)
+        [ActiveJoinedThreadsStore, ReadStateStore, ChannelStore],
+        () => channelIds.map(getChannelUnreadState),
+        [channelStateKey],
+        lodash.isEqual
     );
-    let stateSignature = "";
-    for (const state of channelStates) {
-        if (stateSignature) stateSignature += "|";
-        stateSignature += `${state.channelId}:${Number(state.hasUnread)}:${state.mentionCount}:${state.unreadCount}`;
-    }
 
     const { badgeText, hasMention, shouldShow } = getNotificationDotState(
         channelStates,
@@ -117,7 +117,7 @@ export const NotificationDot = ({ channelIds }: { channelIds: string[]; }) => {
         ensureUnreadFallbackCountsLoaded(userId).then(() => {
             if (didCancel) return;
             forceUpdate(prev => prev + 1);
-        });
+        }).catch(error => logger.error("Failed to load unread fallback counts", error));
 
         return () => {
             didCancel = true;
@@ -127,7 +127,7 @@ export const NotificationDot = ({ channelIds }: { channelIds: string[]; }) => {
     useEffect(() => {
         if (!userId || !persistUnreadCountFallback) return;
         updateUnreadFallbackCounts(userId, channelStates);
-    }, [channelStateKey, persistUnreadCountFallback, stateSignature, userId]);
+    }, [channelStates, fallbackRevision, persistUnreadCountFallback, userId]);
 
     return shouldShow ?
         <div
@@ -175,12 +175,12 @@ function ChannelTabContent(props: ChannelTabsProps & {
     channel?: Channel;
 }) {
     const { guild, guildId, channel, channelId, compact } = props;
-    const userId = UserStore.getCurrentUser()?.id;
+    const userId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
     const recipients = channel?.recipients;
     const {
         noPomeloNames,
         showStatusIndicators
-    } = settings.use(["noPomeloNames", "showStatusIndicators"]);
+    } = settings.use(CONTENT_SETTINGS);
 
     const [isTyping, status, isMobile] = useStateFromStores(
         [TypingStore, PresenceStore],
@@ -200,7 +200,9 @@ function ChannelTabContent(props: ChannelTabsProps & {
                 PresenceStore.getStatus(recipientId),
                 PresenceStore.isMobileOnline(recipientId)
             ];
-        }
+        },
+        [recipients?.[0], props.channelId, userId],
+        lodash.isEqual
     );
 
     if (guild) {
@@ -332,7 +334,7 @@ export default function ChannelTab(props: ChannelTabsProps & { index: number; })
     const [isDropTarget, setIsDropTarget] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
 
-    const { showTabNumbers, tabNumberPosition } = settings.use(["showTabNumbers", "tabNumberPosition"]);
+    const { showTabNumbers, tabNumberPosition } = settings.use(NUMBER_SETTINGS);
 
     useEffect(() => {
         if (isEntering) {

@@ -20,9 +20,10 @@
 
 import { definePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import { classes } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
-import { ChannelStore, EmojiStore, RestAPI } from "@webpack/common";
+import { ChannelStore, Constants, EmojiStore, RestAPI, showToast, Toasts } from "@webpack/common";
 import type { SVGProps } from "react";
 // eslint-disable-next-line no-duplicate-imports
 import { PropsWithChildren } from "react";
@@ -84,16 +85,16 @@ const settings = definePluginSettings({
         default: 1026532993923293184n
     }
 });
+const logger = new Logger("Husk");
 
 function getEmojiIdThatShouldBeUsed(guildId: string) {
-    if (!settings.store.findInServer || guildId === "") return settings.store.emojiID;
-    let id = "";
-    EmojiStore.getGuildEmoji(guildId).forEach(emoji => {
-        if (emoji.name === settings.store.emojiName) {
-            id = emoji.id;
-        }
-    });
-    return id !== "" ? id : settings.store.emojiID;
+    const { findInServer, emojiName, emojiID } = settings.store;
+    if (!findInServer || guildId === "") return emojiID;
+    const emojis = EmojiStore.getGuildEmoji(guildId);
+    for (let i = emojis.length - 1; i >= 0; i--) {
+        if (emojis[i].name === emojiName) return emojis[i].id;
+    }
+    return emojiID;
 }
 
 export default definePlugin({
@@ -106,17 +107,19 @@ export default definePlugin({
     messagePopoverButton: {
         icon: Husk,
         render(msg) {
+            const channel = ChannelStore.getChannel(msg.channel_id);
             return {
                 label: "Husk",
                 icon: Husk,
                 message: msg,
-                channel: ChannelStore.getChannel(msg.channel_id),
+                channel,
                 onClick: () => {
-                    const guildId = ChannelStore.getChannel(msg.channel_id).guild_id !== null ? ChannelStore.getChannel(msg.channel_id).guild_id : "";
-                    RestAPI.put({
-                        url: `/channels/${msg.channel_id}/messages/${msg.id}/reactions/${settings.store.emojiName}:${getEmojiIdThatShouldBeUsed(guildId)}/@me`
-                    }
-                    );
+                    return RestAPI.put({
+                        url: Constants.Endpoints.REACTION(msg.channel_id, msg.id, `${settings.store.emojiName}:${getEmojiIdThatShouldBeUsed(channel.guild_id ?? "")}`, "@me")
+                    }).catch(() => {
+                        logger.warn("Could not add reaction.");
+                        showToast("Could not add reaction.", Toasts.Type.FAILURE);
+                    });
                 }
             };
         },

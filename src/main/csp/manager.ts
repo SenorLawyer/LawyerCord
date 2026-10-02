@@ -18,24 +18,18 @@ export function registerCspIpcHandlers() {
     ipcMain.handle(IpcEvents.CSP_IS_DOMAIN_ALLOWED, isDomainAllowed);
 }
 
-function validate(url: string, directives: string[]) {
+function getDomain(url: unknown): string | undefined {
+    if (typeof url !== "string" || url.length > 2048) return;
     try {
-        const { host } = new URL(url);
-
-        if (/[;'"\\]/.test(host)) return false;
+        const { host, protocol } = new URL(url);
+        if (!host || host === "__proto__" || !["http:", "https:", "ws:", "wss:"].includes(protocol) || /[;'"\\]/.test(host)) return;
+        return host;
     } catch {
-        return false;
+        return;
     }
-
-    if (directives.length === 0) return false;
-    if (directives.some(d => !ImageAndCssSrc.includes(d))) return false;
-
-    return true;
 }
 
-function getMessage(url: string, directives: string[], callerName: string) {
-    const domain = new URL(url).host;
-
+function getMessage(domain: string, directives: string[], callerName: string) {
     const message = `${callerName} wants to allow connections to ${domain}`;
 
     let detail =
@@ -68,19 +62,20 @@ function getMessage(url: string, directives: string[], callerName: string) {
     return { message, detail };
 }
 
-async function addCspRule(_: IpcMainInvokeEvent, url: string, directives: string[], callerName: string): Promise<CspRequestResult> {
-    if (!validate(url, directives)) {
+async function addCspRule(_: IpcMainInvokeEvent, url: unknown, directives: unknown, callerName: unknown): Promise<CspRequestResult> {
+    const domain = getDomain(url);
+    if (!domain || !Array.isArray(directives) || !directives.length || directives.length > ImageAndCssSrc.length
+        || !directives.every(d => typeof d === "string" && ImageAndCssSrc.includes(d))
+        || typeof callerName !== "string" || callerName.length > 128) {
         return "invalid";
     }
 
-    const domain = new URL(url).host;
-
-    if (domain in NativeSettings.store.customCspRules) {
+    if (Object.hasOwn(NativeSettings.store.customCspRules, domain)) {
         return "conflict";
     }
 
     const { checkboxChecked, response } = await dialog.showMessageBox({
-        ...getMessage(url, directives, callerName),
+        ...getMessage(domain, directives, callerName),
         type: callerName ? "info" : "warning",
         title: "LawyerCord Host Permissions",
         buttons: ["Cancel", "Allow"],
@@ -98,12 +93,13 @@ async function addCspRule(_: IpcMainInvokeEvent, url: string, directives: string
         return "unchecked";
     }
 
+    if (Object.hasOwn(NativeSettings.store.customCspRules, domain)) return "conflict";
     NativeSettings.store.customCspRules[domain] = directives;
     return "ok";
 }
 
-function removeCspRule(_: IpcMainInvokeEvent, domain: string) {
-    if (domain in NativeSettings.store.customCspRules) {
+function removeCspRule(_: IpcMainInvokeEvent, domain: unknown) {
+    if (typeof domain === "string" && Object.hasOwn(NativeSettings.store.customCspRules, domain)) {
         delete NativeSettings.store.customCspRules[domain];
         return true;
     }
@@ -111,15 +107,9 @@ function removeCspRule(_: IpcMainInvokeEvent, domain: string) {
     return false;
 }
 
-function isDomainAllowed(_: IpcMainInvokeEvent, url: string, directives: string[]) {
-    try {
-        const domain = new URL(url).host;
-
-        const ruleForDomain = CspPolicies[domain] ?? NativeSettings.store.customCspRules[domain];
-        if (!ruleForDomain) return false;
-
-        return directives.every(d => ruleForDomain.includes(d));
-    } catch (e) {
-        return false;
-    }
+function isDomainAllowed(_: IpcMainInvokeEvent, url: unknown, directives: unknown) {
+    const domain = getDomain(url);
+    if (!domain || !Array.isArray(directives) || !directives.length || directives.length > 16) return false;
+    const ruleForDomain = CspPolicies[domain] ?? NativeSettings.store.customCspRules[domain];
+    return Array.isArray(ruleForDomain) && directives.every(d => typeof d === "string" && ruleForDomain.includes(d));
 }

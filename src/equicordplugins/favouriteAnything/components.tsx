@@ -10,7 +10,7 @@ import { LazyComponentWrapper } from "@utils/lazyReact";
 import { Embed, ListRow, Message, MessageAttachment, ScrollerBaseRef } from "@vencord/discord-types";
 import { ChannelType } from "@vencord/discord-types/enums";
 import { findByCodeLazy, findComponentByCode, findComponentByCodeLazy, findCssClassesLazy, proxyLazyWebpack } from "@webpack";
-import { ChannelStore, ExpressionPickerStore, ListScrollerThin, lodash, PermissionsBits, PermissionStore, React, useCallback, useEffect, useMemo, useRef, useState, useStateFromStores } from "@webpack/common";
+import { ChannelStore, ExpressionPickerStore, ListScrollerThin, lodash, PermissionsBits, PermissionStore, React, useCallback, useEffect, useMemo, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
 import { ReactNode } from "react";
 
 import { SignedUrlsStore } from "./stores";
@@ -86,11 +86,11 @@ export function FilePicker({ onSelectItem }: FilePickerProps) {
     const channel = useStateFromStores([ChannelStore], () => ChannelStore.getChannel(channelId), [channelId]);
 
     const favs = useFavourites(CustomItemFormat.ATTACHMENT, query);
-    const count = useMemo(() => (favs ? Object.keys(favs).length : 0), [favs]);
+    const count = favs?.length ?? 0;
 
     const [rowHeights, handleResize] = useListScroller();
 
-    const handleSubmit = useCallback((url: string) => onSelectItem({ url }), []);
+    const handleSubmit = useCallback((url: string) => onSelectItem({ url }), [onSelectItem]);
     const handleChange = useCallback((query: string) => ExpressionPickerStore.setSearchQuery(query), []);
     const handleClear = useCallback(() => ExpressionPickerStore.setSearchQuery(""), []);
 
@@ -188,6 +188,7 @@ function Demo() {
 
 export function FilePickerItem({ url, file, channel, onResize, onSubmit, reducePadding }: FilePickerItemProps) {
     const [isFetching, setIsFetching] = useState(false);
+    const accountId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
 
     const ref = useRef<HTMLDivElement>(null);
     useResizeObserver(ref, ({ height }) => onResize(url, height), [onResize, url]);
@@ -199,13 +200,19 @@ export function FilePickerItem({ url, file, channel, onResize, onSubmit, reduceP
         lodash.isEqual
     ) as MessageAttachment;
 
+    useEffect(() => {
+        SignedUrlsStore.refresh(file.url);
+        SignedUrlsStore.refresh(file.proxy_url);
+    }, [file, attachment.url, attachment.proxy_url, accountId]);
+
     const { canAttachFiles, canSendMessages } = useStateFromStores(
         [PermissionStore],
         () => ({
             canAttachFiles: hasPermission(PermissionsBits.ATTACH_FILES, channel),
             canSendMessages: hasPermission(PermissionsBits.SEND_MESSAGES, channel)
         }),
-        [channel]
+        [channel],
+        lodash.isEqual
     );
 
     const handleClick = useMemo(() => {
@@ -213,8 +220,7 @@ export function FilePickerItem({ url, file, channel, onResize, onSubmit, reduceP
             case canAttachFiles:
                 return async () => {
                     setIsFetching(true);
-                    await sendAttachment(attachment, channel!);
-                    ExpressionPickerStore.closeExpressionPicker();
+                    if (channel && await sendAttachment(attachment, channel)) ExpressionPickerStore.closeExpressionPicker();
                     setIsFetching(false);
                 };
             case canSendMessages:
@@ -222,7 +228,7 @@ export function FilePickerItem({ url, file, channel, onResize, onSubmit, reduceP
             default:
                 return null;
         }
-    }, [attachment, canAttachFiles, canSendMessages, channel, url]);
+    }, [attachment, canAttachFiles, canSendMessages, channel, url, onSubmit]);
 
     return (
         <div ref={ref} className={cl("attachment-container", reducePadding && "reduced-padding")}>

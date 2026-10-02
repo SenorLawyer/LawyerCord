@@ -125,6 +125,7 @@ jobs:
 
             - name: Audit and test release source
               run: |
+                  $PSNativeCommandUseErrorActionPreference = $true
                   pnpm audit --audit-level moderate
                   pnpm testTsc
                   pnpm testPerformance
@@ -143,6 +144,7 @@ jobs:
 
             - name: Build desktop and browser targets
               run: |
+                  $PSNativeCommandUseErrorActionPreference = $true
                   pnpm buildStandalone
                   pnpm buildWebStandalone
 
@@ -311,5 +313,8 @@ jobs:
                           gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/git/refs/heads/$branch" -f sha=$sha -F force=false --silent
                       } else {
                           gh api --method POST "repos/$env:GITHUB_REPOSITORY/git/refs" -f ref="refs/heads/$branch" -f sha=$sha --silent
+                      }
+                      if ($LASTEXITCODE -ne 0) {
+                          throw "Could not advance the $branch update channel."
                       }
                   }

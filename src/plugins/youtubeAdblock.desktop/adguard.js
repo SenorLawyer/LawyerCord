@@ -154,60 +154,33 @@
             }
         }
     };
-    /**
-     * This function overrides a property on the specified object.
-     *
-     * @param {object} obj object to look for properties in
-     * @param {string} propertyName property to override
-     * @param {*} overrideValue value to set
-     */
-    const overrideObject = (obj, propertyName, overrideValue) => {
-        if (!obj) {
-            return false;
-        }
-        let overriden = false;
-        for (const key in obj) {
-            if (obj.hasOwnProperty(key) && key === propertyName) {
-                obj[key] = overrideValue;
-                overriden = true;
-            } else if (obj.hasOwnProperty(key) && typeof obj[key] === "object") {
-                if (overrideObject(obj[key], propertyName, overrideValue)) {
-                    overriden = true;
+    const adMetadata = { adPlacements: [], playerAds: [] };
+    const stripAds = obj => {
+        if (!obj || typeof obj !== "object") return obj;
+        const pending = [obj];
+        const seen = new WeakSet();
+        while (pending.length) {
+            const current = pending.pop();
+            if (seen.has(current)) continue;
+            seen.add(current);
+            for (const key of Object.keys(current)) {
+                if (Object.hasOwn(adMetadata, key)) {
+                    current[key] = adMetadata[key];
+                } else {
+                    const value = current[key];
+                    if (value && typeof value === "object") pending.push(value);
                 }
             }
         }
-        return overriden;
+        return obj;
     };
-    /**
-     * Overrides JSON.parse and Response.json functions.
-     * Examines these functions arguments, looks for properties with the specified name there
-     * and if it exists, changes it's value to what was specified.
-     *
-     * @param {string} propertyName name of the property
-     * @param {*} overrideValue new value for the property
-     */
-    const jsonOverride = (propertyName, overrideValue) => {
-        const nativeJSONParse = JSON.parse;
-        JSON.parse = (...args) => {
-            const obj = nativeJSONParse.apply(this, args);
-            // Override it's props and return back to the caller
-            overrideObject(obj, propertyName, overrideValue);
-            return obj;
-        };
-        // Override Response.prototype.json
-        Response.prototype.json = new Proxy(Response.prototype.json, {
-            async apply(...args) {
-                // Call the target function, get the original Promise
-                const result = await Reflect.apply(...args);
-                // Create a new one and override the JSON inside
-                overrideObject(result, propertyName, overrideValue);
-                return result;
-            },
-        });
-    };
-    // Removes ads metadata from YouTube XHR requests
-    jsonOverride("adPlacements", []);
-    jsonOverride("playerAds", []);
+    const nativeJSONParse = JSON.parse;
+    JSON.parse = (...args) => stripAds(nativeJSONParse(...args));
+    Response.prototype.json = new Proxy(Response.prototype.json, {
+        async apply(...args) {
+            return stripAds(await Reflect.apply(...args));
+        },
+    });
     // Applies CSS that hides YouTube ad elements
     hideElements();
     // Some changes should be re-evaluated on every page change

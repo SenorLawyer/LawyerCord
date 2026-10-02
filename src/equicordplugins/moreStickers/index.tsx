@@ -11,7 +11,7 @@ import { Devs, EquicordDevs } from "@utils/constants";
 import { useAwaiter } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
 import { Channel } from "@vencord/discord-types";
-import { lodash, React, showToast, Toasts } from "@webpack/common";
+import { React, showToast, Toasts } from "@webpack/common";
 
 import { Packs, PickerContent, PickerHeader, PickerSidebar, Wrapper } from "./components";
 import { getStickerPack, getStickerPackMetas } from "./stickers";
@@ -112,15 +112,7 @@ export default definePlugin({
         closePopout: () => void;
     }) {
         const [query, setQuery] = React.useState("");
-        const [settledQuery, setSettledQuery] = React.useState("");
         const [selectedStickerPackId, setSelectedStickerPackId] = React.useState<string | null>(null);
-        const settleQuery = React.useMemo(() => lodash.debounce(setSettledQuery, 150), []);
-
-        React.useEffect(() => {
-            if (query) settleQuery(query);
-            else setSettledQuery("");
-            return () => settleQuery.cancel();
-        }, [query, settleQuery]);
 
         const [loadedPacks] = useAwaiter(async () => {
             const metas = await getStickerPackMetas();
@@ -131,17 +123,6 @@ export default definePlugin({
             onError: () => showToast("Could not load sticker packs.", Toasts.Type.FAILURE)
         });
         const stickerPacks = loadedPacks ?? [];
-        const resultsQuery = query ? settledQuery : "";
-        const content = React.useMemo(() => (
-            <PickerContent
-                stickerPacks={stickerPacks}
-                selectedStickerPackId={selectedStickerPackId}
-                setSelectedStickerPackId={setSelectedStickerPackId}
-                channelId={channel.id}
-                closePopout={closePopout}
-                query={resultsQuery}
-            />
-        ), [stickerPacks, selectedStickerPackId, channel.id, closePopout, resultsQuery]);
 
         return (
             <Wrapper>
@@ -150,7 +131,14 @@ export default definePlugin({
                 </svg>
 
                 <PickerHeader query={query} onQueryChange={setQuery} />
-                {content}
+                <PickerContent
+                    stickerPacks={stickerPacks}
+                    selectedStickerPackId={selectedStickerPackId}
+                    setSelectedStickerPackId={setSelectedStickerPackId}
+                    channelId={channel.id}
+                    closePopout={closePopout}
+                    query={query}
+                />
                 <PickerSidebar
                     packMetas={
                         stickerPacks.map(meta => ({

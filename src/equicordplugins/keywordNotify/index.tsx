@@ -9,6 +9,7 @@ import "./style.css";
 import { DataStore } from "@api/index";
 import { definePluginSettings } from "@api/Settings";
 import { Button, TextButton } from "@components/Button";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
 import { FormSwitch } from "@components/FormSwitch";
 import { Heading } from "@components/Heading";
@@ -17,19 +18,24 @@ import { EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import { Margins } from "@utils/margins";
 import { classes } from "@utils/misc";
-import { useForceUpdater } from "@utils/react";
+import { useAwaiter, useForceUpdater } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
 import { findByCodeLazy, findCssClassesLazy } from "@webpack";
-import { ChannelStore, FluxDispatcher, Select, SelectedChannelStore, TabBar, TextInput, Tooltip, UserStore, useState } from "@webpack/common";
-import type { JSX, PropsWithChildren } from "react";
+import { ChannelStore, FluxDispatcher, Select, SelectedChannelStore, TabBar, TextInput, Tooltip, useEffect, UserStore, useState } from "@webpack/common";
+import type { JSX, PropsWithChildren, ReactNode } from "react";
 
 type IconProps = JSX.IntrinsicElements["svg"];
 type KeywordEntry = { regex: string, listIds: Array<string>, listType: ListType, ignoreCase: boolean; };
 type CompiledKeywordEntry = { entry: KeywordEntry, regex: RegExp, listIds: Set<string>, whitelistMode: boolean; };
 type KeywordEmbed = { description?: string, title?: string, fields?: Array<{ name?: string, value?: string; }>; };
 
+let generation = 0;
+let started = false;
+
 let keywordEntries: Array<KeywordEntry> = [];
+let entriesLoaded = false;
+let entriesLoading: Promise<KeywordEntry[]> | undefined;
 let compiledKeywordEntries: Array<CompiledKeywordEntry> = [];
 let keywordLog: Array<any> = [];
 let storedKeywordLog: string[] = [];
@@ -69,6 +75,16 @@ function rebuildKeywordMatchers() {
     }
 
     compiledKeywordEntries = nextCompiledEntries;
+}
+
+function loadKeywordEntries(): Promise<KeywordEntry[]> {
+    if (entriesLoaded) return Promise.resolve(keywordEntries);
+    return entriesLoading ??= DataStore.get<KeywordEntry[]>(KEYWORD_ENTRIES_KEY).then(entries => {
+        keywordEntries = entries ?? [];
+        entriesLoaded = true;
+        rebuildKeywordMatchers();
+        return keywordEntries;
+    }).finally(() => { entriesLoading = undefined; });
 }
 
 async function persistKeywordEntries() {
@@ -219,28 +235,39 @@ function ListTypeSelector({ listType, setListType }: { listType: ListType, setLi
 }
 
 function KeywordEntries() {
+    const [entries, error] = useAwaiter(loadKeywordEntries);
+    if (error) return <div>Could not load keyword rules. Close settings and try again.</div>;
+    if (!entries) return null;
+    return <KeywordEntriesEditor entries={entries} />;
+}
+
+function KeywordEntriesEditor({ entries }: { entries: KeywordEntry[]; }) {
     const update = useForceUpdater();
-    const [values] = useState(keywordEntries);
+    const [values] = useState(entries);
 
     async function setRegex(index: number, value: string) {
+        if (values !== keywordEntries) return;
         keywordEntries[index].regex = value;
         await persistKeywordEntries();
         update();
     }
 
     async function setListType(index: number, value: ListType) {
+        if (values !== keywordEntries) return;
         keywordEntries[index].listType = value;
         await persistKeywordEntries();
         update();
     }
 
     async function setListIds(index: number, value: Array<string>) {
+        if (values !== keywordEntries) return;
         keywordEntries[index].listIds = value ?? [];
         await persistKeywordEntries();
         update();
     }
 
     async function setIgnoreCase(index: number, value: boolean) {
+        if (values !== keywordEntries) return;
         keywordEntries[index].ignoreCase = value;
         await persistKeywordEntries();
         update();
@@ -260,7 +287,7 @@ function KeywordEntries() {
                             />
                         </div>
                         <Button
-                            onClick={() => removeKeywordEntry(i, update)}
+                            onClick={() => { if (values === keywordEntries) removeKeywordEntry(i, update); }}
                             variant="none"
                             size="iconOnly"
                             className={cl("delete")}>
@@ -284,6 +311,7 @@ function KeywordEntries() {
                     <div className={[Margins.top8, Margins.bottom8].join(" ")} />
                     <Flex flexDirection="row">
                         <Button onClick={() => {
+                            if (values !== keywordEntries) return;
                             values[i].listIds.push("");
                             update();
                         }}>Add ID</Button>
@@ -299,7 +327,7 @@ function KeywordEntries() {
     return (
         <>
             {elements}
-            <div><Button onClick={() => addKeywordEntry(update)}>Add Keyword Entry</Button></div>
+            <div><Button onClick={() => { if (values === keywordEntries) addKeywordEntry(update); }}>Add Keyword Entry</Button></div>
         </>
     );
 }
@@ -358,6 +386,69 @@ const settings = definePluginSettings({
     }
 });
 
+interface KeywordMenuProps {
+    plugin: {
+        onUpdate(): void;
+        renderMsg(props: object): ReactNode;
+        deleteKeyword(id: string): void;
+        discardMessage(id: string): void;
+    };
+    onJump: unknown;
+}
+
+function KeywordMenu({ plugin, onJump }: KeywordMenuProps) {
+    const channel = ChannelStore.getChannel(SelectedChannelStore.getChannelId());
+
+    const [tempLogs, setKeywordLog] = useState(keywordLog);
+    useEffect(() => {
+        if (!started) return;
+        const update = () => setKeywordLog(Array.from(keywordLog));
+        plugin.onUpdate = update;
+        update();
+        return () => {
+            if (plugin.onUpdate === update) plugin.onUpdate = () => { };
+        };
+    }, [plugin]);
+
+    const messageRender = (e: Message & { _keyword?: boolean; }, t: unknown) => {
+        e._keyword = true;
+
+        e.customRenderedContent = {
+            content: highlightKeywords(e.content)
+        };
+
+        const msg = plugin.renderMsg({
+            message: e,
+            gotoMessage: t,
+            dismissible: true
+        });
+
+        return [msg];
+    };
+
+    return (
+        <>
+            <Popout
+                className={classes(recentMentionsPopoutClass.recentMentionsPopout)}
+                scrollerClassName={classes(recentMentionsPopoutClass.scroller)}
+                renderHeader={() => null}
+                renderMessage={messageRender}
+                channel={channel}
+                onJump={onJump}
+                onFetch={() => null}
+                onCloseMessage={(id: string) => {
+                    plugin.deleteKeyword(id);
+                    plugin.discardMessage(id);
+                }}
+                loadMore={() => null}
+                messages={tempLogs}
+                renderEmptyState={() => null}
+                canCloseAllMessages={true}
+            />
+        </>
+    );
+}
+
 export default definePlugin({
     name: "KeywordNotify",
     authors: [EquicordDevs.camila314, EquicordDevs.x3rt],
@@ -398,13 +489,19 @@ export default definePlugin({
         },
     ],
 
-    async start() {
-        this.onUpdate = () => null;
-        keywordEntries = await DataStore.get(KEYWORD_ENTRIES_KEY) ?? [];
-        rebuildKeywordMatchers();
-        await DataStore.set(KEYWORD_ENTRIES_KEY, keywordEntries);
+    onUpdate() { },
+    renderMsg: (_props: object): ReactNode => null,
 
-        storedKeywordLog = await DataStore.get(KEYWORD_LOG_KEY) ?? [];
+    async start() {
+        const current = ++generation;
+        started = true;
+        this.onUpdate = () => null;
+        await loadKeywordEntries();
+        if (current !== generation) return;
+        const logs = await DataStore.get(KEYWORD_LOG_KEY) ?? [];
+        if (current !== generation) return;
+        rebuildKeywordMatchers();
+        storedKeywordLog = logs;
         storedKeywordLogIds.clear();
         storedKeywordLog.forEach(raw => {
             try {
@@ -424,6 +521,14 @@ export default definePlugin({
     },
 
     stop() {
+        generation++;
+        started = false;
+        keywordLog = [];
+        this.onUpdate();
+        this.onUpdate = () => { };
+        compiledKeywordEntries = [];
+        storedKeywordLog = [];
+        storedKeywordLogIds.clear();
         const index = FluxDispatcher._interceptors.indexOf(interceptor);
         if (index > -1) {
             FluxDispatcher._interceptors.splice(index, 1);
@@ -490,6 +595,7 @@ export default definePlugin({
         }
     },
     storeMessage(m: Message) {
+        if (!started) return;
         if (m == null)
             return;
 
@@ -502,13 +608,14 @@ export default definePlugin({
         DataStore.set(KEYWORD_LOG_KEY, storedKeywordLog);
     },
     discardMessage(id: string) {
+        if (!started) return;
         storedKeywordLog = storedKeywordLog.filter(raw => getStoredKeywordLogId(raw) !== id);
         storedKeywordLogIds.delete(id);
 
         DataStore.set(KEYWORD_LOG_KEY, storedKeywordLog);
     },
     addToLog(m: Message) {
-        if (m == null || keywordLog.some(e => e.id === m.id))
+        if (!started || m == null || keywordLog.some(e => e.id === m.id))
             return;
 
         let messageRecord: any;
@@ -530,7 +637,8 @@ export default definePlugin({
         this.onUpdate();
     },
 
-    deleteKeyword(id) {
+    deleteKeyword(id: string) {
+        if (!started) return;
         keywordLog = keywordLog.filter(e => e.id !== id);
         this.onUpdate();
     },
@@ -553,6 +661,7 @@ export default definePlugin({
                         onMouseLeave={onMouseLeave}
                         onMouseEnter={onMouseEnter}
                         onClick={() => {
+                            if (!started) return;
                             keywordLog = [];
                             storedKeywordLog = [];
                             storedKeywordLogIds.clear();
@@ -566,52 +675,8 @@ export default definePlugin({
         );
     },
 
-    tryKeywordMenu(onJump) {
-        const channel = ChannelStore.getChannel(SelectedChannelStore.getChannelId());
-
-        const [tempLogs, setKeywordLog] = useState(keywordLog);
-        this.onUpdate = () => {
-            const newLog = Array.from(keywordLog);
-            setKeywordLog(newLog);
-        };
-
-        const messageRender = (e, t) => {
-            e._keyword = true;
-
-            e.customRenderedContent = {
-                content: highlightKeywords(e.content)
-            };
-
-            const msg = this.renderMsg({
-                message: e,
-                gotoMessage: t,
-                dismissible: true
-            });
-
-            return [msg];
-        };
-
-        return (
-            <>
-                <Popout
-                    className={classes(recentMentionsPopoutClass.recentMentionsPopout)}
-                    scrollerClassName={classes(recentMentionsPopoutClass.scroller)}
-                    renderHeader={() => null}
-                    renderMessage={messageRender}
-                    channel={channel}
-                    onJump={onJump}
-                    onFetch={() => null}
-                    onCloseMessage={(id: string) => {
-                        this.deleteKeyword(id);
-                        this.discardMessage(id);
-                    }}
-                    loadMore={() => null}
-                    messages={tempLogs}
-                    renderEmptyState={() => null}
-                    canCloseAllMessages={true}
-                />
-            </>
-        );
+    tryKeywordMenu(onJump: unknown) {
+        return <ErrorBoundary noop><KeywordMenu plugin={this} onJump={onJump} /></ErrorBoundary>;
     },
 
     modify(e) {

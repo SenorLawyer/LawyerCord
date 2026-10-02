@@ -23,7 +23,7 @@ import { classNameFactory } from "@utils/css";
 import { classes } from "@utils/misc";
 import definePlugin from "@utils/types";
 import { findByPropsLazy, findCssClassesLazy } from "@webpack";
-import { useDrag, useDrop, useLayoutEffect, useRef, UserSettingsActionCreators } from "@webpack/common";
+import { useDrag, useDrop, UserSettingsActionCreators } from "@webpack/common";
 
 const UserSettingsDelay = findByPropsLazy("INFREQUENT_USER_ACTION");
 const imgCls = findCssClassesLazy("image", "imageLoading");
@@ -123,7 +123,7 @@ export default definePlugin({
                 }
                 UserSettingsActionCreators.FrecencyUserSettingsActionCreators.updateAsync("favoriteEmojis", update, UserSettingsDelay.INFREQUENT_USER_ACTION);
             }
-        }), [emoji]);
+        }), [emoji, category]);
     },
     dragItem() {
         return (
@@ -132,32 +132,13 @@ export default definePlugin({
     },
     wrapper(emoji: EmojiDescriptor) {
         const [collected, drop] = this.drop(emoji);
-        const ref: React.RefObject<null | HTMLElement> = useRef(null);
-        useLayoutEffect(() => {
-            if (emoji?.category !== "FAVORITES") return;
-            const frame = requestAnimationFrame(() => {
-                if (!ref.current) {
-                    return;
-                }
-                if (collected.canDrop) {
-                    ref.current.classList.add(dndCls.autoPointerEvents);
-                    return;
-                }
-                ref.current.classList.remove(dndCls.autoPointerEvents);
-            }
-            );
-            return () => cancelAnimationFrame(frame);
-        }, [collected, ref]);
 
-        if (emoji?.category !== "FAVORITES") return;
+        if (emoji?.category !== "FAVORITES") return null;
 
         return (
             <div className={classes(cl("wrapper"), dndCls.wrapper)} aria-hidden="true">
-                <div className={classes(collected.isOver ? cl("indicator") : "", dndCls.target)}
-                    ref={e => {
-                        ref.current = e;
-                        drop(e);
-                    }}>
+                <div className={classes(collected.isOver && cl("indicator"), dndCls.target, collected.canDrop && dndCls.autoPointerEvents)}
+                    ref={drop}>
                 </div>
             </div>
         );

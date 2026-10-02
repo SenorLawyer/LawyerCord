@@ -2,6 +2,143 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 3.1.2.0 - 2026-10-02 (Nightly)
+
+### Changed
+
+- Scope Changelog plugin-list subscriptions, share its dependency index and sort generated plugin records once.
+- Avoid render-driven Shiki theme requests and skip unused styled-name output before building React elements.
+- Traverse parsed YouTube metadata once, preserving deep objects, JSON revivers and ordinary content.
+- Resolve automation array comparisons once and compile filter patterns once per operation.
+
+- Derive Ghosted icons and counters from current stores, include offscreen DMs, skip hidden counters and delete duplicated state and listeners.
+
+- Apply FullVCPFP avatar styles to the rendered call tile without mutating Discord props, and preserve USRBG styles in either patch order.
+- Preserve reply sends and prevent overlapping MessageBurst edits from overwriting each other's text.
+
+- Replace MessageLogger's quadratic edit comparison with the installed bounded diff algorithm, retaining complete text when a detailed diff exceeds its budget.
+
+- Release hidden ImageZoom lens media, pause removed videos and synchronize playback when the lens opens.
+
+- Delete unused Decor modal and button stylesheet rules.
+
+- Skip FakeNitro message-tree cloning when no emoji or sticker links can be transformed, preserving ordinary message trees and whitespace.
+
+- Limit missing-message preview fetches to their target and mounted lifetime, follow live message/channel stores and ignore stale replies.
+
+- Preserve existing MessageLogger logs during streamed imports, skip duplicate IDs and count only committed additions.
+
+- Remove full permission-table expansion from displayed user tags and skip permission computation for webhook and owner tags.
+
+- Stream bounded MessageLogger attachment downloads into contained temporary files, validate native URLs and extensions, and remove the directory existence race.
+
+- Remove unlimited serialized-message and search-query caches from MessageLoggerEnhanced, retain conversion only for the mounted log row and use the native array search.
+
+- Encode GIFs from one shared output-pixel buffer and retain only two source-frame snapshots instead of one canvas per frame.
+
+- Preserve filtered-out and busy upload batches, leave mixed clipboard files with Discord and request upload cancellation on plugin stop.
+
+- Publish Dragify pointer movement once per animation frame and remove its duplicate ghost-state copy.
+
+- Keep the screenshare spectator icon mounted across renders, subscribe to viewer changes and honor the saved panel toggle.
+
+- Let Chromium defer offscreen TIDAL player frames until they approach the viewport.
+
+- Remove Timezones stylesheet rules for modal layouts that no longer exist.
+
+- Delete unused ThemeLibrary tab, like-button and contributor declarations.
+
+- Coalesce Streaks message bursts into one pending refresh per conversation, discard reconnect work, and subscribe each badge only to its conversation.
+
+- Update Song Spotlight progress from media events instead of permanent animation-frame loops and stop loading animations after cards resolve.
+
+- Load the Sekai sticker editor and fonts when opened, release its fonts on close, and remove the Canvas forwarding component.
+- Restore saved sidebar popouts on channel-store changes instead of polling unresolved IDs, and keep already-open windows open.
+- Reject oversized encrypted attachments before reading their bytes, remove a full plaintext encryption copy and release the owned buffer on success or failure.
+- Delete the unused RPCEditor stylesheet.
+- Stop scheduled-message polling while signed out or when only another account owns queued messages.
+- Select Quest progress and completed quests in one pass, and read ignored IDs once per selection.
+- Initialize the Remix editor and its Discord chunks on first use. Discard pending modal loading after stop, restart or account replacement.
+
+- Bind Questify startup, timers, requests and alert callbacks to the active account session. Stop stale work and remove per-status payload logging and timestamp formatting.
+
+- Return the Nightly codebase to Stable 3.0.1.0 for the full project audit. Later Nightly changes are removed and fixes are evaluated against Stable.
+- Remove obsolete IndexedDB cursor fallbacks and unreachable QR video and chunk debugging code.
+- Reuse the active-hours formatter during schedule searches and shallow-copy primitive audio processing records.
+- Coalesce stream tracking and event bursts into one frame and skip primary-video layout scans with a sole audio source.
+- Initialize the automation tab on first view and its builder on first use while keeping the engine's startup timing.
+- Clone only selected blocks when duplicating part of an automation.
+- Guess codeblock languages only when no tag was supplied, and skip guessing for blocks over 50,000 characters.
+- Move large automatic ZIP compression to one worker, yield between bounded batches of small files, and retain the originating upload channel.
+- Stop hidden self call timers and disconnected voice timers from ticking.
+- Remove obsolete Snowfall browser prefix detection and prepare its SVG images only when image snow is selected.
+- Coalesce ChannelTabs unread fallback writes and reuse unchanged snapshots instead of cloning and serializing the entire account cache.
+- Keep ChannelTabs mention and Nitro glows static instead of continuously repainting blurred shadows and icon colors.
+- Remove the command palette's preliminary image decoding and synthetic attachment metadata from local previews.
+- Read message color context directly and set favorite-emoji drag classes through React instead of scheduling a frame for every row.
+- Remove unused Google Font metadata, cancel replaced or closed searches and keep the search field available while loading.
+- Load QR login images when shown and replace its idle JavaScript progress loop with a CSS hold transition.
+- Reuse the shared addon card for online themes and omit empty source-badge tooltips.
+- Delete unused plugin-modal layouts and obsolete warning, text and footer stylesheet overrides.
+- Decode favorite-file metadata only when saved metadata changes and compare file-row permissions by value.
+- Refresh favorite-file links outside render selectors, deduplicate active requests, bound retained links and clear pending work on stop or account changes.
+- Skip plugin registry searches for ordinary messages, remove per-card dependency maps and unused toolbox icon styles.
+- Ignore unrelated voice updates in user indicators and keep channel, permission and tooltip subscriptions current.
+- Export server assets with sequential bounded downloads and the shared queued ZIP compressor instead of concurrent whole-response copies and synchronous renderer compression.
+- Replace idle voice polling with store notifications and prevent disabled restart timers from being recreated by settings edits.
+- Save Quest filter choices only when they change and shallow-copy their primitive records instead of serializing and parsing them during rendering.
+- Keep Discord's lazy Quest artwork loading by default while preserving the saved preload option, and remove the redundant badge component.
+- Update existing keyboard audio volumes instead of rebuilding and preloading the entire pool for every slider edit.
+- Run clip conversions one at a time and release the FFmpeg worker and its WASM memory after each operation.
+
+### Fixed
+
+- Preserve installed archives when installer preparation or replacement fails, using a completed temporary file.
+- Reject malformed client-protocol escapes with the existing not-found response.
+- Validate settings JSON and IPC roots, keep saved files intact after write failures and preserve sync conflict checks.
+- Validate CSP permission fields and recheck saved domain ownership after concurrent confirmations.
+- Require an explicit reaction input when an automation has several possible preceding messages.
+
+- Capture all dropped files before browser drag access expires, and prepare one automatic ZIP upload at a time before allocating input bytes.
+
+- Keep KeywordNotify configuration editable while disabled, reject stopped startup and release retained message records and menu callbacks on stop.
+
+- Search the correct DM or guild endpoint for LastActive, select the actual author/channel hit and reject stale navigation and retained stopped actions.
+
+- Measure completed message fetches, publish timing changes to the current channel and clear pending timing on failures and lifecycle changes.
+
+- Update hidden servers when a saved set changes without changing size, and refresh the hidden count when joined guilds change.
+
+- Update vulnerable fast-uri, brace-expansion, Moment and DOMPurify dependencies.
+- Prevent duplicate declarative plugin registrations and release manager-owned handlers even when a plugin stop callback fails.
+- Preserve server list component state when neighboring registrations or priorities change.
+- Prevent cloud sync feedback from changing the notification log and scheduling another upload.
+- Ignore Roblox process results from a stopped plugin run or a previous account.
+- Advance past oversized automation log lines instead of rereading the same 4 MiB chunk indefinitely.
+- Ignore malformed browser startup metadata and CSS URLs outside the packaged extension stylesheet.
+- Cancel Animalese sound downloads on stop and quality changes, and prevent pending messages from restarting stopped audio.
+- Retry failed ChannelTabs fallback loads and keep badge subscriptions current when channels or accounts change.
+- Prevent late command palette startup from registering after stop, preserve edits made during hydration, and release preview URLs without waiting for image decoding.
+- Save local guild icons atomically, reject stale pickers and writes after stop, and retain the MIME type of images identified by extension.
+- Cancel the entire clip upload when stopped or closed, keep cancellation scoped to its modal, reject account changes before later sends, and release unused picker tokens.
+- Stop Windows release and build checks on the first failed native command and report failed source-channel updates immediately.
+- Preserve expanded editor component identity when a parent supplies a new render callback.
+- Remove nested switch labels while preserving row activation, keyboard toggling and accessible names.
+- Keep incomplete numeric setting edits visible without saving invalid values, and preserve exact bigint input without floating point stepping.
+- Cancel server asset exports on stop or account connection changes, enforce a 100 MiB total and two minute deadline, and reject failed downloads before archiving.
+- Filter ignored call events before Discord stores run, remove updates dispatched during rendering and read each channel's live call for manual dismissal.
+- Remove Orbolay readiness polling, keep socket callbacks scoped to their connection and account, and validate local commands.
+- Prevent keyboard sound setting changes from creating audio players after the plugin stops.
+- Avoid per-emoji settings reads and duplicate channel lookups when adding a Husk reaction, preserve the last matching emoji and handle failed requests.
+- Keep HomeTyping subscribed to account and private-channel changes, and reapply Nitro upsell overrides for every premium tier on reconnect.
+- Subscribe contributor cards only to their displayed enable flags, keep their user profile selector current and handle failed profile lookups.
+- Stop closed or changed plugin modals from appending stale authors or creating fallback users after a lookup finishes.
+- Keep QR confirmation timers across rerenders, cancel partial holds on release or close, prevent duplicate submissions and retain successful login state during cleanup.
+- Own QR image decoding, preview delays and handshakes per scan, release image URLs, reject stale account results and support keyboard confirmation holds.
+- Bound favorite-file metadata to 64 KiB, stop decompression in bounded chunks and validate saved attachment fields and destinations.
+- Bound browser favorite-file downloads, remove their extra ArrayBuffer copy and prevent pending uploads from sending after an account change or plugin stop.
+- Validate local clip metadata, cap its JSON at 1 MiB, remove temporary directories after failed writes, and retain failed cleanup tokens for retry.
+
 ## 3.1.1.0 - 2026-09-29 (Nightly)
 
 ### Fixed

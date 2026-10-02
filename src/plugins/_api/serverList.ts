@@ -21,7 +21,6 @@ import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "ServerListAPI",
-    required: true,
     authors: [Devs.kemo],
     description: "Api required for plugins that modify the server list",
     patches: [

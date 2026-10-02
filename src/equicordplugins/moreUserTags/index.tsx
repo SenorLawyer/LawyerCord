@@ -142,7 +142,7 @@ export default definePlugin({
     }: {
         message?: Message,
         user?: User,
-        channel?: Channel & { isForumPost(): boolean; isMediaPost(): boolean; },
+        channel?: Channel,
         channelId?: string;
         isChat?: boolean;
     }): number | null {
@@ -152,10 +152,12 @@ export default definePlugin({
         if (isChat && user.id === "1") return null;
         if (user.bot && settings.dontShowForBots) return null;
 
-        channel ??= ChannelStore.getChannel(channelId!) as any;
+        channel ??= channelId ? ChannelStore.getChannel(channelId) : undefined;
         if (!channel) return null;
 
-        const perms = this.getPermissions(user, channel);
+        const guild = GuildStore.getGuild(channel.guild_id);
+        const isOwner = guild?.ownerId === user.id;
+        let permissions: bigint | undefined;
 
         for (const tag of tags) {
             if (isChat && !settings.tagSettings[tag.name]?.showInChat)
@@ -167,36 +169,23 @@ export default definePlugin({
             // avoid adding other tags because the owner will always match the condition for them
             if (
                 (tag.name !== "OWNER" &&
-                    GuildStore.getGuild(channel?.guild_id)?.ownerId ===
-                    user.id &&
+                    isOwner &&
                     isChat &&
                     !settings.tagSettings.OWNER.showInChat) ||
-                (GuildStore.getGuild(channel?.guild_id)?.ownerId ===
-                    user.id &&
+                (isOwner &&
                     !isChat &&
                     !settings.tagSettings.OWNER.showInNotChat)
             )
                 continue;
 
-            if ("permissions" in tag ?
-                tag.permissions.some(perm => perms.includes(perm)) :
-                tag.condition(message!, user, channel)) {
+            if ("permissions" in tag) {
+                const bits = permissions ??= guild ? computePermissions({ user, context: guild, overwrites: channel.permissionOverwrites }) : 0n;
+                if (!tag.permissions.some(perm => (bits & PermissionsBits[perm]) !== 0n)) continue;
+            } else if (!tag.condition(message, user, channel)) continue;
 
-                return this.localTags[tag.name];
-            }
+            return this.localTags[tag.name];
         }
 
         return null;
-    },
-    getPermissions(user: User, channel: Channel): string[] {
-        const guild = GuildStore.getGuild(channel?.guild_id);
-        if (!guild) return [];
-
-        const permissions = computePermissions({ user, context: guild, overwrites: channel.permissionOverwrites });
-        return Object.entries(PermissionsBits)
-            .map(([perm, permInt]) =>
-                permissions & permInt ? perm : ""
-            )
-            .filter(Boolean);
     },
 });

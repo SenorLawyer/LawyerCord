@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { isQuestSessionCurrent } from "../state";
 import { fetchAndAlertQuests } from "../utils/fetching";
 import { getQuestifySettings } from "./access";
 
@@ -38,7 +39,7 @@ export function autoFetchCompatible(): boolean {
 }
 
 export function startAutoFetchingQuests(force: boolean = false): void {
-    if (!autoFetchCompatible()) {
+    if (!isQuestSessionCurrent() || !autoFetchCompatible()) {
         stopAutoFetchingQuests();
 
         return;

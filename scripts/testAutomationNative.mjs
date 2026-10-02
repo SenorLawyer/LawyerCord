@@ -14,7 +14,9 @@ let reads = 0;
 let processes = 0;
 let logBytes = Buffer.alloc(0);
 let readLimit = Infinity;
-let bytesRequested = 0;
+const scannedFolders = [];
+let codexFolder;
+let codexNames = [];
 const result = await build({
     entryPoints: ["src/equicordplugins/automationCore.desktop/native.ts"], bundle: true, write: false, platform: "node", format: "cjs",
     external: ["electron"],
@@ -31,14 +33,11 @@ const globals = {
     require: name => {
         if (name === "electron") return { safeStorage: {}, shell: {} };
         if (name === "fs/promises") return {
-            readdir: async () => { reads++; return []; },
+            readdir: async path => { reads++; scannedFolders.push(path); return path === codexFolder ? codexNames : []; },
             stat: async () => { reads++; throw Object.assign(new Error("Missing test file"), { code: "ENOENT" }); },
             open: async () => ({
                 stat: async () => ({ size: logBytes.length }),
-                read: async (buffer, offset, length, position) => {
-                    bytesRequested += length;
-                    return { bytesRead: logBytes.copy(buffer, offset, position, position + Math.min(length, readLimit)) };
-                },
+                read: async (buffer, offset, length, position) => ({ bytesRead: logBytes.copy(buffer, offset, position, position + Math.min(length, readLimit)) }),
                 close: async () => {}
             })
         };
@@ -46,7 +45,7 @@ const globals = {
         return require(name);
     },
 };
-const { readAppended, readCodexHeader, completionInput, READ_CAP } = runInNewContext(result.outputFiles[0].text + "\n({ readAppended, readCodexHeader, completionInput, READ_CAP });", globals);
+const { readAppended, completionInput } = runInNewContext(result.outputFiles[0].text + "\n({ readAppended, completionInput });", globals);
 const api = globals.module.exports;
 await api.pollSystemEvents({}, 0, []);
 assert.equal(reads, 0);
@@ -83,64 +82,38 @@ assert.equal(chunk.lines.filter(Boolean).join("\n"), "reset");
 assert.equal(chunk.offset, logBytes.length);
 console.log("Incremental log reads retain partial lines and UTF-8 bytes across short reads and truncation.");
 
-const completion = JSON.stringify({ type: "event_msg", payload: { type: "task_complete", turn_id: "fixture", last_agent_message: "Done" } });
-logBytes = Buffer.from("x".repeat(READ_CAP * 2 + 50) + "\n" + completion + "\n");
-bytesRequested = 0;
-chunk = { lines: [], offset: 0 };
-for (let poll = 0; poll < 3; poll++) {
-    const previous = chunk.offset;
-    chunk = await readAppended("fixture", chunk.offset, chunk.skipping);
-    assert.ok(chunk.offset > previous, "Oversized lines must advance the cursor.");
-}
-assert.equal(chunk.lines.filter(Boolean).join("\n"), completion);
+const cap = 4 * 1024 * 1024;
+logBytes = Buffer.alloc(cap + 17, 0x78);
+chunk = await readAppended("fixture", 0);
+assert.equal(chunk.offset, cap, "An oversized line must advance rather than reread the same chunk every poll.");
+assert.equal(chunk.discarding, true);
+chunk = await readAppended("fixture", chunk.offset, chunk.discarding);
 assert.equal(chunk.offset, logBytes.length);
-assert.equal(bytesRequested, logBytes.length);
-console.log(`Oversized line skipped in three polls with ${bytesRequested} bytes read and no repeated prefix.`);
-
-logBytes = Buffer.alloc(READ_CAP, 120);
-chunk = await readAppended("fixture", 0);
-assert.equal(chunk.skipping, true);
-chunk = await readAppended("fixture", chunk.offset, chunk.skipping);
-assert.equal(chunk.skipping, true);
-logBytes = Buffer.concat([logBytes, Buffer.from("tail\n" + completion + "\n")]);
-chunk = await readAppended("fixture", chunk.offset, chunk.skipping);
-assert.equal(chunk.lines.filter(Boolean).join("\n"), completion);
-logBytes = Buffer.alloc(READ_CAP, 120);
-chunk = await readAppended("fixture", 0);
+assert.equal(chunk.discarding, true);
+const boundary = '{"type":"event_msg","payload":{"type":"task_started","turn_id":"later"}}';
+logBytes = Buffer.concat([logBytes, Buffer.from(`\n${boundary}\npartial 😀`)]);
+chunk = await readAppended("fixture", chunk.offset, chunk.discarding);
+assert.equal(chunk.lines.filter(Boolean).join("\n"), boundary);
+assert.equal(chunk.discarding, false);
+logBytes = Buffer.concat([logBytes, Buffer.from("\n")]);
+chunk = await readAppended("fixture", chunk.offset, chunk.discarding);
+assert.equal(chunk.lines.filter(Boolean).join("\n"), "partial 😀");
 logBytes = Buffer.from("reset\n");
-chunk = await readAppended("fixture", chunk.offset, chunk.skipping);
+chunk = await readAppended("fixture", cap, true);
 assert.equal(chunk.lines.filter(Boolean).join("\n"), "reset");
+assert.equal(chunk.discarding, false);
+console.log("Oversized log lines are skipped across polls without hiding subsequent events or ordinary partial lines.");
 
-const header = JSON.stringify({ type: "session_meta", payload: { id: "fixture", cwd: "project😀" } });
-logBytes = Buffer.from(header + "\n" + "ignored\n".repeat(700000));
-bytesRequested = 0;
-assert.equal((await readCodexHeader("fixture")).cwd, "project😀");
-assert.ok(bytesRequested <= 16 * 1024, `Header requested ${bytesRequested} bytes.`);
-console.log(`Session header requested ${bytesRequested} bytes from a ${logBytes.length} byte file.`);
-readLimit = 7;
-assert.equal((await readCodexHeader("fixture")).sessionId, "fixture");
-readLimit = Infinity;
-const largeHeader = JSON.stringify({ type: "session_meta", payload: { id: "large", cwd: "project😀", base_instructions: "Instructions. ".repeat(5000) } });
-logBytes = Buffer.from(largeHeader + "\n" + "ignored\n".repeat(700000));
-bytesRequested = 0;
-assert.equal((await readCodexHeader("fixture"))?.sessionId, "large");
-assert.equal(bytesRequested, Math.ceil(Buffer.byteLength(largeHeader + "\n") / (16 * 1024)) * 16 * 1024);
-console.log(`Large session header recovered with ${bytesRequested} bytes requested in 16 KiB chunks.`);
-const cappedPayload = { id: "capped", cwd: "project", base_instructions: "" };
-const headerOverhead = Buffer.byteLength(JSON.stringify({ type: "session_meta", payload: cappedPayload }) + "\n");
-cappedPayload.base_instructions = "x".repeat(READ_CAP - headerOverhead);
-logBytes = Buffer.from(JSON.stringify({ type: "session_meta", payload: cappedPayload }) + "\n");
-bytesRequested = 0;
-assert.equal((await readCodexHeader("fixture"))?.sessionId, "capped");
-assert.equal(bytesRequested, READ_CAP);
-logBytes = Buffer.from("ignored\nignored\n" + header + "\n");
-assert.equal((await readCodexHeader("fixture")).sessionId, "fixture");
-logBytes = Buffer.from("ignored\nignored\nignored\n" + header + "\n");
-assert.equal(await readCodexHeader("fixture"), undefined);
-logBytes = Buffer.alloc(READ_CAP, 120);
-bytesRequested = 0;
-assert.equal(await readCodexHeader("fixture"), undefined);
-assert.equal(bytesRequested, READ_CAP);
+codexFolder = scannedFolders[0];
+codexNames = ["fixture.jsonl"];
+logBytes = Buffer.alloc(cap + 17, 0x78);
+const beforeOversized = await api.pollSystemEvents({}, 0, ["codex-start"]);
+assert.equal(beforeOversized.events.length, 0);
+logBytes = Buffer.concat([logBytes, Buffer.from(`\n${boundary}\n`)]);
+const afterOversized = await api.pollSystemEvents({}, beforeOversized.cursor, ["codex-start"]);
+assert.equal(afterOversized.events.length, 1, "Codex polling must retain its discard position and reach the later turn.");
+assert.equal(afterOversized.events[0].codex.turnId, "later");
+assert.equal((await api.pollSystemEvents({}, afterOversized.cursor, ["codex-start"])).events.length, 0);
 
 const input = { requestId: "fixture", timeoutSeconds: 30, messages: [], model: "vendor/model", systemPrompt: "", prompt: "Hello", maxTokens: 100, temperature: 0.2, json: false };
 const cyclic = {};

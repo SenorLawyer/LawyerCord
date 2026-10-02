@@ -17,7 +17,7 @@ export type ITag = {
 } & ({
     permissions: Permissions[];
 } | {
-    condition?(message: Message | null, user: User, channel: Channel): boolean;
+    condition(message: Message | undefined, user: User, channel: Channel): boolean;
 });
 
 export interface TagSetting {

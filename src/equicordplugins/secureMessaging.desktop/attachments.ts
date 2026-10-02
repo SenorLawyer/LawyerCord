@@ -110,7 +110,7 @@ function validateStickers(stickers: SecureStickerItem[]): void {
     }
 }
 
-function concatBytes(...values: Uint8Array[]): Uint8Array {
+function concatBytes(...values: Uint8Array[]): Uint8Array<ArrayBuffer> {
     const result = new Uint8Array(values.reduce((total, value) => total + value.byteLength, 0));
     let offset = 0;
     for (const value of values) {
@@ -296,17 +296,20 @@ export async function encryptAttachmentBytes(input: {
     if (input.data.byteLength !== input.metadata.size) throw new Error("Attachment byte length does not match its metadata");
     const metadataBytes = new TextEncoder().encode(JSON.stringify(canonicalMetadata(input.metadata)));
     if (metadataBytes.byteLength > MAX_ATTACHMENT_METADATA_BYTES) throw new Error("Attachment metadata is too large");
-    const plaintext = concatBytes(uint32(metadataBytes.byteLength), metadataBytes, input.data);
     const aad = attachmentAad(input.channelId, input.senderUserId, input.bundleId, input.index, input.count);
     const { key, nonce } = await attachmentKeyAndNonce(input.masterKey, input.bundleId, aad);
-    const encrypted = await crypto.subtle.encrypt({
-        name: "AES-GCM",
-        iv: cryptoBytes(nonce),
-        additionalData: cryptoBytes(aad),
-        tagLength: 128,
-    }, key, cryptoBytes(plaintext));
-    plaintext.fill(0);
-    return new Uint8Array(encrypted);
+    const plaintext = concatBytes(uint32(metadataBytes.byteLength), metadataBytes, input.data);
+    try {
+        const encrypted = await crypto.subtle.encrypt({
+            name: "AES-GCM",
+            iv: cryptoBytes(nonce),
+            additionalData: cryptoBytes(aad),
+            tagLength: 128,
+        }, key, plaintext.buffer);
+        return new Uint8Array(encrypted);
+    } finally {
+        plaintext.fill(0);
+    }
 }
 
 export async function decryptAttachmentBytes(input: {

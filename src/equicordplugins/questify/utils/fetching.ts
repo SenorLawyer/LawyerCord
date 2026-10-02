@@ -15,33 +15,17 @@ import { NavigationRouter } from "@webpack/common/utils";
 
 import { getQuestifySettings } from "../settings/access";
 import { questIsIgnored } from "../settings/ignoredQuests";
+import { isQuestSessionCurrent, questSession } from "../state";
 import { getNewQuests, normalizeQuestName, type QuestIncludedTypes, questMatchesIncludedTypes } from "./filtering";
 import { QL } from "./logging";
 import { QUEST_PAGE } from "./ui";
 
 const QuestifyNative = VencordNative?.pluginHelpers?.Questify as PluginNative<typeof import("../native")> | undefined;
 
-export function snakeToCamel(obj: any): any {
-    if (Array.isArray(obj)) {
-        return obj.map(snakeToCamel);
-    }
-
-    if (obj && typeof obj === "object") {
-        return Object.fromEntries(
-            Object.entries(obj).map(([key, value]) => [
-                key.replace(/_([a-z])/g, (_, c) => c.toUpperCase()),
-                snakeToCamel(value),
-            ]),
-        );
-    }
-
-    return obj;
-}
-
 export const fetchAndDispatchQuests = findByCodeLazy("QUESTS_FETCH_CURRENT_QUESTS_BEGIN");
 const parseQuestConfig = findByCodeLazy("config).with({config_version:");
 const formatQuestData = findByCodeLazy("config),userStatus:null==");
-let fetchAndAlertQuestsPromise: Promise<Quest[] | null> | undefined;
+let pendingFetch: { session: typeof questSession; promise: Promise<Quest[] | null>; } | undefined;
 
 async function fetchQuestById(questId: string): Promise<Quest | null> {
     try {
@@ -62,15 +46,17 @@ async function fetchQuestById(questId: string): Promise<Quest | null> {
     }
 }
 
-async function fetchExcludedQuestConfigs(questIds: string[]): Promise<Quest[]> {
+async function fetchExcludedQuestConfigs(questIds: string[], session: typeof questSession): Promise<Quest[]> {
     const quests: Quest[] = [];
 
     for (const [index, questId] of questIds.entries()) {
         if (index > 0) {
             await sleep(1000);
         }
+        if (!isQuestSessionCurrent(session)) break;
 
         const quest = await fetchQuestById(questId);
+        if (!isQuestSessionCurrent(session)) break;
 
         if (quest) {
             quests.push(quest);
@@ -118,7 +104,7 @@ function getQuestNotificationText(quests: Quest[], excluded: boolean): { title: 
     };
 }
 
-function notifyNewQuests(quests: Quest[], excluded: boolean): void {
+function notifyNewQuests(quests: Quest[], excluded: boolean, session: typeof questSession): void {
     if (quests.length === 0) return;
 
     const firstQuest = quests[0];
@@ -131,11 +117,11 @@ function notifyNewQuests(quests: Quest[], excluded: boolean): void {
         title,
         body,
         dismissOnClick: true,
-        onClick
+        onClick: onClick ? () => { if (isQuestSessionCurrent(session)) void onClick(); } : undefined
     });
 }
 
-async function doFetchAndAlertQuests(): Promise<Quest[] | null> {
+async function doFetchAndAlertQuests(session: typeof questSession): Promise<Quest[] | null> {
     const settings = getQuestifySettings();
     const alertSound = settings.newQuestAlertSound;
     const alertVolume = settings.newQuestAlertVolume;
@@ -147,11 +133,13 @@ async function doFetchAndAlertQuests(): Promise<Quest[] | null> {
     const includedTypes = settings.questButtonIncludedTypes as QuestIncludedTypes;
 
     await fetchAndDispatchQuests();
+    if (!isQuestSessionCurrent(session)) return null;
     await sleep(1000);
+    if (!isQuestSessionCurrent(session)) return null;
 
     const nextQuests = Array.from(QuestStore.quests.values());
 
-    if (!nextQuests || currentQuests.length === 0) {
+    if (currentQuests.length === 0) {
         return nextQuests;
     }
 
@@ -166,49 +154,54 @@ async function doFetchAndAlertQuests(): Promise<Quest[] | null> {
         return nextQuests;
     }
 
-    const newExcludedQuests = newExcludedQuestIds.length > 0 ? await fetchExcludedQuestConfigs(newExcludedQuestIds) : [];
+    const newExcludedQuests = newExcludedQuestIds.length > 0 ? await fetchExcludedQuestConfigs(newExcludedQuestIds, session) : [];
+    if (!isQuestSessionCurrent(session)) return null;
     const newIncludedQuests = newQuests.filter(quest => questMatchesIncludedTypes(quest, includedTypes) && !questIsIgnored(quest.id));
     const newIncludedExcludedQuests = newExcludedQuests.filter(quest => questMatchesIncludedTypes(quest, includedTypes) && !questIsIgnored(quest.id));
-    const shouldAlert = Boolean(alertSound) && newIncludedQuests.length > 0;
-    const shouldAlertExcluded = Boolean(excludedAlertSound) && newIncludedExcludedQuests.length > 0;
     const shouldNotify = settings.notifyOnNewQuests && newIncludedQuests.length > 0;
     const shouldNotifyExcluded = settings.notifyOnNewExcludedQuests && newIncludedExcludedQuests.length > 0;
 
-    if (shouldAlert) {
+    if (alertSound && newIncludedQuests.length > 0) {
         playAudio(
-            alertSound!,
+            alertSound,
             { volume: Math.max(0, Math.min(100, alertVolume)) }
         );
     }
 
-    if (shouldAlertExcluded) {
+    if (excludedAlertSound && newIncludedExcludedQuests.length > 0) {
         playAudio(
-            excludedAlertSound!,
+            excludedAlertSound,
             { volume: Math.max(0, Math.min(100, excludedAlertVolume)) }
         );
     }
 
     if (shouldNotify) {
-        notifyNewQuests(newIncludedQuests, false);
+        notifyNewQuests(newIncludedQuests, false, session);
     }
 
     if (shouldNotifyExcluded) {
-        notifyNewQuests(newIncludedExcludedQuests, true);
+        notifyNewQuests(newIncludedExcludedQuests, true, session);
     }
 
     return nextQuests;
 }
 
 export async function fetchAndAlertQuests(_source: string): Promise<Quest[] | null> {
-    if (fetchAndAlertQuestsPromise) {
-        return fetchAndAlertQuestsPromise;
+    const session = questSession;
+    if (!isQuestSessionCurrent(session)) return null;
+    if (pendingFetch && pendingFetch.session === session) {
+        return pendingFetch.promise;
     }
 
-    fetchAndAlertQuestsPromise = doFetchAndAlertQuests();
+    const request = { session, promise: doFetchAndAlertQuests(session).catch(error => {
+        if (isQuestSessionCurrent(session)) QL.warn("Could not fetch quests", error);
+        return null;
+    }) };
+    pendingFetch = request;
 
     try {
-        return await fetchAndAlertQuestsPromise;
+        return await request.promise;
     } finally {
-        fetchAndAlertQuestsPromise = undefined;
+        if (pendingFetch === request) pendingFetch = undefined;
     }
 }

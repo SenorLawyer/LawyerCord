@@ -106,27 +106,13 @@ function ReactionUsers({ message, emoji, type }: ReactionProps) {
     const { avatarClick } = settings.use(AVATAR_SETTINGS);
     const scroller = React.useContext(getScrollerContext());
     const key = `${message.id}:${emoji.name}:${emoji.id ?? ""}:${type}`;
-    const { userIds, guildId, generation, userId } = useStateFromStores([MessageReactionsStore, UserStore, ChannelStore], () => {
-        const userIds = Array.from(reactions[key]?.users.keys() ?? []);
-        const guildId = ChannelStore.getChannel(message.channel_id)?.guild_id;
-        return {
-            userIds,
-            guildId,
-            generation: fetchGeneration,
-            userId: UserStore.getCurrentUser()?.id,
-            users: userIds.map(id => {
-                const user = UserStore.getUser(id);
-                return user && {
-                    id: user.id,
-                    username: user.username,
-                    globalName: user.globalName,
-                    discriminator: user.discriminator,
-                    avatar: user.avatar,
-                    guildAvatar: guildId ? user.guildMemberAvatars?.[guildId] : undefined
-                };
-            })
-        };
-    }, [key, message.channel_id], lodash.isEqual);
+    const { userIds, guildId, generation, userId } = useStateFromStores([MessageReactionsStore, UserStore, ChannelStore], () => ({
+        userIds: Array.from(reactions[key]?.users.keys() ?? []),
+        guildId: ChannelStore.getChannel(message.channel_id)?.guild_id,
+        generation: fetchGeneration,
+        userId: UserStore.getCurrentUser()?.id,
+        userVersion: UserStore.getUserStoreVersion()
+    }), [key, message.channel_id], lodash.isEqual);
 
     useLayoutEffect(() => { // bc need to prevent autoscrolling
         if (scroller && scroller.scrollCounter > 0) {

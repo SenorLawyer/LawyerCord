@@ -133,7 +133,7 @@ export default definePlugin({
         },
     ],
     settings,
-    useStore: () => { useStateFromStores([HiddenServersStore], () => HiddenServersStore.hiddenGuilds, undefined, (old, newer) => old.size === newer.size); },
+    useStore: () => { useStateFromStores([HiddenServersStore], () => HiddenServersStore.hiddenGuilds, undefined, (old, newer) => old === newer); },
 
     async start() {
         if (settings.store.showIndicator) {
@@ -152,7 +152,7 @@ export default definePlugin({
             [HiddenServersStore],
             () => HiddenServersStore.hiddenGuilds,
             undefined,
-            (old, newer) => old.size === newer.size
+            (old, newer) => old === newer
         );
 
         return guilds.flatMap(guild => {

@@ -13,7 +13,7 @@ import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { Channel, User } from "@vencord/discord-types";
 import { extractAndLoadChunksLazy } from "@webpack";
-import { ChannelStore, Menu, openModal,SelectedChannelStore } from "@webpack/common";
+import { Menu, openModal } from "@webpack/common";
 
 import { SetColorModal } from "./SetColorModal";
 
@@ -22,6 +22,12 @@ export let colors: Record<string, string> = {};
 let colorsLoaded = false;
 let colorsLoad: Promise<void> | null = null;
 let colorsGeneration = 0;
+
+interface MessageColorContext {
+    message?: { author?: Pick<User, "id"> | null; channel_id?: string; };
+    author?: { colorString?: string; } | null;
+    channel?: Pick<Channel, "guild_id"> | null;
+}
 
 function isColorMap(value: unknown): value is Record<string, string> {
     return value != null && typeof value === "object" && !Array.isArray(value);
@@ -186,38 +192,29 @@ export default definePlugin({
         },
     ],
 
-    wrapMessageColorProps(colorProps: { colorString: string, colorStrings?: Record<"primaryColor" | "secondaryColor" | "tertiaryColor", string>; }, context: any) {
-        try {
-            const channelId = SelectedChannelStore.getChannelId();
-            const channel = ChannelStore.getChannel(channelId);
-            const isDM = channel.isDM() || channel.isMultiUserDM();
-            const colorString = this.colorIfServer(context);
-            if (colorString === colorProps.colorString) return colorProps;
-            if (!settings.store.colorInServers && !isDM) return colorProps;
+    wrapMessageColorProps(colorProps: { colorString: string, colorStrings?: Record<"primaryColor" | "secondaryColor" | "tertiaryColor", string>; }, context: MessageColorContext) {
+        const colorString = this.colorIfServer(context);
+        if (colorString === colorProps.colorString) return colorProps;
 
-            return {
-                ...colorProps,
-                colorString,
-                colorStrings: colorProps.colorStrings && {
-                    primaryColor: colorString,
-                    secondaryColor: undefined,
-                    tertiaryColor: undefined
-                }
-            };
-        } catch (e) {
-            console.error("Failed to calculate message color strings:", e);
-            return colorProps;
-        }
+        return {
+            ...colorProps,
+            colorString,
+            colorStrings: colorProps.colorStrings && {
+                primaryColor: colorString,
+                secondaryColor: undefined,
+                tertiaryColor: undefined
+            }
+        };
     },
 
-    colorDMList(context: any): string | undefined {
+    colorDMList(context: { user?: Pick<User, "id"> | null; channel?: Pick<Channel, "id"> | null; }): string | undefined {
         const id = context?.user?.id ?? context?.channel?.id;
         const colorString = getCustomColorString(id, true);
 
         return colorString ?? "inherit";
     },
 
-    colorIfServer(context: any): string | undefined {
+    colorIfServer(context: MessageColorContext): string | undefined {
         const userId = context?.message?.author?.id;
         const colorString = context?.author?.colorString;
 
@@ -229,7 +226,7 @@ export default definePlugin({
         return color ?? colorString ?? undefined;
     },
 
-    colorInReplyingTo(a: any) {
+    colorInReplyingTo(a: { reply: { message: { author: Pick<User, "id">; }; }; }) {
         const { id } = a.reply.message.author;
         return getCustomColorString(id, true);
     },

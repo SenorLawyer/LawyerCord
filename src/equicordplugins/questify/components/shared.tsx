@@ -9,7 +9,7 @@ import { Heading } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
 import { findComponentByCodeLazy } from "@webpack";
 import { ColorPicker, Slider } from "@webpack/common";
-import type { ComponentProps, ComponentType, JSX, ReactNode } from "react";
+import type { ComponentProps, JSX, ReactNode } from "react";
 
 import { q } from "../utils/ui";
 
@@ -175,12 +175,6 @@ type ColorPickerWithOnCloseProps = ComponentProps<typeof ColorPicker> & {
     onClose?: () => void;
 };
 
-function ColorPickerWithOnClose(props: ColorPickerWithOnCloseProps): JSX.Element {
-    const LiveColorPicker = ColorPicker as ComponentType<ColorPickerWithOnCloseProps>;
-
-    return <LiveColorPicker {...props} />;
-}
-
 export interface SettingsColorPickerProps extends ColorPickerWithOnCloseProps {
     className?: string | string[];
     label?: ReactNode;
@@ -197,7 +191,7 @@ export function SettingsColorPicker({
         <>
             {label != null && <SettingsParagraph className={withDimmedClass(labelClassName, !!props.disabled)}>{label}</SettingsParagraph>}
             <div className={q("settings-color-picker", className)}>
-                <ColorPickerWithOnClose {...props} />
+                <ColorPicker {...props} />
             </div>
         </>
     );

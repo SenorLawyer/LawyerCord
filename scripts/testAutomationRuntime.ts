@@ -12,7 +12,7 @@ import { compileTriggers, matchTriggers, type TriggerEvent } from "../src/compon
 import { type Automation, type AutomationBlock, createAutomation, createAutomationBlock, createAutomationFile } from "../src/components/settings/tabs/automations/model";
 import { createRunQueue } from "../src/components/settings/tabs/automations/runQueue";
 import { abortable, delay, executeWorkflow, type RunEvent, type RuntimeEnvironment, updateSavedValue } from "../src/components/settings/tabs/automations/runtime";
-import { inActiveHours, nextOccurrence, schedulePreview, validateSchedule } from "../src/components/settings/tabs/automations/scheduling";
+import { nextOccurrence, schedulePreview, validateSchedule } from "../src/components/settings/tabs/automations/scheduling";
 import { readPath } from "../src/components/settings/tabs/automations/values";
 import { duplicateWorkflows, migrateWorkflow, parseWorkflowFile, validateWorkflow } from "../src/components/settings/tabs/automations/workflow";
 
@@ -173,6 +173,15 @@ async function main() {
     assert.throws(() => parseWorkflowFile({ ...file, automations: [{ ...waiting, blocks: [{ ...wait, config: { cases: "wrong" } }] }] }), /Switch routes/);
     assert.ok(validateWorkflow(workflow({ ...normal, config: { jsonDrafts: { input: "{" } } })).some(issue => issue.message.includes("invalid JSON")));
     assert.ok(validateWorkflow(workflow({ ...normal, config: { variable: "blocks" } })).some(issue => issue.message.includes("reserved")));
+    const leftMessage = createAutomationBlock("send-message");
+    const rightMessage = createAutomationBlock("send-message");
+    const react = createAutomationBlock("react-message");
+    leftMessage.next = react.id;
+    rightMessage.next = react.id;
+    const ambiguousReaction = workflow(leftMessage, rightMessage, react);
+    assert.ok(validateWorkflow(ambiguousReaction).some(issue => issue.blockId === react.id && issue.message.includes("Several messages")));
+    react.config.input = { kind: "reference", value: `blocks.${leftMessage.id}.value` };
+    assert.ok(!validateWorkflow(ambiguousReaction).some(issue => issue.message.includes("Several messages")));
     const isolated = workflow({ ...normal, config: { variable: "result", input: { kind: "reference", value: "input" } } });
     const isolatedEnv = environment([isolated]);
     const parallel = await Promise.all([1, 2, 3].map(input => executeWorkflow(isolated, { input }, isolatedEnv.env)));
@@ -214,42 +223,35 @@ async function main() {
     scheduled.schedule.weekdays = [1];
     assert.equal(new Date(nextOccurrence(scheduled, Date.parse("2026-08-31T08:00:00Z"))).toISOString(), "2026-09-07T07:00:00.000Z");
 
+    scheduled.schedule = { interval: 1, unit: "minutes", startAt: Date.parse("2026-01-01T00:00:00Z"), timezone: "UTC", activeStart: "23:59", activeEnd: "00:00" };
+    assert.equal(nextOccurrence(scheduled, scheduled.schedule.startAt), Date.parse("2026-01-01T23:59:00Z"));
+    assert.equal(nextOccurrence(scheduled, Date.parse("2026-01-01T23:59:00Z")), Date.parse("2026-01-02T23:59:00Z"));
+    scheduled.schedule.activeEnd = "23:59";
+    assert.equal(nextOccurrence(scheduled, scheduled.schedule.startAt), scheduled.schedule.startAt + 60_000);
+    scheduled.schedule = { interval: 1, unit: "days", startAt: 0, mode: "cron", timezone: "Europe/Amsterdam", cron: "30 * * * *", activeStart: "02:00", activeEnd: "03:00" };
+    assert.equal(nextOccurrence(scheduled, Date.parse("2026-03-28T23:00:00Z")), Date.parse("2026-03-30T00:30:00Z"));
+    assert.equal(nextOccurrence(scheduled, Date.parse("2026-10-24T22:00:00Z")), Date.parse("2026-10-25T00:30:00Z"));
+
     const initial = { workflow: waiting, past: [], future: [] };
     const edited = editorReducer(initial, { type: "edit", workflow: { ...waiting, name: "Changed" } });
     assert.equal(editorReducer(edited, { type: "undo" }).workflow.name, waiting.name);
     assert.equal(editorReducer(editorReducer(edited, { type: "undo" }), { type: "redo" }).workflow.name, "Changed");
-    scheduled.schedule = { interval: 1, unit: "minutes", startAt: Date.parse("2026-09-29T00:00:00Z"), timezone: "UTC", activeStart: "09:00", activeEnd: "17:00" };
-    const originalFormatter = Intl.DateTimeFormat;
-    let formatters = 0;
-    Intl.DateTimeFormat = new Proxy(originalFormatter, {
-        construct(target, args: ConstructorParameters<typeof Intl.DateTimeFormat>) {
-            formatters++;
-            return new target(...args);
-        },
-    });
-    try {
-        assert.deepEqual(schedulePreview(scheduled, scheduled.schedule.startAt), Array.from({ length: 5 }, (_value, index) => Date.parse("2026-09-29T09:00:00Z") + index * 60_000));
-        assert.ok(formatters <= 6, `Expected at most 6 formatters, created ${formatters}.`);
-        console.log(`Active-hours preview constructed ${formatters} formatters.`);
-    } finally {
-        Intl.DateTimeFormat = originalFormatter;
-    }
-    scheduled.schedule.activeStart = "22:00";
-    scheduled.schedule.activeEnd = "06:00";
-    assert.equal(inActiveHours(scheduled.schedule, Date.parse("2026-09-29T23:00:00Z")), true);
-    assert.equal(inActiveHours(scheduled.schedule, Date.parse("2026-09-29T06:00:00Z")), false);
-    scheduled.schedule.timezone = "Europe/Amsterdam";
-    scheduled.schedule.activeStart = "03:00";
-    scheduled.schedule.activeEnd = "04:00";
-    assert.equal(inActiveHours(scheduled.schedule, Date.parse("2026-03-29T00:59:00Z")), false);
-    assert.equal(inActiveHours(scheduled.schedule, Date.parse("2026-03-29T01:00:00Z")), true);
-    assert.equal(inActiveHours(scheduled.schedule, Date.parse("2026-03-29T02:00:00Z")), false);
-    scheduled.schedule.timezone = "UTC";
-    assert.equal(inActiveHours(scheduled.schedule, Date.parse("2026-03-29T01:00:00Z")), false);
-
     const duplicated = duplicateBlocks(waiting, new Set(waiting.blocks.map(block => block.id)));
     assert.equal(duplicated.workflow.blocks.length, waiting.blocks.length * 2);
     assert.equal(removeBlocks(duplicated.workflow, duplicated.ids).blocks.length, waiting.blocks.length);
+    const selectedBlock = createAutomationBlock("note");
+    const untouchedBlock = createAutomationBlock("note");
+    const sample = { nested: ["original"] };
+    selectedBlock.config.sample = sample;
+    Object.defineProperty(untouchedBlock.config, "sample", { enumerable: true, get() { assert.fail("Duplicating a selection must not clone unrelated block data."); } });
+    const selectedWorkflow = workflow(selectedBlock, untouchedBlock);
+    const selectionCopy = duplicateBlocks(selectedWorkflow, new Set([selectedBlock.id]));
+    assert.equal(selectionCopy.workflow.blocks[1], untouchedBlock);
+    const copiedBlock = selectionCopy.workflow.blocks[2];
+    assert.notEqual(copiedBlock.id, selectedBlock.id);
+    assert.notEqual(copiedBlock.config.sample, sample);
+    sample.nested.push("later");
+    assert.deepEqual(copiedBlock.config.sample, { nested: ["original"] });
     const controller = new AbortController();
     const sleeping = delay(60_000, controller.signal);
     controller.abort();

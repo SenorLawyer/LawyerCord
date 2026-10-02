@@ -124,10 +124,28 @@ func installLatestBuilds() error {
 \tif IsDevInstall {
 \t\treturn nil
 \t}
-\tif err := os.WriteFile(LawyerCordDirectory, embeddedLawyerCordAsar, 0o644); err != nil {
+\ttemporary, err := os.CreateTemp(filepath.Dir(LawyerCordDirectory), ".lawyercord-*.asar")
+\tif err != nil {
 \t\treturn err
 \t}
-\tif err := FixOwnership(LawyerCordDirectory); err != nil {
+\tdefer os.Remove(temporary.Name())
+\tdefer temporary.Close()
+\tif _, err := temporary.Write(embeddedLawyerCordAsar); err != nil {
+\t\treturn err
+\t}
+\tif err := temporary.Chmod(0o644); err != nil {
+\t\treturn err
+\t}
+\tif err := temporary.Sync(); err != nil {
+\t\treturn err
+\t}
+\tif err := temporary.Close(); err != nil {
+\t\treturn err
+\t}
+\tif err := FixOwnership(temporary.Name()); err != nil {
+\t\treturn err
+\t}
+\tif err := os.Rename(temporary.Name(), LawyerCordDirectory); err != nil {
 \t\treturn err
 \t}
 \tInstalledHash = LatestHash

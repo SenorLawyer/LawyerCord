@@ -22,15 +22,15 @@ import { validateIgnoredQuests } from "./settings/ignoredQuests";
 import { rerenderQuests, useQuestRerender } from "./settings/rerender";
 import { disposeRestartTracking, initializeRestartTracking, promptToRestartIfDirty, setRestartDirty } from "./settings/restartTracking";
 import { settings } from "./settings/store";
-import { getSettingsModalOpen, setInitialQuestDataFetched, setSettingsModalOpen } from "./state";
+import { beginQuestSession, endQuestSession, getSettingsModalOpen, isQuestSessionCurrent, questSession, setInitialQuestDataFetched, setSettingsModalOpen } from "./state";
 import managedStyle from "./styles.css?managed";
-import { canOpenDevToolsWindow, fetchAndDispatchQuests, openDevToolsWindow, snakeToCamel } from "./utils/fetching";
+import { canOpenDevToolsWindow, fetchAndDispatchQuests, openDevToolsWindow } from "./utils/fetching";
 import { notifyQuestCompletion, QL } from "./utils/logging";
 import { getQuestEmbedProgress, getQuestPanelOverride, getQuestPanelPercentComplete } from "./utils/questState";
 import { getLastFilterChoices, getLastSortChoice, getQuestTileClasses, getQuestTileStyle, setLastFilterChoices, setLastSortChoice, shouldPreloadQuestAssets, sortQuests } from "./utils/questTiles";
 import { formatLowerBadge, QUEST_PAGE } from "./utils/ui";
 
-let isSwitchingAccount = false;
+let startupGeneration = 0;
 const notifiedCompletedQuests = new Set<string>();
 export const enabledOnStartup = PlainSettings.plugins.Questify?.enabled;
 
@@ -39,23 +39,28 @@ function setOnQuestsPage(force?: boolean): void {
 }
 
 function startPerAccountTasks(source: string): void {
-    const startedAt = Date.now();
+    if (isQuestSessionCurrent()) return;
+    beginQuestSession();
+    if (!isQuestSessionCurrent()) return;
 
     setOnQuestsPage();
     startAutoFetchingQuests();
-    fetchAndDispatchQuests();
+    const session = questSession;
+    Promise.resolve(fetchAndDispatchQuests()).catch(error => {
+        if (isQuestSessionCurrent(session)) QL.warn("Could not fetch quests", error);
+    });
 
-    QL.info(`START_TASKS-${source.toUpperCase()}`, { startedAt });
+    QL.info("Started tasks", source);
 }
 
 function stopPerAccountTasks(source: string): void {
-    const stoppedAt = Date.now();
+    endQuestSession();
 
     setOnQuestsPage();
     stopAutoFetchingQuests();
     notifiedCompletedQuests.clear();
 
-    QL.info(`STOP_TASKS-${source.toUpperCase()}`, { stoppedAt });
+    QL.info("Stopped tasks", source);
 }
 
 export default definePlugin({
@@ -430,24 +435,26 @@ export default definePlugin({
 
         QUESTS_FETCH_CURRENT_QUESTS_SUCCESS(data: { quests: Quest[]; }): void {
             setInitialQuestDataFetched(true);
-            QL.log("QUESTS_FETCH_CURRENT_QUESTS_SUCCESS", data);
             validateIgnoredQuests(data.quests);
         },
 
-        QUESTS_ENROLL_SUCCESS(data: any): void {
-            QL.log("QUESTS_ENROLL_SUCCESS", data);
+        QUESTS_ENROLL_SUCCESS(): void {
             validateIgnoredQuests();
         },
 
-        QUESTS_CLAIM_REWARD_SUCCESS(data: any): void {
-            QL.log("QUESTS_CLAIM_REWARD_SUCCESS", data);
+        QUESTS_CLAIM_REWARD_SUCCESS(): void {
             validateIgnoredQuests();
         },
 
-        QUESTS_USER_STATUS_UPDATE(data: any): void {
-            QL.log("QUESTS_USER_STATUS_UPDATE", data);
-
-            const userStatus = snakeToCamel(data).userStatus as QuestUserStatus | undefined;
+        QUESTS_USER_STATUS_UPDATE(data: {
+            userStatus?: Pick<QuestUserStatus, "questId" | "claimedAt" | "completedAt">;
+            user_status?: { quest_id: string; claimed_at?: string; completed_at?: string; };
+        }): void {
+            const userStatus = data.userStatus ?? (data.user_status && {
+                questId: data.user_status.quest_id,
+                claimedAt: data.user_status.claimed_at,
+                completedAt: data.user_status.completed_at
+            });
             const claimedAt = !!userStatus?.claimedAt;
             const completedRecently = userStatus?.completedAt
                 ? Date.now() - new Date(userStatus.completedAt).getTime() <= 5000
@@ -455,11 +462,11 @@ export default definePlugin({
 
             validateIgnoredQuests();
 
-            if (completedRecently && !claimedAt && !notifiedCompletedQuests.has(userStatus!.questId)) {
-                notifiedCompletedQuests.add(userStatus!.questId);
+            if (userStatus && completedRecently && !claimedAt && !notifiedCompletedQuests.has(userStatus.questId)) {
+                notifiedCompletedQuests.add(userStatus.questId);
 
                 if (getQuestifySettings().notifyOnQuestComplete) {
-                    notifyQuestCompletion(QuestStore.getQuest(userStatus!.questId));
+                    notifyQuestCompletion(QuestStore.getQuest(userStatus.questId));
                 }
 
                 if (getQuestifySettings().questCompletedAlertSound) {
@@ -480,24 +487,16 @@ export default definePlugin({
             promptToRestartIfDirty();
         },
 
-        LOGIN_SUCCESS(): void {
-            if (!isSwitchingAccount || getQuestifySettings().disableQuestsEverything) {
-                return;
-            } else {
-                isSwitchingAccount = false;
-            }
-
+        async LOGIN_SUCCESS(): Promise<void> {
+            const generation = startupGeneration;
+            await onceReady;
+            if (generation !== startupGeneration || getQuestifySettings().disableQuestsEverything) return;
             setInitialQuestDataFetched(false);
             startPerAccountTasks("LOGIN_SUCCESS");
         },
 
-        LOGOUT(data: { isSwitchingAccount?: boolean; }): void {
-            if (!data.isSwitchingAccount) {
-                return;
-            } else {
-                isSwitchingAccount = true;
-            }
-
+        LOGOUT(): void {
+            startupGeneration++;
             setInitialQuestDataFetched(false);
             stopPerAccountTasks("LOGOUT");
         },
@@ -510,6 +509,7 @@ export default definePlugin({
     renderQuestifyButton: ErrorBoundary.wrap(QuestButton, { noop: true }),
 
     start() {
+        const generation = ++startupGeneration;
         if (!enabledOnStartup && PlainSettings.plugins.Questify?.enabled) {
             setRestartDirty(true);
         }
@@ -521,6 +521,7 @@ export default definePlugin({
         }
 
         onceReady.then(() => {
+            if (generation !== startupGeneration) return;
             if (!getQuestifySettings().disableQuestsEverything) {
                 startPerAccountTasks("PLUGIN_START");
             } else {
@@ -530,6 +531,7 @@ export default definePlugin({
     },
 
     stop() {
+        startupGeneration++;
         disposeRestartTracking();
         removeServerListElement(ServerListRenderPosition.Above, this.renderQuestifyButton);
         stopPerAccountTasks("PLUGIN_STOP");

@@ -10,27 +10,21 @@ import { definePluginSettings, migratePluginSetting } from "@api/Settings";
 import { Card } from "@components/Card";
 import { HeadingSecondary, HeadingTertiary } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
-import { debounce } from "@shared/debounce";
 import { EquicordDevs } from "@utils/constants";
+import { Logger } from "@utils/Logger";
 import { Margins } from "@utils/margins";
 import { classes } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
-import { React, TextInput } from "@webpack/common";
+import { lodash, React, TextInput } from "@webpack/common";
 
 interface GoogleFontMetadata {
     family: string;
     displayName: string;
     authors: string[];
-    category?: number;
-    popularity?: number;
-    variants: Array<{
-        axes: Array<{
-            tag: string;
-            min: number;
-            max: number;
-        }>;
-    }>;
+
 }
+
+const logger = new Logger("FontLoader");
 
 const MAX_FONT_SEARCH_CACHE_SIZE = 25;
 const fontSearchCache = new Map<string, GoogleFontMetadata[]>();
@@ -47,7 +41,7 @@ const loadFontStyle = (url: string) => {
     return link;
 };
 
-async function searchGoogleFonts(query: string) {
+async function searchGoogleFonts(query: string, signal: AbortSignal) {
     const normalizedQuery = query.trim();
     if (!normalizedQuery) return [];
 
@@ -58,6 +52,7 @@ async function searchGoogleFonts(query: string) {
     try {
         const response = await fetch("https://fonts.google.com/$rpc/fonts.fe.catalog.actions.metadata.MetadataService/FontSearch", {
             method: "POST",
+            signal,
             headers: {
                 "content-type": "application/json+protobuf",
                 "x-user-agent": "grpc-web-javascript/0.1"
@@ -65,19 +60,16 @@ async function searchGoogleFonts(query: string) {
             body: JSON.stringify([[normalizedQuery, null, null, null, null, null, 1], [5], null, 16])
         });
 
-        const data = await response.json();
-        if (!data?.[1]) return [];
-        const fonts = data[1].map(([_, fontData]: [string, any[]]) => ({
-            family: fontData[0],
-            displayName: fontData[1],
-            authors: fontData[2],
-            category: fontData[3],
-            variants: fontData[6].map((variant: any[]) => ({
-                axes: variant[0].map(([tag, min, max]: [string, number, number]) => ({
-                    tag, min, max
-                }))
-            }))
-        }));
+        if (!response.ok) throw new Error("Font search failed.");
+        const data: unknown = await response.json();
+        if (signal.aborted || !Array.isArray(data) || !Array.isArray(data[1])) return [];
+        const fonts: GoogleFontMetadata[] = data[1].flatMap((entry: unknown) => {
+            if (!Array.isArray(entry) || !Array.isArray(entry[1])) return [];
+            const [family, displayName, authors] = entry[1];
+            if (typeof family !== "string" || typeof displayName !== "string"
+                || !Array.isArray(authors) || !authors.every(author => typeof author === "string")) return [];
+            return [{ family, displayName, authors }];
+        });
 
         fontSearchCache.set(cacheKey, fonts);
         if (fontSearchCache.size > MAX_FONT_SEARCH_CACHE_SIZE) {
@@ -87,7 +79,7 @@ async function searchGoogleFonts(query: string) {
 
         return fonts;
     } catch (err) {
-        console.error("Failed to fetch fonts:", err);
+        if (!signal.aborted) logger.warn("Could not search Google Fonts.", err);
         return [];
     }
 }
@@ -99,7 +91,7 @@ let styleElement: HTMLStyleElement | null = null;
 let fontLinkElement: HTMLLinkElement | null = null;
 let fontLinkUrl: string | null = null;
 
-const applyFont = async (fontFamily: string) => {
+const applyFont = (fontFamily: string) => {
     if (!fontFamily) {
         styleElement?.remove();
         styleElement = null;
@@ -132,7 +124,7 @@ const applyFont = async (fontFamily: string) => {
             }
         `;
     } catch (err) {
-        console.error("Failed to load font:", err);
+        logger.error("Could not apply the selected font.", err);
     }
 };
 
@@ -141,46 +133,35 @@ function GoogleFontSearch({ onSelect }: { onSelect: (font: GoogleFontMetadata) =
     const [results, setResults] = React.useState<GoogleFontMetadata[]>([]);
     const [loading, setLoading] = React.useState(false);
     const previewLinks = React.useRef<HTMLLinkElement[]>([]);
-    const searchGeneration = React.useRef(0);
-    const mounted = React.useRef(true);
-
     const clearPreviewLinks = React.useCallback(() => {
         previewLinks.current.forEach(link => link.remove());
         previewLinks.current = [];
     }, []);
 
-    React.useEffect(() => () => {
-        mounted.current = false;
-        searchGeneration.current++;
-        clearPreviewLinks();
-    }, [clearPreviewLinks]);
-
-    const debouncedSearch = React.useMemo(() => debounce(async (value: string) => {
-        const generation = ++searchGeneration.current;
-        if (!mounted.current) return;
-
-        setLoading(true);
-
-        if (!value) {
+    React.useEffect(() => clearPreviewLinks, [clearPreviewLinks]);
+    React.useEffect(() => {
+        const controller = new AbortController();
+        if (!query.trim()) {
             clearPreviewLinks();
             setResults([]);
             setLoading(false);
             return;
         }
-
-        const fonts = await searchGoogleFonts(value);
-        if (!mounted.current || generation !== searchGeneration.current) return;
-
-        clearPreviewLinks();
-        previewLinks.current = fonts.map(f => preloadFont(f.family));
-        setResults(fonts);
-        setLoading(false);
-    }, 300), [clearPreviewLinks]);
-
-    const handleSearch = (e: string) => {
-        setQuery(e);
-        debouncedSearch(e);
-    };
+        const search = lodash.debounce(async () => {
+            setLoading(true);
+            const fonts = await searchGoogleFonts(query, controller.signal);
+            if (controller.signal.aborted) return;
+            clearPreviewLinks();
+            previewLinks.current = fonts.map(font => preloadFont(font.family));
+            setResults(fonts);
+            setLoading(false);
+        }, 300);
+        search();
+        return () => {
+            search.cancel();
+            controller.abort();
+        };
+    }, [query, clearPreviewLinks]);
 
     return (
         <section>
@@ -189,9 +170,9 @@ function GoogleFontSearch({ onSelect }: { onSelect: (font: GoogleFontMetadata) =
 
             <TextInput
                 value={query}
-                onChange={e => handleSearch(e)}
+                onChange={setQuery}
                 placeholder="Search fonts..."
-                disabled={loading}
+                aria-busy={loading}
             />
 
             {results.length > 0 && (
@@ -254,18 +235,11 @@ export default definePlugin({
     authors: [EquicordDevs.vmohammad],
     settings,
 
-    async start() {
-        const savedFont = settings.store.selectedFont;
-        if (savedFont) {
-            await applyFont(savedFont);
-        }
+    start() {
+        applyFont(settings.store.selectedFont);
     },
 
     stop() {
-        styleElement?.remove();
-        styleElement = null;
-        fontLinkElement?.remove();
-        fontLinkElement = null;
-        fontLinkUrl = null;
+        applyFont("");
     }
 });

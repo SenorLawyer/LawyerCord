@@ -21,7 +21,7 @@ import { settings } from "@plugins/imageZoom";
 import { ELEMENT_ID } from "@plugins/imageZoom/constants";
 import { waitFor } from "@plugins/imageZoom/utils/waitFor";
 import { classNameFactory } from "@utils/css";
-import { FluxDispatcher, useLayoutEffect, useMemo, useRef, useState } from "@webpack/common";
+import { FluxDispatcher, useCallback, useLayoutEffect, useMemo, useRef, useState } from "@webpack/common";
 
 interface Vec2 {
     x: number,
@@ -52,6 +52,15 @@ export const Magnifier = ErrorBoundary.wrap<MagnifierProps>(({ instance, size: i
     const currentVideoElementRef = useRef<HTMLVideoElement | null>(null);
     const originalVideoElementRef = useRef<HTMLVideoElement | null>(null);
 
+    const setVideoElement = useCallback((video: HTMLVideoElement | null) => {
+        currentVideoElementRef.current?.pause();
+        currentVideoElementRef.current = video;
+    }, []);
+    const syncVideos = () => {
+        if (currentVideoElementRef.current && originalVideoElementRef.current)
+            currentVideoElementRef.current.currentTime = originalVideoElementRef.current.currentTime;
+    };
+
     // since we accessing document im gonna use useLayoutEffect
     useLayoutEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
@@ -64,11 +73,6 @@ export const Magnifier = ErrorBoundary.wrap<MagnifierProps>(({ instance, size: i
                 isShiftDown.current = false;
             }
         };
-        const syncVideos = () => {
-            if (currentVideoElementRef.current && originalVideoElementRef.current)
-                currentVideoElementRef.current.currentTime = originalVideoElementRef.current.currentTime;
-        };
-
         const updateMousePosition = (e: MouseEvent) => {
             if (!element.current) return;
 
@@ -168,7 +172,7 @@ export const Magnifier = ErrorBoundary.wrap<MagnifierProps>(({ instance, size: i
         }
     }, [instance.props.src]);
 
-    if (!ready) return null;
+    if (!ready || opacity === 0) return null;
 
     const box = element.current?.getBoundingClientRect();
 
@@ -187,7 +191,8 @@ export const Magnifier = ErrorBoundary.wrap<MagnifierProps>(({ instance, size: i
             {instance.props.animated ?
                 (
                     <video
-                        ref={currentVideoElementRef}
+                        ref={setVideoElement}
+                        onLoadedMetadata={syncVideos}
                         style={{
                             position: "absolute",
                             left: `${imagePosition.x}px`,

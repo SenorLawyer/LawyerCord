@@ -7,355 +7,278 @@
 import { BaseText } from "@components/BaseText";
 import { QrCodeIcon } from "@components/Icons";
 import { wrapTab } from "@components/settings";
-import loginWithQR from "@equicordplugins/loginWithQR";
+import loginWithQR, { scans } from "@equicordplugins/loginWithQR";
 import { images } from "@equicordplugins/loginWithQR/images";
-import { findByPropsLazy } from "@webpack";
-import {
-    RestAPI,
-    useEffect,
-    useRef,
-    useState,
-} from "@webpack/common";
-import jsQR, { QRCode } from "jsqr";
-import { MutableRefObject, ReactElement } from "react";
+import { Logger } from "@utils/Logger";
+import { RestAPI, useEffect, useRef, UserStore, useState } from "@webpack/common";
+import jsQR from "jsqr";
+import type { CSSProperties } from "react";
 
-import { cl, Spinner, SpinnerTypes } from "..";
+import { cl, Spinner } from "..";
 import openVerifyModal from "./VerifyModal";
 
-enum LoginStateType {
-    Idle,
-    Loading,
-}
-
 interface Preview {
-    source: ReactElement;
-    size: {
-        width: number;
-        height: number;
-    };
-    crosses?: { x: number; y: number; rot: number; size: number; }[];
+    url: string;
+    size: { width: number; height: number; };
+    crosses: { x: number; y: number; rot: number; size: number; }[];
 }
 
-interface QrModalProps {
-    exit: (err: string | null) => void;
-    setPreview: (
-        media: HTMLImageElement | HTMLVideoElement | null,
-        location?: QRCode["location"]
-    ) => Promise<void>;
+interface Scan {
+    controller: AbortController;
+    accountId: string;
+    url?: string;
+    timeout?: ReturnType<typeof setTimeout>;
 }
-type QrModalPropsRef = MutableRefObject<QrModalProps>;
-
-const limitSize = (width: number, height: number) => {
-    if (width > height) {
-        const w = Math.min(width, 1280);
-        return { w, h: (height / width) * w };
-    } else {
-        const h = Math.min(height, 1280);
-        return { h, w: (width / height) * h };
-    }
-};
-
-const { getVideoDeviceId } = findByPropsLazy("getVideoDeviceId");
 
 const tokenRegex = /^https:\/\/discord\.com\/ra\/([\w-]+)$/;
-const verifyUrl = async (
-    token: string,
-    { current: modalProps }: QrModalPropsRef
-) => {
-    // yay
-    let handshake: string | null = null;
-    try {
-        const res = await RestAPI.post({
-            url: "/users/@me/remote-auth",
-            body: { fingerprint: token },
-        });
-        if (res.ok && res.status === 200) handshake = res.body?.handshake_token;
-    } catch { }
+const logger = new Logger("LoginWithQR");
 
-    modalProps.setPreview(null);
-    openVerifyModal(
-        handshake,
-        () => {
-            modalProps.exit(null);
-            RestAPI.post({
-                url: "/users/@me/remote-auth/cancel",
-                body: { handshake_token: handshake },
-            });
-        },
-    );
-};
-
-const handleProcessImage = (file: File, modalPropsRef: QrModalPropsRef) => {
-    const { current: modalProps } = modalPropsRef;
-
-    const reader = new FileReader();
-    reader.addEventListener("load", () => {
-        if (!reader.result) return;
-
-        const img = new Image();
-        img.addEventListener("load", () => {
-            modalProps.setPreview(img);
-            const { w, h } = limitSize(img.width, img.height);
-            img.width = w;
-            img.height = h;
-
-            const canvas = document.createElement("canvas");
-            canvas.width = img.width;
-            canvas.height = img.height;
-
-            const ctx = canvas.getContext("2d")!;
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-            const { data, width, height } = ctx.getImageData(
-                0,
-                0,
-                canvas.width,
-                canvas.height
-            );
-            const code = jsQR(data, width, height);
-
-            const token = code?.data.match(tokenRegex)?.[1];
-            if (token)
-                modalProps
-                    .setPreview(img, code.location)
-                    .then(() =>
-                        verifyUrl(token, modalPropsRef).catch(e =>
-                            modalProps.exit(e?.message)
-                        )
-                    );
-            else modalProps.exit(null);
-
-            canvas.remove();
-        });
-        img.src = reader.result as string;
-    });
-    reader.readAsDataURL(file);
-};
+function cancelHandshake(handshake: string, accountId: string) {
+    if (UserStore.getCurrentUser()?.id !== accountId) return;
+    void RestAPI.post({
+        url: "/users/@me/remote-auth/cancel",
+        body: { handshake_token: handshake }
+    }).catch(() => logger.warn("Could not cancel the QR login request."));
+}
 
 function QrModal() {
-    const [state, setState] = useState(LoginStateType.Idle);
+    const [loading, setLoading] = useState(false);
+    const [dragging, setDragging] = useState(false);
     const [preview, setPreview] = useState<Preview | null>(null);
-    const error = useRef<string | null>(null);
-
+    const [error, setError] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const active = useRef(false);
+    const scanRef = useRef<Scan | null>(null);
 
-    const modalProps = useRef<QrModalProps>({
-        exit: err => {
-            error.current = err;
-            setState(LoginStateType.Idle);
+    const isCurrent = (scan: Scan) => active.current && scanRef.current === scan
+        && !scan.controller.signal.aborted && UserStore.getCurrentUser()?.id === scan.accountId;
+
+    const exit = (scan: Scan, message: string | null = null) => {
+        if (scanRef.current !== scan) return;
+        scanRef.current = null;
+        clearTimeout(scan.timeout);
+        if (scan.url) URL.revokeObjectURL(scan.url);
+        scans.delete(scan.controller);
+        scan.controller.abort();
+        if (active.current) {
+            setError(message);
+            setLoading(false);
             setPreview(null);
-        },
-        setPreview: (media, location) =>
-            new Promise(res => {
-                if (!media) return res(setPreview(null));
+        }
+    };
 
-                const size = {} as Preview["size"];
-                if (media.width > media.height) {
-                    size.width = 34;
-                    size.height = (media.height / media.width) * 34;
-                } else {
-                    size.height = 34;
-                    size.width = (media.width / media.height) * 34;
+    const begin = () => {
+        const accountId = UserStore.getCurrentUser()?.id;
+        if (!active.current || !loginWithQR.started || scanRef.current || !accountId) return;
+        const scan: Scan = { controller: new AbortController(), accountId };
+        scanRef.current = scan;
+        scans.add(scan.controller);
+        scan.controller.signal.addEventListener("abort", () => exit(scan), { once: true });
+        setError(null);
+        setLoading(true);
+        return scan;
+    };
+
+    const verify = async (token: string, scan: Scan) => {
+        if (!isCurrent(scan)) return;
+        try {
+            const res = await RestAPI.post({
+                url: "/users/@me/remote-auth",
+                body: { fingerprint: token }
+            });
+            const handshake = res.ok && res.status === 200 && typeof res.body?.handshake_token === "string"
+                && res.body.handshake_token.length > 0 ? res.body.handshake_token : null;
+            if (!isCurrent(scan)) {
+                if (handshake) cancelHandshake(handshake, scan.accountId);
+                return;
+            }
+            setPreview(null);
+            if (scan.url) {
+                URL.revokeObjectURL(scan.url);
+                scan.url = undefined;
+            }
+            openVerifyModal(handshake, confirmed => {
+                if (!confirmed && handshake) cancelHandshake(handshake, scan.accountId);
+                exit(scan);
+            }, scan.controller.signal, scan.accountId);
+        } catch {
+            if (isCurrent(scan)) exit(scan, "Could not verify the QR code. Try again.");
+        }
+    };
+
+    const processImage = async (file: File) => {
+        const scan = begin();
+        if (!scan) return;
+        try {
+            const img = new Image();
+            scan.url = URL.createObjectURL(file);
+            await new Promise<void>((resolve, reject) => {
+                const { signal } = scan.controller;
+                const finish = (failed: boolean) => {
+                    img.onload = img.onerror = null;
+                    signal.removeEventListener("abort", abort);
+                    if (failed) reject(new Error("Could not read the image. Try another image."));
+                    else resolve();
+                };
+                const abort = () => { img.src = ""; finish(true); };
+                img.onload = () => finish(false);
+                img.onerror = () => finish(true);
+                signal.addEventListener("abort", abort, { once: true });
+                img.src = scan.url ?? "";
+            });
+            if (!isCurrent(scan)) return;
+            const scale = Math.min(1, 1280 / Math.max(img.width, img.height));
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.max(1, Math.round(img.width * scale));
+            canvas.height = Math.max(1, Math.round(img.height * scale));
+            const ctx = canvas.getContext("2d");
+            if (!ctx) throw new Error("Could not read the image. Try another image.");
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(data, width, height);
+            canvas.width = canvas.height = 0;
+            const token = code?.data.match(tokenRegex)?.[1];
+            if (!token || !code) return exit(scan);
+
+            const { location } = code;
+            const size = width > height
+                ? { width: 34, height: height / width * 34 }
+                : { width: width / height * 34, height: 34 };
+            const crossSize = (Math.hypot(location.topLeftCorner.x - location.topRightCorner.x, location.topLeftCorner.y - location.topRightCorner.y)
+                + Math.hypot(location.topRightCorner.x - location.bottomRightCorner.x, location.topRightCorner.y - location.bottomRightCorner.y)) / 3 / height;
+            const crosses: NonNullable<Preview["crosses"]> = [];
+            for (const [first, second] of [
+                [location.topLeftCorner, location.bottomRightCorner],
+                [location.topRightCorner, location.bottomLeftCorner]
+            ]) {
+                for (const [current, opposite] of [[first, second], [second, first]]) {
+                    crosses.push({
+                        x: current.x / width * 100,
+                        y: current.y / height * 100,
+                        rot: (Math.atan2(opposite.y - current.y, opposite.x - current.x) - Math.PI / 4) * 180 / Math.PI,
+                        size: Math.min(crossSize * size.height, 7)
+                    });
                 }
-
-                let source: ReactElement;
-                if (media instanceof HTMLImageElement)
-                    source = (
-                        <img src={media.src} style={{ width: "100%", height: "100%" }} />
-                    );
-                else
-                    source = (
-                        <video
-                            controls={false}
-                            style={{ width: "100%", height: "100%" }}
-                            ref={e => {
-                                if (e) {
-                                    e.srcObject = media.srcObject;
-                                    if (!media.paused) {
-                                        e.play().catch(error => {
-                                            console.error("Error playing the video:", error);
-                                        });
-                                    }
-                                }
-                            }}
-                        />
-                    );
-
-                if (!location) return res(setPreview({ source, size }));
-                else {
-                    const combinations = [
-                        [location.topLeftCorner, location.bottomRightCorner],
-                        [location.topRightCorner, location.bottomLeftCorner],
-                    ];
-
-                    const crossSize =
-                        (Math.sqrt(
-                            Math.abs(location.topLeftCorner.x - location.topRightCorner.x) **
-                            2 +
-                            Math.abs(
-                                location.topLeftCorner.y - location.topRightCorner.y
-                            ) **
-                            2
-                        ) +
-                            Math.sqrt(
-                                Math.abs(
-                                    location.topRightCorner.x - location.bottomRightCorner.x
-                                ) **
-                                2 +
-                                Math.abs(
-                                    location.topRightCorner.y - location.bottomRightCorner.y
-                                ) **
-                                2
-                            )) /
-                        3 /
-                        media.height;
-
-                    const crosses = [] as NonNullable<Preview["crosses"]>;
-                    for (const combination of combinations) {
-                        for (let i = 0; i < 2; i++) {
-                            const current = combination[i];
-                            const opposite = combination[1 - i];
-
-                            const rot =
-                                (Math.atan2(opposite.y - current.y, opposite.x - current.x) -
-                                    Math.PI / 4) *
-                                (180 / Math.PI);
-
-                            crosses.push({
-                                x: (current.x / media.width) * 100,
-                                y: (current.y / media.height) * 100,
-                                rot,
-                                size: Math.min(crossSize * size.height, 7),
-                            });
-                        }
-                    }
-
-                    setPreview({ source, size, crosses });
-                    setTimeout(res, 500 + 300 + 300);
-                }
-            }),
-    });
+            }
+            setPreview({ url: scan.url ?? "", size, crosses });
+            scan.timeout = setTimeout(() => { void verify(token, scan); }, 1100);
+        } catch (err) {
+            if (isCurrent(scan)) exit(scan, err instanceof Error ? err.message : "Could not read the image. Try another image.");
+        }
+    };
 
     useEffect(() => {
+        active.current = true;
         loginWithQR.qrModalOpen = true;
-        return () => void (loginWithQR.qrModalOpen = false);
+        return () => {
+            active.current = false;
+            loginWithQR.qrModalOpen = false;
+            if (scanRef.current) exit(scanRef.current);
+        };
     }, []);
 
     useEffect(() => {
-        const callback = (e: ClipboardEvent) => {
-            e.preventDefault();
-            if (state !== LoginStateType.Idle || !e.clipboardData) return;
-
-            for (const item of e.clipboardData.items) {
+        const callback = (event: ClipboardEvent) => {
+            if (!loginWithQR.started || !event.clipboardData || scanRef.current) return;
+            for (const item of event.clipboardData.items) {
                 if (item.kind === "file" && item.type.startsWith("image/")) {
-                    setState(LoginStateType.Loading);
-                    handleProcessImage(item.getAsFile()!, modalProps);
+                    const file = item.getAsFile();
+                    if (file) { event.preventDefault(); void processImage(file); }
                     break;
-                } else if (item.kind === "string" && item.type === "text/plain") {
+                }
+                if (item.kind === "string" && item.type === "text/plain") {
+                    const scan = begin();
+                    if (!scan) return;
+                    event.preventDefault();
                     item.getAsString(text => {
-                        setState(LoginStateType.Loading);
-
+                        if (!isCurrent(scan)) return;
                         const token = text.match(tokenRegex)?.[1];
-                        if (token)
-                            verifyUrl(token, modalProps).catch(e =>
-                                modalProps.current.exit(e?.message)
-                            );
-                        else modalProps.current.exit(null);
+                        if (token) void verify(token, scan);
+                        else exit(scan);
                     });
                     break;
                 }
             }
         };
-
-        if (state === LoginStateType.Idle)
-            document.addEventListener("paste", callback);
+        document.addEventListener("paste", callback);
         return () => document.removeEventListener("paste", callback);
-    }, [state]);
+    }, []);
 
     return (
         <div className={cl("modal-container")}>
             <div
                 className={cl(
                     "modal-filepaste",
-                    preview?.source && "modal-filepaste-preview",
-                    preview?.crosses && "modal-filepaste-crosses"
+                    preview?.url && "modal-filepaste-preview",
+                    dragging && "modal-filepaste-drop"
                 )}
                 onClick={() =>
-                    state === LoginStateType.Idle && inputRef.current?.click()
+                    !loading && inputRef.current?.click()
                 }
-                onDragEnter={e =>
-                    e.currentTarget.classList.add(cl("modal-filepaste-drop"))
-                }
-                onDragLeave={e =>
-                    e.currentTarget.classList.remove(cl("modal-filepaste-drop"))
-                }
+                onDragEnter={() => setDragging(true)}
+                onDragLeave={() => setDragging(false)}
                 onDrop={e => {
                     e.preventDefault();
-                    e.currentTarget.classList.remove(cl("modal-filepaste-drop"));
+                    setDragging(false);
 
-                    if (state !== LoginStateType.Idle) return;
+                    if (loading) return;
 
                     for (const item of e.dataTransfer.files) {
                         if (item.type.startsWith("image/")) {
-                            setState(LoginStateType.Loading);
-                            handleProcessImage(item, modalProps);
+                            void processImage(item);
                             break;
                         }
                     }
                 }}
                 role="button"
+                tabIndex={0}
+                aria-disabled={loading}
+                onKeyDown={event => {
+                    if (!loading && (event.key === "Enter" || event.key === " ")) {
+                        event.preventDefault();
+                        inputRef.current?.click();
+                    }
+                }}
+                onDragOver={event => event.preventDefault()}
                 style={
-                    preview?.size
+                    preview
                         ? {
                             width: `${preview.size.width}rem`,
                             height: `${preview.size.height}rem`,
                         }
-                        : {}
+                        : undefined
                 }
             >
-                {preview?.source ? (
+                {preview?.url ? (
                     <div
                         style={{
-                            width: "100%",
-                            height: "100%",
-                            position: "relative",
-                            ["--scale" as any]: preview.crosses
-                                ? Math.max(preview.crosses[0].size * 0.9, 1)
-                                : undefined,
-                            ["--offset-x" as any]: preview.crosses
-                                ? `${-(preview.crosses.reduce((i, { x }) => i + x, 0) /
-                                    preview.crosses.length -
-                                    50)}%`
-                                : undefined,
-                            ["--offset-y" as any]: preview.crosses
-                                ? `${-(preview.crosses.reduce((i, { y }) => i + y, 0) /
-                                    preview.crosses.length -
-                                    50)}%`
-                                : undefined,
-                        }}
-                        className={cl(preview?.crosses && "preview-crosses")}
+                            "--scale": Math.max(preview.crosses[0].size * 0.9, 1),
+                            "--offset-x": `${50 - preview.crosses.reduce((sum, { x }) => sum + x, 0) / preview.crosses.length}%`,
+                            "--offset-y": `${50 - preview.crosses.reduce((sum, { y }) => sum + y, 0) / preview.crosses.length}%`,
+                        } as CSSProperties}
+                        className={cl("preview-crosses")}
                     >
-                        {preview.source}
-                        {preview.crosses?.map(({ x, y, rot, size }) => (
+                        <img src={preview.url} className={cl("preview-image")} alt="Scanned QR code" />
+                        {preview.crosses.map(({ x, y, rot, size }) => (
                             <span
-                                key={cl("preview-cross")}
+                                key={`${x}:${y}`}
                                 className={cl("preview-cross")}
                                 style={{
                                     left: `${x}%`,
                                     top: `${y}%`,
-                                    ["--size" as any]: `${size}rem`,
-                                    ["--rot" as any]: `${rot}deg`,
-                                }}
+                                    "--size": `${size}rem`,
+                                    "--rot": `${rot}deg`,
+                                } as CSSProperties}
                             >
                                 <img src={images.cross} draggable={false} />
                             </span>
                         ))}
                     </div>
-                ) : state === LoginStateType.Loading ? (
-                    <Spinner type={SpinnerTypes.WANDERING_CUBES} />
-                ) : error.current ? (
+                ) : loading ? (
+                    <Spinner type="wanderingCubes" />
+                ) : error ? (
                     <BaseText size="md" weight="semibold" color="text-danger">
-                        {error.current}
+                        {error}
                     </BaseText>
                 ) : (
                     <>
@@ -374,15 +297,15 @@ function QrModal() {
                 type="file"
                 accept="image/*"
                 onChange={e => {
-                    if (!e.target.files || state !== LoginStateType.Idle) return;
+                    if (!e.target.files || loading) return;
 
                     for (const item of e.target.files) {
                         if (item.type.startsWith("image/")) {
-                            setState(LoginStateType.Loading);
-                            handleProcessImage(item, modalProps);
+                            void processImage(item);
                             break;
                         }
                     }
+                    e.target.value = "";
                 }}
                 ref={inputRef}
                 style={{ display: "none" }}

@@ -16,14 +16,13 @@ import { Paragraph } from "@components/Paragraph";
 import { AddonCard } from "@components/settings/AddonCard";
 import { QuickAction, QuickActionCard } from "@components/settings/QuickAction";
 import { SpecialCard } from "@components/settings/SpecialCard";
-import { SettingsTab, wrapTab } from "@components/settings/tabs/BaseTab";
+import { SettingsTab } from "@components/settings/tabs/BaseTab";
 import { openInviteModal } from "@utils/discord";
 import { Margins } from "@utils/margins";
 import { chooseFile, saveFile } from "@utils/web";
 import { Alerts, ContextMenuApi, GuildStore, IconUtils, Menu, moment, React, showToast, TextInput, Toasts } from "@webpack/common";
 
 import { BLOCK_ICONS, blockDefinition, describeTrigger } from "./blocks";
-import { openAutomationBuilder } from "./BuilderModal";
 import {
     deleteAutomation,
     discardAutomationDraft,
@@ -53,6 +52,10 @@ import {
 import { RunHistory } from "./RunHistory";
 import { createTemplate, TEMPLATE_DESCRIPTIONS, TEMPLATE_NAMES } from "./templates";
 import { duplicateWorkflows } from "./workflow";
+
+function openAutomationBuilder(automation: Automation): void {
+    (require("./BuilderModal") as typeof import("./BuilderModal")).openAutomationBuilder(automation);
+}
 
 function useAutomationState() {
     const snapshot = React.useSyncExternalStore(subscribeAutomationState, getAutomationSnapshot);
@@ -299,4 +302,4 @@ function AutomationsTab() {
     </SettingsTab>;
 }
 
-export default wrapTab(AutomationsTab, "Automations");
+export default AutomationsTab;

@@ -46,11 +46,6 @@ export type ShikiSpec = {
     }) => Promise<IThemedToken[][]>;
 };
 
-export const enum StyleSheets {
-    Main = "MAIN",
-    DevIcons = "DEVICONS",
-}
-
 export const enum HljsSetting {
     Never = "NEVER",
     Secondary = "SECONDARY",

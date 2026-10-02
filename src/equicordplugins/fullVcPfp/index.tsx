@@ -13,7 +13,7 @@ import style from "./style.css?managed";
 
 export default definePlugin({
     name: "FullVCPFP",
-    description: "Makes avatars take up the entire vc tile",
+    description: "Makes avatars take up the entire voice call tile.",
     tags: ["Appearance", "Voice"],
     authors: [EquicordDevs.mochienya],
     managedStyle: style,
@@ -21,14 +21,14 @@ export default definePlugin({
         {
             find: "\"data-selenium-video-tile\":",
             replacement: {
-                match: /(?<=function\((\i),\i\)\{)/,
-                replace: "Object.assign($1.style=$1.style||{},$self.getVoiceBackgroundStyles($1));",
+                match: /(?<=style:)(?:\i|\{.{0,250}?\})(?=,ref:\i,"data-selenium-video-tile":)/,
+                replace: "{...$&,...$self.getVoiceBackgroundStyles(arguments[0])}",
             }
         },
     ],
 
-    getVoiceBackgroundStyles({ className, participantUserId }: { className?: string; participantUserId?: string; }) {
-        if (!className?.includes("tile") || !participantUserId) return;
+    getVoiceBackgroundStyles({ participantUserId }: { participantUserId?: string; }) {
+        if (!participantUserId) return;
 
         const user = UserStore.getUser(participantUserId);
         if (!user) return;

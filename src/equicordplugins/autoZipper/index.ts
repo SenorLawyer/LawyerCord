@@ -7,9 +7,11 @@
 import { definePluginSettings } from "@api/Settings";
 import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
+import { sleep } from "@utils/misc";
+import { Queue } from "@utils/Queue";
 import definePlugin, { OptionType } from "@utils/types";
-import { ChannelStore, DraftType, SelectedChannelStore, showToast, Toasts, UploadHandler } from "@webpack/common";
-import { zipSync } from "fflate";
+import { createZipFile } from "@utils/zip";
+import { ChannelStore, DraftType, SelectedChannelStore, showToast, Toasts, UploadHandler, UserStore } from "@webpack/common";
 
 const logger = new Logger("AutoZipper");
 const MAX_ZIP_INPUT_BYTES = 100 * 1024 * 1024;
@@ -20,10 +22,7 @@ const settings = definePluginSettings({
         type: OptionType.STRING,
         description: "Comma-separated list of file extensions to auto-zip (e.g., .psd,.blend,.exe,.dmg)",
         default: ".psd,.blend,.exe,.dmg,.app,.apk,.iso",
-        onChange: () => {
-            extensionsToZip.clear();
-            parseExtensions();
-        }
+        onChange: () => parseExtensions()
     }
 });
 
@@ -54,23 +53,14 @@ function assertZipInputSize(fileName: string, bytes: number) {
     throw new Error(`${fileName} is too large to zip safely (${Math.ceil(bytes / 1024 / 1024)} MB).`);
 }
 
-async function zipFile(file: File): Promise<File> {
+async function zipFile(file: File, signal: AbortSignal): Promise<File> {
     assertZipInputSize(file.name, file.size);
 
     const arrayBuffer = await file.arrayBuffer();
     const data = new Uint8Array(arrayBuffer);
 
-    const zipData = zipSync({
-        [file.name]: data
-    });
-
     const baseName = file.name.substring(0, file.name.lastIndexOf(".")) || file.name;
-    return new File([zipData as BlobPart], `${baseName}.zip`, { type: "application/zip" });
-}
-
-async function zipFolder(folderName: string, fileEntries: Record<string, Uint8Array>): Promise<File> {
-    const zipData = zipSync(fileEntries);
-    return new File([zipData as BlobPart], `${folderName}.zip`, { type: "application/zip" });
+    return createZipFile(`${baseName}.zip`, { [file.name]: data }, signal);
 }
 
 async function readFileEntry(entry: FileSystemFileEntry): Promise<File> {
@@ -79,8 +69,8 @@ async function readFileEntry(entry: FileSystemFileEntry): Promise<File> {
     });
 }
 
-async function readDirectoryEntry(entry: FileSystemDirectoryEntry): Promise<Record<string, Uint8Array>> {
-    const files: Record<string, Uint8Array> = {};
+async function readDirectoryEntry(entry: FileSystemDirectoryEntry, signal: AbortSignal): Promise<Record<string, Uint8Array>> {
+    const files: Record<string, Uint8Array> = Object.create(null);
     let fileCount = 0;
     let totalBytes = 0;
 
@@ -88,14 +78,17 @@ async function readDirectoryEntry(entry: FileSystemDirectoryEntry): Promise<Reco
         const reader = dirEntry.createReader();
 
         for (;;) {
+            if (signal.aborted) throw new DOMException("Upload cancelled.", "AbortError");
             const entries = await new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
             if (!entries.length) return;
 
             for (const childEntry of entries) {
+                if (signal.aborted) throw new DOMException("Upload cancelled.", "AbortError");
                 const entryPath = path ? `${path}/${childEntry.name}` : childEntry.name;
 
                 if (childEntry.isFile) {
                     const file = await readFileEntry(childEntry as FileSystemFileEntry);
+                    if (signal.aborted) throw new DOMException("Upload cancelled.", "AbortError");
                     fileCount++;
                     if (fileCount > MAX_FOLDER_FILE_COUNT) {
                         throw new Error(`${entry.name} contains more than ${MAX_FOLDER_FILE_COUNT} files.`);
@@ -121,15 +114,17 @@ function notifyZipFailure(message: string) {
     showToast(message, Toasts.Type.FAILURE);
 }
 
-async function processFiles(files: File[]): Promise<File[]> {
+async function processFiles(files: File[], signal: AbortSignal): Promise<File[]> {
     const processedFiles: File[] = [];
 
     for (const file of files) {
+        if (signal.aborted) throw new DOMException("Upload cancelled.", "AbortError");
         if (shouldZipFile(file)) {
             try {
-                const zippedFile = await zipFile(file);
+                const zippedFile = await zipFile(file, signal);
                 processedFiles.push(zippedFile);
             } catch (error) {
+                if (signal.aborted) throw error;
                 logger.error(`Failed to zip file ${file.name}:`, error);
                 notifyZipFailure(`Failed to zip ${file.name}. Uploading the original file instead.`);
                 processedFiles.push(file);
@@ -143,65 +138,66 @@ async function processFiles(files: File[]): Promise<File[]> {
 }
 
 let interceptingEvents = false;
+const pendingUploads = new Set<AbortController>();
+const preparationQueue = new Queue();
+
+function uploadProcessedFiles(process: (signal: AbortSignal) => Promise<File[]>) {
+    const controller = new AbortController();
+    const { signal } = controller;
+    const channelId = SelectedChannelStore.getChannelId();
+    const userId = UserStore.getCurrentUser()?.id;
+    pendingUploads.add(controller);
+    preparationQueue.push(async () => {
+        try {
+            if (signal.aborted || userId !== UserStore.getCurrentUser()?.id) return;
+            const files = await process(signal);
+            await sleep(10);
+            if (signal.aborted || userId !== UserStore.getCurrentUser()?.id) return;
+            const channel = ChannelStore.getChannel(channelId);
+            if (channel && files.length) await UploadHandler.promptToUpload(files, channel, DraftType.ChannelMessage);
+        } catch (error) {
+            if (!signal.aborted) {
+                logger.error("Failed to prepare upload", error);
+                notifyZipFailure("Could not prepare files for upload.");
+            }
+        } finally {
+            pendingUploads.delete(controller);
+        }
+    });
+}
 
 function handleDrop(event: DragEvent) {
     if (!event.dataTransfer) return;
 
-    const items = Array.from(event.dataTransfer.items);
-    if (items.length === 0) return;
-
-    const hasTargetedItem = items.some(item => {
-        const entry = item.webkitGetAsEntry();
-        if (entry?.isDirectory) return true;
-
-        const file = item.kind === "file" ? item.getAsFile() : null;
-        return file != null && shouldZipFile(file);
-    });
+    const items = Array.from(event.dataTransfer.items, item => ({
+        entry: item.webkitGetAsEntry(),
+        file: item.kind === "file" ? item.getAsFile() : null
+    }));
+    const hasTargetedItem = items.some(({ entry, file }) => entry?.isDirectory || file != null && shouldZipFile(file));
 
     if (!hasTargetedItem) return;
 
     event.preventDefault();
     event.stopPropagation();
 
-    const processPromises: Array<Promise<File | null>> = [];
-
-    for (const item of items) {
-        const entry = item.webkitGetAsEntry();
-
-        if (entry?.isDirectory) {
-            const folderPromise = readDirectoryEntry(entry as FileSystemDirectoryEntry)
-                .then(fileEntries => zipFolder(entry.name, fileEntries))
-                .catch(error => {
+    void uploadProcessedFiles(async signal => {
+        const files: File[] = [];
+        for (const { entry, file } of items) {
+            if (signal.aborted) throw new DOMException("Upload cancelled.", "AbortError");
+            if (entry?.isDirectory) {
+                try {
+                    const fileEntries = await readDirectoryEntry(entry as FileSystemDirectoryEntry, signal);
+                    files.push(await createZipFile(`${entry.name}.zip`, fileEntries, signal));
+                } catch (error) {
+                    if (signal.aborted) throw error;
                     logger.error(`Failed to zip folder ${entry.name}:`, error);
                     notifyZipFailure(`Failed to zip folder ${entry.name}.`);
-                    return null;
-                });
-            processPromises.push(folderPromise);
-        } else if (entry?.isFile) {
-            const file = item.getAsFile();
-            if (file) {
-                if (shouldZipFile(file)) {
-                    processPromises.push(
-                        zipFile(file).catch(error => {
-                            logger.error(`Failed to zip file ${file.name}:`, error);
-                            notifyZipFailure(`Failed to zip ${file.name}. Uploading the original file instead.`);
-                            return file;
-                        })
-                    );
-                } else {
-                    processPromises.push(Promise.resolve(file));
                 }
+            } else if (file) {
+                files.push(...await processFiles([file], signal));
             }
         }
-    }
-
-    Promise.all(processPromises).then(processedFiles => {
-        const validFiles = processedFiles.filter((file): file is File => file !== null);
-        const channelId = SelectedChannelStore.getChannelId();
-        const channel = ChannelStore.getChannel(channelId);
-        if (channel && validFiles.length > 0) {
-            setTimeout(() => UploadHandler.promptToUpload(validFiles, channel, DraftType.ChannelMessage), 10);
-        }
+        return files;
     });
 }
 
@@ -215,13 +211,7 @@ function handlePaste(event: ClipboardEvent) {
     event.preventDefault();
     event.stopPropagation();
 
-    processFiles(files).then(processedFiles => {
-        const channelId = SelectedChannelStore.getChannelId();
-        const channel = ChannelStore.getChannel(channelId);
-        if (channel && processedFiles.length > 0) {
-            setTimeout(() => UploadHandler.promptToUpload(processedFiles, channel, DraftType.ChannelMessage), 10);
-        }
-    });
+    void uploadProcessedFiles(signal => processFiles(files, signal));
 }
 
 export default definePlugin({
@@ -242,6 +232,8 @@ export default definePlugin({
     },
 
     stop() {
+        for (const controller of pendingUploads) controller.abort();
+        pendingUploads.clear();
         document.removeEventListener("drop", handleDrop, true);
         document.removeEventListener("paste", handlePaste, true);
         interceptingEvents = false;

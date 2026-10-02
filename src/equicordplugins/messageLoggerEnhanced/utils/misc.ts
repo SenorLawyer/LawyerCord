@@ -23,8 +23,6 @@ import { ChannelStore, moment, UserStore } from "@webpack/common";
 import { DBMessageStatus } from "../db";
 import { LoggedMessageJSON } from "../types";
 import { DEFAULT_ATTACHMENT_FILE_EXTENSIONS, DEFAULT_IMAGE_CACHE_DIR } from "./constants";
-import { DISCORD_EPOCH } from "./index";
-import { memoize } from "./memoize";
 
 const MessageClass: any = findLazy(m => m?.prototype?.isEdited);
 const AuthorClass = findLazy(m => m?.prototype?.getAvatarURL);
@@ -56,46 +54,19 @@ export const getMessageStatus = (message: LoggedMessageJSON) => {
     throw new Error("Unknown message status");
 };
 
-export const discordIdToDate = (id: string) => new Date((parseInt(id) / 4194304) + DISCORD_EPOCH);
-
-export const sortMessagesByDate = (timestampA: string, timestampB: string) => {
-    // very expensive
-    // const timestampA = discordIdToDate(a).getTime();
-    // const timestampB = discordIdToDate(b).getTime();
-    // return timestampB - timestampA;
-
-    // newest first
-    if (timestampA < timestampB) {
-        return 1;
-    } else if (timestampA > timestampB) {
-        return -1;
-    } else {
-        return 0;
-    }
-};
-
-// stolen from mlv2
-export function findLastIndex<T>(array: T[], predicate: (e: T, t: number, n: T[]) => boolean) {
-    let l = array.length;
-    while (l--) {
-        if (predicate(array[l], l, array))
-            return l;
-    }
-    return -1;
-}
-
 const getTimestamp = (timestamp: any): Date => {
     return new Date(timestamp);
 };
 
 export const mapTimestamp = (m: any) => {
-    if (m.timestamp) m.timestamp = getTimestamp(m.timestamp);
-    if (m.editedTimestamp) m.editedTimestamp = getTimestamp(m.editedTimestamp);
-    if (m.embeds) m.embeds = m.embeds.map(e => sanitizeEmbed(m.channel_id, m.id, e));
-    return m;
+    const result = { ...m };
+    if (m.timestamp) result.timestamp = getTimestamp(m.timestamp);
+    if (m.editedTimestamp) result.editedTimestamp = getTimestamp(m.editedTimestamp);
+    if (m.embeds) result.embeds = m.embeds.map(e => sanitizeEmbed(m.channel_id, m.id, e));
+    return result;
 };
 
-export const messageJsonToMessageClass = memoize((log: { message: LoggedMessageJSON; }) => {
+export const messageJsonToMessageClass = (log: { message: LoggedMessageJSON; }) => {
     // console.time("message populate");
     if (!log?.message) return null;
 
@@ -121,11 +92,11 @@ export const messageJsonToMessageClass = memoize((log: { message: LoggedMessageJ
         message.poll.expiry = moment(message.poll.expiry);
 
     if (message.messageSnapshots)
-        message.messageSnapshots.map(m => mapTimestamp(m.message));
+        message.messageSnapshots = message.messageSnapshots.map(snapshot => ({ ...snapshot, message: mapTimestamp(snapshot.message) }));
 
     // console.timeEnd("message populate");
     return message;
-});
+};
 
 export function getNative(): PluginNative<typeof import("../native")> {
     if (IS_WEB) {

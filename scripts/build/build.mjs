@@ -247,8 +247,6 @@ await Promise.all([
         main: "main.js"
     })),
     copyFile("tools/discord-mcp/server.mjs", "dist/desktop/discord-mcp-server.mjs"),
-    copyFile("src/components/BirthdayCelebration/birthday.mp4", "dist/desktop/presentation.mp4"),
-    copyFile("src/components/BirthdayCelebration/birthday.mp4", "dist/equibop/presentation.mp4"),
     copyFile("tools/discord-mcp/server.mjs", "dist/equibop/discord-mcp-server.mjs")
 ]);
 

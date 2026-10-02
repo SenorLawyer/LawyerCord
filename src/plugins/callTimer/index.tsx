@@ -278,7 +278,7 @@ export default definePlugin({
         const { format } = settings.use(CONNECTION_TIMER_SETTINGS);
         const user = UserStore.getCurrentUser();
         const joinTime = user && userJoinTimes.get(user.id)?.time;
-        const time = useFixedTimer({ initialTime: joinTime });
+        const time = useFixedTimer({ initialTime: joinTime, enabled: joinTime != null });
 
         if (joinTime == null) return null;
 

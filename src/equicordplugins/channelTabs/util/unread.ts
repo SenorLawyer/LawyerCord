@@ -7,12 +7,15 @@
 import { DataStore } from "@api/index";
 import { ChannelUnreadState, reconcileUnreadFallbackCache } from "@equicordplugins/channelTabs/util/unreadState";
 
+import { logger } from "./constants";
+
 export interface PersistedUnreadFallbacks {
     [userId: string]: Record<string, number>;
 }
 
 const DATASTORE_KEY = "ChannelTabs_unreadFallbacks_v1";
 const unreadFallbacks: PersistedUnreadFallbacks = {};
+const loadedUsers = new Set<string>();
 const unreadFallbackLoads = new Map<string, Promise<Record<string, number>>>();
 const unreadFallbackSaves = new Map<string, Promise<void>>();
 
@@ -21,7 +24,7 @@ export function getUnreadFallbackCounts(userId: string) {
 }
 
 export async function ensureUnreadFallbackCountsLoaded(userId: string) {
-    if (unreadFallbacks[userId]) return unreadFallbacks[userId];
+    if (loadedUsers.has(userId)) return unreadFallbacks[userId];
     if (unreadFallbackLoads.has(userId)) return unreadFallbackLoads.get(userId)!;
 
     const loadPromise = DataStore.get<PersistedUnreadFallbacks>(DATASTORE_KEY)
@@ -30,9 +33,10 @@ export async function ensureUnreadFallbackCountsLoaded(userId: string) {
                 ...(fallbacks?.[userId] ?? {}),
                 ...(unreadFallbacks[userId] ?? {})
             };
-            unreadFallbackLoads.delete(userId);
+            loadedUsers.add(userId);
             return unreadFallbacks[userId];
-        });
+        })
+        .finally(() => unreadFallbackLoads.delete(userId));
 
     unreadFallbackLoads.set(userId, loadPromise);
     return loadPromise;
@@ -41,17 +45,28 @@ export async function ensureUnreadFallbackCountsLoaded(userId: string) {
 export function updateUnreadFallbackCounts(userId: string, channelStates: ChannelUnreadState[]) {
     const currentFallbacks = unreadFallbacks[userId] ?? {};
     const nextFallbacks = reconcileUnreadFallbackCache(currentFallbacks, channelStates);
-    if (JSON.stringify(nextFallbacks) === JSON.stringify(currentFallbacks)) return;
+    if (nextFallbacks === currentFallbacks) return;
 
     unreadFallbacks[userId] = nextFallbacks;
 
-    const pendingSave = unreadFallbackSaves.get(userId) ?? Promise.resolve();
-    const nextSave = pendingSave
-        .catch(() => void 0)
-        .then(() => DataStore.update<PersistedUnreadFallbacks>(DATASTORE_KEY, old => ({
-            ...(old ?? {}),
-            [userId]: unreadFallbacks[userId]
-        })));
+    if (unreadFallbackSaves.has(userId)) return;
+    const nextSave = Promise.resolve()
+        .then(async () => {
+            try {
+                await ensureUnreadFallbackCountsLoaded(userId);
+                let snapshot: Record<string, number>;
+                do {
+                    snapshot = unreadFallbacks[userId];
+                    await DataStore.update<PersistedUnreadFallbacks>(DATASTORE_KEY, old => ({
+                        ...(old ?? {}),
+                        [userId]: snapshot
+                    }));
+                } while (snapshot !== unreadFallbacks[userId]);
+            } finally {
+                unreadFallbackSaves.delete(userId);
+            }
+        })
+        .catch(error => logger.error("Failed to save unread fallback counts", error));
 
     unreadFallbackSaves.set(userId, nextSave);
 }

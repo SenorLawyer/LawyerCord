@@ -9,7 +9,7 @@ import { Settings } from "@api/Settings";
 import { gitHashShort } from "@shared/vencordUserAgent";
 import { copyToClipboard } from "@utils/clipboard";
 import { relaunch, showItemInFolder } from "@utils/native";
-import { checkForUpdates, getRepo } from "@utils/updater";
+import { checkForUpdates, getRepo, restartRequired, selectedRelease } from "@utils/updater";
 import { GuildStore, NavigationRouter, SettingsRouter, Toasts } from "@webpack/common";
 
 import gitRemote from "~git-remote";
@@ -134,19 +134,27 @@ export const actions: ButtonAction[] = [
         id: "checkForUpdates", label: "Check for Updates", callback: async () => {
             const isOutdated = await checkForUpdates();
 
-            if (isOutdated) {
-                setTimeout(() => showNotification({
-                    title: "A LawyerCord update is available!",
-                    body: "Click here to view the update",
+            if (restartRequired) {
+                showNotification({
+                    title: "A LawyerCord release is downloaded",
+                    body: "Click here to restart Discord and install it.",
+                    permanent: true,
+                    noPersist: true,
+                    onClick: relaunch
+                });
+            } else if (isOutdated || selectedRelease?.relation === "rollback" || selectedRelease?.relation === "switch") {
+                showNotification({
+                    title: isOutdated ? "A LawyerCord update is available" : "Your selected channel offers a different release",
+                    body: "Click here to view the release.",
                     permanent: true,
                     noPersist: true,
                     onClick() {
                         SettingsRouter.openUserSettings("equicord_updater_panel");
                     }
-                }), 10_000);
+                });
             } else {
                 Toasts.show({
-                    message: "No updates available",
+                    message: "No updates are available for your selected channel.",
                     type: Toasts.Type.MESSAGE,
                     id: Toasts.genId(),
                     options: {

@@ -15,7 +15,7 @@ import * as releaseSelection from "../src/main/updater/releaseSelection";
 import * as updateChannel from "../src/shared/updateChannel";
 
 const nativeRequire = createRequire(import.meta.url);
-const events = { GET_UPDATES: "check", UPDATE: "update", BUILD: "build", GET_REPO: "repo" };
+const events = { GET_RELEASES: "releases", CHECK_RELEASE: "release", RESTART_UPDATE: "restart", GET_UPDATES: "check", UPDATE: "update", BUILD: "build", GET_REPO: "repo" };
 const stable = { tag_name: "v3.0.1.0", target_commitish: "main", published_at: "2026-09-28T10:00:00Z", prerelease: false };
 const beta = { tag_name: "v3.1.0.0-beta.1", target_commitish: "main", published_at: "2026-09-29T10:00:00Z", prerelease: true };
 const nightly = { tag_name: "nightly-20260930-1000-abcdef01", target_commitish: "main", published_at: "2026-09-30T10:00:00Z", prerelease: true };
@@ -31,6 +31,7 @@ for (const mode of ["http", "git"]) test(`${mode} updater isolates release chann
         "@shared/updateChannel": updateChannel,
         "@shared/vencordUserAgent": { VENCORD_USER_AGENT: "test" },
         "./releaseSelection": releaseSelection,
+        "./archiveReplacement": { getStagedUpdateError: () => undefined, replaceVerifiedArchive: async () => ({ staged: true }), restartStagedUpdate: () => true },
         "~git-hash": currentCommit,
         "~git-remote": "fixture/repo",
         "./common": { ASAR_FILE: "desktop.asar", serializeErrors: (fn: unknown) => fn },
@@ -54,10 +55,10 @@ for (const mode of ["http", "git"]) test(`${mode} updater isolates release chann
                 requests.push(endpoint);
                 if (endpoint === "/releases") return [nightly, beta, stable].map(release => ({
                     ...release,
-                    assets: [{ name: "desktop.asar", browser_download_url: `https://example.com/${release.tag_name}`, digest: `sha256:${"a".repeat(64)}` }]
+                    assets: [{ name: "desktop.asar", browser_download_url: `https://github.com/fixture/repo/releases/download/${release.tag_name}/desktop.asar`, digest: `sha256:${"a".repeat(64)}` }]
                 }));
                 if (endpoint.startsWith("/commits/")) return { sha: `commit-${endpoint.slice(9)}` };
-                if (endpoint.startsWith("/compare/")) return { commits: [{ sha: "release-commit", author: { login: "Author" }, commit: { message: "Released fix" } }] };
+                if (endpoint.startsWith("/compare/")) return { status: "ahead", commits: [{ sha: "release-commit", author: { login: "Author" }, commit: { message: "Released fix" } }] };
                 throw new Error(`Unexpected request: ${endpoint}`);
             }
         }
@@ -66,7 +67,7 @@ for (const mode of ["http", "git"]) test(`${mode} updater isolates release chann
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
     });
     runInNewContext(outputText, {
-        exports: {}, __dirname: "/fixture/dist", process: { platform: "win32", env: {} }, URL,
+        exports: {}, __dirname: "/fixture/dist", process: { platform: "win32", env: {} }, URL, VERSION: "3.0.0.0",
         require: (name: string) => name in modules ? modules[name] : nativeRequire(name)
     });
     const check = handlers.get(events.GET_UPDATES);
@@ -81,7 +82,7 @@ for (const mode of ["http", "git"]) test(`${mode} updater isolates release chann
         if (mode === "http") {
             assert.deepEqual(requests, [
                 "/releases", `/commits/${selected.tag_name}`, `/compare/installed-commit...commit-${selected.tag_name}`,
-                "/releases", `/commits/${selected.tag_name}`
+                "/releases", `/commits/${selected.tag_name}`, `/compare/installed-commit...commit-${selected.tag_name}`
             ], "checks and downloads resolve the allowed release tag, never moving main");
         } else {
             const branch = updateChannel.normalizeUpdateChannel(channel);

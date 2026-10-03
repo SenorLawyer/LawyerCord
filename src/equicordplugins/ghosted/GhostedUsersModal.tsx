@@ -7,7 +7,10 @@
 import { classNameFactory } from "@utils/css";
 import { Channel, RenderModalProps } from "@vencord/discord-types";
 import { findByPropsLazy, findComponentByCodeLazy } from "@webpack";
-import { Avatar, Button, ChannelStore, MessageStore, Modal,React, Text, UserStore } from "@webpack/common";
+import { Avatar, Button, ChannelStore, lodash, MessageStore, Modal, React, Text, UserStore, useStateFromStores } from "@webpack/common";
+
+import { settings } from ".";
+import { getGhostedChannels, GHOST_SETTINGS } from "./Boo";
 
 const cl = classNameFactory("vc-boo-");
 
@@ -37,7 +40,6 @@ function GroupDmsIcon({ channel }: { channel: Channel; }) {
 
 interface GhostedUsersModalProps {
     modalProps: RenderModalProps;
-    ghostedChannels: string[];
     onClearGhost: (channelId: string) => void;
 }
 
@@ -55,8 +57,10 @@ export function getChannelDisplayName(channelId: string): string {
     return user?.username || "Unknown User";
 }
 
-export function GhostedUsersModal({ modalProps, ghostedChannels: initialChannels, onClearGhost }: GhostedUsersModalProps) {
-    const [ghostedChannels, setGhostedChannels] = React.useState(initialChannels);
+export function GhostedUsersModal({ modalProps, onClearGhost }: GhostedUsersModalProps) {
+    const values = settings.use(GHOST_SETTINGS);
+    const ghostedChannels = useStateFromStores([ChannelStore, MessageStore, UserStore], getGhostedChannels,
+        GHOST_SETTINGS.map(key => values[key]), lodash.isEqual);
 
     const handleChannelClick = (channelId: string) => {
         const channel = ChannelStore.getChannel(channelId);
@@ -69,15 +73,12 @@ export function GhostedUsersModal({ modalProps, ghostedChannels: initialChannels
     const handleClearClick = (e: React.MouseEvent, channelId: string) => {
         e.stopPropagation();
         onClearGhost(channelId);
-        // update local state to remove the cleared channel
-        setGhostedChannels(prev => prev.filter(id => id !== channelId));
     };
 
     const handleClearAll = () => {
-        for (const channelId of initialChannels) {
+        for (const channelId of ghostedChannels) {
             onClearGhost(channelId);
         }
-        setGhostedChannels([]);
     };
 
     return (
@@ -101,7 +102,7 @@ export function GhostedUsersModal({ modalProps, ghostedChannels: initialChannels
                         const channel = ChannelStore.getChannel(channelId);
                         if (!channel) return null;
 
-                        const lastMessage = MessageStore.getMessages(channelId)?.last();
+                        const lastMessage = MessageStore.getLastMessage(channelId);
                         const lastMessageDate = lastMessage?.timestamp ? formatMessageDate(lastMessage.timestamp) : "";
 
                         const displayName = getChannelDisplayName(channel.id);

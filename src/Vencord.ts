@@ -46,7 +46,7 @@ import { PlainSettings, Settings, SettingsStore } from "./api/Settings";
 import { getAuthorization } from "./api/SettingsSync/cloudSetup";
 import { areLocalSettingsDirty, getCloudSettings, getCloudSyncDirection, markLocalDataDirty, markLocalSettingsDirty, putCloudSettings, shouldCloudSync } from "./api/SettingsSync/cloudSync";
 import { relaunch } from "./utils/native";
-import { checkForUpdates, isOutdated as getIsOutdated, update, UpdateLogger } from "./utils/updater";
+import { checkForUpdates, isOutdated as getIsOutdated, restartRequired, selectedRelease, update, UpdateLogger } from "./utils/updater";
 import { onceReady } from "./webpack";
 import { patches } from "./webpack/patchWebpack";
 
@@ -142,7 +142,7 @@ async function runUpdateCheck() {
                 notifiedForUpdatesThisSession = true;
 
                 showNotice(
-                    "LawyerCord has been updated!",
+                    "The LawyerCord update is ready. Restart Discord to apply it.",
                     "Restart",
                     relaunch
                 );
@@ -171,10 +171,16 @@ function initTrayIpc() {
             const isOutdated = await checkForUpdates();
             VencordNative.tray.setUpdateState(isOutdated);
 
-            if (isOutdated) {
+            if (restartRequired) {
+                showNotice("A LawyerCord release is downloaded. Restart Discord to install it.", "Restart", relaunch);
+            } else if (isOutdated) {
                 showNotice("A LawyerCord update is available!", "View Update", () => openSettingsTabModal(UpdaterTab!));
+            } else if (selectedRelease?.relation === "rollback" || selectedRelease?.relation === "switch") {
+                showNotice("Your selected channel offers a different release.", "View Updates", () => {
+                    if (UpdaterTab) openSettingsTabModal(UpdaterTab);
+                });
             } else {
-                showNotice("No updates available, you're on the latest version!", "OK", popNotice);
+                showNotice("No updates are available for your selected channel.", "OK", popNotice);
             }
         } catch (err) {
             UpdateLogger.error("Failed to check for updates from tray", err);

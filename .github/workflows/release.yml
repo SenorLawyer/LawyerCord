@@ -126,7 +126,7 @@ jobs:
             - name: Audit and test release source
               run: |
                   $PSNativeCommandUseErrorActionPreference = $true
-                  pnpm audit --audit-level moderate
+                  pnpm auditDependencies --audit-level moderate
                   pnpm testTsc
                   pnpm testPerformance
                   pnpm testStartupFlags
@@ -140,6 +140,7 @@ jobs:
                   pnpm testSecureMessaging
                   pnpm testSecureMessagingNative
                   pnpm testUpdateChannelSelection
+                  pnpm testReleaseUpdates
                   pnpm testInstallerStaleMarkerRepair
 
             - name: Build desktop and browser targets

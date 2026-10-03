@@ -84,9 +84,13 @@ package main
 
 import (
 \t_ "embed"
+\t"errors"
+\t"fmt"
 \t"os"
 \t"path/filepath"
 \t"regexp"
+\t"runtime"
+\t"syscall"
 )
 
 //go:embed lawyercord-desktop.asar
@@ -146,6 +150,9 @@ func installLatestBuilds() error {
 \t\treturn err
 \t}
 \tif err := os.Rename(temporary.Name(), LawyerCordDirectory); err != nil {
+\t\tif runtime.GOOS == "windows" && (errors.Is(err, syscall.Errno(5)) || errors.Is(err, syscall.Errno(32)) || errors.Is(err, syscall.Errno(33))) {
+\t\t\treturn fmt.Errorf("Could not replace LawyerCord. Close all Discord windows, including Discord in the system tray and other release channels, then try again. If it still fails, check the LawyerCord folder permissions. Your existing archive has been kept. %w", err)
+\t\t}
 \t\treturn err
 \t}
 \tInstalledHash = LatestHash
@@ -207,6 +214,23 @@ for (const file of ["patcher.go", "gui.go", "cli.go", "find_discord_linux.go"]) 
 
     if (file === "patcher.go") {
         const lineEnding = adapted.includes("\r\n") ? "\r\n" : "\n";
+        const patchStart = `\tLog.Info("Patching " + di.path + "...")
+\tif LatestHash != InstalledHash {
+\t\tif err := InstallLatestBuilds(); err != nil {
+\t\t\treturn ErrAlreadyReported
+\t\t}
+\t}
+
+\tPreparePatch(di)`.replaceAll("\n", lineEnding);
+        const patchReplacement = `\tLog.Info("Patching " + di.path + "...")
+\tPreparePatch(di)
+\tif LatestHash != InstalledHash {
+\t\tif err := InstallLatestBuilds(); err != nil {
+\t\t\treturn ErrAlreadyReported
+\t\t}
+\t}`.replaceAll("\n", lineEnding);
+        if (!adapted.includes(patchStart)) throw new Error("Audited installer patch ordering changed unexpectedly");
+        adapted = adapted.replace(patchStart, patchReplacement);
         const cleanupStart = `func cleanupDesyncedPatchedInstall(dir string, isSystemElectron bool) (bool, error) {
 \tappAsar := path.Join(dir, "app.asar")
 \t_appAsar := path.Join(dir, "_app.asar")
@@ -236,6 +260,9 @@ for (const file of ["patcher.go", "gui.go", "cli.go", "find_discord_linux.go"]) 
         adapted = adapted.replace(cleanupStart, cleanupReplacement);
         if (!adapted.includes(cleanupReplacement)) throw new Error("Audited installer patcher source changed unexpectedly");
     }
+
+    if (file === "gui.go")
+        adapted = adapted.replace("Failed to install the latest LawyerCord builds from GitHub:", "Could not install the LawyerCord build included with this installer:");
 
     await writeFile(path, adapted);
 }

@@ -16,7 +16,7 @@ import definePlugin, { OptionType } from "@utils/types";
 import { Channel } from "@vencord/discord-types";
 import { ChannelStore, lodash, Menu, MessageStore, openModal, Tooltip, UserStore, useStateFromStores } from "@webpack/common";
 
-import { Boo, clearChannelFromGhost, getGhostedChannels, GHOST_SETTINGS } from "./Boo";
+import { Boo, clearChannelFromGhost, getGhostedChannels, GHOST_SETTINGS, migrateClearedChannels } from "./Boo";
 import { getChannelDisplayName, GhostedUsersModal } from "./GhostedUsersModal";
 import { IconGhost } from "./IconGhost";
 
@@ -64,7 +64,7 @@ export const settings = definePluginSettings({
         ],
         restartNeeded: false
     }
-}).withPrivateSettings<{ clearedChannels?: Record<string, string>; }>();
+}).withPrivateSettings<{ clearedChannels?: Record<string, string>; clearedChannelsByUser?: Record<string, Record<string, string>>; }>();
 
 function BooIndicator() {
     const values = settings.use(GHOST_SETTINGS);
@@ -78,7 +78,6 @@ function BooIndicator() {
             <ErrorBoundary>
                 <GhostedUsersModal
                     modalProps={modalProps}
-                    ghostedChannels={ghostedChannels}
                     onClearGhost={clearChannelFromGhost}
                 />
             </ErrorBoundary>
@@ -168,7 +167,12 @@ export default definePlugin({
         );
     },
 
+    flux: {
+        CONNECTION_OPEN: migrateClearedChannels
+    },
+
     start() {
+        migrateClearedChannels();
         addServerListElement(ServerListRenderPosition.Above, this.renderIndicator);
     },
 

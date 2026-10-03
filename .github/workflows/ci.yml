@@ -43,13 +43,14 @@ jobs:
                   cache: false
 
             - name: Audit dependency graph
-              run: pnpm audit --audit-level moderate
+              run: pnpm auditDependencies --audit-level moderate
 
             - name: Type-check
               run: pnpm testTsc
 
             - name: Run focused tests
               run: |
+                  node --test scripts/testDependencyAudit.mjs
                   pnpm testPerformance
                   pnpm testStartupFlags
                   pnpm testCrxToZip
@@ -63,6 +64,7 @@ jobs:
                   pnpm testSecureMessaging
                   pnpm testSecureMessagingNative
                   pnpm testUpdateChannelSelection
+                  pnpm testReleaseUpdates
                   pnpm testInstallerStaleMarkerRepair
 
             - name: Lint
@@ -135,6 +137,7 @@ jobs:
                   $PSNativeCommandUseErrorActionPreference = $true
                   pnpm testInstallerStaleMarkerRepair
                   pnpm buildStandalone
+                  pnpm testReleaseUpdates
                   pnpm auditReleaseArtifacts dist
 
             - name: Prepare offline LawyerCord installer source

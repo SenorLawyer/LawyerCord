@@ -16,6 +16,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { flushSettings } from "@api/Settings";
+import type { ReleaseUpdate } from "@shared/updateRelease";
+
 import gitHash from "~git-hash";
 
 import { Logger } from "./Logger";
@@ -29,9 +32,22 @@ export let isNewer = false;
 export let updateError: any;
 export let changes: Record<"hash" | "author" | "message", string>[] = [];
 
+export let selectedRelease: ReleaseUpdate | undefined;
+export let restartRequired = false;
+export let isUpdating = false;
+
 let updateCheck = Symbol();
 let needsRebuild = false;
 let pendingUpdate: Promise<boolean> | undefined;
+const updateListeners = new Set<() => void>();
+
+export const getUpdateState = () => Number(isUpdating) | Number(restartRequired) << 1;
+export function subscribeUpdateState(listener: () => void) {
+    updateListeners.add(listener);
+    return () => { updateListeners.delete(listener); };
+}
+
+export const waitForPendingUpdate = () => pendingUpdate;
 
 function Unwrap<T>(res: IpcRes<T>) {
     if (res.ok) return res.value;
@@ -40,26 +56,38 @@ function Unwrap<T>(res: IpcRes<T>) {
     throw res.error;
 }
 
-export async function checkForUpdates() {
-    if (pendingUpdate || needsRebuild) return isOutdated;
+export const getReleaseCatalog = async (page = 1) => Unwrap(await VencordNative.updater.getReleases(page));
+
+export async function checkForUpdates(tag?: string) {
+    if (pendingUpdate || needsRebuild || restartRequired) return isOutdated;
     const check = updateCheck = Symbol();
     updateError = undefined;
+    if (IS_STANDALONE) {
+        const result = await VencordNative.updater.checkRelease(Vencord.Settings.updateChannel, tag);
+        if (check !== updateCheck) return isOutdated;
+        selectedRelease = Unwrap(result);
+        changes = selectedRelease.changes;
+        if (selectedRelease.restartRequired) {
+            restartRequired = true;
+            isOutdated = isNewer = false;
+            updateListeners.forEach(listener => listener());
+            return false;
+        }
+        isNewer = selectedRelease.relation === "rollback";
+        return (isOutdated = selectedRelease.relation === "upgrade");
+    }
     const result = await VencordNative.updater.getUpdates(Vencord.Settings.updateChannel);
     if (check !== updateCheck) return isOutdated;
     changes = Unwrap(result);
 
-    // we only want to check this for the git updater, not the http updater
-    if (!IS_STANDALONE) {
-        const classification = classifyUpdateChanges(changes, gitHash);
-        isNewer = classification.isNewer;
-        return (isOutdated = classification.isOutdated);
-    }
-
-    isNewer = false;
-    return (isOutdated = changes.length > 0);
+    const classification = classifyUpdateChanges(changes, gitHash);
+    isNewer = classification.isNewer;
+    return (isOutdated = classification.isOutdated);
 }
 
 export function resetUpdateState() {
+    if (pendingUpdate || needsRebuild || restartRequired) return;
+    selectedRelease = undefined;
     updateCheck = Symbol();
     needsRebuild = false;
     isOutdated = false;
@@ -68,14 +96,17 @@ export function resetUpdateState() {
     changes = [];
 }
 
-export async function update() {
+export async function update(tag?: string) {
     if (pendingUpdate) return pendingUpdate;
-    if (!isOutdated) return true;
+    if (restartRequired) return true;
+    if (!isOutdated && !(IS_STANDALONE && tag)) return true;
 
     const check = updateCheck = Symbol();
-    return pendingUpdate = (async () => {
+    isUpdating = true;
+    pendingUpdate = (async () => {
         if (!needsRebuild) {
-            const result = await VencordNative.updater.update(Vencord.Settings.updateChannel);
+            if (IS_STANDALONE) await flushSettings();
+            const result = await VencordNative.updater.update(Vencord.Settings.updateChannel, tag);
             if (check !== updateCheck) return false;
             if (!Unwrap(result)) return false;
             needsRebuild = true;
@@ -84,12 +115,29 @@ export async function update() {
         const result = await VencordNative.updater.rebuild();
         if (check !== updateCheck) return false;
         if (!Unwrap(result))
-            throw new Error("The Build failed. Please try manually building the new update");
+            throw new Error(IS_STANDALONE ? "The update could not be installed. Try downloading it again." : "The build failed. Try building the update manually.");
 
         needsRebuild = false;
+        restartRequired = IS_STANDALONE;
         isOutdated = false;
+        if (IS_STANDALONE) {
+            selectedRelease = undefined;
+            try {
+                const installed = await VencordNative.updater.checkRelease(Vencord.Settings.updateChannel);
+                if (installed.ok) selectedRelease = installed.value;
+            } catch (error) {
+                UpdateLogger.warn("Could not read the downloaded release details", error);
+            }
+        }
         return true;
-    })().finally(() => { pendingUpdate = undefined; });
+    })().finally(() => {
+        pendingUpdate = undefined;
+        if (IS_STANDALONE && !restartRequired) needsRebuild = false;
+        isUpdating = false;
+        updateListeners.forEach(listener => listener());
+    });
+    updateListeners.forEach(listener => listener());
+    return pendingUpdate;
 }
 
 export const getRepo = async () => Unwrap(await VencordNative.updater.getRepo());

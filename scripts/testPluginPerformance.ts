@@ -16124,25 +16124,26 @@ test("HTTP updater verifies release digests before staging and permits a correct
         loadSource("src/main/updater/http.ts", {
             "@main/utils/http": {
                 fetchJson: async (url: string) => url.includes("/releases?")
-                    ? [{ tag_name: "tag", assets: [{ name: "fixture.asar", browser_download_url: "https://fixture.invalid/archive", digest: advertised }] }]
-                    : { sha: "next" },
+                    ? [{ tag_name: "v4.1.0.0", published_at: "2026-10-03T00:00:00Z", assets: [{ name: "fixture.asar", browser_download_url: "https://github.com/fixture/repo/releases/download/v4.1.0.0/fixture.asar", digest: advertised }] }]
+                    : url.includes("/compare/") ? { status: "ahead", commits: [] } : { sha: "next" },
                 fetchBuffer: async () => downloaded
             },
-            "@shared/IpcEvents": { IpcEvents: { GET_REPO: "repo", GET_UPDATES: "check", UPDATE: "update", BUILD: "build" } },
+            "@shared/IpcEvents": { IpcEvents: { GET_RELEASES: "releases", CHECK_RELEASE: "release", RESTART_UPDATE: "restart", GET_REPO: "repo", GET_UPDATES: "check", UPDATE: "update", BUILD: "build" } },
             "@shared/updateChannel": { normalizeUpdateChannel: () => "nightly" },
             "@shared/vencordUserAgent": { VENCORD_USER_AGENT: "fixture" },
             electron: { ipcMain: { handle: (name: string, handler: (...args: unknown[]) => Promise<unknown>) => { handlers[name] = handler; } } },
-            "original-fs": { mkdtempSync: () => { stages++; return "fixture-temp"; }, renameSync() {}, rmSync() {}, writeFileSync: () => writes++ },
+            "./archiveReplacement": { getStagedUpdateError() {}, restartStagedUpdate() {}, replaceVerifiedArchive: async () => { stages++; writes++; } },
             crypto: { createHash },
             path,
+            "@api/Settings": { flushSettings: async () => {} },
             "~git-hash": { __esModule: true, default: "current" },
             "~git-remote": { __esModule: true, default: "fixture/repo" },
             "./common": { ASAR_FILE: "fixture.asar", serializeErrors: (handler: unknown) => handler },
-            "./releaseSelection": { selectUpdateRelease: (releases: unknown[]) => releases[0] }
-        }, { __dirname: "fixture.asar" });
+            "./releaseSelection": { releaseChannel: () => "nightly", selectUpdateRelease: (releases: unknown[]) => releases[0] }
+        }, { __dirname: "fixture.asar", VERSION: "4.0.1.0", URL });
         if (advertised !== digest) {
-            await assert.rejects(handlers.update(null, "nightly"), /checksum/);
-            assert.equal(await handlers.build(), true);
+            await assert.rejects(handlers.update(null, "nightly"), /verified desktop archive/);
+            assert.equal(await handlers.build(), false);
         } else {
             assert.equal(await handlers.update(null, "nightly"), true);
             await assert.rejects(handlers.build(), /checksum/);
@@ -16165,32 +16166,34 @@ test("HTTP updater discards a pending download when a later check finds nothing 
         loadSource("src/main/updater/http.ts", {
             "@main/utils/http": {
                 fetchJson: async (url: string) => {
+                    if (url.includes("/compare/")) return { status: "ahead", commits: [] };
                     if (url.includes("/releases?")) {
                         if (secondCheck && outcome === "release-error") throw new Error("Release lookup failed");
-                        return [{ tag_name: "tag", assets: [{ name: "fixture.asar", browser_download_url: "https://fixture.invalid/old", digest: `sha256:${createHash("sha256").update("fixture").digest("hex")}` }] }];
+                        return [{ tag_name: "v4.1.0.0", published_at: "2026-10-03T00:00:00Z", assets: [{ name: "fixture.asar", browser_download_url: "https://github.com/fixture/repo/releases/download/v4.1.0.0/fixture.asar", digest: `sha256:${createHash("sha256").update("fixture").digest("hex")}` }] }];
                     }
                     if (secondCheck && outcome === "commit-error") throw new Error("Commit lookup failed");
                     return { sha: secondCheck ? "current" : "next" };
                 },
-                fetchBuffer: async (url: string) => { assert.equal(url, "https://fixture.invalid/old"); downloads++; return Buffer.from("fixture"); }
+                fetchBuffer: async (url: string) => { assert.equal(url, "https://github.com/fixture/repo/releases/download/v4.1.0.0/fixture.asar"); downloads++; return Buffer.from("fixture"); }
             },
-            "@shared/IpcEvents": { IpcEvents: { GET_REPO: "repo", GET_UPDATES: "check", UPDATE: "update", BUILD: "build" } },
+            "@shared/IpcEvents": { IpcEvents: { GET_RELEASES: "releases", CHECK_RELEASE: "release", RESTART_UPDATE: "restart", GET_REPO: "repo", GET_UPDATES: "check", UPDATE: "update", BUILD: "build" } },
             "@shared/updateChannel": { normalizeUpdateChannel: () => "nightly" },
             "@shared/vencordUserAgent": { VENCORD_USER_AGENT: "fixture" },
             electron: { ipcMain: { handle: (name: string, handler: (...args: unknown[]) => Promise<unknown>) => { handlers[name] = handler; } } },
-            "original-fs": { mkdtempSync: () => "fixture-temp", renameSync() {}, rmSync() {}, writeFileSync: () => writes++ },
+            "./archiveReplacement": { getStagedUpdateError() {}, restartStagedUpdate() {}, replaceVerifiedArchive: async () => { writes++; } },
             crypto: { createHash },
             path,
+            "@api/Settings": { flushSettings: async () => {} },
             "~git-hash": { __esModule: true, default: "current" },
             "~git-remote": { __esModule: true, default: "fixture/repo" },
             "./common": { ASAR_FILE: "fixture.asar", serializeErrors: (handler: unknown) => handler },
-            "./releaseSelection": { selectUpdateRelease: (releases: unknown[]) => releases[0] }
-        }, { __dirname: "fixture.asar" });
+            "./releaseSelection": { releaseChannel: () => "nightly", selectUpdateRelease: (releases: unknown[]) => releases[0] }
+        }, { __dirname: "fixture.asar", VERSION: "4.0.1.0", URL });
         assert.equal(await handlers.update(null, "nightly"), true);
         secondCheck = true;
         if (outcome === "current") assert.equal(await handlers.update(null, "nightly"), false);
         else await assert.rejects(handlers.update(null, "nightly"), /lookup failed/);
-        assert.equal(await handlers.build(), true);
+        assert.equal(await handlers.build(), false);
         assert.equal(downloads, 0);
         assert.equal(writes, 0);
         secondCheck = false;
@@ -16203,7 +16206,7 @@ test("HTTP updater discards a pending download when a later check finds nothing 
 });
 
 
-test("HTTP updater ignores superseded checks and downloads even when their URLs match", async () => {
+test("HTTP updater ignores superseded preparation and freezes a shared in-flight download", async () => {
     for (const newest of ["current", "next"]) {
         const handlers: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
         const commits: ReturnType<typeof Promise.withResolvers<{ sha: string }>>[] = [];
@@ -16214,7 +16217,8 @@ test("HTTP updater ignores superseded checks and downloads even when their URLs 
         loadSource("src/main/updater/http.ts", {
             "@main/utils/http": {
                 fetchJson: async (url: string) => {
-                    if (url.includes("/releases?")) return [{ tag_name: "tag", assets: [{ name: "fixture.asar", browser_download_url: "https://fixture.invalid/same", digest: `sha256:${createHash("sha256").update("fixture").digest("hex")}` }] }];
+                    if (url.includes("/compare/")) return { status: "ahead", commits: [] };
+                    if (url.includes("/releases?")) return [{ tag_name: "v4.1.0.0", published_at: "2026-10-03T00:00:00Z", assets: [{ name: "fixture.asar", browser_download_url: "https://github.com/fixture/repo/releases/download/v4.1.0.0/fixture.asar", digest: `sha256:${createHash("sha256").update("fixture").digest("hex")}` }] }];
                     if (!deferChecks) return { sha: "next" };
                     const pending = Promise.withResolvers<{ sha: string }>();
                     commits.push(pending);
@@ -16222,18 +16226,19 @@ test("HTTP updater ignores superseded checks and downloads even when their URLs 
                 },
                 fetchBuffer: async () => { downloads++; return download ? download.promise : Buffer.from("fixture"); }
             },
-            "@shared/IpcEvents": { IpcEvents: { GET_REPO: "repo", GET_UPDATES: "check", UPDATE: "update", BUILD: "build" } },
+            "@shared/IpcEvents": { IpcEvents: { GET_RELEASES: "releases", CHECK_RELEASE: "release", RESTART_UPDATE: "restart", GET_REPO: "repo", GET_UPDATES: "check", UPDATE: "update", BUILD: "build" } },
             "@shared/updateChannel": { normalizeUpdateChannel: () => "nightly" },
             "@shared/vencordUserAgent": { VENCORD_USER_AGENT: "fixture" },
             electron: { ipcMain: { handle: (name: string, handler: (...args: unknown[]) => Promise<unknown>) => { handlers[name] = handler; } } },
-            "original-fs": { mkdtempSync: () => "fixture-temp", renameSync() {}, rmSync() {}, writeFileSync: () => writes++ },
+            "./archiveReplacement": { getStagedUpdateError() {}, restartStagedUpdate() {}, replaceVerifiedArchive: async () => { writes++; } },
             crypto: { createHash },
             path,
+            "@api/Settings": { flushSettings: async () => {} },
             "~git-hash": { __esModule: true, default: "current" },
             "~git-remote": { __esModule: true, default: "fixture/repo" },
             "./common": { ASAR_FILE: "fixture.asar", serializeErrors: (handler: unknown) => handler },
-            "./releaseSelection": { selectUpdateRelease: (releases: unknown[]) => releases[0] }
-        }, { __dirname: "fixture.asar" });
+            "./releaseSelection": { releaseChannel: () => "nightly", selectUpdateRelease: (releases: unknown[]) => releases[0] }
+        }, { __dirname: "fixture.asar", VERSION: "4.0.1.0", URL });
         const older = handlers.update(null, "nightly");
         await setImmediate();
         const newer = handlers.update(null, "nightly");
@@ -16245,25 +16250,17 @@ test("HTTP updater ignores superseded checks and downloads even when their URLs 
         await handlers.build();
         assert.equal(downloads, newest === "next" ? 1 : 0);
         assert.equal(writes, downloads);
+        if (newest === "next") continue;
         deferChecks = false;
-        await handlers.update(null, "nightly");
-        download = Promise.withResolvers<Buffer>();
-        const staleBuild = handlers.build();
-        await handlers.update(null, "nightly");
-        const before = writes;
-        download.resolve(Buffer.from("old"));
-        assert.equal(await staleBuild, false);
-        assert.equal(writes, before);
-        download = undefined;
-        assert.equal(await handlers.build(), true);
-        assert.equal(writes, before + 1);
         await handlers.update(null, "nightly");
         download = Promise.withResolvers<Buffer>();
         const firstBuild = handlers.build();
         const duplicateBuild = handlers.build();
+        assert.equal(await handlers.update(null, "nightly"), false);
         download.resolve(Buffer.from("fixture"));
-        assert.deepEqual(await Promise.all([firstBuild, duplicateBuild]), [true, false]);
-        assert.equal(writes, before + 2);
+        assert.deepEqual(await Promise.all([firstBuild, duplicateBuild]), [true, true]);
+        assert.equal(downloads, 1);
+        assert.equal(writes, 1);
     }
 });
 
@@ -16273,9 +16270,10 @@ test("renderer updater ignores check results and errors invalidated by reset or 
         for (const failure of [false, true]) {
             const pending: ReturnType<typeof Promise.withResolvers<unknown>>[] = [];
             const api = loadSource("src/utils/updater.ts", {
-                "~git-hash": { __esModule: true, default: "current" },
+                "@api/Settings": { flushSettings: async () => {} },
+            "~git-hash": { __esModule: true, default: "current" },
                 "./Logger": { Logger: class {} }, "./native": {}, "./updateClassification": {}
-            }, { IS_STANDALONE: true, Vencord: { Settings: { updateChannel: "nightly" } }, VencordNative: { updater: { getUpdates: () => {
+            }, { IS_STANDALONE: true, Vencord: { Settings: { updateChannel: "nightly" } }, VencordNative: { updater: { checkRelease: () => {
                 const request = Promise.withResolvers<unknown>();
                 pending.push(request);
                 return request.promise;
@@ -16284,10 +16282,10 @@ test("renderer updater ignores check results and errors invalidated by reset or 
             if (reset) api.resetUpdateState();
             else {
                 const current = api.checkForUpdates();
-                pending[1].resolve({ ok: true, value: [{ hash: "new", author: "author", message: "new" }] });
+                pending[1].resolve({ ok: true, value: { relation: "upgrade", changes: [{ hash: "new", author: "author", message: "new" }] } });
                 assert.equal(await current, true);
             }
-            pending[0].resolve(failure ? { ok: false, error: "stale failure" } : { ok: true, value: [{ hash: "old" }] });
+            pending[0].resolve(failure ? { ok: false, error: "stale failure" } : { ok: true, value: { relation: "upgrade", changes: [{ hash: "old" }] } });
             assert.equal(await old, !reset);
             assert.equal(api.isOutdated, !reset);
             assert.equal(api.updateError, undefined);
@@ -16308,9 +16306,10 @@ test("renderer updater keeps a failed rebuild available for retry", async () => 
         let updates = 0;
         let builds = 0;
         const api = loadSource("src/utils/updater.ts", {
+            "@api/Settings": { flushSettings: async () => {} },
             "~git-hash": { __esModule: true, default: "current" },
-            "./Logger": { Logger: class {} }, "./native": {}, "./updateClassification": {}
-        }, { IS_STANDALONE: true, Vencord: { Settings: { updateChannel: "nightly" } }, VencordNative: { updater: {
+            "./Logger": { Logger: class {} }, "./native": {}, "./updateClassification": { classifyUpdateChanges: (changes: unknown[]) => ({ isNewer: false, isOutdated: changes.length > 0 }) }
+        }, { IS_STANDALONE: false, Vencord: { Settings: { updateChannel: "nightly" } }, VencordNative: { updater: {
             getUpdates: async () => ({ ok: true, value: failing ? [{ hash: "next", author: "author", message: "update" }] : [] }),
             update: async () => { updates++; return { ok: true, value: true }; },
             rebuild: async () => {
@@ -16338,7 +16337,7 @@ test("renderer updater keeps a failed rebuild available for retry", async () => 
 });
 
 
-test("renderer updater shares active work and rejects completion after a reset", async () => {
+test("renderer updater shares active work and keeps a staged update across channel resets", async () => {
     for (const resetAt of ["none", "update", "rebuild"]) {
         const updateResult = Promise.withResolvers<unknown>();
         const buildResult = Promise.withResolvers<unknown>();
@@ -16347,10 +16346,11 @@ test("renderer updater shares active work and rejects completion after a reset",
         let updates = 0;
         let builds = 0;
         const api = loadSource("src/utils/updater.ts", {
+            "@api/Settings": { flushSettings: async () => {} },
             "~git-hash": { __esModule: true, default: "current" },
             "./Logger": { Logger: class {} }, "./native": {}, "./updateClassification": {}
         }, { IS_STANDALONE: true, Vencord: { Settings: { updateChannel: "nightly" } }, VencordNative: { updater: {
-            getUpdates: async () => deferCheck ? oldCheck.promise : { ok: true, value: [{ hash: "next" }] },
+            checkRelease: async () => deferCheck ? oldCheck.promise : { ok: true, value: { relation: "upgrade", changes: [{ hash: "next" }] } },
             update: () => { updates++; return updateResult.promise; },
             rebuild: () => { builds++; return buildResult.promise; }
         } } });
@@ -16359,6 +16359,7 @@ test("renderer updater shares active work and rejects completion after a reset",
         const obsoleteCheck = api.checkForUpdates();
         const first = api.update();
         const second = api.update();
+        await setImmediate();
         assert.equal(updates, 1);
         oldCheck.resolve({ ok: true, value: [] });
         assert.equal(await obsoleteCheck, true);
@@ -16366,10 +16367,10 @@ test("renderer updater shares active work and rejects completion after a reset",
         if (resetAt === "update") api.resetUpdateState();
         updateResult.resolve({ ok: true, value: true });
         await setImmediate();
-        assert.equal(builds, resetAt === "update" ? 0 : 1);
+        assert.equal(builds, 1);
         if (resetAt === "rebuild") api.resetUpdateState();
-        buildResult.resolve(resetAt === "rebuild" ? { ok: false, error: "stale build failure" } : { ok: true, value: true });
-        assert.deepEqual(await Promise.all([first, second]), [resetAt === "none", resetAt === "none"]);
+        buildResult.resolve({ ok: true, value: true });
+        assert.deepEqual(await Promise.all([first, second]), [true, true]);
         assert.equal(api.isOutdated, false);
         assert.equal(api.updateError, undefined);
         assert.equal(await api.update(), true);
@@ -16386,13 +16387,14 @@ test("update recovery prompt relaunches only after a successful update", async (
         let errors = 0;
         let alerts = 0;
         const api = loadSource("src/utils/updater.ts", {
+            "@api/Settings": { flushSettings: async () => {} },
             "~git-hash": { __esModule: true, default: "current" },
             "./Logger": { Logger: class { error() { errors++; } } },
             "./native": { relaunch: () => relaunches++ }, "./updateClassification": {}
         }, { IS_STANDALONE: true, IS_WEB: false, IS_UPDATER_DISABLED: false,
             confirm: () => mode !== "declined", alert: () => alerts++,
             Vencord: { Settings: { updateChannel: "nightly" } }, VencordNative: { updater: {
-                getUpdates: async () => ({ ok: true, value: [{ hash: "next" }] }),
+                checkRelease: async () => ({ ok: true, value: { relation: "upgrade", changes: [{ hash: "next" }] } }),
                 update: async () => { updates++; return { ok: true, value: mode !== "unchanged" }; },
                 rebuild: async () => { builds++; return { ok: true, value: mode !== "failed" }; }
             } }

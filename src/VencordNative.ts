@@ -10,6 +10,7 @@ import type { PluginIpcMappings } from "@main/ipcPlugins";
 import { UserThemeHeader } from "@main/themes";
 import { IpcEvents } from "@shared/IpcEvents";
 import type { UpdateChannel } from "@shared/updateChannel";
+import type { ReleaseCatalog, ReleaseUpdate } from "@shared/updateRelease";
 import type { IpcRes } from "@utils/types";
 import { ipcRenderer } from "electron/renderer";
 
@@ -49,8 +50,11 @@ export default {
     },
 
     updater: {
+        restart: () => invoke<IpcRes<boolean>>(IpcEvents.RESTART_UPDATE),
         getUpdates: (channel?: UpdateChannel) => invoke<IpcRes<Record<"hash" | "author" | "message", string>[]>>(IpcEvents.GET_UPDATES, channel),
-        update: (channel?: UpdateChannel) => invoke<IpcRes<boolean>>(IpcEvents.UPDATE, channel),
+        getReleases: (page = 1) => invoke<IpcRes<ReleaseCatalog>>(IpcEvents.GET_RELEASES, page),
+        checkRelease: (channel: UpdateChannel, tag?: string) => invoke<IpcRes<ReleaseUpdate>>(IpcEvents.CHECK_RELEASE, channel, tag),
+        update: (channel?: UpdateChannel, tag?: string) => invoke<IpcRes<boolean>>(IpcEvents.UPDATE, channel, tag),
         rebuild: () => invoke<IpcRes<boolean>>(IpcEvents.BUILD),
         getRepo: () => invoke<IpcRes<string>>(IpcEvents.GET_REPO),
     },

@@ -2,7 +2,7 @@
 
 `package.json` is the source of truth for the LawyerCord version.
 
-The current source version is `4.0.1.0`, continuing the `4.0.0.0` Nightly audit from the audited Stable `3.0.1.0` baseline. The current Stable release version is `3.0.1.0`, including the `3.0.0.0` audit and update-channel fixes.
+The current source version is `4.1.0.0`, continuing the `4.0.0.0` Nightly audit from the audited Stable `3.0.1.0` baseline. The current Stable release version is `3.0.1.0`, including the `3.0.0.0` audit and update-channel fixes.
 
 The current four-part format is retained for upstream compatibility:
 
@@ -16,6 +16,8 @@ major.minor.patch.packaging
 - Increment `packaging` for rebuilds that change distribution metadata without changing source behavior.
 
 ## Compatibility in 4.0.0.0
+
+Packaged clients from 4.1.0.0 can select a specific published release independently of their automatic update channel. Explicit rollbacks require confirmation. Automatic updates only advance to a newer release allowed by the selected channel. Downloaded archives are checksum verified and staged until Discord exits; the update folder retains the previous archive and a snapshot of local renderer and native settings. This snapshot does not include plugin databases or Discord account data.
 
 MusicControls stores saved Spotify lyrics per track instead of rewriting the entire history. Existing history is imported once and retained in its legacy format until the user clears it. Lyrics and translations saved after upgrading are available in the new format; older builds cannot display those new entries after a downgrade. This stored-data change requires a major version increment.
 

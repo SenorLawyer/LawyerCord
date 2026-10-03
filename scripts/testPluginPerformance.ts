@@ -723,6 +723,7 @@ test("unread thread badges render without voice or mention counters", () => {
 test("extra sticker buttons preserve picker callbacks and selection scope", () => {
     const { default: plugin } = loadSource("src/equicordplugins/moreStickers/index.tsx", {
         "@api/Settings": { definePluginSettings: () => ({}) },
+        "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@utils/constants": { Devs: {}, EquicordDevs: {} },
         "@utils/types": { __esModule: true, default: (value: unknown) => value, OptionType: {} },
         "@utils/react": {}, "@webpack/common": {}, "./components": {}, "./stickers": {}, "./utils": {}
@@ -11961,13 +11962,14 @@ test("sticker inspector derives its pack from the current hover", () => {
     let stateIndex = 0;
     const titles: unknown[] = [];
     const React = {
-        useMemo: (make: () => unknown) => make(), createContext: () => ({ Provider: "provider" }),
+        useMemo: (make: () => unknown) => make(), useCallback: (callback: unknown) => callback, createContext: () => ({ Provider: "provider" }),
         createElement: (type: unknown, _props: unknown, ...children: unknown[]) => { if (type === "strong") titles.push(children[0]); return null; },
-        useState: (initial: unknown) => [stateIndex++ === 0 ? hovered : initial, () => {}],
+        useState: (initial: unknown) => [stateIndex++ === 0 ? hovered : typeof initial === "function" ? initial() : initial, () => {}],
         useRef: () => ({ current: null }), useEffect() {}
     };
     const picker = loadSource("src/equicordplugins/moreStickers/components/picker.tsx", {
         "@equicordplugins/moreStickers/types": {},
+        "@webpack": { findComponentByCodeLazy: () => "virtual-list" },
         "@utils/misc": { classes: (...values: unknown[]) => values.filter(Boolean).join(" ") },
         "@utils/react": { useAwaiter: () => [[]] },
         "@equicordplugins/moreStickers/upload": {}, "@equicordplugins/moreStickers/utils": { clPicker: () => "" },
@@ -11992,6 +11994,7 @@ test("sticker search uses the parent query and clears without delayed writes", (
     const CancelIcon = Symbol("CancelIcon");
     const picker = loadSource("src/equicordplugins/moreStickers/components/picker.tsx", {
         "@equicordplugins/moreStickers/types": {},
+        "@webpack": { findComponentByCodeLazy: () => "virtual-list" },
         "@utils/misc": { classes: (...values: unknown[]) => values.filter(Boolean).join(" ") }, "@equicordplugins/moreStickers/upload": {},
         "@equicordplugins/moreStickers/utils": { clPicker: () => "" }, "@utils/react": {},
         "@webpack/common": { TextInput, React: { createElement: (type: unknown, props: never) => {
@@ -12019,15 +12022,16 @@ test("recent sticker loads handle errors and ignore unmounted results", async ()
             const updates: { value?: unknown; error?: unknown; }[] = [];
             let notices = 0;
             const React = {
-                useMemo: (make: () => unknown) => make(), createContext: () => ({ Provider: "provider" }),
+                useMemo: (make: () => unknown) => make(), useCallback: (callback: unknown) => callback, createContext: () => ({ Provider: "provider" }),
                 createElement: () => null, useRef: () => ({ current: null }),
-                useState: (initial: unknown) => [initial, (value: { value?: unknown; error?: unknown; }) => updates.push(value)],
+                useState: (initial: unknown) => [typeof initial === "function" ? initial() : initial, (value: { value?: unknown; error?: unknown; }) => updates.push(value)],
                 useEffect: (effect: () => () => void) => effects.push(effect)
             };
             const shared = loadSource("src/utils/react.tsx", { "@webpack/common": { ...React, React }, "./misc": {}, "./lazyReact": {} });
             const recent = [{ id: "recent-sticker" }];
             const picker = loadSource("src/equicordplugins/moreStickers/components/picker.tsx", {
                 "@equicordplugins/moreStickers/types": {},
+                "@webpack": { findComponentByCodeLazy: () => "virtual-list" },
                 "@utils/misc": { classes: (...values: unknown[]) => values.filter(Boolean).join(" ") }, "@equicordplugins/moreStickers/upload": {},
                 "@equicordplugins/moreStickers/utils": { clPicker: () => "" },
                 "@shared/debounce": { debounce: (callback: unknown) => callback }, "@utils/react": shared,
@@ -12035,7 +12039,7 @@ test("recent sticker loads handle errors and ignore unmounted results", async ()
                 "./misc": { getRecentStickers: async () => { if (failed) throw new Error("Load failed"); return recent; } }
             });
             picker.PickerContent({ stickerPacks: [] });
-            assert.equal(effects.length, 1);
+            assert.equal(effects.length, 2);
             const cleanup = effects[0]();
             if (unmounted) cleanup();
             await setImmediate();
@@ -12063,6 +12067,7 @@ test("sticker picker uses shared async cleanup for pack loading", async () => {
             const pack = { id: "loaded", title: "Loaded", logo: { image: "image" }, stickers: [] };
             const plugin = loadSource("src/equicordplugins/moreStickers/index.tsx", {
                 "@api/Settings": { definePluginSettings: () => ({}) }, "@utils/constants": { Devs: {}, EquicordDevs: {} },
+                "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
                 "@utils/react": shared, "@utils/types": { __esModule: true, default: (value: object) => value, OptionType: {} },
                 "@webpack/common": { React, showToast: () => notices++, Toasts: { Type: {} } },
                 "./components": {}, "./utils": { cl: () => "" },

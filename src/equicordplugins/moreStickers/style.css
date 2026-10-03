@@ -197,11 +197,6 @@
     flex-grow: 1;
 }
 
-.vc-more-stickers-picker-content-list-items {
-    contain: layout;
-    position: absolute;
-    inset: 0 0 0 8px;
-}
 
 .vc-more-stickers-picker-content-header-wrapper {
     position: sticky;

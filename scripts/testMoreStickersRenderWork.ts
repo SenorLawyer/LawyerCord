@@ -26,8 +26,8 @@ function fixture() {
     const slots: { value: unknown; deps?: unknown[]; }[] = [];
     const React = {
         useState(initial: unknown) {
-            const slot = slots[index++] ??= { value: initial };
-            return [slot.value, (value: unknown) => { slot.value = value; }];
+            const slot = slots[index++] ??= { value: typeof initial === "function" ? initial() : initial };
+            return [slot.value, (value: unknown) => { slot.value = typeof value === "function" ? value(slot.value) : value; }];
         },
         useRef(current: unknown) { return (slots[index++] ??= { value: { current } }).value; },
         useMemo(make: () => unknown, deps: unknown[]) {
@@ -37,6 +37,8 @@ function fixture() {
             }
             return slot.value;
         },
+        useCallback(callback: unknown, deps: unknown[]) { return this.useMemo(() => callback, deps); },
+        useEffect() {},
         createContext: (value: unknown) => ({ value, Provider: "provider" }),
         useContext: (context: { value: unknown; }) => { consumers++; return context.value; },
         createElement(type: Element["type"], props: Record<string, unknown>, ...children: Element[]) {
@@ -51,6 +53,7 @@ function fixture() {
         "@equicordplugins/moreStickers/utils": { clPicker: (value: string) => value },
         "@utils/misc": { classes: (...values: unknown[]) => values.filter(Boolean).join(" ") },
         "@utils/react": { useAwaiter: () => [recents] },
+        "@webpack": { findComponentByCodeLazy: () => "virtual-list" },
         "@webpack/common": { React }, "./categories": {}, "./icons": {},
         "./misc": { RECENT_STICKERS_ID: "recent", RECENT_STICKERS_TITLE: "Recent" }
     };
@@ -61,48 +64,74 @@ function fixture() {
     })) }));
     const props = { stickerPacks: packs, query: "sticker", channelId: "channel", selectedStickerPackId: null as string | null, closePopout() {}, setSelectedStickerPackId() {} };
     function render(): Element { index = 0; return api.PickerContent(props); }
-    function rowElements(tree: Element): Element[] {
-        if (!tree || typeof tree !== "object") return [];
-        return [typeof tree.type === "function" && tree.type.name === "PickerContentRow" ? [tree] : [], ...(tree.children ?? []).map(rowElements)].flat();
+    interface ListProps extends Record<string, unknown> {
+        rowCountBySection: number[];
+        renderRow(index: number, location: { sectionIndex: number; sectionRowIndex: number; }): Element;
+        renderSectionHeader(index: number): Element;
+        listPadding: number[];
     }
-    return { props, render, rowElements, indicator: api.indicator, counts: () => ({ rows, titleReads, consumers, images }), reset: () => { rows = titleReads = consumers = images = 0; }, recents: (value: Sticker[] | undefined) => { recents = value; } };
+    function findList(tree: Element): ListProps | undefined {
+        if (tree.type === "virtual-list") return tree.props as ListProps;
+        for (const child of tree.children ?? []) {
+            if (!child || typeof child !== "object") continue;
+            const result = findList(child);
+            if (result) return result;
+        }
+        return undefined;
+    }
+    function list(tree: Element): ListProps {
+        const result = findList(tree);
+        assert.ok(result);
+        return result;
+    }
+    function rowElements(tree: Element): Element[] {
+        const props = list(tree);
+        const result: Element[] = [];
+        let index = 0;
+        props.rowCountBySection.forEach((count, sectionIndex) => {
+            for (let row = 0; row < count; row++, index++) if (result.length < 4) result.push(props.renderRow(index, { sectionIndex, sectionRowIndex: row }));
+        });
+        return result;
+    }
+    return { props, render, list, rowElements, indicator: api.indicator, counts: () => ({ rows, titleReads, consumers, images }), reset: () => { rows = titleReads = consumers = images = 0; }, recents: (value: Sticker[] | undefined) => { recents = value; } };
+
 }
 
-test("sticker hover preserves grid elements and skips filtering unchanged packs", () => {
+test("sticker hover retains native list callbacks and skips filtering unchanged packs", () => {
     const f = fixture();
-    const first = f.rowElements(f.render());
-    assert.equal(first.length, 1020);
-    const hover = (first[0].props.grid1 as { onHover(sticker: Sticker): void; }).onHover;
+    const tree = f.render();
+    const first = f.list(tree);
+    const mounted = f.rowElements(tree);
+    assert.equal(mounted.length, 4);
+    assert.equal(first.rowCountBySection.reduce((a, b) => a + b, 0), 1020);
+    const hover = (mounted[0].props.grid1 as { onHover(sticker: Sticker): void; }).onHover;
     f.reset();
     for (let i = 0; i < 100; i++) {
         hover(f.props.stickerPacks[i % 30].stickers[(i + 1) % 100]);
-        const current = f.rowElements(f.render());
-        assert.equal(current[0], first[0]);
-        assert.equal(current.at(-1), first.at(-1));
+        const current = f.list(f.render());
+        assert.equal(current.renderRow, first.renderRow);
+        assert.equal(current.renderSectionHeader, first.renderSectionHeader);
+        assert.equal(current.rowCountBySection, first.rowCountBySection);
+        assert.equal(current.listPadding, first.listPadding);
     }
     assert.equal(f.counts().rows, 0);
     assert.ok(f.counts().titleReads <= 200);
-    f.recents(undefined);
-    const missing = f.rowElements(f.render());
-    hover(f.props.stickerPacks[0].stickers[0]);
-    assert.equal(f.rowElements(f.render())[0], missing[0]);
 });
 
-test("selection context updates only indicator output and retains the last hovered sticker", () => {
+test("selection context preserves the hovered sticker with only mounted cell consumers", () => {
     const f = fixture();
     const rows = f.rowElements(f.render());
     const grid = rows[0].props.grid1 as { selection: { value?: string; }; onHover(sticker: Sticker): void; };
-    const stickers = f.props.stickerPacks.flatMap(pack => pack.stickers);
+    const stickers = f.props.stickerPacks[0].stickers.slice(0, 12);
     f.reset();
     for (let i = 0; i < 100; i++) {
-        const sticker = stickers[i];
+        const sticker = stickers[i % 12];
         grid.onHover(sticker);
         const tree = f.render();
         grid.selection.value = tree.props.value as string;
         let selected = 0;
         for (const item of stickers) {
             const indicator = f.indicator({ selection: grid.selection, stickerId: item.id });
-            assert.equal(indicator.type, "div");
             if (indicator.props.className.endsWith(" inspected")) {
                 assert.equal(item.id, sticker.id);
                 selected++;
@@ -110,31 +139,41 @@ test("selection context updates only indicator output and retains the last hover
         }
         assert.equal(selected, 1);
     }
-    assert.equal(f.counts().consumers, 300_000);
+    assert.equal(f.counts().consumers, 1200);
     assert.equal(f.counts().images, 200);
     assert.equal(f.counts().rows, 0);
-    assert.equal(f.render().props.value, stickers[99].id);
+    assert.equal(f.render().props.value, stickers[99 % 12].id);
 });
 
-test("sticker grids invalidate query, pack, recent and send inputs while navigation preserves rows", () => {
+test("virtual sticker rows invalidate query, packs, recents and sends while collapse survives navigation", () => {
     const f = fixture();
-    let rows = f.rowElements(f.render());
-    assert.equal(rows[0].props.key, "0-0");
+    let tree = f.render();
+    let list = f.list(tree);
+    assert.equal(f.rowElements(tree)[0].props.key, "p0:0-0");
     f.props.selectedStickerPackId = "p2";
-    assert.equal(f.rowElements(f.render())[0], rows[0]);
+    assert.equal(f.list(f.render()).renderRow, list.renderRow);
     f.props.query = "absent";
     assert.equal(f.rowElements(f.render()).length, 0);
     f.props.query = "sticker";
-    rows = f.rowElements(f.render());
     f.props.stickerPacks = f.props.stickerPacks.map((pack, index) => index ? pack : { ...pack, stickers: [pack.stickers[0]] });
-    assert.equal(f.rowElements(f.render()).length, 987);
+    assert.equal(f.list(f.render()).rowCountBySection.reduce((a, b) => a + b, 0), 987);
     f.recents([f.props.stickerPacks[0].stickers[0]]);
-    rows = f.rowElements(f.render());
-    assert.equal(rows.length, 988);
+    tree = f.render();
+    list = f.list(tree);
+    assert.equal(list.rowCountBySection.reduce((a, b) => a + b, 0), 988);
     f.props.channelId = "new-channel";
-    const changed = f.rowElements(f.render());
-    assert.notEqual(changed[0], rows[0]);
-    assert.equal(changed[0].props.channelId, "new-channel");
+    assert.notEqual(f.list(f.render()).renderRow, list.renderRow);
+    assert.equal(f.rowElements(f.render())[0].props.channelId, "new-channel");
+    list = f.list(f.render());
     f.props.closePopout = () => {};
-    assert.notEqual(f.rowElements(f.render())[0], changed[0]);
+    assert.notEqual(f.list(f.render()).renderRow, list.renderRow);
+    list = f.list(f.render());
+    (list.renderSectionHeader(1).props.onToggle as () => void)();
+    assert.equal(f.list(f.render()).rowCountBySection[1], 0);
+    f.props.selectedStickerPackId = "p20";
+    f.render();
+    f.props.selectedStickerPackId = "p0";
+    assert.equal(f.list(f.render()).renderSectionHeader(1).props.isExpanded, false);
+    f.recents(undefined);
+    assert.equal(f.list(f.render()).rowCountBySection[0], 0);
 });

@@ -342,7 +342,7 @@ async function pollSystem(): Promise<void> {
         systemCursor = cursor;
         if (signal.aborted) return;
         for (const event of events) for (const automation of systemTriggers.get(event.type) ?? []) {
-            if (systemTriggerMatches(automation.trigger, event)) void runAutomationWithVariables(automation.id, systemVariables(event));
+            if (systemTriggerMatches(automation.trigger, event)) void runAutomationWithVariables(automation.id, systemVariables(event), automation);
         }
     } catch (error) {
         logger.warn("Computer events could not be read", error);
@@ -483,7 +483,13 @@ export function subscribeAutomationState(listener: () => void): () => void {
 
 export async function replaceAutomations(next: Automation[] | ((current: Automation[]) => Automation[]), references: GuildReference[] = []): Promise<void> {
     await loadAutomationState();
+    const previous = automations;
     automations = (typeof next === "function" ? next(automations) : next).map(migrateWorkflow);
+    const replacements = new Map(automations.map(workflow => [workflow.id, workflow]));
+    for (const workflow of previous) {
+        const replacement = replacements.get(workflow.id);
+        if (!replacement || workflow.enabled && !replacement.enabled) queue.cancel(workflow.id);
+    }
     nextDue.clear();
     refreshTriggerCache();
     guilds = collectGuildReferences(automations, [...guilds, ...references]);
@@ -500,6 +506,7 @@ export async function upsertAutomation(value: Automation): Promise<void> {
     if (next.enabled && errors.length) throw new Error(errors[0].message);
     next.updatedAt = Date.now();
     const index = automations.findIndex(automation => automation.id === next.id);
+    if (index !== -1 && automations[index].enabled && !next.enabled) queue.cancel(next.id);
     automations = index === -1 ? [...automations, next] : automations.map((automation, i) => i === index ? next : automation);
     nextDue.delete(next.id);
     refreshTriggerCache();
@@ -1846,13 +1853,14 @@ async function executeRun(workflow: Automation, variables: Record<string, unknow
     } finally { notify(); if (!dryRun) await queueWrite(WORKFLOWS_KEY); }
 }
 
-async function runAutomationWithVariables(id: string, variables: Record<string, unknown>): Promise<AutomationRunResult> {
+async function runAutomationWithVariables(id: string, variables: Record<string, unknown>, automatic?: Automation): Promise<AutomationRunResult> {
     const { signal: owner } = triggerController;
     await loadAutomationState();
     if (owner.aborted) return { success: false, error: "Automation stopped." };
     if (!engineRunning) return { success: false, error: "Enable the automation system before running a workflow." };
     const workflow = automations.find(a => a.id === id);
     if (!workflow) return { success: false, error: "Workflow was not found." };
+    if (automatic && (!workflow.enabled || runtimeSnapshot(workflow) !== runtimeSnapshot(automatic))) return { success: false, error: "The triggered workflow changed or was disabled." };
     const accountId = UserStore.getCurrentUser()?.id;
     try {
         await queue.enqueue(workflow, (signal, runId) => executeRun(workflow, variables, signal, runId, false, accountId));
@@ -1887,7 +1895,7 @@ async function handleTriggerEvent(type: string, payload: unknown): Promise<void>
             event.guildId ||= channel?.guild_id ?? "";
             const matches = await matchTriggers(triggerIndex, { type, channelId: event.channelId, guildId: event.guildId, authorId: event.userId, status: event.status, content: "", self: event.userId === user.id, bot: event.user?.bot === true, mention: false, fromEngine: false }, signal, failed);
             checkCancelled(signal);
-            for (const automation of matches) if (automations.some(current => current.id === automation.id && current.enabled && current.updatedAt === automation.updatedAt)) void runAutomationWithVariables(automation.id, { triggerEvent: event, triggerUserId: event.userId, __channelId: event.channelId });
+            for (const automation of matches) if (automations.some(current => current.id === automation.id && current.enabled && current.updatedAt === automation.updatedAt)) void runAutomationWithVariables(automation.id, { triggerEvent: event, triggerUserId: event.userId, __channelId: event.channelId }, automation);
         }
         return;
     }
@@ -1913,7 +1921,7 @@ async function handleTriggerEvent(type: string, payload: unknown): Promise<void>
         checkCancelled(signal);
         if (!matches.length) continue;
         const message = toRuntimeMessage(raw);
-        for (const automation of matches) if (automations.some(current => current.id === automation.id && current.enabled && current.updatedAt === automation.updatedAt)) void runAutomationWithVariables(automation.id, { triggerEvent: event, triggerMessage: message, triggerUserId: authorId, lastMessage: message });
+        for (const automation of matches) if (automations.some(current => current.id === automation.id && current.enabled && current.updatedAt === automation.updatedAt)) void runAutomationWithVariables(automation.id, { triggerEvent: event, triggerMessage: message, triggerUserId: authorId, lastMessage: message }, automation);
     }
 }
 
@@ -1924,7 +1932,7 @@ function processDueAutomations(): void {
         if (due === undefined || due > now) continue;
         nextDue.set(automation.id, nextOccurrence(automation, now));
         updateRunMetadata(automation.id, { lastScheduledAt: due });
-        if (now - due < 5000 || automation.schedule.missed !== "skip") void runAutomation(automation.id);
+        if (now - due < 5000 || automation.schedule.missed !== "skip") void runAutomationWithVariables(automation.id, {}, automation);
     }
     notify();
     void queueWrite(WORKFLOWS_KEY);
@@ -1949,7 +1957,7 @@ export async function startAutomationEngine(): Promise<void> {
     refreshTriggerCache();
     scheduleEngine();
     for (const automation of automations) {
-        if (automation.enabled && automation.trigger.type === "startup") void runAutomation(automation.id);
+        if (automation.enabled && automation.trigger.type === "startup") void runAutomationWithVariables(automation.id, {}, automation);
     }
     notify();
 }

@@ -7,6 +7,7 @@
 import "./style.css";
 
 import { definePluginSettings } from "@api/Settings";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs, EquicordDevs } from "@utils/constants";
 import { useAwaiter } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
@@ -32,7 +33,7 @@ export const settings = definePluginSettings({
 
 export default definePlugin({
     name: "MoreStickers",
-    performance: { impact: "medium", description: "Builds sticker grids while the picker is open and converts animated stickers on send." },
+    performance: { impact: "medium", description: "Renders visible sticker rows while the picker is open and converts animated stickers on send." },
     description: "Adds sticker packs from other social media platforms. (e.g. LINE)",
     tags: ["Chat", "Emotes", "Media"],
     authors: [EquicordDevs.Leko, Devs.Arjix],
@@ -79,10 +80,14 @@ export default definePlugin({
             ]
         },
     ],
-    stickerButton({
+    stickerButton: ErrorBoundary.wrap(function StickerButton({
         innerClassName,
         isActive,
         onClick
+    }: {
+        innerClassName: string;
+        isActive: boolean;
+        onClick: React.MouseEventHandler<HTMLButtonElement>;
     }) {
         return (
             <button
@@ -104,8 +109,8 @@ export default definePlugin({
                 </svg >
             </button >
         );
-    },
-    moreStickersComponent({
+    }, { noop: true }),
+    moreStickersComponent: ErrorBoundary.wrap(function MoreStickers({
         channel,
         closePopout
     }: {
@@ -154,5 +159,5 @@ export default definePlugin({
                 ></PickerSidebar>
             </Wrapper>
         );
-    }
+    }, { noop: true })
 });

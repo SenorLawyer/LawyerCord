@@ -33,6 +33,10 @@ import definePlugin, { OptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
 import { React, Select, TextInput, UserStore, useState } from "@webpack/common";
 
+const logger = new Logger("TextReplace");
+let cachedRegexRules: Rule[] | undefined;
+const compiledRules = new Map<string, RegExp | null>();
+
 const cl = classNameFactory("vc-textReplace-");
 
 interface Rule {
@@ -349,16 +353,31 @@ function applyRules(content: string, scope: "myMessages" | "othersMessages" | "a
         content = ` ${content} `.replaceAll(rule.find, rule.replace.replaceAll("\\n", "\n")).replace(/^\s|\s$/g, "");
     }
 
-    for (const rule of settings.store.regexRules) {
+    const { regexRules } = settings.store;
+    if (regexRules !== cachedRegexRules) {
+        cachedRegexRules = regexRules;
+        const patterns = new Set(regexRules.map(rule => rule.find));
+        for (const pattern of compiledRules.keys()) {
+            if (!patterns.has(pattern)) compiledRules.delete(pattern);
+        }
+    }
+    for (const rule of regexRules) {
         if (!rule.find) continue;
         if (rule.onlyIfIncludes && !content.includes(rule.onlyIfIncludes)) continue;
         if (rule.scope !== "allMessages" && rule.scope !== scope && scope !== "allMessages") continue;
 
-        try {
-            const regex = stringToRegex(rule.find);
+        if (!compiledRules.has(rule.find)) {
+            try {
+                compiledRules.set(rule.find, stringToRegex(rule.find));
+            } catch {
+                compiledRules.set(rule.find, null);
+                logger.error("A text replacement pattern is invalid. Check the rule in settings.");
+            }
+        }
+        const regex = compiledRules.get(rule.find);
+        if (regex) {
+            regex.lastIndex = 0;
             content = content.replace(regex, rule.replace.replaceAll("\\n", "\n"));
-        } catch (e) {
-            new Logger("TextReplace").error(`Invalid regex: ${rule.find}`);
         }
     }
 
@@ -411,6 +430,11 @@ export default definePlugin({
 
         stringRules.forEach(normalizeRule);
         regexRules.forEach(normalizeRule);
+    },
+
+    stop() {
+        cachedRegexRules = undefined;
+        compiledRules.clear();
     },
 
     onBeforeMessageSend(channelId, msg) {

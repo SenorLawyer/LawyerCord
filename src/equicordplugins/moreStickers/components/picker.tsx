@@ -4,19 +4,20 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { PickerContent, PickerContentHeader, PickerContentRow, PickerContentRowGrid, PickerHeaderProps, SidebarProps, Sticker, StickerCategoryType } from "@equicordplugins/moreStickers/types";
+import { PickerContent, PickerContentHeader, PickerContentRow, PickerContentRowGrid, PickerHeaderProps, SidebarProps, Sticker, StickerCategoryType, StickerListProps, StickerListRef } from "@equicordplugins/moreStickers/types";
 import { sendSticker } from "@equicordplugins/moreStickers/upload";
 import { clPicker } from "@equicordplugins/moreStickers/utils";
 import { classes } from "@utils/misc";
 import { useAwaiter } from "@utils/react";
-import { Modal,openModal, React, showToast, TextInput, Toasts } from "@webpack/common";
-import { JSX } from "react";
+import { findComponentByCodeLazy } from "@webpack";
+import { Clickable, Modal, openModal, React, showToast, TextInput, Toasts } from "@webpack/common";
 
 import { CategoryImage, CategoryScroller, CategoryWrapper, StickerCategory } from "./categories";
 import { CancelIcon, CogIcon, IconContainer, RecentlyUsedIcon, SearchIcon } from "./icons";
 import { addRecentSticker, getRecentStickers, Header, Packs, RECENT_STICKERS_ID, RECENT_STICKERS_TITLE } from "./misc";
 
 const EMPTY_STICKERS: Sticker[] = [];
+const StickerList = findComponentByCodeLazy<StickerListProps>("getSectionDescriptors:", "stickyHeaders:", "rowCountBySection:");
 
 export const RecentPack = {
     id: RECENT_STICKERS_ID,
@@ -33,8 +34,6 @@ export const PickerSidebar = ({ packMetas, onPackSelect }: SidebarProps) => {
                     style={{ padding: "4px", boxSizing: "border-box", width: "32px" }}
                     isActive={activePack === RecentPack}
                     onClick={() => {
-                        if (activePack === RecentPack) return;
-
                         onPackSelect(RecentPack);
                         setActivePack(RecentPack);
                     }}
@@ -49,8 +48,6 @@ export const PickerSidebar = ({ packMetas, onPackSelect }: SidebarProps) => {
                             <StickerCategory
                                 key={pack.id}
                                 onClick={() => {
-                                    if (activePack?.id === pack.id) return;
-
                                     onPackSelect(pack);
                                     setActivePack(pack);
                                 }}
@@ -169,70 +166,47 @@ function HeaderCollapseIcon({ isExpanded }: { isExpanded: boolean; }) {
 export function PickerContentHeader({
     image,
     title,
-    children,
-    isSelected = false,
-    afterScroll = () => { },
-    beforeScroll = () => { }
+    isExpanded,
+    onToggle
 }: PickerContentHeader) {
-
-    const [isExpand, setIsExpand] = React.useState(true);
-    const headerElem = React.useRef<HTMLDivElement>(null);
-    React.useEffect(() => {
-        if (isSelected && headerElem.current) {
-            beforeScroll();
-
-            headerElem.current.scrollIntoView({
-                behavior: "smooth",
-                block: "start",
-            });
-
-            afterScroll();
-        }
-    }, [isSelected]);
-
     return (
-        <span>
-            <div className={clPicker("content-header-wrapper")}>
-                <div className={clPicker("content-header-header")} ref={headerElem}
-                    aria-expanded={isExpand}
-                    aria-label={`Category, ${title}`}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => {
-                        setIsExpand(e => !e);
-                    }}
-                >
-                    <div className={clPicker("content-header-header-icon")}>
-                        <div>
-                            {typeof image === "string" ? <svg
-                                className={clPicker("content-header-svg")}
-                                width={16} height={16} viewBox="0 0 16 16"
+        <div className={clPicker("content-header-wrapper")}>
+            <Clickable className={clPicker("content-header-header")}
+                aria-expanded={isExpanded}
+                aria-label={`Category, ${title}`}
+                role="button"
+                tabIndex={0}
+                onClick={onToggle}
+            >
+                <div className={clPicker("content-header-header-icon")}>
+                    <div>
+                        {typeof image === "string" ? <svg
+                            className={clPicker("content-header-svg")}
+                            width={16} height={16} viewBox="0 0 16 16"
+                        >
+                            <foreignObject
+                                x={0} y={0} width={16} height={16}
+                                overflow="visible" mask="url(#svg-mask-squircle)"
                             >
-                                <foreignObject
-                                    x={0} y={0} width={16} height={16}
-                                    overflow="visible" mask="url(#svg-mask-squircle)"
-                                >
-                                    <img
-                                        alt={title}
-                                        src={image}
-                                        className={clPicker("content-header-guild-icon")}
-                                        loading="lazy"
-                                    ></img>
-                                </foreignObject>
-                            </svg>
-                                : image}
-                        </div>
+                                <img
+                                    alt={title}
+                                    src={image}
+                                    className={clPicker("content-header-guild-icon")}
+                                    loading="lazy"
+                                ></img>
+                            </foreignObject>
+                        </svg>
+                            : image}
                     </div>
-                    <span
-                        className={clPicker("content-header-header-label")}
-                    >
-                        {title}
-                    </span>
-                    <HeaderCollapseIcon isExpanded={isExpand} />
                 </div>
-            </div>
-            {isExpand ? children : null}
-        </span>
+                <span
+                    className={clPicker("content-header-header-label")}
+                >
+                    {title}
+                </span>
+                <HeaderCollapseIcon isExpanded={isExpanded} />
+            </Clickable>
+        </div>
     );
 }
 
@@ -253,112 +227,68 @@ export function PickerContent({ stickerPacks, selectedStickerPackId, setSelected
     });
     const recentStickers = loadedRecents ?? EMPTY_STICKERS;
 
-    const stickerPacksElemRef = React.useRef<HTMLDivElement>(null);
-    const scrollerRef = React.useRef<HTMLDivElement>(null);
-
-    const rows = React.useMemo(() => {
+    const scrollerRef = React.useRef<StickerListRef>(null);
+    const [viewportHeight, setViewportHeight] = React.useState(0);
+    const listPadding = React.useMemo(() => [0, 0, Math.max(0, viewportHeight - 32), 8], [viewportHeight]);
+    const onResize = React.useCallback(({ height }: { height: number; }) => setViewportHeight(height), []);
+    const [collapsedPacks, setCollapsedPacks] = React.useState<Set<string>>(() => new Set());
+    const packs = React.useMemo(() => {
         const normalizedQuery = query?.toLowerCase();
-        function queryFilter(stickers: Sticker[]): Sticker[] {
-            if (!normalizedQuery) return stickers;
-            return stickers.filter(sticker => sticker.title.toLowerCase().includes(normalizedQuery));
-        }
-
-        const stickersToRows = (stickers: Sticker[]): JSX.Element[] => stickers
-            .reduce((acc, sticker, i) => {
-                if (i % 3 === 0) {
-                    acc.push([]);
-                }
-                acc[acc.length - 1].push(sticker);
-                return acc;
-            }, [] as Sticker[][])
-            .map((stickers, i) => (
-                <PickerContentRow
-                    key={stickers[0].id}
-                    rowIndex={i}
-                    channelId={channelId}
-                    grid1={{
-                        rowIndex: i,
-                        colIndex: 1,
-                        sticker: stickers[0],
-                        onHover: setCurrentSticker,
-                        onSend: (_, s) => { !s && closePopout(); },
-                        selection
-                    }}
-                    grid2={
-                        stickers.length > 1 ? {
-                            rowIndex: i,
-                            colIndex: 2,
-                            sticker: stickers[1],
-                            onHover: setCurrentSticker,
-                            onSend: (_, s) => { !s && closePopout(); },
-                            selection
-                        } : undefined
-                    }
-                    grid3={
-                        stickers.length > 2 ? {
-                            rowIndex: i,
-                            colIndex: 3,
-                            sticker: stickers[2],
-                            onHover: setCurrentSticker,
-                            onSend: (_, s) => { !s && closePopout(); },
-                            selection
-                        } : undefined
-                    }
-                />
-            ));
-        return [stickersToRows(queryFilter(recentStickers)), ...stickerPacks.map(pack => stickersToRows(queryFilter(pack.stickers)))];
-    }, [stickerPacks, recentStickers, query, channelId, closePopout, selection]);
+        return [
+            { id: RECENT_STICKERS_ID, title: RECENT_STICKERS_TITLE, image: <RecentlyUsedIcon width={16} height={16} color="currentColor" />, stickers: recentStickers },
+            ...stickerPacks.map(pack => ({ id: pack.id, title: pack.title, image: pack.logo.image, stickers: pack.stickers }))
+        ].map(pack => ({ ...pack, stickers: normalizedQuery ? pack.stickers.filter(sticker => sticker.title.toLowerCase().includes(normalizedQuery)) : pack.stickers }));
+    }, [stickerPacks, recentStickers, query]);
+    const rowCountBySection = React.useMemo(() => packs.map(pack => collapsedPacks.has(pack.id) ? 0 : Math.ceil(pack.stickers.length / 3)), [packs, collapsedPacks]);
+    const renderRow = React.useCallback((index: number, { sectionIndex, sectionRowIndex }: { sectionIndex: number; sectionRowIndex: number; }) => {
+        const stickers = packs[sectionIndex].stickers.slice(sectionRowIndex * 3, sectionRowIndex * 3 + 3);
+        const grids = stickers.map((sticker, colIndex) => ({
+            rowIndex: index + 1,
+            colIndex: colIndex + 1,
+            sticker,
+            onHover: setCurrentSticker,
+            onSend: (_: Sticker | undefined, keepOpen: boolean | undefined) => { if (!keepOpen) closePopout(); },
+            selection
+        }));
+        return <PickerContentRow key={`${packs[sectionIndex].id}:${stickers[0].id}`} rowIndex={index + 1} channelId={channelId} grid1={grids[0]} grid2={grids[1]} grid3={grids[2]} />;
+    }, [packs, channelId, closePopout, selection]);
+    const renderSectionHeader = React.useCallback((index: number) => {
+        const pack = packs[index];
+        return <PickerContentHeader key={pack.id} image={pack.image} title={pack.title} isExpanded={!collapsedPacks.has(pack.id)} onToggle={() => {
+            scrollerRef.current?.scrollToSectionTop(index);
+            setCollapsedPacks(previous => {
+                const next = new Set(previous);
+                if (next.has(pack.id)) next.delete(pack.id);
+                else next.add(pack.id);
+                return next;
+            });
+        }} />;
+    }, [packs, collapsedPacks]);
+    const renderSection = React.useCallback((index: number, children: React.ReactNode) => <div key={packs[index].id}>{children}</div>, [packs]);
+    React.useEffect(() => {
+        if (!selectedStickerPackId) return;
+        const section = packs.findIndex(pack => pack.id === selectedStickerPackId);
+        if (section !== -1) scrollerRef.current?.scrollToSectionTop(section, { animate: true });
+        setSelectedStickerPackId(null);
+    }, [selectedStickerPackId, packs, setSelectedStickerPackId]);
 
     return (
         <selection.Provider value={currentSticker?.id}>
             <div className={clPicker("content-list-wrapper")}>
                 <div className={clPicker("content-wrapper")}>
-                    <div className={clPicker("content-scroller")} ref={scrollerRef}>
-                        <div className={clPicker("content-list-items")} role="none presentation">
-                            <div ref={stickerPacksElemRef}>
-                                <PickerContentHeader
-                                    image={
-                                        <RecentlyUsedIcon width={16} height={16} color="currentColor" />
-                                    }
-                                    title={RECENT_STICKERS_TITLE}
-                                    isSelected={RECENT_STICKERS_ID === selectedStickerPackId}
-                                    beforeScroll={() => {
-                                        scrollerRef.current?.scrollTo({
-                                            top: 0,
-                                        });
-                                    }}
-                                    afterScroll={() => { setSelectedStickerPackId(null); }}
-                                >
-                                    {
-                                        ...rows[0]
-                                    }
-                                </PickerContentHeader>
-                                {
-                                    stickerPacks.map((sp, index) => {
-                                        return (
-                                            <PickerContentHeader
-                                                key={sp.id}
-                                                image={sp.logo.image}
-                                                title={sp.title}
-                                                isSelected={sp.id === selectedStickerPackId}
-                                                beforeScroll={() => {
-                                                    scrollerRef.current?.scrollTo({
-                                                        top: 0,
-                                                    });
-                                                }}
-                                                afterScroll={() => { setSelectedStickerPackId(null); }}
-                                            >
-                                                {...rows[index + 1]}
-                                            </PickerContentHeader>
-                                        );
-                                    })
-                                }
-                            </div>
-                        </div>
-                        <div style={{
-                            height: `${stickerPacksElemRef.current?.clientHeight ?? 0}px`
-                        }}></div>
-                    </div>
+                    <StickerList
+                        ref={scrollerRef}
+                        className={clPicker("content-scroller")}
+                        rowCountBySection={rowCountBySection}
+                        rowHeight={108}
+                        sectionHeaderHeight={32}
+                        stickyHeaders={true}
+                        listPadding={listPadding}
+                        onResize={onResize}
+                        renderRow={renderRow}
+                        renderSection={renderSection}
+                        renderSectionHeader={renderSectionHeader}
+                    />
                     <div
                         className={clPicker("content-inspector")}
                         style={{

@@ -16,6 +16,7 @@ import { Heading } from "@components/Heading";
 import { DeleteIcon } from "@components/Icons";
 import { EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
+import { Logger } from "@utils/Logger";
 import { Margins } from "@utils/margins";
 import { classes } from "@utils/misc";
 import { useAwaiter, useForceUpdater } from "@utils/react";
@@ -29,6 +30,8 @@ type IconProps = JSX.IntrinsicElements["svg"];
 type KeywordEntry = { regex: string, listIds: Array<string>, listType: ListType, ignoreCase: boolean; };
 type CompiledKeywordEntry = { entry: KeywordEntry, regex: RegExp, listIds: Set<string>, whitelistMode: boolean; };
 type KeywordEmbed = { description?: string, title?: string, fields?: Array<{ name?: string, value?: string; }>; };
+
+const logger = new Logger("KeywordNotify");
 
 let generation = 0;
 let started = false;
@@ -77,10 +80,20 @@ function rebuildKeywordMatchers() {
     compiledKeywordEntries = nextCompiledEntries;
 }
 
+function isKeywordEntry(entry: unknown): entry is KeywordEntry {
+    return typeof entry === "object" && entry !== null
+        && "regex" in entry && typeof entry.regex === "string"
+        && "listIds" in entry && Array.isArray(entry.listIds) && entry.listIds.every(id => typeof id === "string")
+        && "listType" in entry && (entry.listType === ListType.BlackList || entry.listType === ListType.Whitelist)
+        && "ignoreCase" in entry && typeof entry.ignoreCase === "boolean";
+}
+
 function loadKeywordEntries(): Promise<KeywordEntry[]> {
     if (entriesLoaded) return Promise.resolve(keywordEntries);
-    return entriesLoading ??= DataStore.get<KeywordEntry[]>(KEYWORD_ENTRIES_KEY).then(entries => {
-        keywordEntries = entries ?? [];
+    return entriesLoading ??= DataStore.get<unknown>(KEYWORD_ENTRIES_KEY).then(entries => {
+        keywordEntries = Array.isArray(entries) ? entries.filter(isKeywordEntry) : [];
+        if (entries != null && (!Array.isArray(entries) || keywordEntries.length !== entries.length))
+            logger.warn("Some stored keyword rules are invalid. Valid rules remain active.");
         entriesLoaded = true;
         rebuildKeywordMatchers();
         return keywordEntries;
@@ -540,14 +553,14 @@ export default definePlugin({
         if (!compiledKeywordEntries.length) return;
 
         let matches = false;
+        let guildId: string | null | undefined;
+        const { ignoreBots } = settings.store;
 
         for (const entry of compiledKeywordEntries) {
             let listed = entry.listIds.has(m.channel_id) || entry.listIds.has(m.author.id);
-            if (!listed) {
-                const channel = ChannelStore.getChannel(m.channel_id);
-                if (channel?.guild_id != null) {
-                    listed = entry.listIds.has(channel.guild_id);
-                }
+            if (!listed && entry.listIds.size) {
+                if (guildId === undefined) guildId = ChannelStore.getChannel(m.channel_id)?.guild_id ?? null;
+                if (guildId !== null) listed = entry.listIds.has(guildId);
             }
 
             if (!entry.whitelistMode && listed) {
@@ -557,7 +570,7 @@ export default definePlugin({
                 continue;
             }
 
-            if (settings.store.ignoreBots && m.author.bot && (!entry.whitelistMode || !entry.listIds.has(m.author.id))) {
+            if (ignoreBots && m.author.bot && (!entry.whitelistMode || !entry.listIds.has(m.author.id))) {
                 continue;
             }
 
@@ -576,6 +589,7 @@ export default definePlugin({
                             }
                         }
                     }
+                    if (matches) break;
                 }
             }
 

@@ -5,7 +5,7 @@
  */
 
 import { type Automation, type AutomationBlock, type AutomationPort, edgeTargets, isRecord } from "./model";
-import { compare, executeValue, resolveInput, template, textValue, VALUE_BLOCKS } from "./values";
+import { compare, executeValue, readPath, resolveInput, template, textValue, VALUE_BLOCKS } from "./values";
 import { compileWorkflow, validateWorkflow } from "./workflow";
 
 export interface RunContext {
@@ -80,6 +80,69 @@ interface Budget {
     deadline: number;
 }
 
+function previewValue(value: unknown, limit = 2000): string {
+    if (value === undefined || value === null) return "";
+    if (typeof value === "string") return value.slice(0, limit);
+    let result = "";
+    let visited = 0;
+    const ancestors = new Set<object>();
+    const append = (text: string) => { result += text.slice(0, limit - result.length); };
+    const visit = (item: unknown, depth: number): void => {
+        if (result.length >= limit || visited++ >= limit) return;
+        if (item === null || typeof item !== "object") {
+            append(typeof item === "string" || typeof item === "bigint"
+                ? JSON.stringify(String(item).slice(0, limit - result.length))
+                : JSON.stringify(item) ?? "null");
+            return;
+        }
+        if (item instanceof Date) { append(JSON.stringify(item)); return; }
+        if (ancestors.has(item) || depth >= 32) { append('"[Truncated]"'); return; }
+        ancestors.add(item);
+        if (Array.isArray(item)) {
+            append("[");
+            for (let index = 0; index < item.length && result.length < limit && visited < limit; index++) {
+                if (index) append(",");
+                visit(item[index], depth + 1);
+            }
+            append("]");
+        } else {
+            append("{");
+            let first = true;
+            for (const key in item) {
+                if (result.length >= limit || visited >= limit) break;
+                if (!Object.hasOwn(item, key)) continue;
+                visited++;
+                const child: unknown = Reflect.get(item, key);
+                if (child === undefined || typeof child === "function" || typeof child === "symbol") continue;
+                if (!first) append(",");
+                first = false;
+                append(JSON.stringify(key.slice(0, limit - result.length)));
+                append(":");
+                visit(child, depth + 1);
+            }
+            append("}");
+        }
+        ancestors.delete(item);
+    };
+    visit(value, 0);
+    return result;
+}
+
+function previewTemplate(value: string, variables: Record<string, unknown>): string {
+    let result = "";
+    let offset = 0;
+    let expansions = 0;
+    for (const match of value.matchAll(/{{\s*([^{}]+?)\s*}}/g)) {
+        if (expansions++ >= 2000) return result;
+        result += value.slice(offset, match.index).slice(0, 2000 - result.length);
+        if (result.length >= 2000) return result;
+        result += previewValue(readPath(variables, match[1].trim()), 2000 - result.length);
+        offset = match.index + match[0].length;
+        if (result.length >= 2000) return result;
+    }
+    return result + value.slice(offset, offset + 2000 - result.length);
+}
+
 export async function executeWorkflow(workflow: Automation, variables: Record<string, unknown>, environment: RuntimeEnvironment, options: { signal?: AbortSignal; dryRun?: boolean; runId?: string; immutableSnapshot?: boolean; } = {}): Promise<unknown> {
     const controller = new AbortController();
     const cancel = () => controller.abort(options.signal?.reason);
@@ -127,7 +190,10 @@ async function run(workflow: Automation, variables: Record<string, unknown>, env
         try {
             const c = block.config;
             const input = () => resolveInput(c.input, variables, c.sourceVariable);
-            emit({ status: "running", message: "Block started.", inputPreview: textValue(input()).slice(0, 2000) });
+            const inputPreview = c.input?.kind === "template" ? previewTemplate(c.input.value, variables)
+                : c.input?.kind === "literal" ? previewValue(c.input.value)
+                    : previewValue(c.input ? readPath(variables, c.input.value) : c.sourceVariable ? readPath(variables, c.sourceVariable) : undefined);
+            emit({ status: "running", message: "Block started.", inputPreview });
             if (VALUE_BLOCKS.has(block.type)) {
                 value = executeValue(block, variables, env.now(), env.random, context.signal);
                 if (block.type === "regex-extract" || block.type === "filter-array" && c.operator === "regex") value = await value;
@@ -213,7 +279,7 @@ async function run(workflow: Automation, variables: Record<string, unknown>, env
                 if (isRecord(outputs)) outputs[block.id] = { value, usage };
                 if (isRecord(value) && typeof value.channel_id === "string" && typeof value.id === "string") variables.lastMessage = value;
             }
-            emit({ status: "success", port, usage: usage ? textValue(usage).slice(0, 1000) : undefined, message: block.type === "log" ? "Log recorded." : port === "alternate" ? "Alternate route selected." : "Block completed.", durationMs: env.now() - started, preview: (block.type === "log" ? template(c.content ?? "Checkpoint reached.", variables) : textValue(value)).slice(0, 2000) });
+            emit({ status: "success", port, usage: usage ? previewValue(usage, 1000) : undefined, message: block.type === "log" ? "Log recorded." : port === "alternate" ? "Alternate route selected." : "Block completed.", durationMs: env.now() - started, preview: block.type === "log" ? previewTemplate(c.content ?? "Checkpoint reached.", variables) : previewValue(value) });
         } catch (error) {
             checkCancelled(context.signal);
             const message = error instanceof Error ? error.message : "Block failed.";

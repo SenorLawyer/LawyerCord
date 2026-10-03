@@ -2,6 +2,18 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 4.1.4.0 - 2026-10-03 (Nightly)
+
+### Fixed
+
+- Render MoreStickers rows through Discord's virtual sticker list, keeping pack headers, collapse state, search and category navigation while mounting only visible rows.
+- Contain rendering errors in MoreStickers' injected picker and button.
+- Reuse TextReplace's compiled patterns, discard removed patterns and avoid repeated error logging for invalid rules.
+- Keep valid BlockKeywords patterns active when another pattern is invalid, validate edits and clear stale matchers on restart or stop.
+- Avoid repeated KeywordNotify channel lookups and stop embed matching after a match. Malformed saved rules no longer prevent valid rules from loading.
+- Cancel admitted workflow runs when the workflow is disabled or removed, while allowing a deliberate manual run afterward.
+- Bound automation diagnostic previews before serialization so tracing large values does not repeatedly serialize their entire contents.
+
 ## 4.1.3.1 - 2026-10-03 (Nightly)
 
 ### Packaging

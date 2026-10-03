@@ -18,7 +18,7 @@ const logger = new Logger("Updater");
 
 const windowsWorkerSource = String.raw`
 $ErrorActionPreference = 'Stop'
-$directory = $PSScriptRoot
+$directory = $env:LAWYERCORD_UPDATE_DIRECTORY
 $manifest = Get-Content -LiteralPath (Join-Path $directory 'manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $staged = Join-Path $directory 'archive.asar'
 $request = Join-Path $directory 'restart.json'

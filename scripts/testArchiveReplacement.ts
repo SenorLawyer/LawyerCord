@@ -5,7 +5,7 @@
  */
 
 import assert from "node:assert/strict";
-import { ChildProcess, spawn } from "node:child_process";
+import { ChildProcess, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import * as fs from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -31,8 +31,14 @@ async function waitFor(check: () => boolean, label: string, diagnostics: () => s
     }
 }
 
-async function fixture(runtime = process.execPath, unrelatedOutput = false, failStateWrite = false, pauseCompilation = false) {
-    const directory = await mkdtemp(join(tmpdir(), "lawyercord-archive-é漢字-"));
+async function fixture(runtime = process.execPath, unrelatedOutput = false, failStateWrite = false, pauseCompilation = false, shortPath = false) {
+    let directory = await mkdtemp(join(tmpdir(), "lawyercord-archive-é漢字-"));
+    if (shortPath) {
+        const alias = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "(New-Object -ComObject Scripting.FileSystemObject).GetFolder($env:LAWYERCORD_ALIAS_FIXTURE).ShortPath"], { env: { ...process.env, LAWYERCORD_ALIAS_FIXTURE: directory }, encoding: "utf8", windowsHide: true });
+        assert.equal(alias.status, 0, alias.stderr);
+        assert.notEqual(alias.stdout.trim().toLowerCase(), fs.realpathSync.native(directory).toLowerCase(), "Fixture volume must support 8.3 paths");
+        directory = alias.stdout.trim();
+    }
     const destination = join(directory, "lawyercord.asar");
     const ready = join(directory, "parent-ready.json");
     const restarted = join(directory, "restarted.json");
@@ -60,6 +66,7 @@ const fixtureRequire = id => {
     } };
     if (id === 'original-fs') return { ...fs, writeFileSync: (file, data, ...args) => {
         if (${pauseCompilation} && String(file).endsWith('apply.ps1')) data = String(data).replace('    Add-Type -TypeDefinition', ${JSON.stringify(compilationGate)});
+        if (${shortPath} && String(file).endsWith('apply.ps1')) data = String(data).replace("$ErrorActionPreference = 'Stop'", "$ErrorActionPreference = 'Stop'; [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'worker-directory.txt'), $PSScriptRoot)");
         return fs.writeFileSync(file, data, ...args);
     }, promises: { ...fs.promises, rm: async (file, options) => {
         if (String(file).startsWith(${JSON.stringify(`${destination}.update-`)})) {
@@ -179,6 +186,20 @@ test("Windows locked archive stages, survives parent exit, promotes safely and r
         assert.deepEqual(JSON.parse(await readFile(join(state.directory, "result.json"), "utf8")), { ok: true });
         assert.equal(fs.existsSync(`${f.destination}.update.json`), false);
         assert.deepEqual(JSON.parse(await readFile(f.restarted, "utf8")), { args: restartArguments });
+    } finally { await f.cleanup(); }
+});
+
+test("Windows helper accepts its own acknowledgement through an 8.3 directory alias", { skip: process.platform !== "win32" }, async () => {
+    const f = await fixture(process.execPath, false, false, false, true);
+    try {
+        const { child, state } = await f.start();
+        const workerDirectory = await readFile(join(state.directory, "worker-directory.txt"), "utf8");
+        assert.notEqual(workerDirectory.toLowerCase(), state.directory.toLowerCase());
+        child.stdin.write("quit\n");
+        await once(child, "exit");
+        await waitFor(() => fs.existsSync(join(state.directory, "result.json")), "8.3 alias promotion", f.diagnostics);
+        assert.deepEqual(JSON.parse(await readFile(join(state.directory, "result.json"), "utf8")), { ok: true }, JSON.stringify({ acknowledgedDirectory: state.directory, workerDirectory }));
+        assert.equal(await readFile(f.destination, "utf8"), "New complete archive");
     } finally { await f.cleanup(); }
 });
 

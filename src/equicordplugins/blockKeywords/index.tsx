@@ -13,12 +13,15 @@ import { ErrorBoundary } from "@components/index";
 import { Margins } from "@components/margins";
 import { EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
+import { Logger } from "@utils/Logger";
 import { classes } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
 import { React, TextInput } from "@webpack/common";
 
-let blockedKeywords: Array<RegExp>;
+let blockedKeywords: RegExp[] = [];
+let lastInvalidConfig: string | undefined;
+const logger = new Logger("BlockKeywords");
 const cl = classNameFactory("vc-block-keywords-");
 
 function splitPatterns(input: string): string[] {
@@ -28,6 +31,15 @@ function splitPatterns(input: string): string[] {
         .split(",")
         .map(s => s.replace(/\x00/g, ",").trim())
         .filter(Boolean);
+}
+
+function validatePatterns(input: string) {
+    try {
+        for (const pattern of splitPatterns(input)) new RegExp(pattern);
+        return true;
+    } catch {
+        return "Enter valid regular expressions. Use the Regex Helper to find the invalid pattern.";
+    }
 }
 
 function RegexHelper() {
@@ -112,14 +124,18 @@ const settings = definePluginSettings({
         restartNeeded: true,
     },
 }, {
+    blockedWords: {
+        isValid(value) { return !this.store.useRegex || validatePatterns(value); }
+    },
+    useRegex: {
+        isValid(value) { return !value || validatePatterns(this.store.blockedWords); }
+    },
     regexHelper: {
         hidden() { return !this.store.useRegex; }
     }
 });
 
 export function containsBlockedKeywords(message: Message) {
-    if (!blockedKeywords) return false;
-
     // test a nullable string against all keywords
     const testField = (text: string | null | undefined) => text != null && blockedKeywords.some(regex => regex.test(text));
 
@@ -169,21 +185,30 @@ export default definePlugin({
     containsBlockedKeywords,
 
     start() {
-        const blockedWordsList = splitPatterns(settings.store.blockedWords);
-        const caseSensitiveFlag = settings.store.caseSensitive ? "" : "i";
-
-        if (blockedWordsList.length === 0) return;
-
-        if (settings.store.useRegex) {
-            blockedKeywords = blockedWordsList.map(word => {
-                return new RegExp(word, caseSensitiveFlag);
-            });
-        } else {
-            blockedKeywords = blockedWordsList.map(word => {
+        const { blockedWords, caseSensitive, useRegex } = settings.store;
+        const caseSensitiveFlag = caseSensitive ? "" : "i";
+        blockedKeywords = [];
+        let invalid = false;
+        for (const word of splitPatterns(blockedWords)) {
+            if (useRegex) {
+                try {
+                    blockedKeywords.push(new RegExp(word, caseSensitiveFlag));
+                } catch {
+                    invalid = true;
+                }
+            } else {
                 // escape regex chars in word https://stackoverflow.com/a/6969486
-                return new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, caseSensitiveFlag);
-            });
+                blockedKeywords.push(new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, caseSensitiveFlag));
+            }
         }
+        const invalidConfig = invalid ? JSON.stringify([blockedWords, caseSensitive]) : undefined;
+        if (invalidConfig !== undefined && invalidConfig !== lastInvalidConfig)
+            logger.warn("Some blocked keyword patterns are invalid. Valid patterns remain active. Check the Regex Helper in settings.");
+        lastInvalidConfig = invalidConfig;
+    },
+
+    stop() {
+        blockedKeywords = [];
     },
 
     blockMessagesWithKeywords(messageList) {

@@ -71,10 +71,8 @@ export interface PickerContent {
 export interface PickerContentHeader {
     image: string | React.ReactNode;
     title: string;
-    children?: React.ReactNode;
-    isSelected?: boolean;
-    afterScroll?: () => void;
-    beforeScroll?: () => void;
+    isExpanded: boolean;
+    onToggle: () => void;
 }
 
 export interface PickerContentRow {
@@ -151,4 +149,22 @@ export interface DynamicStickerPackMeta extends StickerPackMeta {
 
 export interface StickerPack extends StickerPackMeta {
     stickers: Sticker[];
+}
+
+export interface StickerListRef {
+    scrollToSectionTop(section: number, options?: { animate?: boolean; }): void;
+}
+
+export interface StickerListProps {
+    ref?: React.Ref<StickerListRef>;
+    className: string;
+    rowCountBySection: number[];
+    rowHeight: number;
+    sectionHeaderHeight: number;
+    stickyHeaders: boolean;
+    onResize(size: { width: number; height: number; }): void;
+    listPadding: number[];
+    renderRow(index: number, section: { sectionIndex: number; sectionRowIndex: number; }): React.ReactNode;
+    renderSection(index: number, children: React.ReactNode): React.ReactNode;
+    renderSectionHeader(index: number): React.ReactNode;
 }

@@ -54,7 +54,7 @@ function fixture(poll?: (cursor: number) => Promise<{ cursor: number; events: un
         const exports: Record<string, unknown> = {};
         modules.set(path, exports);
         let source = readFileSync(path, "utf8");
-        if (path.endsWith("engine.ts")) source += "\nexport { rememberCommands, pollSystem };";
+        if (path.endsWith("engine.ts")) source += "\nexport { rememberCommands, pollSystem, runAutomationWithVariables, updateRunMetadata };";
         source = source.replace("function usesSystemTrigger(automation: Automation): boolean {", "function usesSystemTrigger(automation: Automation): boolean { countSystemCandidate();");
         if (path.endsWith("workflow.ts")) source = source
             .replace("function validateDefinition(automation: Automation): WorkflowIssue[] {", "function validateDefinition(automation: Automation): WorkflowIssue[] { countValidation();")
@@ -73,7 +73,7 @@ function fixture(poll?: (cursor: number) => Promise<{ cursor: number; events: un
         });
         return exports;
     }
-    const api = load(resolve("src/components/settings/tabs/automations/engine.ts")) as typeof Engine & { pollSystem(): Promise<void>; rememberCommands(commands: Engine.AutomationCommandChoice[]): void; };
+    const api = load(resolve("src/components/settings/tabs/automations/engine.ts")) as typeof Engine & { updateRunMetadata(id: string, metadata: { lastRunAt: number; lastStatus: "success"; }): void; runAutomationWithVariables(id: string, variables: Record<string, unknown>, automatic?: Model.Automation): Promise<Engine.AutomationRunResult>; pollSystem(): Promise<void>; rememberCommands(commands: Engine.AutomationCommandChoice[]): void; };
     return { api, data, writes, systemTypes, systemCandidates: () => systemCandidates, posts: () => posts, clones: () => clones, validations: () => validations, compilations: () => compilations, switchAccount(id = "new-account") { account = id; for (const handler of handlers.get("CONNECTION_OPEN") ?? []) handler({ user: { id: account } }); } };
 }
 
@@ -515,4 +515,81 @@ test("Imported guild cards derive membership and refreshed metadata from GuildSt
     guild = undefined;
     assert.ok(JSON.stringify(render({ guilds })).includes("You are not in this server"));
     assert.equal(subscriptions, 3);
+});
+
+
+test("Disabling or removing a workflow cancels admitted work while a later manual run remains available", async () => {
+    for (const mutation of ["toggle", "replace", "remove"] as const) {
+        const f = fixture();
+        await f.api.loadAutomationState();
+        const flow = workflow();
+        flow.runMode = "queue";
+        const pause = Model.createAutomationBlock("delay");
+        pause.config.durationSeconds = 0.1;
+        const send = Model.createAutomationBlock("send-message");
+        send.config = { channelId: "100000000000000002", content: "Fixture only." };
+        pause.next = send.id;
+        flow.blocks = [pause, send];
+        flow.entryId = pause.id;
+        await f.api.replaceAutomations([flow]);
+        await f.api.setAutomationSystemEnabled(true);
+        await f.api.startAutomationEngine();
+        try {
+            const first = f.api.runAutomation(flow.id);
+            const second = f.api.runAutomation(flow.id);
+            await new Promise<void>(resolve => setTimeout(resolve, 10));
+            if (mutation === "toggle") await f.api.setAutomationEnabled(flow.id, false);
+            else await f.api.replaceAutomations(mutation === "remove" ? [] : [{ ...flow, enabled: false }]);
+            assert.equal((await first).success, false, mutation);
+            assert.equal((await second).success, false, mutation);
+            assert.equal(f.posts(), 0, mutation);
+            if (mutation !== "remove") {
+                assert.equal((await f.api.runAutomation(flow.id)).success, true);
+                assert.equal(f.posts(), 1);
+                assert.equal(f.api.getAutomationSnapshot().automations[0].enabled, false);
+            }
+        } finally { f.api.stopAutomationEngine(); }
+    }
+});
+
+
+test("Automatic admission rejects a disabled or replaced trigger after its load boundary", async () => {
+    for (const enabled of [false, true]) {
+        const f = fixture();
+        await f.api.loadAutomationState();
+        const flow = workflow();
+        const send = Model.createAutomationBlock("send-message");
+        send.config = { channelId: "100000000000000002", content: "Fixture only." };
+        flow.blocks = [send];
+        flow.entryId = send.id;
+        await f.api.replaceAutomations([flow]);
+        await f.api.setAutomationSystemEnabled(true);
+        await f.api.startAutomationEngine();
+        try {
+            const original = f.api.getAutomationSnapshot().automations[0];
+            const replacement = f.api.replaceAutomations([{ ...original, enabled }]);
+            const pending = f.api.runAutomationWithVariables(original.id, {}, original);
+            await replacement;
+            assert.equal((await pending).success, false);
+            assert.equal(f.posts(), 0);
+            assert.equal((await f.api.runAutomation(original.id)).success, true);
+            assert.equal(f.posts(), 1);
+        } finally { f.api.stopAutomationEngine(); }
+    }
+});
+
+
+test("Automatic admission survives ordinary previous-run metadata updates", async () => {
+    const f = fixture();
+    await f.api.loadAutomationState();
+    await f.api.replaceAutomations([workflow()]);
+    await f.api.setAutomationSystemEnabled(true);
+    await f.api.startAutomationEngine();
+    try {
+        const original = f.api.getAutomationSnapshot().automations[0];
+        const pending = f.api.runAutomationWithVariables(original.id, {}, original);
+        f.api.updateRunMetadata(original.id, { lastRunAt: Date.now(), lastStatus: "success" });
+        assert.equal((await pending).success, true);
+        assert.notEqual(f.api.getAutomationSnapshot().automations[0], original);
+    } finally { f.api.stopAutomationEngine(); }
 });

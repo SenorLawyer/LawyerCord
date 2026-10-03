@@ -22,6 +22,7 @@ export interface ReleaseCatalog {
 export interface ReleaseUpdate extends UpdateRelease {
     commit: string;
     currentVersion: string;
+    restartRequired?: boolean;
     relation: "current" | "upgrade" | "rollback" | "switch";
     changes: Record<"hash" | "author" | "message", string>[];
 }

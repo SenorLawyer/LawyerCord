@@ -102,11 +102,10 @@ test("checksum failures preserve archive and duplicate apply calls coalesce", as
     assert.equal(f.replacements(), 1);
 });
 
-function rendererFixture() {
+function rendererFixture(staged = false) {
     const exports: Record<string, unknown> = {};
     let resolveCheck: ((value: unknown) => void) | undefined;
     let resolveBuild: ((value: unknown) => void) | undefined;
-    let staged = false;
     const installed: Array<unknown[]> = [];
     const modules: Record<string, unknown> = {
         "@api/Settings": { flushSettings: async () => undefined },
@@ -117,7 +116,7 @@ function rendererFixture() {
         exports, IS_STANDALONE: true,
         Vencord: { Settings: { updateChannel: "stable" } },
         VencordNative: { updater: {
-            checkRelease: () => staged ? Promise.resolve({ ok: true, value: { tag: installed.at(-1)?.[1], relation: "rollback", changes: [] } }) : new Promise(resolve => { resolveCheck = resolve; }),
+            checkRelease: () => staged ? Promise.resolve({ ok: true, value: { tag: installed.at(-1)?.[1] ?? stable.tag_name, relation: "rollback", changes: [], restartRequired: true } }) : new Promise(resolve => { resolveCheck = resolve; }),
             update: async (...args: unknown[]) => { installed.push(args); return { ok: true, value: true }; },
             rebuild: () => new Promise(resolve => { resolveBuild = resolve; })
         } },
@@ -134,6 +133,58 @@ function rendererFixture() {
         built: (success = true) => { staged = success; assert.ok(resolveBuild); resolveBuild({ ok: true, value: success }); }
     };
 }
+
+test("a renderer reload recovers the frozen native download and its restart action", async () => {
+    const native = fixture();
+    await native.call("update", "nightly", stable.tag_name);
+    native.delay();
+    const download = native.call("build");
+    let settled = false;
+    const check = native.call("check", "beta", "v1.0.0.0").then(value => { settled = true; return value; });
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(settled, false, "a reload waits for the existing download rather than offering another install");
+    native.resume();
+    assert.equal(await download, true);
+    const release = await check as { tag: string; restartRequired: boolean };
+    assert.equal(release.tag, stable.tag_name);
+    assert.equal(release.restartRequired, true);
+    const renderer = rendererFixture(true);
+    const snapshots: unknown[] = [];
+    renderer.call("subscribeUpdateState", () => snapshots.push(renderer.call("getUpdateState")));
+    assert.equal(await renderer.call("checkForUpdates"), false);
+    assert.equal(renderer.exports.restartRequired, true);
+    assert.equal(renderer.exports.isNewer, false);
+    assert.deepEqual(snapshots, [2]);
+    assert.equal(await renderer.call("update"), true);
+    assert.equal(renderer.installed.length, 0);
+});
+
+test("packaged relaunch consults the native helper even before a reloaded renderer checks updates", async () => {
+    let promoted = true;
+    let helperCalls = 0;
+    let ordinaryRestarts = 0;
+    const errors: string[] = [];
+    const code = transpileModule(readFileSync("src/utils/native.ts", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;
+    const exports: { relaunch?: () => void } = {};
+    runInNewContext(code, {
+        exports, IS_WEB: false, IS_STANDALONE: true, IS_DISCORD_DESKTOP: true,
+        window: { DiscordNative: { app: { relaunch: () => { ordinaryRestarts++; } } } },
+        VencordNative: { updater: { restart: async () => { helperCalls++; return { ok: true, value: promoted }; } } },
+        alert: (message: string) => errors.push(message),
+        require: () => ({ UpdateLogger: { error: (message: string) => errors.push(message) } })
+    });
+    assert.ok(exports.relaunch);
+    exports.relaunch();
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(helperCalls, 1);
+    assert.equal(ordinaryRestarts, 0);
+    promoted = false;
+    exports.relaunch();
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(helperCalls, 2);
+    assert.equal(ordinaryRestarts, 1);
+    assert.deepEqual(errors, []);
+});
 
 test("renderer discards stale checks and preserves an in-flight explicit rollback across channel reset", async () => {
     const f = rendererFixture();

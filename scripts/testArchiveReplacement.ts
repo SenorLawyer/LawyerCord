@@ -48,6 +48,7 @@ const proxyProcess = Object.create(process);
 Object.defineProperty(proxyProcess, 'execPath', { value: ${JSON.stringify(runtime)} });
 Object.defineProperty(proxyProcess, 'argv', { value: [process.execPath, ${JSON.stringify(marker)}, ${JSON.stringify(restarted)}, '--squirrel-firstrun', ...${JSON.stringify(restartArguments)}] });
 const fixtureRequire = id => {
+    if (id === '@utils/Logger') return { Logger: class { warn() {} } };
     if (id === 'original-fs' && ${failStateWrite}) return { ...fs, writeFileSync: (file, ...args) => {
         if (file === ${JSON.stringify(`${destination}.update.json`)}) {
             const stage = fs.readdirSync(${JSON.stringify(directory)}).find(name => name.startsWith('lawyercord.asar.update-'));
@@ -83,19 +84,31 @@ api.replaceVerifiedArchive(${JSON.stringify(destination)}, Buffer.from('New comp
     });
 }).catch(error => { console.error(error); process.exit(1); });
 `);
+    function launch() {
+        const child = spawn(process.execPath, [parentScript], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true, env: { ...process.env, NODE_OPTIONS: "--no-warnings" } });
+        children.push(child);
+        let stderr = "";
+        child.stderr.on("data", bytes => { stderr += String(bytes); });
+        return { child, get stderr() { return stderr; } };
+    }
     return {
         directory, destination, ready, restarted,
         async start() {
-            const child = spawn(process.execPath, [parentScript], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true, env: { ...process.env, NODE_OPTIONS: "--no-warnings" } });
-            children.push(child);
-            let stderr = "";
-            child.stderr?.on("data", bytes => { stderr += String(bytes); });
+            const parent = launch();
+            const { child } = parent;
             await waitFor(() => {
-                assert.equal(child.exitCode, null, `Parent failed: ${stderr}`);
+                assert.equal(child.exitCode, null, `Parent failed: ${parent.stderr}`);
                 return fs.existsSync(ready);
             }, "helper startup handshake");
             const state = JSON.parse(await readFile(`${destination}.update.json`, "utf8")) as { directory: string; workerPid: number; };
             return { child, state };
+        },
+        async expectFailure(message: RegExp) {
+            const parent = launch();
+            const [code] = await once(parent.child, "close", { signal: AbortSignal.timeout(60_000) });
+            assert.equal(code, 1, `Expected update failure: ${parent.stderr}`);
+            assert.match(parent.stderr, message);
+            assert.equal(fs.existsSync(ready), false);
         },
         async lock(allowWrites = false) {
             assert.equal(process.platform, "win32");
@@ -165,10 +178,29 @@ test("Tampered staged archive is rejected after parent exits and keeps the insta
     } finally { await f.cleanup(); }
 });
 
+test("a cancelled or unacknowledged Windows helper cannot promote its staged archive", { skip: process.platform !== "win32" }, async () => {
+    for (const mismatched of [false, true]) {
+        const f = await fixture();
+        try {
+            const { child, state } = await f.start();
+            if (mismatched) await writeFile(`${f.destination}.update.json`, JSON.stringify({ ...state, directory: `${state.directory}-other` }));
+            else await rm(`${f.destination}.update.json`);
+            child.stdin?.write("quit\n");
+            await once(child, "exit");
+            await waitFor(() => fs.existsSync(join(state.directory, "result.json")), "cancelled update rejection");
+            const result = JSON.parse(await readFile(join(state.directory, "result.json"), "utf8")) as { ok: boolean; error: string; };
+            assert.equal(result.ok, false);
+            assert.match(result.error, /cancelled before installation/);
+            assert.equal(await readFile(f.destination, "utf8"), "Old complete archive");
+            assert.equal(fs.existsSync(f.restarted), false);
+        } finally { await f.cleanup(); }
+    }
+});
+
 test("Unrelated child output cannot acknowledge a helper that never started", { skip: process.platform !== "win32" }, async () => {
     const f = await fixture(process.execPath, true);
     try {
-        await assert.rejects(f.start(), /Parent failed/);
+        await f.expectFailure(/The update helper could not start/);
         assert.equal(fs.existsSync(f.ready), false);
         assert.equal(fs.existsSync(`${f.destination}.update.json`), false);
         assert.equal(await readFile(f.destination, "utf8"), "Old complete archive");
@@ -178,7 +210,7 @@ test("Unrelated child output cannot acknowledge a helper that never started", { 
 test("Failure saving pending state stops the Windows helper and preserves the installed archive", { skip: process.platform !== "win32" }, async () => {
     const f = await fixture(process.execPath, false, true);
     try {
-        await assert.rejects(f.start(), /Injected state persistence failure/);
+        await f.expectFailure(/Injected state persistence failure/);
         const worker = JSON.parse(await readFile(join(f.directory, "failed-worker.json"), "utf8")) as { pid: number; };
         await waitFor(() => {
             try { process.kill(worker.pid, 0); return false; }
@@ -212,6 +244,77 @@ test("An archive installed while the helper waits for a Windows lock is preserve
     } finally { await f.cleanup(); }
 });
 
+test("Completed backup retention keeps the newest backup and preserves active, pending, failed and unknown directories", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "lawyercord-retention-"));
+    const destination = join(directory, "lawyercord.asar");
+    await writeFile(destination, "Installed archive");
+    function completed(name: string, modified: number) {
+        const backup = `${destination}.update-${name}`;
+        fs.mkdirSync(backup);
+        fs.writeFileSync(join(backup, "manifest.json"), JSON.stringify({ destination }));
+        fs.writeFileSync(join(backup, "result.json"), JSON.stringify({ ok: true }));
+        fs.writeFileSync(join(backup, "previous.asar"), name);
+        fs.utimesSync(join(backup, "result.json"), modified, modified);
+        return backup;
+    }
+    const oldest = completed("oldest", 1000);
+    const undeletable = completed("undeletable", 1500);
+    const older = completed("older", 2000);
+    fs.writeFileSync(join(older, "ready.json"), JSON.stringify({ pid: 99999999 }));
+    const newest = completed("newest", 3000);
+    const active = completed("active", 4000);
+    fs.writeFileSync(join(active, "ready.json"), JSON.stringify({ pid: process.pid }));
+    const pending = completed("pending", 5000);
+    fs.writeFileSync(`${destination}.update.json`, JSON.stringify({ directory: pending, workerPid: process.pid }));
+    const failed = completed("failed", 6000);
+    fs.writeFileSync(join(failed, "result.json"), JSON.stringify({ ok: false, error: "Preserve this failure" }));
+    const unknown = completed("unknown", 7000);
+    fs.writeFileSync(join(unknown, "result.json"), "Malformed result");
+    const staged = completed("staged", 8000);
+    fs.writeFileSync(join(staged, "archive.asar"), "Not promoted yet");
+    const foreign = completed("foreign", 9000);
+    fs.writeFileSync(join(foreign, "manifest.json"), JSON.stringify({ destination: join(directory, "other.asar") }));
+    const linked = `${destination}.update-linked`;
+    fs.symlinkSync(newest, linked, process.platform === "win32" ? "junction" : "dir");
+    const unixProcess = Object.create(process);
+    Object.defineProperty(unixProcess, "platform", { value: "linux" });
+    const warnings: unknown[][] = [];
+    const modules: Record<string, unknown> = {
+        "@utils/Logger": { Logger: class { warn(...values: unknown[]) { warnings.push(values); } } },
+        "original-fs": { ...fs, rmSync: (file: fs.PathLike, options: fs.RmOptions) => {
+            if (file === undeletable) throw new Error("Injected backup permission failure");
+            fs.rmSync(file, options);
+        } },
+        "child_process": { spawn: () => assert.fail("Retention fixture must not start a helper") },
+        "electron": { app: {} },
+        "../settings": { NativeSettings: { plain: {} }, RendererSettings: { plain: {} } }
+    };
+    const moduleFixture = { exports: {} };
+    runInNewContext(compiled, { module: moduleFixture, exports: moduleFixture.exports, require: (id: string) => modules[id] ?? nativeRequire(id), process: unixProcess, Buffer, setTimeout });
+    const api = moduleFixture.exports as { replaceVerifiedArchive(destination: string, data: Buffer): Promise<{ staged: boolean; }>; };
+    try {
+        assert.equal((await api.replaceVerifiedArchive(destination, Buffer.from("New archive"))).staged, false);
+        assert.equal(fs.existsSync(oldest), false);
+        assert.equal(fs.existsSync(older), false);
+        for (const preserved of [newest, active, pending, failed, unknown, staged, foreign, linked, undeletable]) assert.equal(fs.existsSync(preserved), true, preserved);
+        assert.equal(warnings.length, 1);
+        assert.equal(warnings[0][0], "Could not remove an older update backup.");
+        assert.equal(fs.lstatSync(linked).isSymbolicLink(), true);
+        const previousArchives = fs.readdirSync(directory).filter(name => name.startsWith("lawyercord.asar.update-") && name !== "lawyercord.asar.update-linked");
+        assert.equal(previousArchives.length, 9);
+        assert.equal(await readFile(destination, "utf8"), "New archive");
+        modules["original-fs"] = { ...fs, readdirSync: () => { throw new Error("Injected backup listing failure"); } };
+        const retryModule = { exports: {} };
+        runInNewContext(compiled, { module: retryModule, exports: retryModule.exports, require: (id: string) => modules[id] ?? nativeRequire(id), process: unixProcess, Buffer, setTimeout });
+        const retry = retryModule.exports as typeof api;
+        assert.equal((await retry.replaceVerifiedArchive(destination, Buffer.from("Update after denied listing"))).staged, false);
+        assert.equal(await readFile(destination, "utf8"), "Update after denied listing");
+        for (const backup of previousArchives) assert.equal(fs.existsSync(join(directory, backup)), true);
+        assert.equal(warnings.length, 2);
+        assert.equal(warnings[1][0], "Could not check older update backups.");
+    } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 const electronRuntime = process.env.LAWYERCORD_TEST_ELECTRON;
 test("Windows helper applies an update for the actual Discord executable without launching Discord", { skip: !electronRuntime || process.platform !== "win32" }, async () => {
     assert.ok(electronRuntime);
@@ -234,6 +337,7 @@ test("Unix replacement keeps the old open inode, backs up files and restarts wit
     let relaunched = false;
     let quit = false;
     const modules: Record<string, unknown> = {
+        "@utils/Logger": { Logger: class { warn() {} } },
         "original-fs": fs,
         "child_process": { spawn: () => assert.fail("Unix replacement must not launch a helper") },
         "electron": { app: { relaunch: () => { relaunched = true; }, quit: () => { quit = true; } } },

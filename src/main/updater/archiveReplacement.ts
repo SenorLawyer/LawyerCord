@@ -4,14 +4,17 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { Logger } from "@utils/Logger";
 import { spawn } from "child_process";
 import { createHash } from "crypto";
 import { app } from "electron";
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "original-fs";
-import { join, resolve } from "path";
+import { copyFileSync, type Dirent, existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "original-fs";
+import { basename, dirname, join, resolve } from "path";
 import { setTimeout as sleep } from "timers/promises";
 
 import { NativeSettings, RendererSettings } from "../settings";
+
+const logger = new Logger("Updater");
 
 const windowsWorkerSource = String.raw`
 $ErrorActionPreference = 'Stop'
@@ -57,6 +60,9 @@ try {
     [IO.File]::WriteAllText((Join-Path $directory 'ready.tmp'), (@{ pid = $PID } | ConvertTo-Json -Compress))
     [IO.File]::Move((Join-Path $directory 'ready.tmp'), (Join-Path $directory 'ready.json'))
     if ($null -ne $parent) { $parent.WaitForExit(); $parent.Dispose() }
+    if (-not (Test-Path -LiteralPath $state)) { throw 'The pending update was cancelled before installation. The previous version was kept.' }
+    $pending = Get-Content -LiteralPath $state -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($pending.directory -ne $directory -or $pending.workerPid -ne $PID) { throw 'The pending update was cancelled before installation. The previous version was kept.' }
     if ((Get-ArchiveDigest $staged) -ne $manifest.digest) { throw 'The staged update changed before installation. Download the release again.' }
     if ((Get-ArchiveDigest $manifest.destination) -ne $manifest.previousDigest) { throw 'Another installer changed LawyerCord while this update was waiting. The newer installed archive was kept.' }
     [IO.File]::Copy($manifest.destination, (Join-Path $directory 'previous.asar'))
@@ -69,11 +75,15 @@ try {
     }
     if (-not $applied) { throw 'Close all Discord clients, then reopen LawyerCord and retry the update. The previous version was kept.' }
     Record-Result @{ ok = $true }
-    Restart-Client
-    if (Test-Path -LiteralPath $state) {
-        $pending = Get-Content -LiteralPath $state -Raw -Encoding UTF8 | ConvertFrom-Json
-        if ($pending.directory -eq $directory) { Remove-Item -LiteralPath $state }
+    try {
+        if (Test-Path -LiteralPath $state) {
+            $pending = Get-Content -LiteralPath $state -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($pending.directory -eq $directory) { Remove-Item -LiteralPath $state }
+        }
+    } catch {
+        Record-Result @{ ok = $true; warning = 'The release was installed, but its pending record could not be removed.' }
     }
+    Restart-Client
 } catch {
     $message = if ($applied) { 'The release was installed, but Discord could not restart. Open Discord normally.' } else { $_.Exception.Message }
     Record-Result @{ ok = $false; error = $message }
@@ -110,8 +120,49 @@ export function getStagedUpdateError(destination: string): string | undefined {
     }
 }
 
+function pruneCompletedBackups(destination: string) {
+    let pendingDirectory: string | undefined;
+    if (existsSync(stateFile(destination))) {
+        try {
+            const pending: unknown = JSON.parse(readFileSync(stateFile(destination), "utf8"));
+            if (typeof pending !== "object" || pending === null || !("directory" in pending) || typeof pending.directory !== "string") return;
+            pendingDirectory = resolve(pending.directory);
+        } catch { return; }
+    }
+    const completed: { directory: string; modified: number; }[] = [];
+    const parent = dirname(resolve(destination));
+    let entries: Dirent[];
+    try { entries = readdirSync(parent, { withFileTypes: true }); }
+    catch (error) { logger.warn("Could not check older update backups.", error); return; }
+    for (const entry of entries) {
+        if (!entry.isDirectory() || entry.isSymbolicLink() || !entry.name.startsWith(`${basename(destination)}.update-`)) continue;
+        const directory = join(parent, entry.name);
+        if (directory === pendingDirectory || existsSync(join(directory, "archive.asar"))) continue;
+        try {
+            const manifest: unknown = JSON.parse(readFileSync(join(directory, "manifest.json"), "utf8"));
+            const result: unknown = JSON.parse(readFileSync(join(directory, "result.json"), "utf8"));
+            if (typeof manifest !== "object" || manifest === null || !("destination" in manifest) || manifest.destination !== resolve(destination)
+                || typeof result !== "object" || result === null || !("ok" in result) || result.ok !== true
+                || !statSync(join(directory, "previous.asar")).isFile()) continue;
+            if (existsSync(join(directory, "ready.json"))) {
+                const ready: unknown = JSON.parse(readFileSync(join(directory, "ready.json"), "utf8"));
+                if (typeof ready !== "object" || ready === null || !("pid" in ready) || typeof ready.pid !== "number" || !Number.isSafeInteger(ready.pid) || ready.pid < 1) continue;
+                try { process.kill(ready.pid, 0); continue; }
+                catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") continue; }
+            }
+            completed.push({ directory, modified: statSync(join(directory, "result.json")).mtimeMs });
+        } catch { continue; }
+    }
+    completed.sort((a, b) => b.modified - a.modified);
+    for (const backup of completed.slice(1)) {
+        try { rmSync(backup.directory, { recursive: true, force: true }); }
+        catch (error) { logger.warn("Could not remove an older update backup.", error); }
+    }
+}
+
 export async function replaceVerifiedArchive(destination: string, data: Buffer): Promise<{ staged: boolean; }> {
     if (stagedUpdate || appliedUpdate) throw new Error("An update is already downloaded. Restart Discord before selecting another release.");
+    pruneCompletedBackups(destination);
     const directory = mkdtempSync(`${destination}.update-`);
     let spawned = false;
     try {
@@ -120,6 +171,7 @@ export async function replaceVerifiedArchive(destination: string, data: Buffer):
         writeFileSync(join(directory, "manifest.json"), JSON.stringify({ destination: resolve(destination), digest: createHash("sha256").update(data).digest("hex"), previousDigest: createHash("sha256").update(readFileSync(destination)).digest("hex"), pid: process.pid, executable: process.execPath }), { flush: true, mode: 0o600 });
         if (process.platform !== "win32") {
             copyFileSync(destination, join(directory, "previous.asar"));
+            writeFileSync(join(directory, "result.json"), JSON.stringify({ ok: true }), { flush: true, mode: 0o600 });
             renameSync(join(directory, "archive.asar"), destination);
             spawned = appliedUpdate = true;
             return { staged: false };
@@ -138,7 +190,8 @@ export async function replaceVerifiedArchive(destination: string, data: Buffer):
         let launchError = false;
         child.once("error", () => { launchError = true; });
         const readyFile = join(directory, "ready.json");
-        for (let attempt = 0; attempt < 200 && !existsSync(readyFile); attempt++) {
+        const deadline = Date.now() + 10_000;
+        while (!existsSync(readyFile) && Date.now() < deadline) {
             if (launchError || child.exitCode !== null && child.exitCode !== 0) break;
             await sleep(50);
         }

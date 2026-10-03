@@ -115,8 +115,9 @@ async function resolveRelease(channel: UpdateChannel, tag?: unknown): Promise<{ 
 async function checkRelease(_: unknown, channel: unknown, tag?: unknown) {
     const previousError = getStagedUpdateError(__dirname);
     if (previousError) throw new Error(previousError);
-    if (applying || restartRequired) {
-        if (pendingUpdate) return pendingUpdate.release;
+    if (applying) await applying;
+    if (restartRequired) {
+        if (pendingUpdate) return { ...pendingUpdate.release, restartRequired: true };
         throw new Error("Restart Discord to finish installing the selected version.");
     }
     const check = updateCheck = Symbol();

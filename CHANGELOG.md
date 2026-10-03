@@ -14,6 +14,10 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - Close the selected Discord installation before the Windows installer replaces its locked LawyerCord archive.
 - Stage verified in-app updates outside the loaded archive and apply them after Discord exits, then restart the selected client.
 - Detect older release targets independently of their commit list and keep automatic updates from silently rolling back a newer client.
+- Keep shared Button and Text exports available during circular initialization so Ghosted and other plugin modals render correctly.
+- Preserve Ghosted clears across cache reloads, account changes and restarts, and update its open modal from live saved state.
+- Restore FriendshipRanks icons by allowing their existing image host in Discord's image security policy.
+- Apply a verified nesting limit to the lint toolchain's braces dependency until an upstream security release is available.
 
 ## 4.0.1.0 - 2026-10-03 (Nightly)
 

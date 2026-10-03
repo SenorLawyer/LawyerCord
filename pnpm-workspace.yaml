@@ -33,3 +33,5 @@ minimumReleaseAgeExclude:
     - dompurify@3.4.16
     - nanoid@3.3.18
     - moment@2.31.0
+patchedDependencies:
+    braces@3.0.3: patches/braces@3.0.3.patch

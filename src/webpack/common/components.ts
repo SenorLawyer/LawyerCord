@@ -16,8 +16,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { TextCompat } from "@components/BaseText";
-import { ButtonCompat } from "@components/Button";
 import { Divider } from "@components/Divider";
 import { FormSwitchCompat } from "@components/FormSwitch";
 import { Heading } from "@components/Heading";
@@ -45,9 +43,9 @@ export const Forms = {
 
 // TODO: Stop using this and use Paragraph/Span directly
 /** @deprecated use Paragraph, Span, or BaseText from Vencord */
-export const Text = TextCompat;
+export { TextCompat as Text } from "@components/BaseText";
 /** @deprecated use Button from Vencord */
-export const Button = ButtonCompat;
+export { ButtonCompat as Button } from "@components/Button";
 /** @deprecated Use FormSwitch from Vencord */
 export const Switch = FormSwitchCompat as never;
 

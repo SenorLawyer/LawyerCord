@@ -67,6 +67,12 @@ export async function checkForUpdates(tag?: string) {
         if (check !== updateCheck) return isOutdated;
         selectedRelease = Unwrap(result);
         changes = selectedRelease.changes;
+        if (selectedRelease.restartRequired) {
+            restartRequired = true;
+            isOutdated = isNewer = false;
+            updateListeners.forEach(listener => listener());
+            return false;
+        }
         isNewer = selectedRelease.relation === "rollback";
         return (isOutdated = selectedRelease.relation === "upgrade");
     }

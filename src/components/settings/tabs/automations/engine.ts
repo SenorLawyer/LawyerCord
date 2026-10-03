@@ -10,7 +10,7 @@ import { openPrivateChannel } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import { sleep } from "@utils/misc";
 import type { PluginNative } from "@utils/types";
-import type { ApplicationCommand, ApplicationCommandIndexResult, ApplicationCommandOption, Guild } from "@vencord/discord-types";
+import type { ApplicationCommand, ApplicationCommandIndexResult, ApplicationCommandOption } from "@vencord/discord-types";
 import {
     ApplicationCommandIndexStore,
     AuthenticationStore,
@@ -481,12 +481,12 @@ export function subscribeAutomationState(listener: () => void): () => void {
     return () => listeners.delete(listener);
 }
 
-export async function replaceAutomations(next: Automation[]): Promise<void> {
+export async function replaceAutomations(next: Automation[] | ((current: Automation[]) => Automation[]), references: GuildReference[] = []): Promise<void> {
     await loadAutomationState();
-    automations = next.map(migrateWorkflow);
+    automations = (typeof next === "function" ? next(automations) : next).map(migrateWorkflow);
     nextDue.clear();
     refreshTriggerCache();
-    guilds = collectGuildReferences(automations, guilds);
+    guilds = collectGuildReferences(automations, [...guilds, ...references]);
     dirtyKeys.add(GUILDS_KEY);
     notify();
     await queueWrite(WORKFLOWS_KEY);
@@ -1985,69 +1985,6 @@ export async function setAutomationSystemEnabled(value: boolean): Promise<void> 
     } else if (available) await startAutomationEngine();
     notify();
     await queueWrite(WORKFLOWS_KEY);
-}
-
-function guildReferenceFromGuild(guild: Guild): GuildReference {
-    return {
-        id: guild.id,
-        name: guild.name,
-        icon: guild.icon || null,
-        banner: guild.banner || null,
-        inviteCode: guild.vanityURLCode || null,
-        available: true,
-    };
-}
-
-function guildReferenceFromResponse(value: unknown, id: string): GuildReference | undefined {
-    if (!isRecord(value) || typeof value.name !== "string") return undefined;
-    return {
-        id,
-        name: value.name,
-        icon: typeof value.icon === "string" ? value.icon : null,
-        banner: typeof value.banner === "string" ? value.banner : null,
-        inviteCode: typeof value.vanity_url_code === "string" ? value.vanity_url_code : null,
-        available: true,
-    };
-}
-
-export async function refreshGuildReferences(references?: GuildReference[]): Promise<GuildReference[]> {
-    await loadAutomationState();
-    const source = references ?? collectGuildReferences(automations, guilds);
-    const next = [...new Map(source.map(reference => [reference.id, { ...reference }])).values()];
-
-    for (const reference of next) {
-        if (!/^\d{1,25}$/.test(reference.id)) {
-            reference.available = false;
-            reference.error = "Server ID is invalid.";
-            continue;
-        }
-        try {
-            const cached = GuildStore.getGuild(reference.id);
-            if (cached) {
-                Object.assign(reference, guildReferenceFromGuild(cached));
-                continue;
-            }
-        } catch (error) {
-            logger.debug(`Unable to read cached guild ${reference.id}`, error);
-        }
-
-        try {
-            const endpoint = Constants.Endpoints.GUILD;
-            if (typeof endpoint !== "function") throw new Error("Guild endpoint unavailable.");
-            const response = await RestAPI.get({ url: endpoint(reference.id) });
-            const fetched = guildReferenceFromResponse(response.body, reference.id);
-            if (fetched) Object.assign(reference, fetched);
-            else reference.error = "Discord returned incomplete guild information.";
-        } catch (error) {
-            reference.available = false;
-            reference.error = getErrorMessage(error);
-        }
-    }
-
-    guilds = next;
-    notify();
-    await queueWrite(GUILDS_KEY);
-    return next.map(reference => ({ ...reference }));
 }
 
 export function parseImportedAutomation(value: unknown): AutomationFile {

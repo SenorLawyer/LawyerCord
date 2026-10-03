@@ -20,7 +20,7 @@ import { SettingsTab } from "@components/settings/tabs/BaseTab";
 import { openInviteModal } from "@utils/discord";
 import { Margins } from "@utils/margins";
 import { chooseFile, saveFile } from "@utils/web";
-import { Alerts, ContextMenuApi, GuildStore, IconUtils, Menu, moment, React, showToast, TextInput, Toasts } from "@webpack/common";
+import { Alerts, ContextMenuApi, FluxDispatcher, GuildStore, IconUtils, Menu, moment, React, showToast, TextInput, Toasts, UserStore, useStateFromStores } from "@webpack/common";
 
 import { BLOCK_ICONS, blockDefinition, describeTrigger } from "./blocks";
 import {
@@ -30,7 +30,6 @@ import {
     getAutomationSnapshot,
     loadAutomationState,
     parseImportedAutomation,
-    refreshGuildReferences,
     replaceAutomations,
     runAutomation,
     setAutomationEnabled,
@@ -129,34 +128,57 @@ function DraftCard({ draft }: { draft: Automation; }) {
 }
 
 function GuildPanel({ guilds }: { guilds: GuildReference[]; }) {
+    const currentGuilds = useStateFromStores([GuildStore], () => guilds.map(reference => GuildStore.getGuild(reference.id)), [guilds],
+        (previous, next) => previous.length === next.length && previous.every((guild, index) => guild === next[index]));
     if (guilds.length === 0) return null;
     return <>
         <Heading className={Margins.top16}>Servers these automations use</Heading>
         <Paragraph className={Margins.bottom16}>Imported automations list every server they need, so you can join any you are missing.</Paragraph>
-        <div className="vc-automations-guild-list">{guilds.map(reference => {
-            const cached = reference.available ? GuildStore.getGuild(reference.id) : undefined;
-            const icon = IconUtils.getGuildIconURL({ id: reference.id, icon: reference.icon ?? undefined, size: 64 });
+        <div className="vc-automations-guild-list">{guilds.map((reference, index) => {
+            const cached = currentGuilds[index];
+            const icon = IconUtils.getGuildIconURL({ id: reference.id, icon: cached ? cached.icon ?? undefined : reference.icon ?? undefined, size: 64 });
             const banner = cached ? IconUtils.getGuildBannerURL(cached, true) : null;
-            return <article className="vc-automations-guild-card" key={reference.id}>{banner && <img className="vc-automations-guild-banner" src={banner} alt="" />}<div className="vc-automations-guild-content">{icon ? <img className="vc-automations-guild-icon" src={icon} alt="" /> : <div className="vc-automations-guild-icon vc-automations-guild-icon-fallback">?</div>}<div className="vc-automations-guild-copy"><strong>{reference.name || "Unknown server"}</strong><span>{reference.available ? "You are in this server" : reference.error || "You are not in this server"}</span></div>{reference.inviteCode && <Button size="small" variant="secondary" onClick={() => void openInviteModal(reference.inviteCode ?? "")}>Join</Button>}</div></article>;
+            return <article className="vc-automations-guild-card" key={reference.id}>{banner && <img className="vc-automations-guild-banner" src={banner} alt="" />}<div className="vc-automations-guild-content">{icon ? <img className="vc-automations-guild-icon" src={icon} alt="" /> : <div className="vc-automations-guild-icon vc-automations-guild-icon-fallback">?</div>}<div className="vc-automations-guild-copy"><strong>{cached?.name || reference.name || "Unknown server"}</strong><span>{cached ? "You are in this server" : "You are not in this server"}</span></div>{!cached && reference.inviteCode && <Button size="small" variant="secondary" onClick={() => void openInviteModal(reference.inviteCode ?? "")}>Join</Button>}</div></article>;
         })}</div>
     </>;
 }
 
-async function importAutomationFile(current: ReturnType<typeof getAutomationSnapshot>): Promise<void> {
-    const file = await chooseFile(".lawyerautomation,application/json");
-    if (!file) return;
+let importOperation = 0;
+
+async function importAutomationFile(): Promise<void> {
+    const operation = ++importOperation;
+    const account = UserStore.getCurrentUser()?.id;
+    let cancelled = false;
+    const logout = () => { cancelled = true; };
+    const changedAccount = () => { if (UserStore.getCurrentUser()?.id !== account) cancelled = true; };
+    const checkCurrent = () => {
+        if (cancelled || operation !== importOperation || UserStore.getCurrentUser()?.id !== account)
+            throw new Error("Automation import was cancelled.");
+    };
+    FluxDispatcher.subscribe("LOGOUT", logout);
+    FluxDispatcher.subscribe("CONNECTION_OPEN", changedAccount);
     try {
+        const file = await chooseFile(".lawyerautomation,application/json");
+        if (!file) return;
+        checkCurrent();
         if (file.size > 2_000_000) throw new Error("Automation files must be smaller than 2 MB.");
         const imported = parseImportedAutomation(JSON.parse(await file.text()) as unknown);
+        checkCurrent();
         const now = Date.now();
         // duplicateWorkflows remaps every edge onto the new block ids. Handing out fresh ids
         // without that leaves the whole graph pointing at blocks that no longer exist.
         const copies = duplicateWorkflows(imported.automations).map(value => ({ ...value, name: `${value.name} (imported)`, createdAt: now, updatedAt: now }));
-        await replaceAutomations([...current.automations, ...copies]);
-        await refreshGuildReferences([...current.guilds, ...imported.guilds]);
+        await replaceAutomations(current => {
+            checkCurrent();
+            return [...current, ...copies];
+        }, imported.guilds);
+        checkCurrent();
         showToast(`Imported ${copies.length} automation${copies.length === 1 ? "" : "s"}. They start turned off.`, Toasts.Type.SUCCESS);
     } catch (error) {
         showToast(error instanceof Error ? error.message : "That automation file could not be imported.", Toasts.Type.FAILURE);
+    } finally {
+        FluxDispatcher.unsubscribe("LOGOUT", logout);
+        FluxDispatcher.unsubscribe("CONNECTION_OPEN", changedAccount);
     }
 }
 
@@ -248,7 +270,7 @@ function AutomationsTab() {
         <Paragraph className={Margins.bottom16}>Create a new automation, or move automations between computers as files. A file can hold one automation or all of them.</Paragraph>
         <QuickActionCard>
             <QuickAction Icon={PlusIcon} text="New automation" action={() => openAutomationBuilder(createAutomation())} />
-            <QuickAction Icon={CloudUploadIcon} text="Import from file" action={() => void importAutomationFile(current)} />
+            <QuickAction Icon={CloudUploadIcon} text="Import from file" action={() => void importAutomationFile()} />
             <QuickAction Icon={CloudDownloadIcon} text="Export all to file" disabled={!current.automations.length} action={() => exportAutomations(current.automations, current.guilds, "lawyercord-automations.lawyerautomation")} />
         </QuickActionCard>
 

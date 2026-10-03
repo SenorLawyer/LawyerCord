@@ -1,0 +1,573 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-03",
+  "source_version": "4.0.1.0",
+  "baseline_tag": "v1.16.0.0",
+  "baseline_commit": "eb3118ac61ef213ca9cb09f5844c3ca040e2dac6",
+  "historical_head": "53260d5900b155a60e89a3fbb89489df6a37cc66",
+  "followup_base": "b9ebd83b12b0d2252cfe832f36a9d08eced1fcce",
+  "original_inventory": "docs/post-1.16-history-review-2026-10-03.json",
+  "original_inventory_sha256": "6a88bb58b1fa7989c2d4389051e7e22d516e8e00da40d6f340e6d0eebfac75c6",
+  "scope": "All 25 first-parent changes in the frozen post-1.16 inventory now have complete textual diff review. This expands the eleven entries previously marked runtime-only or selective. PR57 implementation and this follow-up were reviewed separately as authored changes. Binary media does not have a textual full-read claim.",
+  "commits": [
+    {
+      "commit": "fc0de7e443ed551f7bd005bf0a7f71edee48add0",
+      "parent": "eb3118ac61ef213ca9cb09f5844c3ca040e2dac6",
+      "tree": "9d9ff64b619d8da09e25aaccf59f2b20f979bc80",
+      "pull_request": "14",
+      "subject": "Publish the standalone updater asset (#14)",
+      "changed_path_count": 7,
+      "original_review_depth": "full-diff-review",
+      "review_depth": "full-diff-review",
+      "review": {
+        "notes": "Full diff read. Standalone updater release asset and Ghosted startup deferred until settings ready; no added repeating work.",
+        "provenance": "Previously completed full review retained from the original inventory."
+      }
+    },
+    {
+      "commit": "a287e97577855b724c76c8b5b03fcfa86e66fb5a",
+      "parent": "fc0de7e443ed551f7bd005bf0a7f71edee48add0",
+      "tree": "4dec0a46623141473c587a4705c039f7f19a0e7f",
+      "pull_request": "15",
+      "subject": "Fix installer folder patch recovery (#15)",
+      "changed_path_count": 3,
+      "original_review_depth": "full-diff-review",
+      "review_depth": "full-diff-review",
+      "review": {
+        "notes": "Full diff read. Installer recovery only.",
+        "provenance": "Previously completed full review retained from the original inventory."
+      }
+    },
+    {
+      "commit": "2a2de33901628fbf76fef09974d40462328c3efe",
+      "parent": "a287e97577855b724c76c8b5b03fcfa86e66fb5a",
+      "tree": "6068fc80345b4eee79d4d4549cf7be6071c181c7",
+      "pull_request": "19",
+      "subject": "Add MCP client setup (#19)",
+      "changed_path_count": 6,
+      "original_review_depth": "full-diff-review",
+      "review_depth": "full-diff-review",
+      "review": {
+        "notes": "Full diff read in chunks. MCP configuration writes and setup panel; user initiated, no repeating renderer work added.",
+        "provenance": "Previously completed full review retained from the original inventory."
+      }
+    },
+    {
+      "commit": "704059252ddc058f2ae074fc34e7e65ff3ae093c",
+      "parent": "2a2de33901628fbf76fef09974d40462328c3efe",
+      "tree": "e067ab3fc29eb0481a485a4c0b404c3245425a9d",
+      "pull_request": "31",
+      "subject": "Add Lawyers Fake Nitro (#31)",
+      "changed_path_count": 6,
+      "original_review_depth": "full-diff-review",
+      "review_depth": "full-diff-review",
+      "review": {
+        "notes": "Full diff read. Fake Nitro settings interception and local favorites introduced; global REST interception later removed by #44.",
+        "provenance": "Previously completed full review retained from the original inventory."
+      }
+    },
+    {
+      "commit": "e7055fbbd787362b74075c41bd767aee50a1b975",
+      "parent": "704059252ddc058f2ae074fc34e7e65ff3ae093c",
+      "tree": "f3993412b7de7a857f5bf9e9a3dfe070d826adfa",
+      "pull_request": "32",
+      "subject": "Fix update channels and release v2 (#32)",
+      "changed_path_count": 15,
+      "original_review_depth": "full-diff-review",
+      "review_depth": "full-diff-review",
+      "review": {
+        "notes": "All changed lines and hunks reviewed. Update channel/release selection behavior; no new animation or event loop.",
+        "provenance": "Previously completed full review retained from the original inventory."
+      }
+    },
+    {
+      "commit": "f93f23a820636619dfe10944e77995d3dd4b41e4",
+      "parent": "e7055fbbd787362b74075c41bd767aee50a1b975",
+      "tree": "aee2d2b4e02f8d93a485a0e14621434140122839",
+      "pull_request": "33",
+      "subject": "Repair stale Discord patch markers (#33)",
+      "changed_path_count": 6,
+      "original_review_depth": "full-diff-review",
+      "review_depth": "full-diff-review",
+      "review": {
+        "notes": "Full diff read. Installer stale marker handling only.",
+        "provenance": "Previously completed full review retained from the original inventory."
+      }
+    },
+    {
+      "commit": "43837fb9d48876cc5f7d0ee33f4d79bb3b18fceb",
+      "parent": "f93f23a820636619dfe10944e77995d3dd4b41e4",
+      "tree": "5cbe6dbede08e7c46dd605f2fc042b0ff05c54f8",
+      "pull_request": "34",
+      "subject": "Require a release label (#34)",
+      "changed_path_count": 1,
+      "original_review_depth": "full-diff-review",
+      "review_depth": "full-diff-review",
+      "review": {
+        "notes": "Full diff read. Release labeling only.",
+        "provenance": "Previously completed full review retained from the original inventory."
+      }
+    },
+    {
+      "commit": "80a28a88e51ac2d718a29585b0dc47012ccf3d49",
+      "parent": "43837fb9d48876cc5f7d0ee33f4d79bb3b18fceb",
+      "tree": "c4135c7c87969a7c1e7b13e58f4fe5d93702872f",
+      "pull_request": "38",
+      "subject": "Add Roblox activity notifications (#38)",
+      "changed_path_count": 6,
+      "original_review_depth": "runtime-diff-review",
+      "review_depth": "full-text-diff-review",
+      "review": {
+        "patch_sha256": "8aa1e429d3ae9854d1b10cc3029477d6e9f0ce6982cbf03df0765dfa3f08e5d1",
+        "text_line_count": 371,
+        "read_ranges": [
+          [
+            1,
+            371
+          ]
+        ],
+        "notes": "Process polling and native tasklist were introduced. Subsequent Roblox ownership/polling fixes supersede historical behavior; plugin disabled in the previously captured local configuration is not attributed as the FPS cause. Favorite RestAPI wrappers and settings-proto patches traced against current review; immutable tag commit selection retained.",
+        "binary_resources": []
+      }
+    },
+    {
+      "commit": "7a81e546a38bea8e10a7433fd26212561ccc3146",
+      "parent": "80a28a88e51ac2d718a29585b0dc47012ccf3d49",
+      "tree": "5265733d8d1d2085e1fe2e4c176edbf0a20db95e",
+      "pull_request": "39",
+      "subject": "Fix Roblox activity startup race (#39)",
+      "changed_path_count": 1,
+      "original_review_depth": "full-diff-review",
+      "review_depth": "full-diff-review",
+      "review": {
+        "notes": "Full diff read. Polling starts before UserStore ready; allowed account check inside each tick.",
+        "provenance": "Previously completed full review retained from the original inventory."
+      }
+    },
+    {
+      "commit": "e000213e5a3588294fb72262980303d0bb5e7e0b",
+      "parent": "7a81e546a38bea8e10a7433fd26212561ccc3146",
+      "tree": "f4202b7104a3a6ef54ea07ac8b1f773a53d79b51",
+      "pull_request": "40",
+      "subject": "Persist Fake Nitro favorites reliably (#40)",
+      "changed_path_count": 1,
+      "original_review_depth": "full-diff-review",
+      "review_depth": "full-diff-review",
+      "review": {
+        "notes": "Full diff read. Fake Nitro local favorites restoration/storage; global REST interception later removed.",
+        "provenance": "Previously completed full review retained from the original inventory."
+      }
+    },
+    {
+      "commit": "db2a8d60099f65a6d975a50b2d975de2a40b92d5",
+      "parent": "e000213e5a3588294fb72262980303d0bb5e7e0b",
+      "tree": "568a344863cbf9ba185a6672b649478c96fd1855",
+      "pull_request": "41",
+      "subject": "Fix Fake Nitro favorite persistence (#41)",
+      "changed_path_count": 2,
+      "original_review_depth": "full-diff-review",
+      "review_depth": "full-diff-review",
+      "review": {
+        "notes": "Full diff read. Roblox PRESENCE_UPDATE check introduced without user filtering. Historical source execution reproduces 1000 checks for 1000 unrelated events.",
+        "provenance": "Previously completed full review retained from the original inventory."
+      }
+    },
+    {
+      "commit": "775c018db5dd7fb2a2cbe33a488fe5e13b7892ce",
+      "parent": "db2a8d60099f65a6d975a50b2d975de2a40b92d5",
+      "tree": "885a15baf41b3e359c5d32da9f554a6e700be2ca",
+      "pull_request": "42",
+      "subject": "Allow the active Roblox account (#42)",
+      "changed_path_count": 1,
+      "original_review_depth": "full-diff-review",
+      "review_depth": "full-diff-review",
+      "review": {
+        "notes": "Full diff read. Roblox username allowlist addition.",
+        "provenance": "Previously completed full review retained from the original inventory."
+      }
+    },
+    {
+      "commit": "6a570b5d5fcf198c9a7e9ee35dcddcf4c84109ff",
+      "parent": "775c018db5dd7fb2a2cbe33a488fe5e13b7892ce",
+      "tree": "af09a4e6cf3d5b7cbccd601826792e37dcffe132",
+      "pull_request": "43",
+      "subject": "Use Discord IDs for Roblox activity access (#43)",
+      "changed_path_count": 1,
+      "original_review_depth": "full-diff-review",
+      "review_depth": "full-diff-review",
+      "review": {
+        "notes": "Full diff read. Roblox username allowlist replaced with IDs.",
+        "provenance": "Previously completed full review retained from the original inventory."
+      }
+    },
+    {
+      "commit": "6210ccf67e44ebb18e0b6eedd614360512a5170f",
+      "parent": "6a570b5d5fcf198c9a7e9ee35dcddcf4c84109ff",
+      "tree": "44ee8a01290bcfcdec91c0496f6e67741c56d36a",
+      "pull_request": "44",
+      "subject": "Stop Fake Nitro settings interception (#44)",
+      "changed_path_count": 2,
+      "original_review_depth": "full-diff-review",
+      "review_depth": "full-diff-review",
+      "review": {
+        "notes": "Full diff read. Fake Nitro global RestAPI patch/put interception removed.",
+        "provenance": "Previously completed full review retained from the original inventory."
+      }
+    },
+    {
+      "commit": "b25ed68a80a759e73f2defbbdfd0e5c721a6480f",
+      "parent": "6210ccf67e44ebb18e0b6eedd614360512a5170f",
+      "tree": "41b5293d84dac428e7d97f7f7e48990e9401b1d0",
+      "pull_request": "45",
+      "subject": "Revamp automations and disable the engine by default (#45)",
+      "changed_path_count": 66,
+      "original_review_depth": "selective-diff-review",
+      "review_depth": "full-text-diff-review",
+      "review": {
+        "patch_sha256": "9e7c745c1f3877071235486b5d8ecf4dc45d5e96b82ad82959429c83604e2b54",
+        "text_line_count": 16925,
+        "read_ranges": [
+          [
+            1,
+            16925
+          ]
+        ],
+        "notes": "read-complete",
+        "binary_resources": []
+      }
+    },
+    {
+      "commit": "6e664e03ba3d0b7746ce34740ca444f5112b04bc",
+      "parent": "b25ed68a80a759e73f2defbbdfd0e5c721a6480f",
+      "tree": "d45ac542c403557599f93d8e1bcea6434ac322e1",
+      "pull_request": "46",
+      "subject": "Port ProtonnCord performance optimizations (#46)",
+      "changed_path_count": 77,
+      "original_review_depth": "selective-diff-review",
+      "review_depth": "full-text-diff-review",
+      "review": {
+        "patch_sha256": "fbef7ade04c667d94e361f9d8a73cfe730ded884b8aaf5635b7a61eba530752d",
+        "text_line_count": 8193,
+        "read_ranges": [
+          [
+            1,
+            8193
+          ]
+        ],
+        "notes": "read-complete",
+        "binary_resources": []
+      }
+    },
+    {
+      "commit": "8fc182ba76a9a7cae4ae7c7ccb40949e75128753",
+      "parent": "6e664e03ba3d0b7746ce34740ca444f5112b04bc",
+      "tree": "99db96a76224fcb296bfe6582239e91e441bc99b",
+      "pull_request": "48",
+      "subject": "Add concrete Discord automations and discoverable output fields (#48)",
+      "changed_path_count": 22,
+      "original_review_depth": "selective-diff-review",
+      "review_depth": "full-text-diff-review",
+      "review": {
+        "patch_sha256": "1611ae69d4685aedf8aaa67efcfcd5f303549cae5c99b1300d6169fe12df7add",
+        "text_line_count": 1331,
+        "read_ranges": [
+          [
+            1,
+            1331
+          ]
+        ],
+        "notes": "read-complete",
+        "binary_resources": []
+      }
+    },
+    {
+      "commit": "1f54de7196f99cf8376b84d675d0a2c50e8b52ac",
+      "parent": "8fc182ba76a9a7cae4ae7c7ccb40949e75128753",
+      "tree": "35da6f68f3ca4532ee6eee296d61db0c9e843222",
+      "pull_request": "47",
+      "subject": "Audit the full project and remove obsolete code (#47)",
+      "changed_path_count": 614,
+      "original_review_depth": "selective-diff-review",
+      "review_depth": "full-text-diff-review",
+      "review": {
+        "patch_sha256": "019bcfeb017eb6400a5eae6c18c23b72324804af9989e39128ae82b2a35547cd",
+        "text_line_count": 72735,
+        "read_ranges": [
+          [
+            1,
+            34994
+          ],
+          [
+            34995,
+            72735
+          ]
+        ],
+        "notes": "Complete textual patch read across separate prefix and tail ownership. Binary bytes are classified separately.",
+        "binary_resources": [
+          "browser/icon.png"
+        ]
+      }
+    },
+    {
+      "commit": "428784bba91586ece25778f143c0e806155ee452",
+      "parent": "1f54de7196f99cf8376b84d675d0a2c50e8b52ac",
+      "tree": "311b4cf9757edcd69200abc45410ce1ce6f21cf0",
+      "pull_request": "50",
+      "subject": "Fix update channel isolation and release Stable 3.0.1.0 (#50)",
+      "changed_path_count": 8,
+      "original_review_depth": "selective-diff-review",
+      "review_depth": "full-text-diff-review",
+      "review": {
+        "patch_sha256": "1361d6e8ec37ba83a2149c1df8a73e604677279707907854a0998b8bfa9af0e0",
+        "text_line_count": 239,
+        "read_ranges": [
+          [
+            1,
+            239
+          ]
+        ],
+        "notes": "full historical textual diff read",
+        "binary_resources": []
+      }
+    },
+    {
+      "commit": "d783136e33046f71ec753ca308df17549e7e64de",
+      "parent": "428784bba91586ece25778f143c0e806155ee452",
+      "tree": "06494a8117eda3af8a4a61b694dd3aca04239f4e",
+      "pull_request": "51",
+      "subject": "Update built-in client presentation (#51)",
+      "changed_path_count": 10,
+      "original_review_depth": "runtime-diff-review",
+      "review_depth": "full-text-diff-review",
+      "review": {
+        "patch_sha256": "5632fa22d296a54194919699a0067eb974829ab34d423793646b235acccf52c4",
+        "text_line_count": 292,
+        "read_ranges": [
+          [
+            1,
+            292
+          ]
+        ],
+        "notes": "Presentation subscribes only for allowed accounts, renders media and particles only after a matching message, and releases its subscription. Media and component are absent from current source. Dependency override update is aligned across workspace and lockfile.",
+        "binary_resources": [
+          "src/components/BirthdayCelebration/birthday.mp4"
+        ]
+      }
+    },
+    {
+      "commit": "40d639dc3f7891031a002183d6874516e5dc83ec",
+      "parent": "d783136e33046f71ec753ca308df17549e7e64de",
+      "tree": "68134d807b644a3dc4de7803c87d302a6b8a89fa",
+      "pull_request": "52",
+      "subject": "Fix client updates, background work, and media playback (#52)",
+      "changed_path_count": 33,
+      "original_review_depth": "selective-diff-review",
+      "review_depth": "full-text-diff-review",
+      "review": {
+        "patch_sha256": "f3cd613bc15ac2c9b304755b11d97321b33a50be084464faeb04dde14f274cf9",
+        "text_line_count": 2544,
+        "read_ranges": [
+          [
+            1,
+            2544
+          ]
+        ],
+        "notes": "full historical textual diff read",
+        "binary_resources": []
+      }
+    },
+    {
+      "commit": "f4b27c59de1ae9f13bd6d074ec1e1405bf11952f",
+      "parent": "40d639dc3f7891031a002183d6874516e5dc83ec",
+      "tree": "d9a33cf91c7cbf00df289d45223e38987caff8ac",
+      "pull_request": "53",
+      "subject": "Audit Stable 3.0.1.0 and restore it as Nightly 3.1.2.0 (#53)",
+      "changed_path_count": 253,
+      "original_review_depth": "selective-diff-review",
+      "review_depth": "full-text-diff-review",
+      "review": {
+        "patch_sha256": "643689b0a7c19423bb77165d9615778a6546d2416403b33facfe003ed75dc57a",
+        "text_line_count": 24991,
+        "read_ranges": [
+          [
+            1,
+            24991
+          ]
+        ],
+        "notes": "Prior root confirmed actual read 16621–21020. Current worker read 21021–23370; truncated 21721–22620 output gap re-read 22121–22340. All text including removals counted only when shown. Completed 23371–24991; truncated final output gap reread 24481–24660. Binary deleted birthday.mp4 classified only.",
+        "binary_resources": [
+          "src/components/BirthdayCelebration/birthday.mp4"
+        ]
+      }
+    },
+    {
+      "commit": "52c4d09feb29036cccddf53ba8fe96ce40148bbc",
+      "parent": "f4b27c59de1ae9f13bd6d074ec1e1405bf11952f",
+      "tree": "d17343675eb4ec1c1d4d371243ade84e96ea1e04",
+      "pull_request": "54",
+      "subject": "Reduce renderer stalls and harden queued work for Nightly 3.1.3.0 (#54)",
+      "changed_path_count": 101,
+      "original_review_depth": "selective-diff-review",
+      "review_depth": "full-text-diff-review",
+      "review": {
+        "patch_sha256": "19d60dd6c2b64b29b25bdcf1cc86f3bb6fe489b6d933fc869030d6f2127a63d1",
+        "text_line_count": 11389,
+        "read_ranges": [
+          [
+            1,
+            11389
+          ]
+        ],
+        "notes": "full historical textual diff read",
+        "binary_resources": []
+      }
+    },
+    {
+      "commit": "8c39db293566c926502d76de038e6978b8896097",
+      "parent": "52c4d09feb29036cccddf53ba8fe96ce40148bbc",
+      "tree": "a5ee1189f6ef3da60139c4bd9708018b609aafb1",
+      "pull_request": "55",
+      "subject": "Improve long-session performance across core, automation and plugins (#55)",
+      "changed_path_count": 130,
+      "original_review_depth": "selective-diff-review",
+      "review_depth": "full-text-diff-review",
+      "review": {
+        "patch_sha256": "be2c30d8cb95426c2d3cd0c3e167ba639681f626f1090629414339642ef437eb",
+        "text_line_count": 9873,
+        "read_ranges": [
+          [
+            1,
+            9873
+          ]
+        ],
+        "notes": "All raw lines1–9873 read, including all TSV columns and full notes. Separate ownership1–999 and1000–1922 closed the remaining metadata gap;1923–9873 runtime/tests/prose were read earlier. Truncated outputs were excluded or reread. Historical copied batch notes and pending language retain their qualification; metadata is not live runtime proof.",
+        "binary_resources": []
+      }
+    },
+    {
+      "commit": "53260d5900b155a60e89a3fbb89489df6a37cc66",
+      "parent": "8c39db293566c926502d76de038e6978b8896097",
+      "tree": "c2cc83e433a0aa1e39a0a1d200d10afe73c997b2",
+      "pull_request": "56",
+      "subject": "Correct instruction-link provenance in performance audit (#56)",
+      "changed_path_count": 2,
+      "original_review_depth": "full-diff-review",
+      "review_depth": "full-diff-review",
+      "review": {
+        "notes": "Full diff read. Coverage documentation provenance correction only.",
+        "provenance": "Previously completed full review retained from the original inventory."
+      }
+    }
+  ],
+  "followup_files": [
+    {
+      "path": "CHANGELOG.md",
+      "sha256_lf": "92cc13c1126b3abcd566dec6808e668f5008de593daf66b55a454560d895b008"
+    },
+    {
+      "path": "VERSIONING.md",
+      "sha256_lf": "7dfe33d54b7dd4ea5aae3234be64a65b3216228e9086e2b6cae465bc1567bda6"
+    },
+    {
+      "path": "package.json",
+      "sha256_lf": "28419ac179e0c141c6f643baaf2d51e941c9e2297fbd3031d924ab6bf3cf291e"
+    },
+    {
+      "path": "scripts/testAutomationExecutionWork.ts",
+      "sha256_lf": "262724416b5fb71924c9cdaf804b8cd3ce132174fbf238534cd91ff3c1d85c71"
+    },
+    {
+      "path": "scripts/testFakeNitroWork.ts",
+      "sha256_lf": "635731d23b51f8715c3631cdcd1873c368e069838d84b15f91f2190c9a17b2fe"
+    },
+    {
+      "path": "scripts/testLoggedMessageConversion.ts",
+      "sha256_lf": "27a3b2b4c0c9c7ad95ac79c7f19339b0c6f1727bd6f0d5deef9b2d00f67c9ed5"
+    },
+    {
+      "path": "scripts/testProgressiveCloudReads.ts",
+      "sha256_lf": "721f0b7473854aa0fad12c51695a72cc294dfbf1a3098188152c89160bff0a20"
+    },
+    {
+      "path": "scripts/testProgressiveTimezones.ts",
+      "sha256_lf": "03a74db8c4cc866a823c2f891b7f8ecfe9f396f25ab303bad7a121482add8b23"
+    },
+    {
+      "path": "scripts/testSettingsSync.ts",
+      "sha256_lf": "adbcc4b95794414376a3575a664d613243ba3b874d3ca719f3ce3c50fc6f6b4b"
+    },
+    {
+      "path": "src/api/SettingsSync/cloudSync.ts",
+      "sha256_lf": "e941aeb7aad3b6aa8a0f66129819bf895bf52087b0650d4c992ee312b2ab0596"
+    },
+    {
+      "path": "src/components/settings/tabs/automations/engine.ts",
+      "sha256_lf": "a64ff2669ca073a9dd2a82676f20819654ac6aa71524d8c5826039170e2a61b6"
+    },
+    {
+      "path": "src/components/settings/tabs/automations/index.tsx",
+      "sha256_lf": "fb0957349fcaaa684d85f1f04dd4d0c9834c569bc19b33bd2be622a7dfbef2ca"
+    },
+    {
+      "path": "src/equicordplugins/messageLoggerEnhanced/utils/cleanUp.ts",
+      "sha256_lf": "e1b4b7dd4ad0dccb93836faed523f7230d3f1f81f1d45a39f988c84688e6756f"
+    },
+    {
+      "path": "src/equicordplugins/timezones/index.tsx",
+      "sha256_lf": "bfc068d28a670084d542ef5f0bdf95e1d7e0c147a2d6e47410fc6e9735b31e46"
+    },
+    {
+      "path": "src/plugins/fakeNitro/index.tsx",
+      "sha256_lf": "e80f7ab47b87bbdb61e41fec48341cd6f6616745153b99bc93ef2d9c8ab1ef4b"
+    }
+  ],
+  "static_followup": [
+    {
+      "path": "src/utils/constants.ts",
+      "depth": "full-source",
+      "sha256": "dc7f5357cc98a2474fbcee5773e63fb2fde042234559416f462f33ab27139231",
+      "lines": 1422,
+      "notes": "All lines read, including recovered output gap at 276 through 780. Contributor registry and build/platform constants reviewed.",
+      "newRuntimeFindings": []
+    },
+    {
+      "path": "src/equicordplugins/musicControls/spotify/lyrics/providers/translator/languages.ts",
+      "depth": "full-source",
+      "sha256": "b53691dec4eefa60b758c87e59c7aed71ad63ffb31e72a2d78bfacf8a3a9b97b",
+      "lines": 546,
+      "notes": "All 546 lines read. Static language choices reviewed.",
+      "newRuntimeFindings": []
+    },
+    {
+      "path": "src/equicordplugins/sekaiStickers/characters.json.ts",
+      "depth": "full-semantic-data",
+      "sha256": "6408290403be05ba6d602da64d7af7ecd2d7dfcceebf21959482f5f7c28454ac",
+      "lines": 4676,
+      "notes": "AST checked for executable expressions. All 359 serialized semantic rows read in ranges 1-100, 101-190, 191-280, 281-359. Picker usage traced; repeated search ID 81 does not select or key rows.",
+      "newRuntimeFindings": []
+    },
+    {
+      "path": "src/equicordplugins/sekaiStickers/kanade.svg.tsx",
+      "depth": "full-source",
+      "sha256": "d04c87f0f6e5cb8f5c285bd6cfc593e43236daab7cdd6ec8df82d535b8ebfdaf",
+      "lines": 20,
+      "notes": "Complete source including vector coordinates read. Static 20px SVG component.",
+      "newRuntimeFindings": []
+    },
+    {
+      "path": "src/equicordplugins/songLink.desktop/Providers.ts",
+      "depth": "text-with-binary-resources",
+      "sha256": "1a92aea149ebf81c84509994dc2b50936b3682d526cfc38530cc6c21fcea7cb3",
+      "lines": 95,
+      "notes": "All provider definitions reviewed; embedded PNG payloads validated by signature, dimensions and SHA256. Base64 payload bytes not claimed as textual full read.",
+      "newRuntimeFindings": []
+    }
+  ],
+  "limitations": [
+    "No live Discord FPS or heap profile was captured.",
+    "Captured component factories prove the tested contracts, not every Discord build.",
+    "Static semantic reads and binary resource checks retain their explicit classification; they are not literal full-text reads."
+  ],
+  "hash_policy": "Original inventory and follow-up UTF-8 file hashes use LF line endings. Patch hashes identify the exact materialized review bytes; binary resources have separate classifications.",
+  "followup_source_commit": "4c034ba3c39d90b1b5e8d1a745aa874d6d5d1447"
+}

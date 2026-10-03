@@ -2,6 +2,17 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 4.0.1.0 - 2026-10-03 (Nightly)
+
+### Fixed
+
+- Append imported automations to the latest loaded state, preserve concurrent edits, and cancel imports after account changes or a newer import.
+- Read automation server membership, names and icons from Discord's live store instead of trusting the exporting account's membership.
+- Remove transient React render state before converting logged messages, preserve Discord's JSON timestamp format, and detach plain message payloads before removing private author details.
+- Cancel failed animated-sticker response bodies and abort settled conversion requests.
+- Skip DataStore payload snapshots for V1 cloud uploads while preserving account ownership and concurrent-edit checks.
+- Show profile timezones for users without banners and for server profiles by passing the viewed user's ID from Discord's profile component.
+
 ## 4.0.0.0 - 2026-10-03 (Nightly)
 
 ### Added

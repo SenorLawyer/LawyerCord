@@ -17,7 +17,7 @@
 */
 
 import { User } from "@vencord/discord-types";
-import { MessageStore } from "@webpack/common";
+import { lodash, MessageStore } from "@webpack/common";
 
 import { LoggedMessageJSON, RefrencedMessage } from "../types";
 import { getGuildIdByChannel, isGhostPinged } from "./index";
@@ -32,8 +32,20 @@ export function stripTransientRenderState(message: any) {
 }
 
 export function cleanupMessage(message: any, removeDetails: boolean = true): LoggedMessageJSON {
-    const ret: LoggedMessageJSON = typeof message.toJS === "function" ? JSON.parse(JSON.stringify(message.toJS())) : { ...message };
+    const isRecord = typeof message.toJS === "function";
+    let ret: LoggedMessageJSON = { ...(isRecord ? message.toJS() : message) };
     stripTransientRenderState(ret);
+    if (ret.type === 19) {
+        ret.message_reference = message.message_reference || message.messageReference;
+        if (ret.message_reference) {
+            if (message.referenced_message) {
+                ret.referenced_message = cleanupMessage(message.referenced_message) as RefrencedMessage;
+            } else if (MessageStore.getMessage(ret.message_reference.channel_id, ret.message_reference.message_id)) {
+                ret.referenced_message = cleanupMessage(MessageStore.getMessage(ret.message_reference.channel_id, ret.message_reference.message_id)) as RefrencedMessage;
+            }
+        }
+    }
+    ret = isRecord ? JSON.parse(JSON.stringify(ret)) : lodash.cloneDeep(ret);
     if (removeDetails) {
         ret.author.phone = undefined;
         ret.author.email = undefined;
@@ -45,16 +57,6 @@ export function cleanupMessage(message: any, removeDetails: boolean = true): Log
     ret.deleted = ret.deleted ?? false;
     ret.deletedTimestamp = ret.deleted ? (new Date()).toISOString() : undefined;
     ret.editHistory = ret.editHistory ?? [];
-    if (ret.type === 19) {
-        ret.message_reference = message.message_reference || message.messageReference;
-        if (ret.message_reference) {
-            if (message.referenced_message) {
-                ret.referenced_message = cleanupMessage(message.referenced_message) as RefrencedMessage;
-            } else if (MessageStore.getMessage(ret.message_reference.channel_id, ret.message_reference.message_id)) {
-                ret.referenced_message = cleanupMessage(MessageStore.getMessage(ret.message_reference.channel_id, ret.message_reference.message_id)) as RefrencedMessage;
-            }
-        }
-    }
 
     return ret;
 }

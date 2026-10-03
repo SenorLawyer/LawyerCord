@@ -51,13 +51,15 @@ async function getApiVersion(origin: string): Promise<ApiVersion> {
     return map[origin] ?? "v2";
 }
 
-async function getCloudSyncContext(checkLocalEdits = false) {
+async function getCloudSyncContext(checkLocalEdits = false, upload = false) {
     const url = getCloudUrl();
     const userId = UserStore.getCurrentUser()?.id;
     const revision = localSettingsRevision;
     const isCurrent = () => userId !== undefined && UserStore.getCurrentUser()?.id === userId && getCloudUrl().href === url.href;
+    const version = upload ? await getApiVersion(url.origin) : undefined;
     return {
-        expected: checkLocalEdits ? await captureCloudImportState() : undefined,
+        expected: checkLocalEdits && isCurrent() ? await captureCloudImportState(version !== "v1") : undefined,
+        version,
         url,
         manifestKey: `${MANIFEST_STORE_KEY}:${url.origin}:${userId}`,
         isCurrent,
@@ -630,10 +632,9 @@ export async function putCloudSettings(manual?: boolean) {
     return runCloudOperation(Boolean(manual), async () => {
         let context: Awaited<ReturnType<typeof getCloudSyncContext>> | undefined;
         try {
-            context = await getCloudSyncContext(true);
-            const version = await getApiVersion(context.url.origin);
+            context = await getCloudSyncContext(true, true);
             context.assertCurrent();
-            if (version === "v2") {
+            if (context.version === "v2") {
                 await putV2(context, manual);
                 context.assertCurrent();
                 const nextVersion = await getApiVersion(context.url.origin);

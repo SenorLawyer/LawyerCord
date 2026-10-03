@@ -10,12 +10,12 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
-import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
+import { createSourceFile, isFunctionDeclaration, isVariableStatement, JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 import type * as Engine from "../src/components/settings/tabs/automations/engine";
 import * as Model from "../src/components/settings/tabs/automations/model";
 
-function fixture(poll?: (cursor: number) => Promise<{ cursor: number; events: unknown[]; }>, programs: Record<string, unknown> = {}) {
+function fixture(poll?: (cursor: number) => Promise<{ cursor: number; events: unknown[]; }>, programs: Record<string, unknown> = {}, hydrate?: () => Promise<void>) {
     const data = new Map<string, unknown>();
     const writes: string[][] = [];
     let clones = 0;
@@ -41,7 +41,7 @@ function fixture(poll?: (cursor: number) => Promise<{ cursor: number; events: un
     } });
     const storage = {
         async keys() { return [...data.keys()]; },
-        async getMany(keys: string[]) { return keys.map(key => data.get(key)); },
+        async getMany(keys: string[]) { await hydrate?.(); return keys.map(key => data.get(key)); },
         async del(key: string) { data.delete(key); },
         async get(key: string) { return data.get(key); },
         async update(key: string, updater: (value: unknown) => unknown) { data.set(key, updater(data.get(key))); },
@@ -374,4 +374,144 @@ test("Stop and account replacement cancel the exact native program request", asy
             assert.equal((await run).success, false);
         } finally { release?.(); f.api.stopAutomationEngine(); }
     }
+});
+
+test("Automation replacement updater merges state at the hydrated mutation boundary", async () => {
+    const f = fixture();
+    const original = workflow();
+    f.data.set("LawyerCord_automations", { version: 2, automations: [original] });
+    await f.api.loadAutomationState();
+    await f.api.replaceAutomations([original]);
+    const created = workflow();
+    const imported = workflow();
+    const pending = f.api.replaceAutomations(current => [...current, imported]);
+    await f.api.upsertAutomation(created);
+    await pending;
+    assert.deepEqual(new Set(f.api.getAutomationSnapshot().automations.map(item => item.id)), new Set([original.id, created.id, imported.id]));
+});
+
+function importFixture(hydrate?: () => Promise<void>) {
+    const f = fixture(undefined, {}, hydrate);
+    let account = "original";
+    const handlers = new Map<string, Set<() => void>>();
+    const picks: ((file: { size: number; text(): Promise<string>; } | null) => void)[] = [];
+    const path = "src/components/settings/tabs/automations/index.tsx";
+    const source = createSourceFile(path, readFileSync(process.env.AUDIT_AUTOMATION_IMPORT_SOURCE ?? path, "utf8"), ScriptTarget.Latest, true);
+    const code = source.statements.filter(node => isFunctionDeclaration(node) && node.name?.text === "importAutomationFile"
+        || isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(source) === "importOperation"))
+        .map(node => node.getText(source)).join("\n");
+    const api = runInNewContext(transpileModule(code, { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText + "\n({ importAutomationFile });", {
+        ...f.api, duplicateWorkflows: (values: Model.Automation[]) => values.map(value => ({ ...value, enabled: false })),
+        UserStore: { getCurrentUser: () => ({ id: account }) },
+        FluxDispatcher: {
+            subscribe(name: string, handler: () => void) { const set = handlers.get(name) ?? new Set(); set.add(handler); handlers.set(name, set); },
+            unsubscribe(name: string, handler: () => void) { handlers.get(name)?.delete(handler); },
+        },
+        chooseFile: () => new Promise(resolve => picks.push(resolve)),
+        showToast() {}, Toasts: { Type: { SUCCESS: 1, FAILURE: 2 } },
+    }) as { importAutomationFile(current?: Engine.AutomationSnapshot): Promise<void>; };
+    return { ...f, picks, start: () => api.importAutomationFile(f.api.getAutomationSnapshot()),
+        account(id: string) { account = id; for (const handler of handlers.get("CONNECTION_OPEN") ?? []) handler(); },
+        logout() { for (const handler of handlers.get("LOGOUT") ?? []) handler(); },
+        listeners: () => [...handlers.values()].reduce((sum, set) => sum + set.size, 0),
+        file(flow: Model.Automation) { return { size: 100, text: async () => JSON.stringify(Model.createAutomationFile([flow], [])) }; }
+    };
+}
+
+test("Automation import preserves create edit and delete while the file picker is pending", async () => {
+    const f = importFixture();
+    const edited = workflow(), deleted = workflow(), created = workflow(), imported = workflow();
+    await f.api.replaceAutomations([edited, deleted]);
+    const pending = f.start();
+    await f.api.upsertAutomation({ ...edited, name: "Edited during import" });
+    await f.api.deleteAutomation(deleted.id);
+    await f.api.upsertAutomation(created);
+    f.picks[0](f.file(imported));
+    await pending;
+    const state = f.api.getAutomationSnapshot().automations;
+    assert.equal(state.find(value => value.id === edited.id)?.name, "Edited during import");
+    assert.equal(state.some(value => value.id === deleted.id), false);
+    assert.equal(state.some(value => value.id === created.id), true);
+    assert.equal(state.some(value => value.id === imported.id), true);
+    assert.equal(f.listeners(), 0);
+});
+
+test("Automation import cancels replaced pickers and account changes before committing", async () => {
+    for (const cancellation of ["replacement", "logout", "account"] as const) {
+        const f = importFixture();
+        const imported = workflow();
+        const pending = f.start();
+        if (cancellation === "replacement") { const replacement = f.start(); f.picks[1](null); await replacement; }
+        else if (cancellation === "logout") f.logout();
+        else { f.account("other"); f.account("original"); }
+        f.picks[0](f.file(imported));
+        await pending;
+        assert.equal(f.api.getAutomationSnapshot().automations.length, 0, cancellation);
+        assert.equal(f.listeners(), 0);
+    }
+});
+
+test("Automation import rechecks ownership after reading the selected file", async () => {
+    const f = importFixture();
+    const imported = workflow();
+    let finishRead: (text: string) => void = () => assert.fail("File read has not started");
+    let started: () => void = () => {};
+    const reading = new Promise<void>(resolve => { started = resolve; });
+    const pending = f.start();
+    f.picks[0]({ size: 100, text: () => { started(); return new Promise(resolve => { finishRead = resolve; }); } });
+    await reading;
+    f.logout();
+    finishRead(await f.file(imported).text());
+    await pending;
+    assert.equal(f.api.getAutomationSnapshot().automations.length, 0);
+    assert.equal(f.listeners(), 0);
+});
+
+test("Automation import rejects account changes during initial engine hydration", async () => {
+    let begin: () => void = () => {};
+    let release: () => void = () => {};
+    const started = new Promise<void>(resolve => { begin = resolve; });
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const f = importFixture(async () => { begin(); await gate; });
+    const pending = f.start();
+    f.picks[0](f.file(workflow()));
+    await started;
+    f.account("other");
+    release();
+    await pending;
+    assert.equal(f.api.getAutomationSnapshot().automations.length, 0);
+    assert.equal(f.writes.length, 0);
+    assert.equal(f.listeners(), 0);
+});
+
+test("Imported guild cards derive membership and refreshed metadata from GuildStore", () => {
+    const path = "src/components/settings/tabs/automations/index.tsx";
+    const source = createSourceFile(path, readFileSync(process.env.AUDIT_AUTOMATION_IMPORT_SOURCE ?? path, "utf8"), ScriptTarget.Latest, true);
+    const declaration = source.statements.find(node => isFunctionDeclaration(node) && node.name?.text === "GuildPanel");
+    assert.ok(declaration);
+    let guild: { id: string; name: string; icon: string; } | undefined;
+    let subscriptions = 0;
+    const store = { getGuild: () => guild };
+    const code = transpileModule(declaration.getText(source), { compilerOptions: { target: ScriptTarget.ES2022, jsx: JsxEmit.React } }).outputText;
+    const render = runInNewContext(code + "\nGuildPanel;", {
+        React: { createElement: (type: unknown, props: unknown, ...children: unknown[]) => ({ type, props, children }) },
+        GuildStore: store, useStateFromStores(stores: unknown[], select: () => unknown, deps: unknown[], equality: unknown) {
+            assert.equal(stores[0], store); assert.equal(deps.length, 1); assert.equal(typeof equality, "function"); subscriptions++; return select();
+        }, Heading: "heading", Paragraph: "paragraph", Button: "button", Margins: {},
+        IconUtils: { getGuildIconURL: (value: { icon: string; }) => value.icon, getGuildBannerURL: () => "live-banner" }
+    }) as (props: { guilds: Model.GuildReference[]; }) => unknown;
+    const guilds: Model.GuildReference[] = [{ id: "123", name: "Exported name", icon: "exported-icon", banner: null, inviteCode: "invite", available: true }];
+    const absent = JSON.stringify(render({ guilds }));
+    assert.ok(absent.includes("You are not in this server"));
+    assert.ok(absent.includes("Exported name"));
+    assert.ok(absent.includes("Join"));
+    guild = { id: "123", name: "Joined renamed server", icon: "new-icon" };
+    const joined = JSON.stringify(render({ guilds }));
+    assert.ok(joined.includes("You are in this server"));
+    assert.ok(joined.includes("Joined renamed server"));
+    assert.ok(joined.includes("new-icon"));
+    assert.equal(joined.includes('"Join"'), false);
+    guild = undefined;
+    assert.ok(JSON.stringify(render({ guilds })).includes("You are not in this server"));
+    assert.equal(subscriptions, 3);
 });

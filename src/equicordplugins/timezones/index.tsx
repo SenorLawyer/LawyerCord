@@ -302,6 +302,13 @@ export default definePlugin({
     },
 
     patches: [
+        {
+            find: "insetStart:",
+            replacement: {
+                match: /(?<=[{,])fillClassName:/,
+                replace: "timezoneUserId:arguments[0].user.id,$&"
+            }
+        },
         // stolen from ViewIcons
         {
             find: '"--custom-cutout-radius":',
@@ -374,12 +381,8 @@ export default definePlugin({
     settings,
     getTime,
 
-    renderProfileTimezone: props => {
-        if (!settings.store.showProfileTime || !props?.bannerSrc) return null;
-
-        const match = /\/banners\/(\d+)\//.exec(props.bannerSrc);
-        const userId = match?.[1];
-        if (!userId) return null;
+    renderProfileTimezone: ({ timezoneUserId: userId }: { timezoneUserId?: string; }) => {
+        if (!settings.store.showProfileTime || !userId) return null;
 
         if (userId === UserStore.getCurrentUser().id && !settings.store.showOwnTimezone) return null;
 

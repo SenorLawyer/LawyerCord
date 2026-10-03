@@ -70,3 +70,121 @@ test("Logged message conversion preserves stored history and snapshot timestamps
         assert.equal(log.message.messageSnapshots[0].message.timestamp, timestamp);
     }
 });
+
+function cleanupFixture() {
+    const modules: Record<string, unknown> = {
+        "@webpack/common": { MessageStore: { getMessage: () => undefined }, lodash: { cloneDeep: structuredClone } },
+        "./index": { getGuildIdByChannel: () => "guild", isGhostPinged: () => false }
+    };
+    const source = readFileSync(process.env.AUDIT_LOGGED_CLEANUP_SOURCE ?? "src/equicordplugins/messageLoggerEnhanced/utils/cleanUp.ts", "utf8");
+    const { outputText } = transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } });
+    const api = runInNewContext(outputText + "\nexports;", { exports: {},
+        require: (name: string) => { assert.ok(name in modules, name); return modules[name]; } });
+    return api.cleanupMessage as (message: object, removeDetails?: boolean) => Record<string, unknown>;
+}
+
+class DiscordMessageRecord {
+    webhookId: string | undefined;
+    editedTimestamp: Date | null = null;
+    mentionEveryone = false;
+    toJS() { return { ...this, webkhook_id: this.webhookId, edited_timestamp: this.editedTimestamp, mention_everyone: this.mentionEveryone }; }
+}
+
+test("Logged message cleanup skips transient render trees before copying a Discord record", () => {
+    const cleanup = cleanupFixture();
+    const timestamp = new Date("2026-10-03T00:00:00.000Z");
+    const tree: { owner?: object; toJSON(): never; } = { toJSON() { assert.fail("Render state must not be serialized"); } };
+    tree.owner = tree;
+    const message = Object.assign(new DiscordMessageRecord(), {
+        id: "message", channel_id: "channel", author: { id: "author" }, timestamp, type: 0,
+        customRenderedContent: { content: tree }, __messageloggerAggregated: { originalNodes: tree },
+        __messageloggerLastAppliedKey: "diff", __messageloggerDiff: tree, __messageloggerDiffKey: "diff"
+    });
+    const result = cleanup(message);
+    assert.equal(result.timestamp, timestamp.toISOString());
+    for (const key of ["customRenderedContent", "__messageloggerAggregated", "__messageloggerLastAppliedKey", "__messageloggerDiff", "__messageloggerDiffKey"])
+        assert.equal(key in result, false);
+    assert.equal(message.customRenderedContent.content, tree);
+    assert.equal(message.__messageloggerAggregated.originalNodes, tree);
+});
+
+test("Logged message cleanup detaches plain payloads without changing Discord authors or history", () => {
+    const cleanup = cleanupFixture();
+    const message = {
+        id: "message", channel_id: "channel", type: 0, timestamp: "2026-10-03T00:00:00.000Z",
+        author: { id: "author", phone: "private phone", email: "private email" },
+        editHistory: [{ content: "old", timestamp: "2026-10-02T00:00:00.000Z" }],
+        attachments: [{ id: "attachment", url: "https://example.com/attachment" }]
+    };
+    const result = cleanup(message);
+    const author = result.author as typeof message.author;
+    assert.equal(author.phone, undefined);
+    assert.equal(author.email, undefined);
+    assert.equal(message.author.phone, "private phone");
+    assert.equal(message.author.email, "private email");
+    (result.editHistory as typeof message.editHistory)[0].content = "changed";
+    (result.attachments as typeof message.attachments)[0].url = "changed";
+    assert.equal(message.editHistory[0].content, "old");
+    assert.equal(message.attachments[0].url, "https://example.com/attachment");
+    const cached = cleanup(message, false).author as typeof message.author;
+    assert.equal(cached.phone, "private phone");
+    assert.notEqual(cached, message.author);
+});
+
+test("Logged reply cleanup strips referenced render state before copying the parent", () => {
+    const cleanup = cleanupFixture();
+    const renderState: { owner?: object; } = {};
+    renderState.owner = renderState;
+    const referenced = Object.assign(new DiscordMessageRecord(), {
+        id: "referenced", channel_id: "channel", type: 0, author: { id: "author" },
+        timestamp: new Date("2026-10-02T00:00:00.000Z"), customRenderedContent: renderState
+    });
+    const message = Object.assign(new DiscordMessageRecord(), {
+        id: "reply", channel_id: "channel", type: 19, author: { id: "author" },
+        timestamp: new Date("2026-10-03T00:00:00.000Z"),
+        message_reference: { channel_id: "channel", message_id: "referenced" }, referenced_message: referenced
+    });
+    const result = cleanup(message);
+    const saved = result.referenced_message as Record<string, unknown>;
+    assert.equal(saved.timestamp, referenced.timestamp.toISOString());
+    assert.equal("customRenderedContent" in saved, false);
+    assert.equal(referenced.customRenderedContent, renderState);
+});
+
+test("Logged message cleanup preserves JSON timestamp formats throughout saved records", () => {
+    const cleanup = cleanupFixture();
+    const timestamp = new Date("2026-10-03T00:00:00.000Z");
+    const message = Object.assign(new DiscordMessageRecord(), {
+        id: "message", channel_id: "channel", type: 0, author: { id: "author" }, timestamp,
+        editedTimestamp: timestamp, firstEditTimestamp: timestamp,
+        editHistory: [{ timestamp, content: "old" }],
+        call: { endedTimestamp: timestamp }, poll: { expiry: { toJSON: () => timestamp.toISOString() } },
+        messageSnapshots: [{ message: { timestamp } }]
+    });
+    const result = cleanup(message);
+    const expected = JSON.parse(JSON.stringify(message.toJS()));
+    Object.assign(expected, { ghostPinged: false, guildId: "guild", embeds: [], deleted: false });
+    assert.equal(JSON.stringify(result), JSON.stringify(expected));
+    assert.doesNotThrow(() => structuredClone(result));
+});
+
+test("Logged record cleanup preserves JSON conversions without retaining toJSON aliases", () => {
+    const cleanup = cleanupFixture();
+    const author = { id: "author", phone: "private phone", email: "private email" };
+    const keys: string[] = [];
+    const message = Object.assign(new DiscordMessageRecord(), {
+        id: "message", channel_id: "channel", type: 0, timestamp: new Date("2026-10-03T00:00:00.000Z"),
+        author: { toJSON(key: string) { keys.push(key); return author; } },
+        callback: () => undefined, symbol: Symbol("transient"), invalidNumber: Infinity,
+        values: [undefined, () => undefined, Symbol("transient"), NaN]
+    });
+    const result = cleanup(message);
+    assert.deepEqual(keys, ["author"]);
+    assert.equal(author.phone, "private phone");
+    assert.equal(author.email, "private email");
+    assert.equal("callback" in result, false);
+    assert.equal("symbol" in result, false);
+    assert.equal(result.invalidNumber, null);
+    assert.equal(JSON.stringify(result.values), "[null,null,null,null]");
+    assert.doesNotThrow(() => structuredClone(result));
+});

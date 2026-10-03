@@ -57,6 +57,34 @@ test("FakeNitro stops download and conversion jobs without late upload or notifi
     }
 });
 
+test("FakeNitro releases failed response bodies and deadlines before admitting retries", async () => {
+    const source = readFileSync("src/plugins/fakeNitro/index.tsx", "utf8");
+    const methods = source.slice(source.indexOf("    async sendAnimatedSticker("), source.indexOf("    canUseEmote("));
+    let cancelled = 0;
+    let toasts = 0;
+    const signals: AbortSignal[] = [];
+    const timers = new Set<() => void>();
+    const plugin = runInNewContext(compile(`const stickerJobs = new Set<AbortController>(); let stopped = false; ({${methods}});`), {
+        AbortController, URL, Error,
+        UserStore: { getCurrentUser: () => ({ id: "owner" }) },
+        showToast: () => toasts++, Toasts: { Type: {} },
+        setTimeout: (fn: () => void) => { timers.add(fn); return fn; },
+        clearTimeout: (fn: () => void) => timers.delete(fn),
+        fetch: async (_url: URL, options: { signal: AbortSignal; }) => {
+            signals.push(options.signal);
+            return new Response(new ReadableStream({ cancel() { cancelled++; } }), { status: 500 });
+        }
+    });
+    for (let attempt = 1; attempt <= 10; attempt++) {
+        await plugin.sendAnimatedSticker("https://media.discordapp.net/stickers/1.png", "1", "channel");
+        assert.equal(cancelled, attempt);
+        assert.equal(signals.length, attempt);
+        assert.equal(signals.every(signal => signal.aborted), true);
+        assert.equal(timers.size, 0);
+        assert.equal(toasts, attempt);
+    }
+});
+
 function chunk(type: string, data: Buffer) {
     const bytes = Buffer.concat([Buffer.from(type), data]);
     let crc = 0xFFFFFFFF;

@@ -795,7 +795,10 @@ export default definePlugin({
             if (url.protocol !== "https:" || url.hostname !== "media.discordapp.net" || url.port || url.username || url.password)
                 throw new Error("Invalid sticker URL.");
             const response = await fetch(url, { signal, redirect: "error" });
-            if (!response.ok) throw new Error("Could not download the sticker.");
+            if (!response.ok) {
+                await response.body?.cancel();
+                throw new Error("Could not download the sticker.");
+            }
             const input = await readResponseBody(response, 50 * 1024 * 1024, signal);
             const output = await convertApngToGif(input, signal, settings.store.stickerSize);
             if (signal.aborted || stopped || UserStore.getCurrentUser()?.id !== userId) return;
@@ -806,6 +809,7 @@ export default definePlugin({
             if (!signal.aborted) showToast(error instanceof Error ? error.message : "Could not convert the sticker.", Toasts.Type.FAILURE);
         } finally {
             clearTimeout(timeout);
+            controller.abort();
             stickerJobs.delete(controller);
         }
     },

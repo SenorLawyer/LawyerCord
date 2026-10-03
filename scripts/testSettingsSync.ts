@@ -2328,6 +2328,8 @@ test("cloud completion preserves CSS and stored edits during responses and check
             let persisted = structuredClone(plain);
             let css = "original CSS";
             let records: [string, unknown][] = [["plugin", "original data"]];
+            let dataStoreReads = 0;
+            if (version === "v1" && operation === "putCloudSettings") records.push(["large-cache", "x".repeat(1024 * 1024)]);
             if (operation === "getCloudSettings") records.push(["cache", new Uint8Array([1, 2]).buffer]);
             const storage = { Vencord_settingsDirty: "true", setItem(key: string, value: string) { Reflect.set(this, key, value); } };
             const notifications: { color?: string }[] = [];
@@ -2337,7 +2339,7 @@ test("cloud completion preserves CSS and stored edits during responses and check
             };
             const store = {
                 get: async (key: string) => key === "Vencord_cloudApiVersions" ? { "https://first.invalid": version } : undefined,
-                entries: async () => structuredClone(records), set: async () => {},
+                entries: async () => { dataStoreReads++; return structuredClone(records); }, set: async () => {},
                 updateMany: async (entries: [string, (value: unknown) => unknown][]) => {
                     const next = new Map(records);
                     for (const [key, update] of entries) next.set(key, update(next.get(key)));
@@ -2383,6 +2385,8 @@ test("cloud completion preserves CSS and stored edits during responses and check
             modules["./offline"] = runInNewContext(`${outputText}\nexports;`, { ...globals, exports: {} });
             const api = runInNewContext(`${compiled}\nexports;`, { navigator, ...globals, exports: {} });
             await api[operation](true);
+            if (version === "v1" && operation === "putCloudSettings") assert.equal(dataStoreReads, 0);
+            else assert.ok(dataStoreReads > 0);
             const edited = stage !== "none";
             const syncsSection = !(version === "v1" && operation === "putCloudSettings" && section === "data");
             assert.equal(storage.Vencord_settingsDirty, edited && syncsSection ? "true" : undefined, `${version}/${operation}/${section}/${stage}`);

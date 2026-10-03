@@ -18,9 +18,9 @@
 
 import { MessageAttachment } from "@vencord/discord-types";
 
-import { Flogger, settings } from "../..";
+import { settings } from "../..";
 import { LoggedAttachment, LoggedMessage, LoggedMessageJSON } from "../../types";
-import { deleteImage, downloadAttachment, downloadLifetime, getImage, } from "./ImageManager";
+import { deleteImage, getImage, } from "./ImageManager";
 
 const MAX_ATTACHMENT_BLOB_URLS = 100;
 const ATTACHMENT_BLOB_URL_TTL = 10 * 60 * 1000;
@@ -76,6 +76,14 @@ export function clearAttachmentBlobUrlCache() {
     attachmentBlobUrlCache.clear();
 }
 
+export function invalidateAttachmentBlobUrl(attachmentId: string) {
+    for (const [key, entry] of attachmentBlobUrlCache) {
+        if (!key.startsWith(`${attachmentId}:`)) continue;
+        attachmentBlobUrlCache.delete(key);
+        revokeAttachmentBlobUrlEntry(key, entry);
+    }
+}
+
 export function getFileExtension(str: string) {
     const matches = str.match(/(\.[a-zA-Z0-9]+)(?:\?.*)?$/);
     if (!matches) return null;
@@ -105,45 +113,19 @@ export function isAttachmentGoodToCache(attachment: MessageAttachment, fileExten
     return true;
 }
 
-export async function cacheMessageImages(message: LoggedMessage | LoggedMessageJSON) {
-    const { signal } = downloadLifetime;
-    try {
-        for (const attachment of message.attachments) {
-            if (signal.aborted) return;
-            const fileExtension = getFileExtension(attachment.filename ?? attachment.url) ?? attachment?.content_type?.split("/")?.[1] ?? ".png";
-
-            if (!isAttachmentGoodToCache(attachment, fileExtension)) {
-                continue;
-            }
-
-            attachment.oldUrl = attachment.url;
-            attachment.oldProxyUrl = attachment.proxy_url;
-
-            // only normal urls work if theres a charset in the content type /shrug
-            if (attachment?.content_type?.includes(";")) {
-                attachment.proxy_url = attachment.url;
-            } else {
-                // apparently proxy urls last longer
-                attachment.url = attachment.proxy_url;
-                attachment.proxy_url = attachment.url;
-            }
-
-            attachment.fileExtension = fileExtension;
-
-            const path = await downloadAttachment(attachment);
-            if (signal.aborted) return;
-
-            if (!path) {
-                Flogger.error("Failed to cache attachment", attachment);
-                continue;
-            }
-
-            attachment.path = path;
-        }
-
-    } catch (error) {
-        Flogger.error("Error caching message images:", error);
+export function prepareMessageImages(message: LoggedMessageJSON) {
+    const pendingIds: string[] = [];
+    for (const attachment of message.attachments) {
+        const fileExtension = getFileExtension(attachment.filename ?? attachment.url) ?? attachment.content_type?.split("/")[1] ?? ".png";
+        if (!isAttachmentGoodToCache(attachment, fileExtension)) continue;
+        attachment.oldUrl = attachment.url;
+        attachment.oldProxyUrl = attachment.proxy_url;
+        attachment.url = attachment.content_type?.includes(";") ? attachment.url : attachment.proxy_url;
+        attachment.proxy_url = attachment.url;
+        attachment.fileExtension = fileExtension;
+        pendingIds.push(attachment.id);
     }
+    return pendingIds;
 }
 
 export async function deleteMessageImages(message: LoggedMessage | LoggedMessageJSON) {

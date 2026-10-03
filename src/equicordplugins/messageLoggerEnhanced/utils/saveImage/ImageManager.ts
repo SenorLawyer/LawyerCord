@@ -76,19 +76,27 @@ export async function getImage(attachmentId: string, fileExt?: string | null): P
     return await Native.getImageNative(attachmentId);
 }
 
-export function downloadAttachment(attachment: LoggedAttachment): Promise<string | undefined> {
+export function downloadAttachment(attachment: Pick<LoggedAttachment, "id" | "url" | "oldUrl" | "fileExtension">, signal: AbortSignal = downloadLifetime.signal): Promise<string | undefined> {
     const cached = downloads.get(attachment.id);
     if (cached) return cached;
     const owner = downloadLifetime;
     const promise = (async () => {
-        if (IS_WEB) return downloadAttachmentWeb(attachment, AbortSignal.any([owner.signal, AbortSignal.timeout(120_000)]));
-        const { path, error } = await Native.downloadAttachment(attachment);
-        if (owner.signal.aborted) return;
-        if (error || !path) {
-            Flogger.error("Failed to download attachment", error);
-            return;
+        const lifetime = AbortSignal.any([owner.signal, signal]);
+        if (IS_WEB) return downloadAttachmentWeb(attachment, AbortSignal.any([lifetime, AbortSignal.timeout(120_000)]));
+        for (;;) {
+            lifetime.throwIfAborted();
+            const result = await Native.tryDownloadAttachment(attachment);
+            lifetime.throwIfAborted();
+            if (result.busy) {
+                if (!await Native.waitForAttachmentDownloadCapacity()) throw new DOMException("Attachment download canceled.", "AbortError");
+                continue;
+            }
+            if (result.error || !result.path) {
+                Flogger.error("Failed to download attachment", result.error);
+                return;
+            }
+            return result.path;
         }
-        return path;
     })().finally(() => {
         if (downloads.get(attachment.id) === promise) downloads.delete(attachment.id);
     });
@@ -109,7 +117,7 @@ export async function deleteImage(attachmentId: string): Promise<void> {
     await Native.deleteFileNative(attachmentId);
 }
 
-async function downloadAttachmentWeb(attachemnt: LoggedAttachment, signal: AbortSignal, attempts = 0): Promise<string | undefined> {
+async function downloadAttachmentWeb(attachemnt: Pick<LoggedAttachment, "id" | "url" | "oldUrl" | "fileExtension">, signal: AbortSignal, attempts = 0): Promise<string | undefined> {
     if (!attachemnt?.url || !attachemnt?.id || !attachemnt?.fileExtension) {
         Flogger.error("Invalid attachment", attachemnt);
         return;

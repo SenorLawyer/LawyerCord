@@ -115,6 +115,8 @@ export function getNative(): PluginNative<typeof import("../native")> {
             showItemInFolder: async () => { },
             chooseFile: async () => "",
             downloadAttachment: async () => ({ error: "web", path: null }),
+            tryDownloadAttachment: async () => ({ error: "web", path: null }),
+            waitForAttachmentDownloadCapacity: async () => false,
             cancelNativeAttachmentDownloads: async () => { },
             startNativeLogExport: async () => "" as any,
             finishNativeLogExport: async () => { },

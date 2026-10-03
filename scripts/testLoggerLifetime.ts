@@ -28,13 +28,14 @@ function fixture() {
         "./styles.css": {}, "@components/Icons": {}, "@utils/constants": { Devs: {}, EquicordDevs: {} },
         "@utils/css": { classNameFactory: () => () => "" }, "@utils/Logger": { Logger: class { error() {} } },
         "@utils/types": { __esModule: true, default: (value: unknown) => value },
-        "@webpack": { findByPropsLazy: () => ({}) }, "@webpack/common": { MessageStore, UserStore: { getUser: () => undefined } },
+        "@webpack": { findByPropsLazy: () => ({}) }, "@webpack/common": { MessageStore, UserStore: { getUser: () => undefined, getCurrentUser: () => undefined } },
         "./components/LogsButton": {}, "./components/LogsModal": {},
         "./db": { DBMessageStatus: { DELETED: "DELETED", GHOST_PINGED: "GHOST_PINGED" }, initIDB: async () => {}, cachedMessages, clearMessageCache: () => cachedMessages.clear(), getMessagesByChannelAndAfterTimestampIDB: () => query },
         "./LoggedMessageManager": {}, "./settings": { settings },
         "./utils": { getNative: () => ({ init: async () => {}, getSettings: () => nativeSettings, cancelNativeLogExports: async () => {}, closeNativeLogImports: async () => {}, cancelNativeAttachmentDownloads: async () => { nativeCancellations++; } }),
             messageJsonToMessageClass: () => { converted++; return { id: "logged" }; } },
         "./utils/contextMenu": {}, "./utils/index": {}, "./utils/parseQuery": {},
+        "./utils/saveImage/backlog": { startAttachmentBacklog() {}, stopAttachmentBacklog() { nativeCancellations++; } },
         "./utils/saveImage": {}, "./utils/saveImage/ImageManager": { stopDownloads: () => { downloadStops++; } }
     };
     function load(source: string, moduleMocks = mocks) {

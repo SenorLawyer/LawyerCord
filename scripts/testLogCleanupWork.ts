@@ -14,6 +14,7 @@ function fixture() {
     const saved = new Map<string, { id: string; }>();
     let counts = 0;
     const mocks: Record<string, unknown> = {
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) } },
         ".": { settings: { store: { saveImages: false, timeBasedCleanupMinutes: 0, messageLimit: 5 } } },
         "./db": {
             DBMessageStatus: { DELETED: "DELETED" },

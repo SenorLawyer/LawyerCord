@@ -26,20 +26,46 @@ export function messageLoggerEnhancedUniqueIdThingyIdkMan() { }
 const nativeSavedImages = new Map<string, string>();
 const MAX_ATTACHMENT_BYTES = 500 * 1024 * 1024;
 const logger = new Logger("MessageLoggerEnhanced");
-const downloads = new Map<string, { sender: IpcMainInvokeEvent["sender"]; controller: AbortController; promise: Promise<{ error: string | null; path: string | null; }>; }>();
+interface DownloadResult { error: string | null; path: string | null; busy?: true; }
+interface Attachment { id: string; fileExtension: string; url: URL; oldUrl: URL; }
+interface Download {
+    key: string;
+    controller: AbortController;
+    owners: Map<IpcMainInvokeEvent["sender"], { promise: Promise<DownloadResult>; resolve: (result: DownloadResult) => void; }>;
+}
+interface DownloadOwner {
+    cancel: () => void;
+    waiter?: { promise: Promise<boolean>; resolve: (available: boolean) => void; };
+}
+const MAX_DOWNLOADS = 4;
+const downloads = new Map<string, Download>();
+const downloadOwners = new Map<IpcMainInvokeEvent["sender"], DownloadOwner>();
 let imageScan = 0;
 
 let imageCacheDir: string;
+let directoryInit: Promise<void> | undefined;
+let directoryRevision = 0;
 
 const getImageCacheDir = async () => {
-    if (!imageCacheDir) await initDirs();
+    if (!imageCacheDir) await (directoryInit ??= initDirs().finally(() => directoryInit = undefined));
     return imageCacheDir;
 };
 
 export async function initDirs() {
+    const revision = ++directoryRevision;
     const { imageCacheDir: icd } = await getSettings();
 
-    imageCacheDir = icd || await getDefaultNativeImageDir();
+    const dir = icd || await getDefaultNativeImageDir();
+    await ensureDirectoryExists(dir);
+    const root = await realpath(dir);
+    if (revision !== directoryRevision) return;
+    imageCacheDir = root;
+    for (const work of downloads.values()) {
+        if (!work.key.startsWith("\0")) continue;
+        downloads.delete(work.key);
+        work.key = imageCacheDir + work.key;
+        downloads.set(work.key, work);
+    }
 }
 
 export async function init(_event: IpcMainInvokeEvent) {
@@ -124,9 +150,11 @@ export async function chooseDir(event: IpcMainInvokeEvent, logKey: "logsDir" | "
     await saveSettings(settings);
 
     if (logKey === "imageCacheDir") {
+        const root = await realpath(dir);
+        directoryRevision++;
         for (const work of downloads.values()) work.controller.abort();
         nativeSavedImages.clear();
-        imageCacheDir = dir;
+        imageCacheDir = root;
         await init(event);
     }
 
@@ -146,65 +174,135 @@ export async function chooseFile(_event: IpcMainInvokeEvent, title: string, filt
     return await readFile(path, "utf-8");
 }
 
-export function downloadAttachment(event: IpcMainInvokeEvent, attachment: unknown): Promise<{ error: string | null; path: string | null; }> {
-    if (!attachment || typeof attachment !== "object" || !("id" in attachment) || typeof attachment.id !== "string" || !/^\d{1,20}$/.test(attachment.id))
+function releaseDownloadOwner(sender: IpcMainInvokeEvent["sender"]) {
+    const owner = downloadOwners.get(sender);
+    if (!owner || owner.waiter || [...downloads.values()].some(work => work.owners.has(sender))) return;
+    sender.removeListener("destroyed", owner.cancel);
+    sender.removeListener("render-process-gone", owner.cancel);
+    downloadOwners.delete(sender);
+}
+
+function getDownloadOwner(sender: IpcMainInvokeEvent["sender"]) {
+    let owner = downloadOwners.get(sender);
+    if (!owner) {
+        owner = { cancel: () => cancelDownloads(sender) };
+        downloadOwners.set(sender, owner);
+        sender.once("destroyed", owner.cancel);
+        sender.once("render-process-gone", owner.cancel);
+    }
+    return owner;
+}
+
+function cancelDownloads(sender: IpcMainInvokeEvent["sender"]) {
+    for (const work of downloads.values()) {
+        const owner = work.owners.get(sender);
+        if (!owner) continue;
+        work.owners.delete(sender);
+        owner.resolve({ error: "Attachment download was cancelled.", path: null });
+        if (!work.owners.size) work.controller.abort();
+    }
+    const owner = downloadOwners.get(sender);
+    owner?.waiter?.resolve(false);
+    if (owner) owner.waiter = undefined;
+    releaseDownloadOwner(sender);
+}
+
+export function waitForAttachmentDownloadCapacity(event: IpcMainInvokeEvent): Promise<boolean> {
+    if (event.sender.isDestroyed()) return Promise.resolve(false);
+    if (downloads.size < MAX_DOWNLOADS && ![...downloads.values()].some(work => work.controller.signal.aborted)) return Promise.resolve(true);
+    const owner = getDownloadOwner(event.sender);
+    if (!owner.waiter) {
+        let resolve: (available: boolean) => void = () => {};
+        const promise = new Promise<boolean>(done => resolve = done);
+        owner.waiter = { promise, resolve };
+    }
+    return owner.waiter.promise;
+}
+
+function getDownloadResult(work: Download, sender: IpcMainInvokeEvent["sender"]) {
+    let result = work.owners.get(sender);
+    if (!result) {
+        getDownloadOwner(sender);
+        let resolve: (result: DownloadResult) => void = () => {};
+        const promise = new Promise<DownloadResult>(done => resolve = done);
+        result = { promise, resolve };
+        work.owners.set(sender, result);
+    }
+    return result.promise;
+}
+
+export function downloadAttachment(event: IpcMainInvokeEvent, attachment: unknown): Promise<DownloadResult> {
+    return tryDownloadAttachment(event, attachment);
+}
+
+export function tryDownloadAttachment(event: IpcMainInvokeEvent, attachment: unknown): Promise<DownloadResult> {
+    if (!attachment || typeof attachment !== "object"
+        || !("id" in attachment) || typeof attachment.id !== "string" || !/^\d{1,20}$/.test(attachment.id)
+        || !("fileExtension" in attachment) || typeof attachment.fileExtension !== "string" || !/^\.?[a-z0-9]{1,16}$/i.test(attachment.fileExtension)
+        || !("url" in attachment) || !("oldUrl" in attachment))
         return Promise.resolve({ error: "Invalid attachment.", path: null });
-    const key = `${event.sender.id}:${attachment.id}`;
-    const pending = downloads.get(key);
-    if (pending && !pending.controller.signal.aborted) return pending.promise;
-    const controller = new AbortController();
-    const cancel = () => controller.abort();
-    event.sender.once("destroyed", cancel);
-    event.sender.once("render-process-gone", cancel);
-    const promise = downloadAttachmentFile(attachment, controller.signal).finally(() => {
-        controller.abort();
-        if (downloads.get(key)?.promise === promise) downloads.delete(key);
-        event.sender.removeListener("destroyed", cancel);
-        event.sender.removeListener("render-process-gone", cancel);
+    const urls = [attachment.url, attachment.oldUrl].map(value => {
+        if (typeof value !== "string" || value.length > 8192) return null;
+        const url = URL.parse(value);
+        return url?.protocol === "https:" && !url.port && !url.username && !url.password
+            && ["cdn.discordapp.com", "media.discordapp.net", "images-ext-1.discordapp.net", "images-ext-2.discordapp.net"].includes(url.hostname) ? url : null;
     });
-    downloads.set(key, { sender: event.sender, controller, promise });
-    return promise;
+    const [url, oldUrl] = urls;
+    if (!url || !oldUrl) return Promise.resolve({ error: "Invalid attachment URL.", path: null });
+    if (event.sender.isDestroyed()) return Promise.resolve({ error: "Attachment download was cancelled.", path: null });
+    const fileExtension = attachment.fileExtension.replace(/^\./, "").toLowerCase();
+    const key = `${imageCacheDir ?? ""}\0${attachment.id}.${fileExtension}`;
+    const pending = downloads.get(key);
+    if (pending && !pending.controller.signal.aborted) return getDownloadResult(pending, event.sender);
+    if (pending || downloads.size >= MAX_DOWNLOADS)
+        return Promise.resolve({ error: "Attachment downloads are busy. Retry when capacity is available.", path: null, busy: true });
+    const controller = new AbortController();
+    const work: Download = { key, controller, owners: new Map() };
+    downloads.set(key, work);
+    const result = getDownloadResult(work, event.sender);
+    void downloadAttachmentFile({ id: attachment.id, fileExtension, url, oldUrl }, controller.signal).then(result => {
+        controller.abort();
+        downloads.delete(work.key);
+        for (const [sender, owner] of work.owners) {
+            releaseDownloadOwner(sender);
+            owner.resolve(result);
+        }
+        for (const [sender, owner] of downloadOwners) {
+            if (!owner.waiter) continue;
+            owner.waiter.resolve(true);
+            owner.waiter = undefined;
+            releaseDownloadOwner(sender);
+        }
+    });
+    return result;
 }
 
 export function cancelNativeAttachmentDownloads(event: IpcMainInvokeEvent) {
-    for (const work of downloads.values()) {
-        if (work.sender === event.sender) work.controller.abort();
-    }
+    cancelDownloads(event.sender);
 }
 
-async function downloadAttachmentFile(attachment: unknown, cancelled: AbortSignal): Promise<{ error: string | null; path: string | null; }> {
+async function downloadAttachmentFile(attachment: Attachment, cancelled: AbortSignal): Promise<DownloadResult> {
     let temporaryPath: string | undefined;
+    let response: Response | undefined;
     try {
-        if (!attachment || typeof attachment !== "object"
-            || !("id" in attachment) || typeof attachment.id !== "string" || !/^\d{1,20}$/.test(attachment.id)
-            || !("fileExtension" in attachment) || typeof attachment.fileExtension !== "string" || !/^\.?[a-z0-9]{1,16}$/i.test(attachment.fileExtension)
-            || !("url" in attachment) || !("oldUrl" in attachment))
-            return { error: "Invalid attachment.", path: null };
-
-        const urls = [attachment.url, attachment.oldUrl].map(value => {
-            if (typeof value !== "string" || value.length > 8192) return null;
-            const url = URL.parse(value);
-            return url?.protocol === "https:" && !url.port && !url.username && !url.password
-                && ["cdn.discordapp.com", "media.discordapp.net", "images-ext-1.discordapp.net", "images-ext-2.discordapp.net"].includes(url.hostname) ? url : null;
-        });
-        const [url, oldUrl] = urls;
-        if (!url || !oldUrl) return { error: "Invalid attachment URL.", path: null };
-
+        const root = await getImageCacheDir();
+        cancelled.throwIfAborted();
+        const { url, oldUrl, fileExtension: cleanExt } = attachment;
         const settings = await getSettings();
+        cancelled.throwIfAborted();
         const allowedExtensionsStr = settings.attachmentFileExtensions?.trim() || "";
         if (allowedExtensionsStr === "" || allowedExtensionsStr.toLowerCase() === "none") {
             return { error: "All attachment downloads are currently blocked by settings configurations.", path: null };
         }
 
         const allowedList = allowedExtensionsStr.split(",").map((ext: string) => ext.trim().toLowerCase());
-        const cleanExt = attachment.fileExtension.replace(/^\./, "").toLowerCase();
 
         if (blockedExts.includes(cleanExt) || !allowedList.includes(cleanExt)) {
             return { error: `File type .${cleanExt} is blocked by settings configurations.`, path: null };
         }
 
         const existingImage = nativeSavedImages.get(attachment.id);
-        if (existingImage)
+        if (existingImage === path.join(root, `${attachment.id}.${cleanExt}`))
             return {
                 error: null,
                 path: existingImage
@@ -215,9 +313,11 @@ async function downloadAttachmentFile(attachment: unknown, cancelled: AbortSigna
         let downloadUrl = url;
         for (let attempt = 0; attempt < 4; attempt++) {
             signal.throwIfAborted();
-            const res = await fetch(downloadUrl, { redirect: "error", signal });
+            const res = response = await fetch(downloadUrl, { redirect: "error", signal });
+            signal.throwIfAborted();
             if (res.status !== 200) {
                 await res.body?.cancel();
+                response = undefined;
                 if (attempt === 3) return { error: "Could not download this attachment.", path: null };
                 if ([403, 404, 415].includes(res.status)) downloadUrl = oldUrl;
                 await sleep(1000);
@@ -225,10 +325,10 @@ async function downloadAttachmentFile(attachment: unknown, cancelled: AbortSigna
             }
             if (!res.body || Number(res.headers.get("content-length")) > maxBytes) {
                 await res.body?.cancel();
+                response = undefined;
                 return { error: "Attachment exceeds the download limit.", path: null };
             }
 
-            const root = path.resolve(await getImageCacheDir());
             const finalPath = path.resolve(root, `${attachment.id}.${cleanExt}`);
             if (!finalPath.startsWith(path.join(root, path.sep))) return { error: "Invalid attachment path.", path: null };
             await ensureDirectoryExists(root);
@@ -250,7 +350,7 @@ async function downloadAttachmentFile(attachment: unknown, cancelled: AbortSigna
                 try { await file.close(); }
                 finally {
                     try { await reader.cancel(); }
-                    finally { reader.releaseLock(); }
+                    finally { reader.releaseLock(); response = undefined; }
                 }
             }
             signal.throwIfAborted();
@@ -262,9 +362,13 @@ async function downloadAttachmentFile(attachment: unknown, cancelled: AbortSigna
         }
         return { error: "Could not download this attachment.", path: null };
     } catch {
+        if (cancelled.aborted) return { error: "Attachment download was interrupted. Retry when capacity is available.", path: null, busy: true };
         return { error: "Could not download this attachment.", path: null };
     } finally {
-        if (temporaryPath) await unlink(temporaryPath).catch(() => logger.warn("Could not remove an incomplete attachment."));
+        try { await response?.body?.cancel().catch(() => logger.warn("Could not close an attachment response.")); }
+        finally {
+            if (temporaryPath) await unlink(temporaryPath).catch(() => logger.warn("Could not remove an incomplete attachment."));
+        }
     }
 }
 

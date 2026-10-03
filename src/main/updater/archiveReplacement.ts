@@ -8,7 +8,7 @@ import { Logger } from "@utils/Logger";
 import { spawn } from "child_process";
 import { createHash } from "crypto";
 import { app } from "electron";
-import { copyFileSync, type Dirent, existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "original-fs";
+import { copyFileSync, type Dirent, existsSync, mkdtempSync, promises as fsPromises, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "original-fs";
 import { basename, dirname, join, resolve } from "path";
 import { setTimeout as sleep } from "timers/promises";
 
@@ -53,13 +53,13 @@ function Restart-Client {
     $started.Dispose()
 }
 try {
-    Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class LawyerCordArchive { [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] public static extern bool MoveFileEx(string existing, string replacement, uint flags); }'
     if ((Get-ArchiveDigest $staged) -ne $manifest.digest) { throw 'The staged update failed its checksum check. Download the release again.' }
     $parent = $null
-    try { $parent = [Diagnostics.Process]::GetProcessById($manifest.pid) } catch [ArgumentException] { $parent = $null }
+    try { $parent = [Diagnostics.Process]::GetProcessById($manifest.pid); $null = $parent.Handle } catch [ArgumentException] { $parent = $null }
     [IO.File]::WriteAllText((Join-Path $directory 'ready.tmp'), (@{ pid = $PID } | ConvertTo-Json -Compress))
     [IO.File]::Move((Join-Path $directory 'ready.tmp'), (Join-Path $directory 'ready.json'))
     if ($null -ne $parent) { $parent.WaitForExit(); $parent.Dispose() }
+    Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class LawyerCordArchive { [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] public static extern bool MoveFileEx(string existing, string replacement, uint flags); }'
     if (-not (Test-Path -LiteralPath $state)) { throw 'The pending update was cancelled before installation. The previous version was kept.' }
     $pending = Get-Content -LiteralPath $state -Raw -Encoding UTF8 | ConvertFrom-Json
     if ($pending.directory -ne $directory -or $pending.workerPid -ne $PID) { throw 'The pending update was cancelled before installation. The previous version was kept.' }
@@ -120,7 +120,7 @@ export function getStagedUpdateError(destination: string): string | undefined {
     }
 }
 
-function pruneCompletedBackups(destination: string) {
+async function pruneCompletedBackups(destination: string) {
     let pendingDirectory: string | undefined;
     if (existsSync(stateFile(destination))) {
         try {
@@ -155,14 +155,14 @@ function pruneCompletedBackups(destination: string) {
     }
     completed.sort((a, b) => b.modified - a.modified);
     for (const backup of completed.slice(1)) {
-        try { rmSync(backup.directory, { recursive: true, force: true }); }
+        try { await fsPromises.rm(backup.directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
         catch (error) { logger.warn("Could not remove an older update backup.", error); }
     }
 }
 
 export async function replaceVerifiedArchive(destination: string, data: Buffer): Promise<{ staged: boolean; }> {
     if (stagedUpdate || appliedUpdate) throw new Error("An update is already downloaded. Restart Discord before selecting another release.");
-    pruneCompletedBackups(destination);
+    await pruneCompletedBackups(destination);
     const directory = mkdtempSync(`${destination}.update-`);
     let spawned = false;
     try {
@@ -184,13 +184,14 @@ export async function replaceVerifiedArchive(destination: string, data: Buffer):
         const executable = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
         env.LAWYERCORD_UPDATE_SCRIPT = worker;
         env.LAWYERCORD_UPDATE_RUNTIME = executable;
-        const launcher = "$ErrorActionPreference = 'Stop'; Start-Process -FilePath $env:LAWYERCORD_UPDATE_RUNTIME -ArgumentList @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File', ('\"' + $env:LAWYERCORD_UPDATE_SCRIPT + '\"')) -WindowStyle Hidden | Out-Null";
+        env.LAWYERCORD_UPDATE_DIRECTORY = directory;
+        const launcher = "$ErrorActionPreference = 'Stop'; Start-Process -FilePath $env:LAWYERCORD_UPDATE_RUNTIME -ArgumentList @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File', ('\"' + $env:LAWYERCORD_UPDATE_SCRIPT + '\"')) -WindowStyle Hidden -RedirectStandardOutput (Join-Path $env:LAWYERCORD_UPDATE_DIRECTORY 'worker.stdout.log') -RedirectStandardError (Join-Path $env:LAWYERCORD_UPDATE_DIRECTORY 'worker.stderr.log') | Out-Null";
         const args = ["-NoProfile", "-NonInteractive", "-Command", launcher];
         const child = spawn(executable, args, { stdio: "ignore", windowsHide: true, env });
         let launchError = false;
         child.once("error", () => { launchError = true; });
         const readyFile = join(directory, "ready.json");
-        const deadline = Date.now() + 10_000;
+        const deadline = Date.now() + 60_000;
         while (!existsSync(readyFile) && Date.now() < deadline) {
             if (launchError || child.exitCode !== null && child.exitCode !== 0) break;
             await sleep(50);
@@ -210,7 +211,7 @@ export async function replaceVerifiedArchive(destination: string, data: Buffer):
         child.unref();
         return { staged: true };
     } finally {
-        if (!spawned) rmSync(directory, { recursive: true, force: true });
+        if (!spawned) await fsPromises.rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
 }
 

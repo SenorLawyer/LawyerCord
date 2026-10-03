@@ -23,15 +23,15 @@ const compiled = transformSync(source, { loader: "ts", format: "cjs" }).code;
 const restartArguments = ["argument with spaces", 'embedded"quote', "C:\\trailing\\", "", "Français 漢字"];
 const nativeRequire = createRequire(import.meta.url);
 
-async function waitFor(check: () => boolean, label: string) {
-    const deadline = Date.now() + 15_000;
+async function waitFor(check: () => boolean, label: string, diagnostics: () => string = () => "") {
+    const deadline = Date.now() + 90_000;
     while (!check()) {
-        assert.ok(Date.now() < deadline, `Timed out waiting for ${label}`);
+        if (Date.now() >= deadline) assert.fail(`Timed out waiting for ${label}. ${diagnostics()}`);
         await sleep(50);
     }
 }
 
-async function fixture(runtime = process.execPath, unrelatedOutput = false, failStateWrite = false) {
+async function fixture(runtime = process.execPath, unrelatedOutput = false, failStateWrite = false, pauseCompilation = false) {
     const directory = await mkdtemp(join(tmpdir(), "lawyercord-archive-é漢字-"));
     const destination = join(directory, "lawyercord.asar");
     const ready = join(directory, "parent-ready.json");
@@ -39,6 +39,7 @@ async function fixture(runtime = process.execPath, unrelatedOutput = false, fail
     const marker = join(directory, "restart.cjs");
     const parentScript = join(directory, "parent.cjs");
     const children: ChildProcess[] = [];
+    const compilationGate = "    [IO.File]::WriteAllText((Join-Path $directory 'compiling'), 'started')\n    while (-not [IO.File]::Exists((Join-Path $directory 'compile-release'))) { if (-not [IO.Directory]::Exists($directory)) { throw 'Compilation fixture was cancelled.' }; Start-Sleep -Milliseconds 50 }\n    Add-Type -TypeDefinition";
     await writeFile(destination, "Old complete archive");
     await writeFile(marker, `require('fs').writeFileSync(process.argv[2], JSON.stringify({ args: process.argv.slice(3), electron: process.env.ELECTRON_RUN_AS_NODE, nodeOptions: process.env.NODE_OPTIONS }));`);
     await writeFile(parentScript, `
@@ -57,7 +58,18 @@ const fixtureRequire = id => {
         }
         return fs.writeFileSync(file, ...args);
     } };
-    if (id === 'original-fs') return fs;
+    if (id === 'original-fs') return { ...fs, writeFileSync: (file, data, ...args) => {
+        if (${pauseCompilation} && String(file).endsWith('apply.ps1')) data = String(data).replace('    Add-Type -TypeDefinition', ${JSON.stringify(compilationGate)});
+        return fs.writeFileSync(file, data, ...args);
+    }, promises: { ...fs.promises, rm: async (file, options) => {
+        if (String(file).startsWith(${JSON.stringify(`${destination}.update-`)})) {
+            for (const name of ['ready.json', 'result.json', 'worker.stdout.log', 'worker.stderr.log']) {
+                const diagnostic = require('path').join(file, name);
+                if (fs.existsSync(diagnostic)) console.error('Before staging cleanup', name, fs.readFileSync(diagnostic, 'utf8').slice(-4000));
+            }
+        }
+        return fs.promises.rm(file, options);
+    } } };
     if (id === 'electron') return { app: { quit: () => process.exit(0) } };
     if (id === '../settings') return { NativeSettings: { plain: { native: true } }, RendererSettings: { plain: { autoUpdate: false } } };
     if (id === 'child_process' && ${unrelatedOutput}) return { spawn: (_executable, _args, options) => require('child_process').spawn(process.execPath, ['-e', "console.log('Starting app'); setTimeout(() => process.exit(0), 200)"], options) };
@@ -91,21 +103,29 @@ api.replaceVerifiedArchive(${JSON.stringify(destination)}, Buffer.from('New comp
         child.stderr.on("data", bytes => { stderr += String(bytes); });
         return { child, get stderr() { return stderr; } };
     }
+    function diagnostics() {
+        const snapshots = fs.readdirSync(directory).filter(name => name.startsWith("lawyercord.asar.update-")).map(name => {
+            const stage = join(directory, name);
+            const files = Object.fromEntries(["ready.json", "result.json", "worker.stdout.log", "worker.stderr.log"].filter(file => fs.existsSync(join(stage, file))).map(file => [file, fs.readFileSync(join(stage, file), "utf8").slice(-4000)]));
+            return { name, files, staged: fs.existsSync(join(stage, "archive.asar")), backup: fs.existsSync(join(stage, "previous.asar")) };
+        });
+        return JSON.stringify(snapshots);
+    }
     return {
-        directory, destination, ready, restarted,
+        directory, destination, ready, restarted, diagnostics,
         async start() {
             const parent = launch();
             const { child } = parent;
             await waitFor(() => {
-                assert.equal(child.exitCode, null, `Parent failed: ${parent.stderr}`);
+                assert.equal(child.exitCode, null, `Parent failed: ${parent.stderr}. ${diagnostics()}`);
                 return fs.existsSync(ready);
-            }, "helper startup handshake");
+            }, "helper startup handshake", diagnostics);
             const state = JSON.parse(await readFile(`${destination}.update.json`, "utf8")) as { directory: string; workerPid: number; };
             return { child, state };
         },
         async expectFailure(message: RegExp) {
             const parent = launch();
-            const [code] = await once(parent.child, "close", { signal: AbortSignal.timeout(60_000) });
+            const [code] = await once(parent.child, "close", { signal: AbortSignal.timeout(90_000) });
             assert.equal(code, 1, `Expected update failure: ${parent.stderr}`);
             assert.match(parent.stderr, message);
             assert.equal(fs.existsSync(ready), false);
@@ -117,7 +137,7 @@ api.replaceVerifiedArchive(${JSON.stringify(destination)}, Buffer.from('New comp
             });
             children.push(child);
             assert.ok(child.stdout);
-            const [data] = await once(child.stdout, "data");
+            const [data] = await once(child.stdout, "data", { signal: AbortSignal.timeout(90_000) });
             assert.match(String(data), /locked/);
             return child;
         },
@@ -153,12 +173,47 @@ test("Windows locked archive stages, survives parent exit, promotes safely and r
         assert.equal(fs.existsSync(join(state.directory, "result.json")), false);
         lock.stdin?.write("release\n");
         await once(lock, "exit");
-        await waitFor(() => fs.existsSync(f.restarted), "replacement and restart");
+        await waitFor(() => fs.existsSync(f.restarted), "replacement and restart", f.diagnostics);
         assert.equal(await readFile(f.destination, "utf8"), "New complete archive");
         assert.equal(await readFile(join(state.directory, "previous.asar"), "utf8"), "Old complete archive");
         assert.deepEqual(JSON.parse(await readFile(join(state.directory, "result.json"), "utf8")), { ok: true });
         assert.equal(fs.existsSync(`${f.destination}.update.json`), false);
         assert.deepEqual(JSON.parse(await readFile(f.restarted, "utf8")), { args: restartArguments });
+    } finally { await f.cleanup(); }
+});
+
+test("Windows helper acknowledges the verified stage before deferred native compilation", { skip: process.platform !== "win32" }, async () => {
+    const f = await fixture(process.execPath, false, false, true);
+    try {
+        const { child, state } = await f.start();
+        assert.equal(fs.existsSync(join(state.directory, "compiling")), false);
+        assert.equal(await readFile(f.destination, "utf8"), "Old complete archive");
+        child.stdin.write("quit\n");
+        await once(child, "exit");
+        await waitFor(() => fs.existsSync(join(state.directory, "compiling")), "deferred native compilation", f.diagnostics);
+        assert.equal(fs.existsSync(join(state.directory, "result.json")), false);
+        assert.equal(await readFile(f.destination, "utf8"), "Old complete archive");
+        await writeFile(join(state.directory, "compile-release"), "continue");
+        await waitFor(() => fs.existsSync(join(state.directory, "result.json")), "promotion after compilation", f.diagnostics);
+        assert.deepEqual(JSON.parse(await readFile(join(state.directory, "result.json"), "utf8")), { ok: true });
+        assert.equal(await readFile(f.destination, "utf8"), "New complete archive");
+    } finally { await f.cleanup(); }
+});
+
+test("a stage changed during deferred compilation is checked again before promotion", { skip: process.platform !== "win32" }, async () => {
+    const f = await fixture(process.execPath, false, false, true);
+    try {
+        const { child, state } = await f.start();
+        child.stdin.write("quit\n");
+        await once(child, "exit");
+        await waitFor(() => fs.existsSync(join(state.directory, "compiling")), "deferred native compilation", f.diagnostics);
+        await writeFile(join(state.directory, "archive.asar"), "Changed during compilation");
+        await writeFile(join(state.directory, "compile-release"), "continue");
+        await waitFor(() => fs.existsSync(join(state.directory, "result.json")), "late checksum rejection", f.diagnostics);
+        const result = JSON.parse(await readFile(join(state.directory, "result.json"), "utf8")) as { ok: boolean; error: string; };
+        assert.equal(result.ok, false);
+        assert.match(result.error, /changed before installation/);
+        assert.equal(await readFile(f.destination, "utf8"), "Old complete archive");
     } finally { await f.cleanup(); }
 });
 
@@ -169,7 +224,7 @@ test("Tampered staged archive is rejected after parent exits and keeps the insta
         await writeFile(join(state.directory, "archive.asar"), "Tampered archive");
         child.stdin?.write("quit\n");
         await once(child, "exit");
-        await waitFor(() => fs.existsSync(join(state.directory, "result.json")), "checksum rejection");
+        await waitFor(() => fs.existsSync(join(state.directory, "result.json")), "checksum rejection", f.diagnostics);
         const result = JSON.parse(await readFile(join(state.directory, "result.json"), "utf8")) as { ok: boolean; error: string; };
         assert.equal(result.ok, false);
         assert.match(result.error, /changed before installation/);
@@ -232,11 +287,11 @@ test("An archive installed while the helper waits for a Windows lock is preserve
         const { child, state } = await f.start();
         child.stdin?.write("quit\n");
         await once(child, "exit");
-        await waitFor(() => fs.existsSync(join(state.directory, "previous.asar")), "helper entering promotion");
+        await waitFor(() => fs.existsSync(join(state.directory, "previous.asar")), "helper entering promotion", f.diagnostics);
         await writeFile(f.destination, "Installed by another installer");
+        await waitFor(() => fs.existsSync(join(state.directory, "result.json")), "intervening installation detection while locked", f.diagnostics);
         lock.stdin?.write("release\n");
         await once(lock, "exit");
-        await waitFor(() => fs.existsSync(join(state.directory, "result.json")), "intervening installation detection");
         const result = JSON.parse(await readFile(join(state.directory, "result.json"), "utf8")) as { ok: boolean; error: string; };
         assert.equal(result.ok, false);
         assert.match(result.error, /Another installer/);
@@ -281,10 +336,10 @@ test("Completed backup retention keeps the newest backup and preserves active, p
     const warnings: unknown[][] = [];
     const modules: Record<string, unknown> = {
         "@utils/Logger": { Logger: class { warn(...values: unknown[]) { warnings.push(values); } } },
-        "original-fs": { ...fs, rmSync: (file: fs.PathLike, options: fs.RmOptions) => {
+        "original-fs": { ...fs, promises: { ...fs.promises, rm: async (file: fs.PathLike, options: fs.RmOptions) => {
             if (file === undeletable) throw new Error("Injected backup permission failure");
-            fs.rmSync(file, options);
-        } },
+            await fs.promises.rm(file, options);
+        } } },
         "child_process": { spawn: () => assert.fail("Retention fixture must not start a helper") },
         "electron": { app: {} },
         "../settings": { NativeSettings: { plain: {} }, RendererSettings: { plain: {} } }
@@ -323,7 +378,7 @@ test("Windows helper applies an update for the actual Discord executable without
         const { child, state } = await f.start();
         child.stdin?.write("quit\n");
         await once(child, "exit");
-        await waitFor(() => fs.existsSync(join(state.directory, "result.json")), "Electron helper promotion");
+        await waitFor(() => fs.existsSync(join(state.directory, "result.json")), "Electron helper promotion", f.diagnostics);
         assert.deepEqual(JSON.parse(await readFile(join(state.directory, "result.json"), "utf8")), { ok: true });
         assert.equal(await readFile(f.destination, "utf8"), "New complete archive");
     } finally { await f.cleanup(); }

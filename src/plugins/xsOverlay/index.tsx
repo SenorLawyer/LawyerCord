@@ -180,6 +180,7 @@ const settings = definePluginSettings({
 
 let socket: WebSocket | null = null;
 let socketGeneration = 0;
+let notificationGeneration = 0;
 
 async function connectSocket() {
     const generation = ++socketGeneration;
@@ -354,6 +355,7 @@ export default definePlugin({
     start,
 
     stop() {
+        notificationGeneration++;
         stopSocket();
         avatarIconCache.clear();
     },
@@ -391,7 +393,7 @@ function getCachedAvatarIcon(userId: string, avatar: string) {
             r.readAsDataURL(blob);
         }))
         .catch(error => {
-            avatarIconCache.delete(cacheKey);
+            if (avatarIconCache.get(cacheKey) === promise) avatarIconCache.delete(cacheKey);
             throw error;
         });
 
@@ -400,8 +402,10 @@ function getCachedAvatarIcon(userId: string, avatar: string) {
 }
 
 function sendMsgNotif(titleString: string, content: string, message: Message) {
+    const generation = notificationGeneration;
     getCachedAvatarIcon(message.author.id, message.author.avatar)
         .then(result => {
+            if (generation !== notificationGeneration) return;
             const msgData: NotificationObject = {
                 type: 1,
                 timeout: settings.store.lengthBasedTimeout ? calculateTimeout(content) : settings.store.timeout,
@@ -439,6 +443,7 @@ function sendOtherNotif(content: string, titleString: string) {
 }
 
 async function sendToOverlay(notif: NotificationObject) {
+    const generation = notificationGeneration;
     if (!IS_WEB && settings.store.preferUDP) {
         Native.sendToOverlay(notif);
         return;
@@ -451,6 +456,7 @@ async function sendToOverlay(notif: NotificationObject) {
         rawData: null
     };
     if (socket?.readyState !== WebSocket.OPEN) await connectSocket();
+    if (generation !== notificationGeneration) return;
     if (socket?.readyState !== WebSocket.OPEN) throw new Error("XSOverlay socket is not open");
     socket.send(JSON.stringify(apiObject));
 }

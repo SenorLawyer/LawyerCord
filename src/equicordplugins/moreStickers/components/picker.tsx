@@ -7,6 +7,7 @@
 import { PickerContent, PickerContentHeader, PickerContentRow, PickerContentRowGrid, PickerHeaderProps, SidebarProps, Sticker, StickerCategoryType } from "@equicordplugins/moreStickers/types";
 import { sendSticker } from "@equicordplugins/moreStickers/upload";
 import { clPicker } from "@equicordplugins/moreStickers/utils";
+import { classes } from "@utils/misc";
 import { useAwaiter } from "@utils/react";
 import { Modal,openModal, React, showToast, TextInput, Toasts } from "@webpack/common";
 import { JSX } from "react";
@@ -14,6 +15,8 @@ import { JSX } from "react";
 import { CategoryImage, CategoryScroller, CategoryWrapper, StickerCategory } from "./categories";
 import { CancelIcon, CogIcon, IconContainer, RecentlyUsedIcon, SearchIcon } from "./icons";
 import { addRecentSticker, getRecentStickers, Header, Packs, RECENT_STICKERS_ID, RECENT_STICKERS_TITLE } from "./misc";
+
+const EMPTY_STICKERS: Sticker[] = [];
 
 export const RecentPack = {
     id: RECENT_STICKERS_ID,
@@ -87,7 +90,7 @@ function PickerContentRowGrid({
     onHover,
     channelId,
     onSend = () => { },
-    isHovered = false
+    selection
 }: PickerContentRowGrid) {
     return (
         <div
@@ -109,12 +112,7 @@ function PickerContentRowGrid({
             >
                 <span className={clPicker("content-row-grid-hidden-visually")}>{sticker.title}</span>
                 <div aria-hidden="true">
-                    <div className={
-                        [
-                            clPicker("content-row-grid-inspected-indicator"),
-                            `${isHovered ? "inspected" : ""}`
-                        ].join(" ")
-                    }></div>
+                    <SelectionIndicator selection={selection} stickerId={sticker.id} />
                     <div className={clPicker("content-row-grid-sticker-node")}>
                         <div className={clPicker("content-row-grid-asset-wrapper")} style={{
                             height: "96px",
@@ -134,6 +132,11 @@ function PickerContentRowGrid({
             </div>
         </div>
     );
+}
+
+function SelectionIndicator({ selection, stickerId }: { selection: React.Context<string | undefined>; stickerId: string; }) {
+    const selectedId = React.useContext(selection);
+    return <div className={classes(clPicker("content-row-grid-inspected-indicator"), selectedId === stickerId && "inspected")} />;
 }
 
 function PickerContentRow({ rowIndex, grid1, grid2, grid3, channelId }: PickerContentRow) {
@@ -234,6 +237,7 @@ export function PickerContentHeader({
 }
 
 export function PickerContent({ stickerPacks, selectedStickerPackId, setSelectedStickerPackId, channelId, closePopout, query }: PickerContent) {
+    const selection = React.useMemo(() => React.createContext<string | undefined>(undefined), []);
     const [currentSticker, setCurrentSticker] = (
         React.useState<Sticker | null>((
             stickerPacks.length && stickerPacks[0].stickers.length) ?
@@ -244,162 +248,165 @@ export function PickerContent({ stickerPacks, selectedStickerPackId, setSelected
 
     const currentStickerPack = stickerPacks.find(pack => pack.id === currentSticker?.stickerPackId);
     const [loadedRecents] = useAwaiter(getRecentStickers, {
-        fallbackValue: [],
+        fallbackValue: EMPTY_STICKERS,
         onError: () => showToast("Could not load recent stickers.", Toasts.Type.FAILURE)
     });
-    const recentStickers = loadedRecents ?? [];
+    const recentStickers = loadedRecents ?? EMPTY_STICKERS;
 
     const stickerPacksElemRef = React.useRef<HTMLDivElement>(null);
     const scrollerRef = React.useRef<HTMLDivElement>(null);
 
-    function queryFilter(stickers: Sticker[]): Sticker[] {
-        if (!query) return stickers;
-        return stickers.filter(sticker => sticker.title.toLowerCase().includes(query.toLowerCase()));
-    }
+    const rows = React.useMemo(() => {
+        const normalizedQuery = query?.toLowerCase();
+        function queryFilter(stickers: Sticker[]): Sticker[] {
+            if (!normalizedQuery) return stickers;
+            return stickers.filter(sticker => sticker.title.toLowerCase().includes(normalizedQuery));
+        }
 
-    const stickersToRows = (stickers: Sticker[]): JSX.Element[] => stickers
-        .reduce((acc, sticker, i) => {
-            if (i % 3 === 0) {
-                acc.push([]);
-            }
-            acc[acc.length - 1].push(sticker);
-            return acc;
-        }, [] as Sticker[][])
-        .map((stickers, i) => (
-            <PickerContentRow
-                key={i}
-                rowIndex={i}
-                channelId={channelId}
-                grid1={{
-                    rowIndex: i,
-                    colIndex: 1,
-                    sticker: stickers[0],
-                    onHover: setCurrentSticker,
-                    onSend: (_, s) => { !s && closePopout(); },
-                    isHovered: currentSticker?.id === stickers[0].id
-                }}
-                grid2={
-                    stickers.length > 1 ? {
+        const stickersToRows = (stickers: Sticker[]): JSX.Element[] => stickers
+            .reduce((acc, sticker, i) => {
+                if (i % 3 === 0) {
+                    acc.push([]);
+                }
+                acc[acc.length - 1].push(sticker);
+                return acc;
+            }, [] as Sticker[][])
+            .map((stickers, i) => (
+                <PickerContentRow
+                    key={stickers[0].id}
+                    rowIndex={i}
+                    channelId={channelId}
+                    grid1={{
                         rowIndex: i,
-                        colIndex: 2,
-                        sticker: stickers[1],
+                        colIndex: 1,
+                        sticker: stickers[0],
                         onHover: setCurrentSticker,
                         onSend: (_, s) => { !s && closePopout(); },
-                        isHovered: currentSticker?.id === stickers[1].id
-                    } : undefined
-                }
-                grid3={
-                    stickers.length > 2 ? {
-                        rowIndex: i,
-                        colIndex: 3,
-                        sticker: stickers[2],
-                        onHover: setCurrentSticker,
-                        onSend: (_, s) => { !s && closePopout(); },
-                        isHovered: currentSticker?.id === stickers[2].id
-                    } : undefined
-                }
-            />
-        ));
+                        selection
+                    }}
+                    grid2={
+                        stickers.length > 1 ? {
+                            rowIndex: i,
+                            colIndex: 2,
+                            sticker: stickers[1],
+                            onHover: setCurrentSticker,
+                            onSend: (_, s) => { !s && closePopout(); },
+                            selection
+                        } : undefined
+                    }
+                    grid3={
+                        stickers.length > 2 ? {
+                            rowIndex: i,
+                            colIndex: 3,
+                            sticker: stickers[2],
+                            onHover: setCurrentSticker,
+                            onSend: (_, s) => { !s && closePopout(); },
+                            selection
+                        } : undefined
+                    }
+                />
+            ));
+        return [stickersToRows(queryFilter(recentStickers)), ...stickerPacks.map(pack => stickersToRows(queryFilter(pack.stickers)))];
+    }, [stickerPacks, recentStickers, query, channelId, closePopout, selection]);
 
     return (
-        <div className={clPicker("content-list-wrapper")}>
-            <div className={clPicker("content-wrapper")}>
-                <div className={clPicker("content-scroller")} ref={scrollerRef}>
-                    <div className={clPicker("content-list-items")} role="none presentation">
-                        <div ref={stickerPacksElemRef}>
-                            <PickerContentHeader
-                                image={
-                                    <RecentlyUsedIcon width={16} height={16} color="currentColor" />
-                                }
-                                title={RECENT_STICKERS_TITLE}
-                                isSelected={RECENT_STICKERS_ID === selectedStickerPackId}
-                                beforeScroll={() => {
-                                    scrollerRef.current?.scrollTo({
-                                        top: 0,
-                                    });
-                                }}
-                                afterScroll={() => { setSelectedStickerPackId(null); }}
-                            >
+        <selection.Provider value={currentSticker?.id}>
+            <div className={clPicker("content-list-wrapper")}>
+                <div className={clPicker("content-wrapper")}>
+                    <div className={clPicker("content-scroller")} ref={scrollerRef}>
+                        <div className={clPicker("content-list-items")} role="none presentation">
+                            <div ref={stickerPacksElemRef}>
+                                <PickerContentHeader
+                                    image={
+                                        <RecentlyUsedIcon width={16} height={16} color="currentColor" />
+                                    }
+                                    title={RECENT_STICKERS_TITLE}
+                                    isSelected={RECENT_STICKERS_ID === selectedStickerPackId}
+                                    beforeScroll={() => {
+                                        scrollerRef.current?.scrollTo({
+                                            top: 0,
+                                        });
+                                    }}
+                                    afterScroll={() => { setSelectedStickerPackId(null); }}
+                                >
+                                    {
+                                        ...rows[0]
+                                    }
+                                </PickerContentHeader>
                                 {
-                                    ...stickersToRows(
-                                        queryFilter(recentStickers)
-                                    )
+                                    stickerPacks.map((sp, index) => {
+                                        return (
+                                            <PickerContentHeader
+                                                key={sp.id}
+                                                image={sp.logo.image}
+                                                title={sp.title}
+                                                isSelected={sp.id === selectedStickerPackId}
+                                                beforeScroll={() => {
+                                                    scrollerRef.current?.scrollTo({
+                                                        top: 0,
+                                                    });
+                                                }}
+                                                afterScroll={() => { setSelectedStickerPackId(null); }}
+                                            >
+                                                {...rows[index + 1]}
+                                            </PickerContentHeader>
+                                        );
+                                    })
                                 }
-                            </PickerContentHeader>
-                            {
-                                stickerPacks.map(sp => {
-                                    const rows = stickersToRows(queryFilter(sp.stickers));
-                                    return (
-                                        <PickerContentHeader
-                                            key={sp.id}
-                                            image={sp.logo.image}
-                                            title={sp.title}
-                                            isSelected={sp.id === selectedStickerPackId}
-                                            beforeScroll={() => {
-                                                scrollerRef.current?.scrollTo({
-                                                    top: 0,
-                                                });
-                                            }}
-                                            afterScroll={() => { setSelectedStickerPackId(null); }}
-                                        >
-                                            {...rows}
-                                        </PickerContentHeader>
-                                    );
-                                })
-                            }
-                        </div>
-                    </div>
-                    <div style={{
-                        height: `${stickerPacksElemRef.current?.clientHeight ?? 0}px`
-                    }}></div>
-                </div>
-                <div
-                    className={clPicker("content-inspector")}
-                    style={{
-                        visibility: !currentSticker ? "hidden" : "visible",
-                        ...(!currentSticker ? {
-                            height: "0"
-                        } : {})
-                    }}
-                >
-                    <div className={clPicker("content-inspector-graphic-primary")} aria-hidden="true">
-                        <div>
-                            <div className={clPicker("content-row-grid-asset-wrapper")} style={{
-                                height: "28px",
-                                width: "28px"
-                            }}>
-                                <img
-                                    alt={currentSticker?.title ?? ""}
-                                    src={currentSticker?.image}
-                                    draggable="false"
-                                    data-id={currentSticker?.id ?? ""}
-                                    className={clPicker("content-inspector-img")}
-                                />
                             </div>
                         </div>
+                        <div style={{
+                            height: `${stickerPacksElemRef.current?.clientHeight ?? 0}px`
+                        }}></div>
                     </div>
-                    <div className={clPicker("content-inspector-text-wrapper")}>
-                        <div className={clPicker("content-inspector-title-primary")} data-text-variant="text-md/semibold">{currentSticker?.title ?? ""}</div>
-                        <div className={clPicker("content-inspector-title-secondary")} data-text-variant="text-md/semibold">
-                            {currentStickerPack?.title ? "from " : ""}
-                            <strong>{currentStickerPack?.title ?? ""}</strong>
-                        </div>
-                    </div>
-                    <div className={clPicker("content-inspector-graphic-secondary")} aria-hidden="true">
-                        <div>
-                            <svg width={32} height={32} viewBox="0 0 32 32">
-                                <foreignObject x={0} y={0} width={32} height={32} overflow="visible" mask="url(#svg-mask-squircle)">
+                    <div
+                        className={clPicker("content-inspector")}
+                        style={{
+                            visibility: !currentSticker ? "hidden" : "visible",
+                            ...(!currentSticker ? {
+                                height: "0"
+                            } : {})
+                        }}
+                    >
+                        <div className={clPicker("content-inspector-graphic-primary")} aria-hidden="true">
+                            <div>
+                                <div className={clPicker("content-row-grid-asset-wrapper")} style={{
+                                    height: "28px",
+                                    width: "28px"
+                                }}>
                                     <img
-                                        alt={currentStickerPack?.title ?? ""}
-                                        src={currentStickerPack?.logo?.image}
-                                    ></img>
-                                </foreignObject>
-                            </svg>
+                                        alt={currentSticker?.title ?? ""}
+                                        src={currentSticker?.image}
+                                        draggable="false"
+                                        data-id={currentSticker?.id ?? ""}
+                                        className={clPicker("content-inspector-img")}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className={clPicker("content-inspector-text-wrapper")}>
+                            <div className={clPicker("content-inspector-title-primary")} data-text-variant="text-md/semibold">{currentSticker?.title ?? ""}</div>
+                            <div className={clPicker("content-inspector-title-secondary")} data-text-variant="text-md/semibold">
+                                {currentStickerPack?.title ? "from " : ""}
+                                <strong>{currentStickerPack?.title ?? ""}</strong>
+                            </div>
+                        </div>
+                        <div className={clPicker("content-inspector-graphic-secondary")} aria-hidden="true">
+                            <div>
+                                <svg width={32} height={32} viewBox="0 0 32 32">
+                                    <foreignObject x={0} y={0} width={32} height={32} overflow="visible" mask="url(#svg-mask-squircle)">
+                                        <img
+                                            alt={currentStickerPack?.title ?? ""}
+                                            src={currentStickerPack?.logo?.image}
+                                        ></img>
+                                    </foreignObject>
+                                </svg>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
+        </selection.Provider>
     );
 }
 

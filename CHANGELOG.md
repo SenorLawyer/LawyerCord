@@ -2,6 +2,16 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 4.1.1.0 - 2026-10-03 (Nightly)
+
+### Fixed
+
+- Reuse MoreStickers grid rows while hovering previews, preserving selection and rebuilding when sticker packs or search inputs change.
+- Release GIF availability response bodies before starting more checks, and cancel checks and late exports when the plugin stops.
+- Prevent SidebarChat from opening delayed DM windows after stop or restart, and release its channel lookup subscriptions.
+- Prevent XSOverlay from sending obsolete notifications after avatar loading or socket connection finishes.
+- Stop obsolete profile imports before reading or parsing selected files, and suppress confirmation writes and UI updates after the panel closes.
+
 ## 4.1.0.0 - 2026-10-03 (Nightly)
 
 ### Added

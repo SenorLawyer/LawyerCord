@@ -115,6 +115,8 @@ function getPopoutMenuLabel(channelId: string) {
 
 let stopPersistedPopoutRestore: (() => void) | undefined;
 let restoringPersistedPopouts = false;
+let popoutGeneration = 0;
+const pendingPopoutWaits = new Set<() => void>();
 
 function clearPersistedPopoutRestore() {
     restoringPersistedPopouts = false;
@@ -122,44 +124,52 @@ function clearPersistedPopoutRestore() {
     stopPersistedPopoutRestore = undefined;
 }
 
-async function waitForChannel(channelId: string, timeoutMs = 2500) {
-    const startedAt = Date.now();
-    while (Date.now() - startedAt <= timeoutMs) {
-        const channel = ChannelStore.getChannel(channelId);
-        if (channel) return channel;
-
-        await new Promise(resolve => setTimeout(resolve, 80));
-    }
-
-    return null;
+function waitForChannelStore<T>(read: () => T | null | undefined, generation: number, timeoutMs: number): Promise<T | null> {
+    if (generation !== popoutGeneration) return Promise.resolve(null);
+    const current = read();
+    if (current != null) return Promise.resolve(current);
+    return new Promise(resolve => {
+        const finish = (value: T | null) => {
+            clearTimeout(timer);
+            ChannelStore.removeChangeListener(onChange);
+            pendingPopoutWaits.delete(cancel);
+            resolve(value);
+        };
+        const cancel = () => finish(null);
+        const onChange = () => {
+            const value = read();
+            if (value != null) finish(value);
+        };
+        const timer = setTimeout(cancel, timeoutMs);
+        pendingPopoutWaits.add(cancel);
+        ChannelStore.addChangeListener(onChange);
+    });
 }
 
-async function waitForDmChannel(userId: string, timeoutMs = 2500) {
-    const startedAt = Date.now();
-    while (Date.now() - startedAt <= timeoutMs) {
-        const channelId = ChannelStore.getDMFromUserId?.(userId);
-        if (channelId) return channelId;
+function waitForChannel(channelId: string, generation: number, timeoutMs = 2500) {
+    return waitForChannelStore(() => ChannelStore.getChannel(channelId), generation, timeoutMs);
+}
 
-        await new Promise(resolve => setTimeout(resolve, 80));
-    }
-
-    return null;
+function waitForDmChannel(userId: string, generation: number, timeoutMs = 2500) {
+    return waitForChannelStore(() => ChannelStore.getDMFromUserId(userId), generation, timeoutMs);
 }
 
 async function openPopoutFromUserMenu(userId: string) {
+    const generation = popoutGeneration;
     try {
         const channelId = await Promise.resolve(ChannelActionCreators.getOrEnsurePrivateChannel(userId));
-        if (!channelId) return;
+        if (!channelId || generation !== popoutGeneration) return;
 
-        const channel = await waitForChannel(channelId);
-        if (channel) openPopout(channel.id);
+        const channel = await waitForChannel(channelId, generation);
+        if (channel && generation === popoutGeneration) openPopout(channel.id);
         return;
     } catch {
-        const fallbackChannelId = await waitForDmChannel(userId);
+        if (generation !== popoutGeneration) return;
+        const fallbackChannelId = await waitForDmChannel(userId, generation);
         if (!fallbackChannelId) return;
 
-        const channel = await waitForChannel(fallbackChannelId);
-        if (channel) openPopout(channel.id);
+        const channel = await waitForChannel(fallbackChannelId, generation);
+        if (channel && generation === popoutGeneration) openPopout(channel.id);
     }
 }
 
@@ -357,6 +367,8 @@ export default definePlugin({
     },
 
     stop() {
+        popoutGeneration++;
+        for (const cancel of pendingPopoutWaits) cancel();
         clearPersistedPopoutRestore();
         syncPersistedPopoutWindows();
         for (const windowKey of getOpenPopoutWindowKeys()) {

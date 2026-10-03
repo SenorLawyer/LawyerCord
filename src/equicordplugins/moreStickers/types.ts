@@ -90,7 +90,7 @@ export interface PickerContentRowGrid {
     colIndex: number;
     sticker: Sticker;
     onHover: (sticker: Sticker | null) => void;
-    isHovered?: boolean;
+    selection: React.Context<string | undefined>;
     channelId?: string;
     onSend?: (sticker?: Sticker, shouldClose?: boolean) => void;
 }

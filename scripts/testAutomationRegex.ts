@@ -53,6 +53,7 @@ function fixture() {
         modules.set(path, exports);
         const code = transpileModule(readFileSync(path, "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;
         runInNewContext(code, { exports, Error, Blob, Worker: BrowserWorker, setTimeout, clearTimeout, structuredClone, crypto, AbortController, require(name: string) {
+            if (name === "@utils/regex") return load(resolve("src/utils/regex.ts"));
             return name.startsWith(".") ? load(resolve(dirname(path), `${name}.ts`)) : require(name);
         }, URL: {
             createObjectURL(blob: Blob) { const url = crypto.randomUUID(); blobs.set(url, blob); return url; },
@@ -152,5 +153,21 @@ test("Runtime regex values, conditions and triggers use the worker and preserve 
         controller.abort();
         await assert.rejects(f.events.matchTriggers(index, event, controller.signal));
         assert.equal(f.created(), 1);
+    } finally { f.stop(); }
+});
+
+
+test("Aborting a shared regex owner skips its queued work without spawning replacement workers", async () => {
+    const f = fixture();
+    const controller = new AbortController();
+    try {
+        const jobs = [assert.rejects(f.evaluate("^(a+)+$", ["a".repeat(40) + "!"], false, controller.signal))];
+        for (let index = 0; index < 63; index++) jobs.push(assert.rejects(f.evaluate("a", ["a"], false, controller.signal)));
+        const following = f.evaluate("yes", ["YES"]);
+        controller.abort();
+        await Promise.all(jobs);
+        assert.equal((await following).matches[0], true);
+        assert.equal(f.created(), 2, "Only the original worker and the surviving owner's worker may be created.");
+        assert.equal(f.blobs.size, 0);
     } finally { f.stop(); }
 });

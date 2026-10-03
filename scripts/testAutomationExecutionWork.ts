@@ -65,6 +65,7 @@ function fixture(poll?: (cursor: number) => Promise<{ cursor: number; events: un
             structuredClone(value: unknown) { if (value && typeof value === "object" && "blocks" in value && Array.isArray(value.blocks)) clones++; return structuredClone(value); },
             require(name: string) {
                 if (name === "@api/DataStore") return storage;
+                if (name === "@utils/regex") return load(resolve("src/utils/regex.ts"));
                 if (name.startsWith("@") || name === "./spotify" || name === "./openRouter") return common;
                 if (!name.startsWith(".")) return createRequire(import.meta.url)(name);
                 return load(resolve(dirname(path), `${name}.ts`));

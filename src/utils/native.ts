@@ -16,7 +16,23 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { restartRequired, UpdateLogger } from "./updater";
+
 export function relaunch() {
+    if (!IS_WEB && IS_STANDALONE && restartRequired) {
+        VencordNative.updater.restart().then(result => {
+            if (!result.ok) {
+                UpdateLogger.error(result.error);
+                alert("Discord could not restart to apply the release. Close Discord and open it again, or repair LawyerCord with the installer.");
+            } else if (!result.value) {
+                alert("No downloaded release is ready to restart. Check for updates again.");
+            }
+        }).catch(error => {
+            UpdateLogger.error(error);
+            alert("Discord could not restart to apply the release. Try again or repair LawyerCord with the installer.");
+        });
+        return;
+    }
     if (IS_DISCORD_DESKTOP)
         window.DiscordNative.app.relaunch();
     else if (IS_VESKTOP || IS_EQUIBOP)

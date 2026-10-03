@@ -63,6 +63,7 @@ jobs:
                   pnpm testSecureMessaging
                   pnpm testSecureMessagingNative
                   pnpm testUpdateChannelSelection
+                  pnpm testReleaseUpdates
                   pnpm testInstallerStaleMarkerRepair
 
             - name: Lint
@@ -135,6 +136,7 @@ jobs:
                   $PSNativeCommandUseErrorActionPreference = $true
                   pnpm testInstallerStaleMarkerRepair
                   pnpm buildStandalone
+                  pnpm testReleaseUpdates
                   pnpm auditReleaseArtifacts dist
 
             - name: Prepare offline LawyerCord installer source

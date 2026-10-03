@@ -71,6 +71,9 @@ window.VencordNative = {
     },
 
     updater: {
+        restart: async () => ({ ok: true, value: false }),
+        getReleases: async () => ({ ok: true, value: { releases: [], hasMore: false } }),
+        checkRelease: async () => ({ ok: false, error: { name: "Error", message: "Release selection is only available in desktop builds." } }),
         getRepo: async () => ({ ok: true, value: "https://github.com/ProtonDev-sys/ProtonnCord" }),
         getUpdates: async () => ({ ok: true, value: [] }),
         update: async () => ({ ok: true, value: false }),

@@ -34,6 +34,7 @@ import { React, Select } from "@webpack/common";
 import gitHash from "~git-hash";
 
 import { HashLink, Newer, Updatable } from "./Components";
+import { Releases } from "./Releases";
 
 interface CommonProps {
     repo: string;
@@ -70,6 +71,7 @@ function EquibopSection() {
 
 function Updater() {
     const settings = useSettings(["autoUpdate", "autoUpdateNotification", "updateChannel"]);
+    const [releaseBusy, setReleaseBusy] = React.useState(false);
 
     const [repo, err, repoPending] = useAwaiter(getRepo, { fallbackValue: "Loading..." });
 
@@ -95,6 +97,7 @@ function Updater() {
                 title="Automatically update"
                 description="When enabled, LawyerCord will automatically download and install updates in the background without asking for confirmation. You'll need to restart Discord to apply the changes."
                 value={settings.autoUpdate}
+                disabled={releaseBusy}
                 onChange={(v: boolean) => settings.autoUpdate = v}
                 hideBorder
             />
@@ -103,7 +106,7 @@ function Updater() {
                 onChange={(v: boolean) => settings.autoUpdateNotification = v}
                 title="Get notified when an automatic update completes"
                 description="Receive a notification when LawyerCord finishes downloading an update in the background, so you know when to restart Discord."
-                disabled={!settings.autoUpdate}
+                disabled={!settings.autoUpdate || releaseBusy}
                 hideBorder
             />
 
@@ -112,13 +115,14 @@ function Updater() {
                 Stable receives only Stable releases. Beta receives Stable and Beta releases. Nightly receives releases from all three channels.
             </Paragraph>
             <Select
+                isDisabled={releaseBusy}
                 options={[
                     { label: "Stable", value: "stable", default: true },
                     { label: "Beta", value: "beta" },
                     { label: "Nightly", value: "nightly" },
                 ] satisfies Array<{ value: typeof settings.updateChannel; } & Record<string, unknown>>}
                 select={v => {
-                    if (settings.updateChannel === v) return;
+                    if (releaseBusy || settings.updateChannel === v) return;
                     settings.updateChannel = v;
                     resetUpdateState();
                 }}
@@ -150,7 +154,9 @@ function Updater() {
             <Divider className={Margins.top20} />
 
             <Heading className={Margins.top20}>Updates</Heading>
-            {isNewer
+            {IS_STANDALONE
+                ? <Releases key={settings.updateChannel} channel={settings.updateChannel} onBusyChange={setReleaseBusy} {...commonProps} />
+                : isNewer
                 ? <Newer key={settings.updateChannel} {...commonProps} />
                 : <Updatable key={settings.updateChannel} {...commonProps} />}
         </SettingsTab>

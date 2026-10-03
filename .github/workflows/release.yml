@@ -140,6 +140,7 @@ jobs:
                   pnpm testSecureMessaging
                   pnpm testSecureMessagingNative
                   pnpm testUpdateChannelSelection
+                  pnpm testReleaseUpdates
                   pnpm testInstallerStaleMarkerRepair
 
             - name: Build desktop and browser targets

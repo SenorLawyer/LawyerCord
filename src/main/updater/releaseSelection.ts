@@ -11,11 +11,21 @@ export interface GithubRelease {
     prerelease: boolean;
     published_at: string;
     tag_name: string;
+    draft?: boolean;
+    name?: string | null;
 }
 
 const STABLE_TAG = /^v(\d+)\.(\d+)\.(\d+)\.(\d+)$/;
 const BETA_TAG = /^v(\d+)\.(\d+)\.(\d+)\.(\d+)-beta\.\d+$/;
 const NIGHTLY_TAG = /^nightly-\d{8}-\d{4}-[a-f\d]+$/;
+
+export function releaseChannel(release: GithubRelease): UpdateChannel | undefined {
+    if (release.draft) return undefined;
+    if (!release.prerelease && STABLE_TAG.test(release.tag_name)) return "stable";
+    if (release.prerelease && BETA_TAG.test(release.tag_name)) return "beta";
+    if (release.prerelease && NIGHTLY_TAG.test(release.tag_name)) return "nightly";
+    return undefined;
+}
 
 function compareVersions(first: string, second: string): number {
     const firstMatch = STABLE_TAG.exec(first) ?? BETA_TAG.exec(first);
@@ -34,6 +44,7 @@ function latest(releases: GithubRelease[]): GithubRelease | undefined {
 }
 
 export function selectUpdateRelease(releases: GithubRelease[], channel: UpdateChannel): GithubRelease {
+    releases = releases.filter(release => releaseChannel(release));
     const stable = latest(releases.filter(release => !release.prerelease && STABLE_TAG.test(release.tag_name)));
     const beta = latest(releases.filter(release => release.prerelease && BETA_TAG.test(release.tag_name)));
     const nightly = latest(releases.filter(release => release.prerelease && NIGHTLY_TAG.test(release.tag_name)));

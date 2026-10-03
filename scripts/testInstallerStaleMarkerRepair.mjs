@@ -22,6 +22,33 @@ assert.ok(start >= 0 && end > start);
 const downloader = runInNewContext(`${source.slice(start, end)}\ndownloaderSource;`, { clientSha: "a".repeat(40) });
 const directory = await mkdtemp(join(tmpdir(), "lawyercord-installer-proof-"));
 try {
+    await writeFile(join(directory, "archive_windows_test.go"), await readFile(new URL("./installerArchive_windows_test.go", import.meta.url)));
+    const patchStart = source.indexOf("const patchReplacement = ");
+    const patchEnd = source.indexOf("if (!adapted.includes(patchStart))", patchStart);
+    assert.ok(patchStart >= 0 && patchEnd > patchStart);
+    const patch = runInNewContext(`${source.slice(patchStart, patchEnd)}\npatchReplacement;`, { lineEnding: "\n" });
+    await writeFile(join(directory, "patch.go"), `/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+package main
+
+import "errors"
+
+type DiscordInstall struct { path string }
+type logger struct {}
+func (logger) Info(string) {}
+var Log logger
+var ErrAlreadyReported = errors.New("Already reported")
+var PreparePatch = func(*DiscordInstall) {}
+func InstallLatestBuilds() error { return installLatestBuilds() }
+func (di *DiscordInstall) patch() error {
+${patch}
+    return nil
+}
+`);
     await writeFile(join(directory, "github_downloader.go"), downloader.replace("os.CreateTemp(", "faultableCreateTemp("));
     await writeFile(join(directory, "lawyercord-desktop.asar"), "New complete archive");
     await writeFile(join(directory, "persistence_test.go"), String.raw`/*

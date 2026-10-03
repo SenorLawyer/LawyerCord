@@ -2,6 +2,19 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 4.1.0.0 - 2026-10-03 (Nightly)
+
+### Added
+
+- Browse published releases and install a specific Stable, Beta or Nightly version without changing the automatic update channel.
+- Show explicit upgrade and rollback targets, retain the previous client archive and back up local settings before applying a downloaded release.
+
+### Fixed
+
+- Close the selected Discord installation before the Windows installer replaces its locked LawyerCord archive.
+- Stage verified in-app updates outside the loaded archive and apply them after Discord exits, then restart the selected client.
+- Detect older release targets independently of their commit list and keep automatic updates from silently rolling back a newer client.
+
 ## 4.0.1.0 - 2026-10-03 (Nightly)
 
 ### Fixed

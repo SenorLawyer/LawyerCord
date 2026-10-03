@@ -2,6 +2,13 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 4.1.3.1 - 2026-10-03 (Nightly)
+
+### Packaging
+
+- Correct attachment test fixtures for Windows short-path aliases and release deliberately blocked test work during failed assertions.
+- Run attachment download regressions in Windows pull-request checks before building installers, with a bounded test deadline.
+
 ## 4.1.3.0 - 2026-10-03 (Nightly)
 
 ### Fixed

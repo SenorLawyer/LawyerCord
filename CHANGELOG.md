@@ -2,6 +2,16 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 4.1.2.0 - 2026-10-03 (Nightly)
+
+### Fixed
+
+- Save deleted-message logs immediately and persist pending attachment work in the same database record so downloads can resume after restarting Discord.
+- Limit native attachment downloads to four physical transfers across windows, share matching downloads, and retain capacity until file and network cleanup finishes.
+- Cancel obsolete attachment work on account changes, plugin shutdown, log deletion, or replacement without restoring deleted records or overwriting newer messages.
+- Refresh cached attachment previews after a download completes and retry interrupted downloads when the cache folder changes.
+- Keep background attachment metadata out of exported logs. The database remains compatible with older clients, although an older client overwriting a log can discard its pending download work.
+
 ## 4.1.1.0 - 2026-10-03 (Nightly)
 
 ### Fixed

@@ -135,6 +135,7 @@ jobs:
             - name: Validate Windows build
               run: |
                   $PSNativeCommandUseErrorActionPreference = $true
+                  pnpm exec tsx --test --test-timeout=30000 scripts/testLoggedAttachmentDownloads.ts
                   pnpm testInstallerStaleMarkerRepair
                   pnpm buildStandalone
                   pnpm testReleaseUpdates

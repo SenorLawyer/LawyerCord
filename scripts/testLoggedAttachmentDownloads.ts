@@ -18,6 +18,7 @@ import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
 
 interface DownloadResult { error: string | null; path: string | null; busy?: true; }
 interface NativeApi {
+    downloadsIdle(): boolean;
     downloadAttachment(event: object, attachment: unknown): Promise<DownloadResult>;
     tryDownloadAttachment(event: object, attachment: unknown): Promise<DownloadResult>;
     waitForAttachmentDownloadCapacity(event: object): Promise<boolean>;
@@ -32,11 +33,16 @@ interface NativeApi {
 
 async function fixture(t: { after(callback: () => Promise<void>): void; }, initialize = true) {
     const event = { sender: Object.assign(new EventEmitter(), { id: 1, isDestroyed: () => false }) };
-    const root = await fs.mkdtemp(path.join(tmpdir(), "lawyercord-attachment-test-"));
+    const root = await fs.realpath(await fs.mkdtemp(path.join(tmpdir(), "lawyercord-attachment-test-")));
+    const releases: (() => void)[] = [];
     t.after(async () => {
         api.cancelNativeAttachmentDownloads(event);
-        if (api.waitForAttachmentDownloadCapacity) await api.waitForAttachmentDownloadCapacity(event);
-        await fs.rm(root, { recursive: true, force: true });
+        for (const release of releases) release();
+        try {
+            await until(api.downloadsIdle);
+        } finally {
+            await fs.rm(root, { recursive: true, force: true });
+        }
     });
     const settings = { imageCacheDir: root, attachmentFileExtensions: "png" };
     const requests: { url: string; options: RequestInit; }[] = [];
@@ -76,7 +82,7 @@ async function fixture(t: { after(callback: () => Promise<void>): void; }, initi
     const { outputText } = transpileModule(source, {
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
     });
-    const api: NativeApi = runInNewContext(`${outputText}\nexports;`, {
+    const api: NativeApi = runInNewContext(`${outputText}\n({ ...exports, downloadsIdle: () => downloads.size === 0 });`, {
         exports: {}, URL, AbortController, AbortSignal, Buffer, console: { error() {} },
         require: (name: string) => { assert.ok(name in mocks, name); return mocks[name]; },
         fetch: async (url: URL | string, options: RequestInit = {}) => {
@@ -91,6 +97,12 @@ async function fixture(t: { after(callback: () => Promise<void>): void; }, initi
     const attachment = { id: "123456789012345678", fileExtension: ".png",
         url: "https://media.discordapp.net/attachments/1/image.png", oldUrl: "https://cdn.discordapp.com/attachments/1/image.png" };
     return { root, api, attachment, settings, requests, event, fullReads: () => fullReads,
+        defer<T>(fallback: T) {
+            const pending = deferred<T>();
+            releases.push(() => pending.resolve(fallback));
+            return pending;
+        },
+        onTeardown: (release: () => void) => releases.push(release),
         respond: (callback: () => Response | Promise<Response>) => { responder = callback; },
         holdCleanup: (promise: Promise<void>) => cleanup = promise, cleanupStarted: () => cleanupStarted, fileWork: () => fileWork,
         holdUnlink: (promise: Promise<void>) => unlinkCleanup = promise, unlinkStarted: () => unlinkStarted,
@@ -118,6 +130,7 @@ test("native log attachments stream to a contained canonical filename without wh
 test("Native attachment requests coalesce and cancellation prevents late publication", async t => {
     const f = await fixture(t);
     let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
+    f.onTeardown(() => { if (stream) stream.close(); });
     f.respond(() => new Response(new ReadableStream<Uint8Array>({ start(controller) { stream = controller; } })));
     const first = f.download();
     const second = f.download();
@@ -127,6 +140,7 @@ test("Native attachment requests coalesce and cancellation prevents late publica
     assert.ok(stream);
     stream.enqueue(new Uint8Array([1, 2, 3]));
     stream.close();
+    stream = undefined;
     assert.ok((await first).error);
     assert.equal(f.requests.length, 1);
     assert.deepEqual(await fs.readdir(f.root), []);
@@ -257,13 +271,14 @@ function deferred<T>() {
 }
 
 async function until(predicate: () => boolean) {
-    for (let turn = 0; turn < 100 && !predicate(); turn++) await delay(1);
-    assert.ok(predicate(), "Expected native work to reach the controlled boundary.");
+    const deadline = Date.now() + 5000;
+    while (!predicate() && Date.now() < deadline) await delay(5);
+    assert.ok(predicate(), "Native work did not reach the expected boundary within five seconds.");
 }
 
 test("Sixteen legacy attachment calls admit only four physical downloads and one listener pair", async t => {
     const f = await fixture(t);
-    const response = deferred<Response>();
+    const response = f.defer(new Response());
     f.respond(() => response.promise.then(() => new Response("image")));
     const work = Array.from({ length: 16 }, (_, index) => f.download({ id: String(index + 1) }));
     try {
@@ -292,7 +307,8 @@ test("Sixteen legacy attachment calls admit only four physical downloads and one
 test("Senders share physical downloads and cancelling one leaves the other attached", async t => {
     const f = await fixture(t);
     const other = { sender: Object.assign(new EventEmitter(), { id: 2, isDestroyed: () => false }) };
-    const response = deferred<Response>();
+    f.onTeardown(() => f.api.cancelNativeAttachmentDownloads(other));
+    const response = f.defer(new Response());
     f.respond(() => response.promise);
     const first = f.download();
     const second = f.api.tryDownloadAttachment(other, f.attachment);
@@ -314,7 +330,7 @@ test("Senders share physical downloads and cancelling one leaves the other attac
 
 test("Physical capacity stays occupied through stalled file cleanup and waiters share one promise", async t => {
     const f = await fixture(t);
-    const cleanup = deferred<void>();
+    const cleanup = f.defer<void>(undefined);
     f.holdCleanup(cleanup.promise);
     const work = Array.from({ length: 4 }, (_, index) => f.download({ id: String(index + 1) }));
     await until(() => f.cleanupStarted() === 4);
@@ -335,7 +351,7 @@ test("Physical capacity stays occupied through stalled file cleanup and waiters 
 
 test("Cancelling the final owner holds admission until response and temporary file cleanup settle", async t => {
     const f = await fixture(t);
-    const response = deferred<Response>();
+    const response = f.defer(new Response());
     f.respond(() => response.promise.then(() => new Response("image")));
     const work = Array.from({ length: 4 }, (_, index) => f.download({ id: String(index + 1) }));
     await until(() => f.requests.length === 4);
@@ -353,7 +369,7 @@ test("Cancelling the final owner holds admission until response and temporary fi
 
 test("Changing the cache directory separates identical attachment IDs while old work settles", async t => {
     const f = await fixture(t);
-    const response = deferred<Response>();
+    const response = f.defer(new Response());
     f.respond(() => response.promise);
     const old = f.download();
     await until(() => f.requests.length === 1);
@@ -374,7 +390,7 @@ test("Changing the cache directory separates identical attachment IDs while old 
 
 test("Cold initialization keeps admission bounded and canonicalizes in-flight deduplication", async t => {
     const f = await fixture(t, false);
-    const response = deferred<Response>();
+    const response = f.defer(new Response());
     f.respond(() => response.promise.then(() => new Response("image")));
     const work = Array.from({ length: 4 }, (_, index) => f.download({ id: String(index + 1) }));
     assert.equal((await f.download({ id: "5" })).busy, true);
@@ -387,7 +403,7 @@ test("Cold initialization keeps admission bounded and canonicalizes in-flight de
 
 test("Failed downloads retain all slots until partial files have been removed", async t => {
     const f = await fixture(t);
-    const cleanup = deferred<void>();
+    const cleanup = f.defer<void>(undefined);
     f.holdUnlink(cleanup.promise);
     f.respond(() => new Response(new Uint8Array(101)));
     const work = Array.from({ length: 4 }, (_, index) => f.download({ id: String(index + 1) }));
@@ -407,7 +423,7 @@ test("Failed downloads retain all slots until partial files have been removed", 
 test("Different attachment extensions cannot reuse a pending or cached path", async t => {
     const f = await fixture(t);
     f.settings.attachmentFileExtensions = "png,webp";
-    const response = deferred<Response>();
+    const response = f.defer(new Response());
     f.respond(() => response.promise.then(() => new Response("image")));
     const png = f.download();
     const webp = f.download({ fileExtension: ".webp" });
@@ -423,7 +439,8 @@ test("Different attachment extensions cannot reuse a pending or cached path", as
 test("A renderer waiting only for capacity detaches on destruction without cancelling other owners", async t => {
     const f = await fixture(t);
     const other = { sender: Object.assign(new EventEmitter(), { id: 2, isDestroyed: () => false }) };
-    const response = deferred<Response>();
+    f.onTeardown(() => f.api.cancelNativeAttachmentDownloads(other));
+    const response = f.defer(new Response());
     f.respond(() => response.promise.then(() => new Response("image")));
     const work = Array.from({ length: 4 }, (_, index) => f.download({ id: String(index + 1) }));
     await until(() => f.requests.length === 4);
@@ -442,7 +459,7 @@ test("A renderer waiting only for capacity detaches on destruction without cance
 
 test("A directory selection supersedes cold initialization without losing active slot ownership", async t => {
     const f = await fixture(t, false);
-    const rootResolution = deferred<void>();
+    const rootResolution = f.defer<void>(undefined);
     f.holdRootResolution(rootResolution.promise);
     const old = f.download();
     await until(() => f.rootResolutions() === 1);
@@ -450,7 +467,7 @@ test("A directory selection supersedes cold initialization without losing active
     await fs.mkdir(next);
     f.chooseDirectory(next);
     await f.api.chooseDir(f.event, "imageCacheDir");
-    const response = deferred<Response>();
+    const response = f.defer(new Response());
     f.respond(() => response.promise.then(() => new Response("image")));
     const current = f.download();
     await until(() => f.requests.length === 1);
@@ -468,7 +485,7 @@ test("A directory selection supersedes cold initialization without losing active
 
 test("Destroying a sender during cold initialization cannot start its download", async t => {
     const f = await fixture(t, false);
-    const rootResolution = deferred<void>();
+    const rootResolution = f.defer<void>(undefined);
     f.holdRootResolution(rootResolution.promise);
     const work = f.download();
     await until(() => f.rootResolutions() === 1);
@@ -484,7 +501,7 @@ test("Destroying a sender during cold initialization cannot start its download",
 test("Cancellation during a settings read cannot publish a cached success", async t => {
     const f = await fixture(t);
     assert.equal((await f.download()).error, null);
-    const settingsRead = deferred<void>();
+    const settingsRead = f.defer<void>(undefined);
     f.holdSettingsRead(settingsRead.promise);
     const before = f.settingsReads();
     const work = f.download();
@@ -544,7 +561,7 @@ test("Real renderer preparation and database projection preserve the native fall
 test("A directory interruption retries the actual queued renderer payload under the new cache root", async t => {
     const f = await fixture(t);
     const renderer = await rendererJob(f);
-    const response = deferred<Response>();
+    const response = f.defer(new Response());
     f.respond(() => response.promise);
     const download = renderer.download();
     await until(() => f.requests.length === 1);

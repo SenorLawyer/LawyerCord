@@ -2,6 +2,14 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 4.1.3.0 - 2026-10-03 (Nightly)
+
+### Fixed
+
+- Run HopOn trigger matching in a separate worker so expensive regular expressions cannot freeze Discord. Matches that exceed the worker's time or queue limits do not open a URL.
+- Cancel pending HopOn matches when settings, accounts, or channels change, and keep its worker independent from automations.
+- Skip cancelled regex requests before starting a worker, preventing worker creation bursts when automations cancel many queued matches.
+
 ## 4.1.2.0 - 2026-10-03 (Nightly)
 
 ### Fixed

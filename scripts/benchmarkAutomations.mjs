@@ -34,6 +34,7 @@ async function engine(version) {
         stdin: { contents, loader: "ts", resolveDir: dirname(resolve(sourcePath)) },
         bundle: true, write: false, platform: "node", format: "cjs",
         plugins: [{ name: "benchmark-adapters", setup(build) {
+            build.onResolve({ filter: /^@utils\/regex$/ }, () => ({ path: resolve("src/utils/regex.ts") }));
             build.onResolve({ filter: /^@/ }, args => ({ path: args.path === "@api/DataStore" ? "storage" : "common", namespace: "mock" }));
             build.onResolve({ filter: /^\.\/spotify$/ }, () => ({ path: "common", namespace: "mock" }));
             build.onResolve({ filter: /^\.\/openRouter$/ }, () => ({ path: "openRouter", namespace: "mock" }));

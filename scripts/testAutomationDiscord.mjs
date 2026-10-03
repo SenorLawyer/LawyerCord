@@ -33,6 +33,7 @@ const bundled = await build({
     stdin: { contents: `${source}\nexport { externalBlock };export { createAutomation, createAutomationBlock, getAutomationVariableNames } from "./model";export { compileTriggers, matchTriggers } from "./events";export { normalizeClientEvents } from "./events";export { blockOutputs, validateWorkflow } from "./workflow";export { executeWorkflow } from "./runtime";`, loader: "ts", resolveDir: directory },
     bundle: true, write: false, platform: "node", format: "cjs",
     plugins: [{ name: "discord-fixtures", setup(build) {
+        build.onResolve({ filter: /^@utils\/regex$/ }, () => ({ path: resolve("src/utils/regex.ts") }));
         build.onResolve({ filter: /^@|^\.\/spotify$|^\.\/openRouter$/ }, args => ({ path: args.path === "@api/DataStore" ? "storage" : args.path === "./openRouter" ? "ai" : "common", namespace: "fixture" }));
         build.onLoad({ filter: /.*/, namespace: "fixture" }, args => ({ contents: args.path === "storage" ? storage : args.path === "ai" ? "export const completeOpenRouter=async()=>({});export const getAutomationAISettings=async()=>({});export const loadOpenRouterModels=async()=>[];" : common, loader: "js" }));
     } }],

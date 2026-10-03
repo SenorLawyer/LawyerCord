@@ -40,7 +40,7 @@ function imageFixture(web = false) {
             set: async (path: string, bytes: Uint8Array) => saved.push({ path, bytes }) },
         "@utils/misc": { sleep: async () => {} }, "../constants": { DEFAULT_IMAGE_CACHE_DIR: "images" },
         "../..": { Flogger: { error() {}, warn() {} }, settings: { store: { attachmentSizeLimitInMegabytes: 4 / 1024 / 1024 } },
-            Native: { getImageNative: async () => { nativeCalls++; return "native"; }, downloadAttachment: () => { nativeCalls++; return request; } } }
+            Native: { getImageNative: async () => { nativeCalls++; return "native"; }, tryDownloadAttachment: () => { nativeCalls++; return request; } } }
     }, { IS_WEB: web, fetch: async () => response() }) as {
         getImage(id: string): Promise<unknown>; downloadAttachment(attachment: object): Promise<string | undefined>; stopDownloads(): void;
     };
@@ -71,24 +71,18 @@ test("Stopping image work prevents late cache hydration and native publication",
     assert.equal(f.api.downloadAttachment(attachment), first);
     f.api.stopDownloads();
     request.resolve({ path: "old", error: null });
-    assert.equal(await first, undefined);
+    await assert.rejects(first, { name: "AbortError" });
 });
 
-test("Stopping a cache batch cannot start its remaining attachments under the new lifetime", async () => {
+test("Preparing images records eligible metadata without starting downloads", () => {
     const f = imageFixture();
-    const first = deferred<{ path: string; error: null; }>();
-    f.setRequest(first.promise);
-    const cache = load(process.env.AUDIT_CACHE_IMAGES_SOURCE ?? "src/equicordplugins/messageLoggerEnhanced/utils/saveImage/index.ts", {
-        "../..": { Flogger: { error() {} }, settings: { store: { attachmentSizeLimitInMegabytes: 1, attachmentFileExtensions: "png" } } },
+    const cache = load("src/equicordplugins/messageLoggerEnhanced/utils/saveImage/index.ts", {
+        "../..": { settings: { store: { attachmentSizeLimitInMegabytes: 1, attachmentFileExtensions: "png" } } },
         "./ImageManager": f.api
-    }, { URL, Blob }) as { cacheMessageImages(message: object): Promise<void>; };
+    }, { URL, Blob }) as { prepareMessageImages(message: object): string[]; };
     const attachments = ["1", "2"].map(id => ({ id, size: 3, filename: `${id}.png`, url: `https://cdn.discordapp.com/${id}.png`, proxy_url: `https://cdn.discordapp.com/${id}.png` }));
-    const work = cache.cacheMessageImages({ attachments });
-    assert.equal(f.counts().nativeCalls, 1);
-    f.api.stopDownloads();
-    first.resolve({ path: "stale", error: null });
-    await work;
-    assert.equal(f.counts().nativeCalls, 1);
+    assert.deepEqual(Array.from(cache.prepareMessageImages({ attachments })), ["1", "2"]);
+    assert.equal(f.counts().nativeCalls, 0);
     assert.ok(attachments.every(attachment => !("path" in attachment)));
 });
 
@@ -138,4 +132,40 @@ test("Database failures abort web log exports and release their writer", async (
     await f.api.exportLogs();
     assert.equal(f.aborted(), true);
     assert.equal(f.output.locked, false);
+});
+
+
+test("Completing a background attachment invalidates a previous missing image result", async () => {
+    let bytes: Uint8Array | null = null;
+    let reads = 0;
+    const cache = load("src/equicordplugins/messageLoggerEnhanced/utils/saveImage/index.ts", {
+        "../..": { settings: { store: {} } },
+        "./ImageManager": { getImage: async () => { reads++; return bytes; } }
+    }, { URL, Blob }) as { getAttachmentBlobUrl(attachment: object): Promise<string | null>; invalidateAttachmentBlobUrl(id: string): void; clearAttachmentBlobUrlCache(): void; };
+    const attachment = { id: "1", fileExtension: ".png" };
+    assert.equal(await cache.getAttachmentBlobUrl(attachment), null);
+    bytes = new Uint8Array([1]);
+    cache.invalidateAttachmentBlobUrl("1");
+    assert.match(await cache.getAttachmentBlobUrl(attachment) ?? "", /^blob:/);
+    assert.equal(reads, 2);
+    cache.clearAttachmentBlobUrlCache();
+});
+
+test("Both export targets omit internal attachment work while preserving the log format", async () => {
+    for (const web of [false, true]) {
+        const chunks: string[] = [];
+        const row = { message_id: "1", channel_id: "2", status: "DELETED", message: { id: "1" }, attachmentWork: { ownerId: "private", revision: "internal", pendingIds: ["3"] } };
+        const writable = new WritableStream<Uint8Array>({ write(bytes) { chunks.push(new TextDecoder().decode(bytes)); } });
+        const api = load("src/equicordplugins/messageLoggerEnhanced/utils/settingsUtils.ts", {
+            "@streamparser/json/jsonparser.js": {}, "@utils/web": {},
+            "@webpack/common": { Toasts: { genId() {}, show() {}, Type: { SUCCESS: "success" } } },
+            "native-file-system-adapter": { showSaveFilePicker: async () => ({ createWritable: async () => writable }) },
+            "..": { Native: { startNativeLogExport: async () => "stream", writeNativeLogChunk: async (_id: string, chunk: string) => chunks.push(chunk), finishNativeLogExport: async () => {}, cancelNativeLogExport: async () => {} } },
+            "../db": { iterateAllMessagesIDB: async function* () { yield [row]; } }
+        }, { IS_WEB: web, console }) as { exportLogs(): Promise<void>; };
+        await api.exportLogs();
+        const text = chunks.join("");
+        assert.ok(!text.includes("attachmentWork"));
+        assert.deepEqual(JSON.parse(text).messages, [[{ message_id: "1", channel_id: "2", status: "DELETED", message: { id: "1" } }]]);
+    }
 });

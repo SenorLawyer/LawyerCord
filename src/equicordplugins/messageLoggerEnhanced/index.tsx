@@ -29,6 +29,7 @@ import { hasWhitelistedId, shouldIgnore } from "./utils/index";
 import { LimitedMap } from "./utils/LimitedMap";
 import { doesMatch } from "./utils/parseQuery";
 import * as imageUtils from "./utils/saveImage";
+import { startAttachmentBacklog, stopAttachmentBacklog } from "./utils/saveImage/backlog";
 import * as ImageManager from "./utils/saveImage/ImageManager";
 export { settings };
 
@@ -38,6 +39,7 @@ export const cacheSentMessages = new LimitedMap<string, LoggedMessageJSON>();
 export const cl = classNameFactory("vc-msg-logger-enhanced-");
 
 let didClearLogsOnStartup = false;
+let ready = false;
 let generation = 0;
 let connectionGeneration = 0;
 let messageStoreOverride: typeof MessageStore.getMessage | undefined;
@@ -46,10 +48,11 @@ const cacheThing = findByPropsLazy("commit", "getOrCreate");
 
 function clearSession() {
     connectionGeneration++;
+    stopAttachmentBacklog();
     cacheSentMessages.clear();
     idb.clearMessageCache();
     ImageManager.stopDownloads();
-    void Promise.all([Native.cancelNativeLogExports(), Native.closeNativeLogImports(), Native.cancelNativeAttachmentDownloads()])
+    return Promise.all([Native.cancelNativeLogExports(), Native.closeNativeLogImports()])
         .catch(error => Flogger.error("Failed to close message log files", error));
 }
 
@@ -391,8 +394,12 @@ export default definePlugin({
         "MESSAGE_DELETE_BULK": messageDeleteBulkHandler,
         "MESSAGE_UPDATE": messageUpdateHandler,
         "MESSAGE_CREATE": messageCreateHandler,
-        "CONNECTION_OPEN"() {
-            clearSession();
+        async "CONNECTION_OPEN"() {
+            const clearing = clearSession();
+            const session = connectionGeneration;
+            await clearing;
+            const accountId = UserStore.getCurrentUser()?.id;
+            if (ready && session === connectionGeneration && accountId) startAttachmentBacklog(accountId);
         },
         "LOGOUT"() {
             clearSession();
@@ -445,9 +452,13 @@ export default definePlugin({
         settings.store.imageCacheDir = imageCacheDir;
         settings.store.logsDir = logsDir;
         settings.store.attachmentFileExtensions = attachmentFileExtensions ?? "none";
+        ready = true;
+        const accountId = UserStore.getCurrentUser()?.id;
+        if (accountId) startAttachmentBacklog(accountId);
     },
 
     stop() {
+        ready = false;
         generation++;
         if (MessageStore.getMessage === messageStoreOverride) MessageStore.getMessage = this.oldGetMessage;
         messageStoreOverride = undefined;

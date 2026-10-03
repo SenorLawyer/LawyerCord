@@ -16,11 +16,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { UserStore } from "@webpack/common";
+
 import { settings } from ".";
 import { addMessageIDB, db, DBMessageStatus, deleteMessagesBulkIDB, getOlderThanTimestampForGuildsIDB, getOldestMessagesIDB } from "./db";
 import { LoggedMessage, LoggedMessageJSON } from "./types";
 import { cleanupMessage } from "./utils";
-import { cacheMessageImages } from "./utils/saveImage";
+import { prepareMessageImages } from "./utils/saveImage";
 
 let lastCleanupTime = 0;
 const CLEANUP_COOLDOWN = 60 * 1000;
@@ -29,11 +31,12 @@ let cleanupPending = false;
 let cleanupChannelId: string | undefined;
 
 export const addMessage = async (message: LoggedMessage | LoggedMessageJSON, status: DBMessageStatus, currentChannelId?: string) => {
-    if (settings.store.saveImages && status === DBMessageStatus.DELETED)
-        await cacheMessageImages(message);
     const finalMessage = cleanupMessage(message);
-
-    await addMessageIDB(finalMessage, status);
+    const ownerId = UserStore.getCurrentUser()?.id;
+    const pendingIds = settings.store.saveImages && status === DBMessageStatus.DELETED && ownerId
+        ? prepareMessageImages(finalMessage) : [];
+    const attachmentWork = ownerId && pendingIds.length ? { ownerId, revision: crypto.randomUUID(), pendingIds } : undefined;
+    await addMessageIDB(finalMessage, status, attachmentWork);
 
     await cleanupMessages(currentChannelId);
 };

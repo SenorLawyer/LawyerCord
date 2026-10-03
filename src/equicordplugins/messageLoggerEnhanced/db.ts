@@ -7,12 +7,12 @@
 import { ChannelStore, Toasts } from "@webpack/common";
 import { DBSchema, IDBPDatabase, openDB } from "idb";
 
-import { LoggedMessageJSON } from "./types";
+import { LoggedAttachment, LoggedMessageJSON } from "./types";
 import { getMessageStatus } from "./utils";
 import { stripTransientRenderState } from "./utils/cleanUp";
 import { DB_NAME, DB_VERSION } from "./utils/constants";
 import { LimitedMap } from "./utils/LimitedMap";
-import { clearAttachmentBlobUrlCache, getAttachmentBlobUrl } from "./utils/saveImage";
+import { clearAttachmentBlobUrlCache, getAttachmentBlobUrl, invalidateAttachmentBlobUrl } from "./utils/saveImage";
 
 export enum DBMessageStatus {
     DELETED = "DELETED",
@@ -20,7 +20,27 @@ export enum DBMessageStatus {
     GHOST_PINGED = "GHOST_PINGED",
 }
 
+export interface AttachmentWork {
+    ownerId: string;
+    revision: string;
+    pendingIds: string[];
+}
+
+export interface AttachmentJob {
+    messageId: string;
+    ownerId: string;
+    revision: string;
+    attachment: Pick<LoggedAttachment, "id" | "url" | "oldUrl" | "fileExtension">;
+}
+
+export let attachmentWorkChanged: ((messageId?: string, hasWork?: boolean) => void) | undefined;
+
+export function setAttachmentWorkListener(listener: typeof attachmentWorkChanged) {
+    attachmentWorkChanged = listener;
+}
+
 export interface DBMessageRecord {
+    attachmentWork?: AttachmentWork;
     message_id: string;
     channel_id: string;
     status: DBMessageStatus;
@@ -217,7 +237,7 @@ export async function getMessagesByChannelAndAfterTimestampIDB(channel_id: strin
     return cacheRecords(messages, undefined, generation);
 }
 
-export async function addMessageIDB(message: LoggedMessageJSON, status: DBMessageStatus) {
+export async function addMessageIDB(message: LoggedMessageJSON, status: DBMessageStatus, attachmentWork?: AttachmentWork) {
     const generation = cacheGeneration;
     stripTransientRenderState(message);
 
@@ -227,7 +247,9 @@ export async function addMessageIDB(message: LoggedMessageJSON, status: DBMessag
         message_id: message.id,
         status,
         message,
+        attachmentWork,
     });
+    attachmentWorkChanged?.(message.id, Boolean(attachmentWork));
 
     if (generation === cacheGeneration) cachedMessages.set(message.id, message);
 }
@@ -250,6 +272,7 @@ export async function addMessagesBulkIDB(messages: LoggedMessageJSON[], status?:
         tx.done
     ]);
 
+    messages.forEach(message => attachmentWorkChanged?.(message.id));
     if (generation === cacheGeneration) messages.forEach(message => cachedMessages.set(message.id, message));
 }
 
@@ -280,6 +303,7 @@ export async function deleteMessageIDB(message_id: string) {
     await initIDB();
     await db.delete("messages", message_id);
 
+    attachmentWorkChanged?.(message_id);
     cachedMessages.delete(message_id);
 }
 
@@ -289,13 +313,17 @@ export async function deleteMessagesBulkIDB(message_ids: string[]) {
     const { store } = tx;
 
     await Promise.all([...message_ids.map(id => store.delete(id)), tx.done]);
-    message_ids.forEach(id => cachedMessages.delete(id));
+    message_ids.forEach(id => {
+        attachmentWorkChanged?.(id);
+        cachedMessages.delete(id);
+    });
 }
 
 export async function clearMessagesIDB(showToast = true) {
     await initIDB();
     clearMessageCache();
     await db.clear("messages");
+    attachmentWorkChanged?.();
     if (!showToast) return;
 
     Toasts.show({
@@ -303,4 +331,54 @@ export async function clearMessagesIDB(showToast = true) {
         message: "Cleared message log database and cache.",
         id: Toasts.genId()
     });
+}
+
+export async function getAttachmentWorkPage(ownerId: string, fromId?: string, throughId?: string) {
+    await initIDB();
+    const tx = db.transaction("messages");
+    let cursor = await tx.store.openCursor(fromId ? throughId ? IDBKeyRange.bound(fromId, throughId) : IDBKeyRange.lowerBound(fromId) : undefined);
+    let scanned = 0;
+    while (cursor && scanned++ < 100) {
+        const { attachmentWork, message, message_id } = cursor.value;
+        if (attachmentWork?.ownerId === ownerId) {
+            const attachment = message.attachments.find(attachment => attachmentWork.pendingIds.includes(attachment.id));
+            if (attachment) {
+                const job: AttachmentJob = {
+                    messageId: message_id,
+                    ownerId,
+                    revision: attachmentWork.revision,
+                    attachment: { id: attachment.id, url: attachment.url, oldUrl: attachment.oldUrl, fileExtension: attachment.fileExtension }
+                };
+                await tx.done;
+                return { job, nextId: message_id };
+            }
+        }
+        cursor = await cursor.continue();
+    }
+    const nextId = cursor?.primaryKey;
+    await tx.done;
+    return { job: undefined, nextId };
+}
+
+export async function completeAttachmentWork(job: AttachmentJob, path?: string, signal?: AbortSignal) {
+    const tx = db.transaction("messages", "readwrite");
+    const record = await tx.store.get(job.messageId);
+    const work = record?.attachmentWork;
+    if (!signal?.aborted && record && work?.ownerId === job.ownerId && work.revision === job.revision && work.pendingIds.includes(job.attachment.id)) {
+        const attachment = record.message.attachments.find(attachment => attachment.id === job.attachment.id);
+        if (attachment && path) attachment.path = path;
+        work.pendingIds = work.pendingIds.filter(id => id !== job.attachment.id);
+        if (!work.pendingIds.length) delete record.attachmentWork;
+        const cached = cachedMessages.get(job.messageId);
+        await tx.store.put(record);
+        await tx.done;
+        if (path) {
+            invalidateAttachmentBlobUrl(job.attachment.id);
+            if (cached && cachedMessages.get(job.messageId) === cached) {
+                const cachedAttachment = cached.attachments.find(attachment => attachment.id === job.attachment.id);
+                if (cachedAttachment) cachedAttachment.path = path;
+            }
+        }
+    }
+    await tx.done;
 }

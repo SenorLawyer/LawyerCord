@@ -90,7 +90,7 @@ export async function exportLogs() {
                     const prefix = first ? "" : ",\n";
                     first = false;
 
-                    const chunk = prefix + "    " + JSON.stringify(record);
+                    const chunk = prefix + "    " + JSON.stringify(record.map(({ channel_id, message_id, status, message }) => ({ channel_id, message_id, status, message })));
 
                     await Native.writeNativeLogChunk(streamId, chunk);
                 }
@@ -131,7 +131,7 @@ export async function exportLogs() {
                 for await (const records of iterateAllMessagesIDB()) {
                     const prefix = first ? "" : ",\n";
                     first = false;
-                    const chunk = prefix + "    " + JSON.stringify(records);
+                    const chunk = prefix + "    " + JSON.stringify(records.map(({ channel_id, message_id, status, message }) => ({ channel_id, message_id, status, message })));
                     await writer.write(encoder.encode(chunk));
                     count++;
                 }

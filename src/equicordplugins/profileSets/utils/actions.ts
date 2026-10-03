@@ -86,7 +86,7 @@ export function createPresetActions(storage: PresetStorage, signal?: AbortSignal
         recoverLegacy = false
     ) {
         const userId = UserStore.getCurrentUser()?.id;
-        if (!userId) return;
+        if (!userId || signal?.aborted) return;
         const originalPresets = storage.presets;
         const checkScope = () => {
             if (UserStore.getCurrentUser()?.id !== userId || storage.presets !== originalPresets)
@@ -99,20 +99,25 @@ export function createPresetActions(storage: PresetStorage, signal?: AbortSignal
                 importedPresets = await storage.readLegacyPresets();
             } else {
                 const file = await chooseFile("application/json");
-                if (!file) return;
-                importedPresets = JSON.parse(await file.text());
+                if (!file || signal?.aborted) return;
+                checkScope();
+                const text = await file.text();
+                if (signal?.aborted) return;
+                checkScope();
+                importedPresets = JSON.parse(text);
             }
+            if (signal?.aborted) return;
             checkScope();
 
             if (!isPresetList(importedPresets)) throw new Error("Invalid profile preset list.");
 
             const decision = recoverLegacy || storage.presets.length > 0 ? await onImportPrompt(storage.presets.length, recoverLegacy) : "override";
-            if (decision === "cancel") return;
+            if (decision === "cancel" || signal?.aborted) return;
             checkScope();
             await storage.savePresetsData(section, decision === "merge" ? [...storage.presets, ...importedPresets] : importedPresets);
-            forceUpdate();
+            if (!signal?.aborted) forceUpdate();
         } catch {
-            showToast("Could not import the profile presets. Reopen this panel before trying again.", Toasts.Type.FAILURE);
+            if (!signal?.aborted) showToast("Could not import the profile presets. Reopen this panel before trying again.", Toasts.Type.FAILURE);
         }
     }
 

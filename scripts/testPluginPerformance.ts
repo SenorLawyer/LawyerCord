@@ -11961,12 +11961,14 @@ test("sticker inspector derives its pack from the current hover", () => {
     let stateIndex = 0;
     const titles: unknown[] = [];
     const React = {
+        useMemo: (make: () => unknown) => make(), createContext: () => ({ Provider: "provider" }),
         createElement: (type: unknown, _props: unknown, ...children: unknown[]) => { if (type === "strong") titles.push(children[0]); return null; },
         useState: (initial: unknown) => [stateIndex++ === 0 ? hovered : initial, () => {}],
         useRef: () => ({ current: null }), useEffect() {}
     };
     const picker = loadSource("src/equicordplugins/moreStickers/components/picker.tsx", {
         "@equicordplugins/moreStickers/types": {},
+        "@utils/misc": { classes: (...values: unknown[]) => values.filter(Boolean).join(" ") },
         "@utils/react": { useAwaiter: () => [[]] },
         "@equicordplugins/moreStickers/upload": {}, "@equicordplugins/moreStickers/utils": { clPicker: () => "" },
         "@shared/debounce": { debounce: (callback: unknown) => callback }, "@webpack/common": { React },
@@ -11989,7 +11991,8 @@ test("sticker search uses the parent query and clears without delayed writes", (
     const TextInput = Symbol("TextInput");
     const CancelIcon = Symbol("CancelIcon");
     const picker = loadSource("src/equicordplugins/moreStickers/components/picker.tsx", {
-        "@equicordplugins/moreStickers/types": {}, "@equicordplugins/moreStickers/upload": {},
+        "@equicordplugins/moreStickers/types": {},
+        "@utils/misc": { classes: (...values: unknown[]) => values.filter(Boolean).join(" ") }, "@equicordplugins/moreStickers/upload": {},
         "@equicordplugins/moreStickers/utils": { clPicker: () => "" }, "@utils/react": {},
         "@webpack/common": { TextInput, React: { createElement: (type: unknown, props: never) => {
             if (type === TextInput) inputs.push(props);
@@ -12016,6 +12019,7 @@ test("recent sticker loads handle errors and ignore unmounted results", async ()
             const updates: { value?: unknown; error?: unknown; }[] = [];
             let notices = 0;
             const React = {
+                useMemo: (make: () => unknown) => make(), createContext: () => ({ Provider: "provider" }),
                 createElement: () => null, useRef: () => ({ current: null }),
                 useState: (initial: unknown) => [initial, (value: { value?: unknown; error?: unknown; }) => updates.push(value)],
                 useEffect: (effect: () => () => void) => effects.push(effect)
@@ -12023,7 +12027,8 @@ test("recent sticker loads handle errors and ignore unmounted results", async ()
             const shared = loadSource("src/utils/react.tsx", { "@webpack/common": { ...React, React }, "./misc": {}, "./lazyReact": {} });
             const recent = [{ id: "recent-sticker" }];
             const picker = loadSource("src/equicordplugins/moreStickers/components/picker.tsx", {
-                "@equicordplugins/moreStickers/types": {}, "@equicordplugins/moreStickers/upload": {},
+                "@equicordplugins/moreStickers/types": {},
+                "@utils/misc": { classes: (...values: unknown[]) => values.filter(Boolean).join(" ") }, "@equicordplugins/moreStickers/upload": {},
                 "@equicordplugins/moreStickers/utils": { clPicker: () => "" },
                 "@shared/debounce": { debounce: (callback: unknown) => callback }, "@utils/react": shared,
                 "@webpack/common": { React, showToast: () => notices++, Toasts: { Type: {} } }, "./categories": {}, "./icons": {},

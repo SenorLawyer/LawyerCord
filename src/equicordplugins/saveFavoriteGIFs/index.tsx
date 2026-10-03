@@ -17,6 +17,7 @@ import { Menu, UserSettingsActionCreators } from "@webpack/common";
 
 const logger = new Logger("SaveFavoriteGIFs");
 const MAX_GIF_CHECK_CONCURRENCY = 8;
+const activeChecks = new Set<AbortController>();
 
 async function saveContentToFile(content: string, filename: string) {
     try {
@@ -47,36 +48,35 @@ function getGifUrls(): string[] {
     return Object.keys(UserSettingsActionCreators.FrecencyUserSettingsActionCreators.getCurrentValue().favoriteGifs.gifs);
 }
 
-async function isGifReachable(url: string) {
-    try {
-        const response = await fetch(url, { method: "HEAD" });
-        if (response.ok) return true;
-    } catch {
-        return await isGifReachableByGet(url);
+async function isGifReachable(url: string, signal?: AbortSignal) {
+    for (const method of ["HEAD", "GET"]) {
+        if (signal?.aborted) return false;
+        let response: Response;
+        try {
+            response = await fetch(url, { method, signal });
+        } catch {
+            if (method === "GET") return false;
+            continue;
+        }
+        try {
+            if (response.ok) return !signal?.aborted;
+        } finally {
+            await response.body?.cancel().catch(error => logger.warn("Could not release a GIF check response.", error));
+        }
     }
-
-    return await isGifReachableByGet(url);
+    return false;
 }
 
-async function isGifReachableByGet(url: string) {
-    try {
-        const response = await fetch(url);
-        return response.ok;
-    } catch {
-        return false;
-    }
-}
-
-async function filterReachableGifs(gifUrls: string[]) {
+async function filterReachableGifs(gifUrls: string[], signal?: AbortSignal) {
     const reachable = new Array<boolean>(gifUrls.length).fill(false);
     let nextIndex = 0;
 
     async function worker() {
         for (;;) {
             const index = nextIndex++;
-            if (index >= gifUrls.length) return;
+            if (index >= gifUrls.length || signal?.aborted) return;
 
-            reachable[index] = await isGifReachable(gifUrls[index]);
+            reachable[index] = await isGifReachable(gifUrls[index], signal);
         }
     }
 
@@ -116,7 +116,15 @@ async function saveWorkingGifs() {
         body: `Testing ${gifUrls.length} GIFs.. This may take a moment...`,
     });
 
-    const workingUrls = await filterReachableGifs(gifUrls);
+    const controller = new AbortController();
+    activeChecks.add(controller);
+    let workingUrls: string[];
+    try {
+        workingUrls = await filterReachableGifs(gifUrls, controller.signal);
+    } finally {
+        activeChecks.delete(controller);
+    }
+    if (controller.signal.aborted) return;
 
     if (workingUrls.length === 0) {
         showNotification({ title: "Save Favorite GIFs", body: "None of your saved GIFs appear to be working." });
@@ -149,6 +157,9 @@ export default definePlugin({
     tags: ["Emotes", "Utility"],
     authors: [Devs.thororen],
     settings,
+    stop() {
+        for (const controller of activeChecks) controller.abort();
+    },
     commands: [
         {
             name: "savegifs",

@@ -2,7 +2,7 @@
 
 `package.json` is the source of truth for the LawyerCord version.
 
-The current source version is `4.3.0.0`, adding compression modes and faster media encoding to MediaCompressor. It includes the `4.0.0.0` Nightly audit from the audited Stable `3.0.1.0` baseline. The current Stable release version is `3.0.1.0`, including the `3.0.0.0` audit and update-channel fixes.
+The current source version is `4.3.1.0`, fixing frame timing across MediaCompressor's video encoding passes. It includes compression modes, faster media encoding and the `4.0.0.0` Nightly audit from the audited Stable `3.0.1.0` baseline. The current Stable release version is `3.0.1.0`, including the `3.0.0.0` audit and update-channel fixes.
 
 The current four-part format is retained for upstream compatibility:
 

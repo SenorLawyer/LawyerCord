@@ -49,6 +49,7 @@ try {
         let video;
         let animated;
         let rotated;
+        let trimmed;
         try {
             await MediaTest.loadFFmpeg(ff);
             if (await ff.exec(["-f", "lavfi", "-i", "testsrc2=size=320x180:rate=15:duration=3", "-f", "lavfi", "-i", "sine=frequency=440:duration=3", "-c:v", "libx264", "-crf", "8", "-threads", "1", "-c:a", "aac", "source.mp4"])) throw Error("Could not create the video fixture.");
@@ -57,8 +58,17 @@ try {
             rotated = new File([await ff.readFile("rotated.mp4")], "rotated.mp4", { type: "video/mp4" });
             if (await ff.exec(["-i", "source.mp4", "-t", "0.2", "-plays", "0", "-f", "apng", "animated.png"])) throw Error("Could not create the animation fixture.");
             animated = new File([await ff.readFile("animated.png")], "animated.png", { type: "image/png" });
+            if (await ff.exec(["-f", "lavfi", "-i", "testsrc2=size=320x180:rate=60:duration=4", "-f", "lavfi", "-i", "sine=frequency=440:duration=4", "-c:v", "libx264", "-crf", "8", "-threads", "1", "-c:a", "aac", "recording.mp4"])) throw Error("Could not create the recording fixture.");
+            if (await ff.exec(["-i", "recording.mp4", "-t", "3", "-map", "0", "-c", "copy", "trimmed.mp4"])) throw Error("Could not trim the recording fixture.");
+            trimmed = new File([await ff.readFile("trimmed.mp4")], "trimmed.mp4", { type: "video/mp4" });
         } finally { ff.terminate(); }
+        const trimmedResult = await MediaTest.compress(trimmed, 100000, new AbortController().signal, () => {}, "extreme");
         const element = document.createElement("video");
+        const trimmedUrl = URL.createObjectURL(trimmedResult);
+        element.src = trimmedUrl;
+        await new Promise((resolve, reject) => { element.onloadedmetadata = resolve; element.onerror = reject; });
+        const trimmedDuration = element.duration;
+        URL.revokeObjectURL(trimmedUrl);
         const videos = [];
         let compressedVideo;
         for (const mode of modes) {
@@ -93,7 +103,7 @@ try {
         try {
             await MediaTest.compress(video, 50000, controller.signal, status => { if (status.startsWith("Compressing video,")) controller.abort(); });
         } catch { cancelled = controller.signal.aborted; }
-        return { images, videos, portraitDimensions, hasAudio, animationRejected, cancelled };
+        return { images, videos, trimmedBytes: trimmedResult.size, trimmedDuration, portraitDimensions, hasAudio, animationRejected, cancelled };
     });
     for (const image of result.images) {
         assert.ok(image.bytes > 0 && image.bytes <= (image.mode === "extreme" ? 30000 : 60000) && image.width > 0);
@@ -103,6 +113,8 @@ try {
         assert.equal(video.analyses === 0, video.mode !== "extreme");
     }
     assert.equal(result.hasAudio, true);
+    assert.ok(result.trimmedBytes > 0 && result.trimmedBytes <= 50000);
+    assert.ok(result.trimmedDuration >= 3 && result.trimmedDuration < 3.1);
     assert.equal(result.animationRejected, true);
     assert.equal(result.cancelled, true);
     assert.deepEqual(result.portraitDimensions, [180, 320]);

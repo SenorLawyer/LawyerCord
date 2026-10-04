@@ -68,6 +68,9 @@ jobs:
                   pnpm testReleaseUpdates
                   pnpm testInstallerStaleMarkerRepair
 
+            - name: Test real browser media compression
+              run: CHROMIUM_BIN="$(command -v google-chrome)" pnpm testMediaCompressorBrowser
+
             - name: Lint
               run: |
                   pnpm lint

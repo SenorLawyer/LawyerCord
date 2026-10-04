@@ -2,7 +2,18 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
-## 4.2.0.0 - Unreleased
+## 4.3.0.0 - 2026-10-04 (Nightly)
+
+### Added
+
+- Choose Fast, Normal or Extreme compression in MediaCompressor. Show each attachment's target size before compression and its actual size and percentage saved afterward. Extreme targets half the available upload size.
+
+### Fixed
+
+- Skip the video analysis pass in Fast and Normal modes. Fast uses a cheaper encoder preset and more size headroom to reduce retries. Image compression uses bounded quality and resolution adjustments instead of repeated full quality searches.
+- Continue processing one file at a time in a single CPU worker, preserve originals on cancellation or failure, and leave compressed files in the draft for review.
+
+## 4.2.0.0 - 2026-10-04 (Nightly)
 
 ### Added
 

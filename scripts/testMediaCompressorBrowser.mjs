@@ -36,10 +36,14 @@ try {
         }
         context.putImageData(pixels, 0, 0);
         const image = new File([await canvas.convertToBlob({ type: "image/png" })], "image.png", { type: "image/png" });
-        const compressedImage = await MediaTest.compress(image, 60000, new AbortController().signal, () => {});
-        const bitmap = await createImageBitmap(compressedImage);
-        const imageWidth = bitmap.width;
-        bitmap.close();
+        const modes = ["fast", "normal", "extreme"];
+        const images = [];
+        for (const mode of modes) {
+            const output = await MediaTest.compress(image, 60000, new AbortController().signal, () => {}, mode);
+            const bitmap = await createImageBitmap(output);
+            images.push({ mode, bytes: output.size, width: bitmap.width });
+            bitmap.close();
+        }
 
         const ff = new MediaTest.FFmpeg();
         let video;
@@ -54,13 +58,19 @@ try {
             if (await ff.exec(["-i", "source.mp4", "-t", "0.2", "-plays", "0", "-f", "apng", "animated.png"])) throw Error("Could not create the animation fixture.");
             animated = new File([await ff.readFile("animated.png")], "animated.png", { type: "image/png" });
         } finally { ff.terminate(); }
-        const compressedVideo = await MediaTest.compress(video, 50000, new AbortController().signal, () => {});
         const element = document.createElement("video");
-        const url = URL.createObjectURL(compressedVideo);
-        element.src = url;
-        await new Promise((resolve, reject) => { element.onloadedmetadata = resolve; element.onerror = reject; });
-        const duration = element.duration;
-        URL.revokeObjectURL(url);
+        const videos = [];
+        let compressedVideo;
+        for (const mode of modes) {
+            let analyses = 0;
+            const output = await MediaTest.compress(video, 50000, new AbortController().signal, status => { if (status === "Analyzing video") analyses++; }, mode);
+            const url = URL.createObjectURL(output);
+            element.src = url;
+            await new Promise((resolve, reject) => { element.onloadedmetadata = resolve; element.onerror = reject; });
+            videos.push({ mode, bytes: output.size, duration: element.duration, analyses });
+            URL.revokeObjectURL(url);
+            if (mode === "normal") compressedVideo = output;
+        }
         const portrait = await MediaTest.compress(rotated, 50000, new AbortController().signal, () => {});
         const portraitUrl = URL.createObjectURL(portrait);
         element.src = portraitUrl;
@@ -81,12 +91,17 @@ try {
         const controller = new AbortController();
         let cancelled = false;
         try {
-            await MediaTest.compress(video, 50000, controller.signal, status => { if (status.startsWith("Analyzing video,")) controller.abort(); });
+            await MediaTest.compress(video, 50000, controller.signal, status => { if (status.startsWith("Compressing video,")) controller.abort(); });
         } catch { cancelled = controller.signal.aborted; }
-        return { image: [image.size, compressedImage.size, imageWidth], video: [video.size, compressedVideo.size, duration], portraitDimensions, hasAudio, animationRejected, cancelled };
+        return { images, videos, portraitDimensions, hasAudio, animationRejected, cancelled };
     });
-    assert.ok(result.image[0] > 60000 && result.image[1] <= 60000 && result.image[2] > 0);
-    assert.ok(result.video[0] > 50000 && result.video[1] <= 50000 && result.video[2] >= 3 && result.video[2] < 3.1);
+    for (const image of result.images) {
+        assert.ok(image.bytes > 0 && image.bytes <= (image.mode === "extreme" ? 30000 : 60000) && image.width > 0);
+    }
+    for (const video of result.videos) {
+        assert.ok(video.bytes > 0 && video.bytes <= (video.mode === "extreme" ? 25000 : 50000) && video.duration >= 3 && video.duration < 3.1);
+        assert.equal(video.analyses === 0, video.mode !== "extreme");
+    }
     assert.equal(result.hasAudio, true);
     assert.equal(result.animationRejected, true);
     assert.equal(result.cancelled, true);

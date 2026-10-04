@@ -8,9 +8,9 @@ import { Flex } from "@components/Flex";
 import { Paragraph } from "@components/Paragraph";
 import type { CloudUpload, RenderModalProps } from "@vencord/discord-types";
 import { CloudUploadPlatform } from "@vencord/discord-types/enums";
-import { CloudUploader, DraftType, FluxDispatcher, Humanize, Modal, UploadAttachmentStore, useEffect, UserStore, useState, useStateFromStores } from "@webpack/common";
+import { CloudUploader, DraftType, FluxDispatcher, Humanize, Modal, Select, UploadAttachmentStore, useEffect, UserStore, useState, useStateFromStores } from "@webpack/common";
 
-import { compress } from "./compress";
+import { compress, CompressionMode, compressionModes, targetSize } from "./compress";
 import { CompressionItem, getLimits } from "./index";
 
 interface CompressionModalProps extends RenderModalProps {
@@ -48,6 +48,7 @@ export function replaceFiles(channelId: string, items: CompressionItem[], result
 }
 
 export function CompressionModal({ channelId, items, controller, ...props }: CompressionModalProps) {
+    const [mode, setMode] = useState<CompressionMode>("normal");
     const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState("");
     const [error, setError] = useState("");
@@ -67,7 +68,7 @@ export function CompressionModal({ channelId, items, controller, ...props }: Com
         try {
             const files: File[] = [];
             for (const item of items) {
-                files.push(await compress(item.file, item.limit, controller.signal, text => setStatus(`${files.length + 1} of ${items.length}: ${text}`)));
+                files.push(await compress(item.file, item.limit, controller.signal, text => setStatus(`${files.length + 1} of ${items.length}: ${text}`), mode));
             }
             replaceFiles(channelId, items, files, userId, controller.signal);
             setResults(files);
@@ -89,9 +90,21 @@ export function CompressionModal({ channelId, items, controller, ...props }: Com
     >
         <Flex flexDirection="column" gap={12}>
             <Paragraph>{done ? "The compressed files have replaced the originals in your draft. Review them, then press Send when you are ready." : "These attachments exceed the available upload size. Compress them locally and keep your message as a draft?"}</Paragraph>
+            {!done && <Select
+                aria-label="Compression mode"
+                isDisabled={busy}
+                options={(["fast", "normal", "extreme"] as const).map(value => ({ label: compressionModes[value].label, value }))}
+                select={setMode}
+                isSelected={(value: CompressionMode) => value === mode}
+                serialize={(value: CompressionMode) => value}
+            />}
+            {!done && <Paragraph>{compressionModes[mode].description}</Paragraph>}
             {items.map((item, i) => <Paragraph key={item.upload.id}>
-                {item.upload.filename}: {Humanize.filesize(item.file.size)}. {done ? `Compressed to ${Humanize.filesize(results[i].size)}.` : `Available: ${Humanize.filesize(item.limit)}.`}
+                {item.upload.filename}: {Humanize.filesize(item.file.size)}. {done
+                    ? `Compressed to ${Humanize.filesize(results[i].size)}. Saved ${Math.round((1 - results[i].size / item.file.size) * 100)}%.`
+                    : `Target: up to ${Humanize.filesize(targetSize(item.limit, mode))}. Allowed: ${Humanize.filesize(item.limit)}.`}
             </Paragraph>)}
+            {!done && <Paragraph>Video sizes should be close to the target. Image sizes depend on their content. The exact size is shown when compression finishes.</Paragraph>}
             {!done && <Paragraph>Images become WebP. Videos and GIFs become MP4. Compression may reduce quality or resolution. Animated formats that cannot be preserved will stay unchanged.</Paragraph>}
             {!done && <Paragraph>Files stay on your device during compression. This can take several minutes. Cancel at any time.</Paragraph>}
             {busy && <div role="status" aria-live="polite"><Paragraph>{status}</Paragraph></div>}

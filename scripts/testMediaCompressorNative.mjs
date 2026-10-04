@@ -34,7 +34,7 @@ try {
     const other = { senderFrame: {}, sender: new EventEmitter() };
     const id = randomUUID();
     const begin = (key = id, overrides = {}) => native.begin(event, key, overrides.name ?? "recording.mp4", "video/mp4", overrides.size ?? 10, overrides.limit ?? 4096, overrides.mode ?? "fast");
-    for (const bad of [{ size: -1 }, { size: Infinity }, { size: 2 ** 32 }, { limit: NaN }, { limit: 10 }, { mode: "__proto__" }, { name: "movie.m3u8" }])
+    for (const bad of [{ size: -1 }, { size: Infinity }, { size: 2 ** 32 }, { limit: NaN }, { limit: 10 }, { mode: "__proto__" }, { name: "" }])
         assert.ok((await begin(randomUUID(), bad)).error);
     assert.ok((await begin("../escape")).error);
     assert.equal((await begin()).available, true);
@@ -57,6 +57,15 @@ try {
     assert.equal((await readdir(join(root, "mediaCompressor", "jobs"))).length, 0);
     assert.equal(event.sender.listenerCount("destroyed"), 0);
     assert.equal(event.sender.listenerCount("render-process-gone"), 0);
+    const navigationId = randomUUID();
+    assert.equal((await begin(navigationId, { name: "clipboard" })).available, true);
+    const navigate = event.sender.listeners("did-start-navigation")[0];
+    await navigate({}, "https://discord.com/channels/@me", true, true);
+    assert.ok(await native.status(event, navigationId));
+    await navigate({}, "https://discord.com/channels/@me", false, true);
+    assert.equal(await native.status(event, navigationId), null);
+    assert.equal(event.sender.listenerCount("did-start-navigation"), 0);
+    assert.equal((await readdir(join(root, "mediaCompressor", "jobs"))).length, 0);
     assert.deepEqual((await hardwareCandidates("darwin")).map(c => c.codec), ["h264_videotoolbox"]);
     assert.deepEqual((await hardwareCandidates("win32")).map(c => c.codec), ["h264_nvenc", "h264_amf", "h264_qsv"]);
     const controller = new AbortController();

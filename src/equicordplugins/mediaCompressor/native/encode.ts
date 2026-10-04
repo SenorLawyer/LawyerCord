@@ -61,7 +61,7 @@ export async function compressFile(binary: string, directory: string, input: str
         deleteFile: path => rm(join(directory, path), { force: true })
     };
     const listed = await run(binary, ["-hide_banner", "-encoders"], directory, signal);
-    const still = /\.(png|jpe?g|webp|avif|bmp|tiff?)$/i.test(name);
+    const still = /^image\/(jpeg|png|webp|avif|bmp|tiff)$/.test(type) || /\.(png|jpe?g|webp|avif|bmp|tiff?)$/i.test(name);
     const hardware = still ? [] : candidates ?? await hardwareCandidates(process.platform);
     for (const candidate of hardware) {
         if (!listed.output.includes(candidate.codec)) continue;

@@ -31,6 +31,7 @@ interface Job {
     controller: AbortController;
     timer: ReturnType<typeof setTimeout>;
     cleanup: () => void;
+    navigate: (_event: unknown, url: string, sameDocument: boolean, mainFrame: boolean) => void;
     pending: Promise<unknown> | null;
     phase: "setup" | "input" | "encoding" | "done";
     data?: Uint8Array;
@@ -51,6 +52,7 @@ async function dispose(id: string, job: Job) {
     clearTimeout(job.timer);
     job.sender.removeListener("destroyed", job.cleanup);
     job.sender.removeListener("render-process-gone", job.cleanup);
+    job.sender.removeListener("did-start-navigation", job.navigate);
     await job.pending;
     await rm(job.directory, { recursive: true, force: true }).catch(() => logger.warn("Could not remove temporary compression files."));
     jobs.delete(id);
@@ -59,22 +61,26 @@ async function dispose(id: string, job: Job) {
 export async function begin(event: IpcMainInvokeEvent, id: unknown, name: unknown, type: unknown, size: unknown, limit: unknown, mode: unknown): Promise<{ available: boolean; error?: string; }> {
     const owner = event.senderFrame;
     if (!owner || typeof id !== "string" || !/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(id)
-        || typeof name !== "string" || name.length > 1024 || !/\.(png|jpe?g|webp|gif|avif|bmp|tiff?|heic|heif|mp4|m4v|mov|webm|mkv|avi)$/i.test(name)
-        || typeof type !== "string" || type.length > 128 || typeof size !== "number" || !Number.isSafeInteger(size) || size <= 0 || size > 2 * 1024 ** 3
+        || typeof name !== "string" || !name.length || name.length > 1024 || typeof type !== "string" || type.length > 128
+        || !(type.startsWith("image/") || type.startsWith("video/") || /\.(png|jpe?g|webp|gif|avif|bmp|tiff?|heic|heif|mp4|m4v|mov|webm|mkv|avi)$/i.test(name))
+        || typeof size !== "number" || !Number.isSafeInteger(size) || size <= 0 || size > 2 * 1024 ** 3
         || typeof limit !== "number" || !Number.isSafeInteger(limit) || limit < 1024 || limit > 1024 ** 3 || typeof mode !== "string" || !["fast", "normal", "extreme"].includes(mode))
         return { available: false, error: "This attachment cannot be processed by the native encoder." };
     if (jobs.size > 0)
         return { available: false, error: "Another attachment is still being compressed." };
     const directory = join(DATA_DIR, "mediaCompressor", "jobs", randomUUID());
-    const cleanup = () => { void dispose(id, job); };
+    const cleanup = () => dispose(id, job);
+    const navigate = (_event: unknown, _url: string, sameDocument: boolean, mainFrame: boolean) => { if (!sameDocument && mainFrame) return cleanup(); };
+    const extension = /\.(png|jpe?g|webp|gif|avif|bmp|tiff?|heic|heif|mp4|m4v|mov|webm|mkv|avi)$/i.exec(name)?.[0] ?? ".bin";
     const job: Job = {
-        owner, sender: event.sender, directory, input: join(directory, `input${name.slice(name.lastIndexOf(".")).toLowerCase()}`),
+        owner, sender: event.sender, directory, input: join(directory, `input${extension.toLowerCase()}`),
         binary: "", name, type, size, limit, mode: mode as CompressionMode, bytes: 0, status: "Preparing the native encoder",
-        controller: new AbortController(), timer: setTimeout(cleanup, 5 * 60_000), cleanup, pending: null, phase: "setup"
+        controller: new AbortController(), timer: setTimeout(cleanup, 5 * 60_000), cleanup, navigate, pending: null, phase: "setup"
     };
     jobs.set(id, job);
     event.sender.once("destroyed", cleanup);
     event.sender.once("render-process-gone", cleanup);
+    event.sender.on("did-start-navigation", navigate);
     const result = (async () => {
         try {
             await mkdir(directory, { recursive: true, mode: 0o700 });

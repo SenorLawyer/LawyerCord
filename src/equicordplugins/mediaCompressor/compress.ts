@@ -7,6 +7,17 @@
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { loadFFmpeg } from "@utils/ffmpeg";
 
+export const compressionModes = {
+    fast: { label: "Fast", description: "Finish sooner, with less detail. Large videos are resized.", preset: "ultrafast", edge: 1280, quality: 75, effort: 1, ratio: 1 },
+    normal: { label: "Normal", description: "Balance speed and quality. Use the available upload size.", preset: "veryfast", edge: Infinity, quality: 90, effort: 4, ratio: 1 },
+    extreme: { label: "Extreme", description: "Aim for half the available size. Expect less detail and a longer wait.", preset: "fast", edge: 854, quality: 60, effort: 5, ratio: 0.5 }
+} as const;
+export type CompressionMode = keyof typeof compressionModes;
+
+export function targetSize(limit: number, mode: CompressionMode) {
+    return Math.floor(limit * compressionModes[mode].ratio);
+}
+
 export function isMedia(file: File) {
     return /^(image|video)\//.test(file.type) || /\.(?:png|jpe?g|webp|gif|avif|bmp|tiff?|heic|heif|mp4|m4v|mov|webm|mkv|avi)$/i.test(file.name);
 }
@@ -19,8 +30,10 @@ export function videoBudget(bytes: number, duration: number) {
     return { video: total - audio, audio: Math.max(8_000, audio) };
 }
 
-export async function compress(file: File, limit: number, signal: AbortSignal, progress: (status: string) => void): Promise<File> {
+export async function compress(file: File, limit: number, signal: AbortSignal, progress: (status: string) => void, mode: CompressionMode = "normal"): Promise<File> {
     signal.throwIfAborted();
+    const options = compressionModes[mode];
+    limit = targetSize(limit, mode);
     const ff = new FFmpeg();
     const abort = () => ff.terminate();
     signal.addEventListener("abort", abort, { once: true });
@@ -71,39 +84,40 @@ export async function compress(file: File, limit: number, signal: AbortSignal, p
         }
         if (still) {
             phase = "Compressing image";
-            progress("Trying lossless compression");
-            const lossless = await encode(["-frames:v", "1", "-c:v", "libwebp", "-lossless", "1", "-compression_level", "4", "-threads", "1"]);
-            if (lossless.size <= limit) return lossless;
-            for (let scale = 1; scale >= 0.2; scale *= 0.75) {
-                let low = 40;
-                let high = 100;
-                let best: File | undefined;
-                for (let attempt = 0; attempt < 7 && low <= high; attempt++) {
-                    const quality = Math.ceil((low + high) / 2);
-                    progress(`Finding image quality, ${Math.round(scale * 100)}% resolution`);
-                    const result = await encode(["-vf", `scale=iw*${scale}:ih*${scale}`, "-frames:v", "1", "-c:v", "libwebp", "-q:v", String(quality), "-compression_level", "4", "-threads", "1"]);
-                    if (result.size <= limit) { best = result; low = quality + 1; }
-                    else high = quality - 1;
-                }
-                if (best) return best;
+            if (mode === "normal") {
+                progress("Trying lossless compression");
+                const lossless = await encode(["-frames:v", "1", "-c:v", "libwebp", "-lossless", "1", "-compression_level", "4", "-threads", "1"]);
+                if (lossless.size <= limit) return lossless;
+            }
+            let scale = 1;
+            let { quality } = options;
+            for (let attempt = 0; attempt < 6; attempt++) {
+                progress(`Compressing image, ${Math.round(scale * 100)}% resolution`);
+                const result = await encode(["-vf", `scale='max(1,trunc(iw*${scale}))':'max(1,trunc(ih*${scale}))'`, "-frames:v", "1", "-c:v", "libwebp", "-q:v", String(quality), "-compression_level", String(options.effort), "-threads", "1"]);
+                if (result.size <= limit) return result;
+                if (mode === "normal" && quality > 60) quality -= 15;
+                else scale *= Math.min(0.9, Math.sqrt(limit / result.size) * 0.95);
             }
         } else {
             if (!duration) throw new Error("The video duration could not be read. Your original file is still attached.");
-            const budget = videoBudget(limit, duration);
+            const budget = videoBudget(limit * (mode === "fast" ? 0.85 : mode === "extreme" ? 0.9 : 1), duration);
+            let { video } = budget;
             for (let attempt = 0; attempt < 3; attempt++) {
-                const video = Math.floor(budget.video * 0.85 ** attempt);
                 const edge = video < 300_000 ? 480 : video < 800_000 ? 854 : video < 2_000_000 ? 1280 : Math.max(width, height);
-                const bound = Math.min(edge, Math.max(width, height));
-                const codec = ["-map", "0:v:0", "-vf", `scale=${bound}:${bound}:force_original_aspect_ratio=decrease:force_divisible_by=2`, "-c:v", "libx264", "-preset", "veryfast", "-b:v", String(video), "-pix_fmt", "yuv420p", "-threads", "1", "-passlogfile", "encode"];
-                phase = "Analyzing video";
-                progress(phase);
-                if (await ff.exec(["-y", ...input, ...codec, "-pass", "1", "-an", "-f", "null", "/dev/null"], 30 * 60_000) !== 0)
-                    throw new Error("This video could not be analyzed. Your original file is still attached.");
+                const bound = Math.min(edge, options.edge, Math.max(width, height));
+                const codec = ["-map", "0:v:0", "-vf", `scale=${bound}:${bound}:force_original_aspect_ratio=decrease:force_divisible_by=2`, "-c:v", "libx264", "-preset", options.preset, "-b:v", String(video), "-pix_fmt", "yuv420p", "-threads", "1", "-passlogfile", "encode"];
+                if (mode === "extreme") {
+                    phase = "Analyzing video";
+                    progress(phase);
+                    if (await ff.exec(["-y", ...input, ...codec, "-pass", "1", "-an", "-f", "null", "/dev/null"], 30 * 60_000) !== 0)
+                        throw new Error("This video could not be analyzed. Your original file is still attached.");
+                }
                 signal.throwIfAborted();
                 phase = "Compressing video";
                 progress(phase);
-                const result = await encode([...codec, "-pass", "2", "-map", "0:a:0?", "-c:a", "aac", "-b:a", String(budget.audio), "-ac", "2", "-movflags", "+faststart"]);
+                const result = await encode([...codec, ...mode === "extreme" ? ["-pass", "2"] : [], "-map", "0:a:0?", "-c:a", "aac", "-b:a", String(budget.audio), "-ac", "2", "-movflags", "+faststart"]);
                 if (result.size <= limit) return result;
+                video = Math.floor(video * Math.min(0.85, limit / result.size * 0.9));
             }
         }
         throw new Error("This file could not fit within the limit. Your original file is still attached.");

@@ -18,7 +18,7 @@ interface UploadEvent {
     items?: unknown;
 }
 
-function fixture() {
+function fixture(compressorEnabled = false) {
     const path = process.env.AUDIT_FILE_INTERCEPTION_SOURCE ?? "src/equicordplugins/fileUpload/index.tsx";
     const { outputText } = transpileModule(readFileSync(path, "utf8"), {
         fileName: path, compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022, jsx: JsxEmit.ReactJSX }
@@ -33,6 +33,8 @@ function fixture() {
     const listeners = new Map<string, unknown>();
     const modules: Record<string, unknown> = {
         "./styles.css": {}, "@api/ContextMenu": {}, "react/jsx-runtime": {},
+        "@api/PluginManager": { isPluginEnabled: () => compressorEnabled },
+        "@equicordplugins/mediaCompressor/compress": { isMedia: (file: File) => /^(image|video)\//.test(file.type) },
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@components/Icons": {}, "@utils/constants": { Devs: {}, EquicordDevs: {} },
         "@utils/css": { classNameFactory: () => () => "" },
@@ -60,6 +62,15 @@ function fixture() {
     }) as { plugin: { start(): void; stop(): void; shouldBypassDiscordUploadSizeCheck(): boolean; }; interceptUploadAddFiles(event: UploadEvent): void; handlePaste(event: object): void; };
     return { ...exports, restored, fail: (files: File[]) => fail?.(files), switchAccount: () => account = "other", uploaded, listeners, interceptors, setBusy: () => { busy = true; }, get cancellations() { return cancellations; } };
 }
+
+test("MediaCompressor keeps media local when FileUpload automatic interception is enabled", () => {
+    const f = fixture(true);
+    const file = new File(["image"], "photo.png", { type: "image/png" });
+    const event = { type: "UPLOAD_ATTACHMENT_ADD_FILES", draftType: 0, files: [file] };
+    f.interceptUploadAddFiles(event);
+    assert.equal(event.files[0], file);
+    assert.equal(f.uploaded.length, 0);
+});
 
 test("FileUpload retains disallowed files and wrapper metadata while intercepting each allowed file once", () => {
     const f = fixture();

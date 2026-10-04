@@ -7,8 +7,10 @@
 import "./styles.css";
 
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
+import { isPluginEnabled } from "@api/PluginManager";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { OpenExternalIcon } from "@components/Icons";
+import { isMedia } from "@equicordplugins/mediaCompressor/compress";
 import { Devs, EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import definePlugin from "@utils/types";
@@ -86,6 +88,8 @@ function interceptUploadAddFiles(event: unknown): void {
     ];
     const uniqueFiles = Array.from(new Set(files)).filter(f => isFileTypeAllowed(f));
 
+    if (isPluginEnabled("MediaCompressor") && files.some(isMedia)) return;
+
     if (!uniqueFiles.length) return;
     if (!shouldInterceptUploadFiles(uniqueFiles, payload)) return;
 
@@ -124,6 +128,7 @@ function restoreFiles(payload: UploadAddFilesEvent, failed: readonly File[], use
 function handlePaste(event: ClipboardEvent) {
     const files = Array.from(event.clipboardData?.files || []);
     if (files.length === 0) return;
+    if (isPluginEnabled("MediaCompressor") && files.some(isMedia)) return;
 
     if (!settings.store.autoUploadPastedFiles || isUploadInProgress() || !isConfigured()) return;
 

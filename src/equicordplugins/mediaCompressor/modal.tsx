@@ -106,7 +106,7 @@ export function CompressionModal({ channelId, items, controller, ...props }: Com
             </Paragraph>)}
             {!done && <Paragraph>Video sizes should be close to the target. Image sizes depend on their content. The exact size is shown when compression finishes.</Paragraph>}
             {!done && <Paragraph>Images become WebP. Videos and GIFs become MP4. Compression may reduce quality or resolution. Animated formats that cannot be preserved will stay unchanged.</Paragraph>}
-            {!done && <Paragraph>Files stay on your device during compression. This can take several minutes. Cancel at any time.</Paragraph>}
+            {!done && <Paragraph>Files stay on your device. Desktop builds automatically use native encoding and supported video hardware. The encoder may download once on first use. Browser builds use a slower local fallback. Cancel at any time.</Paragraph>}
             {busy && <div role="status" aria-live="polite"><Paragraph>{status}</Paragraph></div>}
         </Flex>
     </Modal>;

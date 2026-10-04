@@ -93,7 +93,7 @@ export default definePlugin({
     authors: [EquicordDevs.SenorLawyer],
     tags: ["Media", "Utility"],
     dependencies: ["MessageEventsAPI"],
-    performance: { impact: "low", description: "Compresses one file at a time in a single CPU worker when requested." },
+    performance: { impact: "low", description: "Compresses one file at a time using supported video hardware or a limited number of CPU threads." },
     patches: [
         {
             find: "Unexpected mismatch between files and file metadata",

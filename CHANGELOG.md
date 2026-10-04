@@ -2,6 +2,13 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 4.2.0.0 - Unreleased
+
+### Added
+
+- Add MediaCompressor to stage images and videos locally in message drafts and offer compression when Send is pressed. It reads Discord's account, channel and combined attachment limits, processes one file at a time, and leaves compressed replacements in the draft for review before sending.
+- Preserve attachment order, spoiler flags, descriptions and edited filenames. Cancel compression without replacing originals, and stop automatic FileUpload hosting from intercepting media while MediaCompressor is enabled.
+
 ## 4.1.4.0 - 2026-10-03 (Nightly)
 
 ### Fixed

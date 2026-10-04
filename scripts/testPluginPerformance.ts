@@ -9458,6 +9458,8 @@ test("Draft attachments remain until their upload succeeds", async () => {
     let removed = 0;
     const draft = loadSource("src/equicordplugins/fileUpload/index.tsx", {
         "@api/ContextMenu": {},
+        "@api/PluginManager": { isPluginEnabled: () => false },
+        "@equicordplugins/mediaCompressor/compress": {},
         "@components/ErrorBoundary": { __esModule: true, default: { wrap: (component: unknown) => component } },
         "@components/Icons": {}, "@utils/constants": { Devs: {}, EquicordDevs: {} },
         "@utils/css": { classNameFactory: () => () => "" },

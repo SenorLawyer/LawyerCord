@@ -58,6 +58,7 @@ jobs:
                   pnpm testExtensionInstall
                   pnpm testSettingsSync
                   pnpm testMessageEventsPriority
+                  pnpm testMediaCompressor
                   pnpm testAutomations
                   pnpm testDiscordMcp
                   pnpm testReleaseArtifactAudit

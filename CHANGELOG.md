@@ -2,6 +2,13 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 4.4.0.0 - 2026-10-05 (Nightly)
+
+### Added
+
+- MediaCompressor now uses native FFmpeg on Windows, macOS and Linux, automatically checking NVIDIA NVENC, AMD AMF, Intel Quick Sync, Apple VideoToolbox and Linux VAAPI. Unsupported or failed hardware falls back to native CPU encoding. Browser builds retain local browser compression.
+- Download and verify a pinned native encoder on first use when FFmpeg is not installed. Windows x64 and ARM64 through x64 emulation, macOS Intel and Apple Silicon, and Linux x64 and ARM64 have automatic downloads. Compression stays local, uses one attachment at a time, limits CPU threads, supports cancellation and leaves messages as drafts.
+
 ## 4.3.1.0 - 2026-10-04 (Nightly)
 
 ### Fixed

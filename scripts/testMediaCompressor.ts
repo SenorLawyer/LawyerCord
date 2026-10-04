@@ -58,13 +58,14 @@ function fixture() {
             closeModal: () => modalClose?.()
         },
         "@vencord/discord-types/enums": { CloudUploadPlatform: { WEB: 1 } },
-        "@ffmpeg/ffmpeg": {}, "@utils/ffmpeg": {},
+        "@ffmpeg/ffmpeg": {}, "@utils/ffmpeg": {}, "./bridge": {}, "./encode": {},
         "./modal": { CompressionModal: () => null }
     };
     function load(path: string) {
         const code = transformSync(readFileSync(`src/equicordplugins/mediaCompressor/${path}`, "utf8"), { loader: path.endsWith("tsx") ? "tsx" : "ts", format: "cjs" }).code;
         return runInNewContext(`${code};module.exports`, { module: { exports: {} }, File, AbortController, Map, Number, Error, require: (id: string) => { assert.ok(id in modules, id); return modules[id]; } });
     }
+    modules["./policy"] = load("policy.ts");
     const compressor = load("compress.ts") as typeof import("../src/equicordplugins/mediaCompressor/compress");
     modules["./compress"] = compressor;
     const index = load("index.tsx") as typeof import("../src/equicordplugins/mediaCompressor");

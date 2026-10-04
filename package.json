@@ -1,7 +1,7 @@
 {
     "name": "lawyercord",
     "private": true,
-    "version": "4.3.1.0",
+    "version": "4.4.0.0",
     "description": "LawyerCord, a Discord client mod",
     "license": "GPL-3.0-or-later",
     "author": "LawyerCord contributors",
@@ -34,7 +34,7 @@
         "lint:intl": "node scripts/lintIntl.mjs",
         "lint:patches": "node scripts/lintPatches.mjs",
         "testPrimaryStreamAudio": "tsx scripts/testPrimaryStreamAudio.ts",
-        "testMediaCompressor": "tsx --test scripts/testMediaCompressor.ts scripts/testFileUploadInterception.ts",
+        "testMediaCompressor": "tsx --test scripts/testMediaCompressor.ts scripts/testFileUploadInterception.ts && node scripts/testMediaCompressorNative.mjs",
         "testMediaCompressorBrowser": "node scripts/testMediaCompressorBrowser.mjs",
         "testNewPluginsManager": "tsx scripts/testNewPluginsManager.ts",
         "testClientsideGuildIcons": "tsx scripts/testClientsideGuildIcons.ts",

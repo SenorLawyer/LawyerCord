@@ -11,7 +11,7 @@ import puppeteer from "puppeteer-core";
 
 const bundle = await build({
     stdin: { contents: 'export {compress} from "./src/equicordplugins/mediaCompressor/compress"; export {loadFFmpeg} from "./src/utils/ffmpeg"; export {FFmpeg} from "@ffmpeg/ffmpeg";', resolveDir: process.cwd(), loader: "ts" },
-    bundle: true, platform: "browser", format: "iife", globalName: "MediaTest", write: false
+    define: { IS_WEB: "true" }, bundle: true, platform: "browser", format: "iife", globalName: "MediaTest", write: false
 });
 const server = createServer((request, response) => {
     response.setHeader("Content-Type", request.url === "/bundle.js" ? "text/javascript" : "text/html");

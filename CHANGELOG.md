@@ -2,6 +2,12 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 4.3.1.0 - 2026-10-04 (Nightly)
+
+### Fixed
+
+- Preserve video frame timestamps across compression passes so trimmed recordings do not fail near the end with incomplete encoder statistics. Add a real browser regression using a trimmed 60 FPS recording with audio.
+
 ## 4.3.0.0 - 2026-10-04 (Nightly)
 
 ### Added

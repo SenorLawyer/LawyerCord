@@ -105,7 +105,7 @@ export async function compress(file: File, limit: number, signal: AbortSignal, p
             for (let attempt = 0; attempt < 3; attempt++) {
                 const edge = video < 300_000 ? 480 : video < 800_000 ? 854 : video < 2_000_000 ? 1280 : Math.max(width, height);
                 const bound = Math.min(edge, options.edge, Math.max(width, height));
-                const codec = ["-map", "0:v:0", "-vf", `scale=${bound}:${bound}:force_original_aspect_ratio=decrease:force_divisible_by=2`, "-c:v", "libx264", "-preset", options.preset, "-b:v", String(video), "-pix_fmt", "yuv420p", "-threads", "1", "-passlogfile", "encode"];
+                const codec = ["-map", "0:v:0", "-vf", `scale=${bound}:${bound}:force_original_aspect_ratio=decrease:force_divisible_by=2`, "-fps_mode", "passthrough", "-c:v", "libx264", "-preset", options.preset, "-b:v", String(video), "-pix_fmt", "yuv420p", "-threads", "1", "-passlogfile", "encode"];
                 if (mode === "extreme") {
                     phase = "Analyzing video";
                     progress(phase);

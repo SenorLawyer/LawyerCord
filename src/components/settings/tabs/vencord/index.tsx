@@ -57,7 +57,7 @@ function Switches() {
         !IS_WEB && {
             key: "enableReactDevtools",
             title: "Enable React Developer Tools",
-            description: "Enable the React Developer Tools extension for debugging Discord's React components. Useful for plugin development.",
+            description: "Enable the React Developer Tools extension for debugging Discord's React components. Useful for plugin development. It runs on every render, so Discord gets slower the longer it stays open. Turn it off unless you are debugging.",
             restartRequired: true,
         },
         !IS_WEB && (!IS_DISCORD_DESKTOP || !IS_WINDOWS) && {

@@ -2,6 +2,12 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 4.5.2.0 - 2026-10-27 (Nightly)
+
+### Fixed
+
+- Warn in the Vencord settings that React Developer Tools keeps running on every render and slows Discord down the longer it stays open. Measured on a live client, disabling it removed the largest source of renderer CPU time and forced layouts.
+
 ## 4.5.1.0 - 2026-10-27 (Nightly)
 
 ### Fixed

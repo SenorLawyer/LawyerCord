@@ -45,6 +45,8 @@ async function fixture(runtime = process.execPath, unrelatedOutput = false, fail
     const marker = join(directory, "restart.cjs");
     const parentScript = join(directory, "parent.cjs");
     const children: ChildProcess[] = [];
+    const parentSource = unrelatedOutput ? compiled.replace("Date.now() + 6e4", "Date.now() + 5e3") : compiled;
+    assert.ok(!unrelatedOutput || parentSource !== compiled, "Helper start deadline was not found");
     const compilationGate = "    [IO.File]::WriteAllText((Join-Path $directory 'compiling'), 'started')\n    while (-not [IO.File]::Exists((Join-Path $directory 'compile-release'))) { if (-not [IO.Directory]::Exists($directory)) { throw 'Compilation fixture was cancelled.' }; Start-Sleep -Milliseconds 50 }\n    Add-Type -TypeDefinition";
     await writeFile(destination, "Old complete archive");
     await writeFile(marker, `require('fs').writeFileSync(process.argv[2], JSON.stringify({ args: process.argv.slice(3), electron: process.env.ELECTRON_RUN_AS_NODE, nodeOptions: process.env.NODE_OPTIONS }));`);
@@ -93,7 +95,7 @@ const fixtureRequire = id => {
     } };
     return require(id);
 };
-new Function('require', 'module', 'exports', 'process', ${JSON.stringify(compiled)})(fixtureRequire, moduleFixture, moduleFixture.exports, proxyProcess);
+new Function('require', 'module', 'exports', 'process', ${JSON.stringify(parentSource)})(fixtureRequire, moduleFixture, moduleFixture.exports, proxyProcess);
 const api = moduleFixture.exports;
 api.replaceVerifiedArchive(${JSON.stringify(destination)}, Buffer.from('New complete archive')).then(result => {
     fs.writeFileSync(${JSON.stringify(ready)}, JSON.stringify(result));

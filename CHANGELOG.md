@@ -2,6 +2,13 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 4.5.3.0 - 2026-10-27 (Nightly)
+
+### Changed
+
+- Release builds run the full test suite and the desktop and installer build in parallel, then publish only when both pass, cutting about five minutes from every release. Only the publish step holds write access, and it checks the asset checksums before uploading.
+- The Windows update helper test for unrelated child output uses a short start deadline instead of waiting the full 60 seconds, which saves a minute in CI and in every release.
+
 ## 4.5.2.0 - 2026-10-27 (Nightly)
 
 ### Fixed

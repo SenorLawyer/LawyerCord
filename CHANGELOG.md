@@ -2,6 +2,12 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 4.5.1.0 - 2026-10-27 (Nightly)
+
+### Fixed
+
+- MediaCompressor downloads its Windows and Linux FFmpeg builds from a permanent LawyerCord release instead of BtbN autobuild tags, which upstream deletes after about two weeks and which broke the download.
+
 ## 4.5.0.0 - 2026-10-27 (Nightly)
 
 ### Added

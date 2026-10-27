@@ -13,7 +13,7 @@ import { delimiter, isAbsolute, join } from "path";
 import { run } from "./process";
 
 const BUILD = "ffmpeg-n8.1.3-24-g92611900bb";
-const RELEASE = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-26-14-25";
+const RELEASE = "https://github.com/SenorLawyer/LawyerCord/releases/download/encoders-ffmpeg-n8.1.3-24";
 const archives: Record<string, { url: string; hash: string; binary: string; }> = {
     "win32-x64": { url: `${RELEASE}/${BUILD}-win64-gpl-8.1.zip`, hash: "bf01c986f3f9d25ba316146a5ad37369a23f166bbe2ed002c1ec8a9b2f65183e", binary: `${BUILD}-win64-gpl-8.1/bin/ffmpeg.exe` },
     "linux-x64": { url: `${RELEASE}/${BUILD}-linux64-gpl-8.1.tar.xz`, hash: "d113aa5b57ab0dcfee171d835240ce3ea5db826a0ee80ed7528c8d26a61e87a4", binary: `${BUILD}-linux64-gpl-8.1/bin/ffmpeg` },

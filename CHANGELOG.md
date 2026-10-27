@@ -8,6 +8,10 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 
 - Warn in the Vencord settings that React Developer Tools keeps running on every render and slows Discord down the longer it stays open. Measured on a live client, disabling it removed the largest source of renderer CPU time and forced layouts.
 
+### Removed
+
+- Remove RobloxActivity, a private joke plugin that posted Roblox session embeds to a fixed channel for two hardcoded accounts.
+
 ## 4.5.1.0 - 2026-10-27 (Nightly)
 
 ### Fixed

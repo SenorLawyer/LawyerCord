@@ -45,7 +45,6 @@ export function getChunkPaths(wreq): { [chunkId: string]: string; } {
     } catch (e: any) {
         return e;
     } finally {
-        // @ts-ignore
         delete Object.prototype[sym];
     }
     throw new Error("getChunkPaths failed");

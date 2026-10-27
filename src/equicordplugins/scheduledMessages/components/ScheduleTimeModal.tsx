@@ -17,8 +17,9 @@ import { ErrorIcon } from "./Icons";
 
 const cl = classNameFactory("vc-scheduled-msg-");
 
-function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, close, userId, uploadIds }: {
+function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, close, userId, uploadIds, replaceId }: {
     uploadIds?: string[];
+    replaceId?: string;
     userId: string;
     channelId: string;
     content: string;
@@ -69,7 +70,7 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
         }
 
         submitting.current = true;
-        const result = await addScheduledMessage(channelId, content, scheduledTime, attachments)
+        const result = await addScheduledMessage(channelId, content, scheduledTime, attachments, replaceId)
             .catch(() => ({ success: false, error: "Could not save the scheduled message. Try again." }));
         submitting.current = false;
 
@@ -95,7 +96,7 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
         <Modal
             {...rootProps}
             size="sm"
-            title={uploadIds === undefined ? "Recreate Scheduled Message" : "Schedule Message"}
+            title={replaceId ? "Reschedule Message" : uploadIds === undefined ? "Recreate Scheduled Message" : "Schedule Message"}
             actions={[
                 {
                     text: "Schedule",
@@ -118,7 +119,7 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
 
             {uploadIds === undefined && (
                 <div>
-                    <p>This creates a new scheduled message for the account currently signed in. The original stays paused.</p>
+                    <p>{replaceId ? "This replaces the missed message with a new time." : "This creates a new scheduled message for the account currently signed in. The original stays paused."}</p>
                     <div>{content}</div>
                     {attachments?.map((attachment, index) => <div key={index}>{attachment.filename}</div>)}
                 </div>
@@ -175,7 +176,7 @@ function ScheduleTimeModalInner({ channelId, content, attachments, rootProps, cl
 
 export const ScheduleTimeModal = ErrorBoundary.wrap(ScheduleTimeModalInner, { noop: true });
 
-export function openScheduleTimeModal(channelId: string, content: string, attachments?: ScheduledAttachment[], uploadIds?: string[]): void {
+export function openScheduleTimeModal(channelId: string, content: string, attachments?: ScheduledAttachment[], uploadIds?: string[], replaceId?: string): void {
     const userId = UserStore.getCurrentUser()?.id;
     if (!userId) return;
     if (!ChannelStore.getChannel(channelId)) {
@@ -185,6 +186,7 @@ export function openScheduleTimeModal(channelId: string, content: string, attach
     const key = openModal(props => (
         <ScheduleTimeModal
             uploadIds={uploadIds}
+            replaceId={replaceId}
             userId={userId}
             channelId={channelId}
             content={content}

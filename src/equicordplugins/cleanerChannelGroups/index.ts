@@ -18,7 +18,7 @@ export default definePlugin({
             find: '"placeholder-channel-id"',
             replacement: [
                 {
-                    match: /this\.category\.isCollapsed&&\(.{0,600}?\)\?\{renderLevel:3,threadIds:/,
+                    match: /this\.category\.isCollapsed&&\(.{0,300}?\)\?\{renderLevel:3,threadIds:/,
                     replace: "this.category.isCollapsed?{renderLevel:3,threadIds:"
                 },
                 {

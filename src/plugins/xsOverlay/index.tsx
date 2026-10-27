@@ -10,7 +10,7 @@ import { Logger } from "@utils/Logger";
 import definePlugin, { makeRange, OptionType, PluginNative, ReporterTestable } from "@utils/types";
 import type { Channel, Embed, GuildMember, MessageAttachment, User } from "@vencord/discord-types";
 import { findByCodeLazy, findLazy } from "@webpack";
-import { Button, ChannelStore, GuildRoleStore, GuildStore, UserStore } from "@webpack/common";
+import { Button, ChannelStore, GuildRoleStore, GuildStore, IconUtils, UserStore } from "@webpack/common";
 
 const ChannelTypes = findLazy(m => m.ANNOUNCEMENT_THREAD === 10);
 
@@ -375,8 +375,8 @@ function shouldIgnoreForChannelType(channel: Channel) {
     return !settings.store.serverNotifications;
 }
 
-function getCachedAvatarIcon(userId: string, avatar: string) {
-    const cacheKey = `${userId}:${avatar}`;
+function getCachedAvatarIcon(user: User) {
+    const cacheKey = `${user.id}:${user.avatar}`;
     const cached = avatarIconCache.get(cacheKey);
     if (cached) return cached;
 
@@ -385,7 +385,7 @@ function getCachedAvatarIcon(userId: string, avatar: string) {
         if (oldestKey != null) avatarIconCache.delete(oldestKey);
     }
 
-    const promise = fetch(`https://cdn.discordapp.com/avatars/${userId}/${avatar}.png?size=128`)
+    const promise = fetch(IconUtils.getUserAvatarURL(user, false, 128, "png"))
         .then(response => response.blob())
         .then(blob => new Promise<string>(resolve => {
             const r = new FileReader();
@@ -403,7 +403,7 @@ function getCachedAvatarIcon(userId: string, avatar: string) {
 
 function sendMsgNotif(titleString: string, content: string, message: Message) {
     const generation = notificationGeneration;
-    getCachedAvatarIcon(message.author.id, message.author.avatar)
+    getCachedAvatarIcon(message.author)
         .then(result => {
             if (generation !== notificationGeneration) return;
             const msgData: NotificationObject = {

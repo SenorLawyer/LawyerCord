@@ -4,12 +4,50 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { RendererSettings } from "@main/settings";
+import { randomUUID } from "crypto";
+import { lookup } from "dns/promises";
 import { IpcMainInvokeEvent } from "electron";
+import { BlockList, isIP } from "net";
 
 import { isUploadUrl, MAX_FILE_BYTES, MAX_RESPONSE_BYTES, readResponseBody } from "./request";
 import { NativeUploadResult, NestUploadResponse } from "./types";
 
 const requests = new Map<number, Set<AbortController>>();
+
+const privateRanges = new BlockList();
+for (const [address, prefix] of [["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12], ["192.0.0.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["224.0.0.0", 3]] as const) privateRanges.addSubnet(address, prefix, "ipv4");
+for (const [address, prefix] of [["::", 128], ["::1", 128], ["64:ff9b::", 96], ["fc00::", 7], ["fe80::", 10], ["ff00::", 8]] as const) privateRanges.addSubnet(address, prefix, "ipv6");
+
+function isConfiguredHost(url: URL) {
+    const settings = RendererSettings.store.plugins?.FileUpload;
+    return [settings?.s3Endpoint, settings?.webdavUrl].some(value => {
+        if (typeof value !== "string") return false;
+        try {
+            const { protocol, host } = new URL(value);
+            return url.protocol === protocol && (url.host === host || url.host === `${settings?.s3Bucket}.${host}`);
+        } catch {
+            return false;
+        }
+    });
+}
+
+async function assertPublicHost(value: string) {
+    const url = new URL(value);
+    if (isConfiguredHost(url)) return;
+    const host = url.hostname.replace(/^\[|\]$/g, "");
+    if (/(^|\.)(localhost|local|internal|lan)\.?$/i.test(host)) throw new Error("Blocked upload host.");
+    const addresses = isIP(host) ? [{ address: host, family: isIP(host) }] : await lookup(host, { all: true });
+    if (!addresses.length || addresses.some(({ address, family }) => privateRanges.check(address, family === 6 ? "ipv6" : "ipv4"))) throw new Error("Blocked upload host.");
+}
+
+function uploaded(url: string, host: string): NativeUploadResult {
+    if (!isUploadUrl(url)) return { success: false, error: "The server returned an unexpected link." };
+    const { hostname } = new URL(url);
+    return hostname === host || hostname.endsWith(`.${host}`)
+        ? { success: true, url }
+        : { success: false, error: "The server returned an unexpected link." };
+}
 
 export function cancelUploads(event: IpcMainInvokeEvent) {
     for (const controller of requests.get(event.sender.id) ?? []) controller.abort();
@@ -45,6 +83,7 @@ async function request(event: IpcMainInvokeEvent, url: string, options: RequestI
     const timeout = setTimeout(() => controller.abort(), 300_000);
     try {
         for (let redirects = 0; ; redirects++) {
+            await assertPublicHost(url);
             const response = await fetch(url, { ...options, redirect: "manual", signal: controller.signal });
             if ([301, 302, 303, 307, 308].includes(response.status)) {
                 await response.body?.cancel();
@@ -151,11 +190,7 @@ export async function uploadTo0x0(
             const errorText = await response.text();
             return { success: false, error: `Upload failed: ${response.status} ${errorText}` };
         }
-        const text = (await response.text()).trim();
-        if (!text) {
-            return { success: false, error: "No URL returned from upload" };
-        }
-        return { success: true, url: text };
+        return uploaded((await response.text()).trim(), "0x0.st");
     } catch {
         return { success: false, error: "The request failed." };
     }
@@ -207,11 +242,7 @@ export async function uploadToCatbox(
             const errorText = await response.text();
             return { success: false, error: `Upload failed: ${response.status} ${errorText}` };
         }
-        const text = (await response.text()).trim();
-        if (!text) {
-            return { success: false, error: "No URL returned from upload" };
-        }
-        return { success: true, url: text };
+        return uploaded((await response.text()).trim(), "catbox.moe");
     } catch {
         return { success: false, error: "The request failed." };
     }
@@ -238,11 +269,7 @@ export async function uploadToLitterbox(
             const errorText = await response.text();
             return { success: false, error: `Upload failed: ${response.status} ${errorText}` };
         }
-        const text = (await response.text()).trim();
-        if (!text) {
-            return { success: false, error: "No URL returned from upload" };
-        }
-        return { success: true, url: text };
+        return uploaded((await response.text()).trim(), "catbox.moe");
     } catch {
         return { success: false, error: "The request failed." };
     }
@@ -337,16 +364,12 @@ export async function uploadToBuzzheavier(
         try {
             const data = JSON.parse(text) as { code?: number; data?: { id?: string; }; };
             if (data.code === 201 && data.data?.id) {
-                return { success: true, url: `https://buzzheavier.com/${data.data.id}` };
+                return { success: true, url: `https://buzzheavier.com/${encodeURIComponent(data.data.id)}` };
             }
         } catch {
-            if (!isUploadUrl(text.trim())) return { success: false, error: "Invalid upload response." };
+            return uploaded(text.trim(), "buzzheavier.com");
         }
-        const url = text.trim();
-        if (!url) {
-            return { success: false, error: "No URL returned from upload" };
-        }
-        return { success: true, url };
+        return { success: false, error: "No URL returned from upload" };
     } catch {
         return { success: false, error: "The request failed." };
     }
@@ -369,11 +392,7 @@ export async function uploadToTempSh(
             const errorText = await response.text();
             return { success: false, error: `Upload failed: ${response.status} ${errorText}` };
         }
-        const url = (await response.text()).trim();
-        if (!url) {
-            return { success: false, error: "No URL returned from upload" };
-        }
-        return { success: true, url };
+        return uploaded((await response.text()).trim(), "temp.sh");
     } catch {
         return { success: false, error: "The request failed." };
     }
@@ -386,7 +405,7 @@ export async function uploadToFilebin(
 ): Promise<NativeUploadResult> {
     try {
         validateFile(fileBuffer, filename);
-        const binId = `${Date.now().toString(16)}${Math.random().toString(16).slice(2, 10)}`;
+        const binId = randomUUID().replaceAll("-", "");
         const uploadUrl = `https://filebin.net/${binId}/${encodeURIComponent(filename)}`;
         const formData = new FormData();
         formData.append("file", new Blob([fileBuffer]), filename);
@@ -432,11 +451,7 @@ export async function uploadToPixelVault(
         if (!response.ok) {
             return { success: false, error: `Upload failed: ${response.status} ${text}` };
         }
-        const url = data?.resource || data?.url || text.trim();
-        if (!url) {
-            return { success: false, error: "No URL returned from upload" };
-        }
-        return { success: true, url };
+        return uploaded(data?.resource || data?.url || text.trim(), "pixelvault.co");
     } catch {
         return { success: false, error: "The request failed." };
     }

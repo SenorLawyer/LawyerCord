@@ -27,6 +27,7 @@ import {
     createKeyAnnouncement,
     decryptMessage as decryptProtocolMessage,
     encryptMessage as encryptProtocolMessage,
+    envelopeFits,
     fingerprintPublicKeys,
     formatFingerprint,
     generateIdentity,
@@ -313,6 +314,9 @@ let persistedQuarantines = new Map<string, number>();
 let cachedQuarantineSignature: string | null = null;
 let cachedVault: VaultFile | null = null;
 let cachedVaultSignature: string | null = null;
+let vaultDirty = false;
+let vaultFlushTimer: ReturnType<typeof setTimeout> | undefined;
+const VAULT_FLUSH_DELAY_MS = 1000;
 let operationQueue: Promise<void> = Promise.resolve();
 let pendingOperations = 0;
 const MAX_PENDING_OPERATIONS = 256;
@@ -808,6 +812,7 @@ async function synchronizeCachedVault(): Promise<void> {
     const signature = await getFileSignature(VAULT_PATH);
     if (cachedVaultSignature === signature) return;
     cachedVault = null;
+    vaultDirty = false;
     cachedVaultSignature = signature;
 }
 
@@ -930,6 +935,23 @@ async function saveVault(vault: VaultFile): Promise<void> {
         await rm(temporaryPath, { force: true }).catch(() => undefined);
     }
     cachedVault = structuredClone(vault);
+    vaultDirty = false;
+}
+
+function deferVaultSave(vault: VaultFile): void {
+    cachedVault = vault;
+    vaultDirty = true;
+    vaultFlushTimer ??= setTimeout(() => void flushDeferredVault(), VAULT_FLUSH_DELAY_MS);
+}
+
+async function flushDeferredVault(): Promise<void> {
+    clearTimeout(vaultFlushTimer);
+    vaultFlushTimer = undefined;
+    if (!vaultDirty) return;
+    const result = await runSerialized(async () => {
+        if (vaultDirty && cachedVault) await saveVault(cachedVault);
+    });
+    if (result && vaultDirty) vaultFlushTimer = setTimeout(() => void flushDeferredVault(), VAULT_FLUSH_DELAY_MS);
 }
 
 async function runSerialized<T>(operation: () => Promise<T>): Promise<T | NativeFailure> {
@@ -1842,6 +1864,14 @@ export async function encryptOutgoing(
             recipients.push(peer.identity);
         }
 
+        if (!envelopeFits({
+            channelId: checkedInput.value.snapshot.channelId,
+            counter: context.account.sendCounter + 1,
+            plaintext: checkedInput.value.plaintext,
+            recipientUserIds: recipients.map(recipient => recipient.userId),
+            senderUserId: user.value,
+        })) return { status: "failed", error: "message_too_long" };
+
         const counter = ++context.account.sendCounter;
         await saveVault(context.vault);
         try {
@@ -2026,7 +2056,7 @@ export async function decryptIncoming(
         });
         if (context.account.replayCache.length > MAX_REPLAY_RECORDS)
             context.account.replayCache.splice(0, context.account.replayCache.length - MAX_REPLAY_RECORDS);
-        await saveVault(context.vault);
+        deferVaultSave(context.vault);
         return { status: "decrypted", plaintext, attachmentBundle, stickers, counter: envelope.q, envelopeId: envelope.i };
     });
     if (result.status === "decrypted" && (!screenCaptureProtectionEnabled || !screenCaptureProtectionHealthy))

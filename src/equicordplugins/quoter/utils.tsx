@@ -63,34 +63,6 @@ export function getMimeType(saveAsGif: boolean): string {
     return saveAsGif ? "image/gif" : "image/png";
 }
 
-let fontLoadingPromise: Promise<void> | null = null;
-
-export async function ensureFontLoaded(): Promise<void> {
-    if (fontLoadingPromise) return fontLoadingPromise;
-
-    fontLoadingPromise = (async () => {
-        if (!document.getElementById("quoter-font-style")) {
-            const style = document.createElement("style");
-            style.id = "quoter-font-style";
-            style.textContent = `
-                @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@300&display=swap');
-                @import url('https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300..800;1,300..800&display=swap');
-                @import url('https://fonts.googleapis.com/css2?family=Momo+Signature&display=swap');
-                @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&display=swap');
-                @import url('https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700&display=swap');
-            `;
-            document.head.appendChild(style);
-            await new Promise(resolve => setTimeout(resolve, 300));
-        }
-    })();
-
-    return fontLoadingPromise;
-}
-
-export function resetFontLoading() {
-    fontLoadingPromise = null;
-}
-
 async function canvasToGif(canvas: HTMLCanvasElement): Promise<Blob> {
     const gif = GIFEncoder();
     const ctx = canvas.getContext("2d");
@@ -400,7 +372,6 @@ function drawWatermark(
 export async function createQuoteImage(options: QuoteImageOptions): Promise<Blob> {
     const { avatarUrl, quote: rawQuote, grayScale, author, watermark, showWatermark, saveAsGif, quoteFont, signal } = options;
 
-    await ensureFontLoaded();
     if (signal?.aborted) throw new Error("Quote creation was cancelled.");
 
     const quote = fixUpQuote(rawQuote);

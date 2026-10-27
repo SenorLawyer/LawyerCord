@@ -5,7 +5,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { open, readdir, readFile, realpath, rename, unlink } from "node:fs/promises";
+import { open, readdir, readFile, realpath, rename, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 
 import { DATA_DIR } from "@main/utils/constants";
@@ -25,6 +25,10 @@ export function messageLoggerEnhancedUniqueIdThingyIdkMan() { }
 
 const nativeSavedImages = new Map<string, string>();
 const MAX_ATTACHMENT_BYTES = 500 * 1024 * 1024;
+const MAX_CACHE_BYTES = 5 * 1024 ** 3;
+const MAX_CHOSEN_FILE_BYTES = 64 * 1024 * 1024;
+const imageSizes = new Map<string, number>();
+let cacheBytes = 0;
 const logger = new Logger("MessageLoggerEnhanced");
 interface DownloadResult { error: string | null; path: string | null; busy?: true; }
 interface Attachment { id: string; fileExtension: string; url: URL; oldUrl: URL; }
@@ -68,21 +72,48 @@ export async function initDirs() {
     }
 }
 
+function trackImage(id: string, size: number) {
+    cacheBytes += size - (imageSizes.get(id) ?? 0);
+    imageSizes.delete(id);
+    imageSizes.set(id, size);
+}
+
+function untrackImage(id: string) {
+    cacheBytes -= imageSizes.get(id) ?? 0;
+    imageSizes.delete(id);
+    nativeSavedImages.delete(id);
+}
+
+async function evictImages(keep?: string) {
+    for (const id of imageSizes.keys()) {
+        if (cacheBytes <= MAX_CACHE_BYTES) return;
+        if (id === keep) continue;
+        const imagePath = nativeSavedImages.get(id);
+        untrackImage(id);
+        if (imagePath) await unlink(imagePath).catch(() => logger.warn("Could not evict a cached attachment."));
+    }
+}
+
 export async function init(_event: IpcMainInvokeEvent) {
     const scan = ++imageScan;
     const imageDir = await getImageCacheDir();
 
     await ensureDirectoryExists(imageDir);
     const files = await readdir(imageDir, { withFileTypes: true });
+    const found = (await Promise.all(files.filter(file => file.isFile() && /^\d{1,20}\.[a-z0-9]{1,16}$/i.test(file.name)).map(async file => {
+        const filePath = path.join(imageDir, file.name);
+        const info = await stat(filePath).catch(() => null);
+        return info && { id: getAttachmentIdFromFilename(file.name), filePath, size: info.size, time: info.mtimeMs };
+    }))).filter(entry => entry !== null).sort((a, b) => a.time - b.time);
     if (scan !== imageScan) return;
     nativeSavedImages.clear();
-    for (const file of files) {
-        if (!file.isFile()) continue;
-        const filename = file.name;
-        if (!/^\d{1,20}\.[a-z0-9]{1,16}$/i.test(filename)) continue;
-        const attachmentId = getAttachmentIdFromFilename(filename);
-        nativeSavedImages.set(attachmentId, path.join(imageDir, filename));
+    imageSizes.clear();
+    cacheBytes = 0;
+    for (const { id, filePath, size } of found) {
+        nativeSavedImages.set(id, filePath);
+        trackImage(id, size);
     }
+    await evictImages();
 }
 
 export async function getImageNative(_event: IpcMainInvokeEvent, attachmentId: unknown): Promise<Uint8Array<ArrayBuffer> | null> {
@@ -115,12 +146,17 @@ export async function getImageNative(_event: IpcMainInvokeEvent, attachmentId: u
     }
 }
 
-export async function deleteFileNative(_event: IpcMainInvokeEvent, attachmentId: string) {
+export async function deleteFileNative(_event: IpcMainInvokeEvent, attachmentId: unknown) {
+    if (typeof attachmentId !== "string" || !/^\d{1,20}$/.test(attachmentId)) return;
     const imagePath = nativeSavedImages.get(attachmentId);
     if (!imagePath) return;
 
-    await unlink(imagePath);
-    nativeSavedImages.delete(attachmentId);
+    try {
+        await unlink(imagePath);
+    } catch (error) {
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw new Error("Could not delete the attachment.");
+    }
+    untrackImage(attachmentId);
 }
 
 export async function getDefaultNativeImageDir(): Promise<string> {
@@ -154,6 +190,8 @@ export async function chooseDir(event: IpcMainInvokeEvent, logKey: "logsDir" | "
         directoryRevision++;
         for (const work of downloads.values()) work.controller.abort();
         nativeSavedImages.clear();
+        imageSizes.clear();
+        cacheBytes = 0;
         imageCacheDir = root;
         await init(event);
     }
@@ -170,6 +208,8 @@ export async function chooseFile(_event: IpcMainInvokeEvent, title: string, filt
     const [path] = res.filePaths;
 
     if (!path) throw Error("Invalid file");
+
+    if ((await stat(path)).size > MAX_CHOSEN_FILE_BYTES) throw Error("The file is too large.");
 
     return await readFile(path, "utf-8");
 }
@@ -358,6 +398,8 @@ async function downloadAttachmentFile(attachment: Attachment, cancelled: AbortSi
             temporaryPath = undefined;
             signal.throwIfAborted();
             nativeSavedImages.set(attachment.id, finalPath);
+            trackImage(attachment.id, bytes);
+            void evictImages(attachment.id);
             return { error: null, path: finalPath };
         }
         return { error: "Could not download this attachment.", path: null };

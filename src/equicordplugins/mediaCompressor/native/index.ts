@@ -8,8 +8,8 @@ import { DATA_DIR } from "@main/utils/constants";
 import { Logger } from "@utils/Logger";
 import { randomUUID } from "crypto";
 import type { IpcMainInvokeEvent, WebContents, WebFrameMain } from "electron";
-import { appendFile, mkdir, rm } from "fs/promises";
-import { join } from "path";
+import { appendFile, mkdir, readdir, rm, stat } from "fs/promises";
+import { join, resolve, sep } from "path";
 
 import { CompressionMode } from "../policy";
 import { getBinary } from "./binary";
@@ -39,11 +39,27 @@ interface Job {
 
 const jobs = new Map<string, Job>();
 const logger = new Logger("MediaCompressor");
+const MAX_TEMP_AGE = 60 * 60_000;
+let swept: Promise<void> | undefined;
 const error = "Compression failed. Your original file is still attached.";
 
 function get(event: IpcMainInvokeEvent, id: unknown) {
     const job = typeof id === "string" ? jobs.get(id) : undefined;
     return job?.owner === event.senderFrame && !job.controller.signal.aborted ? job : undefined;
+}
+
+async function sweep(directory: string, live: (path: string) => boolean = () => false) {
+    for (const entry of await readdir(directory, { withFileTypes: true }).catch(() => [])) {
+        const path = resolve(directory, entry.name);
+        if (!/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(entry.name) || !path.startsWith(directory + sep) || live(path)) continue;
+        const info = await stat(path).catch(() => null);
+        if (info && Date.now() - info.mtimeMs > MAX_TEMP_AGE) await rm(path, { recursive: true, force: true }).catch(() => logger.warn("Could not remove old temporary files."));
+    }
+}
+
+function sweepTemp() {
+    const root = join(DATA_DIR, "mediaCompressor");
+    return sweep(join(root, "jobs"), path => [...jobs.values()].some(job => job.directory === path)).then(() => sweep(join(root, "encoders")));
 }
 
 async function dispose(id: string, job: Job) {
@@ -59,6 +75,7 @@ async function dispose(id: string, job: Job) {
 }
 
 export async function begin(event: IpcMainInvokeEvent, id: unknown, name: unknown, type: unknown, size: unknown, limit: unknown, mode: unknown): Promise<{ available: boolean; error?: string; }> {
+    swept ??= sweepTemp();
     const owner = event.senderFrame;
     if (!owner || typeof id !== "string" || !/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(id)
         || typeof name !== "string" || !name.length || name.length > 1024 || typeof type !== "string" || type.length > 128

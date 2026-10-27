@@ -21,7 +21,7 @@ export const settings = definePluginSettings({
         description: "settings for services",
         default: Object.fromEntries(Object.entries(Providers).map(([name, data]) => [name, {
             enabled: true,
-            // @ts-ignore
+            // @ts-expect-error data.native is not in the provider type
             openInNative: data.native || false
         }]))
     },

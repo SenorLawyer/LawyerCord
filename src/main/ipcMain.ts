@@ -25,7 +25,7 @@ import { IpcEvents } from "@shared/IpcEvents";
 import { Logger } from "@utils/Logger";
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell, systemPreferences, type WebContents } from "electron";
 import monacoHtml from "file://monacoWin.html?minify&base64";
-import { FSWatcher, mkdirSync, readFileSync, watch, writeFileSync } from "fs";
+import { FSWatcher, mkdirSync, readFileSync, renameSync, watch, writeFileSync } from "fs";
 import { open, readdir, readFile, unlink } from "fs/promises";
 import { release } from "os";
 import { join, normalize } from "path";
@@ -88,7 +88,7 @@ ipcMain.handle(IpcEvents.OPEN_EXTERNAL, (_, url) => {
     if (!ALLOWED_PROTOCOLS.includes(protocol))
         throw "Disallowed protocol.";
 
-    shell.openExternal(url);
+    return shell.openExternal(url);
 });
 
 ipcMain.handle(IpcEvents.GET_QUICK_CSS, () => readCss());
@@ -107,7 +107,9 @@ ipcMain.handle(IpcEvents.SET_QUICK_CSS, (_, css: unknown, expected: unknown) => 
             throw new Error("QuickCSS changed during sync. Try again to include your latest changes.");
     }
     try {
-        writeFileSync(QUICK_CSS_PATH, css);
+        const temporaryFile = `${QUICK_CSS_PATH}.tmp`;
+        writeFileSync(temporaryFile, css);
+        renameSync(temporaryFile, QUICK_CSS_PATH);
     } catch {
         throw new Error("Could not save QuickCSS.");
     }
@@ -213,21 +215,23 @@ ipcMain.handle(IpcEvents.OPEN_MONACO_EDITOR, async () => {
     await monacoWin.loadURL(`data:text/html;base64,${monacoHtml}`);
 });
 
-app.on("before-quit", async event => {
-    if (monacoWin && !monacoWin.isDestroyed() && !monacoWin.isVisible()) {
-        const result = await dialog.showMessageBox({
-            type: "question",
-            buttons: ["Cancel", "Close Anyway"],
-            defaultId: 0,
-            title: "QuickCSS Editor Open",
-            message: "QuickCSS editor is still open in the background.",
-            detail: "Do you want to close Discord anyway? This will also close the QuickCSS editor."
-        });
+let quitPromptOpen = false;
 
-        if (result.response === 1) {
-            app.exit();
-        }
-    }
+app.on("before-quit", event => {
+    if (!monacoWin || monacoWin.isDestroyed() || monacoWin.isVisible()) return;
+    event.preventDefault();
+    if (quitPromptOpen) return;
+    quitPromptOpen = true;
+    dialog.showMessageBox({
+        type: "question",
+        buttons: ["Cancel", "Close Anyway"],
+        defaultId: 0,
+        title: "QuickCSS Editor Open",
+        message: "QuickCSS editor is still open in the background.",
+        detail: "Do you want to close Discord anyway? This will also close the QuickCSS editor."
+    }).then(result => {
+        if (result.response === 1) app.exit();
+    }).finally(() => { quitPromptOpen = false; });
 });
 
 ipcMain.handle(IpcEvents.GET_RENDERER_CSS, () => readFile(RENDERER_CSS_PATH, "utf-8"));

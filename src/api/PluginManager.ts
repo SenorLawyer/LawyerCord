@@ -232,7 +232,12 @@ export function subscribeAllPluginsFluxEvents(fluxDispatcher: typeof FluxDispatc
     }
 }
 
+const startAttempts = new WeakMap<Plugin, Promise<unknown>>();
+const boundPlugins = new WeakSet<Plugin>();
+
 export const startPlugin = traceFunction("startPlugin", function startPlugin(p: Plugin) {
+    bindPluginMethods(p);
+
     const {
         name, commands, contextMenus, managedStyle, userProfileBadges,
         onBeforeMessageEdit, onBeforeMessageSend, onMessageClick,
@@ -412,6 +417,8 @@ function bindPluginSettings(p: Plugin) {
 }
 
 function bindPluginMethods(p: Plugin) {
+    if (boundPlugins.has(p)) return;
+    boundPlugins.add(p);
     for (const key of pluginKeysToBind) {
         p[key] &&= p[key].bind(p) as any;
     }

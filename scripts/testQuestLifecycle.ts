@@ -49,6 +49,7 @@ function fixture() {
         "@api/Notifications": { showNotification: (notification: { onClick?: () => void; }) => notifications.push(notification) },
         "@api/ServerList": { addServerListElement() {}, removeServerListElement() {}, ServerListRenderPosition: {} },
         "@api/Settings": { PlainSettings: { plugins: { Questify: { enabled: true } } } },
+        "@api/Styles": { setStyleClassNames() {} },
         "@components/index": { ErrorBoundary: { wrap: (component: unknown) => component } },
         "@utils/constants": { EquicordDevs: {} },
         "@utils/types": { __esModule: true, default: (plugin: unknown) => plugin, StartAt: {} },
@@ -57,7 +58,7 @@ function fixture() {
             info() { logCount++; } log() { logCount++; } debug() { logCount++; } error() { logCount++; }
             warn(...args: unknown[]) { warnings.push(args); }
         } },
-        "@webpack": { onceReady: ready.promise, findByCodeLazy: (code: string) =>
+        "@webpack": { onceReady: ready.promise, findCssClassesLazy: () => ({}), findByCodeLazy: (code: string) =>
             code === "QUESTS_FETCH_CURRENT_QUESTS_BEGIN" ? () => { fetches++; return fetch(); }
                 : code.startsWith("config).with") ? () => true : (body: object) => body
         },

@@ -4,11 +4,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import "./style.css";
-
 import { DecoratorProps } from "@api/MemberListDecorators";
 import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
+import { setStyleClassNames } from "@api/Styles";
 import { AttachmentIcon, GifIcon, ImageIcon, Microphone, StickerIcon, VideoIcon } from "@components/Icons";
 import betterActivities from "@equicordplugins/betterActivities";
 import showMeYourName from "@plugins/showMeYourName";
@@ -21,9 +20,11 @@ import { MessageFlags } from "@vencord/discord-types/enums";
 import { findByCodeLazy, findByPropsLazy, findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
 import { ChannelStore, ExperimentStore, MessageStore, Parser, RelationshipStore, SnowflakeUtils, UserGuildSettingsStore, UserStore, useStateFromStores } from "@webpack/common";
 
+import managedStyle from "./style.css?managed";
+
 const cl = classNameFactory("vc-message-peek-");
 
-const PrivateChannelClasses = findCssClassesLazy("subtext", "channel", "interactive");
+const PrivateChannelClasses = findCssClassesLazy("subtext", "channel", "interactive", "interactiveSelected");
 const ActivityClasses = findCssClassesLazy("textWithIconContainer", "icon", "truncated", "container", "textXs");
 const MessageActions = findByPropsLazy("fetchMessages", "sendMessage");
 
@@ -251,17 +252,24 @@ export default definePlugin({
     tags: ["Appearance", "Chat"],
     authors: [Devs.prism, EquicordDevs.justjxke],
     settings,
+    managedStyle,
     patches: [
         {
             find: "PrivateChannel.renderAvatar",
             replacement: {
-                match: /,subText:\i\.isSystemDM\(\).{0,700}:null,(?=name:)/,
+                match: /,subText:\i\.isSystemDM\(\).{0,560}:null,(?=name:)/,
                 replace: ",subText:$self.getSubText(arguments[0]),"
             }
         }
     ],
 
     async start() {
+        setStyleClassNames(managedStyle, {
+            interactive: PrivateChannelClasses.interactive,
+            interactiveSelected: PrivateChannelClasses.interactiveSelected,
+            textXs: ActivityClasses.textXs
+        });
+
         const generation = ++startupFetchGeneration;
         const channels = ChannelStore.getSortedPrivateChannels()
             .slice(0, 25)

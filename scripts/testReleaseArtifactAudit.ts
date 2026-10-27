@@ -39,6 +39,11 @@ async function main() {
         await writeFile(join(tokenDirectory, "bundle.js"), `"token":"${"a".repeat(24)}.${"b".repeat(6)}.${"c".repeat(30)}"`);
         assert.notEqual(runAudit(tokenDirectory).status, 0, "Discord credential-shaped values are rejected");
 
+        const oversizedDirectory = join(root, "oversized");
+        await mkdir(oversizedDirectory);
+        await writeFile(join(oversizedDirectory, "LawyerCord.user.js"), "a".repeat(5_300_001));
+        assert.notEqual(runAudit(oversizedDirectory).status, 0, "bundles over their size budget are rejected");
+
         const zip = new JSZip();
         zip.file("control-panel/config.json", "{}");
         const archivePath = join(root, "unsafe.zip");

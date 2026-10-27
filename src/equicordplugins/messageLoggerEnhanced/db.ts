@@ -14,11 +14,12 @@ import { DB_NAME, DB_VERSION } from "./utils/constants";
 import { LimitedMap } from "./utils/LimitedMap";
 import { clearAttachmentBlobUrlCache, getAttachmentBlobUrl, invalidateAttachmentBlobUrl } from "./utils/saveImage";
 
-export enum DBMessageStatus {
-    DELETED = "DELETED",
-    EDITED = "EDITED",
-    GHOST_PINGED = "GHOST_PINGED",
-}
+export const DBMessageStatus = {
+    DELETED: "DELETED",
+    EDITED: "EDITED",
+    GHOST_PINGED: "GHOST_PINGED",
+} as const;
+export type DBMessageStatus = typeof DBMessageStatus[keyof typeof DBMessageStatus];
 
 export interface AttachmentWork {
     ownerId: string;

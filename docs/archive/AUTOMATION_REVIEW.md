@@ -1,6 +1,6 @@
 # Automation revamp review
 
-This is the historical revamp review at the baseline below. Its checkout, loader and validation statements describe that work and do not establish the current installation state. The current Stable audit is tracked in [docs/stable-audit-2026-10-01.md](docs/stable-audit-2026-10-01.md).
+This is the historical revamp review at the baseline below. Its checkout, loader and validation statements describe that work and do not establish the current installation state. The current Stable audit is tracked in [stable-audit-2026-10-01.md](stable-audit-2026-10-01.md).
 
 The revamp is in `C:\Users\larsm\Documents\Development\Active\Developer Projects\LawyerCord-automation-revamp`, on `feature/automation-revamp`. Discord's loader now points to this worktree's `dist\desktop` build.
 

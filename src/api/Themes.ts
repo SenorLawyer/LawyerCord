@@ -84,6 +84,10 @@ async function initThemes() {
         const mode = getThemeActivationMode(rawLink);
 
         if (shouldApplyTheme(mode, activeTheme)) {
+            if (/["()\\\r\n]/.test(link)) {
+                logger.warn("Ignoring theme link with unsafe characters");
+                continue;
+            }
             links.add(link);
         }
     }
@@ -110,7 +114,7 @@ async function initThemes() {
         for (const theme of enabledThemes) {
             const mode = getThemeActivationMode(theme);
             if (!shouldApplyTheme(mode, activeTheme)) continue;
-            links.add(`vencord:///themes/${theme}?v=${version}`);
+            links.add(`vencord:///themes/${encodeURIComponent(theme)}?v=${version}`);
         }
     }
 

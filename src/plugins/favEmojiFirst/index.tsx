@@ -41,7 +41,7 @@ interface EmojiResult {
     name?: string;
     uniqueName?: string;
     surrogates?: string;
-    type?: string;
+    type?: string | number;
     originalName?: string;
     guildId?: string;
     index?: number;
@@ -232,6 +232,10 @@ function emojiIdentityFromRef(ref: StoredEmojiRef): string {
     if (surrogate) return `unicode:${surrogate}`;
 
     return `unicode-name:${ref.name.toLowerCase()}`;
+}
+
+function isEmoji(emoji: EmojiResult): emoji is Emoji & EmojiResult {
+    return typeof emoji.type === "number";
 }
 
 function emojiIdentityFromResult(emoji: EmojiResult): string {
@@ -1258,7 +1262,7 @@ export default definePlugin({
             seen.add(identity);
 
             const priority = priorities.get(identity) ?? 0;
-            const isFavorite = emojiContext.isFavoriteEmojiWithoutFetchingLatest(emoji as unknown as Emoji);
+            const isFavorite = isEmoji(emoji) && emojiContext.isFavoriteEmojiWithoutFetchingLatest(emoji);
 
             if (priority === 2) {
                 exact.push(emoji);

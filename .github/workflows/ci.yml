@@ -67,6 +67,12 @@ jobs:
                   pnpm testUpdateChannelSelection
                   pnpm testReleaseUpdates
                   pnpm testInstallerStaleMarkerRepair
+                  pnpm testPrimaryStreamAudio
+                  pnpm testNewPluginsManager
+                  pnpm testClientsideGuildIcons
+                  pnpm testPromiseTimeout
+                  pnpm testUpdaterClassification
+                  pnpm testVoiceMessageTranscriber
 
             - name: Test real browser media compression
               run: CHROMIUM_BIN="$(command -v google-chrome)" pnpm testMediaCompressorBrowser
@@ -77,6 +83,7 @@ jobs:
                   pnpm lint-styles
                   pnpm lint:intl
                   pnpm lint:patches
+                  pnpm lint:ci-tests
 
             - name: Build desktop and browser targets
               run: |

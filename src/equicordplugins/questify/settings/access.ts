@@ -20,7 +20,8 @@ export function getQuestifySettings(): QuestifySettings {
 }
 
 export function useQuestifySettings<K extends keyof QuestifySettings & string>(keys: readonly K[]): Pick<QuestifySettings, K> {
-    return useSettings(keys.map(key => `plugins.${QUESTIFY_PLUGIN_NAME}.${key}`) as any).plugins[QUESTIFY_PLUGIN_NAME] as unknown as Pick<QuestifySettings, K>;
+    useSettings(keys.map(key => `plugins.${QUESTIFY_PLUGIN_NAME}.${key}` as const));
+    return getQuestifySettings();
 }
 
 export function getCurrentUserId(userId?: string): string | null {

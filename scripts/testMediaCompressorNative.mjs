@@ -25,7 +25,7 @@ try {
         bundle: true, platform: "node", format: "cjs", outfile: output,
         plugins: [{ name: "isolated-native-data", setup(build) {
             build.onResolve({ filter: /^@main\/utils\/constants$/ }, () => ({ path: "constants", namespace: "test" }));
-            build.onResolve({ filter: /^\.\/binary$/ }, args => args.importer.endsWith("native/index.ts") ? { path: "binary", namespace: "test" } : undefined);
+            build.onResolve({ filter: /^\.\/binary$/ }, args => /native[\\/]index\.ts$/.test(args.importer) ? { path: "binary", namespace: "test" } : undefined);
             build.onLoad({ filter: /.*/, namespace: "test" }, args => ({ contents: args.path === "constants" ? `export const DATA_DIR = ${JSON.stringify(root)};` : 'export async function getBinary() { return process.env.MEDIA_TEST_FFMPEG || process.execPath; }' }));
         } }]
     });

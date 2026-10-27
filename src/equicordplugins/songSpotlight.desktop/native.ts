@@ -9,7 +9,7 @@ import type { Song } from "@song-spotlight/api/structs";
 import { setFetchHandler } from "@song-spotlight/api/util";
 import { type IpcMainInvokeEvent, net } from "electron";
 
-setFetchHandler(net.fetch as unknown as typeof fetch);
+setFetchHandler((input, init) => net.fetch(input instanceof URL ? input.href : input, init));
 
 export async function parseLink(_: IpcMainInvokeEvent, link: string) {
     return handlers.parseLink(link);

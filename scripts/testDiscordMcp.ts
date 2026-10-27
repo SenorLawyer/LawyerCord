@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 
+import { describeInstructions } from "../tools/discord-mcp/server.mjs";
 import {
     canDeleteRecordedMessage,
     DISCORD_MCP_TOOL_NAMES,
@@ -18,6 +19,7 @@ import {
     normalizeSearchSortOrder,
     requireSnowflake,
     sentMessageKey,
+    TOOL_POLICY,
 } from "../src/equicordplugins/discordMcp.desktop/policy";
 
 assert.equal(isDiscordSnowflake("895063026686885909"), true);
@@ -143,8 +145,14 @@ try {
     const listed = await rpc("tools/list");
     const names = listed.tools.map((tool: any) => tool.name);
     assert.deepEqual(names, DISCORD_MCP_TOOL_NAMES.map(name => `discord_${name}`), "all fixed Discord tools are advertised");
-    assert.equal(names.some((name: string) => /member|friend|relationship|block|role|moder|request|rest/i.test(name)), false, "no user-management, moderation, or arbitrary request tool exists");
-    for (const tool of listed.tools) assert.equal(tool.inputSchema.additionalProperties, false, `${tool.name} rejects unknown arguments`);
+    assert.equal(names.some((name: string) => /arbitrary|raw_request|rest_request|eval/i.test(name)), false, "no arbitrary request tool exists");
+    for (const tool of listed.tools) {
+        assert.equal(tool.inputSchema.additionalProperties, false, `${tool.name} rejects unknown arguments`);
+        const policy = TOOL_POLICY[tool.name.slice("discord_".length) as keyof typeof TOOL_POLICY] as { write?: true; gate?: string; };
+        assert.equal(tool.annotations.readOnlyHint, !policy.write && !/subscribe/.test(tool.name), `${tool.name} declares read-only correctly`);
+        if (policy.write) assert.equal(typeof tool.annotations.destructiveHint, "boolean", `${tool.name} declares destructiveHint`);
+        if (policy.gate) assert.match(tool.description, /off by default/, `${tool.name} documents its setting`);
+    }
     const searchTool = listed.tools.find((tool: any) => tool.name === "discord_search_messages");
     assert.ok(searchTool, "headless message search is exposed");
     assert.deepEqual(searchTool.inputSchema.anyOf, [{ required: ["channel_id"] }, { required: ["guild_id"] }]);
@@ -152,7 +160,21 @@ try {
     const status = await rpc("tools/call", { name: "discord_connection_status", arguments: {} });
     assert.equal(status.structuredContent.connected, true);
     assert.equal(status.structuredContent.channelAccess, "all_accessible_channels");
-    assert.equal(observedRequests[0].tool, "connection_status", "public tool names map to the fixed bridge operation");
+    assert.equal(observedRequests[observedRequests.length - 1].tool, "connection_status", "public tool names map to the fixed bridge operation");
+    assert.match(initialized.instructions, /discord_connection_status/, "instructions point at the status tool when gates are unknown");
+    assert.match(describeInstructions({ gates: { moderation: { enabled: true, allows: "kicking members" }, roles: { enabled: false, allows: "changing roles" } } }), /Enabled in the plugin settings: kicking members..*changing roles/);
+
+    const before = observedRequests.length;
+    const invalid = await rpc("tools/call", { name: "discord_read_messages", arguments: { channel_id: "nope" } });
+    assert.equal(invalid.isError, true);
+    assert.match(invalid.content[0].text, /channel_id/);
+    const extra = await rpc("tools/call", { name: "discord_read_messages", arguments: { channel_id: "895063026686885909", surprise: 1 } });
+    assert.equal(extra.isError, true);
+    const missing = await rpc("tools/call", { name: "discord_send_message", arguments: {} });
+    assert.match(missing.content[0].text, /channel_id is required/);
+    assert.equal(observedRequests.length, before, "invalid arguments never reach the bridge");
+    const link = await rpc("tools/call", { name: "discord_get_message", arguments: { channel_id: "https://discord.com/channels/895063026686885909/895063026686885910/895063026686885911" } });
+    assert.match(link.content[0].text, /message_id is required|echoedTool/, "jump links pass schema validation");
 
     const imageDownload = await rpc("tools/call", {
         name: "discord_download_attachment",

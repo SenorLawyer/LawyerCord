@@ -5,6 +5,7 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
+import { disableStyle, enableStyle } from "@api/Styles";
 import { FormSwitch } from "@components/FormSwitch";
 import { Devs, EquicordDevs } from "@utils/constants";
 import { getCurrentChannel } from "@utils/discord";
@@ -13,8 +14,9 @@ import { Message, RenderModalProps } from "@vencord/discord-types";
 import { IconUtils, Menu, Modal, openModal, showToast, TextInput, Toasts, UploadHandler, useEffect, useState } from "@webpack/common";
 
 import { QuoteIcon } from "./components/QuoteIcon";
+import fontStyle from "./style.css?managed";
 import { QuoteFont } from "./types";
-import { createQuoteImage, ensureFontLoaded, generateFileNamePreview, getFileExtension, getMimeType, resetFontLoading } from "./utils";
+import { createQuoteImage, generateFileNamePreview, getFileExtension, getMimeType } from "./utils";
 
 const quoteRequests = new Set<AbortController>();
 
@@ -63,16 +65,14 @@ export default definePlugin({
     authors: [Devs.Samwich, Devs.thororen, EquicordDevs.neoarz, Devs.prism],
     settings,
 
-    async start() {
-        await ensureFontLoaded();
+    start() {
+        enableStyle(fontStyle);
     },
 
     stop() {
         for (const request of quoteRequests) request.abort();
         quoteRequests.clear();
-        const style = document.getElementById("quoter-font-style");
-        if (style) style.remove();
-        resetFontLoading();
+        disableStyle(fontStyle);
     },
 
     contextMenus: {

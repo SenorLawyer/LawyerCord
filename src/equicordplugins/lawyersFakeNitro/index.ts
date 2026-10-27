@@ -7,7 +7,7 @@
 import { DataStore } from "@api/index";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
-import { UserSettingsProtoStore } from "@webpack/common";
+import { lodash, UserSettingsProtoStore } from "@webpack/common";
 
 const FAVORITES_KEY = "LawyersFakeNitro_favoriteChannels";
 
@@ -32,7 +32,7 @@ function stateFavoriteChannels(state: unknown): RecordValue | undefined {
 
 function saveFavoriteChannels(state: unknown) {
     const channels = stateFavoriteChannels(state);
-    if (!channels) return;
+    if (!channels || lodash.isEqual(channels, localFavoriteChannels)) return;
 
     localFavoriteChannels = { ...channels };
     void DataStore.set(FAVORITES_KEY, localFavoriteChannels);

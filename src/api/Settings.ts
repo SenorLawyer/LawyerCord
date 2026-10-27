@@ -276,7 +276,7 @@ function flushSettingsBeforeUnload() {
 if (!IS_REPORTER) {
     SettingsStore.addGlobalChangeListener((_, path) => {
         settingsRevision++;
-        if (path !== "cloud" && !path.startsWith("cloud."))
+        if (path && path !== "cloud" && !path.startsWith("cloud."))
             SettingsStore.plain.cloud.settingsSyncVersion = Date.now();
         if (!batchSettings) {
             const pending = VencordNative.settings.set(SettingsStore.plain, path);

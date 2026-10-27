@@ -2,6 +2,49 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 4.5.0.0 - 2026-10-27 (Nightly)
+
+### Added
+
+- DiscordMCP grows from 15 to 70 tools. It can look up servers, roles, channels, threads, forum posts, members, profiles, presence and friends, search messages with Discord's full filters, read pins, reactions, mentions, unread state and message context, and send, reply, edit, delete, react, pin, forward, create threads and forum posts, and upload files from allowed folders with pings off by default. Subscriptions cover new, edited and deleted messages and reactions for a channel, a server or all DMs.
+- DiscordMCP relationship, membership, account, moderation, role and channel management actions each have their own setting, all off by default. Writes are rate limited per channel and globally.
+- ScheduledMessages asks what to do with messages that are more than two minutes overdue instead of posting them late, with Send now, Reschedule and Delete.
+- Leftover MediaCompressor and ClipUpload temporary folders from crashed or killed sessions are cleaned up on first use.
+
+### Fixed
+
+- Updater requests and downloads now time out and are size capped instead of hanging update checks until restart, and a corrupt pending update record is cleared instead of blocking every check.
+- Cancel on the QuickCSS quit prompt now keeps Discord open.
+- Plugins enabled while Discord is running now bind their message and render hooks, and a plugin whose async start fails is stopped instead of left half started.
+- Launching without changing anything no longer pushes settings to the cloud.
+- DiscordMCP recovers from a failed ledger write, answers requests claimed just before the plugin stops, no longer waits out the poll for requests that arrive during startup, and deletes downloaded attachments after a day.
+- OrbolayBridge stops streams correctly in DMs and calls, reconnects with backoff and shows its failure toast once per outage.
+- The audio player API patch applies again on the current Discord build.
+- Global badges load again now that their host is allowed by the content security policy.
+- Automation program timeouts and cancellation stop the whole process tree.
+
+### Security
+
+- Theme links and names can no longer inject CSS, and CDN script permissions are limited to the exact libraries LawyerCord loads.
+- Voice message transcription verifies pinned checksums for its library and runtime files.
+- FileUpload refuses private, loopback and link local hosts, including through redirects, unless it is your own S3 or WebDAV server, checks the links upload hosts return, and uses random Filebin folder ids.
+- External link failures are reported, and the About window only opens allowed protocols. QuickCSS saves are atomic.
+- MessageLoggerEnhanced validates attachment ids and caps picked file size.
+- Update source-map-js, DOMPurify, Zod, fast-uri and postcss-selector-parser to versions that fix newly published advisories.
+- MediaCompressor pins the current Windows and Linux encoder builds after the previous release assets were removed upstream.
+
+### Performance
+
+- SecureMessaging batches replay record saves instead of rewriting the vault for every new message, and rejects messages that cannot fit before using a counter.
+- ScheduledMessages stores attachments separately and tracks a version instead of deep comparing the whole queue on every change.
+- Questify drops a dead patch that scanned up to 30,000 characters, ShowMeYourName, MessagePeek and CleanerChannelGroups use tighter patches, and Questify, MessagePeek, MusicControls and ChannelTabs resolve Discord class names instead of substring selectors.
+- MessageLoggerEnhanced caps its attachment cache at 5 GiB and the voice transcriber caps its model cache at 4 GiB.
+- RandomVoice and SongSpotlight subscribe only to the settings they read, and LawyersFakeNitro skips unchanged favorite writes.
+
+### Changed
+
+- CI runs every test script, with a check that fails when a new one is left out, and release artifacts have a size budget. Historical audit documents moved to `docs/archive`.
+
 ## 4.4.0.0 - 2026-10-05 (Nightly)
 
 ### Added

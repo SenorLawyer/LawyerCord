@@ -44,11 +44,13 @@ interface ProfileSongsProps {
     isSideBar: boolean;
 }
 
+const SETTING_KEYS: ("profileSongsLimit" | "collapseSongList")[] = ["profileSongsLimit", "collapseSongList"];
+
 export default function ProfileSongs({ user, isSideBar }: ProfileSongsProps) {
     const [failed, setFailed] = useState(false);
     const { isAuthorized } = useAuthorizationStore();
     const { users } = useSongStore();
-    const { profileSongsLimit, collapseSongList } = settings.use();
+    const { profileSongsLimit, collapseSongList } = settings.use(SETTING_KEYS);
     const userId = user.id;
     const data = users[userId]?.data;
     useEffect(() => {

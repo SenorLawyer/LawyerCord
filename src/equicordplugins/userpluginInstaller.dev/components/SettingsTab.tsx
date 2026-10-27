@@ -76,7 +76,7 @@ function UserPluginsTab() {
 
     return (
         <STab
-            // @ts-ignore
+            // @ts-expect-error STab typings lack title
             title={`UserPlugins${pluginsLoaded ? ` (${plugins.length}, ${countEnabledUserPlugins(plugins)} enabled)` : ""}`}
         >
             <div className={cl("update-check-container")}>

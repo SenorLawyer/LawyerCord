@@ -203,6 +203,7 @@ test("clip conversions run one worker and release it on cancellation, failure an
 
 test("clip metadata rejects malformed fields and oversized JSON before returning it to the renderer", async () => {
     const footer = Buffer.from([0x75, 0x75, 0x69, 0x64, 0xA1, 0xC8, 0x52, 0x99, 0x33, 0x46, 0x4D, 0xB8, 0x88, 0xF0, 0x83, 0xF5, 0x7A, 0x75, 0xA5, 0xEF]);
+    const event = { sender: { once() {} } };
     let payload = Buffer.alloc(0);
     let nextId = 0;
     let bytesRead = 0;
@@ -214,7 +215,7 @@ test("clip metadata rejects malformed fields and oversized JSON before returning
         crypto: { randomUUID: () => String(++nextId) },
         electron: { dialog: { showOpenDialog: async () => ({ filePaths: ["clip.mp4"], canceled: false }) } },
         fs: { createReadStream: () => { bytesRead += payload.length; return Readable.from([payload]); } },
-        "fs/promises": { open: async () => {
+        "fs/promises": { readdir: async () => [], open: async () => {
             opened++;
             return { stat: async () => ({ size: payload.length }), close: async () => { closed++; },
                 read: async (target: Buffer, offset: number, length: number, position: number) => {
@@ -228,22 +229,23 @@ test("clip metadata rejects malformed fields and oversized JSON before returning
     const valid = { id: "123", applicationId: "456", applicationName: "Game", users: ["789"], version: 1 };
     for (const value of [valid, [valid], { applicationName: {} }, { users: [123] }, { version: "1" }, { applicationId: [] }, { applicationName: "x".repeat(1024 * 1024) }]) {
         payload = Buffer.concat([Buffer.from([1]), footer, Buffer.from(JSON.stringify(value))]);
-        const selected = await native.chooseVideoFile({});
-        const metadata = await native.parseClipFileMetadata({}, selected.token);
+        const selected = await native.chooseVideoFile(event);
+        const metadata = await native.parseClipFileMetadata(event, selected.token);
         if (value === valid || Array.isArray(value)) assert.deepEqual(structuredClone(metadata), [valid]);
         else assert.equal(metadata, null);
-        native.releaseVideoFile({}, selected.token);
-        assert.equal(await native.parseClipFileMetadata({}, selected.token), null);
+        native.releaseVideoFile(event, selected.token);
+        assert.equal(await native.parseClipFileMetadata(event, selected.token), null);
     }
     payload = Buffer.concat([Buffer.alloc(16 * 1024 * 1024), footer, Buffer.from(JSON.stringify(valid))]);
     bytesRead = 0;
-    const selected = await native.chooseVideoFile({});
-    assert.deepEqual(structuredClone(await native.parseClipFileMetadata({}, selected.token)), [valid]);
+    const selected = await native.chooseVideoFile(event);
+    assert.deepEqual(structuredClone(await native.parseClipFileMetadata(event, selected.token)), [valid]);
     assert.ok(bytesRead <= 1024 * 1024 + footer.length, `Read ${bytesRead} bytes for metadata`);
     assert.equal(closed, opened);
 });
 
 test("temporary clip creation cleans up failed writes and failed deletion remains retryable", async () => {
+    const event = { sender: { once() {} } };
     let nextId = 0;
     let failWrite = true;
     let failDelete = false;
@@ -259,6 +261,7 @@ test("temporary clip creation cleans up failed writes and failed deletion remain
         "@utils/Logger": { Logger: class { warn() { warnings++; } } },
         crypto: { randomUUID: () => String(++nextId) }, electron: {}, fs: {},
         "fs/promises": {
+            readdir: async () => [], stat: async () => null,
             mkdir: async () => {},
             writeFile: async () => { if (failWrite) throw new Error("Private filesystem details"); },
             rm: async (target: string) => {
@@ -268,11 +271,12 @@ test("temporary clip creation cleans up failed writes and failed deletion remain
             }
         }, path, "stream/consumers": {}
     });
-    assert.equal(await native.createTempVideoFileFromBytes({}, "clip.mp4", new Uint8Array([1])), null);
+    assert.equal(await native.createTempVideoFileFromBytes(event, "clip.mp4", new Uint8Array([1])), null);
     assert.equal(removed.length, 1);
     failWrite = false;
-    const owner = { senderFrame: {} };
-    const foreign = { senderFrame: {} };
+    const sender = { once() {} };
+    const owner = { senderFrame: {}, sender };
+    const foreign = { senderFrame: {}, sender };
     const token = await native.createTempVideoFileFromBytes(owner, "clip.mp4", new Uint8Array([1]));
     assert.equal(native.getTempVideoFilePath(foreign, token), null);
     assert.equal(await native.readVideoFile(foreign, token), null);

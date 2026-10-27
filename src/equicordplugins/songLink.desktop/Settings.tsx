@@ -46,7 +46,7 @@ export function Settings() {
                         onChange={v => settings.store.servicesSettings[provider[0]].enabled = v}
                     />
                     {
-                        /* @ts-ignore */
+                        /* @ts-expect-error provider[1].native is not in the provider type */
                         provider[1].native && <FormSwitch
                             title="Open in desktop app"
                             hideBorder={true}

@@ -62,7 +62,7 @@ async function syncSettings() {
     }, 60_000);
 
     SettingsStore.addGlobalChangeListener((_, path) => {
-        if (path === "cloud" || path.startsWith("cloud.")) return;
+        if (!path || path === "cloud" || path.startsWith("cloud.")) return;
         markLocalSettingsDirty();
         saveSettingsOnFrequentAction();
     });

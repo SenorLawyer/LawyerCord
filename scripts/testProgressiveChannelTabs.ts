@@ -15,7 +15,8 @@ function loadTabs(overrides: Record<string, unknown> = {}, settings: Record<stri
     return runInNewContext(transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022, jsx: JsxEmit.React } }).outputText + "\nexports;", {
         exports: {}, setTimeout: () => 1, clearTimeout() {}, require(name: string) {
             if (name === "./constants") return { settings: { store: settings }, logger: { warn() {}, error() {} } };
-            if (name === "@utils/css") return { classNameFactory: () => () => "" };
+            if (name === "@utils/css") return { classNameFactory: () => () => "", classNameToSelector: () => "" };
+            if (name === "@webpack") return { findCssClassesLazy: () => ({}) };
             if (name === "@webpack/common") return { NavigationRouter: { transitionToGuild() {} }, SelectedChannelStore: { getChannelId: () => "" }, SelectedGuildStore: { getGuildId: () => "" }, ...common };
             if (name === "@api/index") return { DataStore: storage };
             if (name === "@api/PluginManager") return { isPluginEnabled: () => false };

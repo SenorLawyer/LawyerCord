@@ -430,7 +430,8 @@ export default function ChannelTab(props: ChannelTabsProps & { index: number; })
             return {
                 id,
                 channelId: tab?.channelId || channelId,
-                guildId: tab?.guildId || guildId
+                guildId: tab?.guildId || guildId,
+                width: ref.current?.getBoundingClientRect().width
             };
         },
         collect: monitor => ({
@@ -474,8 +475,7 @@ export default function ChannelTab(props: ChannelTabsProps & { index: number; })
             const hoverMiddleX = hoverWidth / 2;
 
             // get tab width
-            const draggedElement = document.querySelector(".vc-channeltabs-tab-dragging") as HTMLElement;
-            const draggedWidth = draggedElement?.getBoundingClientRect().width || hoverWidth;
+            const draggedWidth = item.width || hoverWidth;
             const halfDraggedWidth = draggedWidth / 2;
 
             const hysteresis = hoverWidth * 0.05;

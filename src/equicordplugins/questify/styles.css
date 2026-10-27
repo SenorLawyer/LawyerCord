@@ -1,28 +1,29 @@
 /* Miscellaneous */
 
 /* Fix to overwrite bad CSS in callTimer/alignedChatInputFix.css */
-[class*="panels"] [class*="questProgressWrapper"] [class*="outer"] > [class*="inner"] {
+[--panels] [--questProgressWrapper] [--progressOuter] > [--progressInner] {
     height: 100% !important;
 }
 
 /* Fix to overwrite bad CSS in callTimer/alignedChatInputFix.css */
-[class*="panels"] [class*="questProgressWrapper"] > div {
+[--panels] [--questProgressWrapper] > div {
     opacity: 1 !important;
 }
 
 /* Fix oversized confetti blocking Quest buttons. */
-[class*="rewardDescriptionContainer"] [class*="progressWrapper"] > [class*="confetti"] {
+[--rewardDescriptionContainer] [--rewardProgressWrapper] > [--rewardConfetti] {
     pointer-events: none;
 }
 
 /* Fix Questify button text clipping. */
-.questify-quest-item-restyle button [class*="buttonChildren"],
+.questify-quest-item-restyle button [--buttonChildren],
+.questify-quest-item-restyle button [--buttonChildrenWrapper],
 .questify-quest-item-restyle button span {
     overflow: visible;
 }
 
 /* Prevent shifting in the progress subtitle. */
-[class*="questProgressHint_"] {
+[--questProgressHint] {
     font-variant-numeric: tabular-nums;
 }
 
@@ -79,7 +80,7 @@
     line-height: 0.2em;
 }
 
-[class*="clickTrapContainer"] > div > .questify-settings-tooltip {
+[--clickTrapContainer] > div > .questify-settings-tooltip {
     margin-right: 4px;
 }
 
@@ -92,13 +93,13 @@
     margin-bottom: 5px;
 }
 
-.questify-setting-switch [class*="container_"] [class*="labelContainer_"] label {
+.questify-setting-switch [--switchContainer] [--switchLabelContainer] label {
     font-size: 16px;
     font-weight: 500;
 }
 
-.questify-setting-subtle-switch [class*="container_"] [class*="labelContainer_"] label,
-.questify-setting-switch [class*="container_"] [class*="labelContainer_"] div {
+.questify-setting-subtle-switch [--switchContainer] [--switchLabelContainer] label,
+.questify-setting-switch [--switchContainer] [--switchLabelContainer] div {
     font-size: 14px;
     font-weight: 400;
 }
@@ -111,9 +112,9 @@
     font-size: 14px;
 }
 
-.questify-setting [data-floating-ui-focusable][class*="selectDropdown"],
-.questify-setting [data-mana-component="select-input-field"] > [class*="selectField"],
-.questify-setting [data-mana-component="select-input-field"] [class*="tagList"] > div {
+.questify-setting [data-floating-ui-focusable][--selectDropdown],
+.questify-setting [data-mana-component="select-input-field"] > [--selectField],
+.questify-setting [data-mana-component="select-input-field"] [--tagList] > div {
     border-radius: 3px;
 }
 
@@ -153,7 +154,7 @@
     cursor: default;
 }
 
-.questify-sound-select [class*="selectedIcon"] {
+.questify-sound-select [--selectedIcon] {
     display: none;
 }
 
@@ -355,15 +356,15 @@
     margin-top: 5px;
 }
 
-.questify-settings-color-picker.questify-quest-tile-color-picker > [class*="colorSwatch"] {
+.questify-settings-color-picker.questify-quest-tile-color-picker > [--colorSwatch] {
     display: flex;
     width: 100%;
     height: 100%;
     min-height: 38px;
 }
 
-.questify-settings-color-picker.questify-quest-tile-color-picker [class*="swatch"],
-.questify-settings-color-picker.questify-quest-tile-color-picker [class*="Swatch"] {
+.questify-settings-color-picker.questify-quest-tile-color-picker [--swatch],
+.questify-settings-color-picker.questify-quest-tile-color-picker [--colorSwatch] {
     width: 100%;
     height: 100%;
     min-height: 38px;
@@ -406,40 +407,40 @@
 }
 
 /* Allows glowing reward previews which aren't confined to their own square video frame to overflow. */
-.questify-quest-item-restyle > div > div[class*="rewardDescriptionContainer"] {
+.questify-quest-item-restyle > div > div[--rewardDescriptionContainer] {
     overflow: visible;
 }
 
 /* Quest name color. */
-.questify-quest-item-restyle > div > div[class*="rewardDescriptionContainer"] > div[class*="textContainer"] > [class*="eyebrow"] {
+.questify-quest-item-restyle > div > div[--rewardDescriptionContainer] > div[--textContainer] > [class*="eyebrow"] {
     color: var(--questify-quest-name) !important;
 }
 
 /* Reward title + Orbs reward title text color. */
-.questify-quest-item-restyle > div > div[class*="rewardDescriptionContainer"] > div[class*="textContainer"] > div[class*="text-md"],
-.questify-quest-item-restyle > div > div[class*="rewardDescriptionContainer"] > div[class*="textContainer"] > div[class*="text-md"] > span {
+.questify-quest-item-restyle > div > div[--rewardDescriptionContainer] > div[--textContainer] > div[class*="text-md"],
+.questify-quest-item-restyle > div > div[--rewardDescriptionContainer] > div[--textContainer] > div[class*="text-md"] > span {
     color: var(--questify-reward-title) !important;
 }
 
 /* Quest description text color. */
-.questify-quest-item-restyle > div > div[class*="rewardDescriptionContainer"] > div[class*="textContainer"] > div[class*="text-sm"] {
+.questify-quest-item-restyle > div > div[--rewardDescriptionContainer] > div[--textContainer] > div[class*="text-sm"] {
     color: var(--questify-reward-description) !important;
 }
 
-.questify-quest-item-restyle [class*="placeholderElement"] {
+.questify-quest-item-restyle [--placeholderElement] {
     background-color: transparent;
 }
 
 /* Promoted by XYZ text color. */
-.questify-quest-item-restyle > div[class*="container"] > div[class*="positionContentOverBackground"] > div[class*="contents"] > div[class*="bottomRow"] > div[class*="text-sm"] {
+.questify-quest-item-restyle > div[--heroContainer] > div[--positionContentOverBackground] > div[--heroContents] > div[--heroBottomRow] > div[class*="text-sm"] {
     color: var(--questify-reward-description) !important;
 }
 
-.questify-quest-item-contrast-logo > div[class*="container"] > div[class*="positionContentOverBackground"] > div[class*="contents"] > div[class*="partnerBranding"] > img {
+.questify-quest-item-contrast-logo > div[--heroContainer] > div[--positionContentOverBackground] > div[--heroContents] > div[--partnerBranding] > img {
     filter: drop-shadow(0 0 10px rgb(0 0 0 / 80%));
 }
 
-.questify-quest-item-intense-gradient > :nth-child(1) [class*="overlay"] {
+.questify-quest-item-intense-gradient > :nth-child(1) [--heroOverlay] {
     background: linear-gradient(to top,
             var(--questify-color) 0,
             hsl(from var(--questify-color) h s l / 100%) 20.5%,
@@ -451,14 +452,14 @@
             hsl(from var(--questify-color) h s l / 0%) 100%);
 }
 
-.questify-quest-item-default-gradient > :nth-child(1) [class*="overlay"] {
+.questify-quest-item-default-gradient > :nth-child(1) [--heroOverlay] {
     background: linear-gradient(to top,
             var(--questify-color) 0,
             hsl(from var(--questify-color) h s l / 95%) 20.31%,
             hsl(from var(--questify-color) h s l / 0%) 100%);
 }
 
-.questify-quest-item-black-gradient > :nth-child(1) [class*="overlay"] {
+.questify-quest-item-black-gradient > :nth-child(1) [--heroOverlay] {
     background: linear-gradient(to top,
             hsl(0deg 0% 0% / 80%) 10%,
             hsl(0deg 0% 0% / 65%) 20%,
@@ -467,11 +468,11 @@
             hsl(0deg 0% 0% / 0%) 90%);
 }
 
-.questify-quest-item-hide-gradient > :nth-child(1) [class*="overlay"] {
+.questify-quest-item-hide-gradient > :nth-child(1) [--heroOverlay] {
     display: none;
 }
 
-.questify-quest-item-restyle > :nth-child(2) [class*="textOverflowBlur"] {
+.questify-quest-item-restyle > :nth-child(2) [--textOverflowBlur] {
     background: linear-gradient(transparent 50%, var(--questify-color) 100%);
     filter: brightness(0.9);
 }
@@ -516,15 +517,15 @@ div[id^="quest-tile-"] div[class^="confetti__"] {
     margin-top: 5px;
 }
 
-.questify-settings-color-picker.questify-quest-button-color-picker > [class*="colorSwatch"] {
+.questify-settings-color-picker.questify-quest-button-color-picker > [--colorSwatch] {
     display: flex;
     width: 100%;
     height: 100%;
     min-height: 38px;
 }
 
-.questify-settings-color-picker.questify-quest-button-color-picker [class*="swatch"],
-.questify-settings-color-picker.questify-quest-button-color-picker [class*="Swatch"] {
+.questify-settings-color-picker.questify-quest-button-color-picker [--swatch],
+.questify-settings-color-picker.questify-quest-button-color-picker [--colorSwatch] {
     width: 100%;
     height: 100%;
     min-height: 38px;

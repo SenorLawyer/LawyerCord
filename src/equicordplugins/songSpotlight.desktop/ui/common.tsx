@@ -25,14 +25,15 @@ export const WidgetClasses = findCssClassesLazy("tabPanelScroller", "tabListScro
 export const DMSideBarClasses = findCssClassesLazy("widgetPreviews");
 export const ProfileCardClasses = findCssClassesLazy("cardsList", "firstCardContainer", "card", "container");
 
-export enum SpinnerTypes {
-    CHASING_DOTS = "chasingDots",
-    LOW_MOTION = "lowMotion",
-    PULSING_ELLIPSIS = "pulsingEllipsis",
-    SPINNING_CIRCLE = "spinningCircle",
-    SPINNING_CIRCLE_SIMPLE = "spinningCircleSimple",
-    WANDERING_CUBES = "wanderingCubes",
-}
+export const SpinnerTypes = {
+    CHASING_DOTS: "chasingDots",
+    LOW_MOTION: "lowMotion",
+    PULSING_ELLIPSIS: "pulsingEllipsis",
+    SPINNING_CIRCLE: "spinningCircle",
+    SPINNING_CIRCLE_SIMPLE: "spinningCircleSimple",
+    WANDERING_CUBES: "wanderingCubes",
+} as const;
+export type SpinnerTypes = (typeof SpinnerTypes)[keyof typeof SpinnerTypes];
 
 type Spinner =
     & ComponentType<
@@ -44,7 +45,7 @@ type Spinner =
         Type: typeof SpinnerTypes;
     };
 
-export const Spinner = findByCodeLazy('"pulsingEllipsis"') as unknown as Spinner;
+export const Spinner: Spinner = findByCodeLazy('"pulsingEllipsis"');
 
 // basic components
 export function ExplicitTag({ className }: HTMLAttributes<HTMLDivElement>) {

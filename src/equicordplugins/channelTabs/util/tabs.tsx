@@ -6,7 +6,8 @@
 
 import { DataStore } from "@api/index";
 import { isPluginEnabled } from "@api/PluginManager";
-import { classNameFactory } from "@utils/css";
+import { classNameFactory, classNameToSelector } from "@utils/css";
+import { findCssClassesLazy } from "@webpack";
 import { NavigationRouter, SelectedChannelStore, SelectedGuildStore, showToast, Toasts, useEffect, useRef, useState } from "@webpack/common";
 import { JSX } from "react";
 
@@ -344,9 +345,11 @@ export function moveDraggedTabs(index1: number, index2: number) {
     update();
 }
 
+const ChatScrollerClasses = findCssClassesLazy("scrollerInner", "scrollerSpacer", "chatGradientBase");
+
 function getScrollContainer(): HTMLElement | null {
     // discord's main chat scroller
-    return document.querySelector('[class*="scrollerInner"]') as HTMLElement;
+    return document.querySelector<HTMLElement>(classNameToSelector(ChatScrollerClasses.scrollerInner));
 }
 
 function evictStaleCache() {

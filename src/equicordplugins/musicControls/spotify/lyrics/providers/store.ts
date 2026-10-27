@@ -84,7 +84,6 @@ export const SpotifyLrcStore = proxyLazyWebpack(() => {
             lyricsInfo = nextLyricsInfo;
             if (lyricsConversion !== Provider.None) {
                 FluxDispatcher.dispatch({
-                    // @ts-ignore
                     type: "SPOTIFY_LYRICS_PROVIDER_CHANGE",
                     provider: lyricsConversion
                 });
@@ -93,7 +92,7 @@ export const SpotifyLrcStore = proxyLazyWebpack(() => {
             store.emitChange();
         },
 
-        // @ts-ignore
+        // @ts-expect-error custom flux event is not in FluxEvents
         async SPOTIFY_LYRICS_PROVIDER_CHANGE(e: { provider: Provider; }) {
             if (!active) return;
             const { track } = SpotifyStore;

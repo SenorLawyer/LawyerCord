@@ -35,3 +35,9 @@ ExtensionCache/
 
 # wakatime related stuff
 .wakatime-project
+
+# local scratch output
+discord-server-*.json
+candidate-list.html
+rodevs-*.html
+benchmark-results/

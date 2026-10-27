@@ -4,8 +4,11 @@ overrides:
     brace-expansion@<1.1.21: 1.1.21
     brace-expansion@>=2.0.0 <2.1.7: 2.1.7
     brace-expansion@>=4.0.0 <5.0.12: 5.0.12
-    dompurify: 3.4.16
-    fast-uri: 3.1.8
+    dompurify: 3.4.17
+    fast-uri: 3.1.9
+    source-map-js: 1.2.2
+    postcss-selector-parser@>=7.0.0 <7.1.6: 7.1.7
+    zod@<4.6.6: 4.6.7
 peerDependencyRules:
     ignoreMissing:
         - eslint-plugin-import
@@ -34,13 +37,13 @@ minimumReleaseAgeExclude:
     # Added 2026-07-28 (13a7d4688), same hardening pass. Revisit by 2026-11-28.
     - picomatch@2.3.2 || 4.0.4
     # Pins follow the fast-uri override above. Last bumped 2026-10-02 (f4b27c59d). Revisit when the override moves.
-    - fast-uri@3.1.8
+    - fast-uri@3.1.9
     # Added 2026-07-28 (13a7d4688), same hardening pass. Revisit by 2026-11-28.
     - postcss@8.5.18
     # Added 2026-08-29 (704059252, Lawyers Fake Nitro) for a security fix. Revisit by 2026-11-29.
     - js-yaml@4.3.1
     # Pins follow the dompurify override above. Added 2026-08-29, last bumped 2026-10-02 (f4b27c59d). Revisit when the override moves.
-    - dompurify@3.4.16
+    - dompurify@3.4.17
     # Added 2026-08-29 (704059252, Lawyers Fake Nitro). Revisit by 2026-11-29.
     - nanoid@3.3.18
     # Added 2026-10-02 (f4b27c59d, Stable 3.0.1.0 audit). Revisit by 2026-11-02.

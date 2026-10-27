@@ -12,12 +12,12 @@ import { delimiter, isAbsolute, join } from "path";
 
 import { run } from "./process";
 
-const BUILD = "ffmpeg-n8.1.3-14-g330caae0c1";
-const RELEASE = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-04-20-51";
+const BUILD = "ffmpeg-n8.1.3-24-g92611900bb";
+const RELEASE = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-26-14-25";
 const archives: Record<string, { url: string; hash: string; binary: string; }> = {
-    "win32-x64": { url: `${RELEASE}/${BUILD}-win64-gpl-8.1.zip`, hash: "e0152c72dbc560bcf5bf8bb8ce6cb5b7ff2240379dc706240c65d5c1157dd037", binary: `${BUILD}-win64-gpl-8.1/bin/ffmpeg.exe` },
-    "linux-x64": { url: `${RELEASE}/${BUILD}-linux64-gpl-8.1.tar.xz`, hash: "7e594ca6a9b11df570db21b6ba0f437d4483c94208df4bcf3660524f1a3c75da", binary: `${BUILD}-linux64-gpl-8.1/bin/ffmpeg` },
-    "linux-arm64": { url: `${RELEASE}/${BUILD}-linuxarm64-gpl-8.1.tar.xz`, hash: "bdd13f73d5b64a8c0c8137a33fa54cd3b7e579c8881a25c5fc55705983fee7a4", binary: `${BUILD}-linuxarm64-gpl-8.1/bin/ffmpeg` },
+    "win32-x64": { url: `${RELEASE}/${BUILD}-win64-gpl-8.1.zip`, hash: "bf01c986f3f9d25ba316146a5ad37369a23f166bbe2ed002c1ec8a9b2f65183e", binary: `${BUILD}-win64-gpl-8.1/bin/ffmpeg.exe` },
+    "linux-x64": { url: `${RELEASE}/${BUILD}-linux64-gpl-8.1.tar.xz`, hash: "d113aa5b57ab0dcfee171d835240ce3ea5db826a0ee80ed7528c8d26a61e87a4", binary: `${BUILD}-linux64-gpl-8.1/bin/ffmpeg` },
+    "linux-arm64": { url: `${RELEASE}/${BUILD}-linuxarm64-gpl-8.1.tar.xz`, hash: "a51b192690f082d51c495e7241bd1013f86e4a7dfc5ed89a5766a5e46112addf", binary: `${BUILD}-linuxarm64-gpl-8.1/bin/ffmpeg` },
     "darwin-arm64": { url: "https://www.osxexperts.net/ffmpeg9arm.zip", hash: "d0c06c5c68ce48af3143b262f7a9118a7c9f67de1e237fcc24ffb14df9c67af9", binary: "ffmpeg" },
     "darwin-x64": { url: "https://www.osxexperts.net/ffmpeg80intel.zip", hash: "2d24d22db78c87f394a5822867acd5c5dc5e762cd261a44bd26923f3a5af3e07", binary: "ffmpeg" }
 };

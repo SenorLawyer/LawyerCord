@@ -30,6 +30,8 @@ All notable LawyerCord changes are recorded here. Versions follow [Semantic Vers
 - FileUpload refuses private, loopback and link local hosts, including through redirects, unless it is your own S3 or WebDAV server, checks the links upload hosts return, and uses random Filebin folder ids.
 - External link failures are reported, and the About window only opens allowed protocols. QuickCSS saves are atomic.
 - MessageLoggerEnhanced validates attachment ids and caps picked file size.
+- Update source-map-js, DOMPurify, Zod, fast-uri and postcss-selector-parser to versions that fix newly published advisories.
+- MediaCompressor pins the current Windows and Linux encoder builds after the previous release assets were removed upstream.
 
 ### Performance
 

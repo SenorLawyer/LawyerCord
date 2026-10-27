@@ -9,7 +9,7 @@ import { gitHashShort } from "@shared/vencordUserAgent";
 import { BrowserWindow, ipcMain, Menu, MenuItemConstructorOptions, shell } from "electron";
 import aboutHtml from "file://about.html?minify";
 
-import { SETTINGS_DIR, THEMES_DIR } from "./utils/constants";
+import { ALLOWED_PROTOCOLS, SETTINGS_DIR, THEMES_DIR } from "./utils/constants";
 
 let cachedUpdateAvailable = false;
 
@@ -72,13 +72,13 @@ function openAboutWindow() {
     });
 
     aboutWindow.webContents.setWindowOpenHandler(({ url }) => {
-        shell.openExternal(url);
+        openAllowedExternal(url);
         return { action: "deny" };
     });
 
     aboutWindow.webContents.on("will-navigate", (e, url) => {
         e.preventDefault();
-        shell.openExternal(url);
+        openAllowedExternal(url);
     });
 
     const aboutParams = aboutHtml
@@ -89,6 +89,10 @@ function openAboutWindow() {
     aboutWindow.on("closed", () => {
         aboutWindow = null;
     });
+}
+
+function openAllowedExternal(url: string) {
+    if (URL.canParse(url) && ALLOWED_PROTOCOLS.includes(new URL(url).protocol)) shell.openExternal(url).catch(() => undefined);
 }
 
 function createLawyerCordMenuItems(): MenuItemConstructorOptions[] {

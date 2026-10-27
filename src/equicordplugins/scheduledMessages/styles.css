@@ -225,11 +225,11 @@
 }
 
 /* Phantom Message Styles */
-.vc-scheduled-msg-phantom {
+[id^="chat-messages-"]:has(.vc-scheduled-msg-accessory) {
     opacity: 0.5 !important;
 }
 
-.vc-scheduled-msg-phantom:hover {
+[id^="chat-messages-"]:has(.vc-scheduled-msg-accessory):hover {
     opacity: 0.7 !important;
 }
 

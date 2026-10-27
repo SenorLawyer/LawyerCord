@@ -10,7 +10,7 @@ import { classNameFactory } from "@utils/css";
 import { RenderModalProps } from "@vencord/discord-types";
 import { ChannelStore, closeModal, Modal, openModal, showToast, Toasts, UserStore, useState, useStateFromStores } from "@webpack/common";
 
-import { clearAllScheduledMessages, getChannelDisplayInfo, getScheduledMessages, loadScheduledMessages, removeScheduledMessage, sendScheduledMessageNow } from "../utils";
+import { clearAllScheduledMessages, getChannelDisplayInfo, getScheduledMessages, isMissedMessage, loadScheduledMessages, removeScheduledMessage, sendScheduledMessageNow } from "../utils";
 import { CalendarIcon, TimerIcon } from "./Icons";
 import { openScheduleTimeModal } from "./ScheduleTimeModal";
 
@@ -112,12 +112,12 @@ function ViewScheduledModalInner({ rootProps, close }: ViewScheduledModalProps) 
                                     </div>
                                     <div className={cl("message-time")}>
                                         <TimerIcon width={14} height={14} />
-                                        <span>{!msg.userId ? "Paused. This older message has no saved account. Recreate it to choose an account and a new time. The original stays paused." : msg.attemptedAt === undefined ? new Date(msg.scheduledTime).toLocaleString() : "Send attempted. Check the channel before retrying."}</span>
+                                        <span>{!msg.userId ? "Paused. This older message has no saved account. Recreate it to choose an account and a new time. The original stays paused." : msg.attemptedAt === undefined ? new Date(msg.scheduledTime).toLocaleString() + (isMissedMessage(msg) ? " (missed)" : "") : "Send attempted. Check the channel before retrying."}</span>
                                     </div>
                                     <div className={cl("message-content")}>{displayContent}</div>
                                 </div>
                                 <div className={cl("message-actions")}>
-                                    {msg.attemptedAt !== undefined && msg.userId === userId && (
+                                    {(msg.attemptedAt !== undefined || isMissedMessage(msg)) && msg.userId === userId && (
                                         <Button
                                             size="small"
                                             variant="secondary"

@@ -18,6 +18,13 @@ const discordCredentialPatterns = [
     /\b[A-Za-z0-9_-]{24,}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{25,}\b/gu,
     /["'](?:discord[_-]?)?token["']\s*:\s*["'][A-Za-z0-9._-]{20,}["']/giu,
 ];
+const sizeBudgets = {
+    "desktop.asar": 27_500_000,
+    "equibop.asar": 27_500_000,
+    "LawyerCord.user.js": 5_300_000,
+    "extension-chrome.zip": 3_500_000,
+    "extension-firefox.zip": 3_500_000,
+};
 const failures = [];
 
 function normalized(path) {
@@ -50,6 +57,11 @@ async function inspectZip(path, origin) {
 }
 
 async function inspectFile(path, origin) {
+    const budget = sizeBudgets[basename(path)];
+    if (budget !== undefined) {
+        const { size } = await stat(path);
+        if (size > budget) failures.push(`${origin}: ${size} bytes exceeds the ${budget} byte size budget`);
+    }
     inspectName(relative(".", path), origin);
     if (path.toLowerCase().endsWith(".zip")) await inspectZip(path, origin);
     else inspectBytes(await readFile(path), origin);

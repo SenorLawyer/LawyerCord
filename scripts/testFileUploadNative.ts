@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
+import net from "node:net";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
@@ -19,7 +20,7 @@ function fixture(response: () => Promise<Response> = async () => new Response("h
     const { outputText } = transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } });
     const shared = transpileModule(readFileSync("src/equicordplugins/fileUpload/request.ts", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;
     const request = runInNewContext(shared + "\nexports;", { exports: {}, URL, Blob, Uint8Array });
-    const api = runInNewContext(outputText + "\nexports;", { exports: {}, require: () => request, URL, ArrayBuffer, Uint8Array, Blob, FormData, Headers, Response, AbortController, Buffer, TextDecoder,
+    const api = runInNewContext(outputText + "\nexports;", { exports: {}, require: (id: string) => id === "net" ? net : id === "crypto" ? { randomUUID: () => "00000000-0000-4000-8000-000000000000" } : id === "dns/promises" ? { lookup: async (host: string) => host === "internal.example" ? [{ address: "10.0.0.5", family: 4 }] : [{ address: "93.184.216.34", family: 4 }] } : id === "@main/settings" ? { RendererSettings: { store: { plugins: { FileUpload: { webdavUrl: "https://nas.lan.test" } } } } } : request, URL, ArrayBuffer, Uint8Array, Blob, FormData, Headers, Response, AbortController, Buffer, TextDecoder,
         setTimeout: (fn: () => void) => { timers.add(fn); return fn; }, clearTimeout: (fn: () => void) => timers.delete(fn),
         fetch: async (url: string, options?: RequestInit) => { calls.push({ url, options }); return response(); }
     }) as {
@@ -50,7 +51,7 @@ test("Native downloads reject excessive declared content length and cancel the r
     let cancelled = false;
     const f = fixture(async () => new Response(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array([1])); }, cancel() { cancelled = true; } }), { headers: { "content-length": String(3 * 1024 ** 3) } }));
     const result = f.api.fetchFile(f.event, "https://example.com/file");
-    await Promise.resolve();
+    await new Promise(resolve => setImmediate(resolve));
     if (!f.calls[0]?.options?.signal) return assert.fail("Download must carry a cancellation signal.");
     assert.equal((await result).success, false);
     assert.equal(cancelled, true);
@@ -91,5 +92,20 @@ test("Native uploads cancel stalled bodies when their renderer exits and remove 
         assert.equal(f.event.sender.listenerCount("render-process-gone"), 0);
         assert.equal(f.timers.size, 0);
         await new Promise(resolve => setImmediate(resolve));
+    }
+});
+
+test("Native requests refuse private, loopback and local targets unless configured", async () => {
+    const f = fixture();
+    for (const url of ["https://127.0.0.1/a", "https://[::1]/a", "https://169.254.169.254/a", "https://192.168.1.2/a", "https://[::ffff:10.0.0.1]/a", "https://[fd00::1]/a", "https://printer.local/a", "https://internal.example/a"]) assert.equal((await f.api.fetchFile(f.event, url)).success, false, url);
+    assert.equal(f.calls.length, 0);
+    assert.equal((await f.api.fetchFile(f.event, "https://example.com/a")).success, true);
+});
+
+test("Native upload hosts must return links on their own domain", async () => {
+    assert.equal((await fixture(async () => new Response("https://files.catbox.moe/a.png")).api.uploadToCatbox(fixture().event, new ArrayBuffer(1), "a.png")).success, true);
+    for (const body of ["https://evil.example/a.png", "javascript:alert(1)", "https://catbox.moe.evil.example/a"]) {
+        const f = fixture(async () => new Response(body));
+        assert.equal((await f.api.uploadToCatbox(f.event, new ArrayBuffer(1), "a.png")).success, false, body);
     }
 });

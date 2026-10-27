@@ -332,14 +332,12 @@ export default definePlugin({
         {
             name: "lawyercord-debug",
             description: "Send LawyerCord debug info",
-            // @ts-ignore
             predicate: ctx => isAnyPluginDev(UserStore.getCurrentUser()?.id) || isEquicordGuild(ctx?.guild?.id, true),
             execute: async () => ({ content: await generateDebugInfoMessage() })
         },
         {
             name: "lawyercord-plugins",
             description: "Send LawyerCord plugin list",
-            // @ts-ignore
             predicate: ctx => isAnyPluginDev(UserStore.getCurrentUser()?.id) || isEquicordGuild(ctx?.guild?.id, true),
             execute: async () => {
                 const channelId = SelectedChannelStore.getChannelId();

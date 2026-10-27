@@ -44,14 +44,14 @@ function fixture() {
                 if (url.includes("/compare/")) return { status, commits: [] };
                 throw new Error(url);
             },
-            async fetchBuffer() {
+            async checkedFetch() {
                 if (waitDownload) await new Promise<void>(resolve => { delayDownload = resolve; });
-                return archive;
+                return { headers: { get: () => null }, body: [archive] };
             }
         }
     };
     const source = transpileModule(readFileSync("src/main/updater/http.ts", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 } }).outputText;
-    runInNewContext(source, { exports: {}, __dirname: "/fixture/desktop.asar", URL, VERSION: "4.1.0.0", require: (name: string) => name in modules ? modules[name] : nativeRequire(name) });
+    runInNewContext(source, { exports: {}, __dirname: "/fixture/desktop.asar", URL, AbortSignal, Buffer, VERSION: "4.1.0.0", require: (name: string) => name in modules ? modules[name] : nativeRequire(name) });
     const call = (event: string, ...args: unknown[]) => {
         const fn = handlers.get(event);
         assert.ok(fn);

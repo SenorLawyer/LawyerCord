@@ -51,7 +51,6 @@ export function LyricsContextMenu() {
                         disabled={lyricsAlternative.includes(provider) && !hasLyrics}
                         action={() => {
                             FluxDispatcher.dispatch({
-                                // @ts-ignore
                                 type: "SPOTIFY_LYRICS_PROVIDER_CHANGE",
                                 provider: provider,
                             });

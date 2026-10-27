@@ -1153,19 +1153,35 @@ export default definePlugin({
         {
             // Replace name in solo DM title bar and tooltip.
             find: "channel.isSystemDM(),",
-            replacement: {
-                match: /(?<=length>0,\i=\i&&null!=\i&&!\i,)(\i=)(.{0,125}?"aria-label":)(\i.\i.getName\(\i\).{0,1700}?text:)(?=\i,position)/,
-                replace: "smynName=arguments[0].channel.recipients.length===1?$self.getTypingMemberListProfilesReactionsVoiceNameText({user:$self.UserStore.getUser(arguments[0].channel.recipients[0]),type:\"profilesPopout\"})??null:null,$1smynName??$2smynName??$3smynName??"
-            },
+            group: true,
+            replacement: [
+                {
+                    match: /(?<=length>0,\i=\i&&null!=\i&&!\i,)(\i=)/,
+                    replace: "smynName=arguments[0].channel.recipients.length===1?$self.getTypingMemberListProfilesReactionsVoiceNameText({user:$self.UserStore.getUser(arguments[0].channel.recipients[0]),type:\"profilesPopout\"})??null:null,$1smynName??"
+                },
+                {
+                    match: /(?<="aria-label":)(?=\i.\i.getName\(\i\))/,
+                    replace: "smynName??"
+                },
+                {
+                    match: /text:(?=\i,position)/,
+                    replace: "$&smynName??"
+                }
+            ],
         },
         {
             // Track hovering on messages to animate gradients.
             // Attach the group ID to their messages to allow animating gradients within a group.
             find: "CUSTOM_GIFT?\"\":",
+            group: true,
             replacement: [
                 {
-                    match: /(hasHovered:\i,isHovered:(\i).{0,2000})(let \i=\i.id===\i,\i=)/,
-                    replace: "$1arguments[0].message.showMeYourNameGroupId=!!arguments[0].groupId?`g-${arguments[0].groupId}`:null;$self.handleHoveringMessage(arguments[0].message,$2);$3",
+                    match: /(?<=hasHovered:\i,isHovered:\i)(?=})/,
+                    replace: ",isHovered:smynHovered"
+                },
+                {
+                    match: /(?=let \i=\i.id===\i,\i=)/,
+                    replace: "arguments[0].message.showMeYourNameGroupId=!!arguments[0].groupId?`g-${arguments[0].groupId}`:null;$self.handleHoveringMessage(arguments[0].message,smynHovered);",
                 },
             ],
         },

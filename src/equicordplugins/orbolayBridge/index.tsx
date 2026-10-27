@@ -27,6 +27,9 @@ let ws: WebSocket | null = null;
 let accountId: string | undefined;
 let currentChannel: string | null = null;
 let connectTimeout: ReturnType<typeof setTimeout> | undefined;
+let retryTimeout: ReturnType<typeof setTimeout> | undefined;
+let retryDelay = 1000;
+let failureNotified = false;
 
 function clearConnectTimeout() {
     if (connectTimeout === undefined) return;
@@ -36,12 +39,18 @@ function clearConnectTimeout() {
 
 function closeWebsocket() {
     clearConnectTimeout();
+    clearTimeout(retryTimeout);
     const socket = ws;
     ws = null;
     currentChannel = null;
     if (!socket) return;
     socket.onopen = socket.onmessage = socket.onerror = socket.onclose = null;
     socket.close();
+}
+
+function reconnect() {
+    retryTimeout = setTimeout(createWebsocket, retryDelay);
+    retryDelay = Math.min(retryDelay * 2, 30000);
 }
 
 function send(payload: object) {
@@ -96,7 +105,7 @@ function incoming(payload: unknown) {
             if (!channel) return;
             FluxDispatcher.dispatch({
                 type: "STREAM_STOP",
-                streamKey: `guild:${channel.guild_id}:${voiceState.channelId}:${accountId}`,
+                streamKey: channel.guild_id ? `guild:${channel.guild_id}:${voiceState.channelId}:${accountId}` : `call:${voiceState.channelId}:${accountId}`,
                 appContext: "APP"
             });
             break;
@@ -128,7 +137,11 @@ function createWebsocket() {
     const failed = () => {
         if (!isCurrent()) return;
         closeWebsocket();
-        Toasts.show({ message: "Orbolay could not connect. Is the server running?", type: Toasts.Type.FAILURE, id: Toasts.genId() });
+        if (!failureNotified) {
+            failureNotified = true;
+            Toasts.show({ message: "Orbolay could not connect. Is the server running?", type: Toasts.Type.FAILURE, id: Toasts.genId() });
+        }
+        reconnect();
     };
     connectTimeout = setTimeout(failed, 1000);
     socket.onerror = failed;
@@ -137,6 +150,7 @@ function createWebsocket() {
         clearConnectTimeout();
         ws = null;
         currentChannel = null;
+        reconnect();
     };
     socket.onmessage = event => {
         if (!isCurrent() || socket.readyState !== WebSocket.OPEN || typeof event.data !== "string" || event.data.length > 4096) return;
@@ -152,7 +166,11 @@ function createWebsocket() {
     socket.onopen = () => {
         if (!isCurrent()) return;
         clearConnectTimeout();
-        Toasts.show({ message: "Connected to Orbolay server", type: Toasts.Type.SUCCESS, id: Toasts.genId() });
+        retryDelay = 1000;
+        if (failureNotified) {
+            failureNotified = false;
+            Toasts.show({ message: "Connected to Orbolay server", type: Toasts.Type.SUCCESS, id: Toasts.genId() });
+        }
         send({ cmd: "REGISTER_CONFIG", userId });
         // Let the client know whether we are in streamer mode
         send({ cmd: "STREAMER_MODE", enabled: StreamerModeStore.enabled });
@@ -162,7 +180,9 @@ function createWebsocket() {
 }
 
 function onAccountChange() {
-    if (active && UserStore.getCurrentUser()?.id !== accountId) createWebsocket();
+    if (!active || UserStore.getCurrentUser()?.id === accountId) return;
+    retryDelay = 1000;
+    createWebsocket();
 }
 
 export default definePlugin({
@@ -217,5 +237,7 @@ export default definePlugin({
         UserStore.removeChangeListener(onAccountChange);
         closeWebsocket();
         accountId = undefined;
+        retryDelay = 1000;
+        failureNotified = false;
     }
 });

@@ -104,19 +104,35 @@ function stateFile(destination: string) {
     return `${destination}.update.json`;
 }
 
+function readState(file: string): unknown {
+    try {
+        return JSON.parse(readFileSync(file, "utf8"));
+    } catch {
+        return undefined;
+    }
+}
+
 export function getStagedUpdateError(destination: string): string | undefined {
     if (!existsSync(stateFile(destination))) return;
-    const state: unknown = JSON.parse(readFileSync(stateFile(destination), "utf8"));
+    const state = readState(stateFile(destination));
     if (typeof state !== "object" || state === null || !("directory" in state) || typeof state.directory !== "string"
-        || !resolve(state.directory).startsWith(`${resolve(destination)}.update-`))
-        throw new Error("The pending update record is invalid. Repair LawyerCord with the installer.");
+        || !resolve(state.directory).startsWith(`${resolve(destination)}.update-`)) {
+        logger.warn("The pending update record is invalid, removing it.");
+        rmSync(stateFile(destination), { force: true });
+        return;
+    }
     const result = join(state.directory, "result.json");
     if (!existsSync(result)) return;
-    const outcome: unknown = JSON.parse(readFileSync(result, "utf8"));
+    const outcome = readState(result);
     if (typeof outcome === "object" && outcome !== null && "ok" in outcome && outcome.ok === false
         && "error" in outcome && typeof outcome.error === "string") {
         rmSync(stateFile(destination));
         return outcome.error;
+    }
+    if (outcome === undefined) {
+        logger.warn("The update result record is unreadable, removing it.");
+        rmSync(result, { force: true });
+        rmSync(stateFile(destination), { force: true });
     }
 }
 

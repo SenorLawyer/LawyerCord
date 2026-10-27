@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { classNameToSelector } from "@utils/css";
 import { Message } from "@vencord/discord-types";
+import { findCssClassesLazy } from "@webpack";
 import { MessageStore, SnowflakeUtils } from "@webpack/common";
 
 import { settings } from "../settings";
@@ -12,6 +14,8 @@ import { Gif } from "../types";
 import { cleanUrl } from "./cleanUrl";
 import { isAudio } from "./isAudio";
 import { uuidv4 } from "./uuidv4";
+
+const ImageClasses = findCssClassesLazy("imageWrapper");
 
 function isValidSnowflake(snowflake: string): boolean {
     return !Number.isNaN(SnowflakeUtils.extractTimestamp(snowflake));
@@ -31,7 +35,7 @@ function getGifByTarget(url: string, target?: HTMLElement | null): Gif | null {
 }
 
 function getGifByMessageAndTarget(target: HTMLElement, message: Message): Gif | null {
-    const wrapper = target.closest("[class*=\"imageWrapper\"]");
+    const wrapper = target.closest(classNameToSelector(ImageClasses.imageWrapper));
     const url = wrapper?.querySelector("video")?.src ?? wrapper?.querySelector("img")?.src;
     if (!url) return null;
 

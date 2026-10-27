@@ -8,9 +8,9 @@ import { DATA_DIR } from "@main/utils/constants";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import type { IpcMainInvokeEvent } from "electron";
 import { watch } from "fs";
-import { chmod, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "fs/promises";
+import { chmod, mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile } from "fs/promises";
 import { homedir, platform } from "os";
-import { basename, dirname, extname, join } from "path";
+import { basename, dirname, extname, isAbsolute, join, parse, relative, resolve } from "path";
 
 import { DISCORD_MCP_TOOL_NAMES, isDiscordSnowflake, sentMessageKey } from "./policy";
 
@@ -70,6 +70,11 @@ const SERVER_SOURCE_PATH = join(__dirname, "discord-mcp-server.mjs");
 const MAX_REQUEST_SIZE = 64 * 1024;
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 const MAX_REQUEST_AGE_MS = 5 * 60 * 1000;
+const MAX_RESPONSE_SIZE = 4 * 1024 * 1024;
+const MAX_ERROR_LENGTH = 2_000;
+const DOWNLOAD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const DOWNLOADS_MAX_TOTAL_SIZE = 500 * 1024 * 1024;
+const MAX_UPLOAD_DIRECTORIES = 20;
 const REQUEST_ID = /^[A-Za-z0-9_-]{8,100}$/;
 const allowedTools = new Set<string>(DISCORD_MCP_TOOL_NAMES);
 
@@ -195,10 +200,11 @@ async function loadSentLedger(): Promise<void> {
 }
 
 function persistSentLedger(): Promise<void> {
-    ledgerWrite = ledgerWrite.then(() =>
+    const write = ledgerWrite.then(() =>
         atomicWrite(SENT_LEDGER_PATH, `${JSON.stringify([...sentMessages], null, 2)}\n`)
     );
-    return ledgerWrite;
+    ledgerWrite = write.catch(() => undefined);
+    return write;
 }
 
 async function cleanupStaleQueueFiles(): Promise<void> {
@@ -214,6 +220,28 @@ async function cleanupStaleQueueFiles(): Promise<void> {
     }
 }
 
+async function sweepDownloads(keep?: string): Promise<void> {
+    const cutoff = Date.now() - DOWNLOAD_MAX_AGE_MS;
+    const remaining: Array<{ path: string; mtimeMs: number; size: number; }> = [];
+    for (const entry of await readdir(DOWNLOADS_DIR, { withFileTypes: true })) {
+        if (!entry.isFile()) continue;
+        const path = join(DOWNLOADS_DIR, entry.name);
+        try {
+            const info = await stat(path);
+            if (path !== keep && info.mtimeMs < cutoff) await rm(path, { force: true });
+            else remaining.push({ path, mtimeMs: info.mtimeMs, size: info.size });
+        } catch { }
+    }
+
+    let total = remaining.reduce((sum, file) => sum + file.size, 0);
+    for (const file of remaining.sort((a, b) => a.mtimeMs - b.mtimeMs)) {
+        if (total <= DOWNLOADS_MAX_TOTAL_SIZE) break;
+        if (file.path === keep) continue;
+        await rm(file.path, { force: true }).catch(() => undefined);
+        total -= file.size;
+    }
+}
+
 async function ensureInitialized(): Promise<void> {
     if (!initialization) {
         initialization = (async () => {
@@ -224,7 +252,7 @@ async function ensureInitialized(): Promise<void> {
             ]);
             await ensureBridgeServer();
             bridgeSecret = (await readOrCreateConfig()).secret;
-            await Promise.all([loadSentLedger(), cleanupStaleQueueFiles()]);
+            await Promise.all([loadSentLedger(), cleanupStaleQueueFiles(), sweepDownloads()]);
         })();
     }
     return initialization;
@@ -276,6 +304,10 @@ export async function configureMcpClients(_: IpcMainInvokeEvent, clients: unknow
     return results;
 }
 
+async function respondWithError(id: string, error: string): Promise<void> {
+    await atomicWrite(join(RESPONSES_DIR, `${id}.json`), JSON.stringify({ id, ok: false, error })).catch(() => undefined);
+}
+
 async function claimRequests(): Promise<BridgeRequest[]> {
     const requests: BridgeRequest[] = [];
     const entries = (await readdir(REQUESTS_DIR, { withFileTypes: true }))
@@ -292,8 +324,14 @@ async function claimRequests(): Promise<BridgeRequest[]> {
             const parsed = JSON.parse(await readFile(claimedPath, "utf8")) as BridgeRequest;
             if (!REQUEST_ID.test(parsed.id)) continue;
             if (!equalSecret(parsed.secret)) continue;
-            if (!allowedTools.has(parsed.tool)) continue;
-            if (!Number.isFinite(parsed.createdAt) || Math.abs(Date.now() - parsed.createdAt) > MAX_REQUEST_AGE_MS) continue;
+            if (!allowedTools.has(parsed.tool)) {
+                await respondWithError(parsed.id, "Unsupported Discord MCP tool");
+                continue;
+            }
+            if (!Number.isFinite(parsed.createdAt) || Math.abs(Date.now() - parsed.createdAt) > MAX_REQUEST_AGE_MS) {
+                await respondWithError(parsed.id, "The request expired before Discord picked it up. Check that your system clock is correct.");
+                continue;
+            }
             requests.push(parsed);
         } catch { }
         finally { await rm(claimedPath, { force: true }).catch(() => undefined); }
@@ -302,12 +340,15 @@ async function claimRequests(): Promise<BridgeRequest[]> {
     return requests;
 }
 
-function waitForRequestSignal(timeoutMs: number): Promise<void> {
-    return new Promise(resolve => {
+const WATCH_FALLBACK_POLL_MS = 250;
+
+function watchForRequests(timeoutMs: number): { signal: Promise<void>; cancel(): void; } {
+    let finish = () => { };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let watcher: ReturnType<typeof watch> | undefined;
+    const signal = new Promise<void>(resolve => {
         let finished = false;
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        let watcher: ReturnType<typeof watch> | undefined;
-        const finish = () => {
+        finish = () => {
             if (finished) return;
             finished = true;
             if (timer) clearTimeout(timer);
@@ -322,32 +363,48 @@ function waitForRequestSignal(timeoutMs: number): Promise<void> {
             watcher.once("error", finish);
             timer = setTimeout(finish, timeoutMs);
         } catch {
-            finish();
+            timer = setTimeout(finish, Math.min(timeoutMs, WATCH_FALLBACK_POLL_MS));
         }
     });
+    return { signal, cancel: finish };
 }
 
 export async function takeRequests(_: IpcMainInvokeEvent, waitMs = 10_000): Promise<BridgeRequest[]> {
     await ensureInitialized();
-    const immediatelyAvailable = await claimRequests();
-    if (immediatelyAvailable.length > 0) return immediatelyAvailable;
-
     const boundedWaitMs = Number.isFinite(waitMs) ? Math.max(0, Math.min(30_000, waitMs)) : 10_000;
-    if (boundedWaitMs > 0) await waitForRequestSignal(boundedWaitMs);
-    return claimRequests();
+    const watcher = boundedWaitMs > 0 ? watchForRequests(boundedWaitMs) : null;
+    try {
+        const available = await claimRequests();
+        if (available.length > 0 || !watcher) return available;
+        await watcher.signal;
+        return await claimRequests();
+    } finally {
+        watcher?.cancel();
+    }
 }
 
 export async function writeResponse(_: IpcMainInvokeEvent, response: BridgeResponse): Promise<void> {
     await ensureInitialized();
-    if (!response || !REQUEST_ID.test(response.id)) throw new Error("Invalid Discord MCP response ID");
-    await atomicWrite(join(RESPONSES_DIR, `${response.id}.json`), JSON.stringify(response));
+    if (!isRecord(response) || typeof response.id !== "string" || !REQUEST_ID.test(response.id) || typeof response.ok !== "boolean")
+        throw new Error("Invalid Discord MCP response");
+    const body = JSON.stringify({
+        id: response.id,
+        ok: response.ok,
+        ...(response.ok ? { result: response.result } : { error: String(response.error ?? "Discord MCP request failed").slice(0, MAX_ERROR_LENGTH) }),
+    });
+    if (body.length > MAX_RESPONSE_SIZE) throw new Error("Discord MCP response is too large");
+    await atomicWrite(join(RESPONSES_DIR, `${response.id}.json`), body);
 }
 
 export async function recordSentMessage(_: IpcMainInvokeEvent, channelId: string, messageId: string): Promise<void> {
     await ensureInitialized();
     if (!isDiscordSnowflake(channelId) || !isDiscordSnowflake(messageId)) throw new Error("Invalid message identity");
     sentMessages.add(sentMessageKey(channelId, messageId));
-    if (sentMessages.size > 10_000) sentMessages.delete(sentMessages.values().next().value!);
+    while (sentMessages.size > 10_000) {
+        const oldest = sentMessages.values().next();
+        if (oldest.done) break;
+        sentMessages.delete(oldest.value);
+    }
     await persistSentLedger();
 }
 
@@ -441,6 +498,7 @@ export async function downloadDiscordAttachment(
     const outputName = safeDownloadName(filename);
     const outputPath = join(DOWNLOADS_DIR, outputName);
     await writeFile(outputPath, data, { flag: "wx", mode: 0o600 });
+    await sweepDownloads(outputPath).catch(() => undefined);
 
     return {
         path: outputPath,
@@ -450,4 +508,51 @@ export async function downloadDiscordAttachment(
         size: data.byteLength,
         sha256: createHash("sha256").update(data).digest("hex"),
     };
+}
+
+function insideDirectory(parent: string, child: string): boolean {
+    const normalize = (value: string) => platform() === "win32" ? value.toLowerCase() : value;
+    const offset = relative(normalize(parent), normalize(child));
+    return offset === "" || (!offset.startsWith("..") && !isAbsolute(offset));
+}
+
+async function allowedUploadRoots(directories: unknown): Promise<string[]> {
+    if (!Array.isArray(directories) || directories.length > MAX_UPLOAD_DIRECTORIES) throw new Error("Invalid upload folder list");
+    const roots = [await realpath(DOWNLOADS_DIR)];
+    for (const directory of directories) {
+        if (typeof directory !== "string" || directory.length > 1_024 || !isAbsolute(directory)) continue;
+        const resolved = resolve(directory);
+        if (resolved === parse(resolved).root) continue;
+        try {
+            if ((await stat(resolved)).isDirectory()) roots.push(await realpath(resolved));
+        } catch { }
+    }
+    return roots;
+}
+
+export async function readUploadFile(_: IpcMainInvokeEvent, filePath: unknown, directories: unknown): Promise<{
+    name: string;
+    data: Uint8Array;
+}> {
+    await ensureInitialized();
+    if (typeof filePath !== "string" || filePath.length < 1 || filePath.length > 1_024 || !isAbsolute(filePath))
+        throw new Error("Attachment paths must be full paths");
+
+    const roots = await allowedUploadRoots(directories);
+    let resolved: string;
+    try { resolved = await realpath(filePath); }
+    catch { throw new Error("Attachment file was not found"); }
+
+    const bridge = await realpath(BRIDGE_DIR);
+    const downloads = await realpath(DOWNLOADS_DIR);
+    const dataDirectory = await realpath(DATA_DIR);
+    if (!roots.some(root => insideDirectory(root, resolved)))
+        throw new Error("That file is outside the folders allowed in the DiscordMCP settings");
+    if ((insideDirectory(bridge, resolved) || insideDirectory(dataDirectory, resolved)) && !insideDirectory(downloads, resolved))
+        throw new Error("That file is private to LawyerCord and cannot be sent");
+
+    const info = await stat(resolved);
+    if (!info.isFile()) throw new Error("Attachment path must be a file");
+    if (info.size > MAX_ATTACHMENT_SIZE) throw new Error("Attachment exceeds the 25 MB Discord MCP limit");
+    return { name: basename(resolved), data: new Uint8Array(await readFile(resolved)) };
 }

@@ -8,16 +8,25 @@ import * as DataStore from "@api/DataStore";
 import { Logger } from "@utils/Logger";
 import { isObject } from "@utils/misc";
 import { CloudUploadPlatform } from "@vencord/discord-types/enums";
-import { ChannelStore, CloudUploader, Constants, FluxDispatcher, GuildStore, IconUtils, lodash, MessageActions, MessageStore, RestAPI, showToast, SnowflakeUtils, Toasts, UserStore } from "@webpack/common";
+import { ChannelStore, CloudUploader, Constants, FluxDispatcher, GuildStore, IconUtils, MessageActions, MessageStore, RestAPI, showToast, SnowflakeUtils, Toasts, UserStore } from "@webpack/common";
 
 import { settings } from ".";
+import { openMissedMessagesModal } from "./components/MissedMessagesModal";
 import { PhantomMessageData, ScheduledAttachment, ScheduledMessage, ScheduledReaction } from "./types";
 
 const logger = new Logger("ScheduledMessages");
 const STORAGE_KEY = "ScheduledMessages_queue";
+const VERSION_KEY = "ScheduledMessages_version";
+const BLOB_PREFIX = "ScheduledMessages_blob_";
+const MISSED_GRACE_MS = 2 * 60 * 1000;
+
+type StoredAttachment = Omit<ScheduledAttachment, "data"> & { data?: string; blob?: string; };
+type StoredMessage = Omit<ScheduledMessage, "attachments"> & { attachments?: StoredAttachment[]; };
 
 let scheduledMessages: ScheduledMessage[] = [];
-let savedMessages: ScheduledMessage[] | undefined;
+let savedVersion = 0;
+const persistedBlobs = new Set<string>();
+const promptedMissed = new Set<string>();
 let queueLoaded = false;
 let invalidStoredQueue = false;
 let queueOperation: Promise<void> = Promise.resolve();
@@ -40,9 +49,9 @@ function isStoredTimestamp(value: unknown): value is number {
     return typeof value === "number" && Number.isFinite(value) && !Number.isNaN(new Date(value).getTime());
 }
 
-function isScheduledMessage(value: unknown): value is ScheduledMessage {
+function isScheduledMessage(value: unknown): value is StoredMessage {
     if (!isObject(value)) return false;
-    const entry = value as Partial<ScheduledMessage>;
+    const entry = value as Partial<StoredMessage>;
     return typeof entry.id === "string" && entry.id.length > 0
         && typeof entry.channelId === "string" && entry.channelId.length > 0
         && typeof entry.content === "string"
@@ -51,8 +60,8 @@ function isScheduledMessage(value: unknown): value is ScheduledMessage {
         && (entry.attemptedAt === undefined || isStoredTimestamp(entry.attemptedAt))
         && (entry.attachments === undefined || Array.isArray(entry.attachments) && [...entry.attachments].every((attachment: unknown) => {
             if (!isObject(attachment)) return false;
-            const item = attachment as Partial<ScheduledAttachment>;
-            return typeof item.filename === "string" && typeof item.data === "string" && typeof item.type === "string";
+            const item = attachment as Partial<StoredAttachment>;
+            return typeof item.filename === "string" && typeof item.type === "string" && (typeof item.data === "string" || typeof item.blob === "string");
         }))
         && (entry.reactions === undefined || Array.isArray(entry.reactions) && [...entry.reactions].every((reaction: unknown) => {
             if (!isObject(reaction)) return false;
@@ -76,6 +85,7 @@ export async function loadScheduledMessages(refreshPreviews = false): Promise<vo
 
 async function readStoredQueue(): Promise<void> {
     invalidStoredQueue = true;
+    const version = await DataStore.get<number>(VERSION_KEY) ?? 0;
     const saved = await DataStore.get<unknown>(STORAGE_KEY);
     if (saved !== undefined && (!Array.isArray(saved) || ![...saved].every(isScheduledMessage) || new Set(saved.map(entry => entry.id)).size !== saved.length)) {
         stopScheduler();
@@ -83,14 +93,32 @@ async function readStoredQueue(): Promise<void> {
         scheduledMessages = [];
         throw new Error("Saved scheduled messages are invalid. The stored data has been preserved.");
     }
+    const hydrated = await Promise.all((saved ?? []).map(hydrateMessage));
     for (const message of scheduledMessages) {
-        if (phantomMessageMap.has(`scheduled-${message.id}`) && !saved?.some(entry => entry.id === message.id))
+        if (phantomMessageMap.has(`scheduled-${message.id}`) && !hydrated.some(entry => entry.id === message.id))
             removePhantomMessage(message);
     }
     queueLoaded = true;
     invalidStoredQueue = false;
-    savedMessages = saved;
-    scheduledMessages = [...saved ?? []].sort((a, b) => a.scheduledTime - b.scheduledTime);
+    savedVersion = version;
+    scheduledMessages = hydrated.sort((a, b) => a.scheduledTime - b.scheduledTime);
+    persistedBlobs.clear();
+    for (const entry of saved ?? [])
+        entry.attachments?.forEach(({ blob }) => blob && persistedBlobs.add(blob));
+    if (saved?.some(entry => entry.attachments?.some(({ data }) => data !== undefined)))
+        await saveScheduledMessages(scheduledMessages);
+}
+
+async function hydrateMessage({ attachments, ...message }: StoredMessage): Promise<ScheduledMessage> {
+    if (!attachments) return message;
+    return {
+        ...message,
+        attachments: await Promise.all(attachments.map(async ({ blob, data, ...attachment }) => {
+            const content = data ?? (blob === undefined ? undefined : await DataStore.get<string>(blob));
+            if (typeof content !== "string") throw new Error("A saved scheduled attachment is missing. The stored data has been preserved.");
+            return { ...attachment, data: content };
+        }))
+    };
 }
 
 function runQueueOperation<T>(operation: () => Promise<T>, loading = false): Promise<T> {
@@ -106,12 +134,27 @@ function runQueueOperation<T>(operation: () => Promise<T>, loading = false): Pro
 }
 
 async function saveScheduledMessages(messages: ScheduledMessage[]): Promise<void> {
-    await DataStore.update<ScheduledMessage[]>(STORAGE_KEY, stored => {
-        if (!lodash.isEqual(stored, savedMessages))
+    const blobs = new Map<string, string>();
+    const stored = messages.map(({ attachments, ...message }): StoredMessage => attachments ? {
+        ...message,
+        attachments: attachments.map(({ data, ...attachment }, index) => {
+            const blob = `${BLOB_PREFIX}${message.id}_${index}`;
+            blobs.set(blob, data);
+            return { ...attachment, blob };
+        })
+    } : message);
+    const expected = savedVersion;
+    await DataStore.update<number>(VERSION_KEY, current => {
+        if ((current ?? 0) !== expected)
             throw new Error("Scheduled messages changed in another client. Reload the queue before trying again.");
-        return messages;
+        return expected + 1;
     });
-    savedMessages = messages;
+    savedVersion = expected + 1;
+    await DataStore.setMany([...blobs].filter(([blob]) => !persistedBlobs.has(blob)));
+    await DataStore.set(STORAGE_KEY, stored);
+    await DataStore.delMany([...persistedBlobs].filter(blob => !blobs.has(blob)));
+    persistedBlobs.clear();
+    blobs.forEach((_, blob) => persistedBlobs.add(blob));
     scheduledMessages = messages;
 }
 
@@ -313,30 +356,9 @@ export async function createPhantomMessage(msg: ScheduledMessage): Promise<void>
             sendMessageOptions: {},
             isPushNotification: false
         });
-
-        applyPhantomClassToMessage(msg.channelId, messageId);
     }).catch(() => {
         if (isCurrent()) logger.warn("Could not create scheduled message preview.");
     });
-}
-
-function applyPhantomClassToMessage(channelId: string, messageId: string): void {
-    const generation = phantomGeneration;
-    const tryApply = (retries = 0) => {
-        if (generation !== phantomGeneration) return false;
-
-        const el = document.getElementById(`chat-messages-${channelId}-${messageId}`);
-        if (el) {
-            el.classList.add("vc-scheduled-msg-phantom");
-            return true;
-        }
-        if (retries < 20) {
-            setTimeout(() => tryApply(retries + 1), 100 + retries * 50);
-        }
-        return false;
-    };
-
-    setTimeout(() => tryApply(), 50);
 }
 
 function removePhantomMessage(msg: ScheduledMessage): void {
@@ -485,7 +507,8 @@ export async function addScheduledMessage(
     channelId: string,
     content: string,
     scheduledTime: number,
-    attachments?: ScheduledAttachment[]
+    attachments?: ScheduledAttachment[],
+    replaceId?: string
 ): Promise<{ success: boolean; error?: string; }> {
     const userId = UserStore.getCurrentUser()?.id;
     if (!userId) return { success: false, error: "Sign in before scheduling a message." };
@@ -495,7 +518,9 @@ export async function addScheduledMessage(
     const generation = schedulerGeneration;
     return runQueueOperation(async () => {
         const minuteStart = Math.floor(scheduledTime / 60000) * 60000;
-        const count = scheduledMessages.filter(m =>
+        const replaced = scheduledMessages.find(m => m.id === replaceId);
+        const queue = scheduledMessages.filter(m => m !== replaced);
+        const count = queue.filter(m =>
             m.userId === userId && m.channelId === channelId && m.scheduledTime >= minuteStart && m.scheduledTime < minuteStart + 60000
         ).length;
         if (count >= settings.store.maxMessagesPerMinute) {
@@ -510,7 +535,8 @@ export async function addScheduledMessage(
             createdAt: Date.now(),
             attachments
         };
-        await saveScheduledMessages([...scheduledMessages, newMessage].sort((a, b) => a.scheduledTime - b.scheduledTime));
+        await saveScheduledMessages([...queue, newMessage].sort((a, b) => a.scheduledTime - b.scheduledTime));
+        if (replaced) removePhantomMessage(replaced);
         if (generation === schedulerGeneration && UserStore.getCurrentUser()?.id === userId)
             createPhantomMessage(newMessage).catch(() => logger.warn("Could not create a scheduled message preview."));
         scheduleNextCheck();
@@ -569,6 +595,15 @@ export async function clearAllScheduledMessages(): Promise<void> {
     scheduleNextCheck();
 }
 
+export function isMissedMessage(msg: ScheduledMessage, now = Date.now()): boolean {
+    return msg.attemptedAt === undefined && now - msg.scheduledTime > MISSED_GRACE_MS;
+}
+
+export function getMissedMessages(): ScheduledMessage[] {
+    const userId = UserStore.getCurrentUser()?.id;
+    return scheduledMessages.filter(m => m.userId === userId && isMissedMessage(m));
+}
+
 async function checkAndSendMessages(): Promise<void> {
     if (isProcessingMessages) return;
     isProcessingMessages = true;
@@ -577,9 +612,15 @@ async function checkAndSendMessages(): Promise<void> {
     try {
         const now = Date.now();
         const userId = UserStore.getCurrentUser()?.id;
-        const dueMessages = userId
+        const overdue = userId
             ? scheduledMessages.filter(m => m.userId === userId && m.attemptedAt === undefined && m.scheduledTime <= now)
             : [];
+        const dueMessages = overdue.filter(m => !isMissedMessage(m, now));
+        const missed = overdue.filter(m => isMissedMessage(m, now) && !promptedMissed.has(m.id));
+        if (missed.length) {
+            missed.forEach(m => promptedMissed.add(m.id));
+            openMissedMessagesModal();
+        }
 
         for (const msg of dueMessages) {
             if (generation !== schedulerGeneration) return;
@@ -615,7 +656,7 @@ export function scheduleNextCheck(): void {
     }
 
     const userId = UserStore.getCurrentUser()?.id;
-    const nextMessage = userId && scheduledMessages.find(message => message.userId === userId && message.attemptedAt === undefined);
+    const nextMessage = userId && scheduledMessages.find(message => message.userId === userId && message.attemptedAt === undefined && !isMissedMessage(message));
     if (!nextMessage) return;
 
     const maxDelay = Math.max(1000, settings.store.checkIntervalSeconds * 1000);

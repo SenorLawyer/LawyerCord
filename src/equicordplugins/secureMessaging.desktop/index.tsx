@@ -636,11 +636,14 @@ async function assertProgrammaticEditAllowed(request: Record<string, any>): Prom
         throw new Error("Secure Messaging blocked a programmatic edit in a protected conversation");
 }
 
+function isRestMethod(value: unknown): value is RestMethod {
+    return typeof value === "function";
+}
+
 function installNetworkGuard(): void {
-    const rest = RestAPI as unknown as Record<string, any>;
-    const { post } = rest;
-    const { patch } = rest;
-    if (typeof post !== "function" || typeof patch !== "function")
+    const rest: Record<string, unknown> = RestAPI;
+    const { post, patch } = rest;
+    if (!isRestMethod(post) || !isRestMethod(patch))
         throw new Error("Discord REST message methods are unavailable");
 
     networkGuardEnabled = true;
@@ -660,7 +663,7 @@ function installNetworkGuard(): void {
 
 function uninstallNetworkGuard(): void {
     networkGuardEnabled = false;
-    const rest = RestAPI as unknown as Record<string, any>;
+    const rest: Record<string, unknown> = RestAPI;
     if (guardedRestPost && rest.post === guardedRestPost && originalRestPost) rest.post = originalRestPost;
     if (guardedRestPatch && rest.patch === guardedRestPatch && originalRestPatch) rest.patch = originalRestPatch;
     originalRestPost = null;

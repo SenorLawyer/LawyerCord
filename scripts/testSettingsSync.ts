@@ -1230,7 +1230,7 @@ test("cloud configuration changes persist locally without changing sync timestam
                 markLocalSettingsDirty: () => dirty++, saveSettingsOnFrequentAction: () => scheduled++
             });
             callback(plain, path);
-            const cloudOnly = path === "cloud" || path.startsWith("cloud.");
+            const cloudOnly = !path || path === "cloud" || path.startsWith("cloud.");
             if (file === "src/api/Settings.ts") {
                 assert.equal(saves, 1);
                 assert.equal(plain.cloud.settingsSyncVersion, cloudOnly ? 5 : 100, path);
@@ -2467,21 +2467,24 @@ test("cloud transfers do not create another device's scheduled sends or replace 
     }).outputText;
     for (const legacy of [false, true]) {
         const posts: string[] = [];
-        const job = { id: "job", userId: "account", channelId: "synthetic", content: "Synthetic fixture", scheduledTime: 0, createdAt: 0 };
+        const job = { id: "job", userId: "account", channelId: "synthetic", content: "Synthetic fixture", scheduledTime: Date.now(), createdAt: 0 };
         const entries: [string, unknown][] = [
-            ["ScheduledMessages_queue", [job]], ["VCLastVoiceChannel", { channelId: "source voice" }],
+            ["ScheduledMessages_queue", [job]], ["ScheduledMessages_version", 3], ["ScheduledMessages_blob_job_0", "synthetic"], ["VCLastVoiceChannel", { channelId: "source voice" }],
             ["KeepCurrentChannel_previousData", { channelId: "source text", guildId: null }], ["CustomSounds", { saved: true }]
         ];
         const device = (name: string, initial: [string, unknown][]) => {
             const records = new Map(initial);
             const store = {
                 get: async (key: string) => structuredClone(records.get(key)), entries: async () => structuredClone([...records]),
+                set: async (key: string, value: unknown) => { records.set(key, structuredClone(value)); },
                 setMany: async (entries: [string, unknown][]) => { for (const [key, value] of entries) records.set(key, structuredClone(value)); },
+                delMany: async (keys: string[]) => { for (const key of keys) records.delete(key); },
                 update: async (key: string, updater: (value: unknown) => unknown) => { records.set(key, structuredClone(updater(structuredClone(records.get(key))))); }
             };
             const modules: Record<string, unknown> = {
                 "@api/DataStore": store, "..": { DataStore: store },
                 "@api/Settings": { PlainSettings: {}, DefaultSettings: defaultSettings },
+                "./components/MissedMessagesModal": { openMissedMessagesModal() {} },
                 "@utils/Logger": { Logger: class { warn() {} } },
                 "@utils/misc": { isObject: (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) },
                 "@webpack/common": {
@@ -2508,7 +2511,7 @@ test("cloud transfers do not create another device's scheduled sends or replace 
         assert.deepEqual(recipient.records.get("VCLastVoiceChannel"), localVoice);
         assert.deepEqual(recipient.records.get("KeepCurrentChannel_previousData"), localText);
         assert.deepEqual(recipient.records.get("CustomSounds"), { saved: true });
-        assert.equal(recipient.records.has("ScheduledMessages_queue"), false);
+        for (const key of ["ScheduledMessages_queue", "ScheduledMessages_version", "ScheduledMessages_blob_job_0"]) assert.equal(recipient.records.has(key), false, key);
     }
 });
 

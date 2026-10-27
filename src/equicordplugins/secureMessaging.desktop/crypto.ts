@@ -16,11 +16,13 @@ import {
     canonicalKeyAnnouncement,
     decodeBase64Url,
     encodeBase64Url,
+    ENCRYPTED_MESSAGE_PREFIX,
     EncryptedEnvelope,
     envelopeHeader,
     isEnvelopeId,
     isProtocolTimestamp,
     KeyAnnouncement,
+    MAX_DISCORD_MESSAGE_LENGTH,
     MAX_SELECTED_RECIPIENTS,
     parseEncryptedEnvelope,
     parseKeyAnnouncement,
@@ -226,6 +228,18 @@ export interface EncryptMessageInput {
     now?: number;
     messageId?: string;
     counter: number;
+}
+
+export function envelopeFits(input: { channelId: string; counter: number; plaintext: string; recipientUserIds: string[]; senderUserId: string; }): boolean {
+    const filler = (length: number) => "A".repeat(length);
+    const ciphertextBytes = new TextEncoder().encode(input.plaintext).byteLength + 16;
+    const envelope: EncryptedEnvelope = {
+        v: PROTOCOL_VERSION, t: "m", i: filler(36), c: input.channelId, s: input.senderUserId, d: Date.now(), q: input.counter,
+        k: filler(43),
+        r: [...new Set([input.senderUserId, ...input.recipientUserIds])].map(u => ({ u, e: filler(43), x: filler(64) })),
+        n: filler(16), x: filler(Math.ceil(ciphertextBytes * 4 / 3)), z: filler(86)
+    };
+    return ENCRYPTED_MESSAGE_PREFIX.length + JSON.stringify(envelope).length <= MAX_DISCORD_MESSAGE_LENGTH;
 }
 
 export async function encryptMessage(input: EncryptMessageInput): Promise<string> {

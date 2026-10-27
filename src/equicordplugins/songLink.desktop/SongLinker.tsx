@@ -76,7 +76,7 @@ export default function SongLinker({ url, onResolved }: SongLinkerProps) {
                         {
                             Object.keys(songData.links).map(service => settings.store.servicesSettings[service]?.enabled && Providers[service] && <Button key={`${service}-${url}`} style={{
                                 width: "20px !important"
-                                // @ts-ignore
+                                // @ts-expect-error "secondary" is not in the Button variant type
                             }} variant="secondary" onClick={() => {
                                 // FIXME: fix type error
                                 // @ts-expect-error ???

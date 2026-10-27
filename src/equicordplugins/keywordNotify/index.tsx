@@ -599,7 +599,7 @@ export default definePlugin({
         if (matches) {
             const id = UserStore.getCurrentUser()?.id;
             if (id != null) {
-                // @ts-ignore
+                // @ts-expect-error mention objects are partial
                 m.mentions.push({ id: id });
             }
 

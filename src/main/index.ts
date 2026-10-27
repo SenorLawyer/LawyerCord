@@ -32,7 +32,7 @@ if (!IS_VANILLA && !IS_EXTENSION) {
             protocol.handle(scheme, ({ url: unsafeUrl }) => {
                 let url: string;
                 try {
-                    url = decodeURI(unsafeUrl).slice(`${scheme}://`.length).replace(/\?v=\d+$/, "");
+                    url = decodeURIComponent(unsafeUrl).slice(`${scheme}://`.length).replace(/\?v=\d+$/, "");
                 } catch {
                     return new Response(null, { status: 404 });
                 }

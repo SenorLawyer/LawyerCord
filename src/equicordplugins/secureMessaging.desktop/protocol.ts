@@ -170,7 +170,7 @@ export function parseKeyAnnouncement(content: string): KeyAnnouncement {
         typeof value.e !== "string" || !BASE64URL_32.test(value.e) || !isCanonicalBase64Url(value.e, 32) ||
         typeof value.z !== "string" || !BASE64URL_64.test(value.z) || !isCanonicalBase64Url(value.z, 64))
         throw new Error("Invalid key announcement fields");
-    const announcement = value as unknown as KeyAnnouncement;
+    const announcement: KeyAnnouncement = { v: value.v, t: value.t, u: value.u, d: value.d, s: value.s, e: value.e, z: value.z };
     if (JSON.stringify(announcement) !== content.slice(KEY_ANNOUNCEMENT_PREFIX.length))
         throw new Error("Key announcement is not canonically encoded");
     return announcement;
@@ -182,24 +182,25 @@ export function parseEncryptedEnvelope(content: string): EncryptedEnvelope {
         throw new Error("Malformed encrypted envelope");
     if (value.v !== PROTOCOL_VERSION || value.t !== "m" || !isEnvelopeId(value.i) ||
         !isSnowflake(value.c) || !isSnowflake(value.s) || !isProtocolTimestamp(value.d) ||
-        !Number.isSafeInteger(value.q) || (value.q as number) < 1 ||
+        typeof value.q !== "number" || !Number.isSafeInteger(value.q) || value.q < 1 ||
         typeof value.k !== "string" || !BASE64URL_32.test(value.k) || !isCanonicalBase64Url(value.k, 32) ||
         !isCanonicalBase64Url(value.n, 12) || !isCanonicalVariableBase64Url(value.x, 17, MAX_DISCORD_MESSAGE_LENGTH) ||
         typeof value.z !== "string" || !BASE64URL_64.test(value.z) || !isCanonicalBase64Url(value.z, 64) || !Array.isArray(value.r) ||
         value.r.length < 1 || value.r.length > MAX_SELECTED_RECIPIENTS + 1)
         throw new Error("Invalid encrypted envelope fields");
 
-    const recipients = value.r as unknown[];
+    const recipients: WrappedContentKey[] = [];
     let previousUserId = "";
-    for (const recipient of recipients) {
+    for (const recipient of value.r) {
         if (!isRecord(recipient) || !hasExactKeys(recipient, ["u", "e", "x"]) || !isSnowflake(recipient.u) ||
             typeof recipient.e !== "string" || !BASE64URL_32.test(recipient.e) || !isCanonicalBase64Url(recipient.e, 32) ||
             typeof recipient.x !== "string" || !BASE64URL_48.test(recipient.x) || !isCanonicalBase64Url(recipient.x, 48) ||
             recipient.u <= previousUserId)
             throw new Error("Invalid or unsorted encrypted recipient entry");
         previousUserId = recipient.u;
+        recipients.push({ u: recipient.u, e: recipient.e, x: recipient.x });
     }
-    const envelope = value as unknown as EncryptedEnvelope;
+    const envelope: EncryptedEnvelope = { v: value.v, t: value.t, i: value.i, c: value.c, s: value.s, d: value.d, q: value.q, k: value.k, r: recipients, n: value.n, x: value.x, z: value.z };
     if (JSON.stringify(envelope) !== content.slice(ENCRYPTED_MESSAGE_PREFIX.length))
         throw new Error("Encrypted envelope is not canonically encoded");
     return envelope;

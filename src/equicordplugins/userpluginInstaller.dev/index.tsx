@@ -20,7 +20,6 @@ import SettingsTab from "./components/SettingsTab";
 import UserpluginInstallButton from "./components/UserpluginInstallButton";
 import { VariableWithCallbacks } from "./VariableWithCallbacks";
 
-// @ts-ignore
 export const Native = VencordNative.pluginHelpers.UserpluginInstaller as PluginNative<typeof import("./native")>;
 export const OpenSettingsModule = findByPropsLazy("openUserSettings");
 let generation = 0;
@@ -128,7 +127,7 @@ export default definePlugin({
             });
             const pls = await Native.getUserplugins();
             if (run !== generation) return;
-            // @ts-ignore :trolley:
+            // @ts-expect-error settings entry typings lack value
             this.plugins.value(pls);
             await this.checkPluginUpdates(run);
         } catch {
@@ -146,7 +145,6 @@ export default definePlugin({
             this.pluginsWithUpdates.deregisterCallback(notificationCallback);
             notificationCallback = undefined;
         }
-        // @ts-ignore
         const index = plSettings.customEntries.indexOf(this.section);
         if (index !== -1) plSettings.customEntries.splice(index, 1);
     },

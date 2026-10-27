@@ -67,7 +67,7 @@ for (const mode of ["http", "git"]) test(`${mode} updater isolates release chann
         compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
     });
     runInNewContext(outputText, {
-        exports: {}, __dirname: "/fixture/dist", process: { platform: "win32", env: {} }, URL, VERSION: "3.0.0.0",
+        exports: {}, __dirname: "/fixture/dist", process: { platform: "win32", env: {} }, URL, AbortSignal, VERSION: "3.0.0.0",
         require: (name: string) => name in modules ? modules[name] : nativeRequire(name)
     });
     const check = handlers.get(events.GET_UPDATES);

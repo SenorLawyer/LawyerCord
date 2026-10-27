@@ -51,7 +51,7 @@ for (const mode of ["normal", "stop", "restart"]) {
         const response = new Promise(resolve => finish = resolve);
         const api = load("src/plugins/xsOverlay/index.tsx", ["getCachedAvatarIcon", "sendMsgNotif", "sendToOverlay", "stopSocket", "calculateHeight", "calculateTimeout", "start"], ["socket", "socketGeneration", "notificationGeneration", "avatarIconCache", "MAX_AVATAR_ICON_CACHE_SIZE"], {
             settings: { store: { preferUDP: true } }, IS_WEB: false, Native: { sendToOverlay: () => sends++ },
-            fetch: () => response, connectSocket: async () => {}, logger: { error() {} },
+            IconUtils: { getUserAvatarURL: () => "avatar" }, fetch: () => response, connectSocket: async () => {}, logger: { error() {} },
             FileReader: class { result = "data:image/png;base64,a"; onload = () => {}; readAsDataURL() { this.onload(); } }
         });
         await api.start();

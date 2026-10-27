@@ -7,11 +7,12 @@
 import { playAudio } from "@api/AudioPlayer";
 import { addServerListElement, removeServerListElement, ServerListRenderPosition } from "@api/ServerList";
 import { PlainSettings } from "@api/Settings";
+import { setStyleClassNames } from "@api/Styles";
 import { ErrorBoundary } from "@components/index";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { StartAt } from "@utils/types";
 import type { Quest, QuestUserStatus } from "@vencord/discord-types";
-import { onceReady } from "@webpack";
+import { findCssClassesLazy, onceReady } from "@webpack";
 import { QuestStore } from "@webpack/common";
 
 import { disguiseHomeButton, QuestButton, showQuestButton } from "./components/questButton";
@@ -29,6 +30,20 @@ import { notifyQuestCompletion, QL } from "./utils/logging";
 import { getQuestEmbedProgress, getQuestPanelOverride, getQuestPanelPercentComplete } from "./utils/questState";
 import { getLastFilterChoices, getLastSortChoice, getQuestTileClasses, getQuestTileStyle, setLastFilterChoices, setLastSortChoice, shouldPreloadQuestAssets, sortQuests } from "./utils/questTiles";
 import { formatLowerBadge, QUEST_PAGE } from "./utils/ui";
+
+const LayoutClasses = findCssClassesLazy("panels", "guilds", "sidebar");
+const QuestProgressClasses = findCssClassesLazy("questProgressWrapper", "questProgressHint");
+const ProgressRingClasses = findCssClassesLazy("outer", "inner", "progressBar");
+const QuestEmbedClasses = findCssClassesLazy("rewardDescriptionContainer", "progressWrapper", "confetti", "textContainer", "textOverflowBlur");
+const ButtonClasses = findCssClassesLazy("buttonChildren", "buttonChildrenWrapper");
+const LayerClasses = findCssClassesLazy("clickTrapContainer");
+const FormFieldClasses = findCssClassesLazy("container", "labelContainer", "helperTextContainer", "control");
+const SelectClasses = findCssClassesLazy("selectDropdown", "selectField");
+const TagClasses = findCssClassesLazy("tagGroup", "tagList", "tagLabel");
+const ListBoxClasses = findCssClassesLazy("selectedIcon", "listBoxItem");
+const ColorSwatchClasses = findCssClassesLazy("colorSwatch", "swatch", "editPencilIcon");
+const PlaceholderClasses = findCssClassesLazy("placeholderElement");
+const QuestHeroClasses = findCssClassesLazy("positionContentOverBackground", "contents", "bottomRow", "partnerBranding", "overlay", "container");
 
 let startupGeneration = 0;
 const notifiedCompletedQuests = new Set<string>();
@@ -101,14 +116,6 @@ export default definePlugin({
             replacement: {
                 match: /\.focus\(\)/g,
                 replace: ".focus({preventScroll:$self.getSettingsModalOpen()?!0:undefined})"
-            }
-        },
-        {
-            // Exports the guildless server list item component used by the Quest button.
-            find: '="DOWNLOAD_APPS";function',
-            replacement: {
-                match: /(?=\i:\(\)=>\i.{0,30000}?asContainer:!\i.{0,50};let (\i)=\i.forwardRef\(function)/,
-                replace: "GuildlessServerListItemComponent:()=>$1,"
             }
         },
         {
@@ -523,6 +530,36 @@ export default definePlugin({
 
         onceReady.then(() => {
             if (generation !== startupGeneration) return;
+            setStyleClassNames(managedStyle, {
+                panels: LayoutClasses.panels,
+                questProgressWrapper: QuestProgressClasses.questProgressWrapper,
+                questProgressHint: QuestProgressClasses.questProgressHint,
+                progressOuter: ProgressRingClasses.outer,
+                progressInner: ProgressRingClasses.inner,
+                rewardDescriptionContainer: QuestEmbedClasses.rewardDescriptionContainer,
+                rewardProgressWrapper: QuestEmbedClasses.progressWrapper,
+                rewardConfetti: QuestEmbedClasses.confetti,
+                textContainer: QuestEmbedClasses.textContainer,
+                textOverflowBlur: QuestEmbedClasses.textOverflowBlur,
+                buttonChildren: ButtonClasses.buttonChildren,
+                buttonChildrenWrapper: ButtonClasses.buttonChildrenWrapper,
+                clickTrapContainer: LayerClasses.clickTrapContainer,
+                switchContainer: FormFieldClasses.container,
+                switchLabelContainer: FormFieldClasses.labelContainer,
+                selectDropdown: SelectClasses.selectDropdown,
+                selectField: SelectClasses.selectField,
+                tagList: TagClasses.tagList,
+                selectedIcon: ListBoxClasses.selectedIcon,
+                colorSwatch: ColorSwatchClasses.colorSwatch,
+                swatch: ColorSwatchClasses.swatch,
+                placeholderElement: PlaceholderClasses.placeholderElement,
+                heroContainer: QuestHeroClasses.container,
+                positionContentOverBackground: QuestHeroClasses.positionContentOverBackground,
+                heroContents: QuestHeroClasses.contents,
+                heroBottomRow: QuestHeroClasses.bottomRow,
+                partnerBranding: QuestHeroClasses.partnerBranding,
+                heroOverlay: QuestHeroClasses.overlay,
+            });
             if (!getQuestifySettings().disableQuestsEverything) {
                 startPerAccountTasks("PLUGIN_START");
             } else {

@@ -15,11 +15,11 @@
     color: var(--text-default);
 }
 
-[class*="interactiveSelected__"] .vc-message-peek-timestamp {
+[--interactiveSelected] .vc-message-peek-timestamp {
     color: var(--white);
 }
 
-[class*="interactive__"]:hover .vc-message-peek-timestamp {
+[--interactive]:hover .vc-message-peek-timestamp {
     display: none;
 }
 
@@ -34,7 +34,7 @@
     margin-top: 0.8px;
 }
 
-[class*="interactive__"]:hover .vc-message-peek-icon svg path {
+[--interactive]:hover .vc-message-peek-icon svg path {
     fill: var(--white) !important;
 }
 
@@ -44,10 +44,10 @@
     gap: 4px;
 }
 
-.vc-message-peek-activity-row > [class*="textXs"] {
+.vc-message-peek-activity-row > [--textXs] {
     min-width: 0;
 }
 
-.vc-message-peek-activity-row > [class*="vc-bactivities-row"] {
+.vc-message-peek-activity-row > .vc-bactivities-row {
     flex-shrink: 0;
 }

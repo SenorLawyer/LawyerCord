@@ -145,11 +145,66 @@ export async function decodeAudio(blob: Blob): Promise<Float32Array> {
     }
 }
 
-const workerCode = `
-import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+const TRANSFORMERS_URL = "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
+const PINNED_HASHES: Record<string, string> = {
+    [TRANSFORMERS_URL]: "bcf7cf304e51f470ed59409622b9d6ffbad80dfcf5baf6a40c919e4b9c4ff812",
+    [`${TRANSFORMERS_URL}/dist/ort-wasm.wasm`]: "bbdcb6b3c7d294577d806077630460be4e13ca35a345acb5e81188e9649fa74a",
+    [`${TRANSFORMERS_URL}/dist/ort-wasm-simd.wasm`]: "9bd07bababc65f53d061f457233eeae501be7ceb8a2adb9eef52d87fe776d865",
+    [`${TRANSFORMERS_URL}/dist/ort-wasm-threaded.wasm`]: "2ee2f715093aaacc0344bfb1610313eb49a3474e8afde5e4635f30ddfc7615c8",
+    [`${TRANSFORMERS_URL}/dist/ort-wasm-simd-threaded.wasm`]: "ac23f2f3cbd519a65a0796f7c79eb34ead4c1f6f31eb06e14ed8a9579d697ef6"
+};
+const MODEL_CACHE_LIMIT = 4 * 1024 ** 3;
+const CACHE_INDEX_KEY = "VoiceMessageTranscriber_index";
 
-env.allowLocalModels = false;
-env.useBrowserCache = false;
+interface CacheEntry {
+    key: string;
+    size: number;
+}
+
+async function verifyPinned(url: string, buffer: ArrayBuffer) {
+    const expected = PINNED_HASHES[new URL(url).href];
+    if (!expected) return;
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", buffer));
+    if (Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("") !== expected)
+        throw new Error("A speech recognition file failed its integrity check.");
+}
+
+async function cacheModel(key: string, buffer: ArrayBuffer) {
+    const present = new Set(await DataStore.keys());
+    const evicted: string[] = [];
+    await DataStore.update<CacheEntry[]>(CACHE_INDEX_KEY, (stored = []) => {
+        const index = stored.filter(entry => entry.key !== key && present.has(entry.key));
+        index.push({ key, size: buffer.byteLength });
+        let total = index.reduce((sum, entry) => sum + entry.size, 0);
+        while (total > MODEL_CACHE_LIMIT && index.length > 1) {
+            const [oldest] = index.splice(0, 1);
+            total -= oldest.size;
+            evicted.push(oldest.key);
+        }
+        return index;
+    });
+    await DataStore.set(key, buffer);
+    await DataStore.delMany(evicted);
+}
+
+const workerCode = `
+const LIBRARY_URL = '${TRANSFORMERS_URL}';
+let library = null;
+
+async function loadLibrary() {
+    if (!library) {
+        const response = await fetch(LIBRARY_URL);
+        const url = URL.createObjectURL(new Blob([await response.arrayBuffer()], { type: 'text/javascript' }));
+        try {
+            library = await import(url);
+        } finally {
+            URL.revokeObjectURL(url);
+        }
+        library.env.allowLocalModels = false;
+        library.env.useBrowserCache = false;
+    }
+    return library;
+}
 
 const pendingRequests = new Map();
 
@@ -193,6 +248,7 @@ async function runTranscription({ audio, model, quantized, language }) {
     try {
         if (!transcriber) {
             self.postMessage({ type: 'status', status: 'loading' });
+            const { pipeline } = await loadLibrary();
             transcriber = await pipeline('automatic-speech-recognition', model, {
                 quantized: quantized,
                 progress_callback: (data) => {
@@ -308,9 +364,9 @@ export class TranscriptionWorker {
     }
 
     private validateModelUrl(url: string): void {
-        const { protocol, hostname, port, username, password } = new URL(url);
+        const { protocol, hostname, port, username, password, href } = new URL(url);
         if (protocol !== "https:" || port || username || password
-            || (hostname !== "huggingface.co" && hostname !== "cdn.jsdelivr.net"))
+            || (hostname !== "huggingface.co" && !(href in PINNED_HASHES)))
             throw new Error("Blocked an untrusted model URL.");
     }
 
@@ -323,20 +379,27 @@ export class TranscriptionWorker {
             case "fetch_request":
                 try {
                     this.validateModelUrl(url);
-                    const cachedData = await DataStore.get(`VoiceMessageTranscriber_${url}`);
+                    const key = `VoiceMessageTranscriber_${url}`;
+                    const cachedData = await DataStore.get(key);
                     if (this.terminated) return;
 
                     let buffer: ArrayBuffer;
                     if (lodash.isArrayBuffer(cachedData)) {
                         if (cachedData.byteLength > MAX_FILE_BYTES) throw new Error("The cached speech model is too large.");
                         buffer = cachedData;
+                        await verifyPinned(url, buffer).catch(async error => {
+                            await DataStore.del(key);
+                            throw error;
+                        });
                     } else {
                         const res = await fetch(url, { signal: this.downloads.signal });
                         if (!res.ok) throw new Error("Failed to fetch " + url);
 
                         buffer = await (await readResponseBody(res, MAX_FILE_BYTES, this.downloads.signal)).arrayBuffer();
                         if (this.terminated) return;
-                        await DataStore.set(`VoiceMessageTranscriber_${url}`, buffer);
+                        await verifyPinned(url, buffer);
+                        if (this.terminated) return;
+                        await cacheModel(key, buffer);
                         if (this.terminated) return;
                     }
 
@@ -354,7 +417,7 @@ export class TranscriptionWorker {
                     worker.postMessage({
                         type: "fetch_response",
                         id,
-                        error: String(err)
+                        error: err instanceof Error ? err.message : String(err)
                     });
                 }
                 break;

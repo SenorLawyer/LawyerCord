@@ -8,16 +8,17 @@ import { ensureSafePath } from "@main/ipcMain";
 import { DATA_DIR } from "@main/utils/constants";
 import { Logger } from "@utils/Logger";
 import { randomUUID } from "crypto";
-import { dialog, type IpcMainInvokeEvent, type WebFrameMain } from "electron";
+import { dialog, type IpcMainInvokeEvent, type WebContents, type WebFrameMain } from "electron";
 import { createReadStream } from "fs";
-import { mkdir, open, rm, writeFile } from "fs/promises";
-import { basename, extname, join, relative, resolve } from "path";
+import { mkdir, open, readdir, rm, stat, writeFile } from "fs/promises";
+import { basename, extname, join, relative, resolve, sep } from "path";
 import { buffer } from "stream/consumers";
 
 interface TempEntry {
     tmpDir: string;
     tmpPath: string;
     owner: WebFrameMain | null;
+    sender: WebContents;
 }
 
 interface RawClipAttachment {
@@ -28,7 +29,10 @@ interface RawClipAttachment {
     version?: number;
 }
 
-const pendingTokens = new Map<string, { path: string; owner: WebFrameMain | null; }>();
+const pendingTokens = new Map<string, { path: string; owner: WebFrameMain | null; sender: WebContents; }>();
+const watchedSenders = new WeakSet<WebContents>();
+const MAX_TEMP_AGE = 60 * 60_000;
+let swept: Promise<void> | undefined;
 const tempEntries = new Map<string, TempEntry>();
 const CLIP_UPLOAD_DIR = join(DATA_DIR, "clipUpload");
 const ALLOWED_EXTENSIONS = new Set([".mp4", ".m4v"]);
@@ -45,6 +49,33 @@ const CLIP_FOOTER = Buffer.from([
     0xA1, 0xC8, 0x52, 0x99, 0x33, 0x46, 0x4D, 0xB8, 0x88, 0xF0, 0x83, 0xF5, 0x7A, 0x75, 0xA5, 0xEF,
 ]);
 const CLIP_FOOTER_SIZE = CLIP_FOOTER.length;
+
+function sweepTemp() {
+    const directory = resolve(CLIP_UPLOAD_DIR);
+    return readdir(directory, { withFileTypes: true }).catch(() => []).then(async entries => {
+        for (const entry of entries) {
+            const path = resolve(directory, entry.name);
+            if (!/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(entry.name) || !path.startsWith(directory + sep) || [...tempEntries.values()].some(temp => temp.tmpDir === path)) continue;
+            const info = await stat(path).catch(() => null);
+            if (info && Date.now() - info.mtimeMs > MAX_TEMP_AGE) await rm(path, { recursive: true, force: true }).catch(() => logger.warn("Could not remove old temporary clip files."));
+        }
+    });
+}
+
+function watchSender(sender: WebContents) {
+    if (watchedSenders.has(sender)) return;
+    watchedSenders.add(sender);
+    const release = () => {
+        for (const [token, entry] of pendingTokens) if (entry.sender === sender) pendingTokens.delete(token);
+        for (const [token, entry] of tempEntries) {
+            if (entry.sender !== sender) continue;
+            tempEntries.delete(token);
+            void rm(entry.tmpDir, { force: true, recursive: true }).catch(() => logger.warn("Could not remove temporary clip files."));
+        }
+    };
+    sender.once("destroyed", release);
+    sender.once("render-process-gone", release);
+}
 
 function getMimeType(filePath: string): string {
     return MIME_TYPES[extname(filePath).toLowerCase()] ?? "application/octet-stream";
@@ -103,6 +134,7 @@ function isClipAttachment(value: unknown): value is RawClipAttachment {
 }
 
 export async function chooseVideoFile(_: IpcMainInvokeEvent): Promise<{ token: string; name: string; type: string; } | null> {
+    swept ??= sweepTemp();
     try {
         const { filePaths, canceled } = await dialog.showOpenDialog({
             title: "Select clip file",
@@ -116,7 +148,8 @@ export async function chooseVideoFile(_: IpcMainInvokeEvent): Promise<{ token: s
         if (!ALLOWED_EXTENSIONS.has(extname(resolvedPath).toLowerCase())) return null;
 
         const token = randomUUID();
-        pendingTokens.set(token, { path: resolvedPath, owner: _.senderFrame });
+        watchSender(_.sender);
+        pendingTokens.set(token, { path: resolvedPath, owner: _.senderFrame, sender: _.sender });
 
         return { token, name: basename(resolvedPath), type: getMimeType(resolvedPath) };
     } catch {
@@ -147,6 +180,7 @@ export async function createTempVideoFileFromBytes(_: IpcMainInvokeEvent, name: 
     const fileName = basename(name);
     if (fileName !== name || !ALLOWED_EXTENSIONS.has(extname(fileName).toLowerCase())) return null;
 
+    swept ??= sweepTemp();
     const tmpDir = join(CLIP_UPLOAD_DIR, randomUUID());
     const tmpPath = ensureSafePath(tmpDir, fileName);
     if (!tmpPath) return null;
@@ -156,7 +190,8 @@ export async function createTempVideoFileFromBytes(_: IpcMainInvokeEvent, name: 
         await writeFile(tmpPath, data);
 
         const tmpToken = randomUUID();
-        tempEntries.set(tmpToken, { tmpDir, tmpPath, owner: _.senderFrame });
+        watchSender(_.sender);
+        tempEntries.set(tmpToken, { tmpDir, tmpPath, owner: _.senderFrame, sender: _.sender });
         return tmpToken;
     } catch {
         await rm(tmpDir, { force: true, recursive: true }).catch(() => logger.warn("Could not remove temporary clip files."));

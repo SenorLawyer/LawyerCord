@@ -101,47 +101,43 @@ export default definePlugin({
 
     flux: {
         MESSAGE_CREATE({ message }) {
-            try {
-                if (!message?.channel_id || message.state === "SENDING") return;
+            if (!message.channel_id || message.state === "SENDING") return;
 
-                const channel = ChannelStore.getChannel(message.channel_id);
-                const currentUser = UserStore.getCurrentUser();
+            const channel = ChannelStore.getChannel(message.channel_id);
+            const currentUser = UserStore.getCurrentUser();
 
-                if (!channel || !currentUser) return;
-                if (message.author?.id === currentUser.id) return;
+            if (!channel) return;
+            if (message.author.id === currentUser.id) return;
 
-                const isDM = [1, 3].includes(channel.type);
+            const isDM = [1, 3].includes(channel.type);
 
-                if (checkIfMuted(channel)) return;
-                if (isUserBlocked(message.author.id)) return;
-                if (!settings.store.showInActive && channel.id === SelectedChannelStore.getChannelId()) return;
-                if (PresenceStore.getStatus(currentUser.id) === "dnd") return;
+            if (checkIfMuted(channel)) return;
+            if (isUserBlocked(message.author.id)) return;
+            if (!settings.store.showInActive && channel.id === SelectedChannelStore.getChannelId()) return;
+            if (PresenceStore.getStatus(currentUser.id) === "dnd") return;
 
-                let shouldNotify = false;
+            let shouldNotify = false;
 
-                if (settings.store.mentions && message.mentions?.some(u => u.id === currentUser.id)) {
-                    shouldNotify = true;
-                } else if (settings.store.friends && RelationshipStore.isFriend(message.author.id) && !isDM) {
-                    shouldNotify = true;
-                } else if (isDM && settings.store.dms) {
-                    shouldNotify = true;
-                }
+            if (settings.store.mentions && message.mentions.some(u => u.id === currentUser.id)) {
+                shouldNotify = true;
+            } else if (settings.store.friends && RelationshipStore.isFriend(message.author.id) && !isDM) {
+                shouldNotify = true;
+            } else if (isDM && settings.store.dms) {
+                shouldNotify = true;
+            }
 
-                if (shouldNotify) {
-                    const author = UserStore.getUser(message.author.id) || { username: "Unknown" };
-                    const channelName = channel.name || (isDM ? "DM" : "Group");
+            if (shouldNotify) {
+                const author = UserStore.getUser(message.author.id) || { username: "Unknown" };
+                const channelName = channel.name || (isDM ? "DM" : "Group");
 
-                    showNotification({
-                        title: `${author.username} in ${channelName}`,
-                        body: formatContent(message),
-                        icon: author.getAvatarURL?.(undefined, 128),
-                        onClick: () => NavigationRouter.transitionTo(
-                            `/channels/${channel.guild_id || "@me"}/${channel.id}/${message.id}`
-                        )
-                    });
-                }
-            } catch (err) {
-                console.error("[PingNotifications] Error:", err);
+                showNotification({
+                    title: `${author.username} in ${channelName}`,
+                    body: formatContent(message),
+                    icon: author.getAvatarURL?.(undefined, 128),
+                    onClick: () => NavigationRouter.transitionTo(
+                        `/channels/${channel.guild_id || "@me"}/${channel.id}/${message.id}`
+                    )
+                });
             }
         }
     }

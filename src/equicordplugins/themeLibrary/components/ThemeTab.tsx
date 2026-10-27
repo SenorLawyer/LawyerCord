@@ -218,7 +218,6 @@ function ThemeTab() {
                                         { label: "Show Enabled", value: SearchStatus.ENABLED },
                                         { label: "Show Disabled", value: SearchStatus.DISABLED },
                                     ]}
-                                    // @ts-ignore
                                     value={searchValue.status}
                                     clearable={false}
                                     onChange={v => onStatusChange(v as SearchStatus)}

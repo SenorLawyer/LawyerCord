@@ -254,7 +254,6 @@ const createSidebarChatContextMenuItem = (id: string, guildId: string | null) =>
             label={"Open Sidebar Chat"}
             action={() => {
                 FluxDispatcher.dispatch({
-                    // @ts-ignore
                     type: "VC_SIDEBAR_CHAT_NEW",
                     guildId,
                     id,
@@ -350,7 +349,6 @@ export default definePlugin({
     toolboxActions: {
         "Open Previous Chat"() {
             FluxDispatcher.dispatch({
-                // @ts-ignore
                 type: "VC_SIDEBAR_CHAT_PREVIOUS",
             });
         }
@@ -487,7 +485,6 @@ const Header = ({ guild, channel }: { guild: Guild; channel: Channel; }) => {
     const switchChannels = useCallback(() => {
         const mainChannel = getCurrentChannel()!;
         FluxDispatcher.dispatch({
-            // @ts-ignore
             type: "VC_SIDEBAR_CHAT_NEW",
             guildId: mainChannel.guild_id,
             id: mainChannel.id,

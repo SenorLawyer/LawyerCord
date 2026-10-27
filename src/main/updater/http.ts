@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { fetchBuffer, fetchJson } from "@main/utils/http";
+import { checkedFetch, fetchJson } from "@main/utils/http";
 import { IpcEvents } from "@shared/IpcEvents";
 import { normalizeUpdateChannel, type UpdateChannel } from "@shared/updateChannel";
 import type { ReleaseCatalog, ReleaseUpdate, UpdateRelease } from "@shared/updateRelease";
@@ -38,10 +38,33 @@ let updateCheck = Symbol();
 let applying: Promise<boolean> | undefined;
 let restartRequired = false;
 
+const MAX_ASSET_BYTES = 128 * 1024 * 1024;
+
 async function githubGet<T>(endpoint: string) {
     return fetchJson<T>(API_BASE + endpoint, {
-        headers: { Accept: "application/vnd.github+json", "User-Agent": VENCORD_USER_AGENT }
+        headers: { Accept: "application/vnd.github+json", "User-Agent": VENCORD_USER_AGENT },
+        signal: AbortSignal.timeout(30_000)
     });
+}
+
+async function downloadAsset(url: string) {
+    const signal = AbortSignal.timeout(5 * 60_000);
+    try {
+        const res = await checkedFetch(url, { signal });
+        if (Number(res.headers.get("Content-Length")) > MAX_ASSET_BYTES || !res.body) throw new RangeError();
+        const chunks: Uint8Array[] = [];
+        let length = 0;
+        for await (const chunk of res.body) {
+            length += chunk.byteLength;
+            if (length > MAX_ASSET_BYTES) throw new RangeError();
+            chunks.push(chunk);
+        }
+        return Buffer.concat(chunks);
+    } catch (error) {
+        if (error instanceof RangeError) throw new Error("The update download is larger than expected. Try again later.");
+        if (signal.aborted) throw new Error("The update download timed out. Check your connection and try again.");
+        throw error;
+    }
 }
 
 function releaseAsset(release: GithubRelease) {
@@ -146,7 +169,7 @@ function applyUpdates() {
     if (!pending) return Promise.resolve(false);
     pendingUpdate = pending;
     return applying = (async () => {
-        const data = await fetchBuffer(pending.url);
+        const data = await downloadAsset(pending.url);
         if (`sha256:${createHash("sha256").update(data).digest("hex")}` !== pending.digest)
             throw new Error("The downloaded update does not match its checksum. Try downloading it again.");
         await replaceVerifiedArchive(__dirname, data);

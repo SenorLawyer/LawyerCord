@@ -171,17 +171,19 @@ async function main() {
         assert.equal(status.channelAccess, "all_accessible_channels");
         assert.equal(capabilities.allAccessibleChannels, true);
 
-        const servers = requireRecordArray(await callTool("discord_list_servers"), "discord_list_servers");
+        const servers = requireRecordArray(requireRecord(await callTool("discord_list_servers"), "discord_list_servers").servers, "discord_list_servers");
         assert.ok(servers.some(server => server.id === TARGET_GUILD_ID), "target guild is visible");
 
         const channels = requireRecordArray(
-            await callTool("discord_list_server_channels", { guild_id: TARGET_GUILD_ID }),
+            requireRecord(await callTool("discord_list_server_channels", { guild_id: TARGET_GUILD_ID }), "discord_list_server_channels").channels,
             "discord_list_server_channels"
         );
         assert.ok(channels.some(channel => channel.id === TARGET_CHANNEL_ID), "target channel is visible");
 
-        const messages = await callTool("discord_read_messages", { channel_id: TARGET_CHANNEL_ID, limit: 5 });
-        assert.ok(Array.isArray(messages), "target channel returned a message array");
+        const messages = requireRecordArray(
+            requireRecord(await callTool("discord_read_messages", { channel_id: TARGET_CHANNEL_ID, limit: 5 }), "discord_read_messages").messages,
+            "discord_read_messages"
+        );
 
         console.log(JSON.stringify({
             accountId: currentUser.id,

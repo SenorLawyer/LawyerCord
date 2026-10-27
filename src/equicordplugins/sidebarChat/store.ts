@@ -68,7 +68,7 @@ export const SidebarStore = proxyLazy(() => {
     class SidebarStore extends (FluxWP as IFlux).PersistedStore {
         static persistKey = "SidebarStore";
 
-        // @ts-ignore
+        // @ts-expect-error initialize is not on the store typings
         initialize(previousState: { guildId?: string; channelId?: string; width?: number; } | undefined) {
             if (!settings.store.persistSidebar || settings.store.sidebarWasClosed || !previousState) return;
             const { guildId, channelId, width } = previousState;
@@ -83,7 +83,7 @@ export const SidebarStore = proxyLazy(() => {
     }
 
     const store = new SidebarStore(FluxDispatcher, {
-        // @ts-ignore
+        // @ts-expect-error custom flux event not in FluxEvents
         async VC_SIDEBAR_CHAT_NEW({ guildId: newGId, id }: { guildId: string | null; id: string; }) {
             const request = ++navigation;
             const channelId = newGId ? id : await ChannelActionCreators.getOrEnsurePrivateChannel(id);

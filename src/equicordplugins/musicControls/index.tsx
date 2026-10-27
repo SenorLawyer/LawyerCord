@@ -18,10 +18,12 @@
 
 import "./styles.css";
 
+import { disableStyle, enableStyle, setStyleClassNames } from "@api/Styles";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs, EquicordDevs } from "@utils/constants";
 import { SYM_LAZY_CACHED } from "@utils/lazy";
 import definePlugin from "@utils/types";
+import { findCssClassesLazy } from "@webpack";
 
 import { startLyricsRequests, stopLyricsRequests } from "./lyricsRequest";
 import { settings, toggleHoverControls } from "./settings";
@@ -29,10 +31,14 @@ import { migrateOldLyrics } from "./spotify/lyrics/api";
 import { SpotifyLyrics } from "./spotify/lyrics/components/lyrics";
 import { SpotifyLrcStore } from "./spotify/lyrics/providers/store";
 import { SpotifyPlayer } from "./spotify/PlayerComponent";
+import spotifyStyle from "./spotify/spotifyStyles.css?managed";
 import { TidalLyrics } from "./tidal/lyrics/components/lyrics";
 import { TidalLrcStore } from "./tidal/lyrics/providers/store";
 import { TidalPlayer } from "./tidal/TidalPlayer";
 import { TidalStore } from "./tidal/TidalStore";
+import tidalStyle from "./tidal/tidalStyles.css?managed";
+
+const SliderClasses = findCssClassesLazy("slider", "grabber", "bar", "barFill");
 
 export default definePlugin({
     name: "MusicControls",
@@ -118,6 +124,11 @@ export default definePlugin({
     },
 
     async start() {
+        const { slider, grabber, bar, barFill } = SliderClasses;
+        for (const style of [spotifyStyle, tidalStyle]) {
+            setStyleClassNames(style, { slider, grabber, bar, barFill });
+            enableStyle(style);
+        }
         startLyricsRequests();
         (SpotifyLrcStore as typeof SpotifyLrcStore & { [SYM_LAZY_CACHED]?: typeof SpotifyLrcStore; })[SYM_LAZY_CACHED]?.init();
         (TidalStore as typeof TidalStore & { [SYM_LAZY_CACHED]?: typeof TidalStore; })[SYM_LAZY_CACHED]?.socket.reconnect();
@@ -127,6 +138,8 @@ export default definePlugin({
     },
 
     stop() {
+        disableStyle(spotifyStyle);
+        disableStyle(tidalStyle);
         stopLyricsRequests();
         (SpotifyLrcStore as typeof SpotifyLrcStore & { [SYM_LAZY_CACHED]?: typeof SpotifyLrcStore; })[SYM_LAZY_CACHED]?.destroy();
         (TidalLrcStore as any)[SYM_LAZY_CACHED]?.destroy?.();

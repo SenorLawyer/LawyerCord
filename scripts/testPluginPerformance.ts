@@ -5777,7 +5777,7 @@ test("Song Spotlight validation does not trust a failed render cached as valid",
             requests++;
             return new Response(JSON.stringify(exists ? { id: 123 } : {}));
         } } },
-    });
+    }, { URL });
     try {
         handlers.clearCache();
         const song = { service: "soundcloud", type: "track", id: "123" };
@@ -8729,6 +8729,8 @@ test("MusicControls reconnects cached Tidal stores without initializing unused s
     const lyrics: Record<symbol, object> = {};
     const calls: string[] = [];
     const { default: plugin } = loadSource("src/equicordplugins/musicControls/index.tsx", {
+        "@api/Styles": { disableStyle() {}, enableStyle() {}, setStyleClassNames() {} },
+        "@webpack": { findCssClassesLazy: () => ({}) },
         "@components/ErrorBoundary": {},
         "@utils/constants": { Devs: {}, EquicordDevs: {} },
         "@utils/lazy": { SYM_LAZY_CACHED: cached },
@@ -9616,7 +9618,8 @@ test("Discord MCP handles response failures and cancels pending startup", async 
         "@utils/Logger": { Logger: class { error(message: string) { errors.push(message); } } },
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin, defineDefault: (value: unknown) => value, OptionType: {} },
         "@vencord/discord-types/enums": {}, "@webpack/common": {},
-        "../voiceMessageTranscriber.desktop/utils": {}, "./policy": { DISCORD_MCP_TOOL_NAMES: [] }
+        "../voiceMessageTranscriber.desktop/utils": {}, "./policy": { DISCORD_MCP_TOOL_NAMES: [] },
+        "./handlers": { resetBridgeState() {} }
     }, { VencordNative: { pluginHelpers: { DiscordMCP: Native } } }, "({ ...exports, bridgeLoop })");
     stop = loaded.default.stop;
     await loaded.bridgeLoop(0);
@@ -10414,7 +10417,8 @@ test("channel tab limits preserve foreground and background opening behavior", (
     const navigations: string[] = [];
     const tabs = loadSource("src/equicordplugins/channelTabs/util/tabs.tsx", {
         "@api/index": {}, "@api/PluginManager": {},
-        "@utils/css": { classNameFactory: () => () => "" },
+        "@utils/css": { classNameFactory: () => () => "", classNameToSelector: () => "" },
+        "@webpack": { findCssClassesLazy: () => ({}) },
         "./constants": { logger: { warn() {}, error() {} }, settings: { store: { maxOpenTabs: 1 } } },
         "@webpack/common": {
             NavigationRouter: { transitionToGuild: (_guildId: string, channelId: string) => navigations.push(channelId) },
@@ -10644,6 +10648,7 @@ test("clip file reads share the size cap and selected files reuse the byte write
     let id = 0;
     let reads = 0;
     const writes: Buffer[] = [];
+    const event = { sender: { once() {} } };
     const native = loadComponent("src/equicordplugins/clipUpload.desktop/native.ts", {}, {
         "@main/ipcMain": { ensureSafePath: () => true },
         "@main/utils/constants": { DATA_DIR: "fixture" },
@@ -10656,7 +10661,7 @@ test("clip file reads share the size cap and selected files reuse the byte write
             return Readable.from([payload]);
         } },
         "fs/promises": {
-            mkdir: async () => {}, writeFile: async (_path: string, data: Buffer) => { writes.push(data); },
+            mkdir: async () => {}, readdir: async () => [], stat: async () => null, writeFile: async (_path: string, data: Buffer) => { writes.push(data); },
             open: async () => ({
                 stat: async () => ({ size: oversized ? 500 * 1024 * 1024 + 1 : payload.length }),
                 read: async (target: Buffer, offset: number, length: number, position: number) => { reads++; payload.copy(target, offset, position, position + length); return { bytesRead: length }; },
@@ -10666,18 +10671,18 @@ test("clip file reads share the size cap and selected files reuse the byte write
         path,
         "stream/consumers": { buffer: async (stream: Readable) => oversized ? { length: 500 * 1024 * 1024 + 1 } : buffer(stream) }
     }, { Buffer, Uint8Array });
-    const picked = await native.chooseVideoFile({});
-    const metadata = await native.parseClipFileMetadata({}, picked.token);
+    const picked = await native.chooseVideoFile(event);
+    const metadata = await native.parseClipFileMetadata(event, picked.token);
     assert.equal(metadata[0].applicationName, "Fixture");
-    const temp = await native.createTempVideoFile({}, picked.token);
+    const temp = await native.createTempVideoFile(event, picked.token);
     assert.equal(typeof temp, "string");
     assert.deepEqual(Array.from(writes[0]), [1, 2, 3]);
-    assert.deepEqual(Array.from(await native.readVideoFile({}, temp)), Array.from(payload));
+    assert.deepEqual(Array.from(await native.readVideoFile(event, temp)), Array.from(payload));
     oversized = true;
-    const large = await native.chooseVideoFile({});
-    assert.equal(await native.parseClipFileMetadata({}, large.token), null);
-    assert.equal(await native.createTempVideoFile({}, large.token), null);
-    assert.equal(await native.readVideoFile({}, temp), null);
+    const large = await native.chooseVideoFile(event);
+    assert.equal(await native.parseClipFileMetadata(event, large.token), null);
+    assert.equal(await native.createTempVideoFile(event, large.token), null);
+    assert.equal(await native.readVideoFile(event, temp), null);
     assert.equal(writes.length, 1);
     assert.equal(reads, 5);
 });
@@ -11532,6 +11537,8 @@ test("source fixtures reject recoverable syntax errors before execution", () => 
     }
 });
 
+const scheduledSideStores = new WeakMap<object, Map<string, unknown>>();
+
 function loadSource(path: string, mocks: Record<string, object>, globals: Record<string, unknown> = {}, result = "exports") {
     mocks = { "@shared/readResponseText": { readResponseText }, ...mocks };
     if (path === "src/plugins/translate/utils.ts") {
@@ -11564,21 +11571,29 @@ function loadSource(path: string, mocks: Record<string, object>, globals: Record
             set?: (key: string, value: unknown) => Promise<void>;
             update?: (key: string, updater: (value: unknown) => unknown) => Promise<void>;
         } | undefined;
-        if (store?.get && store.set && !store.update) {
+        mocks = { "./components/MissedMessagesModal": { openMissedMessagesModal() {} }, ...mocks };
+        if (store?.get) {
             const get = store.get;
-            const set = store.set;
-            let stored: unknown;
+            let side = scheduledSideStores.get(store);
+            if (!side) scheduledSideStores.set(store, side = new Map());
+            const extra = side;
+            const isSide = (key: string) => key === "ScheduledMessages_version" || key.startsWith("ScheduledMessages_blob_");
             mocks = { ...mocks, "@api/DataStore": {
                 ...store,
-                get: async (key: string) => { stored = await get(key); return structuredClone(stored); },
+                get: async (key: string) => isSide(key) ? structuredClone(extra.get(key)) : get(key),
+                set: async (key: string, value: unknown) => {
+                    if (isSide(key)) extra.set(key, value);
+                    else if (store.set) await store.set(key, value);
+                    else await store.update?.(key, () => value);
+                },
                 update: async (key: string, updater: (value: unknown) => unknown) => {
-                    const next = updater(structuredClone(stored));
-                    await set(key, next);
-                    stored = structuredClone(next);
-                }
+                    if (isSide(key)) extra.set(key, updater(structuredClone(extra.get(key))));
+                    else await store.update?.(key, updater);
+                },
+                setMany: async (entries: [string, unknown][]) => { for (const [key, value] of entries) extra.set(key, value); },
+                delMany: async (keys: string[]) => { for (const key of keys) extra.delete(key); }
             } };
         }
-        mocks = { ...mocks, "@webpack/common": { lodash: { isEqual: (a: unknown, b: unknown) => isDeepStrictEqual(structuredClone(a), structuredClone(b)) }, ...mocks["@webpack/common"] } };
     }
     if (path.endsWith("profileSets/utils/storage.ts"))
         mocks = { ...mocks, "@webpack/common": { lodash: { isEqual: (a: unknown, b: unknown) => isDeepStrictEqual(structuredClone(a), structuredClone(b)) }, ...mocks["@webpack/common"] } };
@@ -11600,7 +11615,7 @@ function loadSource(path: string, mocks: Record<string, object>, globals: Record
     return runInNewContext(code + `\n${result};`, {
         exports: {}, AbortController, AbortSignal, setTimeout, clearTimeout, ...globals,
         require(name: string) {
-            if (name.endsWith(".css")) return {};
+            if (/\.css(\?managed)?$/.test(name)) return {};
             assert.ok(name in mocks, name);
             return mocks[name];
         }
@@ -12191,6 +12206,7 @@ test("quote preview ignores superseded and unmounted image work", async () => {
     const revoked: string[] = [];
     const React = { createElement: (type: unknown, props: unknown, ...children: unknown[]) => ({ type, props, children }) };
     const modal = loadSource("src/equicordplugins/quoter/index.tsx", {
+        "@api/Styles": { disableStyle() {}, enableStyle() {} },
         "@api/Settings": { definePluginSettings: () => ({ store: { grayscale: false, showWatermark: false, saveAsGif: false, watermark: "", quoteFont: "font" } }) },
         "@components/FormSwitch": {}, "@utils/constants": { Devs: {}, EquicordDevs: {} }, "@utils/discord": {},
         "@utils/types": { __esModule: true, default: (plugin: object) => plugin, OptionType: {} },
@@ -12390,7 +12406,7 @@ test("scheduled send batches stop before starting the next message", async () =>
     let finish: () => void = () => {};
     const module = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
             "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
-        "@api/DataStore": { get: async () => [1, 2].map(id => (scheduledEntry({ id: String(id), userId: "account", channelId: "channel", scheduledTime: 0 }))), set: async () => {} },
+        "@api/DataStore": { get: async () => [1, 2].map(id => (scheduledEntry({ id: String(id), userId: "account", channelId: "channel", scheduledTime: Date.now() }))), set: async () => {} },
         "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
         "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, ChannelStore: { getChannel: () => ({}) }, FluxDispatcher: { dispatch() {} },
             Constants: { Endpoints: { MESSAGES: (id: string) => id } }, SnowflakeUtils: { fromTimestamp: () => "nonce" },
@@ -12729,7 +12745,7 @@ test("scheduled startup ignores completion after stop or a newer start", async (
 
 test("scheduled attempts remain saved on failure and do not automatically replay", async () => {
     for (const outcome of ["success", "request", "channel", "storage"]) {
-        let saved = [{ id: "queued", userId: "account", channelId: "channel", content: "Text", scheduledTime: 0, createdAt: 0, attemptedAt: undefined as number | undefined }];
+        let saved = [{ id: "queued", userId: "account", channelId: "channel", content: "Text", scheduledTime: Date.now(), createdAt: 0, attemptedAt: undefined as number | undefined }];
         let posts = 0;
         let release: () => void = () => {};
         const pendingPost = new Promise<void>(resolve => { release = resolve; });
@@ -13797,6 +13813,31 @@ test("scheduled sends reject unowned and foreign entries without marking them at
 });
 
 
+test("scheduled messages overdue past the grace window open the missed modal once instead of sending", async () => {
+    let posts = 0;
+    let modals = 0;
+    const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
+        "./components/MissedMessagesModal": { openMissedMessagesModal: () => modals++ },
+        "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
+        "@api/DataStore": { get: async () => [
+            scheduledEntry({ id: "missed", userId: "account", channelId: "channel", scheduledTime: Date.now() - 3 * 60_000 }),
+            scheduledEntry({ id: "due", userId: "account", channelId: "channel", scheduledTime: Date.now() - 30_000 })
+        ], set: async () => {} },
+        "@utils/Logger": { Logger: class {} }, "@vencord/discord-types/enums": {},
+        "@webpack/common": { UserStore: { getCurrentUser: () => ({ id: "account" }) }, ChannelStore: { getChannel: () => ({}) }, FluxDispatcher: { dispatch() {} },
+            Constants: { Endpoints: { MESSAGES: (id: string) => id } }, SnowflakeUtils: { fromTimestamp: () => "nonce" },
+            RestAPI: { post: async () => { posts++; return { body: { id: "sent" } }; } } },
+        ".": { settings: { store: { showNotifications: false } } }
+    }, {}, "({ ...exports, checkAndSendMessages })");
+    await api.loadScheduledMessages();
+    await api.checkAndSendMessages();
+    await api.checkAndSendMessages();
+    assert.equal(posts, 1);
+    assert.equal(modals, 1);
+    assert.equal(api.getMissedMessages().map((entry: { id: string; }) => entry.id).join(), "missed");
+    assert.equal(api.getScheduledMessages().find((entry: { id: string; }) => entry.id === "missed")?.attemptedAt, undefined);
+});
+
 test("scheduled previews reject missing and foreign owners before loading history", async () => {
     const api = loadSource("src/equicordplugins/scheduledMessages/utils.ts", {
             "@utils/misc": { isObject: (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value) },
@@ -13953,7 +13994,7 @@ test("scheduled message lists only render the current account and legacy entries
             "@utils/css": { classNameFactory: () => () => "" },
             "@webpack/common": { useState: (value: unknown) => [value, () => {}], useStateFromStores: (_stores: unknown, selector: () => unknown) => selector(),
                 UserStore: { getCurrentUser: () => userId ? { id: userId } : undefined }, ChannelStore: { getChannel: () => undefined } },
-            "../utils": { getScheduledMessages: () => entries, getChannelDisplayInfo: (id: string) => { rendered.push(id); return { name: id }; } }, "./Icons": {}
+            "../utils": { isMissedMessage: () => false, getScheduledMessages: () => entries, getChannelDisplayInfo: (id: string) => { rendered.push(id); return { name: id }; } }, "./Icons": {}
         }, { React: { createElement: () => null } }, "ViewScheduledModalInner");
         component({});
         assert.deepEqual(rendered, userId ? [userId === "account" ? "mine" : "theirs", "legacy"] : []);
@@ -14055,7 +14096,7 @@ test("scheduled queue controls report failures without stale account feedback", 
                 useStateFromStores: (_stores: unknown, selector: () => unknown) => selector(),
                 UserStore: { getCurrentUser: () => ({ id: userId }) }, ChannelStore: { getChannel: () => undefined }, Toasts: { Type: { FAILURE: "failure" } },
                 showToast: (message: string, type: string) => { assert.equal(type, "failure"); notices.push(message); } },
-            "../utils": { getScheduledMessages: () => [{ id: "saved", userId: "account", content: "Text", scheduledTime: 0 }],
+            "../utils": { isMissedMessage: () => false, getScheduledMessages: () => [{ id: "saved", userId: "account", content: "Text", scheduledTime: 0 }],
                 getChannelDisplayInfo: () => ({ name: "Channel" }), removeScheduledMessage: write, clearAllScheduledMessages: write }, "./Icons": {}
         }, { React: { createElement: (type: unknown, props: { onClick: () => Promise<void>; actions: { text: string; onClick: () => Promise<void>; }[]; }) => {
             if (type === Button) remove = props.onClick;
@@ -14089,7 +14130,7 @@ test("scheduled queue reload publishes only successful current-account reads", a
             "@webpack/common": { Modal, UserStore: { getCurrentUser: () => ({ id: userId }) },
                 useState: (value: unknown) => [value, () => updates++], useStateFromStores: (_stores: unknown, selector: () => unknown) => selector(),
                 showToast: (text: string) => notices.push(text), Toasts: { Type: { FAILURE: "failure" } } },
-            "../utils": { getScheduledMessages: () => [], loadScheduledMessages: () => { reads++; return pending.promise; } }
+            "../utils": { isMissedMessage: () => false, getScheduledMessages: () => [], loadScheduledMessages: () => { reads++; return pending.promise; } }
         }, { React: { createElement: (type: unknown, props: { actions: { text: string; onClick: () => Promise<void>; }[]; }) => {
             if (type === Modal) reload = props.actions.find(action => action.text === "Reload")?.onClick ?? reload;
             return null;
@@ -14140,7 +14181,7 @@ test("scheduled legacy recovery retains full content and attachments without sen
         "@webpack/common": { useState: (value: unknown) => [value, () => assert.fail("No list mutation")],
             useStateFromStores: (_stores: unknown, selector: () => unknown) => selector(),
             UserStore: { getCurrentUser: () => ({ id: userId }) }, ChannelStore: { getChannel: () => undefined } },
-        "../utils": { getScheduledMessages: () => [message], getChannelDisplayInfo: () => ({ name: "Channel" }),
+        "../utils": { isMissedMessage: () => false, getScheduledMessages: () => [message], getChannelDisplayInfo: () => ({ name: "Channel" }),
             sendScheduledMessageNow: () => assert.fail("No send"), removeScheduledMessage: () => assert.fail("Keep original") }, "./Icons": {}
     }, { React: { createElement: (type: unknown, props: { onClick: () => never; }, ...children: unknown[]) => {
         if (type === Button && children[0] === "Recreate") recreate = props.onClick;
@@ -14172,7 +14213,7 @@ test("scheduled attempted messages can be retried without stale account feedback
                 useStateFromStores: (_stores: unknown, selector: () => unknown) => selector(),
                 UserStore: { getCurrentUser: () => ({ id: userId }) }, ChannelStore: { getChannel: () => undefined },
                 Toasts: { Type: { SUCCESS: "success", FAILURE: "failure" } }, showToast: (message: string) => notices.push(message) },
-            "../utils": { getScheduledMessages: () => { listReads++; return [{ id: "saved", userId: "account", content: "Text", scheduledTime: 0, attemptedAt: 1 }]; },
+            "../utils": { isMissedMessage: () => false, getScheduledMessages: () => { listReads++; return [{ id: "saved", userId: "account", content: "Text", scheduledTime: 0, attemptedAt: 1 }]; },
                 getChannelDisplayInfo: () => ({ name: "Channel" }), removeScheduledMessage: async () => {}, clearAllScheduledMessages: async () => {},
                 sendScheduledMessageNow: () => { retries++; return new Promise(resolve => { finish = resolve; }); } }, "./Icons": {}
         }, { React: { createElement: (type: unknown, props: { onClick?: () => Promise<void>; }, ...children: unknown[]) => {
@@ -16138,7 +16179,7 @@ test("HTTP updater verifies release digests before staging and permits a correct
                 fetchJson: async (url: string) => url.includes("/releases?")
                     ? [{ tag_name: "v4.1.0.0", published_at: "2026-10-03T00:00:00Z", assets: [{ name: "fixture.asar", browser_download_url: "https://github.com/fixture/repo/releases/download/v4.1.0.0/fixture.asar", digest: advertised }] }]
                     : url.includes("/compare/") ? { status: "ahead", commits: [] } : { sha: "next" },
-                fetchBuffer: async () => downloaded
+                checkedFetch: async () => new Response(downloaded)
             },
             "@shared/IpcEvents": { IpcEvents: { GET_RELEASES: "releases", CHECK_RELEASE: "release", RESTART_UPDATE: "restart", GET_REPO: "repo", GET_UPDATES: "check", UPDATE: "update", BUILD: "build" } },
             "@shared/updateChannel": { normalizeUpdateChannel: () => "nightly" },
@@ -16152,7 +16193,7 @@ test("HTTP updater verifies release digests before staging and permits a correct
             "~git-remote": { __esModule: true, default: "fixture/repo" },
             "./common": { ASAR_FILE: "fixture.asar", serializeErrors: (handler: unknown) => handler },
             "./releaseSelection": { releaseChannel: () => "nightly", selectUpdateRelease: (releases: unknown[]) => releases[0] }
-        }, { __dirname: "fixture.asar", VERSION: "4.0.1.0", URL });
+        }, { __dirname: "fixture.asar", VERSION: "4.0.1.0", URL, Buffer });
         if (advertised !== digest) {
             await assert.rejects(handlers.update(null, "nightly"), /verified desktop archive/);
             assert.equal(await handlers.build(), false);
@@ -16186,7 +16227,7 @@ test("HTTP updater discards a pending download when a later check finds nothing 
                     if (secondCheck && outcome === "commit-error") throw new Error("Commit lookup failed");
                     return { sha: secondCheck ? "current" : "next" };
                 },
-                fetchBuffer: async (url: string) => { assert.equal(url, "https://github.com/fixture/repo/releases/download/v4.1.0.0/fixture.asar"); downloads++; return Buffer.from("fixture"); }
+                checkedFetch: async (url: string) => { assert.equal(url, "https://github.com/fixture/repo/releases/download/v4.1.0.0/fixture.asar"); downloads++; return new Response("fixture"); }
             },
             "@shared/IpcEvents": { IpcEvents: { GET_RELEASES: "releases", CHECK_RELEASE: "release", RESTART_UPDATE: "restart", GET_REPO: "repo", GET_UPDATES: "check", UPDATE: "update", BUILD: "build" } },
             "@shared/updateChannel": { normalizeUpdateChannel: () => "nightly" },
@@ -16200,7 +16241,7 @@ test("HTTP updater discards a pending download when a later check finds nothing 
             "~git-remote": { __esModule: true, default: "fixture/repo" },
             "./common": { ASAR_FILE: "fixture.asar", serializeErrors: (handler: unknown) => handler },
             "./releaseSelection": { releaseChannel: () => "nightly", selectUpdateRelease: (releases: unknown[]) => releases[0] }
-        }, { __dirname: "fixture.asar", VERSION: "4.0.1.0", URL });
+        }, { __dirname: "fixture.asar", VERSION: "4.0.1.0", URL, Buffer });
         assert.equal(await handlers.update(null, "nightly"), true);
         secondCheck = true;
         if (outcome === "current") assert.equal(await handlers.update(null, "nightly"), false);
@@ -16236,7 +16277,7 @@ test("HTTP updater ignores superseded preparation and freezes a shared in-flight
                     commits.push(pending);
                     return pending.promise;
                 },
-                fetchBuffer: async () => { downloads++; return download ? download.promise : Buffer.from("fixture"); }
+                checkedFetch: async () => { downloads++; return new Response(new Uint8Array(download ? await download.promise : Buffer.from("fixture"))); }
             },
             "@shared/IpcEvents": { IpcEvents: { GET_RELEASES: "releases", CHECK_RELEASE: "release", RESTART_UPDATE: "restart", GET_REPO: "repo", GET_UPDATES: "check", UPDATE: "update", BUILD: "build" } },
             "@shared/updateChannel": { normalizeUpdateChannel: () => "nightly" },
@@ -16250,7 +16291,7 @@ test("HTTP updater ignores superseded preparation and freezes a shared in-flight
             "~git-remote": { __esModule: true, default: "fixture/repo" },
             "./common": { ASAR_FILE: "fixture.asar", serializeErrors: (handler: unknown) => handler },
             "./releaseSelection": { releaseChannel: () => "nightly", selectUpdateRelease: (releases: unknown[]) => releases[0] }
-        }, { __dirname: "fixture.asar", VERSION: "4.0.1.0", URL });
+        }, { __dirname: "fixture.asar", VERSION: "4.0.1.0", URL, Buffer });
         const older = handlers.update(null, "nightly");
         await setImmediate();
         const newer = handlers.update(null, "nightly");
@@ -17507,11 +17548,14 @@ test("transcription model requests reject insecure and credentialed URLs before 
         assert.equal(reads, 0, url);
         assert.equal(typeof responses.at(-1)?.error, "string", url);
     }
-    for (const url of ["https://huggingface.co/model", "https://cdn.jsdelivr.net/model"]) {
+    for (const url of ["https://cdn.jsdelivr.net/model", "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.3"]) {
         await instance.onmessage?.({ data: { type: "fetch_request", id: "model", url } });
-        assert.equal(responses.at(-1)?.error, undefined);
+        assert.equal(reads, 0, url);
+        assert.equal(typeof responses.at(-1)?.error, "string", url);
     }
-    assert.equal(reads, 2);
+    await instance.onmessage?.({ data: { type: "fetch_request", id: "model", url: "https://huggingface.co/model" } });
+    assert.equal(responses.at(-1)?.error, undefined);
+    assert.equal(reads, 1);
     worker.terminate();
 });
 
@@ -17567,7 +17611,7 @@ test("transcription model responses describe the transferred bytes", async () =>
         const buffer = new ArrayBuffer(8);
         const responses: Array<{ response: ArrayBuffer; headers: Record<string, string>; }> = [];
         const { TranscriptionWorker } = loadSource("src/equicordplugins/voiceMessageTranscriber.desktop/utils.ts", {
-            "@api/index": { DataStore: { get: async () => cached ? buffer : undefined, set: async (_key: string, value: ArrayBuffer) => { assert.deepEqual(new Uint8Array(value), new Uint8Array(buffer)); writes++; } } },
+            "@api/index": { DataStore: { get: async () => cached ? buffer : undefined, keys: async () => [], update: async (_key: string, update: (stored?: unknown[]) => unknown) => update(), delMany: async () => {}, set: async (_key: string, value: ArrayBuffer) => { assert.deepEqual(new Uint8Array(value), new Uint8Array(buffer)); writes++; } } },
             "@utils/css": { classNameFactory: () => () => "" },
             "@utils/Queue": loadSource("src/utils/Queue.ts", { "./Logger": { Logger: class { error() {} } } }),
         "@equicordplugins/fileUpload/request": loadSource("src/equicordplugins/fileUpload/request.ts", {}, { URL, Blob, Uint8Array }),
@@ -20427,5 +20471,49 @@ test("Streaks coalesces incoming message bursts through refresh and clears recon
             assert.equal(timers.size, 1);
         }
         plugin.stop(); assert.equal(timers.size, 0);
+    }
+});
+
+test("transcription pinned library files must match their checksum and the model cache evicts oldest entries", async () => {
+    const url = "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/ort-wasm.wasm";
+    const bytes = new TextEncoder().encode("tampered");
+    for (const tampered of [true, false]) {
+        let instance: { onmessage?: (event: object) => Promise<void>; } = {};
+        let stored: { key: string; size: number; }[] = [{ key: "VoiceMessageTranscriber_old", size: 4 * 1024 ** 3 }, { key: "VoiceMessageTranscriber_gone", size: 1 }];
+        const deleted: string[] = [];
+        const writes: string[] = [];
+        const responses: Array<{ error?: string; type: string; }> = [];
+        const { TranscriptionWorker } = loadSource("src/equicordplugins/voiceMessageTranscriber.desktop/utils.ts", {
+            "@api/index": { DataStore: {
+                get: async () => undefined, keys: async () => ["VoiceMessageTranscriber_old"],
+                update: async (_key: string, update: (stored?: unknown[]) => { key: string; size: number; }[]) => { stored = update(stored); },
+                set: async (key: string) => { writes.push(key); }, delMany: async (keys: string[]) => { deleted.push(...keys); }
+            } },
+            "@utils/css": { classNameFactory: () => () => "" },
+            "@utils/Queue": loadSource("src/utils/Queue.ts", { "./Logger": { Logger: class { error() {} } } }),
+            "@equicordplugins/fileUpload/request": loadSource("src/equicordplugins/fileUpload/request.ts", {}, { URL, Blob, Uint8Array }),
+            "@webpack/common": { lodash: { isArrayBuffer: () => false } }
+        }, {
+            Blob, AbortController, Float32Array, setTimeout: () => 1, clearTimeout() {}, Array, Uint8Array,
+            crypto: { subtle: { digest: async () => Uint8Array.from(Buffer.from(tampered ? "00".repeat(32) : "bbdcb6b3c7d294577d806077630460be4e13ca35a345acb5e81188e9649fa74a", "hex")).buffer } },
+            URL: class extends URL { static createObjectURL() { return "blob:worker"; } static revokeObjectURL() {} },
+            Worker: class { constructor() { instance = this; } onmessage?: (event: object) => Promise<void>; terminate() {} postMessage(value: { error?: string; type: string; }) { if (value.type !== "run") responses.push(value); } },
+            fetch: async () => new Response(bytes)
+        });
+        const worker = new TranscriptionWorker(() => {}, () => {}, () => {}, () => {});
+        worker.run(new Float32Array([0]), "model");
+        await setImmediate();
+        await instance.onmessage?.({ data: { type: "fetch_request", id: "model", url } });
+        if (tampered) {
+            assert.match(responses.at(-1)?.error ?? "", /integrity check/);
+            assert.deepEqual(writes, []);
+        } else {
+            assert.equal(responses.at(-1)?.error, undefined);
+            await instance.onmessage?.({ data: { type: "fetch_request", id: "model", url: "https://huggingface.co/model.json" } });
+            assert.equal(responses.at(-1)?.error, undefined);
+            assert.deepEqual(deleted, ["VoiceMessageTranscriber_old"]);
+            assert.deepEqual(stored.map(entry => entry.key), ["VoiceMessageTranscriber_https://huggingface.co/model.json"]);
+        }
+        worker.terminate();
     }
 });

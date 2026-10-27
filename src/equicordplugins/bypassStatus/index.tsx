@@ -224,26 +224,21 @@ export default definePlugin({
     dependencies: ["AudioPlayerAPI"],
     flux: {
         async MESSAGE_CREATE({ message, guildId, channelId }: IMessageCreate): Promise<void> {
-            try {
-                const currentUser = UserStore.getCurrentUser();
-                if (!currentUser) return;
+            const currentUser = UserStore.getCurrentUser();
 
-                const userStatus = await PresenceStore.getStatus(currentUser.id);
-                const currentChannelId = getCurrentChannel()?.id ?? "0";
-                if (message.state === "SENDING" || message.content === "" || message.author.id === currentUser.id || (channelId === currentChannelId && WindowStore.isFocused()) || userStatus !== settings.store.statusToUse) {
-                    return;
-                }
-                if (settings.store.respectSilentPings && (message.flags & SILENT_PING_FLAG)) { return; }
-                const mentioned = MessageStore.getMessage(channelId, message.id)?.mentioned;
-                if (((guildId != null && bypassGuildIds.has(guildId)) || bypassChannelIds.has(channelId)) && mentioned) {
+            const userStatus = PresenceStore.getStatus(currentUser.id);
+            const currentChannelId = getCurrentChannel()?.id ?? "0";
+            if (message.state === "SENDING" || message.content === "" || message.author.id === currentUser.id || (channelId === currentChannelId && WindowStore.isFocused()) || userStatus !== settings.store.statusToUse) {
+                return;
+            }
+            if (settings.store.respectSilentPings && (message.flags & SILENT_PING_FLAG)) { return; }
+            const mentioned = MessageStore.getMessage(channelId, message.id)?.mentioned;
+            if (((guildId != null && bypassGuildIds.has(guildId)) || bypassChannelIds.has(channelId)) && mentioned) {
+                await showNotification(message, guildId);
+            } else if (bypassUserIds.has(message.author.id)) {
+                if (ChannelStore.getChannel(channelId)?.isDM() || (mentioned && settings.store.allowOutsideOfDms === true)) {
                     await showNotification(message, guildId);
-                } else if (bypassUserIds.has(message.author.id)) {
-                    if (ChannelStore.getChannel(channelId)?.isDM() || (mentioned && settings.store.allowOutsideOfDms === true)) {
-                        await showNotification(message, guildId);
-                    }
                 }
-            } catch (error) {
-                logger.error("Failed to handle message: ", error);
             }
         }
     },

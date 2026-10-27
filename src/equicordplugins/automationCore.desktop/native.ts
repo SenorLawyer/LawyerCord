@@ -384,14 +384,19 @@ function spawnText(command: string, args: string[], timeoutMs: number, signal?: 
         let timedOut = false;
         let child: ReturnType<typeof spawn>;
         try {
-            child = spawn(command, args, { windowsHide: true, shell: false });
+            child = spawn(command, args, { windowsHide: true, shell: false, detached: process.platform !== "win32" });
         } catch (error) {
             resolve({ code: null, stdout: "", stderr: "The program could not be started.", timedOut: false });
             return;
         }
-        const cancel = () => { child.kill("SIGKILL"); };
+        const cancel = () => {
+            if (process.platform === "win32" && child.pid) spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true, shell: false, stdio: "ignore" }).on("error", () => child.kill("SIGKILL"));
+            else if (child.pid) {
+                try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); }
+            } else child.kill("SIGKILL");
+        };
         signal?.addEventListener("abort", cancel, { once: true });
-        const timer = setTimeout(() => { timedOut = true; child.kill("SIGKILL"); }, timeoutMs);
+        const timer = setTimeout(() => { timedOut = true; cancel(); }, timeoutMs);
         child.stdout?.on("data", (chunk: Buffer) => { if (stdout.length < OUTPUT_CAP) stdout += chunk.toString("utf8").slice(0, OUTPUT_CAP - stdout.length); });
         child.stderr?.on("data", (chunk: Buffer) => { if (stderr.length < OUTPUT_CAP) stderr += chunk.toString("utf8").slice(0, OUTPUT_CAP - stderr.length); });
         child.on("error", () => { stderr ||= "The program could not be started."; });

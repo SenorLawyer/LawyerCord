@@ -105,9 +105,7 @@ export const Magnifier = ErrorBoundary.wrap<MagnifierProps>(({ instance, size: i
                 size.current = settings.store.size;
 
                 // close context menu if open
-                if (document.getElementById("image-context")) {
-                    FluxDispatcher.dispatch({ type: "CONTEXT_MENU_CLOSE" });
-                }
+                FluxDispatcher.dispatch({ type: "CONTEXT_MENU_CLOSE" });
 
                 updateMousePosition(e);
             }

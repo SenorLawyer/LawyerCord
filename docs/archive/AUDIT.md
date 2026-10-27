@@ -1,6 +1,6 @@
 # Project audit report
 
-This is the historical PR47 audit report. Its source revisions, local paths, check results and release status describe that review. The current Stable 3.0.1.0 audit is tracked in [docs/stable-audit-2026-10-01.md](docs/stable-audit-2026-10-01.md).
+This is the historical PR47 audit report. Its source revisions, local paths, check results and release status describe that review. The current Stable 3.0.1.0 audit is tracked in [stable-audit-2026-10-01.md](stable-audit-2026-10-01.md).
 
 The repository review and planned local validation are complete for PR47. The review covers all 1,661 files in published nightly `nightly-20260905-1918-6e664e03`, the integrated main history through `8fc182ba7`, and the resulting 1,656 tracked files. Fifteen files were added and twenty removed. The release handoff is pending until the PR merges and its nightly workflow succeeds. Audit coverage is not a guarantee that every possible defect has been eliminated.
 
@@ -1076,7 +1076,7 @@ VoiceStats waits for valid storage before tracking, invalidates stale startup re
 
 VoiceRejoin preserves existing calls, cancels pending attempts on user voice activity/logout, and rejects malformed, foreign or ownerless saved targets. Channel and active-session state use paired transactions. Skipped reconnects do not mutate session state; disconnect writes check the saved account owner transactionally and no longer trust a cached inactive flag. Reconnects use the existing Discord channel action. Source and isolated browser checks cover these changes, and captured Discord code confirms that the action applies media/chat/join checks and supplies current channel metadata. Same-account competing sessions, timeout semantics, state changes after a paired read, and live acceptance remain open.
 
-The proposed version is `3.0.0.0` because older scheduled data now requires explicit recovery. See [VERSIONING.md](VERSIONING.md) for the compatibility and downgrade implications. No release tag has been created for this audit.
+The proposed version is `3.0.0.0` because older scheduled data now requires explicit recovery. See [VERSIONING.md](../../VERSIONING.md) for the compatibility and downgrade implications. No release tag has been created for this audit.
 
 Message pronouns now read the message channel's guild rather than the browsed channel, and subscribe to formatting, self-visibility, and account changes. All UserSettings API consumers declare their dependency explicitly. The required SupportHelper currently enables that API globally, which previously masked missing declarations.
 

@@ -338,7 +338,7 @@
     transform: scale(0.8);
 }
 
-.vc-channeltabs-container [class*="numberBadge"] {
+.vc-channeltabs-container .vc-channeltabs-notification-badge {
     background-color: var(--channeltabs-red) !important;
     color: var(--channeltabs-white);
     border-radius: 50%;

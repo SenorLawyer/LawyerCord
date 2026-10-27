@@ -14,7 +14,7 @@ export const ImageSrc = [...ConnectSrc, "img-src"];
 export const CssSrc = ["style-src", "font-src"];
 export const ImageAndMediaSrc = [...ImageSrc, "media-src"];
 export const ImageAndCssSrc = [...ImageSrc, ...CssSrc];
-export const ImageScriptsAndCssSrc = [...ImageAndCssSrc, "script-src", "worker-src"];
+export const ScriptSrc = ["script-src", "worker-src"];
 
 // Plugins can whitelist their own domains by importing this object in their native.ts
 // script and just adding to it. But generally, you should just edit this file instead
@@ -52,8 +52,10 @@ export const CspPolicies: PolicyMap = {
 
     // CDNs used for some things by Vencord.
     // FIXME: we really should not be using CDNs anymore
-    "cdnjs.cloudflare.com": ImageScriptsAndCssSrc,
-    "cdn.jsdelivr.net": ImageScriptsAndCssSrc,
+    "cdnjs.cloudflare.com": ImageAndCssSrc,
+    "cdn.jsdelivr.net": ImageAndCssSrc,
+    "cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm/": ScriptSrc, // ffmpeg core and worker
+    "cdn.jsdelivr.net/npm/stegcloak-dist@1.0.0/": ScriptSrc, // invisible chat
 
     // Function Specific
     "api.github.com": ConnectSrc, // used for updating Vencord itself
@@ -70,6 +72,7 @@ export const CspPolicies: PolicyMap = {
     "decor.fieryflames.dev": ConnectSrc, // Decor API
     "streaks.equicord.org": ConnectSrc,
     "badges.equicord.org": ConnectSrc,
+    "badge.equicord.org": ImageSrc, // global badge list and badge images
     "dc.songspotlight.nexpid.xyz": ConnectSrc,
     "translate.googleapis.com": ConnectSrc,
     "timezone.creations.works": ConnectSrc,

@@ -2,6 +2,12 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 4.5.4.0 - 2026-10-31 (Nightly)
+
+### Fixed
+
+- Restore dragging Discord's custom title bar on Windows when its normal drag region stops working.
+
 ## 4.5.3.0 - 2026-10-27 (Nightly)
 
 ### Changed

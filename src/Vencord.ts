@@ -242,4 +242,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (IS_DISCORD_DESKTOP && Settings.winNativeTitleBar && IS_WINDOWS) {
         createAndAppendStyle("vencord-native-titlebar-style", coreStyleRootNode).textContent = "[class*=titleBar]{display: none!important}";
     }
+
+    if (IS_DISCORD_DESKTOP && IS_WINDOWS && !Settings.winNativeTitleBar) {
+        createAndAppendStyle("vencord-window-drag-region", coreStyleRootNode).textContent = "body:not(:has([data-vc-collapsible-ui-header-bar-collapsed], [data-vc-collapsible-ui-title-bar-collapsed]))::after{content:'';position:fixed;top:0;left:80px;right:320px;height:24px;z-index:2147483647;app-region:drag}";
+    }
 }, { once: true });

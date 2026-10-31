@@ -2,7 +2,7 @@
 
 `package.json` is the source of truth for the LawyerCord version.
 
-The current source version is `4.5.4.0`. The current Stable release version is `3.0.1.0`, including the `3.0.0.0` audit and update-channel fixes.
+The current source version is `4.5.5.0`. The current Stable release version is `3.0.1.0`, including the `3.0.0.0` audit and update-channel fixes.
 
 The current four-part format is retained for upstream compatibility:
 

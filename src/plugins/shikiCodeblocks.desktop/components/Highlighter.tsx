@@ -22,7 +22,7 @@ import { shiki } from "@plugins/shikiCodeblocks.desktop/api/shiki";
 import { useTheme } from "@plugins/shikiCodeblocks.desktop/hooks/useTheme";
 import { settings } from "@plugins/shikiCodeblocks.desktop/settings";
 import { hex2Rgb } from "@plugins/shikiCodeblocks.desktop/utils/color";
-import { cl, hljs, requireHljs, shouldUseHljs } from "@plugins/shikiCodeblocks.desktop/utils/misc";
+import { cl, getHljs, requireHljs, shouldUseHljs } from "@plugins/shikiCodeblocks.desktop/utils/misc";
 import { useAwaiter, useIntersection } from "@utils/react";
 import { React, useEffect } from "@webpack/common";
 
@@ -98,7 +98,7 @@ export const Highlighter = ({
     };
 
     let langName;
-    if (lang) langName = useHljs ? hljs?.getLanguage?.(lang)?.name : shikiLang?.name;
+    if (lang) langName = useHljs ? getHljs()?.getLanguage(lang)?.name : shikiLang?.name;
 
     return (
         <div

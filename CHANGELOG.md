@@ -2,6 +2,12 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 4.5.5.0 - 2026-11-01 (Nightly)
+
+### Fixed
+
+- Keep text attachment previews and code blocks visible when Discord's syntax highlighter is unavailable.
+
 ## 4.5.4.0 - 2026-10-31 (Nightly)
 
 ### Fixed

@@ -24,12 +24,12 @@ function fixture() {
         "@plugins/shikiCodeblocks.desktop": { __esModule: true, default: shiki },
         "@plugins/shikiCodeblocks.desktop/utils/misc": {
             requireHljs: () => Promise.resolve(),
-            hljs: {
+            getHljs: () => ({
                 getLanguage: () => { lookups++; return true; },
                 listLanguages: () => ["python"],
                 highlight: () => { highlights++; return { relevance: 0 }; },
                 highlightAuto: () => { highlights++; return { language: "python", relevance: 12, secondBest: { relevance: 1 } }; }
-            }
+            })
         },
         "@utils/constants": { EquicordDevs: {} },
         "@utils/Logger": { Logger: class { error(error: unknown) { assert.fail(String(error)); } } },

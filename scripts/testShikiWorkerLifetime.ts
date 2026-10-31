@@ -228,10 +228,9 @@ test("Highlight.js runs once for unchanged code across display updates", () => {
     let highlights = 0;
     let cached: { dependencies: unknown[]; value: unknown; } | undefined;
     const React = { createElement: (type: unknown, props: unknown, ...children: unknown[]) => ({ type, props, children }) };
+    const hljs = { getLanguage: () => ({}), highlight: (content: string) => { highlights++; return { value: content }; } };
     const modules: Record<string, unknown> = {
-        "@plugins/shikiCodeblocks.desktop/utils/misc": { cl: () => "code", hljs: {
-            getLanguage: () => ({}), highlight: (content: string) => { highlights++; return { value: content }; }
-        } },
+        "@plugins/shikiCodeblocks.desktop/utils/misc": { cl: () => "code", getHljs: () => hljs },
         "@webpack/common": { useMemo: (factory: () => unknown, dependencies: unknown[]) => {
             if (!cached || dependencies.some((value, index) => value !== cached?.dependencies[index]))
                 cached = { dependencies, value: factory() };

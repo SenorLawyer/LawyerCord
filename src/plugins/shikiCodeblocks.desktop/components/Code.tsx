@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { cl, hljs } from "@plugins/shikiCodeblocks.desktop/utils/misc";
+import { cl, getHljs } from "@plugins/shikiCodeblocks.desktop/utils/misc";
 import type { IThemedToken } from "@vap/shiki";
 import { useMemo } from "@webpack/common";
 import type { JSX } from "react";
@@ -38,14 +38,16 @@ export const Code = ({
     content,
     tokens,
 }: CodeProps) => {
+    const hljs = useHljs && lang ? getHljs() : undefined;
     const highlighted = useMemo(() => {
-        if (!useHljs || !lang || !hljs.getLanguage(lang)) return null;
+        if (!lang) return null;
+        if (!hljs?.getLanguage(lang)) return null;
         try {
             return hljs.highlight(content, { language: lang, ignoreIllegals: true }).value;
         } catch {
             return null;
         }
-    }, [useHljs, lang, content]);
+    }, [hljs, lang, content]);
     let lines: JSX.Element[];
 
     if (useHljs) {

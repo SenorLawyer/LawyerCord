@@ -6,7 +6,7 @@
 
 import { isPluginEnabled } from "@api/PluginManager";
 import shikiCodeblocks from "@plugins/shikiCodeblocks.desktop";
-import { hljs, requireHljs } from "@plugins/shikiCodeblocks.desktop/utils/misc";
+import { getHljs, requireHljs } from "@plugins/shikiCodeblocks.desktop/utils/misc";
 import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
@@ -191,7 +191,7 @@ function normalizeLanguage(language: string | undefined) {
     if (!language) return null;
 
     const normalized = LANGUAGE_ALIASES[language] ?? language;
-    if (!normalized || !hljs?.getLanguage?.(normalized)) return null;
+    if (!normalized || !getHljs()?.getLanguage(normalized)) return null;
 
     return normalized;
 }
@@ -239,11 +239,12 @@ function hasStrongSignal(content: string) {
 }
 
 function getSupportedLanguages(): string[] {
-    return hljs?.listLanguages?.() ?? [...PRIMARY_AUTO_LANGUAGES].filter(language => hljs?.getLanguage?.(language));
+    return getHljs()?.listLanguages() ?? [];
 }
 
 function getPrimaryDetectableLanguages(): string[] {
-    return primaryDetectableLanguagesCache ??= [...PRIMARY_AUTO_LANGUAGES].filter(language => hljs?.getLanguage?.(language));
+    const hljs = getHljs();
+    return hljs ? primaryDetectableLanguagesCache ??= [...PRIMARY_AUTO_LANGUAGES].filter(language => hljs.getLanguage(language)) : [];
 }
 
 function getSecondaryDetectableLanguages(): string[] {
@@ -256,6 +257,8 @@ function getSecondaryDetectableLanguages(): string[] {
 
 function runAutoDetection(content: string, languages: string[]): DetectionResult {
     try {
+        const hljs = getHljs();
+        if (!hljs) return { language: null, relevance: 0, confidenceGap: 0 };
         const result = languages.length
             ? hljs.highlightAuto(content, languages)
             : hljs.highlightAuto(content);

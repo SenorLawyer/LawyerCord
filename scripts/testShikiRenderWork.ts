@@ -30,7 +30,7 @@ function fixture() {
         "@plugins/shikiCodeblocks.desktop/settings": { settings: { use: (selected: readonly string[]) => { keys.push(selected); return store; } } },
         "@plugins/shikiCodeblocks.desktop/hooks/useTheme": { useTheme: () => ({ id: "old-theme", theme: { fg: "#fff", colors: { "editor.background": "#000" } } }) },
         "@plugins/shikiCodeblocks.desktop/utils/color": { hex2Rgb: () => [0, 0, 0] },
-        "@plugins/shikiCodeblocks.desktop/utils/misc": { cl: () => "code", hljs: { getLanguage: () => ({ name: "TypeScript" }), highlight: (content: string) => { highlights++; return { value: content }; } }, shouldUseHljs: ({ tryHljs }: { tryHljs: boolean; }) => tryHljs },
+        "@plugins/shikiCodeblocks.desktop/utils/misc": { cl: () => "code", getHljs: () => ({ getLanguage: () => ({ name: "TypeScript" }), highlight: (content: string) => { highlights++; return { value: content }; } }), shouldUseHljs: ({ tryHljs }: { tryHljs: boolean; }) => tryHljs },
         "@utils/react": { useIntersection: () => [null, visible], useAwaiter: (_factory: unknown, options: { deps: unknown[]; }) => { jobs.push(options.deps); return [null]; } },
         "@webpack/common": { React, useEffect: React.useEffect, useMemo: (factory: () => unknown) => factory() },
         "./ButtonRow": {}, "./Code": {}, "./Header": {}
@@ -89,4 +89,34 @@ test("Hidden Shiki fallback blocks defer highlight.js until their first visible 
     f.setVisible(true);
     f.render();
     assert.equal(f.highlights(), 1);
+});
+
+
+test("Highlight.js fallback retries unchanged code when the module becomes available", () => {
+    let available = false;
+    let highlights = 0;
+    let previousDeps: unknown[] = [];
+    let previousValue: unknown;
+    const hljs = { getLanguage: () => true, highlight: () => { highlights++; return { value: "highlighted" }; } };
+    const React = { createElement: (type: unknown, props: unknown, ...children: unknown[]) => ({ type, props, children }) };
+    const modules: Record<string, unknown> = {
+        "@plugins/shikiCodeblocks.desktop/utils/misc": { cl: () => "code", getHljs: () => available ? hljs : undefined },
+        "@webpack/common": { React, useMemo: (factory: () => unknown, deps: unknown[]) => {
+            if (deps.length !== previousDeps.length || deps.some((value, i) => value !== previousDeps[i])) {
+                previousDeps = deps;
+                previousValue = factory();
+            }
+            return previousValue;
+        } }
+    };
+    const { outputText } = transpileModule(readFileSync("src/plugins/shikiCodeblocks.desktop/components/Code.tsx", "utf8"), {
+        compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022, jsx: JsxEmit.React }
+    });
+    const { Code } = runInNewContext(`${outputText}\nexports;`, { exports: {}, React, require: (name: string) => modules[name] });
+    const props = { theme: { plainColor: "white" }, useHljs: true, lang: "lua", content: "print(1)", tokens: null };
+    Code(props);
+    assert.equal(highlights, 0);
+    available = true;
+    Code(props);
+    assert.equal(highlights, 1);
 });

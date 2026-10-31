@@ -20,11 +20,12 @@ import { resolveLang } from "@plugins/shikiCodeblocks.desktop/api/languages";
 import { HighlighterProps } from "@plugins/shikiCodeblocks.desktop/components/Highlighter";
 import { HljsSetting } from "@plugins/shikiCodeblocks.desktop/types";
 import { classNameFactory } from "@utils/css";
-import { DefaultExtractAndLoadChunksRegex, extractAndLoadChunksLazy, findByPropsLazy } from "@webpack";
+import { DefaultExtractAndLoadChunksRegex, extractAndLoadChunksLazy, filters, find } from "@webpack";
 
 export const cl = classNameFactory("vc-shiki-");
 
-export const hljs: typeof import("highlight.js").default = findByPropsLazy("highlight", "registerLanguage");
+let hljs: typeof import("highlight.js").default | undefined;
+export const getHljs = () => hljs ??= find(filters.byProps("highlight", "registerLanguage"), { isIndirect: true });
 export const requireHljs = extractAndLoadChunksLazy(["codeBlock:{react("], new RegExp(`"hljs".+?${DefaultExtractAndLoadChunksRegex.source}`));
 
 export const shouldUseHljs = ({
@@ -34,7 +35,7 @@ export const shouldUseHljs = ({
     lang: HighlighterProps["lang"],
     tryHljs: HljsSetting,
 }) => {
-    const hljsLang = lang ? hljs?.getLanguage?.(lang) : null;
+    const hljsLang = lang ? getHljs()?.getLanguage(lang) : null;
     const shikiLang = lang ? resolveLang(lang) : null;
     const langName = shikiLang?.name;
 

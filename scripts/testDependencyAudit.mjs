@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { after, test } from "node:test";
@@ -21,6 +22,25 @@ const known = {
     github_advisory_id: "GHSA-vfj7-8cjw-p6xm", module_name: "braces", title: "Deep nesting", severity: "high",
     findings: [{ version: "3.0.3", dev: true, paths: [".>stylelint>micromatch>braces"] }]
 };
+
+test("patched minimatch supports legacy and named CommonJS consumers", () => {
+    const require = createRequire(import.meta.url);
+    const legacy = createRequire(require.resolve("eslint-plugin-react"))("minimatch");
+    const modern = createRequire(require.resolve("@electron/asar"))("minimatch");
+    assert.equal(legacy("src/example.tsx", "src/**/*.tsx"), true);
+    assert.equal(legacy("src/example.ts", "src/**/*.tsx"), false);
+    assert.equal(legacy.minimatch, legacy);
+    assert.equal(modern.minimatch("src/example.tsx", "src/**/*.tsx"), true);
+    assert.equal(typeof modern.Minimatch, "function");
+});
+
+test("updated glob rejects an already aborted traversal", async () => {
+    const require = createRequire(import.meta.url);
+    const glob = createRequire(require.resolve("@electron/asar"))("glob");
+    const controller = new AbortController();
+    controller.abort();
+    await assert.rejects(glob.glob("**/*", { cwd: directory, signal: controller.signal }));
+});
 
 function run(report, level = "moderate", status = 1) {
     writeFileSync(manager, `process.stdout.write(${JSON.stringify(typeof report === "string" ? report : JSON.stringify(report))}); process.exitCode = ${status};`);

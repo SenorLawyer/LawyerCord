@@ -58,3 +58,56 @@ test("inherited definitions are ignored in both export formats", () => {
     defineExports(exports, Object.create({ getter: () => 1 }), Object.create({ value: 2 }));
     assert.deepEqual(Object.keys(exports), []);
 });
+
+const runFactorySource = source.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "runFactoryWithWrap")?.getText(source);
+assert.ok(runFactorySource);
+
+interface TestModule {
+    id: string;
+    exports: Record<string, unknown>;
+    loaded?: boolean;
+}
+
+for (const initialLoaded of [undefined, false]) {
+    test(`completed modules become searchable before listeners run, initial loaded=${initialLoaded}`, () => {
+        const original = Symbol("original");
+        const module: TestModule = { id: "sound-context", exports: {} };
+        if (initialLoaded !== undefined) module.loaded = initialLoaded;
+        const factory = Object.assign((current: TestModule) => {
+            assert.notEqual(current.loaded, true);
+            current.exports.sound = "discodo";
+            return "finished";
+        }, { [original]: undefined as unknown });
+        factory[original] = factory;
+        let notified = false;
+        const runFactory = runInNewContext(ts.transpile(`${runFactorySource}; runFactoryWithWrap;`), {
+            SYM_ORIGINAL_FACTORY: original,
+            defineInWebpackInstances() { },
+            wreq: {},
+            moduleListeners: [(exports: Record<string, unknown>) => {
+                assert.equal(module.loaded, true);
+                assert.equal(exports.sound, "discodo");
+                notified = true;
+            }],
+            waitForSubscriptions: new Map()
+        });
+        assert.equal(runFactory(factory, null, [module, module.exports, null]), "finished");
+        assert.equal(module.loaded, true);
+        assert.equal(notified, true);
+    });
+}
+
+test("a throwing module is not marked as loaded", () => {
+    const original = Symbol("original");
+    const module: TestModule = { id: "broken", exports: {} };
+    const failure = new Error("Factory failed");
+    const factory = Object.assign(() => { throw failure; }, { [original]: undefined as unknown });
+    factory[original] = factory;
+    const runFactory = runInNewContext(ts.transpile(`${runFactorySource}; runFactoryWithWrap;`), {
+        SYM_ORIGINAL_FACTORY: original,
+        defineInWebpackInstances() { },
+        wreq: {}
+    });
+    assert.throws(() => runFactory(factory, null, [module, module.exports, null]), error => error === failure);
+    assert.equal(module.loaded, undefined);
+});

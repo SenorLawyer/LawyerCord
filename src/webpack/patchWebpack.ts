@@ -436,6 +436,7 @@ function runFactoryWithWrap(patchedFactory: PatchedModuleFactory, thisArg: unkno
         return originalFactory.apply(thisArg, argArray);
     }
 
+    module.loaded = true;
     exports = module.exports;
 
     if (typeof require === "function" && require.c) {

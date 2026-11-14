@@ -53,10 +53,10 @@ export default definePlugin({
             }
         },
         {
-            find: '"getFavoritesAccess"',
+            find: "canUpsellFavoriteLimit:!",
             replacement: {
-                match: /hasAccess:\i,isExperimentEnabled:\i,isFreemium:\i,favoriteLimit:\i,canUpsellFavoriteLimit:\i/,
-                replace: "hasAccess:true,isExperimentEnabled:true,isFreemium:false,favoriteLimit:0,canUpsellFavoriteLimit:false"
+                match: /favoriteLimit:\i\?200:3,canUpsellFavoriteLimit:!\i/,
+                replace: "favoriteLimit:200,canUpsellFavoriteLimit:false"
             }
         },
         {

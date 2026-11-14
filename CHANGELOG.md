@@ -2,6 +2,12 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 4.5.8.0 - 2026-11-14 (Nightly)
+
+### Fixed
+
+- Restore adding favorite channels with Lawyer's Fake Nitro after Discord changed its favorite limit.
+
 ## 4.5.7.0 - 2026-11-07 (Nightly)
 
 ### Fixed

@@ -1,6 +1,6 @@
 # Discord MCP
 
-This local stdio MCP server talks to the `DiscordMCP` LawyerCord plugin through a private file queue. Discord remains the only process that accesses the authenticated account. The server exposes 70 `discord_*` tools. Every tool has a JSON schema, MCP annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`) and validates its arguments before anything reaches Discord.
+This local stdio MCP server talks to the `DiscordMCP` LawyerCord plugin through a private file queue. Discord remains the only process that accesses the authenticated account. The server exposes 73 `discord_*` tools. Every tool has a JSON schema, MCP annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`) and validates its arguments before anything reaches Discord.
 
 ## What the agent can do
 
@@ -15,6 +15,7 @@ Everything below works without navigating Discord or opening any UI. Any ID argu
 | Reading | `read_messages`, `bulk_read_messages`, `search_messages`, `get_message`, `get_pinned_messages`, `get_reactions`, `get_message_context`, `resolve_link`, `list_mentions`, `list_unread`, `download_attachment` |
 | Writing | `send_message`, `edit_message`, `delete_own_message`, `delete_message`, `add_reaction`, `remove_reaction`, `pin_message`, `unpin_message`, `create_thread`, `create_forum_post`, `send_typing`, `mark_read`, `forward_message` |
 | Events | `subscribe_channel`, `subscribe_guild`, `subscribe_dms`, `wait_for_message`, `list_subscriptions`, `unsubscribe_channel` |
+| Commands | `search_commands`, `run_command` |
 | Gated | see below |
 
 Lists share one shape: a named array, `count`, and `hasMore` with `nextBefore`, `nextAfter` or `nextOffset`. Messages come newest first and include author, nickname, attachments, embeds, reactions, mentions, reply reference, forwarded content, poll and thread. Results are bounded, and long text is truncated with a flag.
@@ -33,13 +34,14 @@ These categories are off by default. Each has its own switch in the DiscordMCP p
 | Allow moderation actions | `kick_member`, `ban_member`, `unban_member`, `timeout_member`, deleting other people's messages, removing other people's reactions |
 | Allow role actions | `add_role`, `remove_role` |
 | Allow channel management | `create_channel`, `edit_channel`, `delete_channel` |
+| Allow direct API requests | `api_request` |
 
 ## Safety boundary
 
-- There is no generic REST request tool. Every call is a fixed operation validated on the server, in the renderer and, for files, in the native process.
-- Sends never notify anyone unless `allowed_mentions` asks for it. Replies do not ping by default.
+- The direct API tool is off by default. It can bypass the other action switches, make account changes and return private data. It accepts Discord API paths, not external URLs, and uses the client's existing authentication without exposing its token. The normal tools remain preferable when they cover the task.
+- The message tools never notify anyone unless `allowed_mentions` asks for it. Replies do not ping by default. Direct API calls and application commands follow Discord's own behavior.
 - `edit_message`, `delete_own_message` and `delete_message` for your own messages check that the signed-in account wrote the message. The persistent sent ledger is kept as an audit trail.
-- Every write action is rate limited with a sliding window per channel and globally (defaults 5 per 10 seconds and 60 per hour per channel, 10 per 10 seconds and 120 per hour overall). The limits are plugin settings, and a blocked call returns a clear error with the wait time.
+- Write actions are rate limited globally and, when a channel can be identified, per channel (defaults 5 per 10 seconds and 60 per hour per channel, 10 per 10 seconds and 120 per hour overall). The limits are plugin settings, and a blocked call returns a clear error with the wait time.
 - File uploads read only from folders listed in the plugin settings, plus attachments the agent downloaded earlier. Paths are resolved through symlinks, LawyerCord's own data folder is always refused, and files are capped at 25 MB.
 - Attachments are fetched only from Discord's attachment CDN, capped at 25 MB and hashed. Downloads older than 24 hours are deleted, and the folder is capped at 500 MB. Images and voice messages are also returned as native MCP image and audio content blocks.
 - Requests and responses are capped in size, authenticated with a per-install secret, and never log message content or tokens.
@@ -48,7 +50,9 @@ These categories are off by default. Each has its own switch in the DiscordMCP p
 
 ## Run
 
-Enable `DiscordMCP` in LawyerCord, open its settings, select the AI apps you use under **Connect an AI app**, then restart those apps. LawyerCord installs its bundled local bridge and uses Discord's Electron runtime, so no Node.js installation or LawyerCord checkout is required.
+Install Node.js 18 or newer, then enable `DiscordMCP` in LawyerCord. Open its settings, select the AI apps you use under **Connect an AI app**, then restart those apps. LawyerCord installs its bundled local bridge, so a LawyerCord checkout is not required.
+
+After updating LawyerCord, restart Discord to copy the bundled bridge, then restart the AI app so it loads the updated tools. The plugin also repairs older configurations that pointed to Discord's executable.
 
 For a manual setup, configure an MCP client to run:
 

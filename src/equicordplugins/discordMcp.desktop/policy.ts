@@ -5,6 +5,11 @@
  */
 
 export const GATES = {
+    api: {
+        setting: "allowApiRequests",
+        label: "Allow direct API requests",
+        what: "direct Discord API requests, including actions normally restricted by other settings",
+    },
     relationships: {
         setting: "allowRelationshipActions",
         label: "Allow relationship actions",
@@ -45,6 +50,9 @@ interface ToolPolicy {
 }
 
 export const TOOL_POLICY = {
+    api_request: { write: true, gate: "api" },
+    search_commands: {},
+    run_command: { write: true },
     connection_status: {},
     whoami: {},
     list_servers: {},
@@ -126,6 +134,7 @@ export function toolPolicy(tool: DiscordMcpToolName): ToolPolicy {
 }
 
 export interface McpSettings {
+    allowApiRequests: boolean;
     allowRelationshipActions: boolean;
     allowMembershipActions: boolean;
     allowAccountActions: boolean;

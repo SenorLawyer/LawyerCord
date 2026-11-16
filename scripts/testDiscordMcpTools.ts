@@ -175,7 +175,8 @@ function makeWorld(options: { sleeps?: number[]; } = {}) {
                 getVoiceStates: () => ({ [ALICE]: { mute: false, deaf: false, selfMute: false, selfDeaf: false, selfVideo: true, selfStream: false, suppress: false, channelId: VOICE } }),
             },
             FluxDispatcher: { dispatch: (event: unknown) => { dispatched.push(event); } },
-            Constants: { Endpoints: { MESSAGES: (c: string) => `/channels/${c}/messages`, MESSAGE: (c: string, m: string) => `/channels/${c}/messages/${m}`, USER: (id: string) => `/users/${id}` } },
+            AuthenticationStore: { getSessionId: () => "session" },
+            Constants: { Endpoints: { INTERACTIONS: "/interactions", APPLICATION_COMMANDS_SEARCH: (c: string) => `/channels/${c}/application-commands/search`, APPLICATION_COMMAND_INDEX_GUILD: (g: string) => `/guilds/${g}/application-command-index`, MESSAGES: (c: string) => `/channels/${c}/messages`, MESSAGE: (c: string, m: string) => `/channels/${c}/messages/${m}`, USER: (id: string) => `/users/${id}` } },
             CloudUploader: class { description: string | null = null; constructor(public item: unknown, public channelId: string) { } },
             RestAPI: Object.fromEntries(["get", "post", "put", "patch", "del"].map(method => [method, async (request: { url: string; query?: Record<string, unknown>; body?: Record<string, unknown>; }) => {
                 const call = { method, url: request.url, query: request.query, body: request.body };
@@ -216,7 +217,7 @@ function makeWorld(options: { sleeps?: number[]; } = {}) {
     };
 
     const defaults = {
-        allowRelationshipActions: false, allowMembershipActions: false, allowAccountActions: false,
+        allowApiRequests: false, allowRelationshipActions: false, allowMembershipActions: false, allowAccountActions: false,
         allowModerationActions: false, allowRoleActions: false, allowChannelManagement: false,
         channelBurstLimit: 5, channelHourlyLimit: 60, globalBurstLimit: 10, globalHourlyLimit: 120, uploadDirectories: "",
     };
@@ -331,6 +332,62 @@ test("gated tools refuse before touching Discord and run once enabled", async ()
         await world.run(tool, args, { [setting]: true });
         assert.equal(world.calls.length, 1, `${tool} calls Discord once when enabled`);
     }
+});
+
+test("direct API calls require the switch, reject external paths and pass JSON to Discord", async () => {
+    const world = makeWorld();
+    world.route("post", /^\/guilds\/123$/, () => ({ ok: true }));
+    const args = { method: "POST", path: "/guilds/123", query: { a: "b" }, body: { name: "test" } };
+    await assert.rejects(world.run("api_request", args), /Allow direct API requests/);
+    for (const path of ["https://example.com", "//example.com", "/foo/../bar", "/foo/%2fbar", "/foo?x=1"]) {
+        await assert.rejects(world.run("api_request", { ...args, path }, { allowApiRequests: true }), /path/);
+    }
+    assert.equal(world.calls.length, 0);
+    assert.deepEqual(await world.run("api_request", args, { allowApiRequests: true }), { status: 200, body: { ok: true } });
+    assert.deepEqual(world.calls[0], { method: "post", url: "/guilds/123", query: { a: "b" }, body: { name: "test" } });
+    await world.run("api_request", { ...args, body: [{ id: "123", position: 1 }] }, { allowApiRequests: true });
+    assert.deepEqual(world.calls[1].body, [{ id: "123", position: 1 }]);
+});
+
+test("direct channel writes share channel limits with ordinary writes", async () => {
+    const world = makeWorld();
+    world.route("post", /./, () => ({}));
+    const settings = { allowApiRequests: true, channelBurstLimit: 1 };
+    await world.run("api_request", { method: "POST", path: `/channels/${CHANNEL}/typing` }, settings);
+    await assert.rejects(world.run("send_typing", { channel_id: CHANNEL }, settings), /this channel/);
+    await assert.rejects(world.run("api_request", { method: "POST", path: "/interactions", body: { channel_id: CHANNEL } }, settings), /this channel/);
+});
+
+test("slash command search and execution use the current channel and session", async () => {
+    const world = makeWorld();
+    world.route("get", /application-command-index$/, () => ({ application_commands: [{ id: MESSAGE_A, type: 1, name: "test", application_id: ALICE, version: MESSAGE_B }, { id: MESSAGE_B, type: 1, name: "other" }] }));
+    world.route("post", /^\/interactions$/, () => ({}));
+    const found = await world.run("search_commands", { channel_id: CHANNEL, query: "test" });
+    assert.equal(found.application_commands[0].id, MESSAGE_A);
+    assert.equal(found.count, 1);
+    assert.equal((await world.run("search_commands", { channel_id: CHANNEL, query: MESSAGE_A })).application_commands[0].id, MESSAGE_A);
+    await world.run("run_command", { channel_id: CHANNEL, command_id: MESSAGE_A, application_id: ALICE, version: MESSAGE_B, name: "test", options: [{ name: "value", type: 3, value: "hello" }] });
+    const body = world.calls[2].body;
+    assert.equal(body?.guild_id, GUILD);
+    assert.equal(body?.channel_id, CHANNEL);
+    assert.equal(body?.session_id, "session");
+    assert.deepEqual((body?.data as Record<string, unknown>).options, [{ name: "value", type: 3, value: "hello" }]);
+    await assert.rejects(world.run("run_command", { channel_id: CHANNEL, command_id: "invalid" }), /command_id/);
+    assert.equal(world.calls.length, 3);
+});
+
+test("command discovery pages server indexes and searches DMs", async () => {
+    const world = makeWorld();
+    world.route("get", /application-command-index$/, () => ({ application_commands: Array.from({ length: 27 }, (_, index) => ({ id: String(index), type: 1, name: `test${index}`, application_id: ALICE })) }));
+    world.route("get", /application-commands\/search$/, () => ({ application_commands: [{ id: MESSAGE_A, name: "test" }] }));
+    const first = await world.run("search_commands", { channel_id: CHANNEL, query: ALICE });
+    assert.equal(first.count, 25);
+    assert.equal(first.nextOffset, 25);
+    const second = await world.run("search_commands", { channel_id: CHANNEL, query: ALICE, offset: first.nextOffset });
+    assert.equal(second.count, 2);
+    assert.equal(second.nextOffset, null);
+    assert.equal((await world.run("search_commands", { channel_id: DM, query: "test" })).application_commands[0].id, MESSAGE_A);
+    await assert.rejects(world.run("search_commands", { channel_id: DM, query: "test", offset: 25 }), /only available for server/);
 });
 
 test("leaving a server you own is refused even when membership actions are on", async () => {

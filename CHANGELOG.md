@@ -2,6 +2,16 @@
 
 All notable LawyerCord changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/) with a fourth packaging revision retained while the project remains compatible with its upstream version format.
 
+## 4.6.0.0 - 2026-11-16 (Nightly)
+
+### Added
+
+- Add Discord MCP tools to search and run application commands and, when enabled, make direct Discord API requests.
+
+### Fixed
+
+- Fix MCP setup using a Discord executable that cannot run the bridge, and repair existing configurations.
+
 ## 4.5.8.0 - 2026-11-14 (Nightly)
 
 ### Fixed

@@ -145,7 +145,11 @@ try {
     const listed = await rpc("tools/list");
     const names = listed.tools.map((tool: any) => tool.name);
     assert.deepEqual(names, DISCORD_MCP_TOOL_NAMES.map(name => `discord_${name}`), "all fixed Discord tools are advertised");
-    assert.equal(names.some((name: string) => /arbitrary|raw_request|rest_request|eval/i.test(name)), false, "no arbitrary request tool exists");
+    assert.ok(names.includes("discord_api_request"), "the gated API fallback is advertised");
+    assert.equal(listed.tools.find((tool: any) => tool.name === "discord_api_request").annotations.idempotentHint, false);
+    const commandAnnotations = listed.tools.find((tool: any) => tool.name === "discord_run_command").annotations;
+    assert.equal(commandAnnotations.destructiveHint, true);
+    assert.equal(commandAnnotations.idempotentHint, false);
     for (const tool of listed.tools) {
         assert.equal(tool.inputSchema.additionalProperties, false, `${tool.name} rejects unknown arguments`);
         const policy = TOOL_POLICY[tool.name.slice("discord_".length) as keyof typeof TOOL_POLICY] as { write?: true; gate?: string; };
@@ -161,7 +165,11 @@ try {
     assert.equal(status.structuredContent.connected, true);
     assert.equal(status.structuredContent.channelAccess, "all_accessible_channels");
     assert.equal(observedRequests[observedRequests.length - 1].tool, "connection_status", "public tool names map to the fixed bridge operation");
+    const direct = await rpc("tools/call", { name: "discord_api_request", arguments: { method: "GET", path: "/users/@me", query: { example: "yes" } } });
+    assert.equal(direct.structuredContent.echoedTool, "api_request");
+    assert.deepEqual(observedRequests[observedRequests.length - 1].arguments.query, { example: "yes" });
     assert.match(initialized.instructions, /discord_connection_status/, "instructions point at the status tool when gates are unknown");
+    assert.match(initialized.instructions, /Commands and direct API calls follow Discord's notification behavior/);
     assert.match(describeInstructions({ gates: { moderation: { enabled: true, allows: "kicking members" }, roles: { enabled: false, allows: "changing roles" } } }), /Enabled in the plugin settings: kicking members..*changing roles/);
 
     const before = observedRequests.length;

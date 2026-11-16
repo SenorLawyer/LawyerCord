@@ -5,12 +5,14 @@
  */
 
 import { DATA_DIR } from "@main/utils/constants";
+import { execFile } from "child_process";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import type { IpcMainInvokeEvent } from "electron";
 import { watch } from "fs";
 import { chmod, mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile } from "fs/promises";
 import { homedir, platform } from "os";
 import { basename, dirname, extname, isAbsolute, join, parse, relative, resolve } from "path";
+import { promisify } from "util";
 
 import { DISCORD_MCP_TOOL_NAMES, isDiscordSnowflake, sentMessageKey } from "./policy";
 
@@ -104,9 +106,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function serverConfig(): Record<string, unknown> {
     return {
-        command: process.execPath,
+        command: "node",
         args: [SERVER_PATH],
-        env: { ELECTRON_RUN_AS_NODE: "1" },
     };
 }
 
@@ -146,11 +147,8 @@ async function writeCodexConfig(): Promise<string> {
 
     const section = [
         "[mcp_servers.lawyercord-discord]",
-        `command = ${tomlString(process.execPath)}`,
+        'command = "node"',
         `args = [${tomlString(SERVER_PATH)}]`,
-        "",
-        "[mcp_servers.lawyercord-discord.env]",
-        "ELECTRON_RUN_AS_NODE = \"1\"",
         "",
     ].join("\n");
     const withoutExisting = config.replace(/^\[mcp_servers\.lawyercord-discord(?:\.env)?\][\s\S]*?(?=^\[[^\]]+\]|(?![\s\S]))/gim, "").trimEnd();
@@ -271,10 +269,25 @@ export async function initializeBridge(_: IpcMainInvokeEvent): Promise<{
     };
 }
 
+async function requireNode(): Promise<void> {
+    try {
+        const { stdout } = await promisify(execFile)("node", ["-p", "process.versions.node"], { timeout: 5_000 });
+        if (!/^\d+\./.test(stdout) || Number(stdout.split(".")[0]) < 18) throw new Error("Node.js version is too old");
+    } catch {
+        throw new Error("Install Node.js 18 or newer and restart Discord before connecting an AI app.");
+    }
+}
+
+function isLegacyElectronCommand(command: unknown): boolean {
+    return typeof command === "string" && /^(?:discord(?: ?(?:canary|ptb|development))?|vesktop|equibop)(?:\.exe)?$/i.test(basename(command));
+}
+
 export async function configureMcpClients(_: IpcMainInvokeEvent, clients: unknown): Promise<McpSetupResult[]> {
     await ensureInitialized();
     if (!Array.isArray(clients) || clients.length === 0 || clients.some(client => !MCP_CLIENTS.includes(client as McpClient)))
         throw new Error("Choose at least one supported MCP client.");
+
+    await requireNode();
 
     const selected = [...new Set(clients as McpClient[])];
     const results: McpSetupResult[] = [];
@@ -302,6 +315,54 @@ export async function configureMcpClients(_: IpcMainInvokeEvent, clients: unknow
         results.push({ client, path });
     }
     return results;
+}
+
+export async function refreshMcpClients(_: IpcMainInvokeEvent): Promise<void> {
+    const failed: string[] = [];
+    let nodeCheck: Promise<void> | undefined;
+    let nodeMissing = false;
+    const paths: Array<[McpClient, string]> = [
+        ["codex", join(homedir(), ".codex", "config.toml")],
+        ["claudeDesktop", claudeDesktopConfigPath()],
+        ["claudeCode", join(homedir(), ".claude.json")],
+        ["gemini", join(homedir(), ".gemini", "settings.json")],
+        ["cursor", join(homedir(), ".cursor", "mcp.json")],
+    ];
+    for (const [client, path] of paths) {
+        try {
+            let contents: string;
+            try { contents = await readFile(path, "utf8"); }
+            catch (error) {
+                if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+                throw error;
+            }
+            if (client === "codex") {
+                const section = /^\[mcp_servers\.lawyercord-discord\][\s\S]*?(?=^\[[^\]]+\]|(?![\s\S]))/im.exec(contents)?.[0];
+                const env = /^\[mcp_servers\.lawyercord-discord\.env\][\s\S]*?(?=^\[[^\]]+\]|(?![\s\S]))/im.exec(contents)?.[0];
+                const command = /^command\s*=\s*("(?:[^"\\]|\\.)*")\s*$/m.exec(section ?? "")?.[1];
+                if (command && isLegacyElectronCommand(JSON.parse(command)) && section?.includes(tomlString(SERVER_PATH)) && /ELECTRON_RUN_AS_NODE\s*=\s*["']1["']/.test(env ?? "")) {
+                    const updated = section.replace(/^command\s*=\s*.*$/m, 'command = "node"');
+                    if (section !== updated) {
+                        await (nodeCheck ??= requireNode());
+                        await atomicWrite(path, contents.replace(section, updated));
+                    }
+                }
+            } else {
+                const config: unknown = JSON.parse(contents);
+                if (!isRecord(config) || !isRecord(config.mcpServers)) continue;
+                const server = config.mcpServers["lawyercord-discord"];
+                if (isRecord(server) && isLegacyElectronCommand(server.command) && Array.isArray(server.args) && server.args.length === 1 && server.args[0] === SERVER_PATH && isRecord(server.env) && server.env.ELECTRON_RUN_AS_NODE === "1") {
+                    await (nodeCheck ??= requireNode());
+                    server.command = "node";
+                    await atomicWrite(path, `${JSON.stringify(config, null, 2)}\n`);
+                }
+            }
+        } catch (error) {
+            if (error instanceof Error && error.message.startsWith("Install Node.js")) nodeMissing = true;
+            failed.push(client);
+        }
+    }
+    if (failed.length) throw new Error(`Could not refresh MCP client configurations: ${failed.join(", ")}.${nodeMissing ? " Install Node.js 18 or newer and restart Discord." : ""}`);
 }
 
 async function respondWithError(id: string, error: string): Promise<void> {

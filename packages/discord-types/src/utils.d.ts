@@ -103,7 +103,7 @@ export interface SnowflakeUtils {
 interface RestRequestData {
     url: string;
     query?: Record<string, any>;
-    body?: Record<string, any>;
+    body?: Record<string, any> | unknown[];
     oldFormErrors?: boolean;
     retries?: number;
 }

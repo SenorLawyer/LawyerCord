@@ -9608,7 +9608,7 @@ test("Discord MCP attachment downloads reject redirects and untrusted origins", 
     let deadline = 0;
     const fetchAttachmentData = loadSource("src/equicordplugins/discordMcp.desktop/native.ts", {
         "@main/utils/constants": { DATA_DIR: "/fixture" },
-        crypto: {}, fs: {}, "fs/promises": {}, os: {}, path,
+        child_process: {}, crypto: {}, fs: {}, "fs/promises": {}, os: {}, path, util: {},
         "./policy": { DISCORD_MCP_TOOL_NAMES: [] }
     }, {
         __dirname: "/fixture", Buffer, URL,

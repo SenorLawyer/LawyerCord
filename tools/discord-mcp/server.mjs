@@ -113,6 +113,17 @@ const searchFilters = {
 };
 
 export const TOOLS = [
+    tool("api_request", "Make a direct Discord API request. This bypasses other action switches and may change or delete account data." + GATED("Allow direct API requests"), {
+        method: oneOf("HTTP method.", ["GET", "POST", "PUT", "PATCH", "DELETE"]),
+        path: text("Discord API path, such as /users/@me. Do not include the host or query string.", 1024),
+        query: { type: "object", description: "Query parameters." },
+        body: { type: ["object", "array"], description: "JSON request body." },
+    }, { required: ["method", "path"], annotations: { ...REMOVE, idempotentHint: false } }),
+    tool("search_commands", "Find application commands for a channel, including the IDs and version needed to run one. Server results may include commands restricted in this channel.", { channel_id: channelId, query: text("Command name, command ID or application ID. An empty string lists commands.", 100, 0), offset: int("Server command offset; use nextOffset from the previous result.", 0, 100000) }, { required: ["channel_id", "query"] }),
+    tool("run_command", "Run a Discord application slash command using details returned by search_commands.", {
+        channel_id: channelId, command_id: id("Command ID."), application_id: id("Application ID."), version: id("Command version."), name: text("Command name.", 32),
+        options: { type: "array", description: "Discord command options, including nested subcommands." },
+    }, { required: ["channel_id", "command_id", "application_id", "version", "name"], annotations: { ...REMOVE, idempotentHint: false } }),
     tool("connection_status", "Check the bridge, the signed-in account, which gated action categories are on, and the write rate limits."),
     tool("whoami", "Get the signed-in account: profile, status, custom status and counts of servers, friends and DMs."),
     tool("list_servers", "List servers with member counts, icons and features.", { query: text("Only servers whose name contains this.", 100) }),
@@ -433,8 +444,8 @@ function bridgeTimeoutForTool(name, args) {
 export function describeInstructions(status) {
     const base = "This silent background server uses the signed-in Discord account's own access without navigating the active Discord view. Every ID argument also accepts a discord.com/channels link. " +
         "It can read servers, channels, threads, forum posts, DMs, members, profiles, presence, friends, pins, reactions, mentions and search, and it can send, edit and delete your own messages, react, pin, start threads, forward and mark channels read. " +
-        "Messages never notify anyone unless allowed_mentions says so, and write actions are rate limited per channel and globally. Local files can only be uploaded from folders allowed in the plugin settings. " +
-        "It cannot make arbitrary Discord requests.";
+        "Message tools do not notify anyone unless allowed_mentions says so. Commands and direct API calls follow Discord's notification behavior. Writes are rate limited globally and per channel when a channel is known. Local files can only be uploaded from folders allowed in the plugin settings. " +
+        "Direct Discord API requests are available only when enabled in the plugin settings and bypass the other action switches.";
     const gates = status && typeof status === "object" && status.gates && typeof status.gates === "object" ? Object.values(status.gates) : null;
     if (!gates?.length) return `${base} Moderation, role, channel, membership, relationship and account actions are off by default; call discord_connection_status to see which are on.`;
     const on = gates.filter(gate => gate?.enabled).map(gate => gate.allows);

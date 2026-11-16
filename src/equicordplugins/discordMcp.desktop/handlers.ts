@@ -5,7 +5,7 @@
  */
 
 import type { PluginNative } from "@utils/types";
-import { ChannelStore } from "@webpack/common";
+import { AuthenticationStore, ChannelStore, Constants, SnowflakeUtils } from "@webpack/common";
 
 import * as actions from "./actions";
 import { type Args, requireChannel, requireGuild, type ToolEnv } from "./context";
@@ -15,10 +15,12 @@ import {
     type DiscordMcpToolName,
     type McpSettings,
     normalizeBoundedInteger,
+    requireGate,
     requireSnowflake,
     resolveLocationArgs,
 } from "./policy";
 import * as readers from "./readers";
+import { api } from "./rest";
 import { isRaw } from "./serialize";
 import * as subscriptions from "./subscriptions";
 
@@ -44,6 +46,57 @@ async function subscribeChannel(args: Args) {
 }
 
 const HANDLERS: Record<DiscordMcpToolName, Handler> = {
+    search_commands: async (args, env) => {
+        const channel = await requireChannel(args.channel_id);
+        if (typeof args.query !== "string" || args.query.length > 100) throw new Error("query must be a string of at most 100 characters");
+        const offset = normalizeBoundedInteger(args.offset, "offset", 0, 0, 100_000);
+        if (!channel.guildId) {
+            if (offset) throw new Error("offset is only available for server commands");
+            return (await api("get", { url: Constants.Endpoints.APPLICATION_COMMANDS_SEARCH(channel.id), query: { type: 1, include_applications: true, query: args.query, limit: 25 } }, env.check)).body;
+        }
+        const { body } = await api("get", { url: Constants.Endpoints.APPLICATION_COMMAND_INDEX_GUILD(channel.guildId) }, env.check);
+        if (!isRaw(body) || !Array.isArray(body.application_commands)) throw new Error("Discord returned an invalid command index");
+        const query = args.query.toLowerCase();
+        const matches = body.application_commands.filter(command => isRaw(command) && command.type === 1 && (
+            typeof command.name === "string" && command.name.toLowerCase().includes(query) || command.id === query || command.application_id === query
+        ));
+        const page = matches.slice(offset, offset + 25);
+        return { application_commands: page, count: page.length, hasMore: offset + page.length < matches.length, nextOffset: offset + page.length < matches.length ? offset + page.length : null };
+    },
+    run_command: async (args, env) => {
+        const channel = await requireChannel(args.channel_id);
+        const commandId = requireSnowflake(args.command_id, "command_id");
+        const applicationId = requireSnowflake(args.application_id, "application_id");
+        const version = requireSnowflake(args.version, "version");
+        if (typeof args.name !== "string" || args.name.length < 1 || args.name.length > 32 || /\s/.test(args.name)) throw new Error("name must be a command name");
+        if (args.options !== undefined && !Array.isArray(args.options)) throw new Error("options must be an array");
+        env.spend(channel.id);
+        const result = await api("post", {
+            url: Constants.Endpoints.INTERACTIONS,
+            body: {
+                type: 2, application_id: applicationId, ...(channel.guildId ? { guild_id: channel.guildId } : {}),
+                channel_id: channel.id, session_id: AuthenticationStore.getSessionId(), nonce: SnowflakeUtils.fromTimestamp(Date.now()),
+                data: { id: commandId, application_id: applicationId, version, name: args.name, type: 1, options: args.options ?? [], application_command: { id: commandId, application_id: applicationId, version }, attachments: [] },
+            },
+        }, env.check);
+        return { status: result.status, commandId, channelId: channel.id };
+    },
+    api_request: async (args, env) => {
+        requireGate(env.settings, "api", "Direct API requests");
+        const { method, path, query, body } = args;
+        if (method !== "GET" && method !== "POST" && method !== "PUT" && method !== "PATCH" && method !== "DELETE")
+            throw new Error("method must be GET, POST, PUT, PATCH or DELETE");
+        if (typeof path !== "string" || path.length > 1024 || !/^\/(?!\/)[A-Za-z0-9_@./~%-]+$/.test(path) || /(?:%2f|%5c|%2e|\.\.)/i.test(path))
+            throw new Error("path must be a relative Discord API path without a query string");
+        if (query !== undefined && !isRaw(query)) throw new Error("query must be an object");
+        if (body !== undefined && !isRaw(body) && !Array.isArray(body)) throw new Error("body must be an object or array");
+        if (method !== "GET") {
+            const channel = /^\/channels\/(\d{17,20})(?:\/|$)/.exec(path)?.[1];
+            env.spend(channel ?? (path === Constants.Endpoints.INTERACTIONS && isRaw(body) && typeof body.channel_id === "string" ? body.channel_id : undefined));
+        }
+        const verbs = { GET: "get", POST: "post", PUT: "put", PATCH: "patch", DELETE: "del" } as const;
+        return api(verbs[method], { url: path, query, body }, env.check);
+    },
     connection_status: readers.connectionStatus,
     whoami: readers.whoami,
     list_servers: readers.listServers,

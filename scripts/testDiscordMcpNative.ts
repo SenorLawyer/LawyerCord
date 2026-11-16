@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { spawnSync } from "node:child_process";
+
 import { loadPluginModule } from "./testDiscordMcpHarness";
 
 const LARGE = 300 * 1024 * 1024;
@@ -18,13 +20,15 @@ const DAY = 24 * 60 * 60 * 1000;
 
 interface NativeModule {
     initializeBridge(event: unknown): Promise<unknown>;
+    configureMcpClients(event: unknown, clients: unknown): Promise<unknown>;
+    refreshMcpClients(event: unknown): Promise<void>;
     takeRequests(event: unknown, waitMs?: number): Promise<Array<{ id: string; tool: string; }>>;
     writeResponse(event: unknown, response: unknown): Promise<void>;
     recordSentMessage(event: unknown, channelId: string, messageId: string): Promise<void>;
     readUploadFile(event: unknown, path: unknown, directories: unknown): Promise<{ name: string; data: Uint8Array; }>;
 }
 
-async function fixture() {
+async function fixture(nodeVersion?: string | null) {
     const root = await realFsPromises.mkdtemp(join(tmpdir(), "discord-mcp-native-"));
     const dataDirectory = join(root, "data");
     const uploads = join(root, "uploads");
@@ -65,11 +69,18 @@ async function fixture() {
 
     const loaded = loadPluginModule("native", {
         "@main/utils/constants": { DATA_DIR: dataDirectory },
+        child_process: await import("node:child_process"),
         crypto: await import("node:crypto"),
         fs,
         "fs/promises": fsPromises,
-        os: await import("node:os"),
+        os: { ...await import("node:os"), homedir: () => root, platform: () => "darwin" },
         path: await import("node:path"),
+        util: nodeVersion === undefined ? await import("node:util") : {
+            promisify: () => async () => {
+                if (nodeVersion === null) throw new Error("node unavailable");
+                return { stdout: nodeVersion };
+            },
+        },
     }, { __dirname: sourceDirectory }) as unknown as NativeModule;
 
     const secretOf = async () => JSON.parse(await realFsPromises.readFile(join(bridge, "config.json"), "utf8")).secret as string;
@@ -78,10 +89,106 @@ async function fixture() {
         await realFsPromises.writeFile(join(bridge, "requests", `${Date.now()}-${id}.json`), JSON.stringify(request));
     };
     return {
-        native: loaded, root, uploads, bridge, downloads, log, hooks, secretOf, writeRequest,
+        native: loaded, root, dataDirectory, sourceDirectory, uploads, bridge, downloads, log, hooks, secretOf, writeRequest,
         cleanup: () => realFsPromises.rm(root, { recursive: true, force: true }),
     };
 }
+
+test("installed MCP clients replace obsolete Electron paths without losing other settings", async () => {
+    const f = await fixture();
+    try {
+        await f.native.configureMcpClients(undefined, ["codex", "cursor"]);
+        const codex = join(f.root, ".codex", "config.toml");
+        const cursor = join(f.root, ".cursor", "mcp.json");
+        const original = await realFsPromises.readFile(codex, "utf8");
+        await realFsPromises.writeFile(codex, original.replace(/^command = .*$/m, 'command = "Discord.exe"') + '\n[mcp_servers.lawyercord-discord.env]\nELECTRON_RUN_AS_NODE = "1"\n\n[other]\nvalue = 42\n');
+        const config = JSON.parse(await realFsPromises.readFile(cursor, "utf8"));
+        config.mcpServers["lawyercord-discord"].command = "Discord.exe";
+        config.mcpServers["lawyercord-discord"].env = { ELECTRON_RUN_AS_NODE: "1" };
+        config.mcpServers["lawyercord-discord"].extra = "keep";
+        await realFsPromises.writeFile(cursor, JSON.stringify(config));
+        const claude = join(f.root, "Library", "Application Support", "Claude", "claude_desktop_config.json");
+        await realFsPromises.mkdir(join(f.root, "Library", "Application Support", "Claude"), { recursive: true });
+        await realFsPromises.writeFile(claude, "{");
+        await assert.rejects(f.native.refreshMcpClients(undefined), /claudeDesktop/);
+        const updated = await realFsPromises.readFile(codex, "utf8");
+        assert.match(updated, /\[other\]\s*value = 42/);
+        assert.doesNotMatch(updated, /Discord\.exe/);
+        const json = JSON.parse(await realFsPromises.readFile(cursor, "utf8"));
+        assert.equal(json.mcpServers["lawyercord-discord"].command, "node");
+        assert.equal(json.mcpServers["lawyercord-discord"].extra, "keep");
+        await realFsPromises.writeFile(claude, "{}");
+        await f.native.refreshMcpClients(undefined);
+        assert.equal(await realFsPromises.readFile(codex, "utf8"), updated);
+    } finally { await f.cleanup(); }
+});
+
+for (const version of [null, "16.20.0"] as const) {
+    test(`migration preserves the configuration when Node is ${version ?? "missing"}`, async () => {
+        const f = await fixture(version);
+        try {
+            const path = join(f.root, ".cursor", "mcp.json");
+            const original = JSON.stringify({ mcpServers: { "lawyercord-discord": { command: "Discord.exe", args: [join(f.bridge, "server.mjs")], env: { ELECTRON_RUN_AS_NODE: "1" } } } });
+            await realFsPromises.mkdir(join(f.root, ".cursor"), { recursive: true });
+            await realFsPromises.writeFile(path, original);
+            await assert.rejects(f.native.refreshMcpClients(undefined), /Install Node.js 18 or newer/);
+            assert.equal(await realFsPromises.readFile(path, "utf8"), original);
+            await assert.rejects(f.native.configureMcpClients(undefined, ["cursor"]), /Install Node.js 18 or newer/);
+            assert.equal(await realFsPromises.readFile(path, "utf8"), original);
+        } finally { await f.cleanup(); }
+    });
+}
+
+test("migration leaves an existing absolute Node command unchanged", async () => {
+    const f = await fixture();
+    try {
+        const path = join(f.root, ".cursor", "mcp.json");
+        const original = JSON.stringify({ mcpServers: { "lawyercord-discord": { command: join(f.root, "node.exe"), args: [join(f.bridge, "server.mjs")], env: { ELECTRON_RUN_AS_NODE: "1" } } } });
+        await realFsPromises.mkdir(join(f.root, ".cursor"), { recursive: true });
+        await realFsPromises.writeFile(path, original);
+        await f.native.refreshMcpClients(undefined);
+        assert.equal(await realFsPromises.readFile(path, "utf8"), original);
+    } finally { await f.cleanup(); }
+});
+
+test("client setup launches the bundled bridge with Node", async () => {
+    const f = await fixture();
+    try {
+        await realFsPromises.copyFile("tools/discord-mcp/server.mjs", join(f.sourceDirectory, "discord-mcp-server.mjs"));
+        await f.native.configureMcpClients(undefined, ["cursor"]);
+        const config = JSON.parse(await realFsPromises.readFile(join(f.root, ".cursor", "mcp.json"), "utf8"));
+        const server = config.mcpServers["lawyercord-discord"];
+        const result = spawnSync(server.command, server.args, {
+            input: '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n',
+            encoding: "utf8", timeout: 10_000,
+        });
+        assert.equal(result.status, 0, result.stderr);
+        const response = JSON.parse(result.stdout);
+        assert.ok(response.result.tools.some((tool: { name: string; }) => tool.name === "discord_api_request"));
+    } finally { await f.cleanup(); }
+});
+
+test("a new plugin process installs the updated bundled server without rotating its secret", async () => {
+    const f = await fixture();
+    try {
+        await f.native.initializeBridge(undefined);
+        const secret = await f.secretOf();
+        await realFsPromises.writeFile(join(f.sourceDirectory, "discord-mcp-server.mjs"), "// updated server");
+        const restarted = loadPluginModule("native", {
+            "@main/utils/constants": { DATA_DIR: f.dataDirectory },
+            child_process: await import("node:child_process"),
+            crypto: await import("node:crypto"),
+            fs: realFs,
+            "fs/promises": realFsPromises,
+            os: { ...await import("node:os"), homedir: () => f.root, platform: () => "darwin" },
+            path: await import("node:path"),
+            util: await import("node:util"),
+        }, { __dirname: f.sourceDirectory }) as unknown as NativeModule;
+        await restarted.initializeBridge(undefined);
+        assert.equal(await realFsPromises.readFile(join(f.bridge, "server.mjs"), "utf8"), "// updated server");
+        assert.equal(await f.secretOf(), secret);
+    } finally { await f.cleanup(); }
+});
 
 test("a rejected ledger write does not poison later writes", async () => {
     const f = await fixture();

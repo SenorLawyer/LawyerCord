@@ -54,7 +54,7 @@ function McpClientSetup() {
         {
             name: "Connect an AI app",
             id: "mcpClients",
-            description: "Installs LawyerCord's bundled local MCP bridge for the selected apps. Restart each app after setup.",
+            description: "Requires Node.js 18 or newer. Installs the bundled MCP bridge for the selected apps. Restart each app after setup.",
         },
         ...MCP_CLIENTS.map(([client, label]) => React.createElement(
             Checkbox,
@@ -98,6 +98,11 @@ function limitSetting(description: string, fallback: number) {
 }
 
 const settings = definePluginSettings({
+    allowApiRequests: {
+        type: OptionType.BOOLEAN,
+        description: "Allow direct Discord API requests. This bypasses the other action switches and can change or delete account data.",
+        default: false,
+    },
     mcpClients: {
         type: OptionType.COMPONENT,
         component: ErrorBoundary.wrap(McpClientSetup, { noop: true }),
@@ -154,6 +159,7 @@ const settings = definePluginSettings({
 function currentSettings(): McpSettings {
     const { store } = settings;
     return {
+        allowApiRequests: store.allowApiRequests,
         allowRelationshipActions: store.allowRelationshipActions,
         allowMembershipActions: store.allowMembershipActions,
         allowAccountActions: store.allowAccountActions,
@@ -251,6 +257,10 @@ export default definePlugin({
         await Native.initializeBridge();
         if (generation !== bridgeGeneration) return;
         void bridgeLoop(generation);
+        void Native.refreshMcpClients().catch(error => {
+            logger.error("Could not refresh MCP client configuration", error);
+            showToast(error instanceof Error ? error.message : "Could not refresh MCP client configuration.", Toasts.Type.FAILURE);
+        });
     },
 
     stop() {

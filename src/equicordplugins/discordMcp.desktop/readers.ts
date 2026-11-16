@@ -108,7 +108,7 @@ export function connectionStatus(_: Args, env: ToolEnv) {
             moderation: settings.allowModerationActions,
             roleChanges: settings.allowRoleActions,
             channelManagement: settings.allowChannelManagement,
-            arbitraryRequests: false,
+            arbitraryRequests: settings.allowApiRequests,
             mentions: "opt_in_per_message",
         },
         gates,

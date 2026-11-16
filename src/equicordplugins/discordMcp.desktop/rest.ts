@@ -14,7 +14,7 @@ type Method = "get" | "post" | "put" | "patch" | "del";
 export interface ApiRequest {
     url: string;
     query?: Record<string, unknown>;
-    body?: Record<string, unknown>;
+    body?: Record<string, unknown> | unknown[];
 }
 
 export interface ApiResponse {
